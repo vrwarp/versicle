@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
 
 interface BookCardProps {
@@ -6,6 +7,7 @@ interface BookCardProps {
 }
 
 export const BookCard: React.FC<BookCardProps> = ({ book }) => {
+  const navigate = useNavigate();
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,7 +25,10 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
   }, [book.coverBlob]);
 
   return (
-    <div className="group flex flex-col bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-200 h-full">
+    <div
+      onClick={() => navigate(`/read/${book.id}`)}
+      className="group flex flex-col bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-200 h-full cursor-pointer"
+    >
       <div className="aspect-[2/3] w-full bg-gray-100 relative overflow-hidden">
         {coverUrl ? (
           <img

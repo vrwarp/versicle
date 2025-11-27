@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { LibraryView } from './components/library/LibraryView';
-// import { Reader } from './components/reader/Reader';
+import { ReaderView } from './components/reader/ReaderView';
 
 function App() {
   return (
@@ -8,7 +8,7 @@ function App() {
       <div className="min-h-screen bg-background text-foreground">
         <Routes>
           <Route path="/" element={<LibraryView />} />
-          {/* <Route path="/book/:id" element={<Reader />} /> */}
+          <Route path="/read/:id" element={<ReaderView />} />
         </Routes>
       </div>
     </Router>
