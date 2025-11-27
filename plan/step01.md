@@ -1,7 +1,7 @@
-# **Step 1: Skeleton & Database**
+# **Step 1: Skeleton & Database (Completed)**
 
 ## **1.1 Overview**
-This step focuses on initializing the project structure, setting up the development environment, and implementing the core data persistence layer using IndexedDB. We will use Vite for tooling, React for the UI, and Zustand for state management.
+This step focused on initializing the project structure, setting up the development environment, and implementing the core data persistence layer using IndexedDB. We used Vite for tooling, React for the UI, and Zustand for state management.
 
 ## **1.2 Tech Stack**
 *   **Build Tool:** Vite (React template)
@@ -37,7 +37,7 @@ src/
 
 ## **1.4 Database Schema (IndexedDB)**
 
-We will use the `idb` library to interact with IndexedDB.
+We used the `idb` library to interact with IndexedDB.
 **Database Name:** `EpubLibraryDB`
 **Version:** 1
 
@@ -88,7 +88,7 @@ export interface Annotation {
 }
 ```
 
-## **1.6 Implementation Steps**
+## **1.6 Implementation Steps (Completed)**
 
 1.  **Initialize Vite Project:**
     *   `npm create vite@latest . -- --template react-ts`
@@ -112,7 +112,7 @@ export interface Annotation {
 5.  **Global Styles:**
     *   Define basic CSS variables for dark/light mode in `index.css`.
 
-## **1.7 Verification**
+## **1.7 Verification (Completed)**
 *   App runs (`npm run dev`).
 *   IndexedDB is created in DevTools > Application > Storage.
 *   Types compile without errors.
