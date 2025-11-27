@@ -11,13 +11,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/react-window": "^1.8.8",
     "clsx": "^2.1.1",
     "epubjs": "^0.3.93",
+    "flexsearch": "^0.8.212",
     "idb": "^8.0.3",
     "lucide-react": "^0.555.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.30.2",
+    "react-window": "^2.2.3",
     "tailwind-merge": "^3.4.0",
     "uuid": "^9.0.1",
     "zustand": "^4.5.7"

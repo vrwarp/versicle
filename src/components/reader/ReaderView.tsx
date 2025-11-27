@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ePub, { type Book, type Rendition, type Location } from 'epubjs';
 import { useReaderStore } from '../../store/useReaderStore';
+import { useTTSStore } from '../../store/useTTSStore';
+import { useTTS } from '../../hooks/useTTS';
 import { getDB } from '../../db/db';
-import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft } from 'lucide-react';
+import { searchClient, SearchResult } from '../../lib/search';
+import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search } from 'lucide-react';
 
 export const ReaderView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,8 +28,68 @@ export const ReaderView: React.FC = () => {
     currentChapterTitle
   } = useReaderStore();
 
+  const {
+      isPlaying,
+      play,
+      pause,
+      activeCfi,
+      rate,
+      setRate,
+      voice,
+      setVoice
+  } = useTTSStore();
+
+  // Use TTS Hook
+  useTTS(renditionRef.current);
+
+  // Highlight Active TTS Sentence
+  useEffect(() => {
+      const rendition = renditionRef.current;
+      if (!rendition || !activeCfi) return;
+
+      // Add highlight
+      rendition.annotations.add('highlight', activeCfi, {}, (e: Event) => {
+          console.log("Clicked highlight", e);
+      }, 'tts-highlight');
+
+      // Remove highlight when activeCfi changes
+      return () => {
+          rendition.annotations.remove(activeCfi, 'highlight');
+      };
+  }, [activeCfi]);
+
+  // Inject Custom CSS for Highlights
+  useEffect(() => {
+      const rendition = renditionRef.current;
+      if (rendition) {
+          rendition.themes.default({
+              '.tts-highlight': {
+                  'fill': 'yellow',
+                  'fill-opacity': '0.3',
+                  'mix-blend-mode': 'multiply'
+              }
+          });
+      }
+  }, [renditionRef.current]);
+
   const [showToc, setShowToc] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showTTS, setShowTTS] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  // Search State
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+      const loadVoices = () => {
+          setAvailableVoices(window.speechSynthesis.getVoices());
+      };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
 
   // Initialize Book
   useEffect(() => {
@@ -89,6 +152,12 @@ export const ReaderView: React.FC = () => {
           // Let's try to generate minimal locations for progress bar to work reasonably.
            // This is heavy, maybe we skip for step 03 or do it async without await?
            book.locations.generate(1000);
+
+           // Index for Search (Async)
+           // Only index if not already done? Or just do it every time for now (simplicity)
+           searchClient.indexBook(book, id).then(() => {
+               console.log("Book indexed for search");
+           });
 
           rendition.on('relocated', (location: Location) => {
             const cfi = location.start.cfi;
@@ -193,6 +262,12 @@ export const ReaderView: React.FC = () => {
              {currentChapterTitle || 'Reading'}
         </h1>
         <div className="flex items-center gap-2">
+           <button aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                <Search className="w-5 h-5 text-gray-700 dark:text-gray-200" />
+           </button>
+           <button aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${isPlaying ? 'text-blue-500' : 'text-gray-700 dark:text-gray-200'}`}>
+                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+           </button>
            <button aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
             <Settings className="w-5 h-5 text-gray-700 dark:text-gray-200" />
           </button>
@@ -225,13 +300,120 @@ export const ReaderView: React.FC = () => {
              </div>
          )}
 
+         {/* Search Sidebar */}
+         {showSearch && (
+             <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
+                 <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                     <h2 className="text-lg font-bold mb-2 dark:text-white">Search</h2>
+                     <div className="flex gap-2">
+                         <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    setIsSearching(true);
+                                    searchClient.search(searchQuery, id || '').then(results => {
+                                        setSearchResults(results);
+                                        setIsSearching(false);
+                                    });
+                                }
+                            }}
+                            placeholder="Search in book..."
+                            className="flex-1 text-sm p-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                         />
+                         <button
+                            onClick={() => setShowSearch(false)}
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                         >
+                            <X className="w-4 h-4 text-gray-500" />
+                         </button>
+                     </div>
+                 </div>
+                 <div className="flex-1 overflow-y-auto p-4">
+                     {isSearching ? (
+                         <div className="text-center text-gray-500">Searching...</div>
+                     ) : (
+                         <ul className="space-y-4">
+                             {searchResults.map((result, idx) => (
+                                 <li key={idx} className="border-b border-gray-100 dark:border-gray-700 pb-2 last:border-0">
+                                     <button
+                                        className="text-left w-full"
+                                        onClick={() => {
+                                            renditionRef.current?.display(result.href);
+                                            // Optionally highlight search term?
+                                            // renditionRef.current.annotations.add('highlight', ...)
+                                        }}
+                                     >
+                                         <p className="text-xs text-gray-500 mb-1">Result {idx + 1}</p>
+                                         <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3">
+                                             {result.excerpt}
+                                         </p>
+                                     </button>
+                                 </li>
+                             ))}
+                             {searchResults.length === 0 && searchQuery && !isSearching && (
+                                 <div className="text-center text-gray-500 text-sm">No results found</div>
+                             )}
+                         </ul>
+                     )}
+                 </div>
+             </div>
+         )}
+
          {/* Reader Area */}
          <div className="flex-1 relative">
             <div ref={viewerRef} className="w-full h-full" />
 
+             {/* TTS Controls */}
+             {showTTS && (
+                 <div className="absolute top-2 right-14 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30">
+                     <div className="flex justify-between items-center mb-2">
+                         <h3 className="text-sm font-bold dark:text-white">Text to Speech</h3>
+                         <button onClick={() => setShowTTS(false)}><X className="w-4 h-4 text-gray-500" /></button>
+                     </div>
+                     <div className="flex items-center gap-2 mb-4">
+                         <button
+                            onClick={isPlaying ? pause : play}
+                            className="flex-1 bg-blue-600 text-white py-1 rounded hover:bg-blue-700 flex justify-center"
+                         >
+                             {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                         </button>
+                     </div>
+                     <div className="mb-2">
+                         <label className="block text-xs text-gray-500 mb-1">Speed: {rate}x</label>
+                         <input
+                            type="range"
+                            min="0.5"
+                            max="2"
+                            step="0.1"
+                            value={rate}
+                            onChange={(e) => setRate(parseFloat(e.target.value))}
+                            className="w-full"
+                         />
+                     </div>
+                     <div>
+                         <label className="block text-xs text-gray-500 mb-1">Voice</label>
+                         <select
+                            className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                            value={voice?.name || ''}
+                            onChange={(e) => {
+                                const selected = availableVoices.find(v => v.name === e.target.value);
+                                setVoice(selected || null);
+                            }}
+                         >
+                             <option value="">Default</option>
+                             {availableVoices.map(v => (
+                                 <option key={v.name} value={v.name}>{v.name.slice(0, 20)}...</option>
+                             ))}
+                         </select>
+                     </div>
+                 </div>
+             )}
+
             {/* Settings Modal (Simplified) */}
             {showSettings && (
-                <div className="absolute top-2 right-2 w-48 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                <div className="absolute top-2 right-2 w-48 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30">
                     <div className="mb-4">
                         <label className="block text-xs font-semibold text-gray-500 mb-1">Theme</label>
                         <div className="flex gap-2">
