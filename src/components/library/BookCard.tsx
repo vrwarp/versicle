@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
+import { Trash2 } from 'lucide-react';
+import { useLibraryStore } from '../../store/useLibraryStore';
 
 interface BookCardProps {
   book: BookMetadata;
@@ -8,6 +10,7 @@ interface BookCardProps {
 
 export const BookCard: React.FC<BookCardProps> = ({ book }) => {
   const navigate = useNavigate();
+  const { removeBook } = useLibraryStore();
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,11 +27,27 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
     };
   }, [book.coverBlob]);
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to delete "${book.title}"?`)) {
+      removeBook(book.id);
+    }
+  };
+
   return (
     <div
       onClick={() => navigate(`/read/${book.id}`)}
-      className="group flex flex-col bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-200 h-full cursor-pointer"
+      className="group flex flex-col bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-200 h-full cursor-pointer relative"
     >
+      <button
+        onClick={handleDelete}
+        className="absolute top-2 right-2 p-2 bg-white/80 hover:bg-red-50 text-gray-500 hover:text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-all z-10"
+        aria-label={`Delete ${book.title}`}
+        title="Delete book"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+
       <div className="aspect-[2/3] w-full bg-gray-100 relative overflow-hidden">
         {coverUrl ? (
           <img
