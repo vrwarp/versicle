@@ -28,23 +28,23 @@
   - Implement sentence-level highlighting using `epub.js` annotations.
   - Add playback controls (Play/Pause, Rate, Voice Select).
 
-- [x] Step 5: **Implement Annotations.**
-  - [x] Design the data model for annotations (highlight range, color, note).
-  - [x] Create `AnnotationManager` or similar logic to handle storage in IndexedDB.
-  - [x] Implement UI for selecting text and creating a highlight.
-  - [x] Show existing highlights on the page.
-  - [x] Add a sidebar/panel to list all annotations for the current book.
+- [ ] Step 5: **Implement Annotations.**
+  - [ ] Design the data model for annotations (highlight range, color, note).
+  - [ ] Create `AnnotationManager` or similar logic to handle storage in IndexedDB.
+  - [ ] Implement UI for selecting text and creating a highlight.
+  - [ ] Show existing highlights on the page.
+  - [ ] Add a sidebar/panel to list all annotations for the current book.
 
-- [x] Step 6: **Advanced Theming.**
-  - [x] Expand settings menu to support font selection (serif, sans-serif, monospace).
-  - [x] Implement custom color themes (beyond light/dark/sepia).
-  - [x] Persist theme preferences.
+- [ ] Step 6: **Advanced Theming.**
+  - [ ] Expand settings menu to support font selection (serif, sans-serif, monospace).
+  - [ ] Implement custom color themes (beyond light/dark/sepia).
+  - [ ] Persist theme preferences.
 
-- [x] Step 7: **PWA Implementation.**
-  - [x] Configure `vite-plugin-pwa`.
-  - [x] Create manifest file.
-  - [x] Implement service worker for caching app shell.
-  - [x] Verify offline capability (loading cached books).
+- [ ] Step 7: **PWA Implementation.**
+  - [ ] Configure `vite-plugin-pwa`.
+  - [ ] Create manifest file.
+  - [ ] Implement service worker for caching app shell.
+  - [ ] Verify offline capability (loading cached books).
 
 - [ ] Step 8: **Final Polish & Verification.**
   - [ ] Comprehensive UI review (animations, transitions, responsive design).
