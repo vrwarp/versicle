@@ -48,3 +48,9 @@ Versicle is a Progressive Web App (PWA) designed to ingest, manage, and render E
   - IndexedDB schema implemented (`EpubLibraryDB`).
   - Zustand stores created (`useLibraryStore`, `useReaderStore`, `useTTSStore`).
   - Basic routing setup with `react-router-dom`.
+
+- **Step 2: Ingestion Engine** - Completed
+  - Implemented `IngestionService` to parse EPUBs using `epub.js`.
+  - Added Drag-and-Drop `FileUploader`.
+  - Implemented `LibraryView` and `BookCard` with cover image support.
+  - Integrated `useLibraryStore` with IndexedDB for persisting books and files.

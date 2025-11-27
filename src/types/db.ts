@@ -4,6 +4,7 @@ export interface BookMetadata {
   author: string;
   description?: string;
   coverUrl?: string; // Blob URL (created on load, revoked on unload)
+  coverBlob?: Blob; // Stored in IndexedDB, not usually passed to UI
   addedAt: number;
   lastRead?: number;
   progress?: number; // 0-1 percentage

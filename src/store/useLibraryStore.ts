@@ -1,77 +1,49 @@
 import { create } from 'zustand';
+import { getDB } from '../db/db';
 import type { BookMetadata } from '../types/db';
-import { getDB } from '../db';
+import { processEpub } from '../lib/ingestion';
 
 interface LibraryState {
   books: BookMetadata[];
   isLoading: boolean;
-  refreshLibrary: () => Promise<void>;
-  addBook: (book: BookMetadata, file: ArrayBuffer) => Promise<void>;
-  removeBook: (id: string) => Promise<void>;
+  isImporting: boolean;
+  error: string | null;
+  fetchBooks: () => Promise<void>;
+  addBook: (file: File) => Promise<void>;
 }
 
-export const useLibraryStore = create<LibraryState>((set) => ({
+export const useLibraryStore = create<LibraryState>((set, get) => ({
   books: [],
   isLoading: false,
+  isImporting: false,
+  error: null,
 
-  refreshLibrary: async () => {
-    set({ isLoading: true });
+  fetchBooks: async () => {
+    set({ isLoading: true, error: null });
     try {
       const db = await getDB();
       const books = await db.getAll('books');
-      // Sort by addedAt desc
+
+      // Sort by addedAt descending
       books.sort((a, b) => b.addedAt - a.addedAt);
-      set({ books });
-    } catch (error) {
-      console.error('Failed to refresh library:', error);
-    } finally {
-      set({ isLoading: false });
+
+      set({ books, isLoading: false });
+    } catch (err) {
+      console.error('Failed to fetch books:', err);
+      set({ error: 'Failed to load library.', isLoading: false });
     }
   },
 
-  addBook: async (book, file) => {
-    set({ isLoading: true });
+  addBook: async (file: File) => {
+    set({ isImporting: true, error: null });
     try {
-      const db = await getDB();
-      const tx = db.transaction(['books', 'files'], 'readwrite');
-      await tx.objectStore('books').put(book);
-      await tx.objectStore('files').put(file, book.id);
-      await tx.done;
-
-      // Update local state
-      set((state) => ({
-        books: [book, ...state.books],
-      }));
-    } catch (error) {
-      console.error('Failed to add book:', error);
-      throw error;
-    } finally {
-      set({ isLoading: false });
-    }
-  },
-
-  removeBook: async (id) => {
-    set({ isLoading: true });
-    try {
-      const db = await getDB();
-      const tx = db.transaction(['books', 'files', 'annotations'], 'readwrite');
-      await tx.objectStore('books').delete(id);
-      await tx.objectStore('files').delete(id);
-      // Also delete annotations for this book
-      const annotationsIndex = tx.objectStore('annotations').index('by_bookId');
-      const annotations = await annotationsIndex.getAllKeys(id);
-      for (const annotationId of annotations) {
-        await tx.objectStore('annotations').delete(annotationId);
-      }
-      await tx.done;
-
-      set((state) => ({
-        books: state.books.filter((b) => b.id !== id),
-      }));
-    } catch (error) {
-      console.error('Failed to remove book:', error);
-    } finally {
-      set({ isLoading: false });
+      await processEpub(file);
+      // Refresh library
+      await get().fetchBooks();
+      set({ isImporting: false });
+    } catch (err) {
+      console.error('Failed to import book:', err);
+      set({ error: 'Failed to import book.', isImporting: false });
     }
   },
 }));
