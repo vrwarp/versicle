@@ -1,77 +1,83 @@
-# **Step 5: Polish (Annotations, Themes, PWA)**
+# **Step 5: Annotations System**
 
 ## **5.1 Overview**
-The final phase adds the "user layer": custom annotations (notes/highlights), persistent theming, and PWA capabilities for "native-like" installability.
+Implement a robust system for user annotations, allowing readers to highlight text and attach notes to specific passages within a book. This feature leverages `epub.js`'s native CFI (Canonical Fragment Identifier) system and persists data to IndexedDB.
 
-## **5.2 Annotations System**
+## **5.2 Data Persistence (IndexedDB)**
 
-### **Data Structure**
-Stored in `annotations` object store in IndexedDB.
+### **Schema**
+We will utilize the existing `annotations` object store in our `EpubLibraryDB`.
+**Store Name:** `annotations`
+**Key Path:** `id` (UUID)
+**Indexes:** `bookId` (to query all annotations for a specific book)
+
+**Interface:**
 ```typescript
-{
-  id: "uuid",
-  bookId: "uuid",
-  cfiRange: "epubcfi(...)",
-  color: "yellow", // or class name
-  note: "This is a great quote!",
-  created: 123456789
+interface Annotation {
+  id: string;          // UUID
+  bookId: string;      // Foreign key to book
+  cfiRange: string;    // The epubcfi range string
+  type: 'highlight' | 'note';
+  color: string;       // e.g., "yellow", "#ff0000", "class-name"
+  note?: string;       // Optional user text
+  created: number;     // Timestamp
 }
 ```
 
-### **Interaction**
-1.  **Selection Event:**
-    *   `rendition.on('selected', (cfiRange, contents) => { ... })`
-    *   Show a popover menu (Highlight | Note | Copy).
-2.  **Creating Annotation:**
-    *   User clicks "Highlight".
-    *   Save to DB.
-    *   Call `rendition.annotations.add('highlight', cfiRange)`.
-    *   *Clear selection:* `window.getSelection().removeAllRanges()`.
-3.  **Loading:**
-    *   On book load, fetch annotations for `bookId` from DB.
-    *   Batch add to rendition.
+### **Database Operations**
+*   `addAnnotation(annotation: Annotation): Promise<void>`
+*   `getAnnotations(bookId: string): Promise<Annotation[]>`
+*   `deleteAnnotation(id: string): Promise<void>`
 
-## **5.3 Advanced Theming**
+## **5.3 User Interaction Flow**
 
-### **Custom Themes**
-Allow users to define custom colors (bg/fg).
-*   `rendition.themes.register('custom', { body: { color: userColor, background: userBg } })`
-*   Persist user preferences in `localStorage` or `useReaderStore` (persisted via `persist` middleware).
+### **1. Selection & Popover**
+*   **Listener:** Attach a listener to the `selected` event on the `rendition` object.
+    ```typescript
+    rendition.on('selected', (cfiRange: string, contents: any) => {
+      // 1. Get screen coordinates of the selection to position the popover
+      const range = rendition.getRange(cfiRange);
+      const rect = range.getBoundingClientRect();
 
-### **Font Selection**
-*   Inject generic font families (`serif`, `sans-serif`) or embed Google Fonts via `rendition.themes.default({ '@font-face': ... })` (complex due to CORS/CSP).
-*   *Simpler:* Allow selection of system fonts.
+      // 2. Show Popover Menu (Highlight Colors, Note Icon) at `rect`
+      setShowPopover({ x: rect.left, y: rect.top, cfiRange });
+    });
+    ```
+*   **UI:** A floating menu component (using a portal or absolute positioning) that offers color choices (Yellow, Green, Blue, Red) and a "Copy" button.
 
-## **5.4 Progressive Web App (PWA)**
+### **2. Creating a Highlight**
+*   **Action:** User clicks a color (e.g., Yellow).
+*   **Process:**
+    1.  Generate a UUID.
+    2.  Save the annotation object to IndexedDB.
+    3.  Apply the highlight visually:
+        ```typescript
+        rendition.annotations.add('highlight', cfiRange, {}, null, `highlight-${color}`);
+        ```
+    4.  Clear the browser text selection: `window.getSelection()?.removeAllRanges()`.
 
-### **Manifest (`public/manifest.json`)**
-```json
-{
-  "name": "Versicle Reader",
-  "short_name": "Versicle",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#333333",
-  "icons": [ ... ]
-}
-```
+### **3. Managing Annotations**
+*   **Clicking a Highlight:**
+    *   Add a listener for clicked annotations.
+    *   Show a menu to "Delete" or "Edit Note".
+*   **Sidebar View:**
+    *   Add an "Annotations" tab to the Sidebar (alongside TOC).
+    *   List all annotations for the current book, sorted by CFI (location).
+    *   Clicking an item in the list navigates the reader: `rendition.display(cfiRange)`.
 
-### **Service Worker**
-*   Use `vite-plugin-pwa`.
-*   **Strategy:** `CacheFirst` for assets.
-*   **Offline Mode:**
-    *   The app shell is cached.
-    *   `epub.js` core is cached.
-    *   Book data is in IndexedDB (offline ready by default).
-    *   *Result:* Fully offline capable reading.
+## **5.4 Implementation Details**
 
-## **5.5 Final Polish**
-*   **Empty States:** "No books found. Import one!"
-*   **Loading Spinners:** Better UI feedback during ingestion/indexing.
-*   **Error Toasts:** "Failed to parse EPUB".
+### **Components**
+*   `ReaderView.tsx`: Updates to handle selection events and render the `AnnotationPopover`.
+*   `AnnotationPopover.tsx`: New component for the floating menu.
+*   `AnnotationList.tsx`: New component for the sidebar tab.
 
-## **5.6 Verification**
-*   **Annotations:** Highlight text. Refresh. Highlight persists. Add note.
-*   **PWA:** Lighthouse audit (aim for 90+ PWA score). "Install" icon appears in browser.
-*   **Offline:** Turn off network. Reload. App loads and opens book.
+### **Styles**
+*   Define CSS classes for highlights (e.g., `.highlight-yellow { fill: yellow; fill-opacity: 0.3; mix-blend-mode: multiply; }`).
+*   Inject these styles using `rendition.themes.default(...)`.
+
+## **5.5 Verification**
+*   **Select Text:** Verify popover appears at correct coordinates.
+*   **Persist:** Highlight text, reload page, verify highlight reappears.
+*   **Navigation:** Click annotation in sidebar, verify reader jumps to correct location.
+*   **Cleanup:** Delete annotation, verify it disappears from screen and DB.

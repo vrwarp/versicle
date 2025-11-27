@@ -207,7 +207,10 @@ epub.js provides a robust annotation API based on **Canonical Fragment Identifie
 2. **Phase 2: Ingestion.** Build the file uploader that parses .epub (using JSZip internal to epub.js) and extracts the cover/metadata.  
 3. **Phase 3: The Reader.** Implement the Viewer component. Handle basic pagination and Chapter navigation.  
 4. **Phase 4: TTS & Optimization.** Implement the TreeWalker logic for sentence extraction and connect the Web Speech API. Add Virtualization for the library.  
-5. **Phase 5: Polish.** Add Annotations, Themes, and PWA manifest for "Add to Home Screen" capability.
+5. **Phase 5: Annotations.** Implement the backend and frontend for user highlights and notes.
+6. **Phase 6: Advanced Theming.** Add font selection and custom color themes.
+7. **Phase 7: PWA.** Add manifest and service worker for offline capability and installability.
+8. **Phase 8: Polish & Verification.** Final UI refinements, error handling, and comprehensive testing.
 
 #### **Works cited**
 
