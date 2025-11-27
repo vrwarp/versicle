@@ -2,7 +2,33 @@ import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { BookCard } from './BookCard';
 import { FileUploader } from './FileUploader';
-import { FixedSizeGrid as Grid } from 'react-window';
+import { Grid } from 'react-window';
+
+// Grid Configuration
+const CARD_WIDTH = 200; // Minimal width
+const CARD_HEIGHT = 320;
+const GAP = 24;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => {
+    const index = rowIndex * columnCount + columnIndex;
+    if (index >= books.length) return null;
+    const book = books[index];
+
+    return (
+        <div style={{
+            ...style,
+            width: Number(style.width) - GAP,
+            height: Number(style.height) - GAP,
+            // We simulate gap by padding effectively (reducing width/height)
+            // But 'style.left' positions rigidly.
+            // Better: Cell size = Card + Gap.
+            // Inner div size = Card.
+        }}>
+           <BookCard book={book} />
+        </div>
+    );
+}
 
 export const LibraryView: React.FC = () => {
   const { books, fetchBooks, isLoading, error } = useLibraryStore();
@@ -27,63 +53,18 @@ export const LibraryView: React.FC = () => {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
-  // Grid Configuration
-  const CARD_WIDTH = 200; // Minimal width
-  const CARD_HEIGHT = 320;
-  const GAP = 24;
-
   const columnCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
   const rowCount = Math.ceil(books.length / columnCount);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const columnWidth = (dimensions.width - (GAP * (columnCount - 1))) / columnCount;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const Cell = ({ columnIndex, rowIndex, style }: any) => {
-      const index = rowIndex * columnCount + columnIndex;
-      const book = books[index];
-
-      if (!book) return null;
-
-      return (
-          <div style={{
-              ...style,
-              left: Number(style.left) + (columnIndex * GAP), // Adjust for gap handled manually if needed, but FixedSizeGrid doesn't support gap natively easily without some math or extra wrappers.
-              // Actually FixedSizeGrid assumes contiguous items.
-              // Better to use a wrapper div inside.
-              width: Number(style.width) - GAP,
-              height: Number(style.height) - GAP
-          }}>
-              <BookCard book={book} />
-          </div>
-      );
-  };
 
   // Re-calculating proper FixedSizeGrid usage with gaps:
   // Usually we make the cell size include the gap, and then render a smaller inner div.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const cellWidth = columnWidth + GAP; // This might be wrong logic for exact widths.
   // Let's rely on flexible card width in BookCard if possible?
   // Or simply:
   const gridColumnWidth = Math.floor(dimensions.width / columnCount);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const GridCell = ({ columnIndex, rowIndex, style }: any) => {
-      const index = rowIndex * columnCount + columnIndex;
-      if (index >= books.length) return null;
-      const book = books[index];
-
-      return (
-          <div style={{
-              ...style,
-              width: Number(style.width) - GAP,
-              height: Number(style.height) - GAP,
-              // We simulate gap by padding effectively (reducing width/height)
-              // But 'style.left' positions rigidly.
-              // Better: Cell size = Card + Gap.
-              // Inner div size = Card.
-          }}>
-             <BookCard book={book} />
-          </div>
-      );
-  }
 
 
   return (
@@ -120,9 +101,9 @@ export const LibraryView: React.FC = () => {
                 rowCount={rowCount}
                 rowHeight={CARD_HEIGHT + GAP}
                 width={dimensions.width}
-             >
-                 {GridCell}
-             </Grid>
+                cellComponent={GridCell}
+                cellProps={{ books, columnCount }}
+             />
           )}
         </section>
       )}
