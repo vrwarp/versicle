@@ -25,8 +25,7 @@ async def test_annotations():
         frame = page.frame_locator("iframe")
         await frame.locator("p").first.wait_for()
 
-        # Select text
-        # We inject JS to create a selection range
+        # Select text - Inject JS to create a selection range
         await frame.locator("body").evaluate("""
             () => {
                 const range = document.createRange();
@@ -58,12 +57,10 @@ async def test_annotations():
         # Check Annotations Sidebar
         await page.get_by_label("Annotations").click()
 
-        # Expect the annotation text to be visible in the list
-        # "Alice's Ad" (first 10 chars approx)
+        # Expect the annotation text to be visible in the list ("Alice's Ad" approx)
         await expect(page.get_by_text("Alice", exact=False)).to_be_visible()
 
-        # Test Note
-        # Select another text
+        # Test Note - Select another text range
         await frame.locator("body").evaluate("""
             () => {
                 const range = document.createRange();
@@ -81,25 +78,12 @@ async def test_annotations():
         await expect(page.get_by_title("Add Note")).to_be_visible()
         await page.get_by_title("Add Note").click()
 
-        # Input note
+        # Input note and save
         await page.get_by_placeholder("Enter note...").fill("My test note")
-        await page.get_by_role("button").filter(has_text="Save").first.click() # Actually it's an icon button, might need better selector
-        # The save button is the checkmark/sticky note icon in the input group
-        # In AnnotationPopover, the save button has StickyNote icon.
-        # But wait, my code for `AnnotationPopover` uses `StickyNote` icon for the button to open input,
-        # AND `StickyNote` icon for saving?
-        # Let's check `AnnotationPopover.tsx`.
-        # Yes: <button onClick={handleSaveNote} ...><StickyNote .../></button>
-        # Selector might be tricky. It has class 'text-green-600'.
-
-        # Wait, I can just press Enter in the input
-        # await page.get_by_placeholder("Enter note...").press("Enter")
+        # Save button is the sticky note icon in the input group (green)
+        await page.get_by_role("button").filter(has_text="Save").first.click()
 
         # Check if note appears in sidebar
-        # Sidebar is already open? Or did it close?
-        # `showPopover` closes when annotation added. Sidebar state `showAnnotations` persists.
-        # But we need to make sure we are looking at the sidebar.
-
         await expect(page.get_by_text("My test note")).to_be_visible()
 
         await browser.close()
