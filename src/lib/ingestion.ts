@@ -3,6 +3,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
 import type { BookMetadata } from '../types/db';
 
+/**
+ * Processes an EPUB file, extracting metadata and cover image, and storing it in the database.
+ *
+ * @param file - The EPUB file object to process.
+ * @returns A Promise that resolves to the UUID of the newly created book.
+ * @throws Will throw an error if the file cannot be parsed or database operations fail.
+ */
 export async function processEpub(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

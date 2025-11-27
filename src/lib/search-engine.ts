@@ -1,14 +1,29 @@
 import FlexSearch from 'flexsearch';
 
+/**
+ * Represents a search result containing a link and a text excerpt.
+ */
 export interface SearchResult {
+    /** The reference (href) to the location in the book. */
     href: string;
+    /** A snippet of text containing the search term. */
     excerpt: string;
 }
 
+/**
+ * Provides search functionality for book content using FlexSearch.
+ * Handles indexing and querying of book sections.
+ */
 export class SearchEngine {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private indexes = new Map<string, any>();
 
+    /**
+     * Indexes a book's sections for searching.
+     *
+     * @param bookId - The unique identifier of the book.
+     * @param sections - An array of sections containing text and location data to be indexed.
+     */
     indexBook(bookId: string, sections: { id: string; href: string; text: string }[]) {
         // @ts-expect-error FlexSearch types might be missing or different
         const index = new FlexSearch.Document({
@@ -28,6 +43,13 @@ export class SearchEngine {
         this.indexes.set(bookId, index);
     }
 
+    /**
+     * Searches a specific book for a query string.
+     *
+     * @param bookId - The unique identifier of the book to search.
+     * @param query - The text query to search for.
+     * @returns An array of SearchResult objects matching the query.
+     */
     search(bookId: string, query: string): SearchResult[] {
         const index = this.indexes.get(bookId);
         if (!index) return [];
@@ -47,6 +69,13 @@ export class SearchEngine {
         );
     }
 
+    /**
+     * Generates a context excerpt for the found query in the text.
+     *
+     * @param text - The full text where the match was found.
+     * @param query - The search query term.
+     * @returns A string snippet surrounding the matched term.
+     */
     private getExcerpt(text: string, query: string): string {
         const lowerText = text.toLowerCase();
         const lowerQuery = query.toLowerCase();

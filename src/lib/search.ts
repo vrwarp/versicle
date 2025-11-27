@@ -1,15 +1,30 @@
 import { Book } from 'epubjs';
 
+/**
+ * Represents the result of a search query within a book.
+ */
 export interface SearchResult {
+    /** The reference (href) to the location in the book. */
     href: string;
+    /** A snippet of text containing the search term. */
     excerpt: string;
-    cfi?: string; // Optional, might need to calculate
+    /** Optional Canonical Fragment Identifier (CFI) for the location. */
+    cfi?: string;
 }
 
+/**
+ * Client-side handler for interacting with the search worker.
+ * Manages off-main-thread indexing and searching of books.
+ */
 class SearchClient {
     private worker: Worker | null = null;
     private listeners: Map<string, (data: unknown) => void> = new Map();
 
+    /**
+     * Retrieves the existing Web Worker instance or creates a new one if it doesn't exist.
+     *
+     * @returns The active Search Web Worker.
+     */
     private getWorker() {
         if (!this.worker) {
              this.worker = new Worker(new URL('../workers/search.worker.ts', import.meta.url), {
@@ -27,6 +42,13 @@ class SearchClient {
         return this.worker;
     }
 
+    /**
+     * Extracts text content from a book's spine items and sends it to the worker for indexing.
+     *
+     * @param book - The epubjs Book object to be indexed.
+     * @param bookId - The unique identifier of the book.
+     * @returns A Promise that resolves when the indexing command is sent to the worker.
+     */
     async indexBook(book: Book, bookId: string) {
         // Extract text from all spine items
         // This can be slow, so we should do it carefully.
@@ -76,6 +98,13 @@ class SearchClient {
         });
     }
 
+    /**
+     * Performs a search query against a specific book index via the worker.
+     *
+     * @param query - The text query to search for.
+     * @param bookId - The unique identifier of the book to search.
+     * @returns A Promise that resolves to an array of SearchResult objects.
+     */
     search(query: string, bookId: string): Promise<SearchResult[]> {
         return new Promise((resolve) => {
             this.listeners.set('SEARCH_RESULTS', (data) => {
@@ -89,6 +118,9 @@ class SearchClient {
         });
     }
 
+    /**
+     * Terminates the search worker and cleans up resources.
+     */
     terminate() {
         if (this.worker) {
             this.worker.terminate();
@@ -97,4 +129,5 @@ class SearchClient {
     }
 }
 
+/** A singleton instance of the SearchClient. */
 export const searchClient = new SearchClient();

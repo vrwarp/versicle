@@ -1,10 +1,21 @@
 import React, { useCallback, useState } from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 
+/**
+ * A component for uploading EPUB files via drag-and-drop or file selection.
+ * Handles user interactions and triggers the book import process.
+ *
+ * @returns A React component rendering the file upload area.
+ */
 export const FileUploader: React.FC = () => {
   const { addBook, isImporting } = useLibraryStore();
   const [dragActive, setDragActive] = useState(false);
 
+  /**
+   * Handles drag events to toggle visual feedback for the drop zone.
+   *
+   * @param e - The React DragEvent.
+   */
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -15,6 +26,11 @@ export const FileUploader: React.FC = () => {
     }
   }, []);
 
+  /**
+   * Handles the drop event to process the dropped file.
+   *
+   * @param e - The React DragEvent containing the dropped files.
+   */
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -33,6 +49,11 @@ export const FileUploader: React.FC = () => {
     [addBook]
   );
 
+  /**
+   * Handles the file input change event for browsing and selecting files.
+   *
+   * @param e - The React ChangeEvent from the file input.
+   */
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     if (e.target.files && e.target.files[0]) {

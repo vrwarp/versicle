@@ -1,7 +1,13 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { BookMetadata, Annotation } from '../types/db';
 
+/**
+ * Interface defining the schema for the IndexedDB database.
+ */
 export interface EpubLibraryDB extends DBSchema {
+  /**
+   * Store for book metadata.
+   */
   books: {
     key: string;
     value: BookMetadata;
@@ -11,10 +17,16 @@ export interface EpubLibraryDB extends DBSchema {
       by_addedAt: number;
     };
   };
+  /**
+   * Store for binary file data (EPUB files).
+   */
   files: {
     key: string;
     value: ArrayBuffer;
   };
+  /**
+   * Store for user annotations.
+   */
   annotations: {
     key: string;
     value: Annotation;
@@ -26,6 +38,12 @@ export interface EpubLibraryDB extends DBSchema {
 
 let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
+/**
+ * Initializes the IndexedDB database connection and handles schema upgrades.
+ * It creates the 'books', 'files', and 'annotations' object stores if they don't exist.
+ *
+ * @returns A Promise resolving to the database instance.
+ */
 export const initDB = () => {
   if (!dbPromise) {
     dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 1, {
@@ -54,6 +72,11 @@ export const initDB = () => {
   return dbPromise;
 };
 
+/**
+ * Retrieves the existing database connection or initializes a new one.
+ *
+ * @returns A Promise resolving to the active database instance.
+ */
 export const getDB = () => {
   if (!dbPromise) {
     return initDB();

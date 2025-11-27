@@ -1,7 +1,12 @@
 import ePub, { Rendition } from 'epubjs';
 
+/**
+ * Represents a sentence and its corresponding location (CFI) in the book.
+ */
 export interface SentenceNode {
+    /** The text content of the sentence. */
     text: string;
+    /** The Canonical Fragment Identifier (CFI) pointing to the sentence's location. */
     cfi: string;
 }
 
@@ -10,6 +15,9 @@ export interface SentenceNode {
  * This is a simplified implementation that extracts text nodes and splits by punctuation.
  * For a production app, a more robust NLP sentence splitter would be better,
  * but this serves the purpose of mapping text to CFIs.
+ *
+ * @param rendition - The current epubjs Rendition object.
+ * @returns An array of SentenceNode objects representing the sentences in the current view.
  */
 export const extractSentences = (rendition: Rendition): SentenceNode[] => {
     const sentences: SentenceNode[] = [];

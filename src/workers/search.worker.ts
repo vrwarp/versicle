@@ -1,12 +1,20 @@
 import { SearchEngine } from '../lib/search-engine';
 
-// Define the worker's API
+/**
+ * Defines the structure of messages sent to the search worker.
+ */
 export type SearchMessage =
   | { type: 'INDEX_BOOK'; payload: { bookId: string; sections: { id: string; href: string; text: string }[] } }
   | { type: 'SEARCH'; payload: { query: string; bookId: string } };
 
 const engine = new SearchEngine();
 
+/**
+ * Global message handler for the Web Worker.
+ * Receives indexing and search commands and delegates them to the SearchEngine.
+ *
+ * @param e - The MessageEvent containing the command and payload.
+ */
 self.onmessage = async (e: MessageEvent<SearchMessage>) => {
   const { type, payload } = e.data;
 

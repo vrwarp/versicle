@@ -8,6 +8,13 @@ import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search } from 'lucide-react';
 
+/**
+ * The main reader interface component.
+ * Renders the EPUB content using epub.js and provides controls for navigation,
+ * settings, Text-to-Speech (TTS), and search.
+ *
+ * @returns A React component for reading books.
+ */
 export const ReaderView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();

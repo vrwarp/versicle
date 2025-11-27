@@ -9,6 +9,17 @@ const CARD_WIDTH = 200; // Minimal width
 const CARD_HEIGHT = 320;
 const GAP = 24;
 
+/**
+ * Renders a single cell within the virtualized grid of books.
+ *
+ * @param props - Properties passed by `react-window` grid.
+ * @param props.columnIndex - The column index of the cell.
+ * @param props.rowIndex - The row index of the cell.
+ * @param props.style - The style object containing positioning for the cell.
+ * @param props.books - The array of books to display.
+ * @param props.columnCount - The total number of columns in the grid.
+ * @returns A BookCard component wrapped in a positioned div, or null if the index is out of bounds.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => {
     const index = rowIndex * columnCount + columnIndex;
@@ -30,6 +41,13 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
     );
 }
 
+/**
+ * The main library view component.
+ * Displays the user's collection of books in a virtualized grid and allows importing new books.
+ * Handles fetching books from the store and responsive layout calculations.
+ *
+ * @returns A React component rendering the library interface.
+ */
 export const LibraryView: React.FC = () => {
   const { books, fetchBooks, isLoading, error } = useLibraryStore();
   const containerRef = useRef<HTMLDivElement>(null);

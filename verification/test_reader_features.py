@@ -5,6 +5,22 @@ import re
 import os
 
 async def run_test():
+    """
+    Executes a comprehensive verification test suite for the Reader features using Playwright.
+
+    The test covers:
+    1. Navigation to the library.
+    2. Uploading an EPUB book.
+    3. Opening the book in the Reader view.
+    4. Navigating pages (Next/Previous).
+    5. Using the Table of Contents (TOC).
+    6. Changing settings (Theme, Font Size).
+    7. Persistence of settings and reading progress after reload.
+    8. Keyboard navigation.
+    9. Returning to the library and re-opening the book.
+
+    Screenshots are saved to 'verification/screenshots/' at various steps.
+    """
     async with async_playwright() as p:
         browser = await p.chromium.launch()
         page = await browser.new_page()

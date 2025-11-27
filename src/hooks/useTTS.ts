@@ -3,6 +3,14 @@ import { useTTSStore } from '../store/useTTSStore';
 import { extractSentences, type SentenceNode } from '../lib/tts';
 import { Rendition } from 'epubjs';
 
+/**
+ * Custom hook to manage Text-to-Speech (TTS) functionality.
+ * Handles extracting sentences from the current rendition, managing the SpeechSynthesis API,
+ * and synchronizing playback state with the TTS store.
+ *
+ * @param rendition - The current epubjs Rendition object, used to extract text content.
+ * @returns An object containing the extracted sentences for the current view.
+ */
 export const useTTS = (rendition: Rendition | null) => {
   const {
     isPlaying,

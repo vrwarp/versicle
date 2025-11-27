@@ -3,16 +3,38 @@ import { getDB } from '../db/db';
 import type { BookMetadata } from '../types/db';
 import { processEpub } from '../lib/ingestion';
 
+/**
+ * State interface for the Library store.
+ */
 interface LibraryState {
+  /** List of book metadata currently in the library. */
   books: BookMetadata[];
+  /** Flag indicating if the library is currently loading. */
   isLoading: boolean;
+  /** Flag indicating if a book is currently being imported. */
   isImporting: boolean;
+  /** Error message if an operation failed, or null. */
   error: string | null;
+  /**
+   * Fetches all books from the database and updates the store.
+   */
   fetchBooks: () => Promise<void>;
+  /**
+   * Imports a new EPUB file into the library.
+   * @param file - The EPUB file to import.
+   */
   addBook: (file: File) => Promise<void>;
+  /**
+   * Removes a book and its associated data (files, annotations) from the library.
+   * @param id - The unique identifier of the book to remove.
+   */
   removeBook: (id: string) => Promise<void>;
 }
 
+/**
+ * Zustand store for managing the user's library of books.
+ * Handles fetching, adding, and removing books from IndexedDB.
+ */
 export const useLibraryStore = create<LibraryState>((set, get) => ({
   books: [],
   isLoading: false,

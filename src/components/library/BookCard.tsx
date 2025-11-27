@@ -2,10 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
 
+/**
+ * Props for the BookCard component.
+ */
 interface BookCardProps {
+  /** The metadata of the book to display. */
   book: BookMetadata;
 }
 
+/**
+ * Displays a summary card for a book, including its cover, title, and author.
+ * navigating to the reader view when clicked.
+ *
+ * @param props - Component props containing the book metadata.
+ * @returns A React component rendering the book card.
+ */
 export const BookCard: React.FC<BookCardProps> = ({ book }) => {
   const navigate = useNavigate();
   const [coverUrl, setCoverUrl] = useState<string | null>(null);

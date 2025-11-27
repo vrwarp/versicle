@@ -2,6 +2,12 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useReaderStore } from '../../store/useReaderStore';
 
+/**
+ * A basic reader component that acts as a placeholder for the actual reading experience.
+ * It manages the current book ID via the URL parameters.
+ *
+ * @returns A React component rendering a basic reader interface structure.
+ */
 export const Reader: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { setCurrentBookId } = useReaderStore();
