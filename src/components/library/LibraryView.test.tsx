@@ -5,13 +5,13 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 
 // Mock react-window
 vi.mock('react-window', () => ({
-  FixedSizeGrid: ({ children, columnCount, rowCount }: any) => (
+  Grid: ({ cellComponent: Cell, cellProps, columnCount, rowCount }: any) => (
     <div data-testid="virtual-grid">
       {Array.from({ length: rowCount }).flatMap((_, r) =>
          Array.from({ length: columnCount }).map((_, c) =>
             // eslint-disable-next-line react/jsx-key
             <div key={`${r}-${c}`}>
-                {children({ columnIndex: c, rowIndex: r, style: { width: 100, height: 100 } })}
+                <Cell columnIndex={c} rowIndex={r} style={{ width: 100, height: 100 }} {...cellProps} />
             </div>
          )
       )}

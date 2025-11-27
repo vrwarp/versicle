@@ -5,7 +5,7 @@ import { useReaderStore } from '../../store/useReaderStore';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useTTS } from '../../hooks/useTTS';
 import { getDB } from '../../db/db';
-import { searchClient, SearchResult } from '../../lib/search';
+import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search } from 'lucide-react';
 
 export const ReaderView: React.FC = () => {

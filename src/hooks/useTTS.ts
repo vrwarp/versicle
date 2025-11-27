@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
-import { extractSentences, SentenceNode } from '../lib/tts';
+import { extractSentences, type SentenceNode } from '../lib/tts';
 import { Rendition } from 'epubjs';
 
 export const useTTS = (rendition: Rendition | null) => {
