@@ -1,31 +1,28 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
 import { extractSentences, type SentenceNode } from '../lib/tts';
 import { Rendition } from 'epubjs';
+import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 
 /**
  * Custom hook to manage Text-to-Speech (TTS) functionality.
- * Handles extracting sentences from the current rendition, managing the SpeechSynthesis API,
- * and synchronizing playback state with the TTS store.
+ * Handles extracting sentences from the current rendition and synchronizing with AudioPlayerService.
  *
  * @param rendition - The current epubjs Rendition object, used to extract text content.
  * @returns An object containing the extracted sentences for the current view.
  */
 export const useTTS = (rendition: Rendition | null) => {
   const {
-    isPlaying,
-    rate,
-    voice,
-    activeCfi,
-    setPlaying,
-    setActiveCfi,
-    stop
+    loadVoices
   } = useTTSStore();
 
   const [sentences, setSentences] = useState<SentenceNode[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const synth = window.speechSynthesis;
-  const currentUtterance = useRef<SpeechSynthesisUtterance | null>(null);
+  const player = AudioPlayerService.getInstance();
+
+  // Load voices on mount
+  useEffect(() => {
+      loadVoices();
+  }, [loadVoices]);
 
   // Load sentences when chapter changes
   useEffect(() => {
@@ -35,10 +32,19 @@ export const useTTS = (rendition: Rendition | null) => {
        try {
            const extracted = extractSentences(rendition);
            setSentences(extracted);
-           setCurrentIndex(0);
+
+           // Update player queue
+           // We map SentenceNode to the format expected by AudioPlayerService
+           const queue = extracted.map(s => ({
+               text: s.text,
+               cfi: s.cfi
+           }));
+           player.setQueue(queue);
+
        } catch (e) {
            console.error("Failed to extract sentences", e);
            setSentences([]);
+           player.setQueue([]);
        }
     };
 
@@ -51,80 +57,14 @@ export const useTTS = (rendition: Rendition | null) => {
     return () => {
         rendition.off('rendered', loadSentences);
     };
-  }, [rendition]);
-
-  // Handle Playback Loop
-  const speakSentence = useCallback((index: number) => {
-      if (!synth) return;
-      if (index >= sentences.length) {
-          // Try to go to next chapter?
-          // For now, just stop.
-          setPlaying(false);
-          setActiveCfi(null);
-          return;
-      }
-
-      const sentence = sentences[index];
-
-      // Cancel any current speech
-      synth.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(sentence.text);
-      if (voice) utterance.voice = voice;
-      utterance.rate = rate;
-
-      utterance.onstart = () => {
-          setActiveCfi(sentence.cfi);
-          setCurrentIndex(index);
-      };
-
-      utterance.onend = () => {
-          if (useTTSStore.getState().isPlaying) {
-              speakSentence(index + 1);
-          }
-      };
-
-      utterance.onerror = (e) => {
-          console.error("TTS Error", e);
-          setPlaying(false);
-      };
-
-      currentUtterance.current = utterance;
-      synth.speak(utterance);
-
-  }, [sentences, rate, voice, setPlaying, setActiveCfi, synth]);
-
-  // Effect to trigger playback or pause
-  useEffect(() => {
-      if (!synth) return;
-
-      if (isPlaying && sentences.length > 0) {
-          // If just starting or resumed
-          if (!synth.speaking) {
-             speakSentence(currentIndex);
-          } else {
-             if (synth.paused) {
-                 synth.resume();
-             }
-          }
-      } else if (!isPlaying) {
-          if (synth.speaking) {
-              synth.pause();
-          }
-      }
-
-      return () => {
-          // Cleanup handled in unmount effect
-      };
-  }, [isPlaying, sentences, currentIndex, speakSentence, synth]);
+  }, [rendition, player]);
 
   // Cleanup on unmount
   useEffect(() => {
       return () => {
-          if (synth) synth.cancel();
-          stop();
+          player.stop();
       };
-  }, [stop, synth]);
+  }, [player]);
 
   return {
      sentences

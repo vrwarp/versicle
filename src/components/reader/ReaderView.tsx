@@ -43,7 +43,8 @@ export const ReaderView: React.FC = () => {
       rate,
       setRate,
       voice,
-      setVoice
+      setVoice,
+      voices: availableVoices
   } = useTTSStore();
 
   // Use TTS Hook
@@ -82,21 +83,12 @@ export const ReaderView: React.FC = () => {
   const [showToc, setShowToc] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-
-  useEffect(() => {
-      const loadVoices = () => {
-          setAvailableVoices(window.speechSynthesis.getVoices());
-      };
-      loadVoices();
-      window.speechSynthesis.onvoiceschanged = loadVoices;
-  }, []);
 
   // Initialize Book
   useEffect(() => {
@@ -411,7 +403,7 @@ export const ReaderView: React.FC = () => {
                          >
                              <option value="">Default</option>
                              {availableVoices.map(v => (
-                                 <option key={v.name} value={v.name}>{v.name.slice(0, 20)}...</option>
+                                 <option key={v.id} value={v.name}>{v.name.slice(0, 20)}...</option>
                              ))}
                          </select>
                      </div>
