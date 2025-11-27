@@ -1,4 +1,4 @@
-import ePub, { Rendition } from 'epubjs';
+import type { Rendition } from 'epubjs';
 
 export interface SentenceNode {
     text: string;
@@ -13,6 +13,8 @@ export interface SentenceNode {
  */
 export const extractSentences = (rendition: Rendition): SentenceNode[] => {
     const sentences: SentenceNode[] = [];
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
     const contents = rendition.getContents()[0];
 
     if (!contents) return [];
@@ -63,7 +65,8 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
 
             // Generate CFI
             try {
-                // @ts-expect-error epubjs types might be incomplete
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
                 const cfi = contents.cfiFromRange(range);
 
                 sentences.push({
@@ -88,7 +91,8 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
                  range.setEnd(node, textContent.length);
 
                   try {
-                    // @ts-expect-error epubjs types might be incomplete
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
                     const cfi = contents.cfiFromRange(range);
                     sentences.push({
                         text: remainingText.trim(),

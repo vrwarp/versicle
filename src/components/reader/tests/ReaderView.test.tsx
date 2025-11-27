@@ -182,14 +182,9 @@ describe('ReaderView', () => {
       const settingsBtn = screen.getByLabelText('Settings');
       fireEvent.click(settingsBtn);
 
-      const darkThemeBtn = screen.getAllByRole('button').find(b => b.className.includes('bg-gray-800') || b.className.includes('#333'));
-      // Simplified selector logic as in real component they are buttons with style background
-      // The component renders theme buttons. We can find by checking style or just fire event if we can locate it.
-
-      // The theme buttons don't have aria-labels in the simplified component, so let's find by checking the container
       const themeButtons = screen.getByText('Theme').nextElementSibling?.querySelectorAll('button');
-      if (themeButtons && themeButtons[1]) {
-          fireEvent.click(themeButtons[1]); // Dark
+      if (themeButtons && themeButtons[2]) {
+          fireEvent.click(themeButtons[2]); // Dark (Index 2 in Light, Sepia, Dark)
           expect(useReaderStore.getState().currentTheme).toBe('dark');
       }
   });

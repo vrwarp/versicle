@@ -1,4 +1,4 @@
-import { Book } from 'epubjs';
+import type { Book } from 'epubjs';
 
 export interface SearchResult {
     href: string;
@@ -39,12 +39,12 @@ class SearchClient {
         // For production, maybe do this incrementally or only on demand.
         // For now, we load all.
 
-        const spineItems = (book.spine as unknown as { items: unknown[] }).items;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const spineItems = (book.spine as unknown as { items: any[] }).items;
 
         // Parallelize loading? Limit concurrency?
         // Let's do sequential for safety first.
 
-        // @ts-expect-error epubjs types
         for (const item of spineItems) {
             try {
                 // We use item.load(book.load) or similar.
@@ -52,15 +52,14 @@ class SearchClient {
                 // item.url might be needed.
 
                 // book.load(item.href) returns a document
-                // @ts-expect-error epubjs types
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
                 const doc = await book.load(item.href);
                 if (doc) {
                     // Extract text
                     const text = doc.body.innerText; // or textContent
                     sections.push({
-                        // @ts-expect-error epubjs types
                         id: item.id,
-                        // @ts-expect-error epubjs types
                         href: item.href,
                         text: text
                     });

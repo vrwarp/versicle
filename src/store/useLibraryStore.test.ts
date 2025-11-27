@@ -6,7 +6,7 @@ import type { BookMetadata } from '../types/db';
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  processEpub: vi.fn(async (file: File) => {
+  processEpub: vi.fn(async (_file: File) => {
     // Mock implementation of processEpub that just puts a dummy book in DB
     const db = await getDB();
     const mockBook: BookMetadata = {
@@ -14,7 +14,7 @@ vi.mock('../lib/ingestion', () => ({
       title: 'Test Book',
       author: 'Test Author',
       description: 'Test Description',
-      cover: 'cover-data',
+      coverBlob: undefined,
       addedAt: 1234567890,
     };
     await db.put('books', mockBook);
@@ -30,7 +30,7 @@ describe('useLibraryStore', () => {
     title: 'Test Book',
     author: 'Test Author',
     description: 'Test Description',
-    cover: 'cover-data',
+    coverBlob: undefined,
     addedAt: 1234567890,
   };
 

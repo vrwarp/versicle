@@ -5,8 +5,12 @@ import { useReaderStore } from '../../store/useReaderStore';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useTTS } from '../../hooks/useTTS';
 import { getDB } from '../../db/db';
-import { searchClient, SearchResult } from '../../lib/search';
-import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search } from 'lucide-react';
+import { searchClient, type SearchResult } from '../../lib/search';
+import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Type } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
+import { Button } from '../ui/button';
+import { Slider } from '../ui/slider';
+import { Card } from '../ui/card';
 
 export const ReaderView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -47,13 +51,15 @@ export const ReaderView: React.FC = () => {
       const rendition = renditionRef.current;
       if (!rendition || !activeCfi) return;
 
-      // Add highlight
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
       rendition.annotations.add('highlight', activeCfi, {}, (e: Event) => {
           console.log("Clicked highlight", e);
       }, 'tts-highlight');
 
-      // Remove highlight when activeCfi changes
       return () => {
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
           rendition.annotations.remove(activeCfi, 'highlight');
       };
   }, [activeCfi]);
@@ -62,6 +68,8 @@ export const ReaderView: React.FC = () => {
   useEffect(() => {
       const rendition = renditionRef.current;
       if (rendition) {
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
           rendition.themes.default({
               '.tts-highlight': {
                   'fill': 'yellow',
@@ -72,10 +80,10 @@ export const ReaderView: React.FC = () => {
       }
   }, [renditionRef.current]);
 
-  const [showToc, setShowToc] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [immersiveMode, setImmersiveMode] = useState(false);
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -126,64 +134,40 @@ export const ReaderView: React.FC = () => {
           });
           renditionRef.current = rendition;
 
-          // Load navigation/TOC
           const nav = await book.loaded.navigation;
           setToc(nav.toc);
 
-          // Register themes
-          rendition.themes.register('light', { body: { background: '#ffffff', color: '#000000' } });
-          rendition.themes.register('dark', { body: { background: '#1a1a1a', color: '#f5f5f5' } });
-          rendition.themes.register('sepia', { body: { background: '#f4ecd8', color: '#5b4636' } });
+          rendition.themes.register('light', { body: { background: '#ffffff', color: '#1a1a1a' } });
+          rendition.themes.register('dark', { body: { background: '#0a0a0a', color: '#f5f5f5' } });
+          rendition.themes.register('sepia', { body: { background: '#f8f4e5', color: '#5b4636' } });
 
           rendition.themes.select(currentTheme);
           rendition.themes.fontSize(`${fontSize}%`);
 
-          // Display at saved location or start
           const startLocation = metadata?.currentCfi || undefined;
           await rendition.display(startLocation);
 
-          // Generate locations for progress tracking
-          // In a real app, this should be cached. For now, we generate if missing.
-          // Since generating locations is expensive, we might want to do it lazily or check if we have it saved.
-          // For this step, we'll just await ready and verify readiness.
           await book.ready;
-          // Ideally: await book.locations.generate(1000);
-          // However, for large books this blocks. We can do it in background or rely on percentage from chapters if locations not ready.
-          // Let's try to generate minimal locations for progress bar to work reasonably.
-           // This is heavy, maybe we skip for step 03 or do it async without await?
-           book.locations.generate(1000);
+          book.locations.generate(1000);
 
-           // Index for Search (Async)
-           // Only index if not already done? Or just do it every time for now (simplicity)
            searchClient.indexBook(book, id).then(() => {
                console.log("Book indexed for search");
            });
 
           rendition.on('relocated', (location: Location) => {
             const cfi = location.start.cfi;
-            // Calculate progress
-            // Note: book.locations.percentageFromCfi(cfi) only works if locations are generated.
-            // If not generated, it might return 0 or throw.
-            // We can check book.locations.length()
             let percentage = 0;
             try {
                 percentage = book.locations.percentageFromCfi(cfi);
             } catch {
-                // Locations not ready yet
+                // Locations not ready
             }
 
-            // Get chapter title
-            // Usually we find the spine item and check TOC.
-            // Simplified:
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const item = book.spine.get(location.start.href) as any;
             const title = item ? (item.label || 'Chapter') : 'Unknown';
-            // Actually getting title from spine is tricky without matching TOC.
-            // We'll leave title as is or implement proper TOC lookup later.
 
             updateLocation(cfi, percentage, title);
-
-            // Persist to DB (debouncing would be good here)
             saveProgress(id, cfi, percentage);
           });
         }
@@ -236,7 +220,6 @@ export const ReaderView: React.FC = () => {
   const handlePrev = () => renditionRef.current?.prev();
   const handleNext = () => renditionRef.current?.next();
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') handlePrev();
@@ -247,65 +230,63 @@ export const ReaderView: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900">
+    <div className={`flex flex-col h-screen overflow-hidden transition-colors duration-300 ${currentTheme === 'dark' ? 'bg-gray-950' : currentTheme === 'sepia' ? 'bg-[#f8f4e5]' : 'bg-white'}`}>
+
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 shadow-sm z-10">
-        <div className="flex items-center gap-2">
-          <button aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-            <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-200" />
-          </button>
-          <button aria-label="Table of Contents" onClick={() => setShowToc(!showToc)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-            <List className="w-5 h-5 text-gray-700 dark:text-gray-200" />
-          </button>
-        </div>
-        <h1 className="text-sm font-medium truncate max-w-xs text-gray-800 dark:text-gray-200">
+      <header className={`absolute top-0 left-0 right-0 z-10 transition-transform duration-300 ${immersiveMode ? '-translate-y-full' : 'translate-y-0'} ${currentTheme === 'dark' ? 'bg-gray-900/90 text-white' : 'bg-white/90 text-gray-900'} backdrop-blur-sm shadow-sm border-b ${currentTheme === 'dark' ? 'border-gray-800' : 'border-gray-200'}`}>
+        <div className="flex items-center justify-between px-4 h-14">
+          <div className="flex items-center gap-2">
+            <Button aria-label="Back" variant="ghost" size="icon" onClick={() => navigate('/')} className="hover:bg-black/5 dark:hover:bg-white/10">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+
+            <Sheet>
+                <SheetTrigger asChild>
+                    <Button aria-label="Table of Contents" variant="ghost" size="icon" className="hover:bg-black/5 dark:hover:bg-white/10">
+                        <List className="w-5 h-5" />
+                    </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[300px] sm:w-[400px] p-0">
+                    <SheetHeader className="p-6 border-b">
+                        <SheetTitle>Table of Contents</SheetTitle>
+                    </SheetHeader>
+                    <div className="overflow-y-auto h-full p-2 pb-20">
+                        <ul className="space-y-1">
+                             {useReaderStore.getState().toc.map((item, idx) => (
+                                 <li key={item.id || idx}>
+                                     <button
+                                        className="text-left w-full p-3 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors truncate"
+                                        onClick={() => {
+                                            renditionRef.current?.display(item.href);
+                                            // Close sheet implies logic but standard sheet closes on outside click.
+                                        }}
+                                     >
+                                         {item.label}
+                                     </button>
+                                 </li>
+                             ))}
+                         </ul>
+                    </div>
+                </SheetContent>
+            </Sheet>
+          </div>
+
+          <h1 className="text-sm font-medium truncate max-w-[150px] sm:max-w-md opacity-80">
              {currentChapterTitle || 'Reading'}
-        </h1>
-        <div className="flex items-center gap-2">
-           <button aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                <Search className="w-5 h-5 text-gray-700 dark:text-gray-200" />
-           </button>
-           <button aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${isPlaying ? 'text-blue-500' : 'text-gray-700 dark:text-gray-200'}`}>
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-           </button>
-           <button aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-            <Settings className="w-5 h-5 text-gray-700 dark:text-gray-200" />
-          </button>
-        </div>
-      </header>
+          </h1>
 
-      {/* Main Content */}
-      <div className="flex-1 relative overflow-hidden flex">
-         {/* TOC Sidebar */}
-         {showToc && (
-             <div className="w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
-                 <div className="p-4">
-                     <h2 className="text-lg font-bold mb-4 dark:text-white">Contents</h2>
-                     <ul className="space-y-2">
-                         {useReaderStore.getState().toc.map((item) => (
-                             <li key={item.id}>
-                                 <button
-                                    className="text-left w-full text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
-                                    onClick={() => {
-                                        renditionRef.current?.display(item.href);
-                                        setShowToc(false);
-                                    }}
-                                 >
-                                     {item.label}
-                                 </button>
-                             </li>
-                         ))}
-                     </ul>
-                 </div>
-             </div>
-         )}
-
-         {/* Search Sidebar */}
-         {showSearch && (
-             <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
-                 <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                     <h2 className="text-lg font-bold mb-2 dark:text-white">Search</h2>
-                     <div className="flex gap-2">
+          <div className="flex items-center gap-1">
+           <Sheet open={showSearch} onOpenChange={setShowSearch}>
+                <SheetTrigger asChild>
+                   <Button aria-label="Search" variant="ghost" size="icon" className="hover:bg-black/5 dark:hover:bg-white/10">
+                        <Search className="w-5 h-5" />
+                   </Button>
+                </SheetTrigger>
+                <SheetContent side="right">
+                    <SheetHeader className="mb-4">
+                        <SheetTitle>Search</SheetTitle>
+                    </SheetHeader>
+                     <div className="flex gap-2 mb-4">
                          <input
                             type="text"
                             value={searchQuery}
@@ -320,147 +301,201 @@ export const ReaderView: React.FC = () => {
                                 }
                             }}
                             placeholder="Search in book..."
-                            className="flex-1 text-sm p-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                         />
-                         <button
-                            onClick={() => setShowSearch(false)}
-                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                         >
-                            <X className="w-4 h-4 text-gray-500" />
-                         </button>
-                     </div>
-                 </div>
-                 <div className="flex-1 overflow-y-auto p-4">
-                     {isSearching ? (
-                         <div className="text-center text-gray-500">Searching...</div>
-                     ) : (
-                         <ul className="space-y-4">
-                             {searchResults.map((result, idx) => (
-                                 <li key={idx} className="border-b border-gray-100 dark:border-gray-700 pb-2 last:border-0">
-                                     <button
-                                        className="text-left w-full"
-                                        onClick={() => {
-                                            renditionRef.current?.display(result.href);
-                                            // Optionally highlight search term?
-                                            // renditionRef.current.annotations.add('highlight', ...)
-                                        }}
-                                     >
-                                         <p className="text-xs text-gray-500 mb-1">Result {idx + 1}</p>
-                                         <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3">
-                                             {result.excerpt}
-                                         </p>
-                                     </button>
-                                 </li>
-                             ))}
-                             {searchResults.length === 0 && searchQuery && !isSearching && (
-                                 <div className="text-center text-gray-500 text-sm">No results found</div>
-                             )}
-                         </ul>
-                     )}
-                 </div>
-             </div>
-         )}
-
-         {/* Reader Area */}
-         <div className="flex-1 relative">
-            <div ref={viewerRef} className="w-full h-full" />
-
-             {/* TTS Controls */}
-             {showTTS && (
-                 <div className="absolute top-2 right-14 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30">
-                     <div className="flex justify-between items-center mb-2">
-                         <h3 className="text-sm font-bold dark:text-white">Text to Speech</h3>
-                         <button onClick={() => setShowTTS(false)}><X className="w-4 h-4 text-gray-500" /></button>
-                     </div>
-                     <div className="flex items-center gap-2 mb-4">
-                         <button
-                            onClick={isPlaying ? pause : play}
-                            className="flex-1 bg-blue-600 text-white py-1 rounded hover:bg-blue-700 flex justify-center"
-                         >
-                             {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                         </button>
-                     </div>
-                     <div className="mb-2">
-                         <label className="block text-xs text-gray-500 mb-1">Speed: {rate}x</label>
-                         <input
-                            type="range"
-                            min="0.5"
-                            max="2"
-                            step="0.1"
-                            value={rate}
-                            onChange={(e) => setRate(parseFloat(e.target.value))}
-                            className="w-full"
+                            className="flex-1 text-sm p-2 border rounded bg-background"
                          />
                      </div>
-                     <div>
-                         <label className="block text-xs text-gray-500 mb-1">Voice</label>
+                     <div className="flex-1 overflow-y-auto -mx-6 px-6">
+                         {isSearching ? (
+                             <div className="text-center text-muted-foreground py-8">Searching...</div>
+                         ) : (
+                             <div className="space-y-4 pb-20">
+                                 {searchResults.map((result, idx) => (
+                                     <div key={idx} className="border-b pb-4 last:border-0">
+                                         <button
+                                            className="text-left w-full hover:opacity-70"
+                                            onClick={() => {
+                                                renditionRef.current?.display(result.href);
+                                                setShowSearch(false);
+                                            }}
+                                         >
+                                             <p className="text-xs text-muted-foreground mb-1">Result {idx + 1}</p>
+                                             <p className="text-sm line-clamp-3">
+                                                 {result.excerpt}
+                                             </p>
+                                         </button>
+                                     </div>
+                                 ))}
+                                 {searchResults.length === 0 && searchQuery && !isSearching && (
+                                     <div className="text-center text-muted-foreground py-8">No results found</div>
+                                 )}
+                             </div>
+                         )}
+                     </div>
+                </SheetContent>
+           </Sheet>
+
+           <Button
+                aria-label="Text to Speech"
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowTTS(!showTTS)}
+                className={`hover:bg-black/5 dark:hover:bg-white/10 ${isPlaying ? 'text-blue-500' : ''}`}
+            >
+                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+           </Button>
+
+           <Button
+                aria-label="Settings"
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowSettings(!showSettings)}
+                className="hover:bg-black/5 dark:hover:bg-white/10"
+            >
+                <Settings className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div
+        className="flex-1 relative w-full h-full"
+        onClick={() => setImmersiveMode(!immersiveMode)}
+      >
+        <div ref={viewerRef} className="w-full h-full" />
+      </div>
+
+        {/* TTS Controls (Floating) */}
+         {showTTS && (
+             <div className="absolute top-16 right-4 w-72 z-30">
+                 <Card className="p-4 shadow-xl border-t-4 border-blue-500">
+                     <div className="flex justify-between items-center mb-4">
+                         <h3 className="font-semibold text-sm">Text to Speech</h3>
+                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowTTS(false)}>
+                             <X className="w-4 h-4" />
+                         </Button>
+                     </div>
+                     <div className="flex gap-2 mb-4">
+                         <Button onClick={isPlaying ? pause : play} className="w-full">
+                             {isPlaying ? <Pause className="mr-2 w-4 h-4" /> : <Play className="mr-2 w-4 h-4" />}
+                             {isPlaying ? 'Pause' : 'Play'}
+                         </Button>
+                     </div>
+                     <div className="space-y-4">
+                         <div>
+                            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                                <span>Speed</span>
+                                <span>{rate}x</span>
+                            </div>
+                            <Slider
+                                value={[rate]}
+                                min={0.5} max={2} step={0.1}
+                                onValueChange={([val]) => setRate(val)}
+                            />
+                         </div>
                          <select
-                            className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                            className="w-full text-xs p-2 border rounded bg-background"
                             value={voice?.name || ''}
                             onChange={(e) => {
                                 const selected = availableVoices.find(v => v.name === e.target.value);
                                 setVoice(selected || null);
                             }}
                          >
-                             <option value="">Default</option>
+                             <option value="">Default Voice</option>
                              {availableVoices.map(v => (
-                                 <option key={v.name} value={v.name}>{v.name.slice(0, 20)}...</option>
+                                 <option key={v.name} value={v.name}>{v.name.slice(0, 25)}</option>
                              ))}
                          </select>
                      </div>
-                 </div>
-             )}
+                 </Card>
+             </div>
+         )}
 
-            {/* Settings Modal (Simplified) */}
-            {showSettings && (
-                <div className="absolute top-2 right-2 w-48 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30">
-                    <div className="mb-4">
-                        <label className="block text-xs font-semibold text-gray-500 mb-1">Theme</label>
-                        <div className="flex gap-2">
-                             {(['light', 'dark', 'sepia'] as const).map((theme) => (
-                                 <button
-                                    key={theme}
-                                    onClick={() => useReaderStore.getState().setTheme(theme)}
-                                    className={`w-6 h-6 rounded-full border ${currentTheme === theme ? 'ring-2 ring-blue-500' : ''}`}
-                                    style={{ background: theme === 'light' ? '#fff' : theme === 'dark' ? '#333' : '#f4ecd8' }}
-                                 />
-                             ))}
+         {/* Settings Panel (Floating) */}
+         {showSettings && (
+            <div className="absolute top-16 right-4 w-64 z-30">
+                <Card className="p-4 shadow-xl">
+                    <div className="flex justify-between items-center mb-4">
+                         <h3 className="font-semibold text-sm">Appearance</h3>
+                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowSettings(false)}>
+                             <X className="w-4 h-4" />
+                         </Button>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div>
+                            <label className="text-xs font-medium text-muted-foreground mb-2 block">Theme</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <button
+                                    onClick={() => useReaderStore.getState().setTheme('light')}
+                                    className={`flex flex-col items-center justify-center p-2 rounded border ${currentTheme === 'light' ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200'}`}
+                                >
+                                    <div className="w-full h-8 bg-white border border-gray-100 rounded mb-1"></div>
+                                    <span className="text-[10px]">Light</span>
+                                </button>
+                                <button
+                                    onClick={() => useReaderStore.getState().setTheme('sepia')}
+                                    className={`flex flex-col items-center justify-center p-2 rounded border ${currentTheme === 'sepia' ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200'}`}
+                                >
+                                    <div className="w-full h-8 bg-[#f8f4e5] border border-orange-100 rounded mb-1"></div>
+                                    <span className="text-[10px]">Sepia</span>
+                                </button>
+                                <button
+                                    onClick={() => useReaderStore.getState().setTheme('dark')}
+                                    className={`flex flex-col items-center justify-center p-2 rounded border ${currentTheme === 'dark' ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-200'}`}
+                                >
+                                    <div className="w-full h-8 bg-[#1a1a1a] rounded mb-1"></div>
+                                    <span className="text-[10px]">Dark</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex justify-between text-xs font-medium text-muted-foreground mb-2">
+                                <span>Font Size</span>
+                                <span>{fontSize}%</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Type className="w-3 h-3" />
+                                <Slider
+                                    value={[fontSize]}
+                                    min={80} max={200} step={10}
+                                    onValueChange={([val]) => useReaderStore.getState().setFontSize(val)}
+                                />
+                                <Type className="w-5 h-5" />
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-1">Font Size</label>
-                        <div className="flex items-center justify-between">
-                            <button onClick={() => useReaderStore.getState().setFontSize(Math.max(80, fontSize - 10))} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">-</button>
-                            <span className="text-sm dark:text-white">{fontSize}%</span>
-                            <button onClick={() => useReaderStore.getState().setFontSize(Math.min(200, fontSize + 10))} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">+</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-         </div>
-      </div>
+                </Card>
+            </div>
+         )}
 
-      {/* Footer / Controls */}
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-2 flex items-center justify-between z-10">
-          <button aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-              <ChevronLeft className="w-6 h-6 text-gray-600 dark:text-gray-300" />
-          </button>
+      {/* Footer */}
+      <footer className={`absolute bottom-0 left-0 right-0 z-10 transition-transform duration-300 ${immersiveMode ? 'translate-y-full' : 'translate-y-0'} ${currentTheme === 'dark' ? 'bg-gray-900/90' : 'bg-white/90'} backdrop-blur-sm border-t ${currentTheme === 'dark' ? 'border-gray-800' : 'border-gray-200'} pb-safe`}>
+          <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+              <Button aria-label="Previous Page" variant="ghost" size="icon" onClick={handlePrev} disabled={!bookRef.current}>
+                  <ChevronLeft className="w-6 h-6" />
+              </Button>
 
-          <div className="flex-1 mx-4">
-              <div className="h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 transition-all duration-300"
-                    style={{ width: `${progress * 100}%` }}
+              <div className="flex-1 flex flex-col gap-1">
+                  <Slider
+                      value={[progress * 100]}
+                      max={100}
+                      step={0.1}
+                      onValueChange={() => {
+                          // Allow scrubbing ideally, for now just visual
+                      }}
+                      className="cursor-default"
                   />
+                  <div className="flex justify-between text-[10px] text-muted-foreground px-1">
+                      <span>{Math.round(progress * 100)}%</span>
+                  </div>
               </div>
-              <div className="text-center text-xs text-gray-500 mt-1">
-                  {Math.round(progress * 100)}%
-              </div>
-          </div>
 
-          <button aria-label="Next Page" onClick={handleNext} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-              <ChevronRight className="w-6 h-6 text-gray-600 dark:text-gray-300" />
-          </button>
+              <Button aria-label="Next Page" variant="ghost" size="icon" onClick={handleNext} disabled={!bookRef.current}>
+                  <ChevronRight className="w-6 h-6" />
+              </Button>
+          </div>
       </footer>
     </div>
   );

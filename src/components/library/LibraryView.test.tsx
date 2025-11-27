@@ -4,50 +4,40 @@ import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
 
 // Mock react-window
-vi.mock('react-window', () => ({
-  FixedSizeGrid: ({ children, columnCount, rowCount }: any) => (
+vi.mock('react-window', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const FixedSizeGrid = ({ children, columnCount, rowCount }: any) => (
     <div data-testid="virtual-grid">
       {Array.from({ length: rowCount }).flatMap((_, r) =>
          Array.from({ length: columnCount }).map((_, c) =>
             // eslint-disable-next-line react/jsx-key
-            <div key={`${r}-${c}`}>
-                {children({ columnIndex: c, rowIndex: r, style: { width: 100, height: 100 } })}
+            <div key={`${r}-${c}`} style={{ left: 0 }}>
+                {children({ columnIndex: c, rowIndex: r, style: { width: 100, height: 100, left: 0, top: 0 } })}
             </div>
          )
       )}
     </div>
-  )
-}));
+  );
+  return {
+      FixedSizeGrid,
+      default: { FixedSizeGrid }
+  };
+});
 
 // Mock BookCard
 vi.mock('./BookCard', () => ({
   BookCard: ({ book }: any) => <div data-testid="book-card">{book.title}</div>
 }));
 
-// Mock FileUploader
-vi.mock('./FileUploader', () => ({
-    FileUploader: () => <div data-testid="file-uploader">Upload</div>
+// Mock DragDropOverlay
+vi.mock('./DragDropOverlay', () => ({
+    DragDropOverlay: () => <div data-testid="drag-drop-overlay" />
 }));
-
-// Mock IDB via fake-indexeddb is usually handled globally or we mock getDB
-// But since we are testing View, we can mock the store action fetchBooks to avoid DB calls.
-// The store uses `getDB` which is async.
 
 describe('LibraryView', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
-        // Mock fetchBooks to avoid real DB and async state issues in test
-        // We override the fetchBooks method in the store for tests
-        // But zustand store is a singleton.
-
-        // Better: Mock `useLibraryStore` partially?
-        // Or just mock `fetchBooks` to be a no-op or controlled.
-
-        // Since `useLibraryStore` is imported, we can mock the module,
-        // but it's harder with zustand.
-
-        // Let's rely on setState, but overwrite fetchBooks in the state temporarily?
         useLibraryStore.setState({
             books: [],
             isLoading: false,
@@ -67,7 +57,6 @@ describe('LibraryView', () => {
     it('renders loading state', () => {
         useLibraryStore.setState({ isLoading: true });
         render(<LibraryView />);
-        expect(screen.getByTestId('file-uploader')).toBeInTheDocument();
         expect(screen.queryByTestId('virtual-grid')).not.toBeInTheDocument();
         // Spinner
         expect(document.querySelector('.animate-spin')).toBeInTheDocument();
@@ -78,7 +67,7 @@ describe('LibraryView', () => {
         // It calls fetchBooks on mount, which is mocked.
         // Should show empty state immediately.
 
-        expect(screen.getByText(/No books yet/i)).toBeInTheDocument();
+        expect(screen.getByText(/Your library is empty/i)).toBeInTheDocument();
     });
 
     it('renders grid with books', async () => {
