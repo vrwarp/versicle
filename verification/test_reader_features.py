@@ -18,7 +18,6 @@ async def run_test():
 
         print("2. Upload book")
         file_input = page.locator("input[type='file']")
-        # We assume the file exists at this path relative to the repo root
         await file_input.set_input_files("src/test/fixtures/alice.epub")
         await page.wait_for_selector("text=Alice's Adventures in Wonderland", timeout=10000)
 
@@ -68,22 +67,15 @@ async def run_test():
         settings_btn = page.get_by_label("Settings")
         await settings_btn.click()
 
-        # Ensure Font Size label is visible. If not, maybe it closed?
-        # Note: ReaderView.tsx settings modal is just {showSettings && ...}
-        # It shouldn't close on its own unless clicked again or unmounted.
         await expect(page.get_by_text("Font Size")).to_be_visible()
 
         # Change theme to Sepia (3rd button)
-        # Using specific locator for theme buttons inside the settings modal
         theme_section = page.locator("div", has_text="Theme")
-        # Buttons are siblings in a div
         sepia_btn = theme_section.locator("button").nth(2)
         await sepia_btn.click()
         await page.screenshot(path="verification/screenshots/6_settings_sepia.png")
 
         # Verify if modal is still open. If not, reopen it.
-        # The modal closes if we click something else? No.
-        # But previous failure showed it might have disappeared.
         if not await page.get_by_text("Font Size").is_visible():
             print("Settings modal closed unexpectedly. Re-opening...")
             await settings_btn.click()
@@ -92,7 +84,6 @@ async def run_test():
         # Change Font Size
         print("Testing Font Size...")
         font_size_section = page.locator("div", has_text="Font Size")
-        # Use more robust locator for buttons
         increase_font_btn = font_size_section.locator("button", has_text="+")
         decrease_font_btn = font_size_section.locator("button", has_text="-")
 
