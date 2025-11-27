@@ -54,44 +54,6 @@ export class WebSpeechProvider implements ITTSProvider {
   }
 
   async synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment> {
-    // For WebSpeech, we don't return audio, we prepare execution.
-    // However, the interface says synthesize returns a Promise<SpeechSegment>.
-    // Since isNative is true, we might not need to do much here,
-    // but we should probably prepare the utterance.
-
-    // In this architecture, synthesize might be called just before play?
-    // Or does AudioPlayerService call synthesize then play?
-    // For local, we "play" immediately usually.
-    // But to adhere to the pattern, let's just return isNative: true
-    // and let the `play` method (or implicit action) handle the actual speech.
-
-    // Actually, to make it controllable, we should probably set up the utterance here
-    // but not speak it until 'play' or just speak it immediately?
-    // The interface implies `synthesize` does the heavy lifting.
-    // For native, we'll store the parameters and `play` will use them.
-
-    // Wait, the interface has `stop`, `pause`, `resume`. But no `play(segment)`.
-    // The AudioPlayerService will likely handle the flow.
-    // If isNative is true, AudioPlayerService might expect the provider to handle playback
-    // OR it might assume `synthesize` starts playback?
-    // Let's assume `synthesize` prepares it.
-
-    // But `speechSynthesis` is imperative. `speak(utterance)`.
-    // Let's implement a custom method `speak` or handle it within synthesize?
-    // The plan says: "Since Web Speech API plays audio directly, this method will return { isNative: true }."
-    // It also says: "Event Handling: The provider will need to expose an event emitter..."
-
-    // So let's add `speak` method to the provider or make `synthesize` start it?
-    // If `synthesize` starts it, then AudioPlayerService has less control over EXACT start time
-    // if it wants to buffer first. But local can't buffer.
-
-    // Let's add a `speak` method to the class (not in interface yet, or maybe modify interface?)
-    // Or just make `synthesize` start speaking for Native?
-    // "synthesize: Cloud providers return a Blob... Local providers return a specialized flag..."
-
-    // I will start speaking in `synthesize` for now, as that's how `speechSynthesis` works best.
-    // The AudioPlayerService calls synthesize when it wants to play a segment.
-
     this.cancel(); // specific method to stop previous
 
     const utterance = new SpeechSynthesisUtterance(text);
