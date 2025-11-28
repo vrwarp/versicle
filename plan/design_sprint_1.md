@@ -72,9 +72,10 @@ Switch to a modern sans-serif stack (Inter or System UI) with a clear hierarchy.
 
 ## 4. Implementation Plan
 
-### Step 1: Foundation & Theming
-*   Update `tailwind.config.js` with the semantic color palette.
-*   Create a global `ThemeContext` or update `useReaderStore` to apply classes to the `<body>` or a top-level wrapper, ensuring the entire app (not just the reader frame) shifts colors.
+### Step 1: Foundation & Theming (Completed)
+*   [x] Update `tailwind.config.js` with the semantic color palette.
+*   [x] Create a global `ThemeContext` or update `useReaderStore` to apply classes to the `<body>` or a top-level wrapper, ensuring the entire app (not just the reader frame) shifts colors.
+*   [x] Initial refactor of `LibraryView` and `ReaderView` to use semantic tokens.
 
 ### Step 2: Library UI
 *   Refactor `LibraryView.tsx`.
