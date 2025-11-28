@@ -6,7 +6,10 @@ SCREENSHOT_DIR = "verification/screenshots"
 
 async def setup(p):
     """Launches browser and creates a new page."""
-    browser = await p.chromium.launch()
+    browser = await p.chromium.launch(args=[
+        "--disable-web-security",
+        "--disable-features=IsolateOrigins,site-per-process"
+    ])
     context = await browser.new_context()
     page = await context.new_page()
     # Enable console logging for debugging

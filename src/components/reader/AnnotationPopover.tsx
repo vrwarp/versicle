@@ -24,9 +24,9 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose }) => {
   // Calculate position to keep it within viewport (simplified)
   // We might need useLayoutEffect to measure dimensions
   const style: React.CSSProperties = {
-    position: 'absolute',
-    left: popover.x,
-    top: popover.y - 50, // Display above selection
+    position: 'fixed',
+    left: Math.max(10, Math.min(window.innerWidth - 200, popover.x)), // Clamp horizontal
+    top: Math.max(10, popover.y - 50), // Display above selection, prevent top clipping
     zIndex: 50,
   };
 

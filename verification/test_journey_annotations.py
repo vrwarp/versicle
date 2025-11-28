@@ -19,12 +19,36 @@ async def run_test():
         frame = page.frame_locator("iframe").first
         await frame.locator("body").wait_for(timeout=10000)
 
+        # Get initial text to compare
+        try:
+            initial_text = await frame.locator("body").inner_text()
+        except:
+            initial_text = ""
+        print(f"Initial Text: {initial_text[:50]}...")
+
         # 1. Create Highlight
         print("Creating Highlight...")
 
         # Navigate to a page with text (Next Page)
-        await page.get_by_label("Next Page").click()
-        await page.wait_for_timeout(2000)
+        # We might need to click multiple times to get past the cover and title pages
+        # Check until we have substantial text
+        for i in range(5):
+             current_text = await frame.locator("body").inner_text()
+             if len(current_text) > 200:
+                 print("Found substantial text.")
+                 break
+             print(f"Clicking Next Page ({i+1})...")
+             await page.get_by_label("Next Page").click()
+             # Wait for text to change
+             try:
+                 await expect(frame.locator("body")).not_to_have_text(current_text, timeout=5000)
+             except:
+                 pass # Might have failed to change or timeout
+             await page.wait_for_timeout(1000)
+
+        # Re-locate frame to avoid detached frame errors
+        frame = page.frame_locator("iframe").first
+        await frame.locator("body").wait_for()
 
         # Inject script to select text reliably
         selection_success = await frame.locator("body").evaluate("""
@@ -47,17 +71,14 @@ async def run_test():
                         selection.removeAllRanges();
                         selection.addRange(range);
 
-                        document.dispatchEvent(new MouseEvent('mouseup', {
-                            view: window,
-                            bubbles: true,
-                            cancelable: true,
-                            clientX: 100,
-                            clientY: 100
-                        }));
+                        // Dispatch mouseup to trigger epub.js selection event
+                        // We will dispatch it from python side to be sure, or here.
+                        // Epub.js often listens on the document.
                         return true;
                     }
                     return false;
                 } catch (e) {
+                    console.error("Selection script error:", e);
                     return false;
                 }
             }
@@ -66,11 +87,34 @@ async def run_test():
         if not selection_success:
             print("Could not select text for highlighting.")
             await utils.capture_screenshot(page, "annotations_failed_selection")
-            # Fail gracefully? Or retry? For now, we assume standard book content works.
             return
 
+        # Dispatch mouseup using Playwright on the body to ensure it reaches epub.js listeners
+        await frame.locator("body").evaluate("""
+            element => {
+                const event = new MouseEvent('mouseup', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: 100,
+                    clientY: 100,
+                    view: window
+                });
+                element.dispatchEvent(event);
+                // Also dispatch on document and window to be safe for epub.js listeners
+                element.ownerDocument.dispatchEvent(event);
+                element.ownerDocument.defaultView.dispatchEvent(event);
+            }
+        """)
+
         # Check for Popover (Highlight Color Buttons)
-        await expect(page.get_by_title("Yellow")).to_be_visible(timeout=5000)
+        # It might take a moment to appear
+        try:
+            await expect(page.get_by_title("Yellow")).to_be_visible(timeout=5000)
+        except AssertionError:
+             print("Popover did not appear. Dumping current state.")
+             await utils.capture_screenshot(page, "annotations_failed_popover")
+             raise
+
         await utils.capture_screenshot(page, "annotations_1_popover")
 
         # Click Yellow
@@ -81,6 +125,7 @@ async def run_test():
         print("Verifying Highlight in Sidebar...")
         await page.get_by_label("Annotations").click()
         await expect(page.get_by_role("heading", name="Annotations")).to_be_visible()
+        # Wait for list item
         await expect(page.locator("ul li").first).to_be_visible()
         await utils.capture_screenshot(page, "annotations_2_sidebar_highlight")
 
@@ -90,6 +135,7 @@ async def run_test():
         # 2. Create Note
         print("Creating Note...")
         # Select another text segment (offset)
+        # We need to find a DIFFERENT node or different range
         await frame.locator("body").evaluate("""
             () => {
                 const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
@@ -108,8 +154,21 @@ async def run_test():
                     const selection = window.getSelection();
                     selection.removeAllRanges();
                     selection.addRange(range);
-                    document.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
                 }
+            }
+        """)
+
+        # Dispatch mouseup again for Note
+        await frame.locator("body").evaluate("""
+            element => {
+                const event = new MouseEvent('mouseup', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
+                });
+                element.dispatchEvent(event);
+                element.ownerDocument.dispatchEvent(event);
+                element.ownerDocument.defaultView.dispatchEvent(event);
             }
         """)
 

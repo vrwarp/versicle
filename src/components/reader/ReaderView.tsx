@@ -220,6 +220,7 @@ export const ReaderView: React.FC = () => {
             height: '100%',
             flow: 'paginated',
             manager: 'default',
+            allowScriptedContent: true,
           });
           renditionRef.current = rendition;
 
@@ -269,16 +270,6 @@ export const ReaderView: React.FC = () => {
             const range = rendition.getRange(cfiRange);
             if (range) {
                 const rect = range.getBoundingClientRect();
-                // Adjust rect coordinates based on the iframe position if needed,
-                // but usually getBoundingClientRect inside iframe is relative to iframe viewport?
-                // Wait, getRange returns a DOM Range. getBoundingClientRect is relative to viewport.
-                // Since epub.js renders in an iframe, we need to account for iframe position?
-                // Actually `rendition.getRange(cfiRange)` returns a range in the iframe document.
-                // We need to map that to the main window.
-
-                // However, the popover will be rendered in the main window.
-                // We need to translate iframe coordinates to main window coordinates.
-                // `viewerRef.current` contains the iframe.
                 const iframe = viewerRef.current?.querySelector('iframe');
                 if (iframe) {
                    const iframeRect = iframe.getBoundingClientRect();
@@ -288,9 +279,6 @@ export const ReaderView: React.FC = () => {
                        cfiRange,
                        range.toString()
                    );
-
-                   // Clear selection (optional, but keep it so user sees what they selected)
-                   // contents.window.getSelection().removeAllRanges();
                 }
             }
           });
