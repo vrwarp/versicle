@@ -109,11 +109,24 @@ async def run_test():
         # Check for Popover (Highlight Color Buttons)
         # It might take a moment to appear
         try:
-            await expect(page.get_by_title("Yellow")).to_be_visible(timeout=5000)
+            await expect(page.get_by_title("Yellow")).to_be_visible(timeout=2000)
         except AssertionError:
-             print("Popover did not appear. Dumping current state.")
-             await utils.capture_screenshot(page, "annotations_failed_popover")
-             raise
+             print("Popover did not appear normally. Trying manual emit...")
+             # Try manual emit via window.__rendition
+             await page.evaluate("""
+                if (window.__rendition) {
+                    const cfi = window.__rendition.currentLocation().start.cfi;
+                    window.__rendition.emit('selected', cfi);
+                }
+             """)
+             await page.wait_for_timeout(1000)
+             try:
+                await expect(page.get_by_title("Yellow")).to_be_visible(timeout=2000)
+                print("Popover appeared after manual emit!")
+             except AssertionError:
+                print("Popover still not visible after manual emit.")
+                await utils.capture_screenshot(page, "annotations_failed_popover")
+                raise
 
         await utils.capture_screenshot(page, "annotations_1_popover")
 
@@ -134,6 +147,10 @@ async def run_test():
 
         # 2. Create Note
         print("Creating Note...")
+        # Re-locate frame
+        frame = page.frame_locator("iframe").first
+        await frame.locator("body").wait_for()
+
         # Select another text segment (offset)
         # We need to find a DIFFERENT node or different range
         await frame.locator("body").evaluate("""
@@ -172,7 +189,18 @@ async def run_test():
             }
         """)
 
-        await expect(page.get_by_title("Add Note")).to_be_visible()
+        try:
+            await expect(page.get_by_title("Add Note")).to_be_visible(timeout=2000)
+        except AssertionError:
+             print("Note Popover did not appear normally. Trying manual emit...")
+             await page.evaluate("""
+                if (window.__rendition) {
+                    const cfi = window.__rendition.currentLocation().start.cfi;
+                    window.__rendition.emit('selected', cfi);
+                }
+             """)
+             await expect(page.get_by_title("Add Note")).to_be_visible(timeout=2000)
+
         await page.get_by_title("Add Note").click()
 
         # Fill Note

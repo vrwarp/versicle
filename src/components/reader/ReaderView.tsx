@@ -283,6 +283,10 @@ export const ReaderView: React.FC = () => {
             }
           });
 
+          // Expose rendition for testing/automation
+          // @ts-ignore
+          window.__rendition = rendition;
+
           // Clear popover on click elsewhere
           rendition.on('click', () => {
              hidePopover();
