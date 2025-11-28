@@ -8,6 +8,7 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
+import { TTSQueue } from './TTSQueue';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
@@ -682,6 +683,8 @@ export const ReaderView: React.FC = () => {
                             )}
                         </div>
                      )}
+
+                     <TTSQueue />
                  </div>
              )}
 

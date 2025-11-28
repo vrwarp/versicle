@@ -6,7 +6,16 @@ import { TTSCache } from './TTSCache';
 
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading';
 
-type PlaybackListener = (status: TTSStatus, activeCfi: string | null) => void;
+export interface TTSQueueItem {
+    text: string;
+    cfi: string;
+    title?: string;
+    author?: string;
+    bookTitle?: string;
+    coverUrl?: string;
+}
+
+type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[]) => void;
 
 export class AudioPlayerService {
   private static instance: AudioPlayerService;
@@ -14,7 +23,7 @@ export class AudioPlayerService {
   private audioPlayer: AudioElementPlayer | null = null;
   private syncEngine: SyncEngine | null = null;
   private cache: TTSCache;
-  private queue: { text: string; cfi: string; title?: string; author?: string; bookTitle?: string; coverUrl?: string }[] = [];
+  private queue: TTSQueueItem[] = [];
   private currentIndex: number = 0;
   private status: TTSStatus = 'stopped';
   private listeners: PlaybackListener[] = [];
@@ -138,10 +147,19 @@ export class AudioPlayerService {
     return this.provider.getVoices();
   }
 
-  setQueue(items: { text: string; cfi: string; title?: string; author?: string; bookTitle?: string; coverUrl?: string }[], startIndex: number = 0) {
+  setQueue(items: TTSQueueItem[], startIndex: number = 0) {
     this.stop();
     this.queue = items;
     this.currentIndex = startIndex;
+    this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+  }
+
+  jumpTo(index: number) {
+      if (index >= 0 && index < this.queue.length) {
+          this.stop();
+          this.currentIndex = index;
+          this.play();
+      }
   }
 
   async play() {
@@ -302,12 +320,19 @@ export class AudioPlayerService {
 
   subscribe(listener: PlaybackListener) {
     this.listeners.push(listener);
+    // Immediately notify with current state
+    const currentCfi = this.queue[this.currentIndex]?.cfi || null;
+    // Defer execution to avoid issues if called during store initialization
+    setTimeout(() => {
+        listener(this.status, currentCfi, this.currentIndex, this.queue);
+    }, 0);
+
     return () => {
       this.listeners = this.listeners.filter(l => l !== listener);
     };
   }
 
   private notifyListeners(activeCfi: string | null) {
-      this.listeners.forEach(l => l(this.status, activeCfi));
+      this.listeners.forEach(l => l(this.status, activeCfi, this.currentIndex, this.queue));
   }
 }
