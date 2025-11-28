@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
 import { extractSentences, type SentenceNode } from '../lib/tts';
 import { Rendition } from 'epubjs';
-import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 
 /**
  * Custom hook to manage Text-to-Speech (TTS) functionality.
@@ -13,11 +12,12 @@ import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
  */
 export const useTTS = (rendition: Rendition | null) => {
   const {
-    loadVoices
+    loadVoices,
+    setQueue,
+    stop
   } = useTTSStore();
 
   const [sentences, setSentences] = useState<SentenceNode[]>([]);
-  const player = AudioPlayerService.getInstance();
 
   // Load voices on mount
   useEffect(() => {
@@ -33,18 +33,17 @@ export const useTTS = (rendition: Rendition | null) => {
            const extracted = extractSentences(rendition);
            setSentences(extracted);
 
-           // Update player queue
-           // We map SentenceNode to the format expected by AudioPlayerService
+           // Update player queue via store
            const queue = extracted.map(s => ({
                text: s.text,
                cfi: s.cfi
            }));
-           player.setQueue(queue);
+           setQueue(queue);
 
        } catch (e) {
            console.error("Failed to extract sentences", e);
            setSentences([]);
-           player.setQueue([]);
+           setQueue([]);
        }
     };
 
@@ -57,14 +56,14 @@ export const useTTS = (rendition: Rendition | null) => {
     return () => {
         rendition.off('rendered', loadSentences);
     };
-  }, [rendition, player]);
+  }, [rendition, setQueue]);
 
   // Cleanup on unmount
   useEffect(() => {
       return () => {
-          player.stop();
+          stop();
       };
-  }, [player]);
+  }, [stop]);
 
   return {
      sentences

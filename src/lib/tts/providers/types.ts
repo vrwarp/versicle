@@ -23,6 +23,16 @@ export interface Timepoint {
   type?: string;
 }
 
+export interface QueueItem {
+    text: string;
+    cfi: string;
+    // Metadata for lockscreen
+    title?: string;
+    author?: string;
+    bookTitle?: string;
+    coverUrl?: string;
+}
+
 export interface ITTSProvider {
   /** Unique identifier for the provider */
   id: string;

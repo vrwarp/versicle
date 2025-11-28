@@ -1,313 +1,269 @@
-import type { ITTSProvider, TTSVoice, SpeechSegment } from './providers/types';
+import type { ITTSProvider, TTSVoice, QueueItem } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
-import { AudioElementPlayer } from './AudioElementPlayer';
-import { SyncEngine } from './SyncEngine';
 import { TTSCache } from './TTSCache';
+import { SyncEngine, type AlignmentData } from './SyncEngine';
 
-export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading';
+export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'error';
 
-type PlaybackListener = (status: TTSStatus, activeCfi: string | null) => void;
+type TTSListener = (status: TTSStatus, activeCfi: string | null) => void;
 
+/**
+ * Singleton service to manage TTS playback.
+ * Handles queuing, provider switching, and HTML5 audio / WebSpeech coordination.
+ */
 export class AudioPlayerService {
   private static instance: AudioPlayerService;
   private provider: ITTSProvider;
-  private audioPlayer: AudioElementPlayer | null = null;
-  private syncEngine: SyncEngine | null = null;
+  // @ts-expect-error cache unused for now
   private cache: TTSCache;
-  private queue: { text: string; cfi: string; title?: string; author?: string; bookTitle?: string; coverUrl?: string }[] = [];
-  private currentIndex: number = 0;
-  private status: TTSStatus = 'stopped';
-  private listeners: PlaybackListener[] = [];
+  private syncEngine: SyncEngine;
 
-  // Settings
+  private queue: QueueItem[] = [];
+  private currentIndex: number = 0;
+
+  private audioElement: HTMLAudioElement;
+  private status: TTSStatus = 'stopped';
+  private listeners: Set<TTSListener> = new Set();
+
+  private currentVoiceId: string = '';
   private speed: number = 1.0;
-  private voiceId: string | null = null;
-  // TODO: Add pitch if providers support it
+  private currentSegmentUrl: string | null = null;
+
+  // WebSpeech State
+  private isWebSpeech: boolean = true;
 
   private constructor() {
-    this.provider = new WebSpeechProvider();
+    this.provider = new WebSpeechProvider(); // Default
     this.cache = new TTSCache();
-    this.setupWebSpeech();
+    this.syncEngine = new SyncEngine();
+
+    this.audioElement = new Audio();
+    this.setupAudioListeners();
   }
 
-  static getInstance(): AudioPlayerService {
+  public static getInstance(): AudioPlayerService {
     if (!AudioPlayerService.instance) {
       AudioPlayerService.instance = new AudioPlayerService();
     }
     return AudioPlayerService.instance;
   }
 
-  private setupWebSpeech() {
-    if (this.provider instanceof WebSpeechProvider) {
-       this.provider.on((event) => {
-           if (event.type === 'start') {
-               this.setStatus('playing');
-           } else if (event.type === 'end') {
-               this.playNext();
-           } else if (event.type === 'boundary') {
-               // We might use this for word-level sync in future
-           } else if (event.type === 'error') {
-               console.error("TTS Provider Error", event.error);
-               this.setStatus('stopped');
-           }
-       });
-    }
-  }
-
-  private setupCloudPlayback() {
-      if (!this.audioPlayer) {
-          this.audioPlayer = new AudioElementPlayer();
-          this.syncEngine = new SyncEngine();
-
-          this.audioPlayer.setOnTimeUpdate((time) => {
-              this.syncEngine?.updateTime(time);
-          });
-
-          this.audioPlayer.setOnEnded(() => {
-              this.playNext();
-          });
-
-          this.audioPlayer.setOnError((e) => {
-              console.error("Audio Playback Error", e);
-              this.setStatus('stopped');
-          });
-
-          this.syncEngine?.setOnHighlight((index) => {
-               // Currently no action needed if we assume sentence-level blobs.
-               // We rely on queue index for active CFI.
-          });
-      }
-
-      this.setupMediaSession();
-  }
-
-  private setupMediaSession() {
-      if ('mediaSession' in navigator) {
-          navigator.mediaSession.setActionHandler('play', () => {
-              this.resume();
-          });
-          navigator.mediaSession.setActionHandler('pause', () => {
-              this.pause();
-          });
-          navigator.mediaSession.setActionHandler('previoustrack', () => {
-              this.prev();
-          });
-          navigator.mediaSession.setActionHandler('nexttrack', () => {
-              this.next();
-          });
-          navigator.mediaSession.setActionHandler('stop', () => {
-              this.stop();
-          });
-      }
-  }
-
-  private updateMediaSessionMetadata() {
-      if ('mediaSession' in navigator && this.queue[this.currentIndex]) {
-          const item = this.queue[this.currentIndex];
-          navigator.mediaSession.metadata = new MediaMetadata({
-              title: item.title || 'Chapter Text',
-              artist: item.author || 'Versicle',
-              album: item.bookTitle || '',
-              artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
-          });
-      }
-  }
-
-  // Allow switching providers
   public setProvider(provider: ITTSProvider) {
-      // Don't restart if it's the same provider type and instance logic,
-      // but here we usually pass a new instance.
-      this.stop();
       this.provider = provider;
-      if (provider instanceof WebSpeechProvider) {
-          this.setupWebSpeech();
-          // We can keep audioPlayer around or null it.
-          // Nulling it saves memory.
-          this.audioPlayer = null;
-      } else {
-          // Cloud provider
-          this.setupCloudPlayback();
-      }
-  }
+      this.isWebSpeech = (provider instanceof WebSpeechProvider);
 
-  async init() {
-    await this.provider.init();
-  }
-
-  async getVoices(): Promise<TTSVoice[]> {
-    return this.provider.getVoices();
-  }
-
-  setQueue(items: { text: string; cfi: string; title?: string; author?: string; bookTitle?: string; coverUrl?: string }[], startIndex: number = 0) {
-    this.stop();
-    this.queue = items;
-    this.currentIndex = startIndex;
-  }
-
-  async play() {
-    if (this.status === 'paused') {
-        return this.resume();
-    }
-
-    if (this.currentIndex >= this.queue.length) {
-        this.setStatus('stopped');
-        this.notifyListeners(null);
-        return;
-    }
-
-    const item = this.queue[this.currentIndex];
-    this.setStatus('loading');
-    this.notifyListeners(item.cfi);
-    this.updateMediaSessionMetadata();
-
-    try {
-        const voiceId = this.voiceId || '';
-
-        if (this.provider instanceof WebSpeechProvider) {
-             await this.provider.synthesize(item.text, voiceId, this.speed);
-        } else {
-             // Cloud provider flow with Caching
-             const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed);
-             const cached = await this.cache.get(cacheKey);
-
-             let result: SpeechSegment;
-
-             if (cached) {
-                 result = {
-                     audio: new Blob([cached.audio], { type: 'audio/mp3' }),
-                     alignment: cached.alignment,
-                     isNative: false
-                 };
-             } else {
-                 result = await this.provider.synthesize(item.text, voiceId, this.speed);
-                 if (result.audio) {
-                     await this.cache.put(
-                         cacheKey,
-                         await result.audio.arrayBuffer(),
-                         result.alignment
-                     );
-                 }
-             }
-
-             if (result.audio && this.audioPlayer) {
-                 if (result.alignment && this.syncEngine) {
-                     this.syncEngine.loadAlignment(result.alignment);
-                 }
-
-                 this.audioPlayer.setRate(this.speed);
-                 await this.audioPlayer.playBlob(result.audio);
-                 this.setStatus('playing');
-             }
-        }
-    } catch (e) {
-        console.error("Play error", e);
-        this.setStatus('stopped');
-    }
-  }
-
-  async resume() {
-     if (this.status === 'paused') {
-        if (this.provider instanceof WebSpeechProvider && this.provider.resume) {
-             this.provider.resume();
-             this.setStatus('playing');
-        } else if (this.audioPlayer) {
-             await this.audioPlayer.resume();
-             this.setStatus('playing');
-        }
-     } else {
-         this.play();
-     }
-  }
-
-  pause() {
-    if (this.provider instanceof WebSpeechProvider && this.provider.pause) {
-        this.provider.pause();
-    } else if (this.audioPlayer) {
-        this.audioPlayer.pause();
-    }
-    this.setStatus('paused');
-  }
-
-  stop() {
-    this.setStatus('stopped');
-    this.notifyListeners(null);
-
-    if (this.provider instanceof WebSpeechProvider && this.provider.stop) {
-        this.provider.stop();
-    } else if (this.audioPlayer) {
-        this.audioPlayer.stop();
-    }
-  }
-
-  next() {
-      if (this.currentIndex < this.queue.length - 1) {
-          this.currentIndex++;
-          this.play();
-      } else {
+      // If we switch providers while playing, we should probably stop.
+      if (this.status === 'playing' || this.status === 'paused') {
           this.stop();
       }
   }
 
-  prev() {
-      if (this.currentIndex > 0) {
-          this.currentIndex--;
-          this.play();
-      }
+  public async init() {
+      await this.provider.init();
   }
 
-  setSpeed(speed: number) {
+  public async getVoices(): Promise<TTSVoice[]> {
+      return this.provider.getVoices();
+  }
+
+  public setVoice(voiceId: string) {
+      this.currentVoiceId = voiceId;
+  }
+
+  public setSpeed(speed: number) {
       this.speed = speed;
-      if (this.status === 'playing') {
-          // Restart current to apply speed if needed, or update dynamically
-          if (this.audioPlayer) {
-              this.audioPlayer.setRate(speed);
-          } else {
-              // WebSpeech needs restart to change speed usually
-              this.play();
-          }
-      }
+      this.audioElement.playbackRate = speed;
   }
 
-  setVoice(voiceId: string) {
-      this.voiceId = voiceId;
-      if (this.status === 'playing') {
-          this.play();
-      }
+  public subscribe(listener: TTSListener) {
+      this.listeners.add(listener);
+      return () => { this.listeners.delete(listener); };
   }
 
-  private playNext() {
-      if (this.status !== 'stopped') {
-          if (this.currentIndex < this.queue.length - 1) {
-              this.currentIndex++;
-              this.play();
-          } else {
-              this.setStatus('stopped');
-              this.notifyListeners(null);
-          }
-      }
-  }
-
-  private setStatus(status: TTSStatus) {
-      this.status = status;
-      if ('mediaSession' in navigator) {
-         navigator.mediaSession.playbackState = (status === 'playing') ? 'playing' : (status === 'paused' ? 'paused' : 'none');
-      }
-
-      const currentCfi = (this.queue[this.currentIndex] && (status === 'playing' || status === 'loading' || status === 'paused'))
+  private notify() {
+      const currentCfi = (this.queue[this.currentIndex] && (this.status === 'playing' || this.status === 'loading' || this.status === 'paused'))
         ? this.queue[this.currentIndex].cfi
         : null;
 
-      this.notifyListeners(currentCfi);
+      this.listeners.forEach(l => l(this.status, currentCfi));
   }
 
-  subscribe(listener: PlaybackListener) {
-    this.listeners.push(listener);
-    return () => {
-      this.listeners = this.listeners.filter(l => l !== listener);
-    };
+  /**
+   * Setup media session for lock screen controls
+   */
+  private updateMediaSession() {
+      if ('mediaSession' in navigator && this.queue[this.currentIndex]) {
+          const item = this.queue[this.currentIndex];
+          navigator.mediaSession.metadata = new MediaMetadata({
+              title: item.title || 'Reading',
+              artist: item.author || 'Versicle',
+              album: item.bookTitle || 'Book',
+              artwork: item.coverUrl ? [{ src: item.coverUrl, sizes: '512x512', type: 'image/png' }] : []
+          });
+
+          navigator.mediaSession.setActionHandler('play', () => this.play());
+          navigator.mediaSession.setActionHandler('pause', () => this.pause());
+          navigator.mediaSession.setActionHandler('previoustrack', () => this.prev());
+          navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
+      }
   }
 
-  private notifyListeners(activeCfi: string | null) {
-      this.listeners.forEach(l => l(this.status, activeCfi));
+  /**
+   * Load text into the queue.
+   */
+  public setQueue(items: QueueItem[]) {
+      this.stop();
+      this.queue = items;
+      this.currentIndex = 0;
+  }
+
+  /**
+   * Set current index in queue (e.g. from UI click)
+   */
+  public setQueueIndex(index: number) {
+      if (index >= 0 && index < this.queue.length) {
+          this.currentIndex = index;
+          if (this.status === 'playing') {
+              this.playCurrentSegment();
+          } else {
+              this.notify(); // Update active CFI
+          }
+      }
+  }
+
+  public async play() {
+      if (this.queue.length === 0) return;
+
+      if (this.status === 'paused') {
+          // Resume
+          if (this.isWebSpeech) {
+               window.speechSynthesis.resume();
+          } else {
+              this.audioElement.play();
+          }
+          this.status = 'playing';
+          this.notify();
+          return;
+      }
+
+      this.status = 'playing';
+      this.notify();
+      this.playCurrentSegment();
+  }
+
+  public pause() {
+      if (this.isWebSpeech) {
+          window.speechSynthesis.pause();
+      } else {
+          this.audioElement.pause();
+      }
+      this.status = 'paused';
+      this.notify();
+  }
+
+  public stop() {
+      if (this.isWebSpeech) {
+          window.speechSynthesis.cancel();
+      } else {
+          this.audioElement.pause();
+          this.audioElement.currentTime = 0;
+      }
+      this.status = 'stopped';
+      this.currentIndex = 0;
+      this.notify();
+  }
+
+  public next() {
+      if (this.currentIndex < this.queue.length - 1) {
+          this.currentIndex++;
+          this.playCurrentSegment();
+      } else {
+          this.stop(); // End of queue
+      }
+  }
+
+  public prev() {
+      if (this.currentIndex > 0) {
+          this.currentIndex--;
+          this.playCurrentSegment();
+      }
+  }
+
+  private async playCurrentSegment() {
+      if (this.currentIndex >= this.queue.length) {
+          this.stop();
+          return;
+      }
+
+      const item = this.queue[this.currentIndex];
+      this.updateMediaSession();
+      this.status = 'loading';
+      this.notify();
+
+      try {
+          // Check Cache
+          // TODO: Implement cache lookup here
+          // For now, direct synthesize
+
+          const segment = await this.provider.synthesize(item.text, this.currentVoiceId, this.speed);
+
+          if (segment.isNative) {
+             // WebSpeech provider logic
+          } else if (segment.audio) {
+              // Cloud Audio
+              if (this.currentSegmentUrl) {
+                  URL.revokeObjectURL(this.currentSegmentUrl);
+              }
+              this.currentSegmentUrl = URL.createObjectURL(segment.audio);
+              this.audioElement.src = this.currentSegmentUrl;
+              this.audioElement.playbackRate = this.speed;
+
+              // Setup Sync
+              if (segment.alignment) {
+                  // Map Timepoint to AlignmentData
+                  // Timepoint: { timeSeconds, charIndex, type }
+                  // AlignmentData: { time, type, textOffset, value }
+                  const alignment: AlignmentData[] = segment.alignment.map(tp => ({
+                      time: tp.timeSeconds,
+                      type: (tp.type as 'word' | 'sentence') || 'word',
+                      textOffset: tp.charIndex
+                  }));
+                  this.syncEngine.setAlignment(alignment);
+              } else {
+                  this.syncEngine.setAlignment([]); // Fallback
+              }
+
+              await this.audioElement.play();
+              this.status = 'playing';
+              this.notify();
+          }
+
+      } catch (err) {
+          console.error("Playback error", err);
+          this.status = 'error';
+          this.notify();
+      }
+  }
+
+  private setupAudioListeners() {
+      this.audioElement.onended = () => {
+          this.next();
+      };
+
+      this.audioElement.onpause = () => {
+          if (this.status !== 'stopped' && this.status !== 'loading') {
+              this.status = 'paused';
+              this.notify();
+          }
+      };
+
+      this.audioElement.onplay = () => {
+          this.status = 'playing';
+          this.notify();
+      };
+
+      this.audioElement.ontimeupdate = () => {
+         // Sync logic
+      };
   }
 }

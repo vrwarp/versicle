@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { TTSVoice } from '../lib/tts/providers/types';
+import type { TTSVoice, QueueItem } from '../lib/tts/providers/types';
 import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 import type { TTSStatus } from '../lib/tts/AudioPlayerService';
 import { GoogleTTSProvider } from '../lib/tts/providers/GoogleTTSProvider';
@@ -25,6 +25,8 @@ interface TTSState {
   voices: TTSVoice[];
   /** The CFI of the currently spoken sentence or segment. */
   activeCfi: string | null;
+  /** The current playback queue */
+  queue: QueueItem[];
 
   /** Provider configuration */
   providerId: 'local' | 'google' | 'openai';
@@ -44,6 +46,11 @@ interface TTSState {
   setApiKey: (provider: 'google' | 'openai', key: string) => void;
   loadVoices: () => Promise<void>;
 
+  /** Update the queue (called by useTTS hook) */
+  setQueue: (items: QueueItem[]) => void;
+  /** Jump to specific item in queue */
+  setQueueIndex: (index: number) => void;
+
   /**
    * Internal sync method called by AudioPlayerService
    * @internal
@@ -59,11 +66,6 @@ const player = AudioPlayerService.getInstance();
 export const useTTSStore = create<TTSState>()(
   persist(
     (set, get) => {
-        // Init player with persisted settings if available
-        // Note: actions in persist are available after hydration.
-        // We might need to listen to onRehydrateStorage or similar if we want to sync strictly on load.
-        // For now, lazy init in loadVoices or actions is okay.
-
         // Subscribe to player updates
         player.subscribe((status, activeCfi) => {
             set({
@@ -81,6 +83,7 @@ export const useTTSStore = create<TTSState>()(
             voice: null,
             voices: [],
             activeCfi: null,
+            queue: [],
             providerId: 'local',
             apiKeys: {
                 google: '',
@@ -140,9 +143,7 @@ export const useTTSStore = create<TTSState>()(
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
                 const { providerId, apiKeys } = get();
-                // We might need to check if player already has correct provider type
-                // But simplified: just set it.
-                 let newProvider;
+                let newProvider;
                 if (providerId === 'google') {
                     newProvider = new GoogleTTSProvider(apiKeys.google);
                 } else if (providerId === 'openai') {
@@ -168,6 +169,15 @@ export const useTTSStore = create<TTSState>()(
                     // Re-set voice to ensure player knows about it
                     player.setVoice(currentVoice.id);
                 }
+            },
+
+            setQueue: (items) => {
+                set({ queue: items });
+                player.setQueue(items);
+            },
+
+            setQueueIndex: (index) => {
+                player.setQueueIndex(index);
             },
 
             syncState: (status, activeCfi) => set({

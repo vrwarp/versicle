@@ -18,6 +18,11 @@ export class SyncEngine {
     this.currentIdx = -1;
   }
 
+  // Alias for compatibility
+  public setAlignment(alignment: AlignmentData[]) {
+      this.loadAlignment(alignment);
+  }
+
   public updateTime(currentTime: number) {
     if (this.alignment.length === 0) return;
 

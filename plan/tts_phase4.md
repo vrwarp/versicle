@@ -1,70 +1,33 @@
-# **Phase 4: Advanced Sync & Polish**
+# TTS Phase 4: Advanced Sync & Polish
 
-## **1. Objectives**
+This phase focuses on refining the user experience, improving playback reliability, and adding visual feedback for the TTS system.
 
-Phase 4 is about refining the user experience. Now that the engines are working, we need to improve the granularity of text splitting (better sentence detection), provide a better visual interface (playlist/queue view), and ensure the app handles edge cases (quota limits, network failures) gracefully.
+## 1. Refined Segmentation (Completed)
+- [x] **Switch to `Intl.Segmenter`**: Replaced regex-based splitting in `src/lib/tts/TextSegmenter.ts`.
+- [x] **Abbreviation Handling**: Added logic to merge common abbreviations (e.g., "Mr.", "Dr.") back into sentences.
+- [x] **Language Support**: Configured segmenter to respect the book's language metadata.
 
-## **2. Design Specifications**
+## 2. Playlist UI
+- [x] **Queue Component**: Create a visual list of the playback queue.
+  - [x] Show current, past, and upcoming sentences.
+  - [x] Highlight the active segment.
+  - [x] Allow clicking a segment to skip to it.
+- [x] **Integration**: Add the queue component to the Reader view (e.g., inside a drawer or popover).
+- [ ] **Scroll Sync**: Ensure the queue automatically scrolls to keep the active segment visible.
+- [x] **Empty State**: Handle cases where the queue is empty or initializing.
 
-### 2.1. Improved Text Segmentation (`src/lib/tts/TextSegmenter.ts`) [Completed]
+## 3. Cost Controls & Estimations
+- [ ] **Usage Tracking**: enhanced `CostEstimator` to track character count per session.
+- [ ] **Visual Indicator**: Add a small indicator (e.g., "$0.05") showing estimated cost for the current session when using paid providers.
+- [ ] **Threshold Warnings**:
+  - [ ] If a user selects "Read Whole Chapter" with a paid provider, show a confirmation dialog with estimated cost.
+  - [ ] Add a "Daily Limit" setting (soft limit) that warns when exceeded.
 
-The current regex-based splitter (`src/lib/tts.ts`) is naive. It breaks on "Mr. Smith" or "e.g.".
+## 4. Pre-fetching & Optimization
+- [ ] **Buffer Logic**: Update `AudioPlayerService` to trigger synthesis for segment N+1 while N is playing.
+- [ ] **Concurrency**: Ensure pre-fetching doesn't block the UI or cause race conditions.
+- [ ] **Cache Hit UI**: visual indication (e.g., icon color) if a segment is playing from cache vs network.
 
-*   **Solution**: Use `Intl.Segmenter` (supported in modern browsers) for locale-aware sentence segmentation.
-    ```typescript
-    const segmenter = new Intl.Segmenter(lang, { granularity: 'sentence' });
-    const segments = segmenter.segment(text);
-    ```
-*   **Fallback**: Keep regex for older browsers if necessary, but `Intl.Segmenter` is widely supported.
-*   **Integration**: Update the `extractSentences` function used by the `AudioPlayerService` queue generator.
-
-### **2.2. Playlist / Queue UI**
-
-A visual representation of what is being read helps users understand context and navigation.
-
-*   **Component**: `TTSQueue.tsx` (or inside `TTSControls`).
-*   **Display**: List of upcoming sentences.
-*   **Interaction**: Click a sentence to jump the queue (and seeking in the book).
-*   **Auto-Scroll**: The active sentence in the list should scroll into view.
-
-### **2.3. Pre-fetching / buffering**
-
-To ensure seamless playback between sentences when using Cloud TTS.
-
-*   **Logic**:
-    *   `AudioPlayerService` maintains a `buffer` of the *next* 1-2 segments.
-    *   When playing segment `N`, trigger synthesis/fetch for `N+1` and `N+2`.
-    *   This masks the network latency of the API calls.
-
-### **2.4. Error Handling & Fallbacks**
-
-*   **Scenario**: User is on Google Cloud voice, but internet drops or API quota exceeded.
-*   **Fallback**:
-    *   Catch error in `AudioPlayerService`.
-    *   Toast notification: "Cloud voice failed, switching to local backup."
-    *   Automatically switch `provider` to `WebSpeechProvider` and continue playback.
-
-### **2.5. Cost Controls**
-
-*   **UI**: Show an estimate of characters synthesized in the current session.
-*   **Warning**: "You are about to listen to a whole chapter (~20k chars). Proceed with Cloud Voice?" (Optional toggle in settings).
-
-## **3. Implementation Plan**
-
-1.  **Refactor Segmentation**:
-    *   Replace `extractSentences` regex logic with `Intl.Segmenter`.
-    *   Test with complex sentences ("Dr. Jones said...", "Item 1.2...").
-2.  **Buffering Logic**:
-    *   Update `AudioPlayerService` to look ahead in the queue.
-    *   Implement `prepare(segment)` method in providers (which checks cache or fetches).
-3.  **UI Enhancements**:
-    *   Add the Queue view.
-    *   Add error toasts.
-4.  **Resiliency**:
-    *   Implement the try-catch-fallback loop in the player service.
-
-## **4. Verification Steps**
-
-*   **Segmentation Test**: Verify "Mr. Smith" is treated as one sentence, not two.
-*   **Gapless Playback**: Listen to a transition between two cloud-generated sentences. It should be instant (due to pre-fetching).
-*   **Disconnect Test**: While playing cloud voice, disconnect network. Verify app falls back to local voice (after current buffer runs out) instead of crashing.
+## 5. Playback Robustness
+- [ ] **Auto-Fallback**: If a cloud request fails (401/429/500), automatically switch the *current segment* to WebSpeech without stopping playback.
+- [ ] **Network Handling**: Pause playback gracefully if offline (unless cached), resume when online.
