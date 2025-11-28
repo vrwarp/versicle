@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ReaderView } from '../ReaderView';
 import { useReaderStore } from '../../../store/useReaderStore';
 import { useTTSStore } from '../../../store/useTTSStore';
@@ -35,6 +35,15 @@ vi.mock('../../../lib/search', () => ({
     }
 }));
 
+// Mock useTTS hook to control sentences
+const mockUseTTS = vi.fn(() => ({
+    sentences: []
+}));
+
+vi.mock('../../../hooks/useTTS', () => ({
+    useTTS: () => mockUseTTS()
+}));
+
 
 describe('ReaderView', () => {
   const mockRenderTo = vi.fn();
@@ -47,9 +56,13 @@ describe('ReaderView', () => {
   const mockFont = vi.fn();
   const mockAnnotations = { add: vi.fn(), remove: vi.fn() };
   const mockDefault = vi.fn();
+  const mockPlay = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Default useTTS return
+    mockUseTTS.mockReturnValue({ sentences: [] });
 
     // Mock epubjs instance
     (ePub as any).mockReturnValue({
@@ -98,7 +111,15 @@ describe('ReaderView', () => {
 
     useTTSStore.setState({
         isPlaying: false,
-        activeCfi: null
+        activeCfi: null,
+        providerId: 'local',
+        play: mockPlay,
+        pause: vi.fn(),
+        setProviderId: (id) => useTTSStore.setState({ providerId: id }),
+        voices: [],
+        setVoice: vi.fn(),
+        apiKeys: { google: '', openai: '' },
+        setApiKey: vi.fn()
     });
   });
 
@@ -160,5 +181,44 @@ describe('ReaderView', () => {
       fireEvent.click(darkThemeBtn);
 
       expect(useReaderStore.getState().currentTheme).toBe('dark');
+  });
+
+  it('shows cost warning dialog when text is large and provider is paid', async () => {
+      // Setup mock to return large text
+      mockUseTTS.mockReturnValue({
+          sentences: Array(200).fill({ text: "A reasonably long sentence to simulate content for cost warning test." })
+      });
+
+      renderComponent();
+      await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+
+      // Open TTS panel
+      const ttsBtn = screen.getByLabelText('Text to Speech');
+      fireEvent.click(ttsBtn);
+
+      // Update store to use paid provider
+      act(() => {
+        useTTSStore.setState({ providerId: 'google' });
+      });
+
+      // Find Play button
+      const playBtn = screen.getByLabelText('Play');
+      fireEvent.click(playBtn);
+
+      // Expect Dialog to appear
+      await waitFor(() => {
+          expect(screen.getByText('Large Synthesis Warning')).toBeInTheDocument();
+          expect(screen.getByText(/You are about to listen to a large section/)).toBeInTheDocument();
+      });
+
+      // Play should not have been called yet
+      expect(mockPlay).not.toHaveBeenCalled();
+
+      // Click Proceed
+      const proceedBtn = screen.getByText('Proceed');
+      fireEvent.click(proceedBtn);
+
+      // Play should be called
+      expect(mockPlay).toHaveBeenCalled();
   });
 });

@@ -65,6 +65,7 @@ To ensure seamless playback between sentences when using Cloud TTS.
 2.  **Buffering Logic**:
     *   Update `AudioPlayerService` to look ahead in the queue.
     *   Implement `prepare(segment)` method in providers (which checks cache or fetches).
+    *   *Status:* Logic implemented in `AudioPlayerService` via `bufferNextSegments`.
 3.  **UI Enhancements**:
     *   Add the Queue view. [Completed]
     *   Add error toasts. [Completed]

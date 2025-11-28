@@ -12,6 +12,7 @@ import { TTSCostIndicator } from './TTSCostIndicator';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
 import { Toast } from '../ui/Toast';
+import { Dialog } from '../ui/Dialog';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
@@ -201,6 +202,7 @@ export const ReaderView: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [showCostWarning, setShowCostWarning] = useState(false);
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -624,17 +626,15 @@ export const ReaderView: React.FC = () => {
                                                 // Warn if total text is large (e.g. > 5000 chars ~ 1 page/chapter depending)
                                                 // and we are just starting (or resuming a large block, but checking full chapter text for now)
                                                 if (totalChars > 5000) {
-                                                    const confirmed = window.confirm(
-                                                        `You are about to listen to a large section (~${totalChars.toLocaleString()} chars). ` +
-                                                        `This may incur costs with ${providerId === 'google' ? 'Google Cloud' : 'OpenAI'}. Proceed?`
-                                                    );
-                                                    if (!confirmed) return;
+                                                    setShowCostWarning(true);
+                                                    return;
                                                 }
                                             }
                                             play();
                                         }
                                     }}
                                     className="flex-1 bg-primary text-background py-1 rounded hover:opacity-90 flex justify-center"
+                                    aria-label={isPlaying ? "Pause" : "Play"}
                                 >
                                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                                 </button>
@@ -738,6 +738,40 @@ export const ReaderView: React.FC = () => {
             {showSettings && (
                 <ReaderSettings onClose={() => setShowSettings(false)} />
             )}
+
+            {/* Cost Warning Dialog */}
+            <Dialog
+                isOpen={showCostWarning}
+                onClose={() => setShowCostWarning(false)}
+                title="Large Synthesis Warning"
+                footer={
+                    <>
+                        <button
+                            onClick={() => setShowCostWarning(false)}
+                            className="px-4 py-2 text-sm text-foreground hover:bg-border rounded"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => {
+                                setShowCostWarning(false);
+                                play();
+                            }}
+                            className="px-4 py-2 text-sm bg-primary text-background rounded hover:opacity-90"
+                        >
+                            Proceed
+                        </button>
+                    </>
+                }
+            >
+                <p>
+                    You are about to listen to a large section (~{sentences.reduce((sum, s) => sum + s.text.length, 0).toLocaleString()} chars).
+                    This may incur costs with {providerId === 'google' ? 'Google Cloud' : 'OpenAI'}.
+                </p>
+                <p className="mt-2 text-sm text-muted">
+                    We cache audio to prevent re-billing, but this initial synthesis will be charged to your API key.
+                </p>
+            </Dialog>
          </div>
       </div>
 
