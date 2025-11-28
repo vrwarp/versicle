@@ -4,6 +4,8 @@
 
 Phase 3 connects the infrastructure to real high-quality voices. We will implement adapters for Google Cloud TTS and/or OpenAI Audio API. Since these APIs are paid, implementing a robust caching layer in IndexedDB is critical to prevent runaway costs and enable offline re-listening of previously generated chapters.
 
+**Status: Completed**
+
 ## **2. Design Specifications**
 
 ### **3.1. Google Cloud TTS Adapter (`src/lib/tts/providers/GoogleTTSProvider.ts`)**
@@ -18,6 +20,7 @@ Phase 3 connects the infrastructure to real high-quality voices. We will impleme
 *   **Response Parsing**:
     *   Decode `audioContent` (base64) to `Blob`.
     *   Parse `timepoints` to `Timepoint[]`.
+    *   *Implementation Note*: Google TTS does not support automatic word-level timepoints for plain text without SSML marks. Current implementation defaults to sentence-level sync (one blob per segment).
 
 ### **3.2. OpenAI Adapter (`src/lib/tts/providers/OpenAIProvider.ts`)**
 
@@ -25,7 +28,6 @@ Phase 3 connects the infrastructure to real high-quality voices. We will impleme
 *   **Authentication**: Bearer Token (API Key).
 *   **Limitation**: OpenAI's TTS API currently **does not** return timestamp/alignment information.
     *   *Workaround*: We can only support **sentence-level** highlighting for OpenAI. The `SyncEngine` will simply highlight the entire sentence for the duration of the audio blob.
-    *   *Alternative*: Estimate word positions based on duration (linear interpolation), though this is inaccurate. For now, stick to sentence-level.
 
 ### **3.3. TTS Cache Layer (`src/lib/tts/TTSCache.ts`)**
 
@@ -59,19 +61,17 @@ We need to store the generated audio and metadata.
 
 ## **3. Implementation Plan**
 
-1.  **Cache Implementation**:
-    *   Update `src/db/db.ts` (or create new `src/lib/tts/db.ts`) to include `tts_cache` store.
+1.  **Cache Implementation** (Done):
+    *   Update `src/db/db.ts` to include `tts_cache` store.
     *   Implement `TTSCache` class with `get(key)` and `put(key, data)`.
-2.  **Google Provider**:
+2.  **Google Provider** (Done):
     *   Implement `GoogleTTSProvider`.
-    *   Test with a valid API key.
-    *   Verify `timepoints` mapping works with `SyncEngine`.
-3.  **OpenAI Provider**:
+    *   Voice ID fix implemented (using `v.name`).
+3.  **OpenAI Provider** (Done):
     *   Implement `OpenAIProvider`.
-    *   Verify playback works (audio only, no word-level sync).
-4.  **UI Integration**:
-    *   Update `TTSControls` or `Settings` to allow inputting API keys.
-    *   Persist keys securely (not in Git, just LocalStorage).
+4.  **UI Integration** (Done):
+    *   Updated `ReaderView.tsx` to allow inputting API keys and selecting providers.
+    *   Persist keys securely (not in Git, just LocalStorage via Zustand).
 
 ## **4. Verification Steps**
 

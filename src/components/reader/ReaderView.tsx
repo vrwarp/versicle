@@ -47,7 +47,11 @@ export const ReaderView: React.FC = () => {
       setRate,
       voice,
       setVoice,
-      voices: availableVoices
+      voices: availableVoices,
+      providerId,
+      setProviderId,
+      apiKeys,
+      setApiKey
   } = useTTSStore();
 
   const {
@@ -164,6 +168,7 @@ export const ReaderView: React.FC = () => {
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -509,8 +514,6 @@ export const ReaderView: React.FC = () => {
                                         className="text-left w-full"
                                         onClick={() => {
                                             renditionRef.current?.display(result.href);
-                                            // Optionally highlight search term?
-                                            // renditionRef.current.annotations.add('highlight', ...)
                                         }}
                                      >
                                          <p className="text-xs text-gray-500 mb-1">Result {idx + 1}</p>
@@ -537,47 +540,106 @@ export const ReaderView: React.FC = () => {
 
              {/* TTS Controls */}
              {showTTS && (
-                 <div className="absolute top-2 right-14 w-64 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30">
+                 <div className="absolute top-2 right-14 w-80 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30 max-h-[80vh] overflow-y-auto">
                      <div className="flex justify-between items-center mb-2">
                          <h3 className="text-sm font-bold dark:text-white">Text to Speech</h3>
-                         <button onClick={() => setShowTTS(false)}><X className="w-4 h-4 text-gray-500" /></button>
+                         <button onClick={() => {setShowTTS(false); setShowVoiceSettings(false);}}><X className="w-4 h-4 text-gray-500" /></button>
                      </div>
-                     <div className="flex items-center gap-2 mb-4">
-                         <button
-                            onClick={isPlaying ? pause : play}
-                            className="flex-1 bg-blue-600 text-white py-1 rounded hover:bg-blue-700 flex justify-center"
-                         >
-                             {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                         </button>
-                     </div>
-                     <div className="mb-2">
-                         <label className="block text-xs text-gray-500 mb-1">Speed: {rate}x</label>
-                         <input
-                            type="range"
-                            min="0.5"
-                            max="2"
-                            step="0.1"
-                            value={rate}
-                            onChange={(e) => setRate(parseFloat(e.target.value))}
-                            className="w-full"
-                         />
-                     </div>
-                     <div>
-                         <label className="block text-xs text-gray-500 mb-1">Voice</label>
-                         <select
-                            className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                            value={voice?.name || ''}
-                            onChange={(e) => {
-                                const selected = availableVoices.find(v => v.name === e.target.value);
-                                setVoice(selected || null);
-                            }}
-                         >
-                             <option value="">Default</option>
-                             {availableVoices.map(v => (
-                                 <option key={v.id} value={v.name}>{v.name.slice(0, 20)}...</option>
-                             ))}
-                         </select>
-                     </div>
+
+                     {!showVoiceSettings ? (
+                        <>
+                            <div className="flex items-center gap-2 mb-4">
+                                <button
+                                    onClick={isPlaying ? pause : play}
+                                    className="flex-1 bg-blue-600 text-white py-1 rounded hover:bg-blue-700 flex justify-center"
+                                >
+                                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                                </button>
+                                <button
+                                    onClick={() => setShowVoiceSettings(true)}
+                                    className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+                                >
+                                    <Settings className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                                </button>
+                            </div>
+                            <div className="mb-2">
+                                <label className="block text-xs text-gray-500 mb-1">Speed: {rate}x</label>
+                                <input
+                                    type="range"
+                                    min="0.5"
+                                    max="2"
+                                    step="0.1"
+                                    value={rate}
+                                    onChange={(e) => setRate(parseFloat(e.target.value))}
+                                    className="w-full"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-500 mb-1">Voice</label>
+                                <select
+                                    className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                    value={voice?.name || ''}
+                                    onChange={(e) => {
+                                        const selected = availableVoices.find(v => v.name === e.target.value);
+                                        setVoice(selected || null);
+                                    }}
+                                >
+                                    <option value="">Default</option>
+                                    {availableVoices.map(v => (
+                                        <option key={v.id} value={v.name}>{v.name.slice(0, 30)}...</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </>
+                     ) : (
+                        <div className="space-y-4">
+                            <button onClick={() => setShowVoiceSettings(false)} className="text-xs text-blue-500 mb-2 flex items-center">
+                                <ArrowLeft className="w-3 h-3 mr-1" /> Back
+                            </button>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Provider</label>
+                                <select
+                                    className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                    value={providerId}
+                                    onChange={(e) => setProviderId(e.target.value as any)}
+                                >
+                                    <option value="local">Local (Free)</option>
+                                    <option value="google">Google Cloud TTS</option>
+                                    <option value="openai">OpenAI TTS</option>
+                                </select>
+                            </div>
+
+                            {providerId === 'google' && (
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Google API Key</label>
+                                    <input
+                                        type="password"
+                                        className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                        value={apiKeys.google}
+                                        onChange={(e) => setApiKey('google', e.target.value)}
+                                        placeholder="Enter Google API Key"
+                                    />
+                                    <p className="text-[10px] text-gray-500 mt-1">
+                                        Needs Cloud Text-to-Speech API enabled.
+                                    </p>
+                                </div>
+                            )}
+
+                            {providerId === 'openai' && (
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1">OpenAI API Key</label>
+                                    <input
+                                        type="password"
+                                        className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                        value={apiKeys.openai}
+                                        onChange={(e) => setApiKey('openai', e.target.value)}
+                                        placeholder="Enter OpenAI API Key"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                     )}
                  </div>
              )}
 

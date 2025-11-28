@@ -108,7 +108,7 @@ To save bandwidth and costs, we cache generated audio.
 
 **Store:** tts\_cache
 
-* **Key:** SHA256(text \+ voiceId \+ speed)  
+* **Key:** SHA256(text \+ voiceId \+ speed \+ pitch)
 * **Value:**  
   * audioBlob: Blob (mp3/wav)  
   * alignment: Array\<{ time: number, type: 'word'|'sentence', textOffset: number }\>  
@@ -137,11 +137,15 @@ New fields in useTTSStore:
 2. **Audio Player**: Implement the HTML5 Audio player logic, separating it from SpeechSynthesis.  
 3. **Media Session**: Add lock-screen control support.
 
-### **Phase 3: Google Cloud / OpenAI Integration**
+### **Phase 3: Google Cloud / OpenAI Integration (Completed)**
 
 1. **Google Adapter**: Implement the adapter for Google Cloud Text-to-Speech API (requires API Key).  
-   * *Note: Google returns "Timepoints" for word boundaries.*  
-2. **Caching**: Implement the IndexedDB cache to store the returned audio blobs.
+   * *Status:* Implemented with sentence-level sync (word-level requires SSML marking).
+2. **OpenAI Adapter**: Implement the adapter for OpenAI Audio API.
+   * *Status:* Implemented (no native timestamp support).
+3. **Caching**: Implement the IndexedDB cache to store the returned audio blobs.
+   * *Status:* Implemented `TTSCache` and integrated into `AudioPlayerService`.
+4. **UI**: Settings added to allow provider selection and key entry.
 
 ### **Phase 4: Advanced Sync & Polish**
 

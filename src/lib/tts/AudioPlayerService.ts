@@ -2,6 +2,7 @@ import type { ITTSProvider, TTSVoice, SpeechSegment } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { AudioElementPlayer } from './AudioElementPlayer';
 import { SyncEngine } from './SyncEngine';
+import { TTSCache } from './TTSCache';
 
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading';
 
@@ -12,6 +13,7 @@ export class AudioPlayerService {
   private provider: ITTSProvider;
   private audioPlayer: AudioElementPlayer | null = null;
   private syncEngine: SyncEngine | null = null;
+  private cache: TTSCache;
   private queue: { text: string; cfi: string; title?: string; author?: string; bookTitle?: string; coverUrl?: string }[] = [];
   private currentIndex: number = 0;
   private status: TTSStatus = 'stopped';
@@ -20,9 +22,11 @@ export class AudioPlayerService {
   // Settings
   private speed: number = 1.0;
   private voiceId: string | null = null;
+  // TODO: Add pitch if providers support it
 
   private constructor() {
     this.provider = new WebSpeechProvider();
+    this.cache = new TTSCache();
     this.setupWebSpeech();
   }
 
@@ -69,22 +73,8 @@ export class AudioPlayerService {
           });
 
           this.syncEngine?.setOnHighlight((index) => {
-               // For now, Cloud playback is usually sentence-level blobs,
-               // so the whole blob maps to the CFI in queue.
-               // However, if we get word alignment, we might want to refine this.
-               // But our queue is strictly sentence/paragraph CFIs.
-               // So if we are playing queue[i], we are highlighting queue[i].cfi.
-
-               // If the provider returned a LONG audio (like a whole chapter),
-               // we would need this sync engine to tell us WHICH sentence we are in.
-               // But currently our architecture seems to assume per-queue-item synthesis for now?
-               // The design doc says: "Cloud engines return [{time: 0.5s, charIndex: 12}, ...]"
-               // And "AudioElem -- 'ontimeupdate' --> SyncEngine -- 'Map to CFI' --> Epub".
-
-               // If we are synthesizing smaller chunks (sentences), the SyncEngine is less critical for CFI switching,
-               // unless we want word-level highlighting WITHIN the sentence.
-
-               // Let's assume for now we just keep the current Item CFI active.
+               // Currently no action needed if we assume sentence-level blobs.
+               // We rely on queue index for active CFI.
           });
       }
 
@@ -125,10 +115,14 @@ export class AudioPlayerService {
 
   // Allow switching providers
   public setProvider(provider: ITTSProvider) {
+      // Don't restart if it's the same provider type and instance logic,
+      // but here we usually pass a new instance.
       this.stop();
       this.provider = provider;
       if (provider instanceof WebSpeechProvider) {
           this.setupWebSpeech();
+          // We can keep audioPlayer around or null it.
+          // Nulling it saves memory.
           this.audioPlayer = null;
       } else {
           // Cloud provider
@@ -172,15 +166,35 @@ export class AudioPlayerService {
         if (this.provider instanceof WebSpeechProvider) {
              await this.provider.synthesize(item.text, voiceId, this.speed);
         } else {
-             // Cloud provider flow
-             const result: SpeechSegment = await this.provider.synthesize(item.text, voiceId, this.speed);
+             // Cloud provider flow with Caching
+             const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed);
+             const cached = await this.cache.get(cacheKey);
+
+             let result: SpeechSegment;
+
+             if (cached) {
+                 result = {
+                     audio: new Blob([cached.audio], { type: 'audio/mp3' }),
+                     alignment: cached.alignment,
+                     isNative: false
+                 };
+             } else {
+                 result = await this.provider.synthesize(item.text, voiceId, this.speed);
+                 if (result.audio) {
+                     await this.cache.put(
+                         cacheKey,
+                         await result.audio.arrayBuffer(),
+                         result.alignment
+                     );
+                 }
+             }
 
              if (result.audio && this.audioPlayer) {
                  if (result.alignment && this.syncEngine) {
                      this.syncEngine.loadAlignment(result.alignment);
                  }
 
-                 this.audioPlayer.setRate(this.speed); // Apply speed to audio element
+                 this.audioPlayer.setRate(this.speed);
                  await this.audioPlayer.playBlob(result.audio);
                  this.setStatus('playing');
              }
