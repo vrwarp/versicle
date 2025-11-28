@@ -166,30 +166,9 @@ export class AudioPlayerService {
         if (this.provider instanceof WebSpeechProvider) {
              await this.provider.synthesize(item.text, voiceId, this.speed);
         } else {
-             // Cloud provider flow with Caching
-             const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed);
-             const cached = await this.cache.get(cacheKey);
+             const result = await this.getCloudAudio(item.text, voiceId, this.speed);
 
-             let result: SpeechSegment;
-
-             if (cached) {
-                 result = {
-                     audio: new Blob([cached.audio], { type: 'audio/mp3' }),
-                     alignment: cached.alignment,
-                     isNative: false
-                 };
-             } else {
-                 result = await this.provider.synthesize(item.text, voiceId, this.speed);
-                 if (result.audio) {
-                     await this.cache.put(
-                         cacheKey,
-                         await result.audio.arrayBuffer(),
-                         result.alignment
-                     );
-                 }
-             }
-
-             if (result.audio && this.audioPlayer) {
+             if (result && result.audio && this.audioPlayer) {
                  if (result.alignment && this.syncEngine) {
                      this.syncEngine.loadAlignment(result.alignment);
                  }
@@ -197,12 +176,55 @@ export class AudioPlayerService {
                  this.audioPlayer.setRate(this.speed);
                  await this.audioPlayer.playBlob(result.audio);
                  this.setStatus('playing');
+
+                 // Trigger buffering for next segments
+                 this.bufferNextSegments();
              }
         }
     } catch (e) {
         console.error("Play error", e);
         this.setStatus('stopped');
     }
+  }
+
+  private async getCloudAudio(text: string, voiceId: string, speed: number): Promise<SpeechSegment | null> {
+     const cacheKey = await this.cache.generateKey(text, voiceId, speed);
+     const cached = await this.cache.get(cacheKey);
+
+     if (cached) {
+         return {
+             audio: new Blob([cached.audio], { type: 'audio/mp3' }),
+             alignment: cached.alignment,
+             isNative: false
+         };
+     }
+
+     // Not in cache, fetch it
+     const result = await this.provider.synthesize(text, voiceId, speed);
+     if (result.audio) {
+         await this.cache.put(
+             cacheKey,
+             await result.audio.arrayBuffer(),
+             result.alignment
+         );
+     }
+     return result;
+  }
+
+  private bufferNextSegments() {
+       if (this.provider instanceof WebSpeechProvider) return;
+
+       const BUFFER_SIZE = 2;
+       const voiceId = this.voiceId || '';
+
+       for (let i = 1; i <= BUFFER_SIZE; i++) {
+           const nextIdx = this.currentIndex + i;
+           if (nextIdx < this.queue.length) {
+               this.getCloudAudio(this.queue[nextIdx].text, voiceId, this.speed).catch(err => {
+                   console.warn("Buffering failed for index", nextIdx, err);
+               });
+           }
+       }
   }
 
   async resume() {

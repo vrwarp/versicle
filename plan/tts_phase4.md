@@ -27,7 +27,7 @@ A visual representation of what is being read helps users understand context and
 *   **Interaction**: Click a sentence to jump the queue (and seeking in the book).
 *   **Auto-Scroll**: The active sentence in the list should scroll into view.
 
-### **2.3. Pre-fetching / buffering**
+### 2.3. Pre-fetching / buffering (Completed)
 
 To ensure seamless playback between sentences when using Cloud TTS.
 
@@ -54,7 +54,7 @@ To ensure seamless playback between sentences when using Cloud TTS.
 1.  **Refactor Segmentation**:
     *   Replace `extractSentences` regex logic with `Intl.Segmenter`.
     *   Test with complex sentences ("Dr. Jones said...", "Item 1.2...").
-2.  **Buffering Logic**:
+2.  **Buffering Logic** (Completed):
     *   Update `AudioPlayerService` to look ahead in the queue.
     *   Implement `prepare(segment)` method in providers (which checks cache or fetches).
 3.  **UI Enhancements**:
