@@ -1,5 +1,7 @@
-import { ITTSProvider, TTSVoice } from './providers/types';
+import { ITTSProvider, TTSVoice, SpeechSegment } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
+import { AudioElementPlayer } from './AudioElementPlayer';
+import { SyncEngine } from './SyncEngine';
 
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading';
 
@@ -7,8 +9,10 @@ type PlaybackListener = (status: TTSStatus, activeCfi: string | null) => void;
 
 export class AudioPlayerService {
   private static instance: AudioPlayerService;
-  private provider: ITTSProvider; // Currently only supports one active provider (WebSpeech)
-  private queue: { text: string; cfi: string }[] = [];
+  private provider: ITTSProvider;
+  private audioPlayer: AudioElementPlayer | null = null;
+  private syncEngine: SyncEngine | null = null;
+  private queue: { text: string; cfi: string; title?: string; author?: string; bookTitle?: string; coverUrl?: string }[] = [];
   private currentIndex: number = 0;
   private status: TTSStatus = 'stopped';
   private listeners: PlaybackListener[] = [];
@@ -18,10 +22,18 @@ export class AudioPlayerService {
   private voiceId: string | null = null;
 
   private constructor() {
-    // Default to WebSpeechProvider
     this.provider = new WebSpeechProvider();
+    this.setupWebSpeech();
+  }
 
-    // Bind provider events if it's WebSpeech
+  static getInstance(): AudioPlayerService {
+    if (!AudioPlayerService.instance) {
+      AudioPlayerService.instance = new AudioPlayerService();
+    }
+    return AudioPlayerService.instance;
+  }
+
+  private setupWebSpeech() {
     if (this.provider instanceof WebSpeechProvider) {
        this.provider.on((event) => {
            if (event.type === 'start') {
@@ -38,11 +50,90 @@ export class AudioPlayerService {
     }
   }
 
-  static getInstance(): AudioPlayerService {
-    if (!AudioPlayerService.instance) {
-      AudioPlayerService.instance = new AudioPlayerService();
-    }
-    return AudioPlayerService.instance;
+  private setupCloudPlayback() {
+      if (!this.audioPlayer) {
+          this.audioPlayer = new AudioElementPlayer();
+          this.syncEngine = new SyncEngine();
+
+          this.audioPlayer.setOnTimeUpdate((time) => {
+              this.syncEngine?.updateTime(time);
+          });
+
+          this.audioPlayer.setOnEnded(() => {
+              this.playNext();
+          });
+
+          this.audioPlayer.setOnError((e) => {
+              console.error("Audio Playback Error", e);
+              this.setStatus('stopped');
+          });
+
+          this.syncEngine?.setOnHighlight((index) => {
+               // For now, Cloud playback is usually sentence-level blobs,
+               // so the whole blob maps to the CFI in queue.
+               // However, if we get word alignment, we might want to refine this.
+               // But our queue is strictly sentence/paragraph CFIs.
+               // So if we are playing queue[i], we are highlighting queue[i].cfi.
+
+               // If the provider returned a LONG audio (like a whole chapter),
+               // we would need this sync engine to tell us WHICH sentence we are in.
+               // But currently our architecture seems to assume per-queue-item synthesis for now?
+               // The design doc says: "Cloud engines return [{time: 0.5s, charIndex: 12}, ...]"
+               // And "AudioElem -- 'ontimeupdate' --> SyncEngine -- 'Map to CFI' --> Epub".
+
+               // If we are synthesizing smaller chunks (sentences), the SyncEngine is less critical for CFI switching,
+               // unless we want word-level highlighting WITHIN the sentence.
+
+               // Let's assume for now we just keep the current Item CFI active.
+          });
+      }
+
+      this.setupMediaSession();
+  }
+
+  private setupMediaSession() {
+      if ('mediaSession' in navigator) {
+          navigator.mediaSession.setActionHandler('play', () => {
+              this.resume();
+          });
+          navigator.mediaSession.setActionHandler('pause', () => {
+              this.pause();
+          });
+          navigator.mediaSession.setActionHandler('previoustrack', () => {
+              this.prev();
+          });
+          navigator.mediaSession.setActionHandler('nexttrack', () => {
+              this.next();
+          });
+          navigator.mediaSession.setActionHandler('stop', () => {
+              this.stop();
+          });
+      }
+  }
+
+  private updateMediaSessionMetadata() {
+      if ('mediaSession' in navigator && this.queue[this.currentIndex]) {
+          const item = this.queue[this.currentIndex];
+          navigator.mediaSession.metadata = new MediaMetadata({
+              title: item.title || 'Chapter Text',
+              artist: item.author || 'Versicle',
+              album: item.bookTitle || '',
+              artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
+          });
+      }
+  }
+
+  // Allow switching providers
+  public setProvider(provider: ITTSProvider) {
+      this.stop();
+      this.provider = provider;
+      if (provider instanceof WebSpeechProvider) {
+          this.setupWebSpeech();
+          this.audioPlayer = null;
+      } else {
+          // Cloud provider
+          this.setupCloudPlayback();
+      }
   }
 
   async init() {
@@ -53,62 +144,91 @@ export class AudioPlayerService {
     return this.provider.getVoices();
   }
 
-  setQueue(items: { text: string; cfi: string }[], startIndex: number = 0) {
-    this.stop(); // Stop current playback to avoid race conditions with onend
+  setQueue(items: { text: string; cfi: string; title?: string; author?: string; bookTitle?: string; coverUrl?: string }[], startIndex: number = 0) {
+    this.stop();
     this.queue = items;
     this.currentIndex = startIndex;
   }
 
   async play() {
-    if (this.status === 'paused' && this.provider.resume) {
-        this.provider.resume();
-        this.setStatus('playing');
-        return;
+    if (this.status === 'paused') {
+        return this.resume();
     }
 
     if (this.currentIndex >= this.queue.length) {
         this.setStatus('stopped');
-        this.notifyListeners(null); // Clear highlight
+        this.notifyListeners(null);
         return;
     }
 
     const item = this.queue[this.currentIndex];
     this.setStatus('loading');
-    this.notifyListeners(item.cfi); // Highlight immediately
+    this.notifyListeners(item.cfi);
+    this.updateMediaSessionMetadata();
 
     try {
-        await this.provider.synthesize(
-            item.text,
-            this.voiceId || '',
-            this.speed
-        );
-        // Status update to 'playing' handled by provider event 'start'
+        const voiceId = this.voiceId || '';
+
+        if (this.provider instanceof WebSpeechProvider) {
+             await this.provider.synthesize(item.text, voiceId, this.speed);
+        } else {
+             // Cloud provider flow
+             const result: SpeechSegment = await this.provider.synthesize(item.text, voiceId, this.speed);
+
+             if (result.audio && this.audioPlayer) {
+                 if (result.alignment && this.syncEngine) {
+                     this.syncEngine.loadAlignment(result.alignment);
+                 }
+
+                 this.audioPlayer.setRate(this.speed); // Apply speed to audio element
+                 await this.audioPlayer.playBlob(result.audio);
+                 this.setStatus('playing');
+             }
+        }
     } catch (e) {
         console.error("Play error", e);
         this.setStatus('stopped');
     }
   }
 
+  async resume() {
+     if (this.status === 'paused') {
+        if (this.provider instanceof WebSpeechProvider && this.provider.resume) {
+             this.provider.resume();
+             this.setStatus('playing');
+        } else if (this.audioPlayer) {
+             await this.audioPlayer.resume();
+             this.setStatus('playing');
+        }
+     } else {
+         this.play();
+     }
+  }
+
   pause() {
-    if (this.provider.pause) {
+    if (this.provider instanceof WebSpeechProvider && this.provider.pause) {
         this.provider.pause();
-        this.setStatus('paused');
+    } else if (this.audioPlayer) {
+        this.audioPlayer.pause();
     }
+    this.setStatus('paused');
   }
 
   stop() {
     this.setStatus('stopped');
     this.notifyListeners(null);
-    // Stop provider after setting status to prevent race condition where onEnd triggers playNext
-    if (this.provider.stop) {
+
+    if (this.provider instanceof WebSpeechProvider && this.provider.stop) {
         this.provider.stop();
+    } else if (this.audioPlayer) {
+        this.audioPlayer.stop();
     }
   }
 
   next() {
       if (this.currentIndex < this.queue.length - 1) {
           this.currentIndex++;
-          this.play(); // This will trigger synthesize for next item
+          this.play();
       } else {
           this.stop();
       }
@@ -123,11 +243,14 @@ export class AudioPlayerService {
 
   setSpeed(speed: number) {
       this.speed = speed;
-      // If playing, we might need to restart current segment to apply speed?
-      // WebSpeech allows dynamic rate change on new utterances only.
       if (this.status === 'playing') {
-          // Restart current
-          this.play();
+          // Restart current to apply speed if needed, or update dynamically
+          if (this.audioPlayer) {
+              this.audioPlayer.setRate(speed);
+          } else {
+              // WebSpeech needs restart to change speed usually
+              this.play();
+          }
       }
   }
 
@@ -138,9 +261,7 @@ export class AudioPlayerService {
       }
   }
 
-  // Private helpers
   private playNext() {
-      // Logic to move to next item
       if (this.status !== 'stopped') {
           if (this.currentIndex < this.queue.length - 1) {
               this.currentIndex++;
@@ -154,13 +275,9 @@ export class AudioPlayerService {
 
   private setStatus(status: TTSStatus) {
       this.status = status;
-      // Notify listeners of status change?
-      // Current listeners mainly want Active CFI updates, but store needs status too.
-      // We'll overload the listener or add a new one.
-      // For now, let's assume the listener handles state sync.
-
-      // Since `notifyListeners` sends CFI, how do we send status?
-      // Let's change the listener signature.
+      if ('mediaSession' in navigator) {
+         navigator.mediaSession.playbackState = (status === 'playing') ? 'playing' : (status === 'paused' ? 'paused' : 'none');
+      }
 
       const currentCfi = (this.queue[this.currentIndex] && (status === 'playing' || status === 'loading' || status === 'paused'))
         ? this.queue[this.currentIndex].cfi
@@ -169,7 +286,6 @@ export class AudioPlayerService {
       this.notifyListeners(currentCfi);
   }
 
-  // Subscription for Store
   subscribe(listener: PlaybackListener) {
     this.listeners.push(listener);
     return () => {

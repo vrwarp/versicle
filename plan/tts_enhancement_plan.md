@@ -125,13 +125,13 @@ New fields in useTTSStore:
 
 ## **6\. Implementation Strategy**
 
-### **Phase 1: Architecture Refactor**
+### **Phase 1: Architecture Refactor (Completed)**
 
 1. **Extract src/lib/tts.ts**: Refactor the current functional code into a WebSpeechProvider class implementing ITTSProvider.  
 2. **Update Store**: Modify useTTSStore to use the provider pattern.  
 3. **Basic Sync**: Ensure the existing highlighting logic works through the new interface.
 
-### **Phase 2: Cloud Foundation**
+### **Phase 2: Cloud Foundation (Completed)**
 
 1. **Generic Cloud Provider**: Create a base class for HTTP-based TTS.  
 2. **Audio Player**: Implement the HTML5 Audio player logic, separating it from SpeechSynthesis.  

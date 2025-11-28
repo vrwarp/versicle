@@ -53,21 +53,21 @@ We need a module that translates "Time" into "Location".
     *   **Crucial Step**: The `AudioPlayerService` must maintain the mapping between the *Audio Segment* currently playing and the *CFI* of the text sentence.
     *   Emit `cfiUpdate` events to the UI for highlighting.
 
-## **3. Implementation Plan**
+## **3. Implementation Plan (Completed)**
 
 1.  **Audio Player Implementation**:
-    *   Create `AudioElementPlayer` class.
-    *   Add methods `playBlob(blob)`, `pause()`, `resume()`.
+    *   [x] Create `AudioElementPlayer` class.
+    *   [x] Add methods `playBlob(blob)`, `pause()`, `resume()`.
 2.  **Enhance AudioPlayerService**:
-    *   Add logic to switch output: If `provider.isNative`, use internal logic. Else, get `SpeechSegment` (audio + alignment) and pass to `AudioElementPlayer`.
+    *   [x] Add logic to switch output: If `provider.isNative`, use internal logic. Else, get `SpeechSegment` (audio + alignment) and pass to `AudioElementPlayer`.
 3.  **Media Session Setup**:
-    *   In `AudioPlayerService`, add `setupMediaSession()` method.
-    *   Hook up the event listeners to the service's control methods.
+    *   [x] In `AudioPlayerService`, add `setupMediaSession()` method.
+    *   [x] Hook up the event listeners to the service's control methods.
 4.  **Sync Logic**:
-    *   Implement the `SyncEngine` class.
-    *   Since we don't have a real cloud provider yet, create a **MockCloudProvider** that returns a static audio file (e.g., a simple MP3 in public folder) and a fake alignment JSON for testing purposes.
+    *   [x] Implement the `SyncEngine` class.
+    *   [x] Since we don't have a real cloud provider yet, create a **MockCloudProvider** that returns a static audio file (e.g., a simple MP3 in public folder) and a fake alignment JSON for testing purposes.
 5.  **Background Play Testing**:
-    *   Ensure that when the tab is hidden or minimized, audio continues playing (unlike visual-dependent rendering loops).
+    *   [x] Ensure that when the tab is hidden or minimized, audio continues playing (unlike visual-dependent rendering loops).
 
 ## **4. Verification Steps**
 
