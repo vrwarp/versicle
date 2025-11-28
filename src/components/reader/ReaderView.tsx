@@ -11,6 +11,7 @@ import { ReaderSettings } from './ReaderSettings';
 import { TTSCostIndicator } from './TTSCostIndicator';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
+import { Toast } from '../ui/Toast';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
@@ -58,7 +59,9 @@ export const ReaderView: React.FC = () => {
       providerId,
       setProviderId,
       apiKeys,
-      setApiKey
+      setApiKey,
+      lastError,
+      clearError
   } = useTTSStore();
 
   const {
@@ -136,6 +139,23 @@ export const ReaderView: React.FC = () => {
       });
     }
   }, [annotations]); // removed renditionRef.current
+
+  // Handle TTS Errors
+  const [toastMessage, setToastMessage] = useState('');
+  const [showToast, setShowToast] = useState(false);
+
+  useEffect(() => {
+      if (lastError) {
+          setToastMessage(lastError);
+          setShowToast(true);
+          // Auto-clear error in store so it doesn't persist forever
+          // but we keep local toast visible for duration
+          // Actually, let's keep it simple: store holds error, we show toast, then clear store.
+
+          // Wait for toast duration then clear?
+          // The Toast component handles its own timer for onClose.
+      }
+  }, [lastError]);
 
   // Inject Custom CSS for Highlights
   useEffect(() => {
@@ -720,6 +740,16 @@ export const ReaderView: React.FC = () => {
             )}
          </div>
       </div>
+
+      {/* Toast Notification */}
+      <Toast
+          message={toastMessage}
+          isVisible={showToast}
+          onClose={() => {
+              setShowToast(false);
+              clearError();
+          }}
+      />
 
       {/* Footer / Controls */}
       <footer className="bg-surface border-t border-border p-2 flex items-center justify-between z-10">
