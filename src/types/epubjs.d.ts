@@ -63,17 +63,35 @@ declare module 'epubjs' {
         select(name: string): void;
         fontSize(size: string): void;
         font(name: string): void;
+        default(properties: object): void;
+    }
+
+    export interface Contents {
+        document: Document;
+        content: HTMLElement;
+        cfiFromRange(range: Range): string;
+    }
+
+    export interface Annotations {
+        add(type: string, cfiRange: string, data?: object, cb?: (e: Event) => void, className?: string): void;
+        remove(cfiRange: string, type: string): void;
     }
 
     export interface Rendition {
         settings: Record<string, unknown>;
         themes: Themes;
+        annotations: Annotations;
         display(target?: string): Promise<void>;
         next(): Promise<void>;
         prev(): Promise<void>;
         currentLocation(): Location;
+        getContents(): Contents[];
+        getRange(cfi: string): Range;
+        resize(width?: number | string, height?: number | string): void;
         on(event: 'relocated', listener: (location: Location) => void): void;
+        on(event: 'rendered', listener: (section: unknown, view: unknown) => void): void;
         on(event: 'selected', listener: (cfiRange: string, contents: unknown) => void): void;
+        off(event: string, listener: (...args: any[]) => void): void;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         on(event: string, listener: (...args: any[]) => void): void;
         destroy(): void;
@@ -104,6 +122,7 @@ declare module 'epubjs' {
       spine: {
         get(target: string | number): unknown;
       }
+      load(url: string): Promise<Document>;
     }
 
     function ePub(data: string | ArrayBuffer, options?: BookOptions): Book;

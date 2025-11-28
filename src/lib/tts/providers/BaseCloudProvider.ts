@@ -1,4 +1,4 @@
-import { ITTSProvider, SpeechSegment, TTSVoice } from './types';
+import type { ITTSProvider, SpeechSegment, TTSVoice } from './types';
 
 export abstract class BaseCloudProvider implements ITTSProvider {
   abstract id: string;
