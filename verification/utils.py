@@ -6,6 +6,8 @@ SCREENSHOT_DIR = "verification/screenshots"
 
 async def setup(p):
     """Launches browser and creates a new page."""
+    # Disable web security and site isolation to allow Playwright to interact with
+    # the sandboxed iframe created by epub.js (about:srcdoc) without cross-origin restrictions.
     browser = await p.chromium.launch(args=[
         "--disable-web-security",
         "--disable-features=IsolateOrigins,site-per-process"
