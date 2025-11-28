@@ -24,6 +24,9 @@ export class AudioPlayerService {
   private voiceId: string | null = null;
   // TODO: Add pitch if providers support it
 
+  // Buffering
+  private preloadCount = 2; // Number of segments to look ahead
+
   private constructor() {
     this.provider = new WebSpeechProvider();
     this.cache = new TTSCache();
@@ -42,6 +45,7 @@ export class AudioPlayerService {
        this.provider.on((event) => {
            if (event.type === 'start') {
                this.setStatus('playing');
+               this.bufferNext(); // Trigger buffering when playback starts
            } else if (event.type === 'end') {
                this.playNext();
            } else if (event.type === 'boundary') {
@@ -69,7 +73,8 @@ export class AudioPlayerService {
 
           this.audioPlayer.setOnError((e) => {
               console.error("Audio Playback Error", e);
-              this.setStatus('stopped');
+              // Fallback happens in play() catch, but if error happens during playback:
+              this.handlePlaybackError(e);
           });
 
           this.syncEngine?.setOnHighlight((index) => {
@@ -144,6 +149,58 @@ export class AudioPlayerService {
     this.currentIndex = startIndex;
   }
 
+  /**
+   * Pre-fetches the next segments in the queue to ensure smooth playback.
+   */
+  private async bufferNext() {
+      if (this.provider instanceof WebSpeechProvider) return; // WebSpeech doesn't need/support buffering in this way
+
+      const start = this.currentIndex + 1;
+      const end = Math.min(this.queue.length, start + this.preloadCount);
+      const voiceId = this.voiceId || '';
+
+      for (let i = start; i < end; i++) {
+          const item = this.queue[i];
+          const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed);
+          const cached = await this.cache.get(cacheKey);
+
+          if (!cached) {
+              // Trigger synthesis but don't wait for it if we are already playing something else?
+              // Ideally we want to fire and forget, but we need to ensure we don't spam API if user skips quickly.
+              // For now, sequentially buffer.
+              try {
+                  const result = await this.provider.synthesize(item.text, voiceId, this.speed);
+                   if (result.audio) {
+                     await this.cache.put(
+                         cacheKey,
+                         await result.audio.arrayBuffer(),
+                         result.alignment
+                     );
+                 }
+              } catch (e) {
+                  console.warn(`Failed to buffer segment ${i}:`, e);
+              }
+          }
+      }
+  }
+
+  private async handlePlaybackError(error: any) {
+      console.error("Handling playback/synthesis error", error);
+
+      // If we are using a cloud provider and it fails, fallback to WebSpeech
+      if (!(this.provider instanceof WebSpeechProvider)) {
+          console.warn("Falling back to WebSpeechProvider due to error.");
+          // Switch provider to WebSpeech
+          // Ideally we should notify the user via a callback or event
+          this.setProvider(new WebSpeechProvider());
+
+          // Try to play current item again with new provider
+          this.play();
+      } else {
+          this.setStatus('stopped');
+      }
+  }
+
   async play() {
     if (this.status === 'paused') {
         return this.resume();
@@ -197,11 +254,13 @@ export class AudioPlayerService {
                  this.audioPlayer.setRate(this.speed);
                  await this.audioPlayer.playBlob(result.audio);
                  this.setStatus('playing');
+
+                 // Trigger buffering for next segments
+                 this.bufferNext();
              }
         }
     } catch (e) {
-        console.error("Play error", e);
-        this.setStatus('stopped');
+        this.handlePlaybackError(e);
     }
   }
 
@@ -253,6 +312,24 @@ export class AudioPlayerService {
           this.currentIndex--;
           this.play();
       }
+  }
+
+  jumpTo(index: number) {
+      if (index >= 0 && index < this.queue.length) {
+          this.currentIndex = index;
+          this.play();
+      }
+  }
+
+  getQueue() {
+      return {
+          items: this.queue,
+          currentIndex: this.currentIndex
+      };
+  }
+
+  getProviderId() {
+      return this.provider.id;
   }
 
   setSpeed(speed: number) {

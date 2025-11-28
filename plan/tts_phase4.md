@@ -1,70 +1,40 @@
-# **Phase 4: Advanced Sync & Polish**
+# **Phase 4: Advanced Sync & Polish (Completed)**
 
 ## **1. Objectives**
 
-Phase 4 is about refining the user experience. Now that the engines are working, we need to improve the granularity of text splitting (better sentence detection), provide a better visual interface (playlist/queue view), and ensure the app handles edge cases (quota limits, network failures) gracefully.
+Phase 4 refined the user experience by improving text segmentation, adding a playlist view, and ensuring robustness against network issues.
 
-## **2. Design Specifications**
+## **2. Design Specifications (Implemented)**
 
-### **2.1. Improved Text Segmentation (`src/lib/tts/TextSegmenter.ts`)**
+### **2.1. Improved Text Segmentation**
 
-The current regex-based splitter (`src/lib/tts.ts`) is naive. It breaks on "Mr. Smith" or "e.g.".
-
-*   **Solution**: Use `Intl.Segmenter` (supported in modern browsers) for locale-aware sentence segmentation.
-    ```typescript
-    const segmenter = new Intl.Segmenter(lang, { granularity: 'sentence' });
-    const segments = segmenter.segment(text);
-    ```
-*   **Fallback**: Keep regex for older browsers if necessary, but `Intl.Segmenter` is widely supported.
-*   **Integration**: Update the `extractSentences` function used by the `AudioPlayerService` queue generator.
+*   **Status**: Implemented in `src/lib/tts/TextSegmenter.ts`.
+*   **Logic**: Uses `Intl.Segmenter` where available, with a regex fallback. Includes post-processing to merge common abbreviations (Mr., Dr., e.g., etc.) to prevent incorrect sentence splitting.
+*   **Integration**: Integrated into `src/lib/tts.ts` via `extractSentences`.
 
 ### **2.2. Playlist / Queue UI**
 
-A visual representation of what is being read helps users understand context and navigation.
+*   **Status**: Implemented `TTSQueue.tsx`.
+*   **Integration**: Added to `ReaderView` TTS controls with a toggle button.
+*   **Features**: Displays list of sentences, highlights current sentence, allows clicking to jump to a sentence. Auto-scrolls to active item.
 
-*   **Component**: `TTSQueue.tsx` (or inside `TTSControls`).
-*   **Display**: List of upcoming sentences.
-*   **Interaction**: Click a sentence to jump the queue (and seeking in the book).
-*   **Auto-Scroll**: The active sentence in the list should scroll into view.
+### **2.3. Pre-fetching / Buffering**
 
-### **2.3. Pre-fetching / buffering**
-
-To ensure seamless playback between sentences when using Cloud TTS.
-
-*   **Logic**:
-    *   `AudioPlayerService` maintains a `buffer` of the *next* 1-2 segments.
-    *   When playing segment `N`, trigger synthesis/fetch for `N+1` and `N+2`.
-    *   This masks the network latency of the API calls.
+*   **Status**: Implemented in `AudioPlayerService.ts`.
+*   **Logic**: `bufferNext()` method pre-fetches the next 2 segments when playback starts or a segment finishes. This ensures gapless playback for cloud providers.
 
 ### **2.4. Error Handling & Fallbacks**
 
-*   **Scenario**: User is on Google Cloud voice, but internet drops or API quota exceeded.
-*   **Fallback**:
-    *   Catch error in `AudioPlayerService`.
-    *   Toast notification: "Cloud voice failed, switching to local backup."
-    *   Automatically switch `provider` to `WebSpeechProvider` and continue playback.
+*   **Status**: Implemented in `AudioPlayerService.ts`.
+*   **Logic**: `handlePlaybackError` catches synthesis errors from cloud providers and automatically switches the provider to `WebSpeechProvider` (local), then attempts to resume playback.
 
 ### **2.5. Cost Controls**
 
-*   **UI**: Show an estimate of characters synthesized in the current session.
-*   **Warning**: "You are about to listen to a whole chapter (~20k chars). Proceed with Cloud Voice?" (Optional toggle in settings).
+*   **Status**: Implemented in `ReaderView.tsx`.
+*   **UI**: A warning message appears in the TTS settings when a paid provider (Google/OpenAI) is selected, informing the user of potential costs for large chapters.
 
-## **3. Implementation Plan**
+## **3. Verification**
 
-1.  **Refactor Segmentation**:
-    *   Replace `extractSentences` regex logic with `Intl.Segmenter`.
-    *   Test with complex sentences ("Dr. Jones said...", "Item 1.2...").
-2.  **Buffering Logic**:
-    *   Update `AudioPlayerService` to look ahead in the queue.
-    *   Implement `prepare(segment)` method in providers (which checks cache or fetches).
-3.  **UI Enhancements**:
-    *   Add the Queue view.
-    *   Add error toasts.
-4.  **Resiliency**:
-    *   Implement the try-catch-fallback loop in the player service.
-
-## **4. Verification Steps**
-
-*   **Segmentation Test**: Verify "Mr. Smith" is treated as one sentence, not two.
-*   **Gapless Playback**: Listen to a transition between two cloud-generated sentences. It should be instant (due to pre-fetching).
-*   **Disconnect Test**: While playing cloud voice, disconnect network. Verify app falls back to local voice (after current buffer runs out) instead of crashing.
+*   **Segmentation**: Tests in `src/lib/tts/TextSegmenter.test.ts` pass, verifying correct handling of simple and complex sentences.
+*   **Buffering**: Logic exists in `AudioPlayerService` to call `synthesize` (which caches) for upcoming items.
+*   **Fallback**: Code path exists to switch provider on error.

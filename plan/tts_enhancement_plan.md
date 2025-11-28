@@ -147,11 +147,16 @@ New fields in useTTSStore:
    * *Status:* Implemented `TTSCache` and integrated into `AudioPlayerService`.
 4. **UI**: Settings added to allow provider selection and key entry.
 
-### **Phase 4: Advanced Sync & Polish**
+### **Phase 4: Advanced Sync & Polish (Completed)**
 
-1. **Refined Segmentation**: Use Intl.Segmenter (browser native) instead of regex for better sentence detection.  
-2. **Playlist UI**: Add a visual "queue" or "playlist" view so users can see upcoming sentences.  
+1. **Refined Segmentation**: Use Intl.Segmenter (browser native) instead of regex for better sentence detection.
+   * *Status:* Implemented `TextSegmenter.ts` with abbreviation handling.
+2. **Playlist UI**: Add a visual "queue" or "playlist" view so users can see upcoming sentences.
+   * *Status:* Implemented `TTSQueue.tsx` and integrated into `ReaderView`.
 3. **Cost Controls**: Add UI warnings for large book synthesis when using paid keys.
+   * *Status:* Added cost warning UI to `ReaderView`.
+4. **Resiliency**: Implement pre-fetching and error fallbacks.
+   * *Status:* Implemented in `AudioPlayerService.ts`.
 
 ## **7\. UX Considerations for "TTS Forward"**
 

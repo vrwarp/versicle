@@ -9,7 +9,8 @@ import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter, ListMusic } from 'lucide-react';
+import { TTSQueue } from './TTSQueue';
 
 /**
  * The main reader interface component.
@@ -169,6 +170,7 @@ export const ReaderView: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [showTTSQueue, setShowTTSQueue] = useState(false);
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -540,15 +542,15 @@ export const ReaderView: React.FC = () => {
 
              {/* TTS Controls */}
              {showTTS && (
-                 <div className="absolute top-2 right-14 w-80 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30 max-h-[80vh] overflow-y-auto">
-                     <div className="flex justify-between items-center mb-2">
+                 <div className="absolute top-2 right-14 w-80 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30 max-h-[80vh] overflow-y-auto flex flex-col">
+                     <div className="flex justify-between items-center mb-2 shrink-0">
                          <h3 className="text-sm font-bold dark:text-white">Text to Speech</h3>
-                         <button onClick={() => {setShowTTS(false); setShowVoiceSettings(false);}}><X className="w-4 h-4 text-gray-500" /></button>
+                         <button onClick={() => {setShowTTS(false); setShowVoiceSettings(false); setShowTTSQueue(false);}}><X className="w-4 h-4 text-gray-500" /></button>
                      </div>
 
-                     {!showVoiceSettings ? (
+                     {!showVoiceSettings && !showTTSQueue ? (
                         <>
-                            <div className="flex items-center gap-2 mb-4">
+                            <div className="flex items-center gap-2 mb-4 shrink-0">
                                 <button
                                     onClick={isPlaying ? pause : play}
                                     className="flex-1 bg-blue-600 text-white py-1 rounded hover:bg-blue-700 flex justify-center"
@@ -556,13 +558,21 @@ export const ReaderView: React.FC = () => {
                                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                                 </button>
                                 <button
+                                    onClick={() => setShowTTSQueue(true)}
+                                    className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+                                    title="Queue"
+                                >
+                                    <ListMusic className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                                </button>
+                                <button
                                     onClick={() => setShowVoiceSettings(true)}
                                     className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+                                    title="Settings"
                                 >
                                     <Settings className="w-4 h-4 text-gray-700 dark:text-gray-200" />
                                 </button>
                             </div>
-                            <div className="mb-2">
+                            <div className="mb-2 shrink-0">
                                 <label className="block text-xs text-gray-500 mb-1">Speed: {rate}x</label>
                                 <input
                                     type="range"
@@ -574,7 +584,7 @@ export const ReaderView: React.FC = () => {
                                     className="w-full"
                                 />
                             </div>
-                            <div>
+                            <div className="shrink-0">
                                 <label className="block text-xs text-gray-500 mb-1">Voice</label>
                                 <select
                                     className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
@@ -591,6 +601,14 @@ export const ReaderView: React.FC = () => {
                                 </select>
                             </div>
                         </>
+                     ) : showTTSQueue ? (
+                        <div className="flex flex-col h-64">
+                             <button onClick={() => setShowTTSQueue(false)} className="text-xs text-blue-500 mb-2 flex items-center shrink-0">
+                                <ArrowLeft className="w-3 h-3 mr-1" /> Back to Controls
+                            </button>
+                            <h4 className="text-xs font-semibold text-gray-500 mb-2 shrink-0">Playback Queue</h4>
+                            <TTSQueue />
+                        </div>
                      ) : (
                         <div className="space-y-4">
                             <button onClick={() => setShowVoiceSettings(false)} className="text-xs text-blue-500 mb-2 flex items-center">
@@ -636,6 +654,15 @@ export const ReaderView: React.FC = () => {
                                         onChange={(e) => setApiKey('openai', e.target.value)}
                                         placeholder="Enter OpenAI API Key"
                                     />
+                                </div>
+                            )}
+
+                            {(providerId === 'google' || providerId === 'openai') && (
+                                <div className="p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded">
+                                    <p className="text-[10px] text-yellow-800 dark:text-yellow-200">
+                                        <strong>Cost Warning:</strong> Using cloud voices incurs costs.
+                                        A typical chapter is ~15k-20k characters.
+                                    </p>
                                 </div>
                             )}
                         </div>
