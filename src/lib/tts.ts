@@ -1,4 +1,5 @@
 import ePub, { Rendition } from 'epubjs';
+import { TextSegmenter } from './tts/TextSegmenter';
 
 /**
  * Represents a sentence and its corresponding location (CFI) in the book.
@@ -37,74 +38,40 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
     const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT, null);
     let node: Node | null;
 
-    // Simple regex for sentence splitting (., !, ?)
-    // Note: This is naive. "Mr. Smith" will split.
-    const sentenceRegex = /([^\.!\?]+[\.!\?]+)/g;
+    // Use the robust TextSegmenter (Intl.Segmenter based)
+    const segmenter = TextSegmenter.getInstance();
 
     while ((node = walker.nextNode())) {
-        const text = node.textContent?.trim();
-        if (!text) continue;
-
-        // If the text node is just whitespace, skip
-        if (text.length === 0) continue;
-
-        // Split text into sentences
-        // We need to keep track of offset within the node to create accurate ranges
-        let match;
         const textContent = node.textContent || '';
+        // If the text node is just whitespace, skip
+        if (!textContent.trim()) continue;
 
-        // Reset regex index
-        sentenceRegex.lastIndex = 0;
+        const segments = segmenter.segment(textContent);
 
-        let lastIndex = 0;
+        for (const segment of segments) {
+             const sentenceText = segment.segment;
+             // Skip empty segments
+             if (!sentenceText.trim()) continue;
 
-        // Find matches
-        while ((match = sentenceRegex.exec(textContent)) !== null) {
-            const sentenceText = match[0];
-            const startIndex = match.index;
-            const endIndex = match.index + sentenceText.length;
+             const startIndex = segment.index;
+             const endIndex = startIndex + sentenceText.length;
 
-            // Create range for this sentence
-            const range = doc.createRange();
-            range.setStart(node, startIndex);
-            range.setEnd(node, endIndex);
+             // Create range for this sentence
+             const range = doc.createRange();
+             range.setStart(node, startIndex);
+             range.setEnd(node, endIndex);
 
-            // Generate CFI
-            try {
-                // @ts-expect-error epubjs types might be incomplete
-                const cfi = contents.cfiFromRange(range);
+             // Generate CFI
+             try {
+                 // @ts-expect-error epubjs types might be incomplete
+                 const cfi = contents.cfiFromRange(range);
 
-                sentences.push({
-                    text: sentenceText.trim(),
-                    cfi: cfi
-                });
-            } catch (e) {
-                console.warn("Failed to generate CFI for range", e);
-            }
-
-            lastIndex = endIndex;
-        }
-
-        // Handle remaining text if any (e.g. no punctuation at end of node)
-        // This often happens if a sentence spans multiple nodes, but for simplicity
-        // we treat text nodes as boundaries in this MVP version or assume simplified structure.
-        if (lastIndex < textContent.length) {
-             const remainingText = textContent.substring(lastIndex);
-             if (remainingText.trim().length > 0) {
-                 const range = doc.createRange();
-                 range.setStart(node, lastIndex);
-                 range.setEnd(node, textContent.length);
-
-                  try {
-                    // @ts-expect-error epubjs types might be incomplete
-                    const cfi = contents.cfiFromRange(range);
-                    sentences.push({
-                        text: remainingText.trim(),
-                        cfi: cfi
-                    });
-                } catch (e) {
-                     console.warn("Failed to generate CFI for remaining range", e);
-                }
+                 sentences.push({
+                     text: sentenceText.trim(),
+                     cfi: cfi
+                 });
+             } catch (e) {
+                 console.warn("Failed to generate CFI for range", e);
              }
         }
     }

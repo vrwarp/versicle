@@ -6,7 +6,7 @@ Phase 4 is about refining the user experience. Now that the engines are working,
 
 ## **2. Design Specifications**
 
-### **2.1. Improved Text Segmentation (`src/lib/tts/TextSegmenter.ts`)**
+### 2.1. Improved Text Segmentation (Completed)
 
 The current regex-based splitter (`src/lib/tts.ts`) is naive. It breaks on "Mr. Smith" or "e.g.".
 
@@ -51,7 +51,7 @@ To ensure seamless playback between sentences when using Cloud TTS.
 
 ## **3. Implementation Plan**
 
-1.  **Refactor Segmentation**:
+1.  **Refactor Segmentation** (Completed):
     *   Replace `extractSentences` regex logic with `Intl.Segmenter`.
     *   Test with complex sentences ("Dr. Jones said...", "Item 1.2...").
 2.  **Buffering Logic** (Completed):
