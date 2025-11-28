@@ -27,41 +27,12 @@ vi.mock('../../../db/db', () => ({
   })),
 }));
 
-// Mock URL.createObjectURL
-global.URL.createObjectURL = vi.fn(() => 'blob:url');
-
 // Mock searchClient
 vi.mock('../../../lib/search', () => ({
     searchClient: {
         indexBook: vi.fn().mockResolvedValue(undefined),
         search: vi.fn().mockResolvedValue([])
     }
-}));
-
-// Mock window.speechSynthesis
-Object.defineProperty(window, 'speechSynthesis', {
-    value: {
-        getVoices: vi.fn().mockReturnValue([]),
-        speak: vi.fn(),
-        cancel: vi.fn(),
-        pause: vi.fn(),
-        resume: vi.fn(),
-        onvoiceschanged: null,
-        speaking: false,
-        paused: false,
-        pending: false
-    },
-    writable: true
-});
-
-// Mock SpeechSynthesisUtterance
-global.SpeechSynthesisUtterance = vi.fn().mockImplementation(() => ({
-    text: '',
-    voice: null,
-    rate: 1,
-    onstart: null,
-    onend: null,
-    onerror: null,
 }));
 
 
@@ -73,6 +44,7 @@ describe('ReaderView', () => {
   const mockRegister = vi.fn();
   const mockSelect = vi.fn();
   const mockFontSize = vi.fn();
+  const mockFont = vi.fn();
   const mockAnnotations = { add: vi.fn(), remove: vi.fn() };
   const mockDefault = vi.fn();
 
@@ -89,6 +61,7 @@ describe('ReaderView', () => {
           register: mockRegister,
           select: mockSelect,
           fontSize: mockFontSize,
+          font: mockFont,
           default: mockDefault
         },
         annotations: mockAnnotations,
@@ -183,15 +156,9 @@ describe('ReaderView', () => {
       const settingsBtn = screen.getByLabelText('Settings');
       fireEvent.click(settingsBtn);
 
-      const darkThemeBtn = screen.getAllByRole('button').find(b => b.className.includes('bg-gray-800') || b.className.includes('#333'));
-      // Simplified selector logic as in real component they are buttons with style background
-      // The component renders theme buttons. We can find by checking style or just fire event if we can locate it.
+      const darkThemeBtn = screen.getByLabelText('Select dark theme');
+      fireEvent.click(darkThemeBtn);
 
-      // The theme buttons don't have aria-labels in the simplified component, so let's find by checking the container
-      const themeButtons = screen.getByText('Theme').nextElementSibling?.querySelectorAll('button');
-      if (themeButtons && themeButtons[1]) {
-          fireEvent.click(themeButtons[1]); // Dark
-          expect(useReaderStore.getState().currentTheme).toBe('dark');
-      }
+      expect(useReaderStore.getState().currentTheme).toBe('dark');
   });
 });

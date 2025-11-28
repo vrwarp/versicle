@@ -258,10 +258,10 @@ epub.js provides a robust annotation API based on **Canonical Fragment Identifie
   - [ ] Show existing highlights on the page.
   - [ ] Add a sidebar/panel to list all annotations for the current book.
 
-- [ ] Step 6: **Advanced Theming.**
-  - [ ] Expand settings menu to support font selection (serif, sans-serif, monospace).
-  - [ ] Implement custom color themes (beyond light/dark/sepia).
-  - [ ] Persist theme preferences.
+- [x] Step 6: **Advanced Theming.**
+  - [x] Expand settings menu to support font selection (serif, sans-serif, monospace).
+  - [x] Implement custom color themes (beyond light/dark/sepia).
+  - [x] Persist theme preferences.
 
 - [ ] Step 7: **PWA Implementation.**
   - [ ] Configure `vite-plugin-pwa`.
