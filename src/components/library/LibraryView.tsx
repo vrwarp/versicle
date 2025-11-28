@@ -86,16 +86,16 @@ export const LibraryView: React.FC = () => {
 
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col">
+    <div className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col bg-background text-foreground">
       <header className="mb-8 flex-none">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">My Library</h1>
-        <p className="text-gray-600">Manage and read your EPUB collection</p>
+        <h1 className="text-3xl font-bold text-primary mb-2">My Library</h1>
+        <p className="text-secondary">Manage and read your EPUB collection</p>
       </header>
 
       <section className="mb-12 flex-none">
         <FileUploader />
         {error && (
-            <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg">
+            <div className="mt-4 p-4 bg-destructive/10 text-destructive rounded-lg">
                 {error}
             </div>
         )}
@@ -103,12 +103,12 @@ export const LibraryView: React.FC = () => {
 
       {isLoading ? (
         <div className="flex justify-center items-center py-12 flex-1">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       ) : (
         <section className="flex-1 min-h-0" ref={containerRef}>
           {books.length === 0 ? (
-             <div className="text-center py-12 text-gray-500">
+             <div className="text-center py-12 text-muted">
                 No books yet. Import one to get started!
              </div>
           ) : (
