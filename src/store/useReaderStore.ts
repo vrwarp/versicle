@@ -11,7 +11,13 @@ interface ReaderState {
   /** The ID of the currently open book. */
   currentBookId: string | null;
   /** The active visual theme of the reader. */
-  currentTheme: 'light' | 'dark' | 'sepia';
+  currentTheme: 'light' | 'dark' | 'sepia' | 'custom';
+  /** Custom theme colors. */
+  customTheme: { bg: string; fg: string };
+  /** Font family (e.g., 'serif', 'sans-serif'). */
+  fontFamily: string;
+  /** Line height (e.g., 1.5). */
+  lineHeight: number;
   /** Font size percentage (e.g., 100). */
   fontSize: number;
   /** Current Canonical Fragment Identifier (CFI) representing the reading position. */
@@ -28,7 +34,13 @@ interface ReaderState {
   /** Sets the ID of the current book. */
   setCurrentBookId: (id: string | null) => void;
   /** Sets the visual theme. */
-  setTheme: (theme: 'light' | 'dark' | 'sepia') => void;
+  setTheme: (theme: 'light' | 'dark' | 'sepia' | 'custom') => void;
+  /** Sets the custom theme colors. */
+  setCustomTheme: (theme: { bg: string; fg: string }) => void;
+  /** Sets the font family. */
+  setFontFamily: (font: string) => void;
+  /** Sets the line height. */
+  setLineHeight: (height: number) => void;
   /** Sets the font size. */
   setFontSize: (size: number) => void;
   /**
@@ -54,6 +66,9 @@ export const useReaderStore = create<ReaderState>()(
       isLoading: false,
       currentBookId: null,
       currentTheme: 'light',
+      customTheme: { bg: '#ffffff', fg: '#000000' },
+      fontFamily: 'serif',
+      lineHeight: 1.5,
       fontSize: 100,
       currentCfi: null,
       currentChapterTitle: null,
@@ -63,6 +78,9 @@ export const useReaderStore = create<ReaderState>()(
       setIsLoading: (isLoading) => set({ isLoading }),
       setCurrentBookId: (id) => set({ currentBookId: id }),
       setTheme: (theme) => set({ currentTheme: theme }),
+      setCustomTheme: (customTheme) => set({ customTheme }),
+      setFontFamily: (fontFamily) => set({ fontFamily }),
+      setLineHeight: (lineHeight) => set({ lineHeight }),
       setFontSize: (size) => set({ fontSize: size }),
       updateLocation: (cfi, progress, chapterTitle) =>
         set((state) => ({
@@ -85,6 +103,9 @@ export const useReaderStore = create<ReaderState>()(
       storage: createJSONStorage(() => localStorage), // (optional) by default, 'localStorage' is used
       partialize: (state) => ({
         currentTheme: state.currentTheme,
+        customTheme: state.customTheme,
+        fontFamily: state.fontFamily,
+        lineHeight: state.lineHeight,
         fontSize: state.fontSize,
       }),
     }

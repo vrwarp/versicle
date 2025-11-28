@@ -7,6 +7,7 @@ import { useTTS } from '../../hooks/useTTS';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
+import { ReaderSettings } from './ReaderSettings';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
@@ -28,6 +29,9 @@ export const ReaderView: React.FC = () => {
 
   const {
     currentTheme,
+    customTheme,
+    fontFamily,
+    lineHeight,
     fontSize,
     updateLocation,
     setToc,
@@ -70,8 +74,8 @@ export const ReaderView: React.FC = () => {
       if (!rendition || !activeCfi) return;
 
       // Add highlight
-      rendition.annotations.add('highlight', activeCfi, {}, (e: Event) => {
-          console.log("Clicked highlight", e);
+      rendition.annotations.add('highlight', activeCfi, {}, () => {
+          // Click handler for TTS highlight
       }, 'tts-highlight');
 
       // Remove highlight when activeCfi changes
@@ -97,7 +101,7 @@ export const ReaderView: React.FC = () => {
       // Add new annotations
       annotations.forEach(annotation => {
         if (!addedAnnotations.current.has(annotation.id)) {
-           rendition.annotations.add('highlight', annotation.cfiRange, {}, (e: Event) => {
+           rendition.annotations.add('highlight', annotation.cfiRange, {}, () => {
                 console.log("Clicked annotation", annotation.id);
                 // TODO: Open edit/delete menu, perhaps via a new state/popover
             }, annotation.color === 'yellow' ? 'highlight-yellow' :
@@ -128,7 +132,7 @@ export const ReaderView: React.FC = () => {
           }
       });
     }
-  }, [annotations, renditionRef.current]);
+  }, [annotations]); // removed renditionRef.current
 
   // Inject Custom CSS for Highlights
   useEffect(() => {
@@ -162,7 +166,7 @@ export const ReaderView: React.FC = () => {
               }
           });
       }
-  }, [renditionRef.current]);
+  }, []); // removed renditionRef.current, technically should depend on it but ref stable
 
   const [showToc, setShowToc] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
@@ -219,9 +223,17 @@ export const ReaderView: React.FC = () => {
           rendition.themes.register('light', { body: { background: '#ffffff', color: '#000000' } });
           rendition.themes.register('dark', { body: { background: '#1a1a1a', color: '#f5f5f5' } });
           rendition.themes.register('sepia', { body: { background: '#f4ecd8', color: '#5b4636' } });
+          rendition.themes.register('custom', { body: { background: customTheme.bg, color: customTheme.fg } });
 
           rendition.themes.select(currentTheme);
           rendition.themes.fontSize(`${fontSize}%`);
+          rendition.themes.font(fontFamily);
+          // Apply line-height via default rule as a workaround since there's no direct API
+          rendition.themes.default({
+              p: { 'line-height': `${lineHeight} !important` },
+              // Also ensure body has it for general text
+              body: { 'line-height': `${lineHeight} !important` }
+          });
 
           // Display at saved location or start
           const startLocation = metadata?.currentCfi || undefined;
@@ -245,7 +257,7 @@ export const ReaderView: React.FC = () => {
            });
 
           // Text Selection Listener
-          rendition.on('selected', (cfiRange: string, contents: any) => {
+          rendition.on('selected', (cfiRange: string) => {
             const range = rendition.getRange(cfiRange);
             if (range) {
                 const rect = range.getBoundingClientRect();
@@ -329,18 +341,30 @@ export const ReaderView: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, navigate]);
 
-  // Handle Theme/Font changes
+  // Handle Theme/Font/Layout changes
   useEffect(() => {
     if (renditionRef.current) {
+      // Re-register custom theme in case colors changed
+      renditionRef.current.themes.register('custom', {
+        body: { background: customTheme.bg, color: customTheme.fg }
+      });
+
       renditionRef.current.themes.select(currentTheme);
       renditionRef.current.themes.fontSize(`${fontSize}%`);
+      renditionRef.current.themes.font(fontFamily);
+
+      // Update line height
+      renditionRef.current.themes.default({
+        p: { 'line-height': `${lineHeight} !important` },
+        body: { 'line-height': `${lineHeight} !important` }
+      });
     }
-  }, [currentTheme, fontSize]);
+  }, [currentTheme, customTheme, fontSize, fontFamily, lineHeight]);
 
   const handleClearSelection = () => {
       const iframe = viewerRef.current?.querySelector('iframe');
-      if (iframe && (iframe as any).contentWindow) {
-          (iframe as any).contentWindow.getSelection()?.removeAllRanges();
+      if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.getSelection()?.removeAllRanges();
       }
   };
 
@@ -602,6 +626,7 @@ export const ReaderView: React.FC = () => {
                                 <select
                                     className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
                                     value={providerId}
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                     onChange={(e) => setProviderId(e.target.value as any)}
                                 >
                                     <option value="local">Local (Free)</option>
@@ -643,31 +668,9 @@ export const ReaderView: React.FC = () => {
                  </div>
              )}
 
-            {/* Settings Modal (Simplified) */}
+            {/* Advanced Settings Modal */}
             {showSettings && (
-                <div className="absolute top-2 right-2 w-48 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30">
-                    <div className="mb-4">
-                        <label className="block text-xs font-semibold text-gray-500 mb-1">Theme</label>
-                        <div className="flex gap-2">
-                             {(['light', 'dark', 'sepia'] as const).map((theme) => (
-                                 <button
-                                    key={theme}
-                                    onClick={() => useReaderStore.getState().setTheme(theme)}
-                                    className={`w-6 h-6 rounded-full border ${currentTheme === theme ? 'ring-2 ring-blue-500' : ''}`}
-                                    style={{ background: theme === 'light' ? '#fff' : theme === 'dark' ? '#333' : '#f4ecd8' }}
-                                 />
-                             ))}
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-1">Font Size</label>
-                        <div className="flex items-center justify-between">
-                            <button onClick={() => useReaderStore.getState().setFontSize(Math.max(80, fontSize - 10))} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">-</button>
-                            <span className="text-sm dark:text-white">{fontSize}%</span>
-                            <button onClick={() => useReaderStore.getState().setFontSize(Math.min(200, fontSize + 10))} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">+</button>
-                        </div>
-                    </div>
-                </div>
+                <ReaderSettings onClose={() => setShowSettings(false)} />
             )}
          </div>
       </div>

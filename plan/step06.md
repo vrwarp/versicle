@@ -1,59 +1,50 @@
-# **Step 6: Advanced Theming**
+# **Step 6: Advanced Theming (Completed)**
 
 ## **6.1 Overview**
-Enhance the reading experience by providing granular control over typography and color themes. This step moves beyond the basic Light/Dark presets to allow custom user preferences.
+Enhanced the reading experience by providing granular control over typography and color themes. This step moved beyond the basic Light/Dark presets to allow custom user preferences.
 
 ## **6.2 Font Selection**
 
-### **Strategy**
-Since loading external web fonts (like Google Fonts) inside the iframe can be complex due to CSP and CORS, we will focus on **System Fonts** and **Generic Families** first.
+### **Implemented Strategy**
+We implemented selection for **System Fonts** and **Generic Families**.
 
-### **Font Options**
+### **Font Options Available**
 *   **Serif:** `Merriweather, Georgia, serif`
 *   **Sans-Serif:** `Roboto, Helvetica, Arial, sans-serif`
 *   **Monospace:** `Consolas, Monaco, monospace`
-*   **Dyslexic Friendly:** `OpenDyslexic` (if bundled) or generic fallbacks.
+*   **Dyslexic Friendly:** `OpenDyslexic, sans-serif`
 
-### **Implementation**
-*   **Store:** Add `fontFamily` to `useReaderStore`.
-*   **Application:**
-    ```typescript
-    rendition.themes.font(selectedFontFamily);
-    // OR via registration
-    rendition.themes.register('custom-font', { body: { 'font-family': selectedFontFamily } });
-    ```
+### **Implementation Details**
+*   **Store:** Added `fontFamily` to `useReaderStore`.
+*   **Application:** Used `rendition.themes.font(selectedFontFamily)` to apply the font.
 
 ## **6.3 Custom Color Themes**
 
 ### **User Interface**
-*   Add a "Custom" option in the Theme selector.
-*   When selected, show color pickers for:
-    *   **Background Color**
-    *   **Text Color**
+*   Added a "Custom" option in the Theme selector.
+*   When selected, color pickers for **Background Color** and **Text Color** are displayed.
 
-### **Implementation**
-*   **Store:** Add `customTheme` object `{ bg: string, fg: string }` to `useReaderStore`.
-*   **Registration:**
-    ```typescript
-    rendition.themes.register('custom', {
-      body: {
-        background: customTheme.bg,
-        color: customTheme.fg
-      }
-    });
-    rendition.themes.select('custom');
-    ```
+### **Implementation Details**
+*   **Store:** Added `customTheme` object `{ bg: string, fg: string }` to `useReaderStore`.
+*   **Registration:** Dynamically registers and updates a 'custom' theme in `epub.js` whenever the colors change.
 
 ## **6.4 Settings UI Overhaul**
 
-### **Modal vs Popover**
-*   Expand the current `Settings` popover in `ReaderView` into a more comprehensive menu or a modal.
-*   **Tabs/Sections:**
-    *   **Display:** Theme (Light/Dark/Sepia/Custom), Brightness (if applicable via overlay).
-    *   **Typography:** Font Family, Font Size, Line Height.
-    *   **Layout:** Margins (padding), Spacing.
+### **ReaderSettings Component**
+*   Created a new `ReaderSettings.tsx` component to handle the increased complexity.
+*   **Features:**
+    *   **Theme:** Light, Dark, Sepia, and Custom (with color pickers).
+    *   **Typography:**
+        *   Font Family Selector.
+        *   Font Size (Slider and +/- buttons).
+        *   Line Height (Slider and +/- buttons).
+*   **Persistence:** All settings are persisted to `localStorage` via Zustand's `persist` middleware.
 
 ## **6.5 Verification**
-*   **Font Change:** Select "Serif", verify text inside iframe changes.
-*   **Custom Colors:** Pick Blue background and White text, verify application.
-*   **Persistence:** Reload page, verify custom theme and font settings are restored.
+*   **Automated Tests:** Created `verification/test_journey_advanced_settings.py` using Playwright.
+*   **Scenarios Verified:**
+    *   Opening the new settings panel.
+    *   Selecting "Custom" theme and verifying UI elements.
+    *   Changing Font Family.
+    *   Changing Line Height.
+    *   Reloading the page to verify persistence of all new settings.

@@ -14,52 +14,56 @@ async def run_test():
         # Open Book
         await page.get_by_text("Alice's Adventures in Wonderland").click()
         await expect(page.get_by_label("Back")).to_be_visible()
-        await page.wait_for_timeout(2000)
+        # Wait for book to load
+        await page.wait_for_timeout(3000)
 
         # 1. Open Settings
         print("Opening Settings...")
         settings_btn = page.get_by_label("Settings")
         await settings_btn.click()
-        await expect(page.get_by_text("Font Size")).to_be_visible()
+        await expect(page.get_by_text("Reader Settings")).to_be_visible()
         await utils.capture_screenshot(page, "settings_1_open")
 
-        # 2. Change Theme (Sepia)
-        print("Changing Theme...")
-        theme_section = page.locator("div", has_text="Theme")
-        # Sepia is typically the 3rd button (Light, Dark, Sepia)
-        sepia_btn = theme_section.locator("button").nth(2)
-        await sepia_btn.click()
+        # 2. Select Custom Theme
+        print("Selecting Custom Theme...")
+        custom_theme_btn = page.get_by_label("Select custom theme")
+        await custom_theme_btn.click()
 
-        # Verify theme change (screenshot check)
-        await page.wait_for_timeout(500)
-        await utils.capture_screenshot(page, "settings_2_sepia")
+        # Verify color pickers appear
+        await expect(page.get_by_text("Background")).to_be_visible()
+        await expect(page.get_by_text("Text")).to_be_visible()
+        await utils.capture_screenshot(page, "settings_2_custom_selected")
 
-        # Re-open settings if closed (theme change triggers re-render)
-        if not await page.get_by_text("Font Size").is_visible():
-            await settings_btn.click()
-            await expect(page.get_by_text("Font Size")).to_be_visible()
+        # 3. Change Font Family
+        print("Changing Font Family...")
+        font_select = page.locator("select").nth(0)
+        await font_select.select_option("Consolas, Monaco, monospace")
 
-        # 3. Change Font Size
-        print("Changing Font Size...")
-        font_size_section = page.locator("div", has_text="Font Size")
-        increase_font_btn = font_size_section.locator("button", has_text="+")
+        await utils.capture_screenshot(page, "settings_3_monospace")
 
-        await increase_font_btn.click()
-        await expect(page.get_by_text("110%")).to_be_visible()
-        await utils.capture_screenshot(page, "settings_3_font_increased")
+        # 4. Change Line Height
+        print("Changing Line Height...")
+        # Locator for line height slider (second range input)
+        await page.locator("input[type='range']").nth(1).fill("2")
+        await utils.capture_screenshot(page, "settings_4_line_height")
 
-        # 4. Persistence
+        # 5. Persistence
         print("Reloading to check persistence...")
         await page.reload()
         await expect(page.get_by_label("Back")).to_be_visible(timeout=15000)
-        await page.wait_for_timeout(2000)
+        await page.wait_for_timeout(3000)
 
-        # Check if still sepia (visually in screenshot) and font size persisted?
-        # To check font size, we need to open settings
+        # Open settings again
         await settings_btn.click()
-        await expect(page.get_by_text("110%")).to_be_visible()
 
-        await utils.capture_screenshot(page, "settings_4_persistence")
+        # Verify custom theme is selected
+        await expect(page.get_by_text("Background")).to_be_visible()
+
+        # Verify font family value
+        font_select = page.locator("select").nth(0)
+        value = await font_select.input_value()
+        if "monospace" not in value:
+             raise Exception(f"Persistence failed: Font family is {value}")
 
         print("Settings Journey Passed!")
         await browser.close()
