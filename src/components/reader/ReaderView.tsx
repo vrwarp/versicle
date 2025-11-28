@@ -357,8 +357,14 @@ export const ReaderView: React.FC = () => {
       }
   };
 
-  const handlePrev = () => renditionRef.current?.prev();
-  const handleNext = () => renditionRef.current?.next();
+  const handlePrev = () => {
+      console.log("Navigating to previous page");
+      renditionRef.current?.prev();
+  };
+  const handleNext = () => {
+      console.log("Navigating to next page");
+      renditionRef.current?.next();
+  };
 
   // Handle Container Resize (e.g. sidebar toggle)
   useEffect(() => {
