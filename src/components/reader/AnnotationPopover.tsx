@@ -76,10 +76,10 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose }) => {
                       if (e.key === 'Escape') setIsEditingNote(false);
                   }}
               />
-              <button onClick={handleSaveNote} className="p-1 hover:bg-green-100 dark:hover:bg-green-900 rounded text-green-600">
+              <button onClick={handleSaveNote} className="p-1 hover:bg-green-100 dark:hover:bg-green-900 rounded text-green-600" aria-label="Save Note">
                   <StickyNote className="w-4 h-4" />
               </button>
-              <button onClick={() => setIsEditingNote(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300">
+              <button onClick={() => setIsEditingNote(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" aria-label="Cancel Note">
                   <X className="w-4 h-4" />
               </button>
           </div>
