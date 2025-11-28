@@ -8,6 +8,7 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
+import { TTSQueue } from './TTSQueue';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
@@ -445,32 +446,32 @@ export const ReaderView: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900">
+    <div className="flex flex-col h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 shadow-sm z-10">
+      <header className="flex items-center justify-between px-4 py-2 bg-surface shadow-sm z-10">
         <div className="flex items-center gap-2">
-          <button aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-            <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-200" />
+          <button aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-border">
+            <ArrowLeft className="w-5 h-5 text-secondary" />
           </button>
-          <button aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); }} className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${showToc ? 'bg-gray-200 dark:bg-gray-700' : ''}`}>
-            <List className="w-5 h-5 text-gray-700 dark:text-gray-200" />
+          <button aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
+            <List className="w-5 h-5 text-secondary" />
           </button>
-          <button aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); }} className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${showAnnotations ? 'bg-gray-200 dark:bg-gray-700' : ''}`}>
-            <Highlighter className="w-5 h-5 text-gray-700 dark:text-gray-200" />
+          <button aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
+            <Highlighter className="w-5 h-5 text-secondary" />
           </button>
         </div>
-        <h1 className="text-sm font-medium truncate max-w-xs text-gray-800 dark:text-gray-200">
+        <h1 className="text-sm font-medium truncate max-w-xs text-foreground">
              {currentChapterTitle || 'Reading'}
         </h1>
         <div className="flex items-center gap-2">
-           <button aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                <Search className="w-5 h-5 text-gray-700 dark:text-gray-200" />
+           <button aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
+                <Search className="w-5 h-5 text-secondary" />
            </button>
-           <button aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${isPlaying ? 'text-blue-500' : 'text-gray-700 dark:text-gray-200'}`}>
+           <button aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
                 {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
            </button>
-           <button aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-            <Settings className="w-5 h-5 text-gray-700 dark:text-gray-200" />
+           <button aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-border">
+            <Settings className="w-5 h-5 text-secondary" />
           </button>
         </div>
       </header>
@@ -479,14 +480,14 @@ export const ReaderView: React.FC = () => {
       <div className="flex-1 relative overflow-hidden flex">
          {/* TOC Sidebar */}
          {showToc && (
-             <div className="w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
+             <div className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
                  <div className="p-4">
-                     <h2 className="text-lg font-bold mb-4 dark:text-white">Contents</h2>
+                     <h2 className="text-lg font-bold mb-4 text-foreground">Contents</h2>
                      <ul className="space-y-2">
                          {useReaderStore.getState().toc.map((item) => (
                              <li key={item.id}>
                                  <button
-                                    className="text-left w-full text-sm text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+                                    className="text-left w-full text-sm text-secondary hover:text-primary"
                                     onClick={() => {
                                         renditionRef.current?.display(item.href);
                                         setShowToc(false);
@@ -503,9 +504,9 @@ export const ReaderView: React.FC = () => {
 
          {/* Annotations Sidebar */}
          {showAnnotations && (
-             <div className="w-64 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
-                 <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                     <h2 className="text-lg font-bold dark:text-white">Annotations</h2>
+             <div className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
+                 <div className="p-4 border-b border-border">
+                     <h2 className="text-lg font-bold text-foreground">Annotations</h2>
                  </div>
                  <AnnotationList onNavigate={(cfi) => {
                      renditionRef.current?.display(cfi);
@@ -516,9 +517,9 @@ export const ReaderView: React.FC = () => {
 
          {/* Search Sidebar */}
          {showSearch && (
-             <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
-                 <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                     <h2 className="text-lg font-bold mb-2 dark:text-white">Search</h2>
+             <div className="w-64 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
+                 <div className="p-4 border-b border-border">
+                     <h2 className="text-lg font-bold mb-2 text-foreground">Search</h2>
                      <div className="flex gap-2">
                          <input
                             type="text"
@@ -534,38 +535,38 @@ export const ReaderView: React.FC = () => {
                                 }
                             }}
                             placeholder="Search in book..."
-                            className="flex-1 text-sm p-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                            className="flex-1 text-sm p-2 border rounded bg-background text-foreground border-border"
                          />
                          <button
                             onClick={() => setShowSearch(false)}
-                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                            className="p-2 hover:bg-border rounded"
                          >
-                            <X className="w-4 h-4 text-gray-500" />
+                            <X className="w-4 h-4 text-muted" />
                          </button>
                      </div>
                  </div>
                  <div className="flex-1 overflow-y-auto p-4">
                      {isSearching ? (
-                         <div className="text-center text-gray-500">Searching...</div>
+                         <div className="text-center text-muted">Searching...</div>
                      ) : (
                          <ul className="space-y-4">
                              {searchResults.map((result, idx) => (
-                                 <li key={idx} className="border-b border-gray-100 dark:border-gray-700 pb-2 last:border-0">
+                                 <li key={idx} className="border-b border-border pb-2 last:border-0">
                                      <button
                                         className="text-left w-full"
                                         onClick={() => {
                                             renditionRef.current?.display(result.href);
                                         }}
                                      >
-                                         <p className="text-xs text-gray-500 mb-1">Result {idx + 1}</p>
-                                         <p className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3">
+                                         <p className="text-xs text-muted mb-1">Result {idx + 1}</p>
+                                         <p className="text-sm text-foreground line-clamp-3">
                                              {result.excerpt}
                                          </p>
                                      </button>
                                  </li>
                              ))}
                              {searchResults.length === 0 && searchQuery && !isSearching && (
-                                 <div className="text-center text-gray-500 text-sm">No results found</div>
+                                 <div className="text-center text-muted text-sm">No results found</div>
                              )}
                          </ul>
                      )}
@@ -581,10 +582,10 @@ export const ReaderView: React.FC = () => {
 
              {/* TTS Controls */}
              {showTTS && (
-                 <div className="absolute top-2 right-14 w-80 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700 z-30 max-h-[80vh] overflow-y-auto">
+                 <div className="absolute top-2 right-14 w-80 bg-surface shadow-lg rounded-lg p-4 border border-border z-30 max-h-[80vh] overflow-y-auto">
                      <div className="flex justify-between items-center mb-2">
-                         <h3 className="text-sm font-bold dark:text-white">Text to Speech</h3>
-                         <button onClick={() => {setShowTTS(false); setShowVoiceSettings(false);}}><X className="w-4 h-4 text-gray-500" /></button>
+                         <h3 className="text-sm font-bold text-foreground">Text to Speech</h3>
+                         <button onClick={() => {setShowTTS(false); setShowVoiceSettings(false);}}><X className="w-4 h-4 text-muted" /></button>
                      </div>
 
                      {!showVoiceSettings ? (
@@ -592,19 +593,19 @@ export const ReaderView: React.FC = () => {
                             <div className="flex items-center gap-2 mb-4">
                                 <button
                                     onClick={isPlaying ? pause : play}
-                                    className="flex-1 bg-blue-600 text-white py-1 rounded hover:bg-blue-700 flex justify-center"
+                                    className="flex-1 bg-primary text-background py-1 rounded hover:opacity-90 flex justify-center"
                                 >
                                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                                 </button>
                                 <button
                                     onClick={() => setShowVoiceSettings(true)}
-                                    className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+                                    className="px-2 py-1 bg-secondary text-surface rounded hover:opacity-90"
                                 >
-                                    <Settings className="w-4 h-4 text-gray-700 dark:text-gray-200" />
+                                    <Settings className="w-4 h-4" />
                                 </button>
                             </div>
                             <div className="mb-2">
-                                <label className="block text-xs text-gray-500 mb-1">Speed: {rate}x</label>
+                                <label className="block text-xs text-muted mb-1">Speed: {rate}x</label>
                                 <input
                                     type="range"
                                     min="0.5"
@@ -612,13 +613,13 @@ export const ReaderView: React.FC = () => {
                                     step="0.1"
                                     value={rate}
                                     onChange={(e) => setRate(parseFloat(e.target.value))}
-                                    className="w-full"
+                                    className="w-full accent-primary"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs text-gray-500 mb-1">Voice</label>
+                                <label className="block text-xs text-muted mb-1">Voice</label>
                                 <select
-                                    className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                    className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
                                     value={voice?.name || ''}
                                     onChange={(e) => {
                                         const selected = availableVoices.find(v => v.name === e.target.value);
@@ -634,14 +635,14 @@ export const ReaderView: React.FC = () => {
                         </>
                      ) : (
                         <div className="space-y-4">
-                            <button onClick={() => setShowVoiceSettings(false)} className="text-xs text-blue-500 mb-2 flex items-center">
+                            <button onClick={() => setShowVoiceSettings(false)} className="text-xs text-primary mb-2 flex items-center">
                                 <ArrowLeft className="w-3 h-3 mr-1" /> Back
                             </button>
 
                             <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1">Provider</label>
+                                <label className="block text-xs font-semibold text-muted mb-1">Provider</label>
                                 <select
-                                    className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                    className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
                                     value={providerId}
                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                     onChange={(e) => setProviderId(e.target.value as any)}
@@ -654,15 +655,15 @@ export const ReaderView: React.FC = () => {
 
                             {providerId === 'google' && (
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Google API Key</label>
+                                    <label className="block text-xs font-semibold text-muted mb-1">Google API Key</label>
                                     <input
                                         type="password"
-                                        className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                        className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
                                         value={apiKeys.google}
                                         onChange={(e) => setApiKey('google', e.target.value)}
                                         placeholder="Enter Google API Key"
                                     />
-                                    <p className="text-[10px] text-gray-500 mt-1">
+                                    <p className="text-[10px] text-muted mt-1">
                                         Needs Cloud Text-to-Speech API enabled.
                                     </p>
                                 </div>
@@ -670,10 +671,10 @@ export const ReaderView: React.FC = () => {
 
                             {providerId === 'openai' && (
                                 <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">OpenAI API Key</label>
+                                    <label className="block text-xs font-semibold text-muted mb-1">OpenAI API Key</label>
                                     <input
                                         type="password"
-                                        className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                                        className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
                                         value={apiKeys.openai}
                                         onChange={(e) => setApiKey('openai', e.target.value)}
                                         placeholder="Enter OpenAI API Key"
@@ -682,6 +683,8 @@ export const ReaderView: React.FC = () => {
                             )}
                         </div>
                      )}
+
+                     <TTSQueue />
                  </div>
              )}
 
@@ -693,25 +696,25 @@ export const ReaderView: React.FC = () => {
       </div>
 
       {/* Footer / Controls */}
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-2 flex items-center justify-between z-10">
-          <button aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-              <ChevronLeft className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+      <footer className="bg-surface border-t border-border p-2 flex items-center justify-between z-10">
+          <button aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-border rounded-full">
+              <ChevronLeft className="w-6 h-6 text-secondary" />
           </button>
 
           <div className="flex-1 mx-4">
-              <div className="h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div className="h-1 bg-border rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-blue-500 transition-all duration-300"
+                    className="h-full bg-primary transition-all duration-300"
                     style={{ width: `${progress * 100}%` }}
                   />
               </div>
-              <div className="text-center text-xs text-gray-500 mt-1">
+              <div className="text-center text-xs text-muted mt-1">
                   {Math.round(progress * 100)}%
               </div>
           </div>
 
-          <button aria-label="Next Page" onClick={handleNext} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-              <ChevronRight className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+          <button aria-label="Next Page" onClick={handleNext} className="p-2 hover:bg-border rounded-full">
+              <ChevronRight className="w-6 h-6 text-secondary" />
           </button>
       </footer>
     </div>

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TTSVoice } from '../lib/tts/providers/types';
 import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
-import type { TTSStatus } from '../lib/tts/AudioPlayerService';
+import type { TTSStatus, TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import { GoogleTTSProvider } from '../lib/tts/providers/GoogleTTSProvider';
 import { OpenAIProvider } from '../lib/tts/providers/OpenAIProvider';
 import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
@@ -25,6 +25,10 @@ interface TTSState {
   voices: TTSVoice[];
   /** The CFI of the currently spoken sentence or segment. */
   activeCfi: string | null;
+  /** Current index in the playback queue */
+  currentIndex: number;
+  /** The playback queue */
+  queue: TTSQueueItem[];
 
   /** Provider configuration */
   providerId: 'local' | 'google' | 'openai';
@@ -43,12 +47,13 @@ interface TTSState {
   setProviderId: (id: 'local' | 'google' | 'openai') => void;
   setApiKey: (provider: 'google' | 'openai', key: string) => void;
   loadVoices: () => Promise<void>;
+  jumpTo: (index: number) => void;
 
   /**
    * Internal sync method called by AudioPlayerService
    * @internal
    */
-  syncState: (status: TTSStatus, activeCfi: string | null) => void;
+  syncState: (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[]) => void;
 }
 
 const player = AudioPlayerService.getInstance();
@@ -65,11 +70,13 @@ export const useTTSStore = create<TTSState>()(
         // For now, lazy init in loadVoices or actions is okay.
 
         // Subscribe to player updates
-        player.subscribe((status, activeCfi) => {
+        player.subscribe((status, activeCfi, currentIndex, queue) => {
             set({
                 status,
                 isPlaying: status === 'playing',
-                activeCfi
+                activeCfi,
+                currentIndex,
+                queue
             });
         });
 
@@ -81,6 +88,8 @@ export const useTTSStore = create<TTSState>()(
             voice: null,
             voices: [],
             activeCfi: null,
+            currentIndex: 0,
+            queue: [],
             providerId: 'local',
             apiKeys: {
                 google: '',
@@ -169,11 +178,16 @@ export const useTTSStore = create<TTSState>()(
                     player.setVoice(currentVoice.id);
                 }
             },
+            jumpTo: (index) => {
+                player.jumpTo(index);
+            },
 
-            syncState: (status, activeCfi) => set({
+            syncState: (status, activeCfi, currentIndex, queue) => set({
                 status,
                 isPlaying: status === 'playing',
-                activeCfi
+                activeCfi,
+                currentIndex,
+                queue
             }),
         };
     },
