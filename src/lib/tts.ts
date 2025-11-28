@@ -1,5 +1,6 @@
 import ePub, { Rendition } from 'epubjs';
 import { TextSegmenter } from './tts/TextSegmenter';
+import { useTTSStore } from '../store/useTTSStore';
 
 /**
  * Represents a sentence and its corresponding location (CFI) in the book.
@@ -32,7 +33,8 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
     let node: Node | null;
 
     // Initialize segmenter
-    const segmenter = new TextSegmenter();
+    const { customAbbreviations } = useTTSStore.getState();
+    const segmenter = new TextSegmenter('en', customAbbreviations);
 
     while ((node = walker.nextNode())) {
         const textContent = node.textContent || '';

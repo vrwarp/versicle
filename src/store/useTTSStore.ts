@@ -37,6 +37,9 @@ interface TTSState {
       openai: string;
   };
 
+  /** Custom abbreviations for sentence segmentation */
+  customAbbreviations: string[];
+
   /** Actions */
   play: () => void;
   pause: () => void;
@@ -46,6 +49,7 @@ interface TTSState {
   setVoice: (voice: TTSVoice | null) => void;
   setProviderId: (id: 'local' | 'google' | 'openai') => void;
   setApiKey: (provider: 'google' | 'openai', key: string) => void;
+  setCustomAbbreviations: (abbrevs: string[]) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
 
@@ -95,6 +99,10 @@ export const useTTSStore = create<TTSState>()(
                 google: '',
                 openai: ''
             },
+            customAbbreviations: [
+                'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
+                'e.g.', 'i.e.'
+            ],
 
             play: () => {
                 player.play();
@@ -145,6 +153,9 @@ export const useTTSStore = create<TTSState>()(
                      // Force re-init of provider
                      get().setProviderId(providerId);
                 }
+            },
+            setCustomAbbreviations: (abbrevs) => {
+                set({ customAbbreviations: abbrevs });
             },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
@@ -200,6 +211,7 @@ export const useTTSStore = create<TTSState>()(
             voice: state.voice,
             providerId: state.providerId,
             apiKeys: state.apiKeys,
+            customAbbreviations: state.customAbbreviations,
         }),
     }
   )

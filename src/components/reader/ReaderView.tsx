@@ -8,7 +8,9 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
+import { TTSCostIndicator } from './TTSCostIndicator';
 import { TTSQueue } from './TTSQueue';
+import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
@@ -67,7 +69,7 @@ export const ReaderView: React.FC = () => {
   } = useAnnotationStore();
 
   // Use TTS Hook
-  useTTS(renditionRef.current);
+  const { sentences } = useTTS(renditionRef.current);
 
   // Highlight Active TTS Sentence
   useEffect(() => {
@@ -592,7 +594,26 @@ export const ReaderView: React.FC = () => {
                         <>
                             <div className="flex items-center gap-2 mb-4">
                                 <button
-                                    onClick={isPlaying ? pause : play}
+                                    onClick={() => {
+                                        if (isPlaying) {
+                                            pause();
+                                        } else {
+                                            // Check cost warning
+                                            if (providerId !== 'local' && sentences.length > 0) {
+                                                const totalChars = sentences.reduce((sum, s) => sum + s.text.length, 0);
+                                                // Warn if total text is large (e.g. > 5000 chars ~ 1 page/chapter depending)
+                                                // and we are just starting (or resuming a large block, but checking full chapter text for now)
+                                                if (totalChars > 5000) {
+                                                    const confirmed = window.confirm(
+                                                        `You are about to listen to a large section (~${totalChars.toLocaleString()} chars). ` +
+                                                        `This may incur costs with ${providerId === 'google' ? 'Google Cloud' : 'OpenAI'}. Proceed?`
+                                                    );
+                                                    if (!confirmed) return;
+                                                }
+                                            }
+                                            play();
+                                        }
+                                    }}
                                     className="flex-1 bg-primary text-background py-1 rounded hover:opacity-90 flex justify-center"
                                 >
                                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
@@ -600,6 +621,7 @@ export const ReaderView: React.FC = () => {
                                 <button
                                     onClick={() => setShowVoiceSettings(true)}
                                     className="px-2 py-1 bg-secondary text-surface rounded hover:opacity-90"
+                                    aria-label="Voice Settings"
                                 >
                                     <Settings className="w-4 h-4" />
                                 </button>
@@ -681,6 +703,10 @@ export const ReaderView: React.FC = () => {
                                     />
                                 </div>
                             )}
+
+                            <div className="pt-2 border-t border-border">
+                                <TTSAbbreviationSettings />
+                            </div>
                         </div>
                      )}
 

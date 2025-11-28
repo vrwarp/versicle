@@ -6,11 +6,13 @@ export interface TextSegment {
 
 export class TextSegmenter {
     private segmenter: Intl.Segmenter | undefined;
+    private abbreviations: Set<string>;
 
-    constructor(locale: string = 'en') {
+    constructor(locale: string = 'en', abbreviations: string[] = []) {
         if (typeof Intl !== 'undefined' && Intl.Segmenter) {
             this.segmenter = new Intl.Segmenter(locale, { granularity: 'sentence' });
         }
+        this.abbreviations = new Set(abbreviations);
     }
 
     segment(text: string): TextSegment[] {
@@ -30,11 +32,6 @@ export class TextSegmenter {
 
     private postProcess(segments: TextSegment[]): TextSegment[] {
         const merged: TextSegment[] = [];
-        // Common abbreviations that shouldn't end a sentence
-        const abbrevs = new Set([
-            'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
-            'e.g.', 'i.e.'
-        ]);
 
         for (let i = 0; i < segments.length; i++) {
             const current = segments[i];
@@ -47,7 +44,7 @@ export class TextSegmenter {
                 // We check if the trimmed text IS an abbreviation OR ends with " Abbrev."
                 let isAbbreviation = false;
 
-                if (abbrevs.has(lastTextTrimmed)) {
+                if (this.abbreviations.has(lastTextTrimmed)) {
                     isAbbreviation = true;
                 } else {
                     // Check if it ends with any abbreviation
@@ -55,7 +52,7 @@ export class TextSegmenter {
                     // Since abbrevs set is small, we can iterate or split.
                     const words = lastTextTrimmed.split(/\s+/);
                     const lastWord = words[words.length - 1];
-                    if (abbrevs.has(lastWord)) {
+                    if (this.abbreviations.has(lastWord)) {
                         isAbbreviation = true;
                     }
                 }
