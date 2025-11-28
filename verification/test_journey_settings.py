@@ -17,6 +17,18 @@ async def run_test():
         # Wait for book to load
         await page.wait_for_timeout(3000)
 
+        # Navigate to a page with text (Chapter 1)
+        print("Navigating to Chapter 1...")
+        next_btn = page.get_by_label("Next Page")
+        # Click a few times to get past cover/intro
+        for _ in range(3):
+            await next_btn.click()
+            await page.wait_for_timeout(1000)
+
+        # Verify we have some text content
+        # frame = page.frame_locator("iframe[title='epubjs-iframe']")
+        # await expect(frame.get_by_text("Alice")).to_be_visible() # Optional check
+
         # 1. Open Settings
         print("Opening Settings...")
         settings_btn = page.get_by_label("Settings")

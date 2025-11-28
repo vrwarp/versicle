@@ -8,6 +8,7 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
+import { TTSCostIndicator } from './TTSCostIndicator';
 import { TTSQueue } from './TTSQueue';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
@@ -67,7 +68,7 @@ export const ReaderView: React.FC = () => {
   } = useAnnotationStore();
 
   // Use TTS Hook
-  useTTS(renditionRef.current);
+  const { sentences } = useTTS(renditionRef.current);
 
   // Highlight Active TTS Sentence
   useEffect(() => {
@@ -592,7 +593,26 @@ export const ReaderView: React.FC = () => {
                         <>
                             <div className="flex items-center gap-2 mb-4">
                                 <button
-                                    onClick={isPlaying ? pause : play}
+                                    onClick={() => {
+                                        if (isPlaying) {
+                                            pause();
+                                        } else {
+                                            // Check cost warning
+                                            if (providerId !== 'local' && sentences.length > 0) {
+                                                const totalChars = sentences.reduce((sum, s) => sum + s.text.length, 0);
+                                                // Warn if total text is large (e.g. > 5000 chars ~ 1 page/chapter depending)
+                                                // and we are just starting (or resuming a large block, but checking full chapter text for now)
+                                                if (totalChars > 5000) {
+                                                    const confirmed = window.confirm(
+                                                        `You are about to listen to a large section (~${totalChars.toLocaleString()} chars). ` +
+                                                        `This may incur costs with ${providerId === 'google' ? 'Google Cloud' : 'OpenAI'}. Proceed?`
+                                                    );
+                                                    if (!confirmed) return;
+                                                }
+                                            }
+                                            play();
+                                        }
+                                    }}
                                     className="flex-1 bg-primary text-background py-1 rounded hover:opacity-90 flex justify-center"
                                 >
                                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
