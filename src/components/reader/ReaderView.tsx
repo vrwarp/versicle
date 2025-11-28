@@ -533,7 +533,7 @@ export const ReaderView: React.FC = () => {
 
          {/* Search Sidebar */}
          {showSearch && (
-             <div className="w-64 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
+             <div className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
                  <div className="p-4 border-b border-border">
                      <h2 className="text-lg font-bold mb-2 text-foreground">Search</h2>
                      <div className="flex gap-2">
