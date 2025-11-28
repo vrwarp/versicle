@@ -8,6 +8,7 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
+import { TTSCostIndicator } from './TTSCostIndicator';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
@@ -66,7 +67,7 @@ export const ReaderView: React.FC = () => {
   } = useAnnotationStore();
 
   // Use TTS Hook
-  useTTS(renditionRef.current);
+  const { sentences } = useTTS(renditionRef.current);
 
   // Highlight Active TTS Sentence
   useEffect(() => {
@@ -466,6 +467,7 @@ export const ReaderView: React.FC = () => {
            <button aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
                 <Search className="w-5 h-5 text-gray-700 dark:text-gray-200" />
            </button>
+           <TTSCostIndicator />
            <button aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 ${isPlaying ? 'text-blue-500' : 'text-gray-700 dark:text-gray-200'}`}>
                 {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
            </button>
@@ -591,7 +593,26 @@ export const ReaderView: React.FC = () => {
                         <>
                             <div className="flex items-center gap-2 mb-4">
                                 <button
-                                    onClick={isPlaying ? pause : play}
+                                    onClick={() => {
+                                        if (isPlaying) {
+                                            pause();
+                                        } else {
+                                            // Check cost warning
+                                            if (providerId !== 'local' && sentences.length > 0) {
+                                                const totalChars = sentences.reduce((sum, s) => sum + s.text.length, 0);
+                                                // Warn if total text is large (e.g. > 5000 chars ~ 1 page/chapter depending)
+                                                // and we are just starting (or resuming a large block, but checking full chapter text for now)
+                                                if (totalChars > 5000) {
+                                                    const confirmed = window.confirm(
+                                                        `You are about to listen to a large section (~${totalChars.toLocaleString()} chars). ` +
+                                                        `This may incur costs with ${providerId === 'google' ? 'Google Cloud' : 'OpenAI'}. Proceed?`
+                                                    );
+                                                    if (!confirmed) return;
+                                                }
+                                            }
+                                            play();
+                                        }
+                                    }}
                                     className="flex-1 bg-blue-600 text-white py-1 rounded hover:bg-blue-700 flex justify-center"
                                 >
                                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}

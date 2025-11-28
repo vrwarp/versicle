@@ -3,6 +3,7 @@ import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { AudioElementPlayer } from './AudioElementPlayer';
 import { SyncEngine } from './SyncEngine';
 import { TTSCache } from './TTSCache';
+import { CostEstimator } from './CostEstimator';
 
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading';
 
@@ -179,6 +180,10 @@ export class AudioPlayerService {
                      isNative: false
                  };
              } else {
+                 // Track cost before calling synthesis
+                 // We only track when we actually hit the API (cache miss)
+                 CostEstimator.getInstance().track(item.text);
+
                  result = await this.provider.synthesize(item.text, voiceId, this.speed);
                  if (result.audio) {
                      await this.cache.put(
