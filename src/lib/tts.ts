@@ -1,4 +1,5 @@
-import ePub, { Rendition } from 'epubjs';
+import ePub from 'epubjs';
+import type { Rendition } from 'epubjs';
 import { TextSegmenter } from './tts/TextSegmenter';
 import { useTTSStore } from '../store/useTTSStore';
 

@@ -1,5 +1,5 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
-import { SpeechSegment } from './types';
+import type { SpeechSegment } from './types';
 
 export class MockCloudProvider extends BaseCloudProvider {
   id = 'mock-cloud';

@@ -69,3 +69,10 @@ We will use `vite-plugin-pwa` for zero-config generation of the service worker.
     3.  Refresh the page.
     4.  Verify the app loads and books can be opened.
 *   **Install:** Verify the app can be installed to the desktop/homescreen and opens in a standalone window.
+
+## **7.6 Implementation Notes**
+
+*   **Plugin:** Used `vite-plugin-pwa` with `generateSW` strategy.
+*   **Icons:** Placeholder icons were generated using a custom Python script (`scripts/generate_pwa_icons.py`) to ensure the build passes.
+*   **Type Definitions:** Encountered missing type definitions in `epub.js` for `annotations` and `getContents`. Augmented `src/types/epubjs.d.ts` to support PWA-related code paths and strict type checking.
+*   **Verification:** Created `verification/verify_pwa.py` to automate checking of the manifest, service worker, and theme color meta tag in the build output.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
 import { extractSentences, type SentenceNode } from '../lib/tts';
-import { Rendition } from 'epubjs';
+import type { Rendition } from 'epubjs';
 import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 
 /**

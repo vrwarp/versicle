@@ -1,7 +1,7 @@
 import type { ITTSProvider, TTSVoice, SpeechSegment } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { AudioElementPlayer } from './AudioElementPlayer';
-import { SyncEngine } from './SyncEngine';
+import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { TTSCache } from './TTSCache';
 import { CostEstimator } from './CostEstimator';
 
@@ -216,7 +216,12 @@ export class AudioPlayerService {
 
              if (result.audio && this.audioPlayer) {
                  if (result.alignment && this.syncEngine) {
-                     this.syncEngine.loadAlignment(result.alignment);
+                     const alignmentData: AlignmentData[] = result.alignment.map(t => ({
+                         time: t.timeSeconds,
+                         type: (t.type as 'word' | 'sentence') || 'word',
+                         textOffset: t.charIndex
+                     }));
+                     this.syncEngine.loadAlignment(alignmentData);
                  }
 
                  this.audioPlayer.setRate(this.speed);
