@@ -1,4 +1,5 @@
 import { Book } from 'epubjs';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Represents the result of a search query within a book.
@@ -32,9 +33,9 @@ class SearchClient {
             });
 
             this.worker.onmessage = (e) => {
-                const { type, results } = e.data;
-                if (type === 'SEARCH_RESULTS') {
-                    const listener = this.listeners.get('SEARCH_RESULTS');
+                const { type, id, results } = e.data;
+                if (type === 'SEARCH_RESULTS' && id) {
+                    const listener = this.listeners.get(id);
                     if (listener) listener(results);
                 }
             };
@@ -107,12 +108,15 @@ class SearchClient {
      */
     search(query: string, bookId: string): Promise<SearchResult[]> {
         return new Promise((resolve) => {
-            this.listeners.set('SEARCH_RESULTS', (data) => {
+            const id = uuidv4();
+            this.listeners.set(id, (data) => {
                 resolve(data as SearchResult[]);
+                this.listeners.delete(id);
             });
 
             this.getWorker().postMessage({
                 type: 'SEARCH',
+                id,
                 payload: { query, bookId }
             });
         });

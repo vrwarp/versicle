@@ -13,11 +13,13 @@ class MockWorker {
            }
        }, 10);
     } else if (data.type === 'SEARCH') {
+        const id = data.id;
         setTimeout(() => {
             if (this.onmessage) {
                 this.onmessage({
                     data: {
                         type: 'SEARCH_RESULTS',
+                        id,
                         results: [
                             { href: 'chap1.html', excerpt: '...found match...' }
                         ]

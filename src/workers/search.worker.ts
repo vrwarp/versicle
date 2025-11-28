@@ -5,7 +5,7 @@ import { SearchEngine } from '../lib/search-engine';
  */
 export type SearchMessage =
   | { type: 'INDEX_BOOK'; payload: { bookId: string; sections: { id: string; href: string; text: string }[] } }
-  | { type: 'SEARCH'; payload: { query: string; bookId: string } };
+  | { type: 'SEARCH'; id: string; payload: { query: string; bookId: string } };
 
 const engine = new SearchEngine();
 
@@ -25,8 +25,10 @@ self.onmessage = async (e: MessageEvent<SearchMessage>) => {
   }
 
   else if (type === 'SEARCH') {
+    // @ts-expect-error id is present on SEARCH type
+    const { id } = e.data;
     const { query, bookId } = payload;
     const results = engine.search(bookId, query);
-    self.postMessage({ type: 'SEARCH_RESULTS', results });
+    self.postMessage({ type: 'SEARCH_RESULTS', id, results });
   }
 };
