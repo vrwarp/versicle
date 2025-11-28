@@ -6,7 +6,7 @@ Phase 4 is about refining the user experience. Now that the engines are working,
 
 ## **2. Design Specifications**
 
-### **2.1. Improved Text Segmentation (`src/lib/tts/TextSegmenter.ts`)**
+### 2.1. Improved Text Segmentation (`src/lib/tts/TextSegmenter.ts`) [Completed]
 
 The current regex-based splitter (`src/lib/tts.ts`) is naive. It breaks on "Mr. Smith" or "e.g.".
 
