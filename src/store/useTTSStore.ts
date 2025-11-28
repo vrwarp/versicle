@@ -29,6 +29,8 @@ interface TTSState {
   currentIndex: number;
   /** The playback queue */
   queue: TTSQueueItem[];
+  /** The last error message, if any */
+  lastError: string | null;
 
   /** Provider configuration */
   providerId: 'local' | 'google' | 'openai';
@@ -52,12 +54,13 @@ interface TTSState {
   setCustomAbbreviations: (abbrevs: string[]) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
+  clearError: () => void;
 
   /**
    * Internal sync method called by AudioPlayerService
    * @internal
    */
-  syncState: (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[]) => void;
+  syncState: (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
 }
 
 const player = AudioPlayerService.getInstance();
@@ -74,14 +77,22 @@ export const useTTSStore = create<TTSState>()(
         // For now, lazy init in loadVoices or actions is okay.
 
         // Subscribe to player updates
-        player.subscribe((status, activeCfi, currentIndex, queue) => {
+        player.subscribe((status, activeCfi, currentIndex, queue, error) => {
             set({
                 status,
                 isPlaying: status === 'playing',
                 activeCfi,
                 currentIndex,
-                queue
+                queue,
+                lastError: error
             });
+
+            // If fallback happened (provider mismatch), we should update our providerId state
+            // But checking provider type from here is hard without exposing it on player.
+            // For now, we rely on the error message or just UI notification.
+            // Ideally, we'd update providerId to 'local' if fallback occurred.
+            // We can infer this if needed, or expose current provider ID in listener.
+            // But 'lastError' is enough for now.
         });
 
         return {
@@ -94,6 +105,7 @@ export const useTTSStore = create<TTSState>()(
             activeCfi: null,
             currentIndex: 0,
             queue: [],
+            lastError: null,
             providerId: 'local',
             apiKeys: {
                 google: '',
@@ -192,13 +204,17 @@ export const useTTSStore = create<TTSState>()(
             jumpTo: (index) => {
                 player.jumpTo(index);
             },
+            clearError: () => {
+                set({ lastError: null });
+            },
 
-            syncState: (status, activeCfi, currentIndex, queue) => set({
+            syncState: (status, activeCfi, currentIndex, queue, error) => set({
                 status,
                 isPlaying: status === 'playing',
                 activeCfi,
                 currentIndex,
-                queue
+                queue,
+                lastError: error
             }),
         };
     },

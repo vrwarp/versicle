@@ -37,7 +37,7 @@ To ensure seamless playback between sentences when using Cloud TTS.
     *   When playing segment `N`, trigger synthesis/fetch for `N+1` and `N+2`.
     *   This masks the network latency of the API calls.
 
-### **2.4. Error Handling & Fallbacks**
+### **2.4. Error Handling & Fallbacks** [Completed]
 
 *   **Scenario**: User is on Google Cloud voice, but internet drops or API quota exceeded.
 *   **Fallback**:
@@ -66,10 +66,10 @@ To ensure seamless playback between sentences when using Cloud TTS.
     *   Update `AudioPlayerService` to look ahead in the queue.
     *   Implement `prepare(segment)` method in providers (which checks cache or fetches).
 3.  **UI Enhancements**:
-    *   Add the Queue view.
-    *   Add error toasts.
+    *   Add the Queue view. [Completed]
+    *   Add error toasts. [Completed]
 4.  **Resiliency**:
-    *   Implement the try-catch-fallback loop in the player service.
+    *   Implement the try-catch-fallback loop in the player service. [Completed]
 
 ## **4. Verification Steps**
 

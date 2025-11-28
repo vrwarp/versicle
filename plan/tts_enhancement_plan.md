@@ -157,4 +157,4 @@ New fields in useTTSStore:
 
 * **Floating Player:** A persistent "Mini Player" bar at the bottom of the screen (even in Library view) allows continuous listening while browsing.  
 * **Pre-fetching:** When playing Sentence N, the system should silently synthesize/fetch Sentence N+1 to ensure zero-latency transitions.  
-* **Error Handling:** If a Cloud API fails (network/quota), gracefully fallback to the Local Web Speech API.
+* **Error Handling:** If a Cloud API fails (network/quota), gracefully fallback to the Local Web Speech API. [Implemented]

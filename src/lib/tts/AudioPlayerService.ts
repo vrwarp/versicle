@@ -16,7 +16,7 @@ export interface TTSQueueItem {
     coverUrl?: string;
 }
 
-type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[]) => void;
+type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
 
 export class AudioPlayerService {
   private static instance: AudioPlayerService;
@@ -59,6 +59,7 @@ export class AudioPlayerService {
            } else if (event.type === 'error') {
                console.error("TTS Provider Error", event.error);
                this.setStatus('stopped');
+               this.notifyError("Playback Error: " + (event.error?.message || "Unknown error"));
            }
        });
     }
@@ -80,6 +81,7 @@ export class AudioPlayerService {
           this.audioPlayer.setOnError((e) => {
               console.error("Audio Playback Error", e);
               this.setStatus('stopped');
+              this.notifyError("Audio Playback Error: " + (e.message || e));
           });
 
           this.syncEngine?.setOnHighlight((index) => {
@@ -224,7 +226,28 @@ export class AudioPlayerService {
         }
     } catch (e) {
         console.error("Play error", e);
+
+        // Error Handling & Fallback logic
+        if (!(this.provider instanceof WebSpeechProvider)) {
+            const errorMessage = e instanceof Error ? e.message : "Cloud TTS error";
+            this.notifyError(`Cloud voice failed (${errorMessage}). Switching to local backup.`);
+
+            console.warn("Falling back to WebSpeechProvider...");
+            this.setProvider(new WebSpeechProvider());
+            // Retry playback with new provider
+            // We need to wait a tick or ensure provider is ready?
+            // WebSpeechProvider doesn't always need init() for basic usage if voices loaded,
+            // but calling init() is safer.
+            await this.init();
+            // Also might want to unset specific voiceId if it was a cloud voice ID
+            // or let the provider handle fallback.
+            // For now, let's just retry.
+            this.play();
+            return;
+        }
+
         this.setStatus('stopped');
+        this.notifyError(e instanceof Error ? e.message : "Playback error");
     }
   }
 
@@ -329,7 +352,7 @@ export class AudioPlayerService {
     const currentCfi = this.queue[this.currentIndex]?.cfi || null;
     // Defer execution to avoid issues if called during store initialization
     setTimeout(() => {
-        listener(this.status, currentCfi, this.currentIndex, this.queue);
+        listener(this.status, currentCfi, this.currentIndex, this.queue, null);
     }, 0);
 
     return () => {
@@ -338,6 +361,10 @@ export class AudioPlayerService {
   }
 
   private notifyListeners(activeCfi: string | null) {
-      this.listeners.forEach(l => l(this.status, activeCfi, this.currentIndex, this.queue));
+      this.listeners.forEach(l => l(this.status, activeCfi, this.currentIndex, this.queue, null));
+  }
+
+  private notifyError(message: string) {
+      this.listeners.forEach(l => l(this.status, this.queue[this.currentIndex]?.cfi || null, this.currentIndex, this.queue, message));
   }
 }
