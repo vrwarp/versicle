@@ -14,26 +14,33 @@ A simplified, high-contrast UI with large touch targets for safe operation while
 - `src/components/reader/CarModeView.tsx`: The UI component.
 - Route update in `App.tsx` (or overlay in `ReaderView`).
 
-## Implementation Steps
+## Feasibility Analysis
+This is a purely frontend task. No complex backend logic.
+- **Wake Lock:** API is widely supported in Chrome/Android, less so in older iOS (but `NoSleep.js` video loop trick works if native API fails).
+- **Navigation:** It should probably be a full-screen overlay within `ReaderView` so we don't lose the `epub.js` context (even if hidden). Unmounting `ReaderView` would stop playback if logic is tied to the component (which it partially is via hooks).
 
-1. **Create `CarModeView`**
-   - Layout: CSS Grid.
-   - 2x2 or similar grid.
-   - Top-Left: Rewind 30s.
-   - Top-Right: Forward 30s.
-   - Bottom: Play/Pause (Full width).
-   - Colors: pure black background (`#000`), white text. High contrast.
+## Implementation Plan
 
-2. **Wake Lock**
-   - Use `navigator.wakeLock` API when Car Mode is active to keep screen on.
+1. **`CarModeView` Component**
+   - Fixed position overlay `z-50`.
+   - Black background.
+   - Large SVG icons (Lucide).
+   - Layout:
+     - Top 20%: Current Chapter Title (Truncated, Large Text).
+     - Middle 40%: Play/Pause (Huge).
+     - Bottom 40%: Split Left/Right for Rewind/Forward.
 
-3. **Navigation**
-   - Add a "Car Mode" button in the main reader header.
-   - Add an "Exit" (X) button in Car Mode (requires long press or double tap to avoid accidental exit? Or just standard button).
+2. **Integration**
+   - Add state `isCarMode` to `useReaderStore` (transient).
+   - In `ReaderView.tsx`, conditionally render `<CarModeView />`.
 
-4. **Testing**
-   - Verify layout on mobile viewport.
-   - Verify controls work.
+3. **Wake Lock**
+   - Use `navigator.wakeLock.request('screen')` on mount.
+   - Release on unmount.
+   - Handle visibility change (re-request if tab comes back to focus).
+
+4. **Gestures**
+   - The large buttons are easy. Maybe add swipe gestures too (Plan 13 overlap).
 
 5. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.

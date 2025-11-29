@@ -12,37 +12,37 @@ This plan focuses on integrating the Media Session API (`navigator.mediaSession`
 ## Proposed Files
 - `src/lib/tts/MediaSessionManager.ts`: Dedicated class for managing the Media Session API.
 
-## Implementation Steps
+## Feasibility Analysis
+The `AudioPlayerService` already contains rudimentary inline Media Session logic (`setupMediaSession`, `updateMediaSessionMetadata`). Extracting this into a dedicated `MediaSessionManager` is a low-risk refactoring task that will improve code maintainability and feature completeness. The browser API is widely supported on modern mobile and desktop browsers.
 
-1. **Create `MediaSessionManager`**
+**Dependencies:**
+- `AudioPlayerService` needs to expose methods for the manager to call (`resume`, `pause`, `next`, `prev`).
+
+## Implementation Plan
+
+1. **Extract `MediaSessionManager`**
    - Create `src/lib/tts/MediaSessionManager.ts`.
-   - Define interface for `MediaMetadata` inputs.
-   - Implement `updateMetadata(metadata)` to set `navigator.mediaSession.metadata`.
-   - Implement `setPlaybackState(state)` ('playing' | 'paused' | 'none').
+   - Move the `MediaMetadata` creation logic here.
+   - Define a configuration interface: `interface MediaSessionCallbacks { onPlay: () => void; onPause: () => void; ... }`.
 
-2. **Implement Action Handlers**
-   - Define a callback interface for player actions (`onPlay`, `onPause`, `onSeekBackward`, `onSeekForward`, `onNext`, `onPrev`).
-   - Register handlers:
-     - `play`, `pause`: Map to resume/pause.
-     - `previoustrack`, `nexttrack`: Map to previous/next paragraph (or chapter).
-     - `seekbackward`, `seekforward`: Map to +/- 10s or 15s.
-     - `seekto`: (Optional) Allow scrubbing.
+2. **Enhance Metadata Handling**
+   - Ensure `coverUrl` is properly handled. Blob URLs from `epub.js` might need to be carefully managed or converted to base64 if the OS struggles with them (though Blob URLs usually work).
+   - Add chapters info if available (to support "Next Track" logically).
 
-3. **Integrate with `AudioPlayerService`**
-   - Remove inline `setupMediaSession` from `src/lib/tts/AudioPlayerService.ts`.
-   - Instantiate `MediaSessionManager` in `AudioPlayerService`.
-   - Call `mediaSessionManager.updateMetadata(...)` whenever the current item changes (in `play` or `setQueue`).
-   - Call `mediaSessionManager.setPlaybackState(...)` in `setStatus`.
-   - Wire up the action callbacks to `AudioPlayerService` methods (`resume`, `pause`, `next`, `prev`).
+3. **Integrate into `AudioPlayerService`**
+   - Remove private methods `setupMediaSession` and `updateMediaSessionMetadata`.
+   - Instantiate `MediaSessionManager` in the constructor.
+   - Wire up the callbacks to `this.resume()`, `this.pause()`, etc.
+   - In `setStatus`, call `mediaSessionManager.setPlaybackState(status)`.
+   - In `play()`, call `mediaSessionManager.setMetadata(...)`.
 
-4. **Cover Art Handling**
-   - Ensure the cover image URL passed to metadata is valid and reasonably sized.
-   - If `epub.js` provides a blob URL, ensure it persists long enough for the OS to grab it.
+4. **Add Seek Support**
+   - Implement `seekbackward` (-10s) and `seekforward` (+10s) handlers.
+   - Since the player operates on a sentence queue, "seeking" might mean jumping back/forward by sentence index if fine-grained time seeking isn't fully implemented in the engine yet. Ideally, use `AudioElementPlayer.currentTime` or `WebAudioEngine` time.
 
-5. **Testing & Verification**
-   - Verify lock screen controls on a mobile device or simulator.
-   - Check if the "Now Playing" info matches the current book/chapter.
-   - Verify hardware media keys (keyboard) work on desktop.
+5. **Testing**
+   - Verify on mobile device (lock screen).
+   - Verify hardware keys on desktop.
 
 6. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.

@@ -13,28 +13,33 @@ Switching voices for dialogue vs. narration significantly improves listener comp
 - Modify `src/lib/tts/TextSegmenter.ts`: Add dialogue detection.
 - Modify `src/lib/tts/AudioPlayerService.ts`: Handle multi-voice queuing.
 
-## Implementation Steps
+## Feasibility Analysis
+The core challenge is accurate extraction. `TextSegmenter` currently splits by sentence. We need to split by "quote boundary" *first*, then by sentence within those blocks? Or just sentence first, then classify?
+- **Issue:** A sentence can contain both: `He said, "Hello."` -> This is one sentence but two voices.
+- **Solution:** We must split this into sub-segments: `He said, ` (Narrator) and `"Hello."` (Character).
+- **Complexity:** This increases the number of TTS API calls significantly (3x).
+- **Cost:** User must be warned about increased cloud costs.
 
-1. **Update `TextSegmenter`**
-   - Enhance segmentation logic to split not just by sentence, but by quote boundaries.
-   - Tag segments: `{ text: "...", type: 'narrator' | 'dialogue' }`.
-   - Regex: Detect text between `“` and `”` or `"`.
+## Implementation Plan
 
-2. **Update Store / Settings**
-   - Add `dialogueVoiceId` in addition to `voiceId` (narrator).
-   - Add toggle: `enableDialogueVoice`.
+1. **Update `TextSegmenter` Logic**
+   - New logic: Split by quotes `“..."` or `"..."`.
+   - Resulting segments need a `type` property: `narrator` | `dialogue`.
+   - Example: `He said, "Go."` -> `[{text: "He said, ", type: 'narrator'}, {text: "Go.", type: 'dialogue'}]`.
 
-3. **Update Playback Logic**
-   - In `AudioPlayerService.play()`:
-   - Check segment type.
-   - Use `voiceId` for narrator, `dialogueVoiceId` for dialogue.
-   - **Optimization:** To avoid HTTP overhead, we might want to batch contiguous dialogue segments if the provider supports it (unlikely for simple APIs).
-   - *Constraint:* This increases API requests (1 sentence might become 3 parts: Narrator -> Dialogue -> Narrator).
-   - *Cost:* Ensure user is aware this might triple their API usage/cost (or use local voices).
+2. **Update `TTSQueueItem`**
+   - Add `voiceId?: string` override to the item structure.
+   - Or keep `type` and let `AudioPlayerService` resolve the ID at runtime.
 
-4. **Testing**
-   - Test with complex sentences: `He said, "Hello there," and walked away.` -> 3 segments.
-   - Verify voice switching happens correctly.
+3. **Update `AudioPlayerService`**
+   - In `play()` loop:
+     - Check item type.
+     - Select voice ID: `useTTSStore.narratorVoiceId` or `useTTSStore.dialogueVoiceId`.
+     - Pass explicit voice ID to `provider.synthesize`.
+
+4. **UI Settings**
+   - Add "Dialogue Voice" selector in Audio Settings.
+   - Add "Enable Multi-voice" toggle.
 
 5. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.

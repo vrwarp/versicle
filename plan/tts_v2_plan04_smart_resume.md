@@ -17,33 +17,34 @@ This feature improves the resumption experience by rewinding slightly based on h
 - Modify `src/store/useTTSStore.ts`: Add `lastPauseTime`.
 - Modify `src/lib/tts/AudioPlayerService.ts`: Implement smart resume logic.
 
-## Implementation Steps
+## Feasibility Analysis
+This is a high-impact, low-effort feature. `useTTSStore` is the correct place to persist `lastPauseTime`. The `AudioPlayerService` has a centralized `resume()` method where this logic can live.
 
-1. **Update Store**
-   - In `useTTSStore`, add `lastPauseTime: number | null`.
-   - Update `setPlaybackStatus`: When status becomes `paused` or `stopped`, set `lastPauseTime = Date.now()`.
+**Technical Constraint:**
+Rewinding by *time* (seconds) is easy with `AudioElementPlayer` or `WebAudioEngine`. However, `WebSpeechProvider` (local TTS) does not support seeking by time, only by utterance boundary.
+- **Strategy:** For Cloud TTS, seek -10s. For WebSpeech, seek -1 or -2 sentences (index decrements).
+
+## Implementation Plan
+
+1. **Update State Management**
+   - In `src/store/useTTSStore.ts`, add `lastPauseTime: number | null`.
+   - In `AudioPlayerService.pause()` or `stop()`, update this timestamp via the store action.
 
 2. **Implement Logic in `AudioPlayerService`**
-   - In `resume()` method:
-     - Retrieve `lastPauseTime` from store.
-     - Calculate `delta = Date.now() - lastPauseTime`.
-     - Determine rewind amount (`rewindSeconds`).
-     - Calculate `newTime = currentTime - rewindSeconds`.
-     - Call `this.audioPlayer.seek(newTime)` (or `this.jumpTo(prevIndex)` if using sentence index).
+   - In `resume()`:
+     - Read `lastPauseTime` from store.
+     - Calculate `elapsed = Date.now() - lastPauseTime`.
+     - Decide rewind amount:
+       - `WebSpeechProvider`: If elapsed > 5min, `currentIndex = max(0, currentIndex - 2)`.
+       - `CloudProvider`: If elapsed > 5min, `seek(currentTime - 10)`.
+   - Update `lastPauseTime` to null after processing.
 
-3. **Handle Sentence-Based Rewind (WebSpeech)**
-   - For `WebSpeechProvider`, we can't seek in seconds easily.
-   - Logic: Go back N sentences.
-     - Medium pause: Go back 1-2 sentences.
-     - Long pause: Go back 5-10 sentences.
-   - Check `currentIndex` boundaries.
+3. **Handle Edge Cases**
+   - If rewind goes before 0s, clamp to 0s.
+   - Ideally, do not rewind across chapter boundaries (too complex for v1).
 
-4. **UI Feedback (Optional)**
-   - Show a toast: "Rewound 10s for context" to explain the jump.
+4. **User Feedback**
+   - Optional: Show a small toast "Rewound 10s" so the user knows why it happened.
 
-5. **Testing**
-   - Manual test: Pause, wait (mock time), resume. Verify position changed.
-   - Unit test: Mock `Date.now()` and check logic.
-
-6. **Pre-commit Steps**
+5. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.

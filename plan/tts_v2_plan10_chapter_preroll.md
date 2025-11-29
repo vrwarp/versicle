@@ -12,26 +12,31 @@ Announces "Chapter [N]" and estimated time before reading the text, providing a 
 ## Proposed Files
 - Modify `src/lib/tts/AudioPlayerService.ts`.
 
-## Implementation Steps
+## Feasibility Analysis
+Detecting chapter transitions is easy in `AudioPlayerService` because `setQueue` is called when loading a new chapter.
+- **Challenge:** Mixing the "Announcement" audio with the "Text" audio in the queue.
+- **Solution:** Add a special `TTSQueueItem` at index -1 or 0 that contains the announcement text.
+- **Timing:** Need to calculate word count of the chapter to estimate time. `queue.reduce(...)` works.
 
-1. **Detect Transition**
-   - In `playNext()` or `setQueue()`, detect if the new item belongs to a different chapter than the previous one.
+## Implementation Plan
 
-2. **Generate Announcement**
-   - Construct text string.
-   - Calculate duration: `wordCount / wpm`.
+1. **Generate Announcement Text**
+   - Helper function: `generatePreroll(chapterTitle: string, wordCount: number, speed: number): string`.
+   - "Chapter 5. The Wedding. Estimated reading time: 14 minutes."
 
-3. **Inject into Queue**
-   - This is tricky. We can either:
-     - Insert a fake `TTSQueueItem` into the queue at runtime.
-     - Or, handle it as a "pre-flight" action in `play()`.
-   - Approach: "Pre-flight". When `play()` is called for the first item of a chapter:
-     - Synthesize announcement.
-     - Play announcement.
-     - *Then* play the actual text.
+2. **Inject into Queue**
+   - In `AudioPlayerService.setQueue(items)`:
+     - Check `userSettings.prerollEnabled`.
+     - Create an announcement item.
+     - `this.queue = [announcementItem, ...items]`.
+     - `this.currentIndex = 0` (points to announcement).
+     - **Note:** The announcement item needs a null CFI or a special flag so it doesn't try to highlight text in the book.
 
-4. **UI Feedback**
-   - Show "Announcing..." toast.
+3. **Handle Highlighting**
+   - If item has no CFI, `SyncEngine` should do nothing (or clear highlights).
+
+4. **Settings**
+   - Toggle in Audio Settings.
 
 5. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.

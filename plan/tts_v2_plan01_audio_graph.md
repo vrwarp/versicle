@@ -15,40 +15,41 @@ This plan establishes the core Web Audio API infrastructure required for advance
 - `src/lib/tts/audio/AudioGraph.ts`: Manages the nodes (Gain, Compressor, etc.).
 - `src/lib/tts/audio/BufferScheduler.ts`: Handles the timing and queuing of `AudioBuffer`s.
 
-## Implementation Steps
+## Feasibility Analysis
+The current `AudioPlayerService` relies on `AudioElementPlayer` which wraps the HTML5 `<audio>` element. While simple, this approach has limitations regarding gapless playback (crucial for sentence-by-sentence TTS) and advanced DSP (needed for Plan 06 and 11).
 
-1. **Create `WebAudioEngine` Structure**
-   - Create `src/lib/tts/audio/WebAudioEngine.ts`.
-   - Implement the singleton pattern.
-   - Initialize `AudioContext` (lazily or on user interaction).
-   - Add `resume()` method to handle autoplay unlocking (to be called on first UI interaction).
+Switching to the Web Audio API (`AudioContext`) is highly feasible and standard practice for these requirements. The codebase is already structured with a service layer that can swap the underlying player implementation (`AudioElementPlayer` vs `WebAudioEngine`).
 
-2. **Implement Audio Graph**
-   - Create `src/lib/tts/audio/AudioGraph.ts`.
-   - Define the node chain: `Source` -> `VoiceGain` -> `MasterGain` -> `DynamicsCompressor` -> `Destination`.
-   - Expose methods to connect sources and control volume parameters.
+**Risks:**
+- **Mobile Autoplay:** iOS Safari requires `AudioContext` to be resumed inside a user interaction handler. The `resume()` method must be wired to the first "Play" click.
+- **Memory Management:** `AudioBuffer` objects can consume significant memory if not garbage collected. The `BufferScheduler` must rigorously manage source nodes and buffers.
+- **Background Audio:** Web Audio API contexts can be suspended by the OS when the screen locks. A common workaround (playing a silent `<audio>` element in parallel) might be needed to keep the `AudioContext` alive on iOS.
 
-3. **Implement Buffer Scheduler**
+## Implementation Plan
+
+1. **Scaffold `WebAudioEngine`**
+   - Create `src/lib/tts/audio/WebAudioEngine.ts` implementing a singleton pattern.
+   - Initialize `AudioContext` lazily.
+   - Implement `suspend()` and `resume()` methods.
+
+2. **Build the Audio Graph (`AudioGraph.ts`)**
+   - Construct the node chain: `Source` (placeholder) -> `VoiceGainNode` -> `DynamicsCompressorNode` (to normalize volume) -> `MasterGainNode` -> `Destination`.
+   - Expose properties for `voiceVolume` and `masterVolume`.
+
+3. **Develop `BufferScheduler`**
    - Create `src/lib/tts/audio/BufferScheduler.ts`.
-   - Implement a queue system for `AudioBuffer` objects.
-   - Use `AudioBufferSourceNode` for playback.
-   - Implement `schedule(buffer)` logic to play the next buffer precisely at `startTime = previousEndTime`.
-   - Handle "drift" by checking `currentTime` and jumping ahead if lag occurs.
+   - Maintain a queue of `{ buffer: AudioBuffer, startTime: number }`.
+   - Use `context.currentTime` to schedule the next buffer immediately after the previous one (`startTime = prevEndTime`).
+   - Implement a lookahead system: always schedule 1-2 sentences ahead to prevent gaps.
 
-4. **Integrate with `AudioPlayerService`**
-   - Modify `src/lib/tts/AudioPlayerService.ts`.
-   - Import `WebAudioEngine`.
-   - Replace `AudioElementPlayer` usage in `setupCloudPlayback` and `play` methods with `WebAudioEngine`.
-   - Ensure `WebSpeechProvider` bypasses this engine (or runs in parallel if we add ambience later).
+4. **Update `AudioPlayerService`**
+   - Replace `AudioElementPlayer` with `WebAudioEngine` in the `setupCloudPlayback` method.
+   - Modify `play()` to feed blobs into the `WebAudioEngine` (which will decode them to `AudioBuffer`s).
+   - Ensure the fallback path to `WebSpeechProvider` remains intact.
 
-5. **Handle Background Playback (Keep-Alive)**
-   - Add a "silence looper" or similar mechanism in `WebAudioEngine` to prevent the OS from suspending the audio thread when the screen is locked (crucial for iOS).
-   - *Note:* This might involve playing a tiny silent buffer periodically or creating a dummy `<audio>` element if Web Audio API alone is insufficient on some platforms.
+5. **Verify Background Playback**
+   - Test specifically on mobile.
+   - If audio cuts out on lock screen, implement the "silent html audio" trick: loop a 1-second silent MP3 in a hidden `<audio>` tag whenever the `WebAudioEngine` is active.
 
-6. **Testing & Verification**
-   - Verify cloud TTS playback (gapless transitions between sentences).
-   - Verify volume controls work.
-   - Verify playback continues when switching tabs or locking the screen (using the keep-alive strategy).
-
-7. **Pre-commit Steps**
+6. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.
