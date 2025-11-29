@@ -28,6 +28,7 @@ export class AudioPlayerService {
   private currentIndex: number = 0;
   private status: TTSStatus = 'stopped';
   private listeners: PlaybackListener[] = [];
+  private pendingRequests = new Map<string, Promise<SpeechSegment>>();
 
   // Settings
   private speed: number = 1.0;
@@ -187,32 +188,8 @@ export class AudioPlayerService {
         if (this.provider instanceof WebSpeechProvider) {
              await this.provider.synthesize(item.text, voiceId, this.speed);
         } else {
-             // Cloud provider flow with Caching
-             const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed);
-             const cached = await this.cache.get(cacheKey);
-
-             let result: SpeechSegment;
-
-             if (cached) {
-                 result = {
-                     audio: new Blob([cached.audio], { type: 'audio/mp3' }),
-                     alignment: cached.alignment,
-                     isNative: false
-                 };
-             } else {
-                 // Track cost before calling synthesis
-                 // We only track when we actually hit the API (cache miss)
-                 CostEstimator.getInstance().track(item.text);
-
-                 result = await this.provider.synthesize(item.text, voiceId, this.speed);
-                 if (result.audio) {
-                     await this.cache.put(
-                         cacheKey,
-                         await result.audio.arrayBuffer(),
-                         result.alignment
-                     );
-                 }
-             }
+             // Cloud provider flow with Prefetching
+             const result = await this.fetchAudio(item.text, voiceId, this.speed);
 
              if (result.audio && this.audioPlayer) {
                  if (result.alignment && this.syncEngine) {
@@ -222,6 +199,9 @@ export class AudioPlayerService {
                  this.audioPlayer.setRate(this.speed);
                  await this.audioPlayer.playBlob(result.audio);
                  this.setStatus('playing');
+
+                 // Trigger prefetch
+                 this.bufferNext();
              }
         }
     } catch (e) {
@@ -252,6 +232,63 @@ export class AudioPlayerService {
         this.setStatus('stopped');
         this.notifyError(e instanceof Error ? e.message : "Playback error");
     }
+  }
+
+  private async fetchAudio(text: string, voiceId: string, speed: number): Promise<SpeechSegment> {
+      const cacheKey = await this.cache.generateKey(text, voiceId, speed);
+
+      // 1. Check in-flight requests
+      if (this.pendingRequests.has(cacheKey)) {
+          return this.pendingRequests.get(cacheKey)!;
+      }
+
+      // 2. Check cache (disk)
+      const cached = await this.cache.get(cacheKey);
+      if (cached) {
+           return {
+               audio: new Blob([cached.audio], { type: 'audio/mp3' }),
+               alignment: cached.alignment,
+               isNative: false
+           };
+      }
+
+      // 3. Fetch from API
+      const fetchPromise = (async () => {
+          try {
+              // Cost tracking
+              CostEstimator.getInstance().track(text);
+
+              const result = await this.provider.synthesize(text, voiceId, speed);
+              if (result.audio) {
+                  await this.cache.put(
+                      cacheKey,
+                      await result.audio.arrayBuffer(),
+                      result.alignment
+                  );
+              }
+              return result;
+          } finally {
+              this.pendingRequests.delete(cacheKey);
+          }
+      })();
+
+      this.pendingRequests.set(cacheKey, fetchPromise);
+      return fetchPromise;
+  }
+
+  private bufferNext() {
+      // Only buffer for cloud providers
+      if (this.provider instanceof WebSpeechProvider) return;
+
+      const nextIndex = this.currentIndex + 1;
+      if (nextIndex < this.queue.length) {
+          const item = this.queue[nextIndex];
+          const voiceId = this.voiceId || '';
+          // Fire and forget, but catch errors to prevent unhandled rejections
+          this.fetchAudio(item.text, voiceId, this.speed).catch(e => {
+              console.warn(`Prefetch failed for index ${nextIndex}`, e);
+          });
+      }
   }
 
   async resume() {

@@ -28,7 +28,7 @@ A visual representation of what is being read helps users understand context and
 *   **Auto-Scroll**: The active sentence in the list should scroll into view.
 *   **Status**: Implemented in `src/components/reader/TTSQueue.tsx` and integrated into `ReaderView.tsx`.
 
-### **2.3. Pre-fetching / buffering**
+### **2.3. Pre-fetching / buffering** [Completed]
 
 To ensure seamless playback between sentences when using Cloud TTS.
 
@@ -62,9 +62,9 @@ To ensure seamless playback between sentences when using Cloud TTS.
 2.  **Refactor Segmentation**:
     *   Replace `extractSentences` regex logic with `Intl.Segmenter`.
     *   Test with complex sentences ("Dr. Jones said...", "Item 1.2...").
-2.  **Buffering Logic**:
+2.  **Buffering Logic** [Completed]:
     *   Update `AudioPlayerService` to look ahead in the queue.
-    *   Implement `prepare(segment)` method in providers (which checks cache or fetches).
+    *   Implement `bufferNext()` method in service to prefetch next item.
 3.  **UI Enhancements**:
     *   Add the Queue view. [Completed]
     *   Add error toasts. [Completed]
