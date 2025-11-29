@@ -75,6 +75,12 @@ export class AudioElementPlayer {
     this.audio.playbackRate = rate;
   }
 
+  public seek(time: number) {
+    if (isFinite(time)) {
+       this.audio.currentTime = Math.max(0, Math.min(time, this.audio.duration || 0));
+    }
+  }
+
   public getCurrentTime(): number {
     return this.audio.currentTime;
   }

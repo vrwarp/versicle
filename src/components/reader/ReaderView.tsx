@@ -10,11 +10,12 @@ import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
+import { TTSCostIndicator } from './TTSCostIndicator';
 import { Toast } from '../ui/Toast';
 import { Dialog } from '../ui/Dialog';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter, RotateCcw, RotateCw } from 'lucide-react';
 
 /**
  * The main reader interface component.
@@ -63,7 +64,8 @@ export const ReaderView: React.FC = () => {
       lastError,
       clearError,
       enableCostWarning,
-      setEnableCostWarning
+      setEnableCostWarning,
+      seek
   } = useTTSStore();
 
   const {
@@ -643,6 +645,17 @@ export const ReaderView: React.FC = () => {
                         <>
                             <div className="flex items-center gap-2 mb-4">
                                 <button
+                                    data-testid="tts-seek-back-button"
+                                    onClick={() => seek(-15)}
+                                    disabled={providerId === 'local'}
+                                    className={`p-2 rounded hover:bg-muted/10 ${providerId === 'local' ? 'opacity-30 cursor-not-allowed' : 'text-secondary'}`}
+                                    aria-label="Skip Back 15s"
+                                    title={providerId === 'local' ? 'Not available for local TTS' : 'Skip Back 15s'}
+                                >
+                                    <RotateCcw className="w-4 h-4" />
+                                </button>
+
+                                <button
                                     data-testid="tts-play-pause-button"
                                     onClick={() => {
                                         if (isPlaying) {
@@ -660,14 +673,26 @@ export const ReaderView: React.FC = () => {
                                             play();
                                         }
                                     }}
-                                    className="flex-1 bg-primary text-background py-1 rounded hover:opacity-90 flex justify-center"
+                                    className="flex-1 bg-primary text-background py-2 rounded hover:opacity-90 flex justify-center items-center"
                                 >
-                                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                                 </button>
+
+                                <button
+                                    data-testid="tts-seek-forward-button"
+                                    onClick={() => seek(15)}
+                                    disabled={providerId === 'local'}
+                                    className={`p-2 rounded hover:bg-muted/10 ${providerId === 'local' ? 'opacity-30 cursor-not-allowed' : 'text-secondary'}`}
+                                    aria-label="Skip Forward 15s"
+                                    title={providerId === 'local' ? 'Not available for local TTS' : 'Skip Forward 15s'}
+                                >
+                                    <RotateCw className="w-4 h-4" />
+                                </button>
+
                                 <button
                                     data-testid="tts-settings-button"
                                     onClick={() => setShowVoiceSettings(true)}
-                                    className="px-2 py-1 bg-secondary text-surface rounded hover:opacity-90"
+                                    className="p-2 bg-secondary text-surface rounded hover:opacity-90 ml-2"
                                     aria-label="Voice Settings"
                                 >
                                     <Settings className="w-4 h-4" />
@@ -706,9 +731,12 @@ export const ReaderView: React.FC = () => {
                         </>
                      ) : (
                         <div className="space-y-4">
-                            <button onClick={() => setShowVoiceSettings(false)} className="text-xs text-primary mb-2 flex items-center">
-                                <ArrowLeft className="w-3 h-3 mr-1" /> Back
-                            </button>
+                            <div className="flex items-center justify-between mb-2">
+                                <button onClick={() => setShowVoiceSettings(false)} className="text-xs text-primary flex items-center">
+                                    <ArrowLeft className="w-3 h-3 mr-1" /> Back
+                                </button>
+                                <TTSCostIndicator />
+                            </div>
 
                             <div>
                                 <label className="block text-xs font-semibold text-muted mb-1">Provider</label>

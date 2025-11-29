@@ -322,6 +322,13 @@ export class AudioPlayerService {
       }
   }
 
+  seek(offset: number) {
+      if (this.audioPlayer && this.status !== 'stopped') {
+          const currentTime = this.audioPlayer.getCurrentTime();
+          this.audioPlayer.seek(currentTime + offset);
+      }
+  }
+
   setVoice(voiceId: string) {
       this.voiceId = voiceId;
       if (this.status === 'playing') {

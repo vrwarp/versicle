@@ -58,6 +58,7 @@ interface TTSState {
   setEnableCostWarning: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
+  seek: (seconds: number) => void;
   clearError: () => void;
 
   /**
@@ -211,6 +212,9 @@ export const useTTSStore = create<TTSState>()(
             },
             jumpTo: (index) => {
                 player.jumpTo(index);
+            },
+            seek: (seconds) => {
+                player.seek(seconds);
             },
             clearError: () => {
                 set({ lastError: null });
