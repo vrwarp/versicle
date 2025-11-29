@@ -13,23 +13,28 @@ Mixes background loops (rain, fire, noise) with the TTS.
 - `src/lib/tts/audio/AmbiencePlayer.ts` (or part of `WebAudioEngine`).
 - Assets: `rain.mp3`, `fire.mp3`.
 
-## Implementation Steps
+## Feasibility Analysis
+Requires `WebAudioEngine` (Plan 01).
+- **Implementation:** Simple `AudioBufferSourceNode` with `loop = true` connected to a GainNode.
+- **Assets:** Need high-quality, seamless loops. Store in `public/assets/sounds/`.
+- **Memory:** Decoding a 30s MP3 to PCM takes ~5MB RAM. Negligible.
 
-1. **Asset Management**
-   - Add assets to `public/sounds/`.
+## Implementation Plan
 
-2. **Implement Player**
-   - Load file into `AudioBuffer`.
-   - Create `AudioBufferSourceNode` with `loop = true`.
-   - Connect to `AmbienceGain` -> `MasterGain` in `WebAudioEngine`.
+1. **`AmbiencePlayer` Class**
+   - Manage loading and playing loops.
+   - Methods: `play(url, volume)`, `stop()`, `setVolume(v)`.
 
-3. **UI Controls**
-   - Add "Ambience" section in Audio Settings.
-   - Selector (Rain, Fire, None).
-   - Volume Slider.
+2. **Integration with `WebAudioEngine`**
+   - `WebAudioEngine` should expose a `mixAmbience(node)` method or simply let `AmbiencePlayer` connect to `WebAudioEngine.masterGain`.
 
-4. **State Persistence**
-   - Store choices in `useTTSStore`.
+3. **UI**
+   - New "Ambience" tab in Audio Settings.
+   - Preset cards (Rain, Fire, Cafe).
+   - Volume slider (independent of voice).
+
+4. **Persistence**
+   - Store `ambienceTrack` and `ambienceVolume` in `useTTSStore`.
 
 5. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.

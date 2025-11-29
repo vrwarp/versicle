@@ -79,3 +79,26 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 **Plan:** [plan/tts_v2_plan14_export_mp3.md](./tts_v2_plan14_export_mp3.md)
 **Goal:** Stitch cached audio segments into a single downloadable file for offline listening on other devices.
 **Key Components:** `AudioExporter`.
+
+---
+
+## Appendix: Implementation Dependencies
+
+### Parallel Development
+Most features in the roadmap are loosely coupled, but some share critical dependencies.
+
+*   **Group A (Core Engine):** Plan 01 (Audio Graph) is a prerequisite for Plan 06 (Smart Speed), Plan 11 (Ambience), and Plan 05 (Fade Out quality). It should be done first.
+*   **Group B (Logic/UI):** Plans 02, 03, 04, 08, 09, 10, 12, 13, 14 can be developed in parallel with each other and largely in parallel with Group A (though they eventually need to hook into the engine).
+*   **Group C (Extraction):** Plan 07 (Voice Switching) and Plan 03 (Sanitization) both touch the `TextSegmenter` pipeline. It is better to do Plan 03 first to ensure clean text before complicating the segmenter with Plan 07.
+
+### Sequential Order Recommendation
+
+1.  **Plan 01 (Audio Graph)** - *Foundation for everything.*
+2.  **Plan 02 (Media Session)** - *Easy win, high value.*
+3.  **Plan 03 (Sanitization)** - *Improves quality immediately.*
+4.  **Plan 04 (Smart Resume)** - *Easy logic, high value.*
+5.  **Plan 05 (Sleep Timer)** - *Easy logic.*
+6.  **Plan 06 (Smart Speed)** - *Requires Plan 01.*
+7.  **Plan 07 (Voice Switching)** - *Complex logic.*
+8.  **Plan 08 (Lexicon)** - *Independent logic.*
+9.  **Plan 09 - 14** - *Independent, do in any order.*

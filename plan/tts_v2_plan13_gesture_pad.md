@@ -13,24 +13,29 @@ A full-screen gesture layer for controlling playback without looking.
 ## Proposed Files
 - `src/components/reader/GestureOverlay.tsx`.
 
-## Implementation Steps
+## Feasibility Analysis
+Similar to Car Mode, this is a UI overlay.
+- **Conflict:** Gestures might conflict with standard browser gestures (back/forward) or OS gestures.
+- **Library:** `use-gesture` or similar React hook library is recommended over raw touch events for robustness.
+- **Accessibility:** Ensure screen readers can still define what's happening.
 
-1. **Create Overlay Component**
-   - Transparent `div` covering the viewport (z-index high).
-   - Use a gesture library or `touchstart`/`touchend` logic.
+## Implementation Plan
 
-2. **Logic**
-   - Tap: `togglePlay()`.
-   - Double Tap Left (0-50% width): `rewind()`.
-   - Double Tap Right (50-100% width): `forward()`.
+1. **Component**
+   - `<GestureOverlay />` covering the screen.
+   - Use `react-use-gesture` (if added) or standard `onTouchStart` tracking.
 
-3. **Integration**
-   - Toggle in Reader menu: "Gesture Mode".
-   - When active, render the overlay.
+2. **Logic Map**
+   - Tap Center: Toggle Play/Pause.
+   - Tap Left/Right (25% width): Rewind/Forward.
+   - Swipe Up/Down: Volume +/-.
+   - Swipe Left/Right: Next/Prev Chapter (requires confirmation?).
 
-4. **Feedback**
-   - Visual ripple effect on tap.
-   - Haptic feedback (vibration) if supported.
+3. **Visuals**
+   - Show transient icons on action (e.g., big Play icon fades in and out).
+
+4. **Integration**
+   - "Gesture Mode" toggle in settings.
 
 5. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.

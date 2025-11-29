@@ -12,20 +12,25 @@ Subtle sound effects for interactions (Skip, Pause) confirming actions without v
 - `src/lib/tts/audio/EarconManager.ts` (or part of `WebAudioEngine`).
 - Assets: simple beeps (generated via code or loaded).
 
-## Implementation Steps
+## Feasibility Analysis
+Very high feasibility. Generating beeps with `OscillatorNode` is instant and requires no assets.
+- **UX:** Sounds must be subtle and non-intrusive.
+- **Timing:** Must play immediately on click/tap (low latency).
 
-1. **Generate Sounds**
-   - Use `OscillatorNode` in `WebAudioEngine` to generate simple beeps (cheaper than loading files).
-     - High beep (800Hz) for Forward.
-     - Low beep (400Hz) for Back.
-     - Short click (noise buffer) for Pause.
+## Implementation Plan
 
-2. **Trigger Logic**
-   - Call `playEarcon(type)` in `AudioPlayerService` action handlers (only if triggered via Media Session or Car Mode?).
-   - Or just always play them if enabled in settings.
+1. **`EarconManager`**
+   - Methods: `playSkip()`, `playRewind()`, `playPause()`, `playResume()`.
+   - Use `AudioContext.createOscillator()`.
+   - envelopes (ADSR) to make them sound pleasant (not harsh beeps).
+     - e.g., Sine wave, fast attack, short decay.
+
+2. **Integration**
+   - In `AudioPlayerService` methods (`next`, `prev`, `pause`, `resume`).
+   - Call `EarconManager.playX()`.
 
 3. **Settings**
-   - Toggle: "Interaction Sounds".
+   - Toggle "Interaction Sounds".
 
 4. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.

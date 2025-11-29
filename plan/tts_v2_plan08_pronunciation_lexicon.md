@@ -13,26 +13,33 @@ Users need to correct mispronunciations, especially for proper nouns in fantasy/
 - `src/lib/tts/LexiconService.ts`: Manage the dictionary.
 - `src/components/reader/LexiconManager.tsx`: UI for adding/editing rules.
 
-## Implementation Steps
+## Feasibility Analysis
+This is a straightforward string replacement task.
+- **Scope:** Global (all books) vs. Local (per book). MVP should be Global or Per-Book (using book ID).
+- **Performance:** Iterating through a map of ~50-100 rules per sentence is negligible.
+- **Cache Invalidation:** If a user changes a rule, previously cached audio for that word will be wrong.
+  - *Fix:* Include the lexicon hash/version in the `TTSCache` key generation.
 
-1. **Create `LexiconService`**
-   - Store: `Map<string, string>`.
-   - Methods: `addRule(original, replacement)`, `removeRule`, `getRules`.
-   - Persist to IndexedDB (or `useLocalStorage` for simplicity initially).
+## Implementation Plan
 
-2. **Implement Processing Logic**
-   - `process(text)` method.
-   - Use Regex with word boundaries `\b` to replace keys with values.
-   - Sort keys by length (descending) to avoid partial replacement issues.
-   - Example: Replace "Sazed" with "Say-zed".
+1. **`LexiconService`**
+   - Store rules in IndexedDB (new object store `lexicon`).
+   - Interface: `{ original: string, replacement: string, bookId?: string }`.
 
-3. **UI Integration**
-   - Add "Pronunciation" option in the text selection menu (requires hooking into `epub.js` selection events).
-   - Add "Manage Pronunciations" in Settings.
+2. **Processing Pipeline**
+   - Create `applyLexicon(text: string, rules: Rule[]): string`.
+   - Use regex with word boundaries: `new RegExp("\\b" + escapeRegExp(original) + "\\b", "gi")`.
+   - Case sensitivity handling? Usually we want case-insensitive match but replace with specific phonetic spelling.
 
-4. **Integration with Pipeline**
-   - Call `LexiconService.process()` in `AudioPlayerService` before sending text to provider/cache.
-   - Note: Changing the lexicon invalidates cached audio for those sentences. We need a strategy to clear cache or use a different cache key (include lexicon hash in key).
+3. **Integration**
+   - In `AudioPlayerService.play()`, fetch rules.
+   - Run `applyLexicon` on text before generating cache key or synthesizing.
+   - **Important:** Modify `TTSCache.generateKey` to accept a `lexiconHash` or similar to ensure cache busting.
+
+4. **UI**
+   - Settings -> Pronunciation.
+   - List of rules. Add/Edit/Delete.
+   - "Test" button to speak the replacement.
 
 5. **Pre-commit Steps**
    - Ensure proper testing, verification, review, and reflection are done.
