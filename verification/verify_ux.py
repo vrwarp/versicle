@@ -4,6 +4,9 @@ import time
 from playwright.sync_api import sync_playwright, expect
 
 def verify_ux_refinements():
+    # Ensure screenshots directory exists
+    os.makedirs("verification/screenshots", exist_ok=True)
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context()
@@ -20,7 +23,7 @@ def verify_ux_refinements():
 
             # Wait for empty state
             expect(page.get_by_text("No books yet")).to_be_visible(timeout=10000)
-            page.screenshot(path="verification/1_library_empty.png")
+            page.screenshot(path="verification/screenshots/1_library_empty.png")
             print("Screenshot 1: Library Empty State captured.")
 
             # 2. Verify Import and Toast
@@ -38,7 +41,7 @@ def verify_ux_refinements():
 
             # Wait for Reader View
             expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=15000)
-            page.screenshot(path="verification/3_reader_view.png")
+            page.screenshot(path="verification/screenshots/3_reader_view.png")
             print("Screenshot 3: Reader View captured.")
 
             # 4. Verify Search Empty State
@@ -47,28 +50,24 @@ def verify_ux_refinements():
             expect(page.get_by_placeholder("Search in book...")).to_be_visible()
 
             # Search for nonsense
-            # Search might be async and take time for index to be ready or worker to respond.
-            # searchClient.indexBook is async.
-            # We see "Book indexed for search" in console.
-
             page.get_by_placeholder("Search in book...").fill("supercalifragilistic")
             page.get_by_placeholder("Search in book...").press("Enter")
 
             # Wait for result
             expect(page.get_by_text('No results found for "supercalifragilistic"')).to_be_visible(timeout=10000)
-            page.screenshot(path="verification/4_search_empty.png")
+            page.screenshot(path="verification/screenshots/4_search_empty.png")
             print("Screenshot 4: Search Empty State captured.")
 
             # 5. Verify Annotations Empty State
             print("Opening Annotations...")
             page.get_by_test_id("reader-annotations-button").click()
             expect(page.get_by_text("No annotations yet")).to_be_visible()
-            page.screenshot(path="verification/5_annotations_empty.png")
+            page.screenshot(path="verification/screenshots/5_annotations_empty.png")
             print("Screenshot 5: Annotations Empty State captured.")
 
         except Exception as e:
             print(f"Verification failed: {e}")
-            page.screenshot(path="verification/failure.png")
+            page.screenshot(path="verification/screenshots/failure.png")
         finally:
             browser.close()
 
