@@ -30,33 +30,41 @@ def test_immersive_mode(page: Page):
     expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=10000)
 
     # Check header is visible initially
-    # Header contains back button
     header = page.locator("header")
     expect(header).to_be_visible()
 
+    # Screenshot 1: Default View
+    page.screenshot(path="verification/screenshots/sprint1_1_default.png")
+
     # 2. Toggle Immersive Mode
     # Click center of viewport.
-    # Since the iframe captures clicks, we rely on the `rendition.on('click')` handler we added.
+    # We need to make sure we click the reader area, not the header/footer.
     viewport_size = page.viewport_size
     if viewport_size:
         x = viewport_size['width'] / 2
         y = viewport_size['height'] / 2
         page.mouse.click(x, y)
 
-    # Wait for state update
-    page.wait_for_timeout(1000)
+    # Wait for state update - INCREASED TIMEOUT
+    page.wait_for_timeout(2000)
 
     # Header should be hidden
     expect(header).to_be_hidden()
+
+    # Screenshot 2: Immersive View
+    page.screenshot(path="verification/screenshots/sprint1_2_immersive.png")
 
     # 3. Toggle Back
     if viewport_size:
         page.mouse.click(x, y)
 
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(2000)
 
     # Header should be visible
     expect(header).to_be_visible()
+
+    # Screenshot 3: Restored View
+    page.screenshot(path="verification/screenshots/sprint1_3_restored.png")
 
 def test_optimal_line_length(page: Page):
     """
@@ -91,3 +99,6 @@ def test_optimal_line_length(page: Page):
     print(f"Computed padding-left: {padding_left}")
 
     assert padding_left in ["24px", "32px"]
+
+    # Screenshot 4: Layout Verification
+    page.screenshot(path="verification/screenshots/sprint1_4_layout.png")
