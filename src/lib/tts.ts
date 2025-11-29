@@ -38,8 +38,8 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
     const body = doc.body;
 
     // Initialize segmenter
-    const { customAbbreviations } = useTTSStore.getState();
-    const segmenter = new TextSegmenter('en', customAbbreviations);
+    const { customAbbreviations, alwaysMerge, sentenceStarters } = useTTSStore.getState();
+    const segmenter = new TextSegmenter('en', customAbbreviations, alwaysMerge, sentenceStarters);
 
     let textBuffer = '';
     let textNodes: { node: Node, length: number }[] = [];

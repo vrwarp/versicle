@@ -6,6 +6,7 @@ import type { TTSStatus, TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import { GoogleTTSProvider } from '../lib/tts/providers/GoogleTTSProvider';
 import { OpenAIProvider } from '../lib/tts/providers/OpenAIProvider';
 import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
+import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
 
 /**
  * State interface for the Text-to-Speech (TTS) store.
@@ -41,6 +42,10 @@ interface TTSState {
 
   /** Custom abbreviations for sentence segmentation */
   customAbbreviations: string[];
+  /** Words that should always trigger a merge (e.g. "Mr.") */
+  alwaysMerge: string[];
+  /** Words that indicate a new sentence start (preventing merge) */
+  sentenceStarters: string[];
 
   /** Whether to show cost warning dialogs */
   enableCostWarning: boolean;
@@ -55,6 +60,8 @@ interface TTSState {
   setProviderId: (id: 'local' | 'google' | 'openai') => void;
   setApiKey: (provider: 'google' | 'openai', key: string) => void;
   setCustomAbbreviations: (abbrevs: string[]) => void;
+  setAlwaysMerge: (words: string[]) => void;
+  setSentenceStarters: (words: string[]) => void;
   setEnableCostWarning: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
@@ -120,6 +127,8 @@ export const useTTSStore = create<TTSState>()(
                 'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
                 'e.g.', 'i.e.'
             ],
+            alwaysMerge: DEFAULT_ALWAYS_MERGE,
+            sentenceStarters: DEFAULT_SENTENCE_STARTERS,
 
             play: () => {
                 player.play();
@@ -173,6 +182,12 @@ export const useTTSStore = create<TTSState>()(
             },
             setCustomAbbreviations: (abbrevs) => {
                 set({ customAbbreviations: abbrevs });
+            },
+            setAlwaysMerge: (words) => {
+                set({ alwaysMerge: words });
+            },
+            setSentenceStarters: (words) => {
+                set({ sentenceStarters: words });
             },
             setEnableCostWarning: (enable) => {
                 set({ enableCostWarning: enable });
@@ -236,6 +251,8 @@ export const useTTSStore = create<TTSState>()(
             providerId: state.providerId,
             apiKeys: state.apiKeys,
             customAbbreviations: state.customAbbreviations,
+            alwaysMerge: state.alwaysMerge,
+            sentenceStarters: state.sentenceStarters,
             enableCostWarning: state.enableCostWarning,
         }),
     }
