@@ -23,7 +23,7 @@ const GAP = 24;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => {
     const index = rowIndex * columnCount + columnIndex;
-    if (index >= books.length) return null;
+    if (index >= books.length) return <div style={style} />;
     const book = books[index];
 
     return (
@@ -73,17 +73,14 @@ export const LibraryView: React.FC = () => {
 
   const columnCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
   const rowCount = Math.ceil(books.length / columnCount);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const columnWidth = (dimensions.width - (GAP * (columnCount - 1))) / columnCount;
-
   // Re-calculating proper FixedSizeGrid usage with gaps:
   // Usually we make the cell size include the gap, and then render a smaller inner div.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const cellWidth = columnWidth + GAP; // This might be wrong logic for exact widths.
   // Let's rely on flexible card width in BookCard if possible?
   // Or simply:
   const gridColumnWidth = Math.floor(dimensions.width / columnCount);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const GridAny = Grid as any;
 
   return (
     <div data-testid="library-container" className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col bg-background text-foreground">
@@ -112,7 +109,7 @@ export const LibraryView: React.FC = () => {
                 No books yet. Import one to get started!
              </div>
           ) : (
-             <Grid
+             <GridAny
                 columnCount={columnCount}
                 columnWidth={gridColumnWidth}
                 height={dimensions.height || 500}

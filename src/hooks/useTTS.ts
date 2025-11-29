@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
 import { extractSentences, type SentenceNode } from '../lib/tts';
-import { Rendition } from 'epubjs';
+import type { Rendition } from 'epubjs';
 import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 
 /**
@@ -50,12 +50,14 @@ export const useTTS = (rendition: Rendition | null) => {
 
     rendition.on('rendered', loadSentences);
     // Also try immediately if already rendered
-    if (rendition.getContents().length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((rendition as any).getContents().length > 0) {
         loadSentences();
     }
 
     return () => {
-        rendition.off('rendered', loadSentences);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (rendition as any).off('rendered', loadSentences);
     };
   }, [rendition, player]);
 

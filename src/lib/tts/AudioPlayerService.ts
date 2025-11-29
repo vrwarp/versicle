@@ -1,7 +1,7 @@
 import type { ITTSProvider, TTSVoice, SpeechSegment } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { AudioElementPlayer } from './AudioElementPlayer';
-import { SyncEngine } from './SyncEngine';
+import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { TTSCache } from './TTSCache';
 import { CostEstimator } from './CostEstimator';
 
@@ -81,10 +81,10 @@ export class AudioPlayerService {
           this.audioPlayer.setOnError((e) => {
               console.error("Audio Playback Error", e);
               this.setStatus('stopped');
-              this.notifyError("Audio Playback Error: " + (e.message || e));
+              this.notifyError("Audio Playback Error: " + (e?.message || e || "Unknown error"));
           });
 
-          this.syncEngine?.setOnHighlight((index) => {
+          this.syncEngine?.setOnHighlight((_index) => {
                // Currently no action needed if we assume sentence-level blobs.
                // We rely on queue index for active CFI.
           });
@@ -216,7 +216,12 @@ export class AudioPlayerService {
 
              if (result.audio && this.audioPlayer) {
                  if (result.alignment && this.syncEngine) {
-                     this.syncEngine.loadAlignment(result.alignment);
+                     const alignmentData: AlignmentData[] = result.alignment.map(tp => ({
+                         time: tp.timeSeconds,
+                         textOffset: tp.charIndex,
+                         type: (tp.type as 'word' | 'sentence') || 'word'
+                     }));
+                     this.syncEngine.loadAlignment(alignmentData);
                  }
 
                  this.audioPlayer.setRate(this.speed);
