@@ -86,7 +86,7 @@ export const LibraryView: React.FC = () => {
 
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col bg-background text-foreground">
+    <div data-testid="library-container" className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col bg-background text-foreground">
       <header className="mb-8 flex-none">
         <h1 className="text-3xl font-bold text-primary mb-2">My Library</h1>
         <p className="text-secondary">Manage and read your EPUB collection</p>

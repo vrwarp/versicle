@@ -74,6 +74,7 @@ export const FileUploader: React.FC = () => {
       <input
         type="file"
         id="file-upload"
+        data-testid="file-upload-input"
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         onChange={handleChange}
         accept=".epub"

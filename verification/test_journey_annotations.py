@@ -8,18 +8,19 @@ def test_annotations_journey(page: Page):
     utils.ensure_library_with_book(page)
 
     # Open Book
-    page.get_by_text("Alice's Adventures in Wonderland").click()
-    expect(page.get_by_label("Back")).to_be_visible()
+    page.get_by_test_id("book-card").click()
+    expect(page.get_by_test_id("reader-back-button")).to_be_visible()
 
     # Wait for iframe content
-    frame = page.frame_locator("iframe").first
+    # Using more robust selector
+    frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
     frame.locator("body").wait_for(timeout=2000)
 
     # 1. Create Highlight
     print("Creating Highlight...")
 
     # Navigate to a page with text (Next Page)
-    page.get_by_label("Next Page").click()
+    page.get_by_test_id("reader-next-page").click()
     page.wait_for_timeout(2000)
 
     # Inject script to select text reliably
@@ -64,23 +65,25 @@ def test_annotations_journey(page: Page):
         utils.capture_screenshot(page, "annotations_failed_selection")
         return
 
-    # Check for Popover
-    expect(page.get_by_title("Yellow")).to_be_visible(timeout=2000)
+    # Check for Popover (using test id)
+    expect(page.get_by_test_id("popover-color-yellow")).to_be_visible(timeout=2000)
     utils.capture_screenshot(page, "annotations_1_popover")
 
     # Click Yellow
-    page.get_by_title("Yellow").click()
-    expect(page.get_by_title("Yellow")).not_to_be_visible()
+    page.get_by_test_id("popover-color-yellow").click()
+    expect(page.get_by_test_id("popover-color-yellow")).not_to_be_visible()
 
     # Verify in Sidebar
     print("Verifying Highlight in Sidebar...")
-    page.get_by_label("Annotations").click()
-    expect(page.get_by_role("heading", name="Annotations")).to_be_visible()
-    expect(page.locator("ul li").first).to_be_visible()
+    page.get_by_test_id("reader-annotations-button").click()
+    expect(page.get_by_test_id("reader-annotations-sidebar")).to_be_visible()
+
+    # Check if any annotation item exists
+    expect(page.locator("li[data-testid^='annotation-item-']").first).to_be_visible()
     utils.capture_screenshot(page, "annotations_2_sidebar_highlight")
 
     # Close sidebar
-    page.get_by_label("Annotations").click()
+    page.get_by_test_id("reader-annotations-button").click()
 
     # 2. Create Note
     print("Creating Note...")
@@ -108,16 +111,17 @@ def test_annotations_journey(page: Page):
         }
     """)
 
-    expect(page.get_by_title("Add Note")).to_be_visible()
-    page.get_by_title("Add Note").click()
+    expect(page.get_by_test_id("popover-add-note-button")).to_be_visible()
+    page.get_by_test_id("popover-add-note-button").click()
 
     # Fill Note
-    page.get_by_placeholder("Enter note...").fill("My automated note")
-    page.get_by_label("Save Note").click()
+    page.get_by_test_id("popover-note-input").fill("My automated note")
+    page.get_by_test_id("popover-save-note-button").click()
 
     # Verify Note in Sidebar
     print("Verifying Note in Sidebar...")
-    page.get_by_label("Annotations").click()
+    page.get_by_test_id("reader-annotations-button").click()
+    expect(page.get_by_test_id("annotation-note-text")).to_be_visible()
     expect(page.get_by_text("My automated note")).to_be_visible()
     utils.capture_screenshot(page, "annotations_3_sidebar_note")
 

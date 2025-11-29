@@ -9,33 +9,34 @@ def test_tts_settings(page: Page):
 
     # Open book
     print("Opening book...")
-    page.get_by_text("Alice's Adventures in Wonderland").first.click()
+    page.get_by_test_id("book-card").click()
 
     # Open TTS Panel
     print("Opening TTS Panel...")
-    tts_trigger = page.locator('button[aria-label="Text to Speech"]')
+    tts_trigger = page.get_by_test_id("reader-tts-button")
     tts_trigger.wait_for(state="visible", timeout=2000)
     tts_trigger.click()
 
     # Wait for TTS Panel
-    tts_panel = page.locator("h3", has_text="Text to Speech").locator("xpath=../..")
+    tts_panel = page.get_by_test_id("tts-panel")
     expect(tts_panel).to_be_visible(timeout=2000)
 
     # Find Settings button inside TTS Panel
     print("Clicking Voice Settings...")
-    settings_btn = tts_panel.locator("button").nth(2)
+    settings_btn = page.get_by_test_id("tts-settings-button")
 
     settings_btn.click()
 
-    # Verify "Provider" label is visible
+    # Verify "Provider" label is visible (or check select existence)
     print("Verifying Voice Settings...")
-    provider_label = page.get_by_text("Provider")
-    expect(provider_label).to_be_visible(timeout=2000)
+    expect(page.get_by_test_id("tts-provider-select")).to_be_visible(timeout=2000)
 
     # Select "Google Cloud TTS"
-    page.select_option('select', 'google')
+    page.get_by_test_id("tts-provider-select").select_option('google')
 
     # Verify "Google API Key" input is visible
+    # I didn't add test-id for api key input explicitly in my plan, but I can check text or add it.
+    # Looking at ReaderView.tsx, I didn't add it.
     expect(page.get_by_text("Google API Key")).to_be_visible(timeout=2000)
 
     # Take screenshot

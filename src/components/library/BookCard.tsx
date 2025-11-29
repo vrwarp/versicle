@@ -38,6 +38,7 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
   return (
     <div
       onClick={() => navigate(`/read/${book.id}`)}
+      data-testid="book-card"
       className="group flex flex-col bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-200 h-full cursor-pointer"
     >
       <div className="aspect-[2/3] w-full bg-gray-100 relative overflow-hidden">
@@ -54,7 +55,7 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
         )}
       </div>
       <div className="p-3 flex flex-col flex-1">
-        <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1" title={book.title}>
+        <h3 data-testid="book-title" className="font-semibold text-gray-900 line-clamp-2 mb-1" title={book.title}>
           {book.title}
         </h3>
         <p className="text-sm text-gray-500 line-clamp-1" title={book.author}>

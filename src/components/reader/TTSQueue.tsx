@@ -20,14 +20,15 @@ export const TTSQueue: React.FC = () => {
     }
 
     return (
-        <div className="flex flex-col gap-1 mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
-            <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Queue</h4>
-            <div className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
+        <div data-testid="tts-queue-container" className="flex flex-col gap-1 mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+            <h4 data-testid="tts-queue-header" className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Queue</h4>
+            <div data-testid="tts-queue-list" className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
                 {queue.map((item, index) => {
                     const isActive = index === currentIndex;
                     return (
                         <button
                             key={index}
+                            data-testid={`tts-queue-item-${index}`}
                             ref={isActive ? activeRef : null}
                             onClick={() => jumpTo(index)}
                             className={cn(

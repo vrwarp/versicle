@@ -65,6 +65,7 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose }) => {
       return (
           <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-2 flex gap-2 items-center border border-gray-200 dark:border-gray-700" style={style}>
               <input
+                  data-testid="popover-note-input"
                   type="text"
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
@@ -76,10 +77,10 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose }) => {
                       if (e.key === 'Escape') setIsEditingNote(false);
                   }}
               />
-              <button onClick={handleSaveNote} className="p-1 hover:bg-green-100 dark:hover:bg-green-900 rounded text-green-600" aria-label="Save Note">
+              <button data-testid="popover-save-note-button" onClick={handleSaveNote} className="p-1 hover:bg-green-100 dark:hover:bg-green-900 rounded text-green-600" aria-label="Save Note">
                   <StickyNote className="w-4 h-4" />
               </button>
-              <button onClick={() => setIsEditingNote(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" aria-label="Cancel Note">
+              <button data-testid="popover-cancel-note-button" onClick={() => setIsEditingNote(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" aria-label="Cancel Note">
                   <X className="w-4 h-4" />
               </button>
           </div>
@@ -97,6 +98,7 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose }) => {
       {COLORS.map((c) => (
         <button
           key={c.name}
+          data-testid={`popover-color-${c.name.toLowerCase()}`}
           className="w-6 h-6 rounded-full border border-gray-300 hover:scale-110 transition-transform"
           style={{ backgroundColor: c.value, opacity: 0.7 }}
           onClick={() => handleColorClick(c.name.toLowerCase())}
@@ -104,13 +106,13 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose }) => {
         />
       ))}
       <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
-      <button onClick={handleNoteClick} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Add Note">
+      <button data-testid="popover-add-note-button" onClick={handleNoteClick} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Add Note">
         <StickyNote className="w-4 h-4" />
       </button>
-      <button onClick={handleCopy} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Copy">
+      <button data-testid="popover-copy-button" onClick={handleCopy} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Copy">
         <Copy className="w-4 h-4" />
       </button>
-      <button onClick={hidePopover} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Close">
+      <button data-testid="popover-close-button" onClick={hidePopover} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Close">
          <X className="w-4 h-4" />
       </button>
     </div>

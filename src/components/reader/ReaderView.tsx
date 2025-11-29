@@ -466,13 +466,13 @@ export const ReaderView: React.FC = () => {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 bg-surface shadow-sm z-10">
         <div className="flex items-center gap-2">
-          <button aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-border">
+          <button data-testid="reader-back-button" aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-border">
             <ArrowLeft className="w-5 h-5 text-secondary" />
           </button>
-          <button aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
+          <button data-testid="reader-toc-button" aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
             <List className="w-5 h-5 text-secondary" />
           </button>
-          <button aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
+          <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
             <Highlighter className="w-5 h-5 text-secondary" />
           </button>
         </div>
@@ -480,13 +480,13 @@ export const ReaderView: React.FC = () => {
              {currentChapterTitle || 'Reading'}
         </h1>
         <div className="flex items-center gap-2">
-           <button aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
+           <button data-testid="reader-search-button" aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
                 <Search className="w-5 h-5 text-secondary" />
            </button>
-           <button aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
+           <button data-testid="reader-tts-button" aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
                 {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
            </button>
-           <button aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-border">
+           <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-border">
             <Settings className="w-5 h-5 text-secondary" />
           </button>
         </div>
@@ -496,13 +496,14 @@ export const ReaderView: React.FC = () => {
       <div className="flex-1 relative overflow-hidden flex">
          {/* TOC Sidebar */}
          {showToc && (
-             <div className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
+             <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
                  <div className="p-4">
                      <h2 className="text-lg font-bold mb-4 text-foreground">Contents</h2>
                      <ul className="space-y-2">
-                         {useReaderStore.getState().toc.map((item) => (
+                         {useReaderStore.getState().toc.map((item, index) => (
                              <li key={item.id}>
                                  <button
+                                    data-testid={`toc-item-${index}`}
                                     className="text-left w-full text-sm text-secondary hover:text-primary"
                                     onClick={() => {
                                         renditionRef.current?.display(item.href);
@@ -520,7 +521,7 @@ export const ReaderView: React.FC = () => {
 
          {/* Annotations Sidebar */}
          {showAnnotations && (
-             <div className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
+             <div data-testid="reader-annotations-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
                  <div className="p-4 border-b border-border">
                      <h2 className="text-lg font-bold text-foreground">Annotations</h2>
                  </div>
@@ -533,11 +534,12 @@ export const ReaderView: React.FC = () => {
 
          {/* Search Sidebar */}
          {showSearch && (
-             <div className="w-64 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
+             <div data-testid="reader-search-sidebar" className="w-64 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
                  <div className="p-4 border-b border-border">
                      <h2 className="text-lg font-bold mb-2 text-foreground">Search</h2>
                      <div className="flex gap-2">
                          <input
+                            data-testid="search-input"
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -554,6 +556,7 @@ export const ReaderView: React.FC = () => {
                             className="flex-1 text-sm p-2 border rounded bg-background text-foreground border-border"
                          />
                          <button
+                            data-testid="search-close-button"
                             onClick={() => setShowSearch(false)}
                             className="p-2 hover:bg-border rounded"
                          >
@@ -569,6 +572,7 @@ export const ReaderView: React.FC = () => {
                              {searchResults.map((result, idx) => (
                                  <li key={idx} className="border-b border-border pb-2 last:border-0">
                                      <button
+                                        data-testid={`search-result-${idx}`}
                                         className="text-left w-full"
                                         onClick={() => {
                                             renditionRef.current?.display(result.href);
@@ -592,13 +596,13 @@ export const ReaderView: React.FC = () => {
 
          {/* Reader Area */}
          <div className="flex-1 relative">
-            <div ref={viewerRef} className="w-full h-full overflow-hidden" />
+            <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full h-full overflow-hidden" />
 
              <AnnotationPopover bookId={id || ''} onClose={handleClearSelection} />
 
              {/* TTS Controls */}
              {showTTS && (
-                 <div className="absolute top-2 right-14 w-80 bg-surface shadow-lg rounded-lg p-4 border border-border z-30 max-h-[80vh] overflow-y-auto">
+                 <div data-testid="tts-panel" className="absolute top-2 right-14 w-80 bg-surface shadow-lg rounded-lg p-4 border border-border z-30 max-h-[80vh] overflow-y-auto">
                      <div className="flex justify-between items-center mb-2">
                          <h3 className="text-sm font-bold text-foreground">Text to Speech</h3>
                          <button onClick={() => {setShowTTS(false); setShowVoiceSettings(false);}}><X className="w-4 h-4 text-muted" /></button>
@@ -608,6 +612,7 @@ export const ReaderView: React.FC = () => {
                         <>
                             <div className="flex items-center gap-2 mb-4">
                                 <button
+                                    data-testid="tts-play-pause-button"
                                     onClick={() => {
                                         if (isPlaying) {
                                             pause();
@@ -633,6 +638,7 @@ export const ReaderView: React.FC = () => {
                                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                                 </button>
                                 <button
+                                    data-testid="tts-settings-button"
                                     onClick={() => setShowVoiceSettings(true)}
                                     className="px-2 py-1 bg-secondary text-surface rounded hover:opacity-90"
                                     aria-label="Voice Settings"
@@ -643,6 +649,7 @@ export const ReaderView: React.FC = () => {
                             <div className="mb-2">
                                 <label className="block text-xs text-muted mb-1">Speed: {rate}x</label>
                                 <input
+                                    data-testid="tts-speed-slider"
                                     type="range"
                                     min="0.5"
                                     max="2"
@@ -655,6 +662,7 @@ export const ReaderView: React.FC = () => {
                             <div>
                                 <label className="block text-xs text-muted mb-1">Voice</label>
                                 <select
+                                    data-testid="tts-voice-select"
                                     className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
                                     value={voice?.name || ''}
                                     onChange={(e) => {
@@ -678,6 +686,7 @@ export const ReaderView: React.FC = () => {
                             <div>
                                 <label className="block text-xs font-semibold text-muted mb-1">Provider</label>
                                 <select
+                                    data-testid="tts-provider-select"
                                     className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
                                     value={providerId}
                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -747,7 +756,7 @@ export const ReaderView: React.FC = () => {
 
       {/* Footer / Controls */}
       <footer className="bg-surface border-t border-border p-2 flex items-center justify-between z-10">
-          <button aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-border rounded-full">
+          <button data-testid="reader-prev-page" aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-border rounded-full">
               <ChevronLeft className="w-6 h-6 text-secondary" />
           </button>
 
@@ -763,7 +772,7 @@ export const ReaderView: React.FC = () => {
               </div>
           </div>
 
-          <button aria-label="Next Page" onClick={handleNext} className="p-2 hover:bg-border rounded-full">
+          <button data-testid="reader-next-page" aria-label="Next Page" onClick={handleNext} className="p-2 hover:bg-border rounded-full">
               <ChevronRight className="w-6 h-6 text-secondary" />
           </button>
       </footer>

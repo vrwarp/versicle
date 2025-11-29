@@ -10,9 +10,10 @@ def test_reading_journey(page: Page):
 
     # Open Book
     print("Opening book...")
-    page.get_by_text("Alice's Adventures in Wonderland").click()
+    # Using locator with data-testid to be more precise
+    page.locator('[data-testid="book-card"]').click()
     expect(page).to_have_url(re.compile(r".*/read/.*"))
-    expect(page.get_by_label("Back")).to_be_visible()
+    expect(page.get_by_test_id("reader-back-button")).to_be_visible()
 
     # Wait for content to render
     page.wait_for_timeout(2000)
@@ -20,7 +21,8 @@ def test_reading_journey(page: Page):
 
     # Helper to get current text content (for verification)
     def get_frame_text():
-            frame = page.frame_locator("iframe").first
+            # More stable selector using the container ID and then iframe
+            frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
             # We need to wait for body
             try:
                 frame.locator("body").wait_for(timeout=2000)
@@ -34,7 +36,7 @@ def test_reading_journey(page: Page):
 
     # 1. Navigation (Next Page 1)
     print("Testing Next Page (1)...")
-    next_btn = page.get_by_label("Next Page")
+    next_btn = page.get_by_test_id("reader-next-page")
     next_btn.click()
     page.wait_for_timeout(2000)
     text_1 = get_frame_text()
@@ -69,7 +71,7 @@ def test_reading_journey(page: Page):
 
     # Prev Page
     print("Testing Prev Page...")
-    prev_btn = page.get_by_label("Previous Page")
+    prev_btn = page.get_by_test_id("reader-prev-page")
     prev_btn.click()
     page.wait_for_timeout(2000)
     text_prev = get_frame_text()
@@ -78,19 +80,20 @@ def test_reading_journey(page: Page):
 
     # 2. TOC
     print("Testing TOC...")
-    toc_btn = page.get_by_label("Table of Contents")
+    toc_btn = page.get_by_test_id("reader-toc-button")
     toc_btn.click()
-    expect(page.get_by_role("heading", name="Contents")).to_be_visible()
+    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
     utils.capture_screenshot(page, "reading_06_toc_open")
 
     # Click a chapter (e.g., 2nd item - likely 'Down the Rabbit-Hole')
-    toc_item = page.locator("ul.space-y-2 li button").nth(1)
+    # Using data-testid for toc item which is much more robust than nth(1) on generic list
+    toc_item = page.get_by_test_id("toc-item-1")
     toc_text = toc_item.inner_text()
     print(f"Clicking TOC item: {toc_text}")
     toc_item.click()
 
-    # TOC should close automatically
-    expect(page.get_by_role("heading", name="Contents")).not_to_be_visible()
+    # TOC should close automatically (sidebar not visible)
+    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
     page.wait_for_timeout(2000)
 
     text_toc_nav = get_frame_text()
