@@ -76,7 +76,7 @@ describe('ReaderView Cost Warning', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (useTTSStore as any).mockReturnValue({
+        (useTTSStore as unknown as jest.Mock).mockReturnValue({
             isPlaying: false,
             play: mockPlay,
             pause: mockPause,
@@ -98,7 +98,7 @@ describe('ReaderView Cost Warning', () => {
             jumpTo: vi.fn()
         });
 
-        (useReaderStore as any).mockReturnValue({
+        (useReaderStore as unknown as jest.Mock).mockReturnValue({
             currentTheme: 'light',
             customTheme: {},
             fontFamily: 'Arial',
@@ -115,7 +115,7 @@ describe('ReaderView Cost Warning', () => {
         });
 
         // Mock hook to return large text
-        (useTTS as any).mockReturnValue({
+        (useTTS as unknown as jest.Mock).mockReturnValue({
             sentences: [{ text: 'A'.repeat(6000), cfi: 'cfi1' }]
         });
     });
@@ -150,7 +150,7 @@ describe('ReaderView Cost Warning', () => {
     });
 
     it('does not show warning if cost warning is disabled', async () => {
-        (useTTSStore as any).mockReturnValue({
+        (useTTSStore as unknown as jest.Mock).mockReturnValue({
             isPlaying: false,
             play: mockPlay,
             pause: mockPause,
@@ -192,7 +192,7 @@ describe('ReaderView Cost Warning', () => {
     });
 
     it('does not show warning if text is small', async () => {
-        (useTTS as any).mockReturnValue({
+        (useTTS as unknown as jest.Mock).mockReturnValue({
             sentences: [{ text: 'Small text', cfi: 'cfi1' }]
         });
 
@@ -215,7 +215,7 @@ describe('ReaderView Cost Warning', () => {
     });
 
      it('does not show warning if provider is local', async () => {
-        (useTTSStore as any).mockReturnValue({
+        (useTTSStore as unknown as jest.Mock).mockReturnValue({
             isPlaying: false,
             play: mockPlay,
             pause: mockPause,
