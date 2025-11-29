@@ -8,6 +8,7 @@ vi.mock('lucide-react', () => ({
   Trash2: () => <span data-testid="icon-trash" />,
   StickyNote: () => <span data-testid="icon-note" />,
   PenLine: () => <span data-testid="icon-edit" />,
+  MessageSquarePlus: () => <span data-testid="icon-message-plus" />,
 }));
 
 describe('AnnotationList', () => {

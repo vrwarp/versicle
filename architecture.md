@@ -15,25 +15,34 @@ graph TD
         Layout[App Layout]
         Library[Library View]
         Reader[Reader View]
-        Settings[Settings UI]
-        TTSControls[TTS Controls]
+        Settings[Reader Settings]
+        TTSControls[TTS Panel]
+        AnnotationUI[Annotation List & Popover]
     end
 
     subgraph "State Management (Zustand)"
         LibStore[useLibraryStore]
         ReaderStore[useReaderStore]
         TTSStore[useTTSStore]
+        AnnotationStore[useAnnotationStore]
+        CostStore[useCostStore]
     end
 
     subgraph "Service Layer"
         Ingest[Ingestion Service]
-        TTS[TTS Engine]
+        AudioService[Audio Player Service]
         SearchClient[Search Client]
     end
 
     subgraph "Core Engines"
         EpubJS[epub.js Rendering Engine]
-        WebSpeech[Web Speech API]
+        TTSProviders[TTS Providers]
+    end
+
+    subgraph "TTS Providers"
+        WebSpeech[WebSpeechProvider (Local)]
+        GoogleTTS[GoogleTTSProvider (Cloud)]
+        OpenAITTS[OpenAIProvider (Cloud)]
     end
 
     subgraph "Background Workers"
@@ -45,6 +54,7 @@ graph TD
         BooksStore[Books Object Store]
         FilesStore[Files Object Store]
         AnnotationsStore[Annotations Store]
+        TTSCache[TTS Cache Store]
     end
 
     %% Routing
@@ -56,14 +66,20 @@ graph TD
     Library --> LibStore
     Reader --> ReaderStore
     Reader --> TTSStore
+    Reader --> AnnotationStore
     Reader --> TTSControls
     Reader --> Settings
+    Reader --> AnnotationUI
 
     %% Store Actions
     LibStore --> Ingest
     LibStore --> DB
     ReaderStore --> DB
     ReaderStore --> EpubJS
+    AnnotationStore --> DB
+    AnnotationStore --> EpubJS
+    TTSStore --> AudioService
+    CostStore --> AudioService
 
     %% Ingestion Flow
     Ingest --> EpubJS
@@ -77,72 +93,82 @@ graph TD
     SearchWorker --> FlexSearch[FlexSearch Engine]
 
     %% TTS Flow
-    TTSControls --> TTSStore
-    TTSStore --> TTS
-    TTS --> WebSpeech
-    TTS -- "Highlight Text" --> EpubJS
+    AudioService --> TTSProviders
+    AudioService --> TTSCache
+    TTSProviders --> WebSpeech
+    TTSProviders --> GoogleTTS
+    TTSProviders --> OpenAITTS
+    AudioService -- "Time Updates" --> TTSStore
+    TTSStore -- "Highlight Text" --> EpubJS
 
     %% Data Flow
     DB --> BooksStore
     DB --> FilesStore
     DB --> AnnotationsStore
+    DB --> TTSCache
 ```
 
-## detailed Component Descriptions
+## Detailed Component Descriptions
 
 ### 1. Frontend Layer
-- **Library View (`src/components/library`)**: The main landing page. It displays a grid of books with their covers and metadata. It handles file uploading via drag-and-drop or file selection.
-- **Reader View (`src/components/reader`)**: The core reading interface. It initializes the `epub.js` `Rendition` object, handles page navigation, theme switching, and layout controls. It also integrates the TTS controls and Search sidebar.
-- **Settings UI**: A modal within the Reader View for adjusting font size and color themes (Light, Dark, Sepia).
+- **Library View (`src/components/library`)**: The main landing page. Displays a virtualized grid of books with skeleton loading states. Handles file uploading and deletions.
+- **Reader View (`src/components/reader`)**: The core reading interface. It initializes the `epub.js` `Rendition` object, handles page navigation, and manages sidebars for TOC, Annotations, and Search.
+- **TTS Panel**: A dedicated UI for controlling playback, changing voices/providers, and viewing the playback queue.
+- **Annotation UI**: Components for creating highlights (`AnnotationPopover`) and listing them (`AnnotationList`).
 
 ### 2. State Management
-- **`useLibraryStore`**: Manages the list of available books. It handles fetching metadata from IndexedDB and orchestrating the book ingestion process.
-- **`useReaderStore`**: Manages the transient state of the active reading session, including the current book ID, current CFI (Canonical Fragment Identifier) location, reading progress, and display settings (theme, font size).
-- **`useTTSStore`**: Manages the state of the Text-to-Speech feature, including playback status (playing/paused), speech rate, selected voice, and the currently active sentence CFI for highlighting.
+- **`useLibraryStore`**: Manages the list of available books and ingestion status.
+- **`useReaderStore`**: Manages reading session state (book ID, CFI location, theme, font settings).
+- **`useTTSStore`**: Manages TTS playback state, voice selection, provider configuration, and highlighting synchronization.
+- **`useAnnotationStore`**: Manages creation, retrieval, and deletion of user annotations.
+- **`useCostStore`**: Tracks character usage for paid TTS providers to estimate costs.
 
 ### 3. Service Layer
-- **Ingestion Service (`src/lib/ingestion.ts`)**: Responsible for parsing new EPUB files. It uses `epub.js` to extract metadata (title, author, cover) and stores the raw binary data and metadata into IndexedDB. It generates a UUID for each book.
-- **TTS Engine (`src/lib/tts.ts` & `src/hooks/useTTS.ts`)**: logic for extracting text from the current chapter, segmenting it into sentences, mapping sentences to CFIs for highlighting, and controlling the browser's `SpeechSynthesis` API.
-- **Search Client (`src/lib/search.ts`)**: An abstraction layer that communicates with the Search Worker. It handles sending book content to be indexed and querying the worker for search results.
+- **Ingestion Service (`src/lib/ingestion.ts`)**: Parses new EPUB files, extracts metadata and covers, and persists them to IndexedDB.
+- **Audio Player Service (`src/lib/tts/AudioPlayerService.ts`)**: A singleton service that orchestrates TTS playback. It handles:
+    - Text segmentation (using `Intl.Segmenter`).
+    - Queue management.
+    - Provider selection (Local vs Cloud).
+    - Caching of synthesized audio.
+    - Synchronization of audio time with text highighting.
+- **Search Client (`src/lib/search.ts`)**: Communicates with the background Search Worker.
 
 ### 4. Background Workers
-- **Search Worker (`src/workers/search.worker.ts`)**: Runs in a separate thread to prevent blocking the UI. It uses **FlexSearch** to build an inverted index of the book's content. When a user opens a book, the client extracts text from spine items and sends it to the worker for indexing. Searches are executed against this in-memory index.
+- **Search Worker (`src/workers/search.worker.ts`)**: Runs `FlexSearch` in a separate thread to index book content without blocking the main UI thread.
 
 ### 5. Data Layer (IndexedDB)
-- **`EpubLibraryDB`**: A local IndexedDB database initialized via the `idb` library.
-  - **`books`**: Stores JSON metadata for each book (id, title, author, description, addedAt, currentCfi, progress).
-  - **`files`**: Stores the raw `ArrayBuffer` of the EPUB file. This is separate from metadata to allow efficient listing of the library without loading heavy file data.
-  - **`annotations`**: (Planned/Partial) Stores user highlights and notes.
+- **`EpubLibraryDB`**:
+  - **`books`**: Metadata (id, title, author, progress, currentCfi).
+  - **`files`**: Raw EPUB `ArrayBuffer`.
+  - **`annotations`**: User highlights (cfiRange, color, note).
+  - **`tts_cache`**: Cached audio segments from cloud providers to reduce API costs.
 
 ## Key Workflows
 
 ### Book Ingestion
-1. User uploads a file in `LibraryView`.
-2. `useLibraryStore.addBook` is called.
-3. `ingestion.ts` reads the file as an ArrayBuffer.
-4. `epub.js` parses the buffer to extract metadata and the cover image.
-5. The metadata and raw ArrayBuffer are saved to the `books` and `files` stores in IndexedDB, respectively.
-6. The library list is refreshed.
+1. User uploads a file.
+2. `ingestion.ts` reads the file.
+3. `epub.js` parses metadata and cover.
+4. Data is stored in `books` and `files` stores.
+5. Library UI updates via `useLibraryStore`.
 
 ### Reading & Persistence
-1. User clicks a book in `LibraryView`.
-2. Router navigates to `/read/:id`.
-3. `ReaderView` fetches the book's ArrayBuffer from IndexedDB using the ID.
-4. `epub.js` renders the book to the DOM.
-5. `ReaderView` restores the last reading position from the book's metadata (`currentCfi`).
-6. As the user navigates, `relocated` events from `epub.js` trigger updates to `useReaderStore` and persist the new `currentCfi` and `progress` to IndexedDB.
+1. `ReaderView` loads book data from IndexedDB.
+2. `epub.js` renders the content.
+3. Reading progress (`currentCfi`) is auto-saved to IndexedDB on navigation.
+4. Settings (theme, font) are persisted in `localStorage` via Zustand persistence.
 
-### Full-Text Search
-1. When a book is loaded, `ReaderView` triggers `searchClient.indexBook`.
-2. The client iterates through the book's spine, loads each chapter, and extracts text.
-3. Text chunks are sent to the `SearchWorker`.
-4. The worker adds documents to the `FlexSearch` index.
-5. When the user searches, the query is sent to the worker, which returns matches with excerpts and CFIs.
-6. Clicking a result navigates the reader to the specific CFI.
+### Text-to-Speech (TTS)
+1. `ReaderView` extracts text from the current chapter using `rendition.getContents()`.
+2. Text is passed to `AudioPlayerService` which splits it into sentences.
+3. `AudioPlayerService` requests audio from the selected provider (WebSpeech, Google, or OpenAI).
+4. For cloud providers, audio is cached in IndexedDB.
+5. As audio plays, `AudioPlayerService` emits events to `useTTSStore` to update the active sentence highlight in `ReaderView`.
 
-### Text-to-Speech
-1. `useTTS` hook listens for the `rendered` event from `epub.js`.
-2. It extracts text nodes from the DOM of the current chapter.
-3. Text is split into sentences and mapped back to CFIs.
-4. When played, `SpeechSynthesis` speaks the sentences sequentially.
-5. The active sentence's CFI is used to apply a highlight style in the `epub.js` rendition, syncing visual feedback with audio.
+### Annotations
+1. User selects text in the reader.
+2. `epub.js` emits a `selected` event.
+3. `AnnotationPopover` appears.
+4. User selects a color and optionally adds a note.
+5. Annotation is saved to IndexedDB via `useAnnotationStore`.
+6. `ReaderView` applies the highlight visual using `rendition.annotations.add`.

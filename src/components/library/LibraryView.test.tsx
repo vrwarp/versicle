@@ -72,8 +72,8 @@ describe('LibraryView', () => {
         render(<LibraryView />);
         expect(screen.getByTestId('file-uploader')).toBeInTheDocument();
         expect(screen.queryByTestId('virtual-grid')).not.toBeInTheDocument();
-        // Spinner
-        expect(document.querySelector('.animate-spin')).toBeInTheDocument();
+        // Skeleton (animate-pulse)
+        expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
     });
 
     it('renders empty state', async () => {

@@ -90,7 +90,7 @@ describe('useLibraryStore', () => {
     expect(useLibraryStore.getState().books).toHaveLength(1);
 
     // Then remove it
-    await useLibraryStore.getState().removeBook(mockBook.id);
+    await useLibraryStore.getState().deleteBook(mockBook.id);
 
     // Verify it's gone from state
     const state = useLibraryStore.getState();
@@ -159,7 +159,7 @@ describe('useLibraryStore', () => {
       expect(await db.get('annotations', 'note-1')).toEqual(annotation);
 
       // Remove the book
-      await useLibraryStore.getState().removeBook(mockBook.id);
+      await useLibraryStore.getState().deleteBook(mockBook.id);
 
       // Verify annotation is deleted
       expect(await db.get('annotations', 'note-1')).toBeUndefined();

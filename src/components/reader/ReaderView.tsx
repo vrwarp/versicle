@@ -10,11 +10,11 @@ import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
-import { Toast } from '../ui/Toast';
+import { Toast, type ToastType } from '../ui/Toast';
 import { Dialog } from '../ui/Dialog';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter, Loader2 } from 'lucide-react';
 
 /**
  * The main reader interface component.
@@ -43,7 +43,8 @@ export const ReaderView: React.FC = () => {
     setCurrentBookId,
     reset,
     progress,
-    currentChapterTitle
+    currentChapterTitle,
+    isLoading
   } = useReaderStore();
 
   const {
@@ -102,7 +103,6 @@ export const ReaderView: React.FC = () => {
   }, [id, loadAnnotations]);
 
   // Apply Annotations to Rendition
-  // We use a ref to track which annotations have been added to the rendition to avoid duplicates.
   const addedAnnotations = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -114,7 +114,6 @@ export const ReaderView: React.FC = () => {
            // eslint-disable-next-line @typescript-eslint/no-explicit-any
            (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, () => {
                 console.log("Clicked annotation", annotation.id);
-                // TODO: Open edit/delete menu, perhaps via a new state/popover
             }, annotation.color === 'yellow' ? 'highlight-yellow' :
                annotation.color === 'green' ? 'highlight-green' :
                annotation.color === 'blue' ? 'highlight-blue' :
@@ -122,36 +121,18 @@ export const ReaderView: React.FC = () => {
            addedAnnotations.current.add(annotation.id);
         }
       });
-
-      // Handle removals (if annotations were deleted from store)
-      // This requires iterating over addedAnnotations and checking if they exist in `annotations`
-      // For now, since `epubjs` annotations API is append-only mostly, we would need to remove by CFI.
-      // But `rendition.annotations.remove` takes CFI and type.
-      // If we delete an annotation, we need to know its CFI.
-      // A full sync might be: clear all highlights and re-add?
-      // Or just track better.
-      // For simplicity in this iteration: we only ADD.
-      // Real implementation should probably clear specific CFIs if removed.
-
-      const currentIds = new Set(annotations.map(a => a.id));
-      addedAnnotations.current.forEach(id => {
-          if (!currentIds.has(id)) {
-              // Find the annotation object (we don't have it anymore if it's gone from store)
-              // We need to store map of ID -> CFI in ref to remove it.
-              // For now, let's just accept we might have stale highlights until reload if we don't implement full sync.
-              // Improving:
-          }
-      });
     }
-  }, [annotations]); // removed renditionRef.current
+  }, [annotations]);
 
   // Handle TTS Errors
   const [toastMessage, setToastMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [toastType, setToastType] = useState<ToastType>('error');
 
   useEffect(() => {
       if (lastError) {
           setToastMessage(lastError);
+          setToastType('error');
           setShowToast(true);
       }
   }, [lastError]);
@@ -194,7 +175,7 @@ export const ReaderView: React.FC = () => {
               }
           });
       }
-  }, []); // removed renditionRef.current, technically should depend on it but ref stable
+  }, []);
 
   const [showToc, setShowToc] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
@@ -208,6 +189,7 @@ export const ReaderView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchHasRun, setSearchHasRun] = useState(false);
 
   // Initialize Book
   useEffect(() => {
@@ -223,7 +205,9 @@ export const ReaderView: React.FC = () => {
         const metadata = await db.get('books', id);
 
         if (!fileData) {
-          console.error('Book file not found');
+          setToastMessage('Book file not found');
+          setToastType('error');
+          setShowToast(true);
           navigate('/');
           return;
         }
@@ -244,7 +228,7 @@ export const ReaderView: React.FC = () => {
           });
           renditionRef.current = rendition;
 
-          // Disable spreads to prevent layout issues
+          // Disable spreads
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (rendition as any).spread('none');
 
@@ -276,31 +260,19 @@ export const ReaderView: React.FC = () => {
           rendition.themes.select(currentTheme);
           rendition.themes.fontSize(`${fontSize}%`);
           rendition.themes.font(fontFamily);
-          // Apply line-height via default rule as a workaround since there's no direct API
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (rendition.themes as any).default({
               p: { 'line-height': `${lineHeight} !important` },
-              // Also ensure body has it for general text
               body: { 'line-height': `${lineHeight} !important` }
           });
 
           // Display at saved location or start
           const startLocation = metadata?.currentCfi || undefined;
           await rendition.display(startLocation);
-
-          // Generate locations for progress tracking
-          // In a real app, this should be cached. For now, we generate if missing.
-          // Since generating locations is expensive, we might want to do it lazily or check if we have it saved.
-          // For this step, we'll just await ready and verify readiness.
           await book.ready;
-          // Ideally: await book.locations.generate(1000);
-          // However, for large books this blocks. We can do it in background or rely on percentage from chapters if locations not ready.
-          // Let's try to generate minimal locations for progress bar to work reasonably.
-           // This is heavy, maybe we skip for step 03 or do it async without await?
-           book.locations.generate(1000);
+          book.locations.generate(1000);
 
-           // Index for Search (Async)
-           // Only index if not already done? Or just do it every time for now (simplicity)
+           // Index for Search
            searchClient.indexBook(book, id).then(() => {
                console.log("Book indexed for search");
            });
@@ -311,16 +283,6 @@ export const ReaderView: React.FC = () => {
             const range = (rendition as any).getRange(cfiRange);
             if (range) {
                 const rect = range.getBoundingClientRect();
-                // Adjust rect coordinates based on the iframe position if needed,
-                // but usually getBoundingClientRect inside iframe is relative to iframe viewport?
-                // Wait, getRange returns a DOM Range. getBoundingClientRect is relative to viewport.
-                // Since epub.js renders in an iframe, we need to account for iframe position?
-                // Actually `rendition.getRange(cfiRange)` returns a range in the iframe document.
-                // We need to map that to the main window.
-
-                // However, the popover will be rendered in the main window.
-                // We need to translate iframe coordinates to main window coordinates.
-                // `viewerRef.current` contains the iframe.
                 const iframe = viewerRef.current?.querySelector('iframe');
                 if (iframe) {
                    const iframeRect = iframe.getBoundingClientRect();
@@ -330,53 +292,39 @@ export const ReaderView: React.FC = () => {
                        cfiRange,
                        range.toString()
                    );
-
-                   // Clear selection (optional, but keep it so user sees what they selected)
-                   // contents.window.getSelection().removeAllRanges();
                 }
             }
           });
 
-          // Clear popover on click elsewhere
           rendition.on('click', () => {
              hidePopover();
           });
 
           rendition.on('relocated', (location: Location) => {
             const cfi = location.start.cfi;
-
-            // Prevent infinite loop if CFI hasn't changed
             if (cfi === useReaderStore.getState().currentCfi) return;
 
             hidePopover();
-            // Calculate progress
-            // Note: book.locations.percentageFromCfi(cfi) only works if locations are generated.
-            // If not generated, it might return 0 or throw.
-            // We can check book.locations.length()
             let percentage = 0;
             try {
                 percentage = book.locations.percentageFromCfi(cfi);
             } catch {
-                // Locations not ready yet
+                // Locations not ready
             }
 
-            // Get chapter title
-            // Usually we find the spine item and check TOC.
-            // Simplified:
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const item = book.spine.get(location.start.href) as any;
             const title = item ? (item.label || 'Chapter') : 'Unknown';
-            // Actually getting title from spine is tricky without matching TOC.
-            // We'll leave title as is or implement proper TOC lookup later.
 
             updateLocation(cfi, percentage, title);
-
-            // Persist to DB (debouncing would be good here)
             saveProgress(id, cfi, percentage);
           });
         }
       } catch (error) {
         console.error('Error loading book:', error);
+        setToastMessage('Failed to load book content. File may be corrupt.');
+        setToastType('error');
+        setShowToast(true);
       } finally {
         setIsLoading(false);
       }
@@ -398,7 +346,6 @@ export const ReaderView: React.FC = () => {
   // Handle Theme/Font/Layout changes
   useEffect(() => {
     if (renditionRef.current) {
-      // Re-register custom theme in case colors changed
       renditionRef.current.themes.register('custom', `
         body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
         p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
@@ -408,7 +355,6 @@ export const ReaderView: React.FC = () => {
       renditionRef.current.themes.fontSize(`${fontSize}%`);
       renditionRef.current.themes.font(fontFamily);
 
-      // Update line height
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (renditionRef.current.themes as any).default({
         p: { 'line-height': `${lineHeight} !important` },
@@ -443,15 +389,13 @@ export const ReaderView: React.FC = () => {
   };
 
   const handlePrev = () => {
-      console.log("Navigating to previous page");
       renditionRef.current?.prev();
   };
   const handleNext = () => {
-      console.log("Navigating to next page");
       renditionRef.current?.next();
   };
 
-  // Handle Container Resize (e.g. sidebar toggle)
+  // Handle Container Resize
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -482,7 +426,6 @@ export const ReaderView: React.FC = () => {
     };
   }, []);
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') handlePrev();
@@ -493,7 +436,7 @@ export const ReaderView: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
+    <div className="flex flex-col h-screen bg-background text-foreground relative">
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 bg-surface shadow-sm z-10">
         <div className="flex items-center gap-2">
@@ -577,6 +520,7 @@ export const ReaderView: React.FC = () => {
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     setIsSearching(true);
+                                    setSearchHasRun(true);
                                     searchClient.search(searchQuery, id || '').then(results => {
                                         setSearchResults(results);
                                         setIsSearching(false);
@@ -597,7 +541,9 @@ export const ReaderView: React.FC = () => {
                  </div>
                  <div className="flex-1 overflow-y-auto p-4">
                      {isSearching ? (
-                         <div className="text-center text-muted">Searching...</div>
+                         <div className="flex justify-center items-center py-8">
+                             <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                         </div>
                      ) : (
                          <ul className="space-y-4">
                              {searchResults.map((result, idx) => (
@@ -616,8 +562,16 @@ export const ReaderView: React.FC = () => {
                                      </button>
                                  </li>
                              ))}
-                             {searchResults.length === 0 && searchQuery && !isSearching && (
-                                 <div className="text-center text-muted text-sm">No results found</div>
+                             {searchHasRun && searchResults.length === 0 && !isSearching && (
+                                 <div className="text-center text-muted text-sm py-8">
+                                    <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                    No results found for "{searchQuery}"
+                                 </div>
+                             )}
+                             {!searchHasRun && (
+                                 <div className="text-center text-muted text-sm py-8">
+                                     Enter a keyword and press Enter to search.
+                                 </div>
                              )}
                          </ul>
                      )}
@@ -627,6 +581,13 @@ export const ReaderView: React.FC = () => {
 
          {/* Reader Area */}
          <div className="flex-1 relative min-w-0">
+             {isLoading && (
+                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface/80 z-50 backdrop-blur-sm">
+                     <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
+                     <p className="text-lg font-medium text-foreground">Opening Book...</p>
+                 </div>
+             )}
+
             <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full h-full overflow-hidden" />
 
              <AnnotationPopover bookId={id || ''} onClose={handleClearSelection} />
@@ -648,10 +609,8 @@ export const ReaderView: React.FC = () => {
                                         if (isPlaying) {
                                             pause();
                                         } else {
-                                            // Check cost warning
                                             if (providerId !== 'local' && sentences.length > 0 && enableCostWarning) {
                                                 const totalChars = sentences.reduce((sum, s) => sum + s.text.length, 0);
-                                                // Warn if total text is large (e.g. > 5000 chars ~ 1 page/chapter depending)
                                                 if (totalChars > 5000) {
                                                     setShowCostWarning(true);
                                                     return;
@@ -735,9 +694,6 @@ export const ReaderView: React.FC = () => {
                                         onChange={(e) => setApiKey('google', e.target.value)}
                                         placeholder="Enter Google API Key"
                                     />
-                                    <p className="text-[10px] text-muted mt-1">
-                                        Needs Cloud Text-to-Speech API enabled.
-                                    </p>
                                 </div>
                             )}
 
@@ -773,12 +729,11 @@ export const ReaderView: React.FC = () => {
                  </div>
              )}
 
-            {/* Cost Warning Dialog */}
             <Dialog
                 isOpen={showCostWarning}
                 onClose={() => setShowCostWarning(false)}
                 title="Cost Warning"
-                description={`You are about to listen to a large section (~${sentences.reduce((sum, s) => sum + s.text.length, 0).toLocaleString()} chars). This may incur costs with ${providerId === 'google' ? 'Google Cloud' : 'OpenAI'}.`}
+                description={`You are about to listen to a large section (~${sentences.reduce((sum, s) => sum + s.text.length, 0).toLocaleString()} chars). This may incur costs.`}
                 footer={
                     <>
                         <button
@@ -800,17 +755,16 @@ export const ReaderView: React.FC = () => {
                 }
             />
 
-            {/* Advanced Settings Modal */}
             {showSettings && (
                 <ReaderSettings onClose={() => setShowSettings(false)} />
             )}
          </div>
       </div>
 
-      {/* Toast Notification */}
       <Toast
           message={toastMessage}
           isVisible={showToast}
+          type={toastType}
           onClose={() => {
               setShowToast(false);
               clearError();

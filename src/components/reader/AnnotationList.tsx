@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { Trash2, StickyNote, PenLine } from 'lucide-react';
+import { Trash2, StickyNote, PenLine, MessageSquarePlus } from 'lucide-react';
 import type { Annotation } from '../../types/db';
 
 interface Props {
@@ -32,14 +32,20 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
   };
 
   if (annotations.length === 0) {
-    return <div className="p-4 text-sm text-gray-500 text-center">No annotations yet. Select text to highlight.</div>;
+    return (
+        <div className="flex flex-col items-center justify-center p-8 text-center h-full text-muted">
+            <MessageSquarePlus className="w-12 h-12 mb-4 opacity-50" />
+            <p className="text-sm font-medium">No annotations yet</p>
+            <p className="text-xs mt-2">Select text in the book to highlight it or add a note.</p>
+        </div>
+    );
   }
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+      <ul className="divide-y divide-border">
         {annotations.map((annotation) => (
-          <li key={annotation.id} data-testid={`annotation-item-${annotation.id}`} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer group" onClick={() => onNavigate(annotation.cfiRange)}>
+          <li key={annotation.id} data-testid={`annotation-item-${annotation.id}`} className="p-3 hover:bg-muted/10 cursor-pointer group transition-colors" onClick={() => onNavigate(annotation.cfiRange)}>
             <div className="flex justify-between items-start gap-2">
               <div className="flex-1 min-w-0">
                   {editingId === annotation.id ? (
@@ -49,7 +55,7 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
                              type="text"
                              value={editNoteText}
                              onChange={(e) => setEditNoteText(e.target.value)}
-                             className="w-full text-xs p-1 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600 mb-1"
+                             className="w-full text-xs p-1 border rounded bg-background text-foreground border-border mb-1"
                              autoFocus
                              onKeyDown={(e) => {
                                  if (e.key === 'Enter') saveEdit(annotation.id);
@@ -57,22 +63,22 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
                              }}
                           />
                           <div className="flex gap-1">
-                              <button data-testid="annotation-save-button" onClick={() => saveEdit(annotation.id)} className="text-xs bg-blue-500 text-white px-2 py-1 rounded">Save</button>
-                              <button data-testid="annotation-cancel-button" onClick={() => setEditingId(null)} className="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded">Cancel</button>
+                              <button data-testid="annotation-save-button" onClick={() => saveEdit(annotation.id)} className="text-xs bg-primary text-background px-2 py-1 rounded">Save</button>
+                              <button data-testid="annotation-cancel-button" onClick={() => setEditingId(null)} className="text-xs bg-secondary text-surface px-2 py-1 rounded">Cancel</button>
                           </div>
                       </div>
                   ) : (
                       <>
                         {annotation.note && (
-                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1">
+                            <div className="text-xs text-secondary mb-1 flex items-center gap-1">
                                 <StickyNote className="w-3 h-3" />
-                                <span data-testid="annotation-note-text" className="truncate">{annotation.note}</span>
+                                <span data-testid="annotation-note-text" className="truncate font-medium">{annotation.note}</span>
                             </div>
                         )}
-                        <p data-testid="annotation-text" className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3 border-l-2 pl-2" style={{ borderColor: annotation.color }}>
+                        <p data-testid="annotation-text" className="text-sm text-foreground line-clamp-3 border-l-2 pl-2" style={{ borderColor: annotation.color }}>
                             {annotation.text}
                         </p>
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="text-[10px] text-muted mt-1">
                             {new Date(annotation.created).toLocaleDateString()}
                         </p>
                       </>
@@ -82,7 +88,7 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
                  <button
                     data-testid="annotation-edit-button"
                     onClick={(e) => handleEditNote(e, annotation)}
-                    className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-500"
+                    className="p-1 hover:bg-muted rounded text-secondary"
                     title="Edit Note"
                  >
                     <PenLine className="w-3 h-3" />
@@ -90,7 +96,7 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
                  <button
                     data-testid="annotation-delete-button"
                     onClick={(e) => handleDelete(e, annotation.id)}
-                    className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-red-500"
+                    className="p-1 hover:bg-destructive/10 rounded text-destructive"
                     title="Delete"
                  >
                     <Trash2 className="w-3 h-3" />

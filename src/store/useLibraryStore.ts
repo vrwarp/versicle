@@ -28,7 +28,7 @@ interface LibraryState {
    * Removes a book and its associated data (files, annotations) from the library.
    * @param id - The unique identifier of the book to remove.
    */
-  removeBook: (id: string) => Promise<void>;
+  deleteBook: (id: string) => Promise<void>;
 }
 
 /**
@@ -66,11 +66,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       set({ isImporting: false });
     } catch (err) {
       console.error('Failed to import book:', err);
-      set({ error: 'Failed to import book.', isImporting: false });
+      // Check for QuotaExceededError
+      if (err instanceof DOMException && err.name === 'QuotaExceededError') {
+          set({ error: 'Storage quota exceeded. Please delete some books to make space.', isImporting: false });
+      } else {
+          set({ error: `Failed to import book: ${(err as Error).message}`, isImporting: false });
+      }
     }
   },
 
-  removeBook: async (id: string) => {
+  deleteBook: async (id: string) => {
     try {
       const db = await getDB();
       const tx = db.transaction(['books', 'files', 'annotations'], 'readwrite');
@@ -78,7 +83,12 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       await tx.objectStore('files').delete(id);
 
       // Delete annotations for this book
-      const index = tx.objectStore('annotations').index('by_bookId');
+      const annotationStore = tx.objectStore('annotations');
+      const index = annotationStore.index('by_bookId');
+
+      // Iterate over cursor to delete
+      // Note: deleting via cursor while iterating can be tricky in some implementations,
+      // but IDB supports it. Alternatively, gather keys and delete.
       let cursor = await index.openCursor(IDBKeyRange.only(id));
       while (cursor) {
         await cursor.delete();
@@ -87,6 +97,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
       await tx.done;
 
+      // Optimistic update or refetch
+      // set(state => ({ books: state.books.filter(b => b.id !== id) }));
+      // Refetch to be safe and consistent
       await get().fetchBooks();
     } catch (err) {
       console.error('Failed to remove book:', err);

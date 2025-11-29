@@ -7,12 +7,20 @@ Versicle is a local-first, web-based EPUB manager and reader. It allows you to o
 
 ## Features
 
-- **Local-First:** All data is stored in your browser using IndexedDB.
-- **Library Management:** Import, sort, and search your EPUB collection.
-- **Advanced Reader:** Customizable themes, font sizes, and layout.
-- **Annotations:** Highlight text in multiple colors and add personal notes.
-- **Text-to-Speech:** Listen to your books with sentence-level highlighting.
-- **Search:** Full-text search within books.
+- **Local-First Architecture:** All books and metadata are stored securely in your browser using IndexedDB. No server uploads required.
+- **Library Management:** Import EPUB files, view cover art in a responsive grid, and manage your collection.
+- **Advanced Reader:**
+    - Paginated reading experience powered by `epub.js`.
+    - Customizable themes (Light, Dark, Sepia, Custom).
+    - Adjustable font size, family, and line height.
+    - Table of Contents navigation.
+- **Annotations:** Highlight text in multiple colors (Yellow, Green, Blue, Red) and add personal notes.
+- **Text-to-Speech (TTS):**
+    - Listen to your books with synchronized sentence-level highlighting.
+    - Support for local browser voices (free) and high-quality cloud voices (Google Cloud, OpenAI).
+    - Playback queue visualization and control.
+- **Full-Text Search:** Blazing fast search within books using `FlexSearch` in a Web Worker.
+- **Progressive Web App (PWA):** Installable on desktop and mobile, with offline reading support.
 
 ## Getting Started
 
@@ -24,9 +32,9 @@ Versicle is a local-first, web-based EPUB manager and reader. It allows you to o
 
 See [architecture.md](architecture.md) for a detailed overview of the system design.
 
-## Project Plan
+## Project Status
 
-The project is being implemented in phases. See [plan.md](plan.md) and the `plan/` directory for details.
+The project is fully implemented.
 
 - [x] Phase 1: Skeleton
 - [x] Phase 2: Ingestion
@@ -35,4 +43,4 @@ The project is being implemented in phases. See [plan.md](plan.md) and the `plan
 - [x] Phase 5: Annotations
 - [x] Phase 6: Advanced Theming
 - [x] Phase 7: PWA
-- [ ] Phase 8: Polish & Verification
+- [x] Phase 8: Polish & Verification

@@ -100,7 +100,7 @@ describe('Feature Integration Tests', () => {
 
     // 2. Delete Book
     const bookId = updatedStore.books[0].id;
-    await store.removeBook(bookId);
+    await store.deleteBook(bookId);
 
     // Verify state after deleting
     const finalStore = useLibraryStore.getState();
