@@ -1,4 +1,4 @@
-import ePub, { Rendition } from 'epubjs';
+import type { Rendition } from 'epubjs';
 import { TextSegmenter } from './tts/TextSegmenter';
 import { useTTSStore } from '../store/useTTSStore';
 
@@ -21,7 +21,8 @@ export interface SentenceNode {
  */
 export const extractSentences = (rendition: Rendition): SentenceNode[] => {
     const sentences: SentenceNode[] = [];
-    const contents = rendition.getContents()[0];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contents = (rendition as any).getContents()[0];
 
     if (!contents) return [];
 
@@ -59,7 +60,6 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
 
             // Generate CFI
             try {
-                // @ts-expect-error epubjs types might be incomplete
                 const cfi = contents.cfiFromRange(range);
 
                 sentences.push({

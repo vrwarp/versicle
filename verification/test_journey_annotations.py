@@ -106,7 +106,13 @@ def test_annotations_journey(page: Page):
                 const selection = window.getSelection();
                 selection.removeAllRanges();
                 selection.addRange(range);
-                document.dispatchEvent(new MouseEvent('mouseup', {bubbles: true}));
+                document.dispatchEvent(new MouseEvent('mouseup', {
+                    view: window,
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: 150,
+                    clientY: 150
+                }));
             }
         }
     """)

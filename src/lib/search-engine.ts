@@ -25,7 +25,6 @@ export class SearchEngine {
      * @param sections - An array of sections containing text and location data to be indexed.
      */
     indexBook(bookId: string, sections: { id: string; href: string; text: string }[]) {
-        // @ts-expect-error FlexSearch types might be missing or different
         const index = new FlexSearch.Document({
             id: "id",
             index: ["text"],

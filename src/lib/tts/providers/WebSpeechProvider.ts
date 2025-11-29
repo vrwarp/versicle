@@ -6,7 +6,6 @@ export class WebSpeechProvider implements ITTSProvider {
   id = 'local';
   private synth: SpeechSynthesis;
   private voices: SpeechSynthesisVoice[] = [];
-  private currentUtterance: SpeechSynthesisUtterance | null = null;
   private callback: TTSCallback | null = null;
 
   constructor() {
@@ -66,7 +65,6 @@ export class WebSpeechProvider implements ITTSProvider {
     utterance.onerror = (e) => this.emit('error', { error: e });
     utterance.onboundary = (e) => this.emit('boundary', { charIndex: e.charIndex });
 
-    this.currentUtterance = utterance;
     this.synth.speak(utterance);
 
     return { isNative: true };
@@ -90,7 +88,6 @@ export class WebSpeechProvider implements ITTSProvider {
 
   private cancel() {
     this.synth.cancel();
-    this.currentUtterance = null;
   }
 
   // Event handling registration

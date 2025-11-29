@@ -8,7 +8,6 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
-import { TTSCostIndicator } from './TTSCostIndicator';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
 import { Toast } from '../ui/Toast';
@@ -80,13 +79,15 @@ export const ReaderView: React.FC = () => {
       if (!rendition || !activeCfi) return;
 
       // Add highlight
-      rendition.annotations.add('highlight', activeCfi, {}, () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
           // Click handler for TTS highlight
       }, 'tts-highlight');
 
       // Remove highlight when activeCfi changes
       return () => {
-          rendition.annotations.remove(activeCfi, 'highlight');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition as any).annotations.remove(activeCfi, 'highlight');
       };
   }, [activeCfi]);
 
@@ -107,7 +108,8 @@ export const ReaderView: React.FC = () => {
       // Add new annotations
       annotations.forEach(annotation => {
         if (!addedAnnotations.current.has(annotation.id)) {
-           rendition.annotations.add('highlight', annotation.cfiRange, {}, () => {
+           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, () => {
                 console.log("Clicked annotation", annotation.id);
                 // TODO: Open edit/delete menu, perhaps via a new state/popover
             }, annotation.color === 'yellow' ? 'highlight-yellow' :
@@ -155,7 +157,8 @@ export const ReaderView: React.FC = () => {
   useEffect(() => {
       const rendition = renditionRef.current;
       if (rendition) {
-          rendition.themes.default({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition.themes as any).default({
               '.tts-highlight': {
                   'fill': 'yellow',
                   'background-color': 'rgba(255, 255, 0, 0.3)',
@@ -238,7 +241,8 @@ export const ReaderView: React.FC = () => {
           renditionRef.current = rendition;
 
           // Disable spreads to prevent layout issues
-          rendition.spread('none');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition as any).spread('none');
 
           // Load navigation/TOC
           const nav = await book.loaded.navigation;
@@ -254,7 +258,8 @@ export const ReaderView: React.FC = () => {
           rendition.themes.fontSize(`${fontSize}%`);
           rendition.themes.font(fontFamily);
           // Apply line-height via default rule as a workaround since there's no direct API
-          rendition.themes.default({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition.themes as any).default({
               p: { 'line-height': `${lineHeight} !important` },
               // Also ensure body has it for general text
               body: { 'line-height': `${lineHeight} !important` }
@@ -283,7 +288,8 @@ export const ReaderView: React.FC = () => {
 
           // Text Selection Listener
           rendition.on('selected', (cfiRange: string) => {
-            const range = rendition.getRange(cfiRange);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const range = (rendition as any).getRange(cfiRange);
             if (range) {
                 const rect = range.getBoundingClientRect();
                 // Adjust rect coordinates based on the iframe position if needed,
@@ -383,7 +389,8 @@ export const ReaderView: React.FC = () => {
       renditionRef.current.themes.font(fontFamily);
 
       // Update line height
-      renditionRef.current.themes.default({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (renditionRef.current.themes as any).default({
         p: { 'line-height': `${lineHeight} !important` },
         body: { 'line-height': `${lineHeight} !important` }
       });
@@ -441,7 +448,8 @@ export const ReaderView: React.FC = () => {
 
             if (resizeTimeout.current) clearTimeout(resizeTimeout.current);
             resizeTimeout.current = setTimeout(() => {
-                 renditionRef.current?.resize(width, height);
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 (renditionRef.current as any)?.resize(width, height);
             }, 100);
         }
     });

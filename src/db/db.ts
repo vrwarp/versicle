@@ -57,7 +57,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 export const initDB = () => {
   if (!dbPromise) {
     dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 2, {
-      upgrade(db, oldVersion, newVersion, transaction) {
+      upgrade(db, _oldVersion, _newVersion, _transaction) {
         // Books store
         if (!db.objectStoreNames.contains('books')) {
           const booksStore = db.createObjectStore('books', { keyPath: 'id' });

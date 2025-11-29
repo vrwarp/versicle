@@ -1,4 +1,4 @@
-import { Book } from 'epubjs';
+import type { Book } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -67,7 +67,6 @@ class SearchClient {
         // Parallelize loading? Limit concurrency?
         // Let's do sequential for safety first.
 
-        // @ts-expect-error epubjs types
         for (const item of spineItems) {
             try {
                 // We use item.load(book.load) or similar.
@@ -75,21 +74,22 @@ class SearchClient {
                 // item.url might be needed.
 
                 // book.load(item.href) returns a document
-                // @ts-expect-error epubjs types
-                const doc = await book.load(item.href);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const doc = await (book as any).load((item as any).href);
                 if (doc) {
                     // Extract text
                     const text = doc.body.innerText; // or textContent
                     sections.push({
-                        // @ts-expect-error epubjs types
-                        id: item.id,
-                        // @ts-expect-error epubjs types
-                        href: item.href,
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        id: (item as any).id,
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        href: (item as any).href,
                         text: text
                     });
                 }
             } catch (e) {
-                console.warn(`Failed to index section ${item.href}`, e);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                console.warn(`Failed to index section ${(item as any).href}`, e);
             }
         }
 

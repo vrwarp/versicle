@@ -25,7 +25,6 @@ self.onmessage = async (e: MessageEvent<SearchMessage>) => {
   }
 
   else if (type === 'SEARCH') {
-    // @ts-expect-error id is present on SEARCH type
     const { id } = e.data;
     const { query, bookId } = payload;
     const results = engine.search(bookId, query);

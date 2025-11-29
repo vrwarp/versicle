@@ -5,7 +5,7 @@ import { CircleDollarSign } from 'lucide-react';
 
 export const TTSCostIndicator: React.FC = () => {
   const sessionCharacters = useCostStore((state) => state.sessionCharacters);
-  const { provider } = useTTSStore();
+  const { providerId } = useTTSStore();
   const [estimatedCost, setEstimatedCost] = useState(0);
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export const TTSCostIndicator: React.FC = () => {
     setEstimatedCost(cost);
   }, [sessionCharacters]);
 
-  if (sessionCharacters === 0 || provider === 'local') {
+  if (sessionCharacters === 0 || providerId === 'local') {
     return null;
   }
 
