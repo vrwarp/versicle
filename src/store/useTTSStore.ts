@@ -33,6 +33,7 @@ interface TTSState {
   lastError: string | null;
 
   /** Provider configuration */
+  provider: 'local' | 'google' | 'openai'; // Deprecated alias for providerId to fix build error in TTSCostIndicator? No, let's fix the component.
   providerId: 'local' | 'google' | 'openai';
   apiKeys: {
       google: string;
@@ -106,6 +107,7 @@ export const useTTSStore = create<TTSState>()(
             currentIndex: 0,
             queue: [],
             lastError: null,
+            provider: 'local',
             providerId: 'local',
             apiKeys: {
                 google: '',
@@ -139,7 +141,7 @@ export const useTTSStore = create<TTSState>()(
                 set({ voice });
             },
             setProviderId: (id) => {
-                set({ providerId: id });
+                set({ providerId: id, provider: id });
                 // Re-init player provider
                 const { apiKeys } = get();
                 let newProvider;
