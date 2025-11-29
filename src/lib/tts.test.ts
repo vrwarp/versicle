@@ -1,53 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { extractSentences } from './tts';
 
-// Mock epubjs Rendition and Contents
-const mockCreateRange = vi.fn();
-const mockCfiFromRange = vi.fn();
-
-const mockDocument = {
-  body: {},
-  createTreeWalker: vi.fn(),
-  createRange: mockCreateRange,
-};
-
-const mockContents = {
-  document: mockDocument,
-  cfiFromRange: mockCfiFromRange,
-};
-
-const mockRendition = {
-  getContents: vi.fn(() => [mockContents]),
-};
+// Mock useTTSStore
+vi.mock('../store/useTTSStore', () => ({
+    useTTSStore: {
+        getState: vi.fn(() => ({
+            customAbbreviations: ['Mr.', 'Mrs.', 'Dr.']
+        })),
+    }
+}));
 
 describe('extractSentences', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    // Setup basic range mock
-    mockCreateRange.mockReturnValue({
-        setStart: vi.fn(),
-        setEnd: vi.fn(),
-    });
-  });
-
   it('should return empty array if no contents', () => {
-    mockRendition.getContents.mockReturnValueOnce([]);
+     const mockRendition = {
+      getContents: vi.fn(() => []),
+    };
     // @ts-expect-error Mocking
     const result = extractSentences(mockRendition);
     expect(result).toEqual([]);
   });
 
   it('should extract sentences from text nodes', () => {
-    // Setup TreeWalker mock
-    const textNode = { textContent: 'Hello world. This is a test.' };
-    const walkerMock = {
-      nextNode: vi.fn()
-        .mockReturnValueOnce(textNode)
-        .mockReturnValue(null) // End of walk
+    // Create real DOM elements
+    const dom = new DOMParser().parseFromString(
+        '<p>Hello world. This is a test.</p>',
+        'text/html'
+    );
+
+    // Mock Rendition
+    const mockRendition = {
+        getContents: () => [{
+            document: dom,
+            cfiFromRange: () => 'test-cfi'
+        }]
     };
-    mockDocument.createTreeWalker.mockReturnValue(walkerMock);
-    mockCfiFromRange.mockReturnValue('epubcfi(/1/2/3:0)');
 
     // @ts-expect-error Mocking
     const result = extractSentences(mockRendition);
@@ -55,18 +41,19 @@ describe('extractSentences', () => {
     expect(result).toHaveLength(2);
     expect(result[0].text).toBe('Hello world.');
     expect(result[1].text).toBe('This is a test.');
-    expect(mockCfiFromRange).toHaveBeenCalledTimes(2);
   });
 
   it('should handle text without punctuation as a sentence', () => {
-      const textNode = { textContent: 'No punctuation' };
-       const walkerMock = {
-        nextNode: vi.fn()
-          .mockReturnValueOnce(textNode)
-          .mockReturnValue(null)
-      };
-      mockDocument.createTreeWalker.mockReturnValue(walkerMock);
-      mockCfiFromRange.mockReturnValue('epubcfi(test)');
+      const dom = new DOMParser().parseFromString(
+        '<p>No punctuation</p>',
+        'text/html'
+    );
+    const mockRendition = {
+        getContents: () => [{
+            document: dom,
+            cfiFromRange: () => 'test-cfi'
+        }]
+    };
 
       // @ts-expect-error Mocking
       const result = extractSentences(mockRendition);
