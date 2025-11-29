@@ -14,7 +14,7 @@ describe('TextSegmenter', () => {
   });
 
   it('handles abbreviations like Mr. Smith correctly', () => {
-    const segmenter = new TextSegmenter();
+    const segmenter = new TextSegmenter('en', ['Mr.']);
     const text = "Mr. Smith went to Washington.";
     const segments = segmenter.segment(text);
 

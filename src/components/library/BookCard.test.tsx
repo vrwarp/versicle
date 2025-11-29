@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { BookCard } from './BookCard';
 import type { BookMetadata } from '../../types/db';
