@@ -14,7 +14,7 @@ vi.mock('../lib/tts/AudioPlayerService', () => {
                 init: vi.fn(),
                 getVoices: vi.fn(() => []),
                 setProvider: vi.fn(),
-                subscribe: vi.fn((cb) => {
+                subscribe: vi.fn(() => {
                     // Simulate playing state when play is called if needed
                     // But for unit test we might want to manually trigger syncState
                 }),
@@ -80,6 +80,7 @@ describe('useTTSStore', () => {
 
   it('should set voice', () => {
     // Mock voice object
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const voice = { id: 'test', name: 'Test Voice', lang: 'en-US', provider: 'local' } as any;
     useTTSStore.getState().setVoice(voice);
     expect(useTTSStore.getState().voice).toBe(voice);

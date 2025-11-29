@@ -16,7 +16,7 @@ export class MockCloudProvider extends BaseCloudProvider {
     // No-op
   }
 
-  async synthesize(_text: string, _voiceId: string, _speed: number): Promise<SpeechSegment> {
+  async synthesize(): Promise<SpeechSegment> {
     // Create a dummy audio blob (1 second of silence or just valid header)
     // For testing without actual audio files, we can try to fetch a known small file
     // or construct a minimal WAV.

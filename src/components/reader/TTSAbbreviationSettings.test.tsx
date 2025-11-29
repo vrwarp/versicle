@@ -1,7 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
-import { useTTSStore } from '../../store/useTTSStore';
 import { vi } from 'vitest';
 
 // Mock Lucide icons
@@ -73,6 +72,7 @@ describe('TTSAbbreviationSettings', () => {
         const mockReadAsText = vi.fn();
         const mockFileReaderInstance = {
             readAsText: mockReadAsText,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onload: null as any,
             result: '',
         };
@@ -80,6 +80,7 @@ describe('TTSAbbreviationSettings', () => {
         // Use a class-like mock for FileReader
         const MockFileReader = class {
             readAsText = mockReadAsText;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onload = null as any;
             result = '';
             constructor() {
@@ -94,6 +95,7 @@ describe('TTSAbbreviationSettings', () => {
                 // So we need to be able to read 'onload' back from the instance.
 
                 // Let's capture this instance in a variable accessible to the test
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (global as any).__mockFileReader = this;
             }
         };
@@ -102,6 +104,7 @@ describe('TTSAbbreviationSettings', () => {
 
         fireEvent.change(input, { target: { files: [file] } });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const readerInstance = (global as any).__mockFileReader;
         expect(mockReadAsText).toHaveBeenCalledWith(file);
 
@@ -125,9 +128,11 @@ describe('TTSAbbreviationSettings', () => {
 
         const MockFileReader = class {
             readAsText = mockReadAsText;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onload = null as any;
             result = '';
             constructor() {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (global as any).__mockFileReader = this;
             }
         };
@@ -136,6 +141,7 @@ describe('TTSAbbreviationSettings', () => {
 
         fireEvent.change(input, { target: { files: [file] } });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const readerInstance = (global as any).__mockFileReader;
 
         readerInstance.result = 'MyAbbrev.';

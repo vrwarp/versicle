@@ -1,7 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import { WebSpeechProvider } from './providers/WebSpeechProvider';
-import { MockCloudProvider } from './providers/MockCloudProvider';
 
 // Mock WebSpeechProvider class
 vi.mock('./providers/WebSpeechProvider', () => {
@@ -44,7 +42,7 @@ describe('AudioPlayerService', () => {
 
     beforeEach(() => {
         // Reset singleton
-        // @ts-ignore
+        // @ts-expect-error Resetting singleton for testing
         AudioPlayerService.instance = undefined;
         service = AudioPlayerService.getInstance();
     });
@@ -71,6 +69,7 @@ describe('AudioPlayerService', () => {
             init: vi.fn().mockResolvedValue(undefined),
             getVoices: vi.fn().mockResolvedValue([]),
             synthesize: vi.fn().mockRejectedValue(new Error("API Quota Exceeded")),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any;
 
         // Force provider to be cloud
@@ -86,7 +85,7 @@ describe('AudioPlayerService', () => {
         // Spy on setProvider to verify fallback
         const setProviderSpy = vi.spyOn(service, 'setProvider');
         // Spy on play to verify retry (recursive call)
-        const playSpy = vi.spyOn(service, 'play');
+        vi.spyOn(service, 'play');
         // Use real console.warn to avoid clutter but let's spy it to ensure it logs
         const consoleSpy = vi.spyOn(console, 'warn');
 

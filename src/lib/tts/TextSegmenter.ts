@@ -76,7 +76,7 @@ export class TextSegmenter {
 
     private fallbackSegment(text: string): TextSegment[] {
         const sentences: TextSegment[] = [];
-        const sentenceRegex = /([^\.!\?]+[\.!\?]+)/g;
+        const sentenceRegex = /([^.!?]+[.!?]+)/g;
         let match;
         let lastIndex = 0;
 

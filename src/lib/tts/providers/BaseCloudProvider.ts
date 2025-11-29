@@ -12,6 +12,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
 
   abstract synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment>;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   protected async fetchAudio(url: string, body: any, headers: Record<string, string> = {}): Promise<Blob> {
     const response = await fetch(url, {
       method: 'POST',

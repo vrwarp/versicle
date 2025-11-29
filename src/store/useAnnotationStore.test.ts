@@ -22,6 +22,7 @@ describe('useAnnotationStore', () => {
 
   beforeEach(() => {
     useAnnotationStore.setState({ annotations: [], popover: { visible: false, x: 0, y: 0, cfiRange: '', text: '' } });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (getDB as any).mockResolvedValue(mockDB);
     vi.clearAllMocks();
   });
@@ -66,6 +67,7 @@ describe('useAnnotationStore', () => {
     const newAnnotation = { bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow' };
 
     await act(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await result.current.addAnnotation(newAnnotation as any);
     });
 
@@ -84,6 +86,7 @@ describe('useAnnotationStore', () => {
   it('should delete annotation', async () => {
     const { result } = renderHook(() => useAnnotationStore());
     const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: [annotation as any] });
 
     await act(async () => {
@@ -97,6 +100,7 @@ describe('useAnnotationStore', () => {
   it('should update annotation', async () => {
     const { result } = renderHook(() => useAnnotationStore());
     const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: [annotation as any] });
     mockDB.get.mockResolvedValue(annotation);
 

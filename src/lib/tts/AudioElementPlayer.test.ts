@@ -4,6 +4,7 @@ import { AudioElementPlayer } from './AudioElementPlayer';
 
 describe('AudioElementPlayer', () => {
   let player: AudioElementPlayer;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockAudio: any;
 
   beforeEach(() => {
@@ -28,6 +29,7 @@ describe('AudioElementPlayer', () => {
     });
 
     if (!global.URL) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         global.URL = { createObjectURL: vi.fn(), revokeObjectURL: vi.fn() } as any;
     } else {
         global.URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url');

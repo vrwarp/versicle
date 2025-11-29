@@ -7,7 +7,7 @@ describe('TextSegmenter with Custom Abbreviations', () => {
     // Using a made-up abbreviation that Intl.Segmenter likely splits
     // "Abc. Def."
     const text = "Abc. Def.";
-    const segments = segmenter.segment(text);
+    segmenter.segment(text);
 
     // If Intl.Segmenter sees "Abc." as a sentence end.
     // We assume it does for this test.

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TextSegmenter } from './TextSegmenter';
 
 describe('TextSegmenter', () => {
@@ -28,11 +28,12 @@ describe('TextSegmenter', () => {
   });
 
   describe('Fallback behavior', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let originalSegmenter: any;
 
       beforeEach(() => {
           originalSegmenter = Intl.Segmenter;
-          // @ts-ignore
+          // @ts-expect-error - Mocking Intl.Segmenter
           Intl.Segmenter = undefined;
       });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { ReaderView } from '../ReaderView';
 import { useReaderStore } from '../../../store/useReaderStore';
@@ -11,6 +11,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 vi.mock('epubjs');
 vi.mock('../../../db/db', () => ({
   getDB: vi.fn(() => Promise.resolve({
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get: vi.fn((store, id) => {
       if (store === 'files') return Promise.resolve(new ArrayBuffer(10));
       if (store === 'books') return Promise.resolve({ title: 'Test Book' });
@@ -52,6 +53,7 @@ describe('ReaderView', () => {
     vi.clearAllMocks();
 
     // Mock epubjs instance
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (ePub as any).mockReturnValue({
       renderTo: mockRenderTo.mockReturnValue({
         display: mockDisplay,

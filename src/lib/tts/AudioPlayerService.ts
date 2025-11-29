@@ -84,7 +84,7 @@ export class AudioPlayerService {
               this.notifyError("Audio Playback Error: " + (e?.message || e || "Unknown error"));
           });
 
-          this.syncEngine?.setOnHighlight((_index) => {
+          this.syncEngine?.setOnHighlight(() => {
                // Currently no action needed if we assume sentence-level blobs.
                // We rely on queue index for active CFI.
           });

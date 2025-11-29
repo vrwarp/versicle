@@ -4,7 +4,6 @@ import { useLibraryStore } from './store/useLibraryStore';
 import { useReaderStore } from './store/useReaderStore';
 import * as fs from 'fs';
 import * as path from 'path';
-import ePub from 'epubjs';
 
 // Mock epub.js but preserve behavior for ingestion (metadata)
 // while mocking behavior for Reader (rendering)

@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // Move mock setup BEFORE import
 // Mock Worker
 class MockWorker {
   onmessage: ((e: MessageEvent) => void) | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   postMessage(data: any) {
     if (data.type === 'INDEX_BOOK') {
        setTimeout(() => {
@@ -59,8 +60,8 @@ describe('SearchClient', () => {
     it('should index a book', async () => {
         // Just verify it doesn't throw and calls postMessage (via mock)
         // Since logic is mainly in worker, we are testing the bridge here.
-        // @ts-expect-error Mocking book
-        await searchClient.indexBook(mockBook, 'book-1');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await searchClient.indexBook(mockBook as any, 'book-1');
         expect(mockBook.load).toHaveBeenCalledWith('chap1.html');
     });
 

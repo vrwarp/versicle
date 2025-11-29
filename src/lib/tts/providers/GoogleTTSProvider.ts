@@ -40,6 +40,7 @@ export class GoogleTTSProvider implements ITTSProvider {
       }
       const data = await response.json();
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.voices = (data.voices || []).map((v: any) => ({
           id: v.name, // Use name directly as ID (e.g., "en-US-Standard-A")
           name: `${v.name} (${v.ssmlGender})`,
@@ -92,6 +93,7 @@ export class GoogleTTSProvider implements ITTSProvider {
     // Parse timepoints if any
     let alignment: Timepoint[] | undefined = undefined;
     if (data.timepoints) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         alignment = data.timepoints.map((tp: any) => ({
             timeSeconds: tp.timeSeconds,
             charIndex: 0,

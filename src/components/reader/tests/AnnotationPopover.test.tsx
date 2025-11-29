@@ -44,6 +44,7 @@ describe('AnnotationPopover', () => {
     useAnnotationStore.setState({
       popover: { visible: true, x: 100, y: 100, cfiRange: 'cfi', text: 'text' },
       addAnnotation: addAnnotationMock,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
     const onCloseMock = vi.fn();

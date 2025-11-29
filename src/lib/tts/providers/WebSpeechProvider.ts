@@ -1,5 +1,6 @@
 import type { ITTSProvider, SpeechSegment, TTSVoice } from './types';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TTSCallback = (event: { type: 'start' | 'end' | 'boundary' | 'error', charIndex?: number, error?: any }) => void;
 
 export class WebSpeechProvider implements ITTSProvider {
@@ -95,6 +96,7 @@ export class WebSpeechProvider implements ITTSProvider {
     this.callback = callback;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private emit(type: 'start' | 'end' | 'boundary' | 'error', data: any = {}) {
     if (this.callback) {
       this.callback({ type, ...data });

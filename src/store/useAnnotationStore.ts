@@ -26,7 +26,7 @@ interface AnnotationState {
   hidePopover: () => void;
 }
 
-export const useAnnotationStore = create<AnnotationState>((set, _get) => ({
+export const useAnnotationStore = create<AnnotationState>((set) => ({
   annotations: [],
   popover: {
     visible: false,

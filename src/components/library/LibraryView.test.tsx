@@ -5,11 +5,11 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 
 // Mock react-window
 vi.mock('react-window', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Grid: ({ cellComponent: Cell, cellProps, columnCount, rowCount }: any) => (
     <div data-testid="virtual-grid">
       {Array.from({ length: rowCount }).flatMap((_, r) =>
          Array.from({ length: columnCount }).map((_, c) =>
-            // eslint-disable-next-line react/jsx-key
             <div key={`${r}-${c}`}>
                 <Cell columnIndex={c} rowIndex={r} style={{ width: 100, height: 100 }} {...cellProps} />
             </div>
@@ -21,6 +21,7 @@ vi.mock('react-window', () => ({
 
 // Mock BookCard
 vi.mock('./BookCard', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   BookCard: ({ book }: any) => <div data-testid="book-card">{book.title}</div>
 }));
 
@@ -52,6 +53,7 @@ describe('LibraryView', () => {
             books: [],
             isLoading: false,
             error: null,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             fetchBooks: vi.fn().mockResolvedValue(undefined) as any
         });
 
@@ -84,7 +86,9 @@ describe('LibraryView', () => {
     it('renders grid with books', async () => {
         useLibraryStore.setState({
             books: [
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 { id: '1', title: 'Book 1' } as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 { id: '2', title: 'Book 2' } as any
             ]
         });
