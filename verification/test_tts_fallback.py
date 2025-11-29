@@ -4,7 +4,8 @@ from verification import utils
 
 def test_tts_fallback(page: Page):
     console_logs = []
-    page.on("console", lambda msg: console_logs.append(msg.text))
+    # Capture all arguments for better visibility of error objects
+    page.on("console", lambda msg: console_logs.append(f"{msg.type}: {msg.text}"))
 
     print("Loading app...")
     utils.reset_app(page)
@@ -42,20 +43,31 @@ def test_tts_fallback(page: Page):
          tts_panel.locator("button").nth(2).click()
 
     # Select Google Cloud
-    page.select_option("select", "google")
+    page.select_option("data-testid=tts-provider-select", "google")
 
     # Close Settings (back)
     page.click("text=Back")
 
-    # Handle Cost Warning Dialog
-    page.on("dialog", lambda dialog: dialog.accept())
-
     # Click Play
     print("Clicking play...")
-    page.click(".flex-1.bg-primary")
+    # Use data-testid for Play button if available, or current selector
+    # ReaderView.tsx: data-testid="tts-play-pause-button"
+    page.click("data-testid=tts-play-pause-button")
+
+    # Handle Cost Warning Dialog if it appears (It's a React Dialog, not native)
+    # The dialog title is "Cost Warning"
+    # We might need to wait briefly to see if it appears
+    try:
+        if page.is_visible("text=Cost Warning", timeout=1000):
+            print("Cost Warning Dialog appeared. Clicking Proceed...")
+            page.click("text=Proceed")
+    except:
+        # Dialog didn't appear, proceed
+        pass
 
     print("Waiting for logs...")
-    page.wait_for_timeout(2000)
+    # Increase wait to allow for retries and fallback
+    page.wait_for_timeout(3000)
 
     # Check for console logs indicating error and fallback
     # Expected logs: "Play error Error: Google Cloud API Key is missing" and "Falling back to WebSpeechProvider..."
@@ -65,6 +77,8 @@ def test_tts_fallback(page: Page):
     print("Console logs captured:")
     print(logs_text)
 
+    # The error might be logged as "error: Play error [object Error]" or similar
+    # We check for substring
     assert "Google Cloud API Key is missing" in logs_text
     assert "Falling back to WebSpeechProvider" in logs_text
 
