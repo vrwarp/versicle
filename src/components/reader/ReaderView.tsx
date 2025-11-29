@@ -8,12 +8,14 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
+import { TableOfContents } from './TableOfContents';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
+import { SearchSideBar } from './SearchSideBar';
 import { Toast } from '../ui/Toast';
 import { Dialog } from '../ui/Dialog';
 import { getDB } from '../../db/db';
-import { searchClient, type SearchResult } from '../../lib/search';
+import { searchClient } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
 
 /**
@@ -205,9 +207,6 @@ export const ReaderView: React.FC = () => {
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
 
   // Initialize Book
   useEffect(() => {
@@ -361,13 +360,12 @@ export const ReaderView: React.FC = () => {
             }
 
             // Get chapter title
-            // Usually we find the spine item and check TOC.
-            // Simplified:
+            // Find matching item in TOC
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const item = book.spine.get(location.start.href) as any;
-            const title = item ? (item.label || 'Chapter') : 'Unknown';
-            // Actually getting title from spine is tricky without matching TOC.
-            // We'll leave title as is or implement proper TOC lookup later.
+            const toc = useReaderStore.getState().toc;
+            const tocItem = toc.find(t => location.start.href.includes(t.href) || t.href.includes(location.start.href));
+            const title = tocItem ? tocItem.label : (item ? (item.label || 'Chapter') : 'Unknown');
 
             updateLocation(cfi, percentage, title);
 
@@ -527,27 +525,10 @@ export const ReaderView: React.FC = () => {
       <div className="flex-1 relative overflow-hidden flex">
          {/* TOC Sidebar */}
          {showToc && (
-             <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
-                 <div className="p-4">
-                     <h2 className="text-lg font-bold mb-4 text-foreground">Contents</h2>
-                     <ul className="space-y-2">
-                         {useReaderStore.getState().toc.map((item, index) => (
-                             <li key={item.id}>
-                                 <button
-                                    data-testid={`toc-item-${index}`}
-                                    className="text-left w-full text-sm text-secondary hover:text-primary"
-                                    onClick={() => {
-                                        renditionRef.current?.display(item.href);
-                                        setShowToc(false);
-                                    }}
-                                 >
-                                     {item.label}
-                                 </button>
-                             </li>
-                         ))}
-                     </ul>
-                 </div>
-             </div>
+             <TableOfContents
+                 onNavigate={(href) => renditionRef.current?.display(href)}
+                 onClose={() => setShowToc(false)}
+             />
          )}
 
          {/* Annotations Sidebar */}
@@ -565,64 +546,11 @@ export const ReaderView: React.FC = () => {
 
          {/* Search Sidebar */}
          {showSearch && (
-             <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
-                 <div className="p-4 border-b border-border">
-                     <h2 className="text-lg font-bold mb-2 text-foreground">Search</h2>
-                     <div className="flex gap-2">
-                         <input
-                            data-testid="search-input"
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    setIsSearching(true);
-                                    searchClient.search(searchQuery, id || '').then(results => {
-                                        setSearchResults(results);
-                                        setIsSearching(false);
-                                    });
-                                }
-                            }}
-                            placeholder="Search in book..."
-                            className="flex-1 text-sm p-2 border rounded bg-background text-foreground border-border"
-                         />
-                         <button
-                            data-testid="search-close-button"
-                            onClick={() => setShowSearch(false)}
-                            className="p-2 hover:bg-border rounded"
-                         >
-                            <X className="w-4 h-4 text-muted" />
-                         </button>
-                     </div>
-                 </div>
-                 <div className="flex-1 overflow-y-auto p-4">
-                     {isSearching ? (
-                         <div className="text-center text-muted">Searching...</div>
-                     ) : (
-                         <ul className="space-y-4">
-                             {searchResults.map((result, idx) => (
-                                 <li key={idx} className="border-b border-border pb-2 last:border-0">
-                                     <button
-                                        data-testid={`search-result-${idx}`}
-                                        className="text-left w-full"
-                                        onClick={() => {
-                                            renditionRef.current?.display(result.href);
-                                        }}
-                                     >
-                                         <p className="text-xs text-muted mb-1">Result {idx + 1}</p>
-                                         <p className="text-sm text-foreground line-clamp-3">
-                                             {result.excerpt}
-                                         </p>
-                                     </button>
-                                 </li>
-                             ))}
-                             {searchResults.length === 0 && searchQuery && !isSearching && (
-                                 <div className="text-center text-muted text-sm">No results found</div>
-                             )}
-                         </ul>
-                     )}
-                 </div>
-             </div>
+             <SearchSideBar
+                 onClose={() => setShowSearch(false)}
+                 onNavigate={(href) => renditionRef.current?.display(href)}
+                 bookId={id || ''}
+             />
          )}
 
          {/* Reader Area */}
