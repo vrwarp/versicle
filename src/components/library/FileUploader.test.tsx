@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import React from 'react';
 import { FileUploader } from './FileUploader';
 import { useLibraryStore } from '../../store/useLibraryStore';
 

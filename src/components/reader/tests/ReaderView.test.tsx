@@ -69,7 +69,9 @@ describe('ReaderView', () => {
         annotations: mockAnnotations,
         on: vi.fn(),
         off: vi.fn(),
-        getContents: vi.fn(() => [])
+        getContents: vi.fn(() => []),
+        spread: vi.fn(),
+        resize: vi.fn(),
       }),
       ready: Promise.resolve(),
       loaded: {
