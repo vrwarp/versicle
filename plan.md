@@ -263,11 +263,11 @@ epub.js provides a robust annotation API based on **Canonical Fragment Identifie
   - [x] Implement custom color themes (beyond light/dark/sepia).
   - [x] Persist theme preferences.
 
-- [ ] Step 7: **PWA Implementation.**
-  - [ ] Configure `vite-plugin-pwa`.
-  - [ ] Create manifest file.
-  - [ ] Implement service worker for caching app shell.
-  - [ ] Verify offline capability (loading cached books).
+- [x] Step 7: **PWA Implementation.**
+  - [x] Configure `vite-plugin-pwa`.
+  - [x] Create manifest file.
+  - [x] Implement service worker for caching app shell.
+  - [x] Verify offline capability (loading cached books).
 
 - [ ] Step 8: **Final Polish & Verification.**
   - [ ] Comprehensive UI review (animations, transitions, responsive design).

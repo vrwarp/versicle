@@ -13,6 +13,7 @@ Versicle is a local-first, web-based EPUB manager and reader. It allows you to o
 - **Annotations:** Highlight text in multiple colors and add personal notes.
 - **Text-to-Speech:** Listen to your books with sentence-level highlighting.
 - **Search:** Full-text search within books.
+- **PWA:** Installable on desktop and mobile with offline support.
 
 ## Getting Started
 
@@ -33,6 +34,6 @@ The project is being implemented in phases. See [plan.md](plan.md) and the `plan
 - [x] Phase 3: Reader
 - [x] Phase 4: TTS & Optimization
 - [x] Phase 5: Annotations
-- [ ] Phase 6: Advanced Theming
-- [ ] Phase 7: PWA
+- [x] Phase 6: Advanced Theming
+- [x] Phase 7: PWA
 - [ ] Phase 8: Polish & Verification
