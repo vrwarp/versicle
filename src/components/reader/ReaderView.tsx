@@ -253,10 +253,25 @@ export const ReaderView: React.FC = () => {
           setToc(nav.toc);
 
           // Register themes
-          rendition.themes.register('light', { body: { background: '#ffffff', color: '#000000' } });
-          rendition.themes.register('dark', { body: { background: '#1a1a1a', color: '#f5f5f5' } });
-          rendition.themes.register('sepia', { body: { background: '#f4ecd8', color: '#5b4636' } });
-          rendition.themes.register('custom', { body: { background: customTheme.bg, color: customTheme.fg } });
+          rendition.themes.register('light', `
+            body { background: #ffffff !important; color: #000000 !important; }
+            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+            a { color: #0000ee !important; }
+          `);
+          rendition.themes.register('dark', `
+            body { background: #1a1a1a !important; color: #f5f5f5 !important; }
+            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+            a { color: #6ab0f3 !important; }
+          `);
+          rendition.themes.register('sepia', `
+            body { background: #f4ecd8 !important; color: #5b4636 !important; }
+            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+            a { color: #0000ee !important; }
+          `);
+          rendition.themes.register('custom', `
+            body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
+            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+          `);
 
           rendition.themes.select(currentTheme);
           rendition.themes.fontSize(`${fontSize}%`);
@@ -384,9 +399,10 @@ export const ReaderView: React.FC = () => {
   useEffect(() => {
     if (renditionRef.current) {
       // Re-register custom theme in case colors changed
-      renditionRef.current.themes.register('custom', {
-        body: { background: customTheme.bg, color: customTheme.fg }
-      });
+      renditionRef.current.themes.register('custom', `
+        body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
+        p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+      `);
 
       renditionRef.current.themes.select(currentTheme);
       renditionRef.current.themes.fontSize(`${fontSize}%`);
