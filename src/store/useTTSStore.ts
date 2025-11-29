@@ -42,6 +42,9 @@ interface TTSState {
   /** Custom abbreviations for sentence segmentation */
   customAbbreviations: string[];
 
+  /** Whether to show cost warning dialogs */
+  enableCostWarning: boolean;
+
   /** Actions */
   play: () => void;
   pause: () => void;
@@ -52,6 +55,7 @@ interface TTSState {
   setProviderId: (id: 'local' | 'google' | 'openai') => void;
   setApiKey: (provider: 'google' | 'openai', key: string) => void;
   setCustomAbbreviations: (abbrevs: string[]) => void;
+  setEnableCostWarning: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
   clearError: () => void;
@@ -111,6 +115,7 @@ export const useTTSStore = create<TTSState>()(
                 google: '',
                 openai: ''
             },
+            enableCostWarning: true,
             customAbbreviations: [
                 'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
                 'e.g.', 'i.e.'
@@ -168,6 +173,9 @@ export const useTTSStore = create<TTSState>()(
             },
             setCustomAbbreviations: (abbrevs) => {
                 set({ customAbbreviations: abbrevs });
+            },
+            setEnableCostWarning: (enable) => {
+                set({ enableCostWarning: enable });
             },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
@@ -228,6 +236,7 @@ export const useTTSStore = create<TTSState>()(
             providerId: state.providerId,
             apiKeys: state.apiKeys,
             customAbbreviations: state.customAbbreviations,
+            enableCostWarning: state.enableCostWarning,
         }),
     }
   )

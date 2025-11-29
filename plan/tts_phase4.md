@@ -50,7 +50,7 @@ To ensure seamless playback between sentences when using Cloud TTS.
 *   **UI**: Show an estimate of characters synthesized in the current session.
     *   *Status:* Implemented via `CostEstimator` and `TTSCostIndicator`.
 *   **Warning**: "You are about to listen to a whole chapter (~20k chars). Proceed with Cloud Voice?" (Optional toggle in settings).
-    *   *Status:* Implemented via `ReaderView` check (threshold 5000 chars) and confirmation dialog.
+    *   *Status:* Implemented via `ReaderView` check (threshold 5000 chars) and custom `Dialog`. Toggle added to TTS settings.
 
 ## **3. Implementation Plan**
 
@@ -58,7 +58,7 @@ To ensure seamless playback between sentences when using Cloud TTS.
     *   Implement `CostEstimator` service.
     *   Integrate tracking into `AudioPlayerService`.
     *   Add `TTSCostIndicator` to `ReaderView`.
-    *   Add warning dialog for large text blocks in `ReaderView`.
+    *   Add custom warning dialog and toggle for large text blocks in `ReaderView`.
 2.  **Refactor Segmentation**:
     *   Replace `extractSentences` regex logic with `Intl.Segmenter`.
     *   Test with complex sentences ("Dr. Jones said...", "Item 1.2...").

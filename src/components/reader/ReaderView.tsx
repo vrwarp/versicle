@@ -12,6 +12,7 @@ import { TTSCostIndicator } from './TTSCostIndicator';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
 import { Toast } from '../ui/Toast';
+import { Dialog } from '../ui/Dialog';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
@@ -61,7 +62,9 @@ export const ReaderView: React.FC = () => {
       apiKeys,
       setApiKey,
       lastError,
-      clearError
+      clearError,
+      enableCostWarning,
+      setEnableCostWarning
   } = useTTSStore();
 
   const {
@@ -195,6 +198,7 @@ export const ReaderView: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showTTS, setShowTTS] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [showCostWarning, setShowCostWarning] = useState(false);
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -618,16 +622,12 @@ export const ReaderView: React.FC = () => {
                                             pause();
                                         } else {
                                             // Check cost warning
-                                            if (providerId !== 'local' && sentences.length > 0) {
+                                            if (providerId !== 'local' && sentences.length > 0 && enableCostWarning) {
                                                 const totalChars = sentences.reduce((sum, s) => sum + s.text.length, 0);
                                                 // Warn if total text is large (e.g. > 5000 chars ~ 1 page/chapter depending)
-                                                // and we are just starting (or resuming a large block, but checking full chapter text for now)
                                                 if (totalChars > 5000) {
-                                                    const confirmed = window.confirm(
-                                                        `You are about to listen to a large section (~${totalChars.toLocaleString()} chars). ` +
-                                                        `This may incur costs with ${providerId === 'google' ? 'Google Cloud' : 'OpenAI'}. Proceed?`
-                                                    );
-                                                    if (!confirmed) return;
+                                                    setShowCostWarning(true);
+                                                    return;
                                                 }
                                             }
                                             play();
@@ -728,6 +728,15 @@ export const ReaderView: React.FC = () => {
                             )}
 
                             <div className="pt-2 border-t border-border">
+                                <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={enableCostWarning}
+                                        onChange={(e) => setEnableCostWarning(e.target.checked)}
+                                        className="accent-primary"
+                                    />
+                                    <span className="text-xs text-foreground">Warn before large synthesis</span>
+                                </label>
                                 <TTSAbbreviationSettings />
                             </div>
                         </div>
@@ -736,6 +745,33 @@ export const ReaderView: React.FC = () => {
                      <TTSQueue />
                  </div>
              )}
+
+            {/* Cost Warning Dialog */}
+            <Dialog
+                isOpen={showCostWarning}
+                onClose={() => setShowCostWarning(false)}
+                title="Cost Warning"
+                description={`You are about to listen to a large section (~${sentences.reduce((sum, s) => sum + s.text.length, 0).toLocaleString()} chars). This may incur costs with ${providerId === 'google' ? 'Google Cloud' : 'OpenAI'}.`}
+                footer={
+                    <>
+                        <button
+                            onClick={() => setShowCostWarning(false)}
+                            className="px-3 py-1 text-sm text-secondary hover:text-primary"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => {
+                                setShowCostWarning(false);
+                                play();
+                            }}
+                            className="px-3 py-1 text-sm bg-primary text-background rounded hover:opacity-90"
+                        >
+                            Proceed
+                        </button>
+                    </>
+                }
+            />
 
             {/* Advanced Settings Modal */}
             {showSettings && (
