@@ -237,6 +237,9 @@ export const ReaderView: React.FC = () => {
           });
           renditionRef.current = rendition;
 
+          // Disable spreads to prevent layout issues
+          rendition.spread('none');
+
           // Load navigation/TOC
           const nav = await book.loaded.navigation;
           setToc(nav.toc);
@@ -595,7 +598,7 @@ export const ReaderView: React.FC = () => {
          )}
 
          {/* Reader Area */}
-         <div className="flex-1 relative">
+         <div className="flex-1 relative min-w-0">
             <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full h-full overflow-hidden" />
 
              <AnnotationPopover bookId={id || ''} onClose={handleClearSelection} />
