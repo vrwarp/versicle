@@ -21,7 +21,8 @@ const GAP = 24;
  * @returns A BookCard component wrapped in a positioned div, or null if the index is out of bounds.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => {
+const GridCell = ({ columnIndex, rowIndex, style, data }: any) => {
+    const { books, columnCount } = data;
     const index = rowIndex * columnCount + columnIndex;
     if (index >= books.length) return null;
     const book = books[index];
@@ -78,8 +79,6 @@ export const LibraryView: React.FC = () => {
 
   // Re-calculating proper FixedSizeGrid usage with gaps:
   // Usually we make the cell size include the gap, and then render a smaller inner div.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const cellWidth = columnWidth + GAP; // This might be wrong logic for exact widths.
   // Let's rely on flexible card width in BookCard if possible?
   // Or simply:
   const gridColumnWidth = Math.floor(dimensions.width / columnCount);
@@ -119,9 +118,10 @@ export const LibraryView: React.FC = () => {
                 rowCount={rowCount}
                 rowHeight={CARD_HEIGHT + GAP}
                 width={dimensions.width}
-                cellComponent={GridCell}
-                cellProps={{ books, columnCount }}
-             />
+                itemData={{ books, columnCount }}
+             >
+                {GridCell}
+             </Grid>
           )}
         </section>
       )}

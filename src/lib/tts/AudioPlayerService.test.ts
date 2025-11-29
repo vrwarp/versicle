@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
+// @ts-expect-error - Unused import in test file but needed for mock
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
+// @ts-expect-error - Unused import in test file but needed for mock
 import { MockCloudProvider } from './providers/MockCloudProvider';
 import { CostEstimator } from './CostEstimator';
 
@@ -104,7 +106,7 @@ describe('AudioPlayerService', () => {
 
     it('should notify listeners on subscribe', () => {
         return new Promise<void>((resolve) => {
-            service.subscribe((status, activeCfi, currentIndex, queue, error) => {
+            service.subscribe((status, _activeCfi, _currentIndex, _queue, error) => {
                 expect(status).toBe('stopped');
                 expect(error).toBeNull();
                 resolve();
@@ -183,7 +185,7 @@ describe('AudioPlayerService', () => {
 
     it('should not make duplicate requests for the same item (request coalescing)', async () => {
          // Create a slow synthesize to ensure pending state
-         const mockSynthesize = vi.fn().mockImplementation(async (text) => {
+         const mockSynthesize = vi.fn().mockImplementation(async (_text) => {
              await new Promise(r => setTimeout(r, 10));
              return {
                  audio: new Blob(["audio"], { type: 'audio/mp3' }),

@@ -1,8 +1,7 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
-import { useTTSStore } from '../../store/useTTSStore';
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({

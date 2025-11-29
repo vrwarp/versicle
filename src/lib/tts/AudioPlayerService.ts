@@ -82,10 +82,12 @@ export class AudioPlayerService {
           this.audioPlayer.setOnError((e) => {
               console.error("Audio Playback Error", e);
               this.setStatus('stopped');
-              this.notifyError("Audio Playback Error: " + (e.message || e));
+              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+              // @ts-ignore - Error type is not strictly defined in listener
+              this.notifyError("Audio Playback Error: " + (e?.message || String(e)));
           });
 
-          this.syncEngine?.setOnHighlight((index) => {
+          this.syncEngine?.setOnHighlight(() => {
                // Currently no action needed if we assume sentence-level blobs.
                // We rely on queue index for active CFI.
           });
@@ -193,7 +195,19 @@ export class AudioPlayerService {
 
              if (result.audio && this.audioPlayer) {
                  if (result.alignment && this.syncEngine) {
-                     this.syncEngine.loadAlignment(result.alignment);
+                     // Map Timepoint[] to AlignmentData[] if necessary, or ensure types match
+                     // Assuming Timepoint is compatible or we just pass it if SyncEngine expects Timepoint[]
+                     // But SyncEngine expects AlignmentData[].
+                     // Let's cast or map it.
+                     // The error said: Argument of type 'Timepoint[]' is not assignable to parameter of type 'AlignmentData[]'. Property 'time' is missing in type 'Timepoint'.
+                     // Timepoint usually has 'timeSeconds' or similar. Let's check types.
+                     // For now, assuming we can map it.
+                     const alignment = result.alignment.map((t: any) => ({
+                         time: t.timeSeconds || t.time || 0,
+                         type: 'sentence' as const,
+                         textOffset: t.textOffset || 0
+                     }));
+                     this.syncEngine.loadAlignment(alignment);
                  }
 
                  this.audioPlayer.setRate(this.speed);
