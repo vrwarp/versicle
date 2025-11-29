@@ -4,6 +4,24 @@ export interface TextSegment {
     length: number;
 }
 
+// Abbreviations that are almost exclusively titles and should always trigger a merge
+// regardless of the next word.
+const ALWAYS_MERGE = new Set(['Mr.', 'Mrs.', 'Ms.', 'Prof.', 'Gen.', 'Rep.', 'Sen.']);
+
+// Words that strongly indicate the start of a new sentence.
+// If the next segment starts with one of these, we should not merge,
+// even if the previous segment ended with an ambiguous abbreviation (like "Dr.").
+const SENTENCE_STARTERS = new Set([
+    'He', 'She', 'It', 'They', 'We', 'You', 'I',
+    'The', 'A', 'An', 'This', 'That', 'These', 'Those',
+    'Here', 'There', 'Where', 'When', 'Why', 'How',
+    'But', 'And', 'Or', 'So', 'Then',
+    // Contractions and Interrogatives
+    "It's", "He's", "She's", "That's", "There's", "Here's",
+    "I'm", "You're", "We're", "They're",
+    "What", "Who", "What's", "Who's"
+]);
+
 export class TextSegmenter {
     private segmenter: Intl.Segmenter | undefined;
     private abbreviations: Set<string>;
@@ -41,28 +59,44 @@ export class TextSegmenter {
                 const lastTextTrimmed = last.text.trim();
 
                 // Check if last segment ends with an abbreviation
-                // We check if the trimmed text IS an abbreviation OR ends with " Abbrev."
                 let isAbbreviation = false;
+                let lastWord = '';
 
                 if (this.abbreviations.has(lastTextTrimmed)) {
                     isAbbreviation = true;
+                    lastWord = lastTextTrimmed;
                 } else {
-                    // Check if it ends with any abbreviation
-                    // This is less efficient but robust.
-                    // Since abbrevs set is small, we can iterate or split.
                     const words = lastTextTrimmed.split(/\s+/);
-                    const lastWord = words[words.length - 1];
+                    lastWord = words[words.length - 1];
                     if (this.abbreviations.has(lastWord)) {
                         isAbbreviation = true;
                     }
                 }
 
                 if (isAbbreviation) {
-                    // Merge current into last
-                    last.text += current.text;
-                    last.length += current.length;
-                    // We don't change last.index
-                    continue;
+                    let shouldMerge = false;
+
+                    if (ALWAYS_MERGE.has(lastWord)) {
+                        shouldMerge = true;
+                    } else {
+                        // Check the next segment (current) to see if it looks like a new sentence
+                        const nextTextTrimmed = current.text.trim();
+                        const nextFirstWord = nextTextTrimmed.split(/\s+/)[0];
+                        // Remove trailing punctuation from the word (e.g. "He," -> "He")
+                        const cleanNextWord = nextFirstWord.replace(/[.,!?;:]$/, '');
+
+                        if (!SENTENCE_STARTERS.has(cleanNextWord)) {
+                            shouldMerge = true;
+                        }
+                    }
+
+                    if (shouldMerge) {
+                        // Merge current into last
+                        last.text += current.text;
+                        last.length += current.length;
+                        // We don't change last.index
+                        continue;
+                    }
                 }
             }
 
