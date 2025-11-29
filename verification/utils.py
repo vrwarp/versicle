@@ -12,7 +12,7 @@ def capture_screenshot(page: Page, name: str):
 
 def reset_app(page: Page):
     """Clears LocalStorage and IndexedDB to ensure a clean state."""
-    page.goto("http://localhost:5173")
+    page.goto("http://localhost:5173", timeout=5000)
     page.evaluate("window.localStorage.clear()")
     # We must be careful with IndexedDB deletion. It can be blocked if there are open connections.
     page.evaluate("""
