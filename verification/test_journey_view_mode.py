@@ -1,27 +1,30 @@
 import pytest
 import os
 from playwright.sync_api import Page, expect
+from verification import utils
 
 def test_journey_view_mode(page: Page):
     """
     Test the user journey for toggling between Paginated and Scrolled view modes.
     Verifies that the setting is applied and persisted.
     """
+    print("Starting View Mode Journey...")
     # 1. Load the app and reset state
-    page.goto("http://localhost:5173/")
-    page.evaluate("localStorage.clear()")
-    page.reload()
+    utils.reset_app(page)
 
     # 2. Upload a book
-    # Locate the alice.epub fixture
     file_path = "src/test/fixtures/alice.epub"
     if not os.path.exists(file_path):
-        # Fallback if running in a different context, though strictly it should be there
+        # Fallback if running in a different context
         file_path = "verification/alice.epub"
         if not os.path.exists(file_path):
              pytest.skip("alice.epub fixture not found")
 
     # Upload
+    # Check for hidden file input (standard in LibraryView)
+    # The new library might use the visible one or hidden one.
+    # Previous tests used page.locator('input[type="file"]') or get_by_test_id("hidden-file-input")
+    # Let's try the locator first as it is generic.
     page.locator('input[type="file"]').set_input_files(file_path)
 
     # 3. Open the book
@@ -41,9 +44,7 @@ def test_journey_view_mode(page: Page):
     expect(paginated_btn).to_be_visible()
     expect(scrolled_btn).to_be_visible()
 
-    # Check visual indication of active state (optional, but good)
-    # The active button has blue text (text-blue-600)
-    # expect(paginated_btn).to_have_class(re.compile(r"text-blue-600"))
+    utils.capture_screenshot(page, "view_mode_1_settings_default")
 
     # 6. Switch to Scrolled Mode
     scrolled_btn.click()
@@ -52,11 +53,22 @@ def test_journey_view_mode(page: Page):
     storage = page.evaluate("localStorage.getItem('reader-storage')")
     assert '"viewMode":"scrolled"' in storage
 
+    # Close settings to see the view
+    page.locator('[data-testid="settings-close-button"]').click()
+
+    # Wait a moment for layout to settle (epub.js might need time to reflow)
+    page.wait_for_timeout(1000)
+
+    utils.capture_screenshot(page, "view_mode_2_scrolled_view")
+
+    # Re-open settings to verify state UI
+    page.locator('[data-testid="reader-settings-button"]').click()
+    utils.capture_screenshot(page, "view_mode_3_settings_scrolled_active")
+
     # 7. Switch back to Paginated Mode
     paginated_btn.click()
 
     storage_after = page.evaluate("localStorage.getItem('reader-storage')")
     assert '"viewMode":"paginated"' in storage_after
 
-    # Close settings
-    page.locator('[data-testid="settings-close-button"]').click()
+    print("View Mode Journey Passed!")
