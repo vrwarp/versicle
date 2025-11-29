@@ -43,7 +43,8 @@ export const ReaderView: React.FC = () => {
     setCurrentBookId,
     reset,
     progress,
-    currentChapterTitle
+    currentChapterTitle,
+    viewMode
   } = useReaderStore();
 
   const {
@@ -240,7 +241,7 @@ export const ReaderView: React.FC = () => {
           const rendition = book.renderTo(viewerRef.current, {
             width: '100%',
             height: '100%',
-            flow: 'paginated',
+            flow: viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated',
             manager: 'default',
           });
           renditionRef.current = rendition;
@@ -431,6 +432,20 @@ export const ReaderView: React.FC = () => {
       });
     }
   }, [currentTheme, customTheme, fontSize, fontFamily, lineHeight]);
+
+  // Handle View Mode changes
+  useEffect(() => {
+      if (renditionRef.current) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (renditionRef.current as any).flow(viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated');
+
+          // Re-display current location to ensure proper rendering after flow change
+          const currentLoc = useReaderStore.getState().currentCfi;
+          if (currentLoc) {
+              renditionRef.current.display(currentLoc);
+          }
+      }
+  }, [viewMode]);
 
   const handleClearSelection = () => {
       const iframe = viewerRef.current?.querySelector('iframe');
