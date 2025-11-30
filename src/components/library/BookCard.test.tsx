@@ -59,4 +59,23 @@ describe('BookCard', () => {
 
     expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
   });
+
+  it('should render progress bar when progress > 0', () => {
+    const bookWithProgress = { ...mockBook, progress: 0.45 };
+    renderWithRouter(<BookCard book={bookWithProgress} />);
+
+    const progressBar = screen.getByTestId('progress-bar');
+    expect(progressBar).toBeInTheDocument();
+    expect(progressBar).toHaveStyle({ width: '45%' });
+  });
+
+  it('should not render progress bar when progress is 0 or undefined', () => {
+    const bookWithZeroProgress = { ...mockBook, progress: 0 };
+    renderWithRouter(<BookCard book={bookWithZeroProgress} />);
+    expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
+
+    const bookWithUndefinedProgress = { ...mockBook, progress: undefined };
+    renderWithRouter(<BookCard book={bookWithUndefinedProgress} />);
+    expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
+  });
 });

@@ -1,5 +1,7 @@
 # Plan: Smart Resume ("Recall" Buffer)
 
+## Status: Completed
+
 ## Priority: High
 
 This feature improves the resumption experience by rewinding slightly based on how long the user has been away, helping them regain context.

@@ -5,10 +5,10 @@ import type { Timepoint } from './providers/types';
 export class TTSCache {
   /**
    * Generates a deterministic key for the cache.
-   * SHA-256(text + voiceId + speed + pitch)
+   * SHA-256(text + voiceId + speed + pitch + lexiconHash)
    */
-  async generateKey(text: string, voiceId: string, speed: number, pitch: number = 1.0): Promise<string> {
-    const data = `${text}|${voiceId}|${speed}|${pitch}`;
+  async generateKey(text: string, voiceId: string, speed: number, pitch: number = 1.0, lexiconHash: string = ''): Promise<string> {
+    const data = `${text}|${voiceId}|${speed}|${pitch}|${lexiconHash}`;
     const encoder = new TextEncoder();
     const dataBuffer = encoder.encode(data);
     const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);

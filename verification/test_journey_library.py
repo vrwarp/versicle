@@ -29,7 +29,7 @@ def test_library_journey(page: Page):
     print("Reloading to check persistence...")
     page.reload()
     expect(page.get_by_test_id("book-card")).to_be_visible(timeout=2000)
-    utils.capture_screenshot(page, "library_3_persistence")
+    # library_3_persistence removed as redundant
 
     # 4. Navigation Check (Clicking book)
     print("Clicking book to verify navigation...")
@@ -38,6 +38,6 @@ def test_library_journey(page: Page):
 
     # Verify we are in reader view (Back button exists)
     expect(page.get_by_test_id("reader-back-button")).to_be_visible()
-    utils.capture_screenshot(page, "library_4_navigation")
+    utils.capture_screenshot(page, "library_reader_view")
 
     print("Library Journey Passed!")

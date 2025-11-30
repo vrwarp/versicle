@@ -4,9 +4,11 @@ import { AudioElementPlayer } from './AudioElementPlayer';
 import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { TTSCache } from './TTSCache';
 import { CostEstimator } from './CostEstimator';
+import { LexiconService } from './LexiconService';
 import { MediaSessionManager } from './MediaSessionManager';
+import { useTTSStore } from '../../store/useTTSStore';
 
-export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading';
+export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
 export interface TTSQueueItem {
     text: string;
@@ -27,6 +29,7 @@ export class AudioPlayerService {
   private syncEngine: SyncEngine | null = null;
   private mediaSessionManager: MediaSessionManager;
   private cache: TTSCache;
+  private lexiconService: LexiconService;
   private queue: TTSQueueItem[] = [];
   private currentIndex: number = 0;
   private status: TTSStatus = 'stopped';
@@ -35,11 +38,14 @@ export class AudioPlayerService {
   // Settings
   private speed: number = 1.0;
   private voiceId: string | null = null;
-  // TODO: Add pitch if providers support it
+
+  // State for current book context (to filter rules)
+  private currentBookId: string | null = null;
 
   private constructor() {
     this.provider = new WebSpeechProvider();
     this.cache = new TTSCache();
+    this.lexiconService = LexiconService.getInstance();
     this.mediaSessionManager = new MediaSessionManager({
         onPlay: () => this.resume(),
         onPause: () => this.pause(),
@@ -57,6 +63,13 @@ export class AudioPlayerService {
       AudioPlayerService.instance = new AudioPlayerService();
     }
     return AudioPlayerService.instance;
+  }
+
+  /**
+   * Sets the current book ID to allow loading book-specific lexicon rules.
+   */
+  setBookId(bookId: string | null) {
+      this.currentBookId = bookId;
   }
 
   private setupWebSpeech() {
@@ -171,7 +184,7 @@ export class AudioPlayerService {
       }
   }
 
-  async play() {
+  async play(): Promise<void> {
     if (this.status === 'paused') {
         return this.resume();
     }
@@ -190,11 +203,16 @@ export class AudioPlayerService {
     try {
         const voiceId = this.voiceId || '';
 
+        // Retrieve and apply lexicon rules
+        const rules = await this.lexiconService.getRules(this.currentBookId || undefined);
+        const processedText = this.lexiconService.applyLexicon(item.text, rules);
+        const lexiconHash = await this.lexiconService.getRulesHash(rules);
+
         if (this.provider instanceof WebSpeechProvider) {
-             await this.provider.synthesize(item.text, voiceId, this.speed);
+             await this.provider.synthesize(processedText, voiceId, this.speed);
         } else {
              // Cloud provider flow with Caching
-             const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed);
+             const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed, 1.0, lexiconHash);
              const cached = await this.cache.get(cacheKey);
 
              let result: SpeechSegment;
@@ -208,9 +226,14 @@ export class AudioPlayerService {
              } else {
                  // Track cost before calling synthesis
                  // We only track when we actually hit the API (cache miss)
-                 CostEstimator.getInstance().track(item.text);
+                 // Note: We track the ORIGINAL text length, not the processed one,
+                 // as that's what the user sees, though technically we send processed text.
+                 // Actually, cloud providers charge by input characters.
+                 // If replacement is much longer, cost increases.
+                 // Let's track processed text to be accurate.
+                 CostEstimator.getInstance().track(processedText);
 
-                 result = await this.provider.synthesize(item.text, voiceId, this.speed);
+                 result = await this.provider.synthesize(processedText, voiceId, this.speed);
                  if (result.audio) {
                      await this.cache.put(
                          cacheKey,
@@ -246,13 +269,7 @@ export class AudioPlayerService {
             console.warn("Falling back to WebSpeechProvider...");
             this.setProvider(new WebSpeechProvider());
             // Retry playback with new provider
-            // We need to wait a tick or ensure provider is ready?
-            // WebSpeechProvider doesn't always need init() for basic usage if voices loaded,
-            // but calling init() is safer.
             await this.init();
-            // Also might want to unset specific voiceId if it was a cloud voice ID
-            // or let the provider handle fallback.
-            // For now, let's just retry.
             // Defer play to allow error state to propagate to UI (avoid batching)
             setTimeout(() => {
                 this.play();
@@ -265,12 +282,58 @@ export class AudioPlayerService {
     }
   }
 
-  async resume() {
+  async resume(): Promise<void> {
      if (this.status === 'paused') {
-        if (this.provider instanceof WebSpeechProvider && this.provider.resume) {
-             this.provider.resume();
-             this.setStatus('playing');
+        // Smart Resume Logic
+        const ttsStore = useTTSStore.getState();
+        const lastPauseTime = ttsStore ? ttsStore.lastPauseTime : null;
+        const now = Date.now();
+        let elapsed = 0;
+        if (lastPauseTime) {
+            elapsed = now - lastPauseTime;
+        }
+
+        // Reset pause time
+        if (ttsStore) {
+            ttsStore.setLastPauseTime(null);
+        }
+
+        if (this.provider instanceof WebSpeechProvider) {
+            // Local provider: rewind by index
+            if (elapsed > 5 * 60 * 1000) { // 5 minutes
+                 // Rewind 2 sentences, clamp to 0
+                 // Note: WebSpeech pause/resume is fragile. Often better to just restart segment if "rewind" needed.
+                 // But strictly speaking, if we just call resume(), it continues where it left off.
+                 // To rewind, we must modify currentIndex and call play().
+                 const rewindAmount = elapsed > 24 * 60 * 60 * 1000 ? 5 : 2; // Rewind more if away for a day
+                 const newIndex = Math.max(0, this.currentIndex - rewindAmount);
+
+                 if (newIndex !== this.currentIndex) {
+                     this.currentIndex = newIndex;
+                     // Set status to stopped so play() starts fresh
+                     this.setStatus('stopped');
+                     return this.play();
+                 }
+            }
+
+            if (this.provider.resume) {
+                this.provider.resume();
+                this.setStatus('playing');
+            } else {
+                // Fallback if provider doesn't support resume
+                this.play();
+            }
+
         } else if (this.audioPlayer) {
+             // Cloud provider: rewind by time
+             if (elapsed > 5 * 60 * 1000) {
+                 const rewindSeconds = elapsed > 24 * 60 * 60 * 1000 ? 60 : 10;
+                 const currentTime = this.audioPlayer.getCurrentTime();
+                 const newTime = Math.max(0, currentTime - rewindSeconds);
+                 this.audioPlayer.seek(newTime);
+                 // Toast notification could go here if we had a way to trigger it from service
+             }
+
              await this.audioPlayer.resume();
              this.setStatus('playing');
         }
@@ -285,12 +348,25 @@ export class AudioPlayerService {
     } else if (this.audioPlayer) {
         this.audioPlayer.pause();
     }
+
+    // Record pause time
+    const ttsStore = useTTSStore.getState();
+    if (ttsStore) {
+        ttsStore.setLastPauseTime(Date.now());
+    }
+
     this.setStatus('paused');
   }
 
   stop() {
     this.setStatus('stopped');
     this.notifyListeners(null);
+
+    // Clear pause time on stop (we don't smart resume from stop)
+    const ttsStore = useTTSStore.getState();
+    if (ttsStore) {
+        ttsStore.setLastPauseTime(null);
+    }
 
     if (this.provider instanceof WebSpeechProvider && this.provider.stop) {
         this.provider.stop();
@@ -348,7 +424,7 @@ export class AudioPlayerService {
               this.currentIndex++;
               this.play();
           } else {
-              this.setStatus('stopped');
+              this.setStatus('completed');
               this.notifyListeners(null);
           }
       }

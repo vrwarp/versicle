@@ -1,5 +1,7 @@
 # Plan: Gesture Pad Overlay
 
+## Status: Completed
+
 ## Priority: Low (Delight)
 
 A full-screen gesture layer for controlling playback without looking.

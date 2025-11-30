@@ -11,11 +11,13 @@ import { ReaderSettings } from './ReaderSettings';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
 import { TTSCostIndicator } from './TTSCostIndicator';
+import { GestureOverlay } from './GestureOverlay';
 import { Toast } from '../ui/Toast';
 import { Dialog } from '../ui/Dialog';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter, RotateCcw, RotateCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter, RotateCcw, RotateCw, Maximize, Minimize } from 'lucide-react';
+import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 
 /**
  * The main reader interface component.
@@ -50,6 +52,7 @@ export const ReaderView: React.FC = () => {
 
   const {
       isPlaying,
+      status,
       play,
       pause,
       activeCfi,
@@ -68,7 +71,8 @@ export const ReaderView: React.FC = () => {
       setEnableCostWarning,
       prerollEnabled,
       setPrerollEnabled,
-      seek
+      seek,
+      queue
   } = useTTSStore();
 
   const {
@@ -86,6 +90,12 @@ export const ReaderView: React.FC = () => {
       const rendition = renditionRef.current;
       if (!rendition || !activeCfi) return;
 
+      // Auto-turn page in paginated mode
+      if (viewMode === 'paginated') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition as any).display(activeCfi);
+      }
+
       // Add highlight
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
@@ -97,7 +107,7 @@ export const ReaderView: React.FC = () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (rendition as any).annotations.remove(activeCfi, 'highlight');
       };
-  }, [activeCfi]);
+  }, [activeCfi, viewMode]);
 
   // Load Annotations
   useEffect(() => {
@@ -212,12 +222,16 @@ export const ReaderView: React.FC = () => {
   // Search State
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   // Initialize Book
   useEffect(() => {
     if (!id) return;
+
+    // Update AudioPlayerService with current book context
+    AudioPlayerService.getInstance().setBookId(id);
 
     const loadBook = async () => {
       setIsLoading(true);
@@ -303,7 +317,23 @@ export const ReaderView: React.FC = () => {
           // However, for large books this blocks. We can do it in background or rely on percentage from chapters if locations not ready.
           // Let's try to generate minimal locations for progress bar to work reasonably.
            // This is heavy, maybe we skip for step 03 or do it async without await?
-           book.locations.generate(1000);
+           book.locations.generate(1000).then(() => {
+               // Update progress immediately if we are already at a location
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               const currentLoc = (rendition as any).location;
+               if (currentLoc && currentLoc.start) {
+                   const cfi = currentLoc.start.cfi;
+                   const pct = book.locations.percentageFromCfi(cfi);
+
+                   // Get chapter title (simplified)
+                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                   const item = book.spine.get(currentLoc.start.href) as any;
+                   const title = item ? (item.label || 'Chapter') : 'Unknown';
+
+                   updateLocation(cfi, pct, title);
+                   saveProgress(id, cfi, pct);
+               }
+           });
 
            // Index for Search (Async)
            // Only index if not already done? Or just do it every time for now (simplicity)
@@ -363,23 +393,9 @@ export const ReaderView: React.FC = () => {
               });
           });
 
-          // Clear popover on click elsewhere and toggle immersive mode
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          rendition.on('click', (e: any) => {
+          // Clear popover on click elsewhere
+          rendition.on('click', () => {
              hidePopover();
-
-             // Check if click was on a link or interactive element
-             const target = e?.target as HTMLElement;
-             const isLink = target?.tagName?.toLowerCase() === 'a' || target?.closest('a');
-
-             // Check if text is selected (using window.getSelection inside iframe)
-             const iframe = viewerRef.current?.querySelector('iframe');
-             const selection = iframe?.contentWindow?.getSelection();
-             const hasSelection = selection && selection.toString().length > 0;
-
-             if (!isLink && !hasSelection) {
-                 setImmersiveMode(prev => !prev);
-             }
           });
 
           rendition.on('relocated', (location: Location) => {
@@ -505,6 +521,85 @@ export const ReaderView: React.FC = () => {
       renditionRef.current?.next();
   };
 
+  const scrollToText = (text: string) => {
+      const iframe = viewerRef.current?.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+          const doc = iframe.contentDocument;
+          if (!doc) return;
+
+          // Method 1: window.find
+          iframe.contentWindow.getSelection()?.removeAllRanges();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const found = (iframe.contentWindow as any).find(text, false, false, true, false, false, false);
+
+          let element: HTMLElement | null = null;
+          let range: Range | null = null;
+
+          if (found) {
+             const selection = iframe.contentWindow.getSelection();
+             if (selection && selection.rangeCount > 0) {
+                 range = selection.getRangeAt(0);
+                 element = range.startContainer.parentElement;
+             }
+          } else {
+              // Method 2: TreeWalker (Fallback)
+              const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
+              let node;
+              while ((node = walker.nextNode())) {
+                  if (node.textContent?.toLowerCase().includes(text.toLowerCase())) {
+                      range = doc.createRange();
+                      range.selectNodeContents(node);
+                      element = node.parentElement;
+
+                      // Highlight selection
+                      const selection = iframe.contentWindow.getSelection();
+                      selection?.removeAllRanges();
+                      selection?.addRange(range);
+                      break;
+                  }
+              }
+          }
+
+          if (element) {
+              if (viewMode === 'scrolled') {
+                 const wrapper = viewerRef.current?.firstElementChild as HTMLElement;
+                 if (wrapper && wrapper.scrollHeight > wrapper.clientHeight) {
+                     const rect = element.getBoundingClientRect();
+                     // rect.top is relative to the iframe document top (which is full height)
+                     // Center the element in the wrapper
+                     const targetTop = rect.top - (wrapper.clientHeight / 2) + (rect.height / 2);
+                     wrapper.scrollTo({ top: Math.max(0, targetTop), behavior: 'auto' });
+                 } else {
+                     element.scrollIntoView({ behavior: 'auto', block: 'center' });
+                 }
+              } else {
+                  element.scrollIntoView({ behavior: 'auto', block: 'center' });
+              }
+              return;
+          }
+      }
+  };
+
+  const [autoPlayNext, setAutoPlayNext] = useState(false);
+
+  // Auto-advance chapter when TTS completes
+  useEffect(() => {
+      if (status === 'completed') {
+          setAutoPlayNext(true);
+          handleNext();
+      }
+  }, [status]);
+
+  // Trigger auto-play when new chapter loads (queue changes)
+  useEffect(() => {
+      // Check if we are waiting to auto-play and the player is stopped (meaning new queue loaded)
+      // We also check queue length to ensure we actually have content
+      if (autoPlayNext && status === 'stopped' && queue.length > 0) {
+          play();
+          setAutoPlayNext(false);
+      }
+  }, [status, autoPlayNext, play, queue]);
+
   // Handle Container Resize (e.g. sidebar toggle)
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -546,8 +641,29 @@ export const ReaderView: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const { setGestureMode } = useReaderStore();
+
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
+    <div className="flex flex-col h-screen bg-background text-foreground relative">
+      {/* Gesture Overlay */}
+      <GestureOverlay
+          onNextChapter={handleNext}
+          onPrevChapter={handlePrev}
+          onClose={() => setGestureMode(false)}
+      />
+
+      {/* Immersive Mode Exit Button */}
+      {immersiveMode && (
+        <button
+            data-testid="reader-immersive-exit-button"
+            aria-label="Exit Immersive Mode"
+            onClick={() => setImmersiveMode(false)}
+            className="absolute top-4 right-4 z-50 p-2 rounded-full bg-surface/50 hover:bg-surface shadow-md backdrop-blur-sm transition-colors"
+        >
+            <Minimize className="w-5 h-5 text-foreground" />
+        </button>
+      )}
+
       {/* Header */}
       {!immersiveMode && (
         <header className="flex items-center justify-between px-6 md:px-8 py-2 bg-surface shadow-sm z-10">
@@ -571,6 +687,9 @@ export const ReaderView: React.FC = () => {
             </button>
             <button data-testid="reader-tts-button" aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
                     {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+            </button>
+            <button data-testid="reader-immersive-enter-button" aria-label="Enter Immersive Mode" onClick={() => setImmersiveMode(true)} className="p-2 rounded-full hover:bg-border">
+                <Maximize className="w-5 h-5 text-secondary" />
             </button>
             <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-border">
                 <Settings className="w-5 h-5 text-secondary" />
@@ -633,6 +752,7 @@ export const ReaderView: React.FC = () => {
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     setIsSearching(true);
+                                    setActiveSearchQuery(searchQuery);
                                     searchClient.search(searchQuery, id || '').then(results => {
                                         setSearchResults(results);
                                         setIsSearching(false);
@@ -661,8 +781,14 @@ export const ReaderView: React.FC = () => {
                                      <button
                                         data-testid={`search-result-${idx}`}
                                         className="text-left w-full"
-                                        onClick={() => {
-                                            renditionRef.current?.display(result.href);
+                                        onClick={async () => {
+                                            if (renditionRef.current) {
+                                                await renditionRef.current.display(result.href);
+                                                // Small delay to ensure rendering is complete before searching DOM
+                                                setTimeout(() => {
+                                                    scrollToText(activeSearchQuery);
+                                                }, 500);
+                                            }
                                         }}
                                      >
                                          <p className="text-xs text-muted mb-1">Result {idx + 1}</p>

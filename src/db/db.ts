@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { BookMetadata, Annotation, CachedSegment } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, LexiconRule } from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -44,19 +44,30 @@ export interface EpubLibraryDB extends DBSchema {
         by_lastAccessed: number;
     };
   };
+  /**
+   * Store for user pronunciation rules.
+   */
+  lexicon: {
+    key: string;
+    value: LexiconRule;
+    indexes: {
+      by_bookId: string;
+      by_original: string;
+    };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
 /**
  * Initializes the IndexedDB database connection and handles schema upgrades.
- * It creates the 'books', 'files', 'annotations', and 'tts_cache' object stores if they don't exist.
+ * It creates the 'books', 'files', 'annotations', 'tts_cache', and 'lexicon' object stores if they don't exist.
  *
  * @returns A Promise resolving to the database instance.
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 2, {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 3, {
       upgrade(db) {
         // Books store
         if (!db.objectStoreNames.contains('books')) {
@@ -81,6 +92,13 @@ export const initDB = () => {
         if (!db.objectStoreNames.contains('tts_cache')) {
           const cacheStore = db.createObjectStore('tts_cache', { keyPath: 'key' });
           cacheStore.createIndex('by_lastAccessed', 'lastAccessed', { unique: false });
+        }
+
+        // Lexicon store (New in v3)
+        if (!db.objectStoreNames.contains('lexicon')) {
+          const lexiconStore = db.createObjectStore('lexicon', { keyPath: 'id' });
+          lexiconStore.createIndex('by_bookId', 'bookId', { unique: false });
+          lexiconStore.createIndex('by_original', 'original', { unique: false });
         }
       },
     });

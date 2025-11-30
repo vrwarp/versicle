@@ -3,7 +3,7 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { BookCard } from './BookCard';
 import { EmptyLibrary } from './EmptyLibrary';
 import { Grid } from 'react-window';
-import { Plus } from 'lucide-react';
+import { Upload } from 'lucide-react';
 
 // Grid Configuration
 const CARD_WIDTH = 200; // Minimal width
@@ -117,15 +117,16 @@ export const LibraryView: React.FC = () => {
         <button
           onClick={triggerFileUpload}
           disabled={isImporting}
-          className="flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
           aria-label="Import book"
           data-testid="header-add-button"
         >
           {isImporting ? (
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
           ) : (
-            <Plus className="w-6 h-6" />
+            <Upload className="w-4 h-4" />
           )}
+          <span className="font-medium">Import Book</span>
         </button>
       </header>
 

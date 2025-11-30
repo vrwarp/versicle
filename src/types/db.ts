@@ -31,3 +31,12 @@ export interface CachedSegment {
   createdAt: number;
   lastAccessed: number;
 }
+
+export interface LexiconRule {
+  id: string; // uuid
+  original: string;
+  replacement: string;
+  isRegex?: boolean; // Treat 'original' as a regex pattern
+  bookId?: string; // Optional: specific to a book. If undefined, applies globally.
+  created: number;
+}

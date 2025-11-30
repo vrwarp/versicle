@@ -36,6 +36,16 @@ vi.mock('./CostEstimator', () => {
     }
 });
 
+// Mock useTTSStore
+vi.mock('../../store/useTTSStore', () => ({
+    useTTSStore: {
+        getState: vi.fn(() => ({
+            lastPauseTime: null,
+            setLastPauseTime: vi.fn(),
+        }))
+    }
+}));
+
 
 describe('AudioPlayerService', () => {
     let service: AudioPlayerService;
@@ -60,6 +70,39 @@ describe('AudioPlayerService', () => {
                 resolve();
             });
         });
+    });
+
+    it('should transition to completed status when queue finishes', async () => {
+        // Use the WebSpeechProvider mock class to create a mock instance that passes instanceof checks
+        const { WebSpeechProvider } = await import('./providers/WebSpeechProvider');
+        const mockInstance = new WebSpeechProvider() as any;
+
+        service.setProvider(mockInstance);
+
+        // Ensure setupWebSpeech() was called and listener registered
+        expect(mockInstance.on).toHaveBeenCalled();
+
+        const onCall = mockInstance.on.mock.calls[0];
+        const listener = onCall[0];
+
+        // Set queue with 1 item
+        service.setQueue([{ text: "1", cfi: "1" }]);
+
+        // Call play() to set status to 'loading'/'playing'
+        // (playNext check requires status !== 'stopped')
+        await service.play();
+
+        // Spy on notifyListeners to verify outcome
+        // @ts-expect-error Access private method
+        const notifySpy = vi.spyOn(service, 'notifyListeners');
+
+        // Trigger 'end' event on the provider listener
+        listener({ type: 'end' });
+
+        // Check status transition
+        // @ts-expect-error Access private property
+        expect(service.status).toBe('completed');
+        expect(notifySpy).toHaveBeenCalledWith(null);
     });
 
     it('should handle fallback from cloud to local on error', async () => {

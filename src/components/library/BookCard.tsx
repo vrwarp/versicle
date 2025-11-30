@@ -61,6 +61,15 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
         <p className="text-sm text-gray-500 line-clamp-1" title={book.author}>
           {book.author || 'Unknown Author'}
         </p>
+        {book.progress !== undefined && book.progress > 0 && (
+          <div className="w-full h-1.5 bg-gray-200 rounded-full mt-3 overflow-hidden" data-testid="progress-container">
+            <div
+              className="h-full bg-primary transition-all duration-300 ease-out"
+              style={{ width: `${Math.min(100, Math.max(0, book.progress * 100))}%` }}
+              data-testid="progress-bar"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

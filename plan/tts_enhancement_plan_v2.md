@@ -25,6 +25,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 
 ### 4. Smart Resume ("Recall" Buffer)
 **Plan:** [plan/tts_v2_plan04_smart_resume.md](./tts_v2_plan04_smart_resume.md)
+**Status:** **Completed**
 **Goal:** Intelligently rewind playback (10s - 60s) upon resumption based on how long the user has been away to help regain context.
 **Key Components:** `useTTSStore` (lastPauseTime), `AudioPlayerService` logic.
 
@@ -74,6 +75,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 
 ### 13. Gesture Pad Overlay
 **Plan:** [plan/tts_v2_plan13_gesture_pad.md](./tts_v2_plan13_gesture_pad.md)
+**Status:** Completed
 **Goal:** A full-screen invisible overlay that accepts gestures (Tap, Swipe) for blind control.
 **Key Components:** `GestureOverlay`.
 

@@ -41,5 +41,5 @@ def test_tts_settings(page: Page):
 
     # Take screenshot
     print("Taking screenshot...")
-    utils.capture_screenshot(page, "tts_settings")
+    utils.capture_screenshot(page, "tts_settings_panel")
     print("Done.")

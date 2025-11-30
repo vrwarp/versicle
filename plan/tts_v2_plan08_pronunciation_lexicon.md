@@ -4,6 +4,8 @@
 
 Users need to correct mispronunciations, especially for proper nouns in fantasy/sci-fi.
 
+## Status: Implemented
+
 ## Goals
 - Allow users to define specific pronunciation rules (Find -> Replace).
 - Apply these rules before synthesis.
@@ -24,11 +26,12 @@ This is a straightforward string replacement task.
 
 1. **`LexiconService`**
    - Store rules in IndexedDB (new object store `lexicon`).
-   - Interface: `{ original: string, replacement: string, bookId?: string }`.
+   - Interface: `{ original: string, replacement: string, bookId?: string, isRegex?: boolean }`.
 
 2. **Processing Pipeline**
    - Create `applyLexicon(text: string, rules: Rule[]): string`.
-   - Use regex with word boundaries: `new RegExp("\\b" + escapeRegExp(original) + "\\b", "gi")`.
+   - Default: Use regex with word boundaries: `new RegExp("\\b" + escapeRegExp(original) + "\\b", "gi")`.
+   - **Regex Mode:** If `isRegex` is true, use `new RegExp(original, "gi")` directly (no escaping, no auto-word-boundaries).
    - Case sensitivity handling? Usually we want case-insensitive match but replace with specific phonetic spelling.
 
 3. **Integration**
