@@ -1,6 +1,6 @@
 import pytest
 from playwright.sync_api import Page, expect
-from utils import reset_app, capture_screenshot
+from verification.utils import reset_app, capture_screenshot
 
 def test_verify_progress_bar(page: Page):
     # 1. Reset app to ensure clean state
