@@ -24,6 +24,11 @@ export interface Annotation {
   created: number;
 }
 
+export interface BookLocations {
+  bookId: string;
+  locations: string; // JSON string from book.locations.save()
+}
+
 export interface CachedSegment {
   key: string;      // SHA-256 hash
   audio: ArrayBuffer;

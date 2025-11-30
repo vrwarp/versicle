@@ -73,9 +73,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   removeBook: async (id: string) => {
     try {
       const db = await getDB();
-      const tx = db.transaction(['books', 'files', 'annotations'], 'readwrite');
+      const tx = db.transaction(['books', 'files', 'annotations', 'locations'], 'readwrite');
       await tx.objectStore('books').delete(id);
       await tx.objectStore('files').delete(id);
+      await tx.objectStore('locations').delete(id);
 
       // Delete annotations for this book
       const index = tx.objectStore('annotations').index('by_bookId');

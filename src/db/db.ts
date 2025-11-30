@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { BookMetadata, Annotation, CachedSegment, LexiconRule } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations } from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -23,6 +23,13 @@ export interface EpubLibraryDB extends DBSchema {
   files: {
     key: string;
     value: ArrayBuffer;
+  };
+  /**
+   * Store for generated locations cache.
+   */
+  locations: {
+    key: string; // bookId
+    value: BookLocations;
   };
   /**
    * Store for user annotations.
@@ -67,7 +74,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 3, {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 4, {
       upgrade(db) {
         // Books store
         if (!db.objectStoreNames.contains('books')) {
@@ -80,6 +87,11 @@ export const initDB = () => {
         // Files store
         if (!db.objectStoreNames.contains('files')) {
           db.createObjectStore('files');
+        }
+
+        // Locations store (New in v4)
+        if (!db.objectStoreNames.contains('locations')) {
+          db.createObjectStore('locations', { keyPath: 'bookId' });
         }
 
         // Annotations store

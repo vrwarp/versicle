@@ -309,31 +309,48 @@ export const ReaderView: React.FC = () => {
           await rendition.display(startLocation);
 
           // Generate locations for progress tracking
-          // In a real app, this should be cached. For now, we generate if missing.
-          // Since generating locations is expensive, we might want to do it lazily or check if we have it saved.
-          // For this step, we'll just await ready and verify readiness.
           await book.ready;
-          // Ideally: await book.locations.generate(1000);
-          // However, for large books this blocks. We can do it in background or rely on percentage from chapters if locations not ready.
-          // Let's try to generate minimal locations for progress bar to work reasonably.
-           // This is heavy, maybe we skip for step 03 or do it async without await?
-           book.locations.generate(1000).then(() => {
-               // Update progress immediately if we are already at a location
+
+          // Helper to update progress once locations are ready
+          const updateProgressFromLocations = (r: Rendition, b: Book) => {
                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-               const currentLoc = (rendition as any).location;
+               const currentLoc = (r as any).location;
                if (currentLoc && currentLoc.start) {
                    const cfi = currentLoc.start.cfi;
-                   const pct = book.locations.percentageFromCfi(cfi);
+                   let pct = 0;
+                   try {
+                       pct = b.locations.percentageFromCfi(cfi);
+                   } catch {
+                       // Ignore if locations somehow failed
+                   }
 
                    // Get chapter title (simplified)
                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                   const item = book.spine.get(currentLoc.start.href) as any;
+                   const item = b.spine.get(currentLoc.start.href) as any;
                    const title = item ? (item.label || 'Chapter') : 'Unknown';
 
                    updateLocation(cfi, pct, title);
                    saveProgress(id, cfi, pct);
                }
-           });
+          };
+
+          // Check for cached locations
+          const savedLocations = await db.get('locations', id);
+          if (savedLocations) {
+              book.locations.load(savedLocations.locations);
+              // Update progress immediately
+              updateProgressFromLocations(rendition, book);
+          } else {
+              // Generate if not cached
+              book.locations.generate(1000).then(async () => {
+                   // Save to DB
+                   const locationStr = book.locations.save();
+                   const db = await getDB();
+                   await db.put('locations', { bookId: id, locations: locationStr });
+
+                   updateProgressFromLocations(rendition, book);
+               });
+          }
 
            // Index for Search (Async)
            // Only index if not already done? Or just do it every time for now (simplicity)

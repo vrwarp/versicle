@@ -18,6 +18,7 @@ vi.mock('../../../db/db', () => ({
       return Promise.resolve(null);
     }),
     getAllFromIndex: vi.fn(() => Promise.resolve([])), // Mock annotations fetch
+    put: vi.fn(() => Promise.resolve()), // Mock put for caching locations
     transaction: vi.fn(() => ({
         objectStore: vi.fn(() => ({
             get: vi.fn(),
@@ -78,8 +79,10 @@ describe('ReaderView', () => {
         navigation: Promise.resolve({ toc: [{ id: '1', label: 'Chapter 1', href: 'chap1.html' }] })
       },
       locations: {
-          generate: vi.fn(),
-          percentageFromCfi: vi.fn(() => 0.5)
+          generate: vi.fn().mockResolvedValue(['cfi1']),
+          percentageFromCfi: vi.fn(() => 0.5),
+          save: vi.fn(() => '["cfi1"]'),
+          load: vi.fn()
       },
       spine: {
           get: vi.fn(() => ({ label: 'Chapter 1' }))

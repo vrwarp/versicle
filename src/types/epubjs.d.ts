@@ -89,6 +89,8 @@ declare module 'epubjs' {
         generate(chars: number): Promise<string[]>;
         cfiFromPercentage(percentage: number): string;
         percentageFromCfi(cfi: string): number;
+        save(): string;
+        load(locations: string): void;
     }
 
     export interface Book {
