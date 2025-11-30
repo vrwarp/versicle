@@ -172,7 +172,7 @@ export class AudioPlayerService {
       }
   }
 
-  async play() {
+  async play(): Promise<void> {
     if (this.status === 'paused') {
         return this.resume();
     }
@@ -266,7 +266,7 @@ export class AudioPlayerService {
     }
   }
 
-  async resume() {
+  async resume(): Promise<void> {
      if (this.status === 'paused') {
         // Smart Resume Logic
         const lastPauseTime = useTTSStore.getState().lastPauseTime;
