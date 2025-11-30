@@ -6,6 +6,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 
 ### 1. Audio Pipeline Infrastructure (Web Audio Graph)
 **Plan:** [plan/tts_v2_plan01_audio_graph.md](./tts_v2_plan01_audio_graph.md)
+**Status:** **Pending**
 **Goal:** Migrate from `AudioElement` to a Web Audio API Directed Acyclic Graph (DAG) to enable gapless playback, precise scheduling, and DSP effects.
 **Key Components:** `WebAudioEngine`, `AudioGraph`, `BufferScheduler`.
 
@@ -31,6 +32,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 
 ### 5. Sleep Timer (Fade Out)
 **Plan:** [plan/tts_v2_plan05_sleep_timer.md](./tts_v2_plan05_sleep_timer.md)
+**Status:** **Pending**
 **Goal:** Implement a sleep timer that gradually fades out volume over the last minute instead of stopping abruptly.
 **Key Components:** `AudioPlayerService`, `SleepTimerMenu`.
 
@@ -38,21 +40,25 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 
 ### 6. Intelligent Silence Trimming ("Smart Speed")
 **Plan:** [plan/tts_v2_plan06_smart_speed.md](./tts_v2_plan06_smart_speed.md)
+**Status:** **Pending**
 **Goal:** Analyze audio buffers to detect and trim excessive silence (>300ms) to create a tighter, more natural pacing.
 **Key Components:** `SilenceTrimmer`, `WebAudioEngine`.
 
 ### 7. Narrative Voice Switching
 **Plan:** [plan/tts_v2_plan07_voice_switching.md](./tts_v2_plan07_voice_switching.md)
+**Status:** **Pending**
 **Goal:** Use different voices or pitches for narration and dialogue (detected via quotes) to distinguish characters.
 **Key Components:** `TextSegmenter` (dialogue detection), `AudioPlayerService`.
 
 ### 8. User Pronunciation Lexicon
 **Plan:** [plan/tts_v2_plan08_pronunciation_lexicon.md](./tts_v2_plan08_pronunciation_lexicon.md)
+**Status:** **Completed**
 **Goal:** Allow users to define custom pronunciation rules (Find/Replace) to correct specific words or names.
 **Key Components:** `LexiconService`, `LexiconManager`.
 
 ### 9. Car Mode UI
 **Plan:** [plan/tts_v2_plan09_car_mode.md](./tts_v2_plan09_car_mode.md)
+**Status:** **Pending**
 **Goal:** A simplified, high-contrast interface with massive buttons for safe usage while driving.
 **Key Components:** `CarModeView`, `WakeLock`.
 
@@ -60,27 +66,31 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 
 ### 10. Chapter Pre-roll (Announcer)
 **Plan:** [plan/tts_v2_plan10_chapter_preroll.md](./tts_v2_plan10_chapter_preroll.md)
+**Status:** **Pending**
 **Goal:** Synthesize and inject an announcement ("Chapter N. Title...") before starting a new chapter.
 **Key Components:** `AudioPlayerService` (pre-flight injection).
 
 ### 11. Ambient Soundscapes
 **Plan:** [plan/tts_v2_plan11_ambient_sounds.md](./tts_v2_plan11_ambient_sounds.md)
+**Status:** **Pending**
 **Goal:** Mix looping background sounds (Rain, Fire, White Noise) with the TTS narration.
 **Key Components:** `AmbiencePlayer`, `AudioGraph`.
 
 ### 12. Earcon Feedback
 **Plan:** [plan/tts_v2_plan12_earcon_feedback.md](./tts_v2_plan12_earcon_feedback.md)
+**Status:** **Pending**
 **Goal:** Play subtle audio cues (beeps/clicks) for interactions like skipping or pausing, essential for headless usage.
 **Key Components:** `EarconManager`.
 
 ### 13. Gesture Pad Overlay
 **Plan:** [plan/tts_v2_plan13_gesture_pad.md](./tts_v2_plan13_gesture_pad.md)
-**Status:** Completed
+**Status:** **Completed**
 **Goal:** A full-screen invisible overlay that accepts gestures (Tap, Swipe) for blind control.
 **Key Components:** `GestureOverlay`.
 
 ### 14. Export to MP3
 **Plan:** [plan/tts_v2_plan14_export_mp3.md](./tts_v2_plan14_export_mp3.md)
+**Status:** **Pending**
 **Goal:** Stitch cached audio segments into a single downloadable file for offline listening on other devices.
 **Key Components:** `AudioExporter`.
 
@@ -99,10 +109,11 @@ Most features in the roadmap are loosely coupled, but some share critical depend
 
 1.  **Plan 01 (Audio Graph)** - *Foundation for everything.*
 2.  **Plan 02 (Media Session)** - *Completed.*
-3.  **Plan 03 (Sanitization)** - *Improves quality immediately.*
-4.  **Plan 04 (Smart Resume)** - *Easy logic, high value.*
-5.  **Plan 05 (Sleep Timer)** - *Easy logic.*
-6.  **Plan 06 (Smart Speed)** - *Requires Plan 01.*
-7.  **Plan 07 (Voice Switching)** - *Complex logic.*
-8.  **Plan 08 (Lexicon)** - *Independent logic.*
-9.  **Plan 09 - 14** - *Independent, do in any order.*
+3.  **Plan 03 (Sanitization)** - *Completed.*
+4.  **Plan 04 (Smart Resume)** - *Completed.*
+5.  **Plan 13 (Gesture Pad)** - *Completed.*
+6.  **Plan 08 (Lexicon)** - *Completed.*
+7.  **Plan 05 (Sleep Timer)** - *Easy logic.*
+8.  **Plan 06 (Smart Speed)** - *Requires Plan 01.*
+9.  **Plan 07 (Voice Switching)** - *Complex logic.*
+10. **Plan 09 - 14** - *Independent, do in any order.*
