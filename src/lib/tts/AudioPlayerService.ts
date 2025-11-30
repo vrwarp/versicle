@@ -8,7 +8,7 @@ import { LexiconService } from './LexiconService';
 import { MediaSessionManager } from './MediaSessionManager';
 import { useTTSStore } from '../../store/useTTSStore';
 
-export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading';
+export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
 export interface TTSQueueItem {
     text: string;
@@ -285,7 +285,8 @@ export class AudioPlayerService {
   async resume(): Promise<void> {
      if (this.status === 'paused') {
         // Smart Resume Logic
-        const lastPauseTime = useTTSStore.getState().lastPauseTime;
+        const ttsStore = useTTSStore.getState();
+        const lastPauseTime = ttsStore ? ttsStore.lastPauseTime : null;
         const now = Date.now();
         let elapsed = 0;
         if (lastPauseTime) {
@@ -293,7 +294,9 @@ export class AudioPlayerService {
         }
 
         // Reset pause time
-        useTTSStore.getState().setLastPauseTime(null);
+        if (ttsStore) {
+            ttsStore.setLastPauseTime(null);
+        }
 
         if (this.provider instanceof WebSpeechProvider) {
             // Local provider: rewind by index
@@ -347,7 +350,10 @@ export class AudioPlayerService {
     }
 
     // Record pause time
-    useTTSStore.getState().setLastPauseTime(Date.now());
+    const ttsStore = useTTSStore.getState();
+    if (ttsStore) {
+        ttsStore.setLastPauseTime(Date.now());
+    }
 
     this.setStatus('paused');
   }
@@ -357,7 +363,10 @@ export class AudioPlayerService {
     this.notifyListeners(null);
 
     // Clear pause time on stop (we don't smart resume from stop)
-    useTTSStore.getState().setLastPauseTime(null);
+    const ttsStore = useTTSStore.getState();
+    if (ttsStore) {
+        ttsStore.setLastPauseTime(null);
+    }
 
     if (this.provider instanceof WebSpeechProvider && this.provider.stop) {
         this.provider.stop();
@@ -415,7 +424,7 @@ export class AudioPlayerService {
               this.currentIndex++;
               this.play();
           } else {
-              this.setStatus('stopped');
+              this.setStatus('completed');
               this.notifyListeners(null);
           }
       }

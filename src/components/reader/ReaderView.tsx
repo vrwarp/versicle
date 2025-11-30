@@ -52,6 +52,7 @@ export const ReaderView: React.FC = () => {
 
   const {
       isPlaying,
+      status,
       play,
       pause,
       activeCfi,
@@ -70,7 +71,8 @@ export const ReaderView: React.FC = () => {
       setEnableCostWarning,
       prerollEnabled,
       setPrerollEnabled,
-      seek
+      seek,
+      queue
   } = useTTSStore();
 
   const {
@@ -88,6 +90,12 @@ export const ReaderView: React.FC = () => {
       const rendition = renditionRef.current;
       if (!rendition || !activeCfi) return;
 
+      // Auto-turn page in paginated mode
+      if (viewMode === 'paginated') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition as any).display(activeCfi);
+      }
+
       // Add highlight
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
@@ -99,7 +107,7 @@ export const ReaderView: React.FC = () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (rendition as any).annotations.remove(activeCfi, 'highlight');
       };
-  }, [activeCfi]);
+  }, [activeCfi, viewMode]);
 
   // Load Annotations
   useEffect(() => {
@@ -509,6 +517,26 @@ export const ReaderView: React.FC = () => {
       console.log("Navigating to next page");
       renditionRef.current?.next();
   };
+
+  const [autoPlayNext, setAutoPlayNext] = useState(false);
+
+  // Auto-advance chapter when TTS completes
+  useEffect(() => {
+      if (status === 'completed') {
+          setAutoPlayNext(true);
+          handleNext();
+      }
+  }, [status]);
+
+  // Trigger auto-play when new chapter loads (queue changes)
+  useEffect(() => {
+      // Check if we are waiting to auto-play and the player is stopped (meaning new queue loaded)
+      // We also check queue length to ensure we actually have content
+      if (autoPlayNext && status === 'stopped' && queue.length > 0) {
+          play();
+          setAutoPlayNext(false);
+      }
+  }, [status, autoPlayNext, play, queue]);
 
   // Handle Container Resize (e.g. sidebar toggle)
   const prevSize = useRef({ width: 0, height: 0 });
