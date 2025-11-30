@@ -138,7 +138,7 @@ describe('AudioPlayerService Smart Resume', () => {
         expect(mockStateHandler.setLastPauseTime).toHaveBeenCalledWith(null);
     });
 
-    it('should clamp rewind to 0 (WebSpeech)', async () => {
+    it('should clamp rewind to 0 (WebSpeech) - ensuring not rewinding past chapter start', async () => {
         const mockProvider = new WebSpeechProvider();
         service.setProvider(mockProvider);
 
@@ -150,6 +150,31 @@ describe('AudioPlayerService Smart Resume', () => {
 
         // 1 - 2 = -1 -> clamped to 0
         expect((service as any).currentIndex).toBe(0); // eslint-disable-line @typescript-eslint/no-explicit-any
+    });
+
+    it('should clamp rewind to 0s (Cloud) - ensuring not rewinding past chapter start', async () => {
+        const mockCloudProvider: any = { init: vi.fn(), getVoices: vi.fn(), synthesize: vi.fn(), stop: vi.fn() }; // eslint-disable-line @typescript-eslint/no-explicit-any
+        service.setProvider(mockCloudProvider);
+        const mockAudioPlayer = {
+            getCurrentTime: vi.fn().mockReturnValue(5), // 5 seconds in
+            seek: vi.fn(),
+            resume: vi.fn().mockResolvedValue(undefined),
+            pause: vi.fn(),
+            stop: vi.fn(),
+            setRate: vi.fn(),
+            setOnTimeUpdate: vi.fn(),
+            setOnEnded: vi.fn(),
+            setOnError: vi.fn(),
+        };
+        (service as any).audioPlayer = mockAudioPlayer; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+        service.pause();
+        lastPauseTime = Date.now() - (6 * 60 * 1000); // 6 mins (should rewind 10s)
+
+        await service.resume();
+
+        // 5 - 10 = -5 -> clamped to 0
+        expect(mockAudioPlayer.seek).toHaveBeenCalledWith(0);
     });
 
     it('should rewind to chapter start (index 0) if paused for > 48 hours (WebSpeech)', async () => {
