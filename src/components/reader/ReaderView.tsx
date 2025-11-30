@@ -369,8 +369,7 @@ export const ReaderView: React.FC = () => {
           });
 
           // Clear popover on click elsewhere
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          rendition.on('click', (e: any) => {
+          rendition.on('click', () => {
              hidePopover();
           });
 
