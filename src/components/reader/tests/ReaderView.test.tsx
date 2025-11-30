@@ -48,7 +48,6 @@ describe('ReaderView', () => {
   const mockFont = vi.fn();
   const mockAnnotations = { add: vi.fn(), remove: vi.fn() };
   const mockDefault = vi.fn();
-  const mockHooksRegister = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -73,11 +72,6 @@ describe('ReaderView', () => {
         getContents: vi.fn(() => []),
         spread: vi.fn(),
         resize: vi.fn(),
-        hooks: {
-            content: {
-                register: mockHooksRegister
-            }
-        }
       }),
       ready: Promise.resolve(),
       loaded: {
