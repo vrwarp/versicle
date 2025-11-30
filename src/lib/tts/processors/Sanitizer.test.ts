@@ -14,9 +14,15 @@ describe('Sanitizer', () => {
         expect(Sanitizer.sanitize(input)).toBe(expected);
     });
 
-    it('removes URLs', () => {
-        const input = 'Visit http://example.com for more info.';
-        const expected = 'Visit for more info.';
+    it('replaces URLs with hostname', () => {
+        const input = 'Visit http://example.com/foo/bar for more info.';
+        const expected = 'Visit example.com for more info.';
+        expect(Sanitizer.sanitize(input)).toBe(expected);
+    });
+
+    it('replaces complex URLs with hostname', () => {
+        const input = 'Check https://old.thecrossing.website/sermons today.';
+        const expected = 'Check old.thecrossing.website today.';
         expect(Sanitizer.sanitize(input)).toBe(expected);
     });
 

@@ -11,7 +11,6 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 
 ### 2. Media Session Integration
 **Plan:** [plan/tts_v2_plan02_media_session.md](./tts_v2_plan02_media_session.md)
-**Status:** **Completed**
 **Goal:** Enable native OS lock screen controls (Play/Pause, Seek, Next/Prev) and display rich metadata (Title, Author, Cover Art).
 **Key Components:** `MediaSessionManager`.
 
@@ -96,7 +95,7 @@ Most features in the roadmap are loosely coupled, but some share critical depend
 ### Sequential Order Recommendation
 
 1.  **Plan 01 (Audio Graph)** - *Foundation for everything.*
-2.  **Plan 02 (Media Session)** - *Implemented.* ✅
+2.  **Plan 02 (Media Session)** - *Easy win, high value.*
 3.  **Plan 03 (Sanitization)** - *Implemented.* ✅
 4.  **Plan 04 (Smart Resume)** - *Easy logic, high value.*
 5.  **Plan 05 (Sleep Timer)** - *Easy logic.*

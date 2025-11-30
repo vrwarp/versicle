@@ -15,7 +15,9 @@ export const REGEX_PATTERNS = {
     PAGE_NUMBER_LINE: /^\s*(?:Page\s+)?\d+\s*$/i,
 
     // Standard URL pattern (http/https/www)
-    URL: /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi,
+    // Updated to match more complex TLDs and paths, using a more inclusive pattern for the path part
+    // Note: This regex is still heuristic.
+    URL: /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,63}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi,
 
     // Academic citations:
     // 1. Bracket style: [12], [12-14]

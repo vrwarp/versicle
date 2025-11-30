@@ -66,8 +66,6 @@ export const ReaderView: React.FC = () => {
       clearError,
       enableCostWarning,
       setEnableCostWarning,
-      prerollEnabled,
-      setPrerollEnabled,
       seek
   } = useTTSStore();
 
@@ -845,15 +843,6 @@ export const ReaderView: React.FC = () => {
                                         className="accent-primary"
                                     />
                                     <span className="text-xs text-foreground">Warn before large synthesis</span>
-                                </label>
-                                <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={prerollEnabled}
-                                        onChange={(e) => setPrerollEnabled(e.target.checked)}
-                                        className="accent-primary"
-                                    />
-                                    <span className="text-xs text-foreground">Announce Chapter Title</span>
                                 </label>
                                 <TTSAbbreviationSettings />
                             </div>

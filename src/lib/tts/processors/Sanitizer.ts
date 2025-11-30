@@ -15,8 +15,17 @@ export class Sanitizer {
 
     let cleanText = text;
 
-    // Remove URLs
-    cleanText = cleanText.replace(REGEX_PATTERNS.URL, ' ');
+    // Replace URLs with hostname
+    cleanText = cleanText.replace(REGEX_PATTERNS.URL, (match) => {
+        try {
+            // Ensure protocol exists for parsing
+            const urlToParse = match.startsWith('http') ? match : `http://${match}`;
+            const url = new URL(urlToParse);
+            return ` ${url.hostname} `;
+        } catch {
+            return ' '; // Fallback if parsing fails
+        }
+    });
 
     // Remove Bracket Citations [1]
     cleanText = cleanText.replace(REGEX_PATTERNS.CITATION_BRACKETS, '');
