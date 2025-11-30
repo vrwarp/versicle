@@ -198,7 +198,26 @@ export const ReaderView: React.FC = () => {
                   'background-color': 'rgba(255, 0, 0, 0.3)',
                   'fill-opacity': '0.3',
                   'mix-blend-mode': 'multiply'
+              },
+              '.search-highlight': {
+                  'fill': 'orange',
+                  'background-color': 'rgba(255, 165, 0, 0.3)',
+                  'fill-opacity': '0.3',
+                  'mix-blend-mode': 'multiply'
               }
+          });
+
+          // Also register for specific themes to ensure it persists
+          ['light', 'dark', 'sepia'].forEach(theme => {
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (rendition.themes as any).register(theme, {
+                  '.search-highlight': {
+                      'fill': 'orange',
+                      'background-color': 'rgba(255, 165, 0, 0.3)',
+                      'fill-opacity': '0.3',
+                      'mix-blend-mode': 'multiply'
+                  }
+              });
           });
       }
   }, []); // removed renditionRef.current, technically should depend on it but ref stable
@@ -675,8 +694,128 @@ export const ReaderView: React.FC = () => {
                                      <button
                                         data-testid={`search-result-${idx}`}
                                         className="text-left w-full"
-                                        onClick={() => {
-                                            renditionRef.current?.display(result.href);
+                                        onClick={async () => {
+                                            const rendition = renditionRef.current;
+                                            if (rendition) {
+                                                await rendition.display(result.href);
+
+                                                // Wait for rendering
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                const contents = (rendition as any).getContents()[0];
+                                                if (contents) {
+                                                    const doc = contents.document;
+                                                    const body = doc.body;
+
+                                                    // Clear previous search highlights (DOM based)
+                                                    const prevHighlights = doc.querySelectorAll('.search-highlight');
+                                                    prevHighlights.forEach((el: HTMLElement) => {
+                                                        const parent = el.parentNode;
+                                                        if (parent) {
+                                                            while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                                                            parent.removeChild(el);
+                                                        }
+                                                    });
+
+                                                    // Helper to clean excerpt for searching
+                                                    const cleanExcerpt = (ex: string) => ex.replace(/^\.\.\.|\.\.\.$/g, '').trim();
+                                                    const targetText = cleanExcerpt(result.excerpt);
+
+                                                    // Improved search: Try to find the excerpt first to disambiguate
+                                                    // If excerpt is not found (e.g. markup issues), fallback to query
+                                                    const findRange = (textToFind: string): Range | null => {
+                                                        // Using window.find is unreliable in hidden iframes or specific contexts
+                                                        // Manual traversal is safer.
+                                                        // We need to find text spanning multiple nodes potentially?
+                                                        // For simplicity, we assume the match is within a node or we match the first node containing the start.
+
+                                                        const findInNode = (node: Node, text: string): Range | null => {
+                                                            if (node.nodeType === 3) {
+                                                                const content = node.textContent || '';
+                                                                const idx = content.toLowerCase().indexOf(text.toLowerCase());
+                                                                if (idx >= 0) {
+                                                                    const range = doc.createRange();
+                                                                    range.setStart(node, idx);
+                                                                    range.setEnd(node, idx + text.length);
+                                                                    return range;
+                                                                }
+                                                            } else {
+                                                                for (let i = 0; i < node.childNodes.length; i++) {
+                                                                    const range = findInNode(node.childNodes[i], text);
+                                                                    if (range) return range;
+                                                                }
+                                                            }
+                                                            return null;
+                                                        };
+                                                        return findInNode(body, textToFind);
+                                                    };
+
+                                                    // 1. Try finding the excerpt
+                                                    // Note: excerpt might contain "..." inside? No, our getExcerpt only adds to ends.
+                                                    // Excerpt might be long.
+                                                    // If excerpt fails, we fallback to query.
+                                                    let range = findRange(targetText);
+
+                                                    // If we found the excerpt, we need to narrow down to the query term within that range
+                                                    if (range) {
+                                                        // We found the excerpt. Now we need to find the query *inside* that text node range?
+                                                        // Actually, findInNode returns a range for the whole text found.
+                                                        // If targetText includes surrounding words, we want to highlight only the query.
+                                                        // But highlighting the whole excerpt is also acceptable context?
+                                                        // The user expects the "matching result" to be highlighted.
+                                                        // Usually that means the query term.
+
+                                                        // Refine range to query term
+                                                        // Simple approach: The excerpt contains the query.
+                                                        // We can search for query inside the text node of the range?
+                                                        // range.startContainer is the text node.
+                                                        // range.startOffset is the start of excerpt.
+                                                        const node = range.startContainer;
+                                                        const content = node.textContent || '';
+                                                        // We know excerpt starts at range.startOffset
+                                                        // We want to find query inside excerpt.
+                                                        const excerptInNode = content.substring(range.startOffset, range.endOffset);
+                                                        const queryIdx = excerptInNode.toLowerCase().indexOf(searchQuery.toLowerCase());
+
+                                                        if (queryIdx >= 0) {
+                                                            // Adjust range to point to query
+                                                            range.setStart(node, range.startOffset + queryIdx);
+                                                            range.setEnd(node, range.startOffset + queryIdx + searchQuery.length);
+                                                        }
+                                                    } else {
+                                                        // Fallback: search for query directly (first match)
+                                                        range = findRange(searchQuery);
+                                                    }
+
+                                                    if (range) {
+                                                        // Calculate CFI before modification for pagination navigation
+                                                        const cfi = contents.cfiFromRange(range);
+                                                        console.log("Adding search highlight (DOM) at CFI:", cfi);
+
+                                                        // Use DOM wrapping as it is more reliable for scrolling and rendering in this specific interaction
+                                                        const span = doc.createElement('span');
+                                                        span.className = 'search-highlight';
+                                                        try {
+                                                            range.surroundContents(span);
+
+                                                            // Scroll logic
+                                                            if (viewMode === 'scrolled') {
+                                                                span.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                                                            } else {
+                                                                // Paginated
+                                                                rendition.display(cfi);
+                                                            }
+                                                        } catch (e) {
+                                                            console.error("Failed to highlight search result:", e);
+                                                            // Fallback to display only
+                                                            rendition.display(cfi);
+                                                        }
+                                                    } else {
+                                                        console.warn("Search term not found in DOM:", searchQuery);
+                                                    }
+                                                }
+
+                                                if (window.innerWidth < 768) setShowSearch(false);
+                                            }
                                         }}
                                      >
                                          <p className="text-xs text-muted mb-1">Result {idx + 1}</p>
