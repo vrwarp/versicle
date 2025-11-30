@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
+import { useReaderStore } from '../store/useReaderStore';
 import { extractSentences, type SentenceNode } from '../lib/tts';
 import type { Rendition } from 'epubjs';
-import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
+import { AudioPlayerService, type TTSQueueItem } from '../lib/tts/AudioPlayerService';
 
 /**
  * Custom hook to manage Text-to-Speech (TTS) functionality.
@@ -13,8 +14,12 @@ import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
  */
 export const useTTS = (rendition: Rendition | null) => {
   const {
-    loadVoices
+    loadVoices,
+    prerollEnabled,
+    rate
   } = useTTSStore();
+
+  const currentChapterTitle = useReaderStore(state => state.currentChapterTitle);
 
   const [sentences, setSentences] = useState<SentenceNode[]>([]);
   const player = AudioPlayerService.getInstance();
@@ -35,10 +40,28 @@ export const useTTS = (rendition: Rendition | null) => {
 
            // Update player queue
            // We map SentenceNode to the format expected by AudioPlayerService
-           const queue = extracted.map(s => ({
+           const queue: TTSQueueItem[] = extracted.map(s => ({
                text: s.text,
                cfi: s.cfi
            }));
+
+           if (prerollEnabled && queue.length > 0) {
+               // Calculate word count
+               const wordCount = extracted.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
+               const title = currentChapterTitle || "Chapter";
+
+               const prerollText = player.generatePreroll(title, wordCount, rate);
+
+               const prerollItem: TTSQueueItem = {
+                   text: prerollText,
+                   cfi: null,
+                   title: title,
+                   isPreroll: true
+               };
+
+               queue.unshift(prerollItem);
+           }
+
            player.setQueue(queue);
 
        } catch (e) {

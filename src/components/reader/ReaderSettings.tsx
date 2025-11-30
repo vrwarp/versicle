@@ -20,7 +20,9 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
     lineHeight,
     setLineHeight,
     viewMode,
-    setViewMode
+    setViewMode,
+    gestureMode,
+    setGestureMode
   } = useReaderStore();
 
   const { enableSmartResume, setEnableSmartResume } = useTTSStore();
@@ -62,6 +64,22 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
                     onChange={(e) => setEnableSmartResume(e.target.checked)}
                   />
                   <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+               </label>
+           </div>
+        </div>
+        {/* Controls */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Controls</label>
+           <div className="flex items-center justify-between mb-4">
+               <span className="text-xs text-gray-700 dark:text-gray-300">Gesture Mode</span>
+               <label className="relative inline-flex items-center cursor-pointer">
+                   <input
+                       type="checkbox"
+                       checked={gestureMode}
+                       onChange={(e) => setGestureMode(e.target.checked)}
+                       className="sr-only peer"
+                   />
+                   <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                </label>
            </div>
         </div>

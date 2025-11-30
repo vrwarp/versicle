@@ -56,6 +56,9 @@ interface TTSState {
   /** Enable Smart Resume (rewind after pause) */
   enableSmartResume: boolean;
 
+  /** Whether to enable chapter pre-roll announcements */
+  prerollEnabled: boolean;
+
   /** Actions */
   play: () => void;
   pause: () => void;
@@ -70,6 +73,7 @@ interface TTSState {
   setSentenceStarters: (words: string[]) => void;
   setEnableCostWarning: (enable: boolean) => void;
   setEnableSmartResume: (enable: boolean) => void;
+  setPrerollEnabled: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
@@ -141,6 +145,7 @@ export const useTTSStore = create<TTSState>()(
             },
             enableCostWarning: true,
             enableSmartResume: true,
+            prerollEnabled: false,
             customAbbreviations: [
                 'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
                 'e.g.', 'i.e.'
@@ -213,6 +218,9 @@ export const useTTSStore = create<TTSState>()(
             setEnableSmartResume: (enable) => {
                 set({ enableSmartResume: enable });
             },
+            setPrerollEnabled: (enable) => {
+                set({ prerollEnabled: enable });
+            },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
                 const { providerId, apiKeys } = get();
@@ -283,6 +291,7 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: state.enableCostWarning,
             enableSmartResume: state.enableSmartResume,
             lastPauseTime: state.lastPauseTime,
+            prerollEnabled: state.prerollEnabled,
         }),
     }
   )

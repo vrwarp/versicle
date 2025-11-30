@@ -11,6 +11,7 @@ import { ReaderSettings } from './ReaderSettings';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
 import { TTSCostIndicator } from './TTSCostIndicator';
+import { GestureOverlay } from './GestureOverlay';
 import { Toast } from '../ui/Toast';
 import { Dialog } from '../ui/Dialog';
 import { getDB } from '../../db/db';
@@ -66,6 +67,8 @@ export const ReaderView: React.FC = () => {
       clearError,
       enableCostWarning,
       setEnableCostWarning,
+      prerollEnabled,
+      setPrerollEnabled,
       seek
   } = useTTSStore();
 
@@ -544,8 +547,17 @@ export const ReaderView: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const { setGestureMode } = useReaderStore();
+
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
+      {/* Gesture Overlay */}
+      <GestureOverlay
+          onNextChapter={handleNext}
+          onPrevChapter={handlePrev}
+          onClose={() => setGestureMode(false)}
+      />
+
       {/* Header */}
       {!immersiveMode && (
         <header className="flex items-center justify-between px-6 md:px-8 py-2 bg-surface shadow-sm z-10">
@@ -843,6 +855,15 @@ export const ReaderView: React.FC = () => {
                                         className="accent-primary"
                                     />
                                     <span className="text-xs text-foreground">Warn before large synthesis</span>
+                                </label>
+                                <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={prerollEnabled}
+                                        onChange={(e) => setPrerollEnabled(e.target.checked)}
+                                        className="accent-primary"
+                                    />
+                                    <span className="text-xs text-foreground">Announce Chapter Title</span>
                                 </label>
                                 <TTSAbbreviationSettings />
                             </div>
