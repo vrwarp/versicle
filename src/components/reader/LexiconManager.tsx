@@ -161,10 +161,8 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
                                         onChange={e => setEditingRule({...editingRule, replacement: e.target.value})}
                                         placeholder="Replacement"
                                     />
-                                    <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
-                                    <button data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
                                </div>
-                               <div className="flex items-center gap-2">
+                               <div className="flex items-center justify-between gap-2">
                                    <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                                        <input
                                            data-testid="lexicon-regex-checkbox"
@@ -175,6 +173,10 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
                                        />
                                        Regex
                                    </label>
+                                   <div className="flex gap-2">
+                                        <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
+                                        <button data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
+                                   </div>
                                </div>
                            </div>
                        </div>
@@ -223,10 +225,8 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
                             onChange={e => setEditingRule({...editingRule, replacement: e.target.value})}
                             placeholder="Replacement"
                         />
-                        <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
-                        <button data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
                    </div>
-                   <div className="flex items-center gap-2">
+                   <div className="flex items-center justify-between gap-2">
                        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                            <input
                                data-testid="lexicon-regex-checkbox"
@@ -237,6 +237,10 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
                            />
                            Regex
                        </label>
+                       <div className="flex gap-2">
+                            <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
+                            <button data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
+                       </div>
                    </div>
               </div>
           ) : (

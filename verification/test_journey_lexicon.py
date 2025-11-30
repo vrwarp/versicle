@@ -50,6 +50,21 @@ def test_journey_lexicon(page: Page):
     expect(regex_checkbox).not_to_be_checked()
     regex_checkbox.check() # Leave checked for the rule
 
+    # Check for Cancel Button (Bug Reproduction)
+    print("Verifying Cancel button visibility...")
+    cancel_btn = page.get_by_test_id("lexicon-cancel-rule-btn")
+    expect(cancel_btn).to_be_visible()
+
+    # Check containment (Bug Reproduction: Ensure button is inside the box)
+    print("Verifying button containment...")
+    container = page.locator('.border.rounded', has=page.get_by_test_id("lexicon-input-original")).first
+    box = container.bounding_box()
+    btn_box = cancel_btn.bounding_box()
+
+    # Check if button is fully inside container (right edge)
+    # The button shouldn't extend significantly beyond the container's right edge
+    assert btn_box['x'] + btn_box['width'] <= box['x'] + box['width'] + 5, f"Cancel button is outside the container: btn_right={btn_box['x'] + btn_box['width']}, container_right={box['x'] + box['width']}"
+
     # Enter Rule Details
     print("Filling rule details...")
     page.get_by_test_id("lexicon-input-original").fill("s/he")
