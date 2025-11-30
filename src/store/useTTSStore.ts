@@ -50,6 +50,9 @@ interface TTSState {
   /** Whether to show cost warning dialogs */
   enableCostWarning: boolean;
 
+  /** Whether to enable chapter pre-roll announcements */
+  prerollEnabled: boolean;
+
   /** Actions */
   play: () => void;
   pause: () => void;
@@ -63,6 +66,7 @@ interface TTSState {
   setAlwaysMerge: (words: string[]) => void;
   setSentenceStarters: (words: string[]) => void;
   setEnableCostWarning: (enable: boolean) => void;
+  setPrerollEnabled: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
@@ -124,6 +128,7 @@ export const useTTSStore = create<TTSState>()(
                 openai: ''
             },
             enableCostWarning: true,
+            prerollEnabled: false,
             customAbbreviations: [
                 'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
                 'e.g.', 'i.e.'
@@ -193,6 +198,9 @@ export const useTTSStore = create<TTSState>()(
             setEnableCostWarning: (enable) => {
                 set({ enableCostWarning: enable });
             },
+            setPrerollEnabled: (enable) => {
+                set({ prerollEnabled: enable });
+            },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
                 const { providerId, apiKeys } = get();
@@ -258,6 +266,7 @@ export const useTTSStore = create<TTSState>()(
             alwaysMerge: state.alwaysMerge,
             sentenceStarters: state.sentenceStarters,
             enableCostWarning: state.enableCostWarning,
+            prerollEnabled: state.prerollEnabled,
         }),
     }
   )

@@ -9,11 +9,12 @@ export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading';
 
 export interface TTSQueueItem {
     text: string;
-    cfi: string;
+    cfi: string | null;
     title?: string;
     author?: string;
     bookTitle?: string;
     coverUrl?: string;
+    isPreroll?: boolean;
 }
 
 type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
@@ -154,7 +155,21 @@ export class AudioPlayerService {
     this.stop();
     this.queue = items;
     this.currentIndex = startIndex;
+
     this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+  }
+
+  /**
+   * Generates a pre-roll announcement text.
+   * "Chapter 5. The Wedding. Estimated reading time: 14 minutes."
+   */
+  public generatePreroll(chapterTitle: string, wordCount: number, speed: number = 1.0): string {
+      const WORDS_PER_MINUTE = 180; // Average reading speed
+      // Adjust WPM by speed
+      const adjustedWpm = WORDS_PER_MINUTE * speed;
+      const minutes = Math.max(1, Math.round(wordCount / adjustedWpm));
+
+      return `${chapterTitle}. Estimated reading time: ${minutes} minute${minutes === 1 ? '' : 's'}.`;
   }
 
   jumpTo(index: number) {
