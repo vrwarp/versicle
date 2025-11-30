@@ -28,6 +28,8 @@ interface ReaderState {
   progress: number;
   /** Table of Contents for the current book. */
   toc: NavigationItem[];
+  /** The viewing mode of the reader. */
+  viewMode: 'paginated' | 'scrolled';
 
   /** Sets the loading state. */
   setIsLoading: (isLoading: boolean) => void;
@@ -52,6 +54,8 @@ interface ReaderState {
   updateLocation: (cfi: string, progress: number, chapterTitle?: string) => void;
   /** Sets the Table of Contents. */
   setToc: (toc: NavigationItem[]) => void;
+  /** Sets the viewing mode. */
+  setViewMode: (mode: 'paginated' | 'scrolled') => void;
   /** Resets the reader state to default values. */
   reset: () => void;
 }
@@ -74,6 +78,7 @@ export const useReaderStore = create<ReaderState>()(
       currentChapterTitle: null,
       progress: 0,
       toc: [],
+      viewMode: 'paginated',
 
       setIsLoading: (isLoading) => set({ isLoading }),
       setCurrentBookId: (id) => set({ currentBookId: id }),
@@ -89,6 +94,7 @@ export const useReaderStore = create<ReaderState>()(
           currentChapterTitle: chapterTitle ?? state.currentChapterTitle
         })),
       setToc: (toc) => set({ toc }),
+      setViewMode: (mode) => set({ viewMode: mode }),
       reset: () => set({
         isLoading: false,
         currentBookId: null,
@@ -107,6 +113,7 @@ export const useReaderStore = create<ReaderState>()(
         fontFamily: state.fontFamily,
         lineHeight: state.lineHeight,
         fontSize: state.fontSize,
+        viewMode: state.viewMode,
       }),
     }
   )

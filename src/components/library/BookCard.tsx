@@ -41,7 +41,7 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
       data-testid="book-card"
       className="group flex flex-col bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-200 h-full cursor-pointer"
     >
-      <div className="aspect-[2/3] w-full bg-gray-100 relative overflow-hidden">
+      <div className="aspect-[2/3] w-full bg-gray-100 relative overflow-hidden shadow-inner">
         {coverUrl ? (
           <img
             src={coverUrl}

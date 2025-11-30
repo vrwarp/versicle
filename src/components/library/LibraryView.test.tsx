@@ -26,9 +26,9 @@ vi.mock('./BookCard', () => ({
   BookCard: ({ book }: any) => <div data-testid="book-card">{book.title}</div>
 }));
 
-// Mock FileUploader
-vi.mock('./FileUploader', () => ({
-    FileUploader: () => <div data-testid="file-uploader">Upload</div>
+// Mock EmptyLibrary
+vi.mock('./EmptyLibrary', () => ({
+    EmptyLibrary: () => <div data-testid="empty-library">Empty Library</div>
 }));
 
 // Mock IDB via fake-indexeddb is usually handled globally or we mock getDB
@@ -70,7 +70,6 @@ describe('LibraryView', () => {
     it('renders loading state', () => {
         useLibraryStore.setState({ isLoading: true });
         render(<LibraryView />);
-        expect(screen.getByTestId('file-uploader')).toBeInTheDocument();
         expect(screen.queryByTestId('virtual-grid')).not.toBeInTheDocument();
         // Spinner
         expect(document.querySelector('.animate-spin')).toBeInTheDocument();
@@ -81,7 +80,7 @@ describe('LibraryView', () => {
         // It calls fetchBooks on mount, which is mocked.
         // Should show empty state immediately.
 
-        expect(screen.getByText(/No books yet/i)).toBeInTheDocument();
+        expect(screen.getByTestId('empty-library')).toBeInTheDocument();
     });
 
     it('renders grid with books', async () => {

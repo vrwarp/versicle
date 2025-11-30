@@ -1,48 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
+import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../../lib/tts/TextSegmenter';
 import { X, Plus, RotateCcw, Download, Upload } from 'lucide-react';
 
-export const TTSAbbreviationSettings: React.FC = () => {
-    const { customAbbreviations, setCustomAbbreviations } = useTTSStore();
-    const [newAbbrev, setNewAbbrev] = useState('');
-    const fileInputRef = React.useRef<HTMLInputElement>(null);
+interface StringListManagerProps {
+    title: string;
+    description: string;
+    items: string[];
+    onItemsChange: (items: string[]) => void;
+    defaults: string[];
+    placeholder: string;
+    importHeader: string;
+    exportFilename: string;
+}
+
+const StringListManager: React.FC<StringListManagerProps> = ({
+    title, description, items, onItemsChange, defaults, placeholder, importHeader, exportFilename
+}) => {
+    const [newItem, setNewItem] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleAdd = () => {
-        if (!newAbbrev.trim()) return;
-        if (customAbbreviations.includes(newAbbrev.trim())) {
-            setNewAbbrev('');
+        if (!newItem.trim()) return;
+        if (items.includes(newItem.trim())) {
+            setNewItem('');
             return;
         }
 
-        setCustomAbbreviations([...customAbbreviations, newAbbrev.trim()]);
-        setNewAbbrev('');
+        onItemsChange([...items, newItem.trim()]);
+        setNewItem('');
     };
 
-    const handleRemove = (abbrev: string) => {
-        setCustomAbbreviations(customAbbreviations.filter(a => a !== abbrev));
+    const handleRemove = (item: string) => {
+        onItemsChange(items.filter(i => i !== item));
     };
 
     const handleReset = () => {
-        // Default abbreviations
-        const defaults = [
-            'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
-            'e.g.', 'i.e.'
-        ];
-        setCustomAbbreviations(defaults);
+        onItemsChange(defaults);
     };
 
     const handleDownload = () => {
-        const csvContent = "Abbreviation\n" + customAbbreviations.join("\n");
+        const csvContent = `${importHeader}\n` + items.join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         if (link.download !== undefined) {
             const url = URL.createObjectURL(blob);
             link.setAttribute('href', url);
-            link.setAttribute('download', 'abbreviations.csv');
+            link.setAttribute('download', exportFilename);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         }
     };
 
@@ -59,21 +68,21 @@ export const TTSAbbreviationSettings: React.FC = () => {
             const text = e.target?.result as string;
             if (!text) return;
 
-            // Simple CSV parse: split by newline, ignore header if present
+            // Simple CSV parse: split by newline
             const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line);
 
-            // Remove header if it looks like one
-            if (lines.length > 0 && lines[0].toLowerCase() === 'abbreviation') {
+            // Remove header if it looks like one (case-insensitive check against configured header)
+            if (lines.length > 0 && lines[0].toLowerCase() === importHeader.toLowerCase()) {
                 lines.shift();
             }
 
             if (lines.length === 0) {
-                alert('No abbreviations found in file.');
+                alert('No items found in file.');
                 return;
             }
 
-            if (window.confirm(`This will replace your current abbreviations with ${lines.length} entries from the file. Are you sure?`)) {
-                setCustomAbbreviations(lines);
+            if (window.confirm(`This will replace your current list with ${lines.length} entries from the file. Are you sure?`)) {
+                onItemsChange(lines);
             }
 
             // Reset input
@@ -85,43 +94,43 @@ export const TTSAbbreviationSettings: React.FC = () => {
     };
 
     return (
-        <div className="space-y-4">
+        <div className="mb-6 last:mb-0">
             <div>
-                <h4 className="text-xs font-semibold text-muted mb-2 uppercase">Sentence Segmentation</h4>
-                <p className="text-[10px] text-muted mb-3">
-                    These abbreviations will not trigger a new sentence when followed by a period.
+                <h4 className="text-xs font-semibold text-muted mb-1 uppercase">{title}</h4>
+                <p className="text-[10px] text-muted mb-2">
+                    {description}
                 </p>
 
-                <div className="flex gap-2 mb-3">
+                <div className="flex gap-2 mb-2">
                     <input
                         type="text"
-                        value={newAbbrev}
-                        onChange={(e) => setNewAbbrev(e.target.value)}
+                        value={newItem}
+                        onChange={(e) => setNewItem(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                        placeholder="e.g. Dr."
+                        placeholder={placeholder}
                         className="flex-1 text-xs p-1 border rounded bg-background text-foreground border-border"
                     />
                     <button
                         onClick={handleAdd}
-                        disabled={!newAbbrev.trim()}
+                        disabled={!newItem.trim()}
                         className="p-1 bg-primary text-background rounded hover:opacity-90 disabled:opacity-50"
-                        aria-label="Add abbreviation"
+                        aria-label={`Add to ${title}`}
                     >
                         <Plus className="w-4 h-4" />
                     </button>
                 </div>
 
-                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 border border-border rounded bg-muted/20">
-                    {customAbbreviations.length === 0 && (
-                         <span className="text-[10px] text-muted p-1">No abbreviations set.</span>
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 border border-border rounded bg-muted/20 mb-2">
+                    {items.length === 0 && (
+                         <span className="text-[10px] text-muted p-1">No items set.</span>
                     )}
-                    {customAbbreviations.map((abbrev) => (
-                        <div key={abbrev} className="flex items-center gap-1 bg-background border border-border px-2 py-1 rounded text-xs">
-                            <span>{abbrev}</span>
+                    {items.map((item) => (
+                        <div key={item} className="flex items-center gap-1 bg-background border border-border px-2 py-1 rounded text-xs">
+                            <span>{item}</span>
                             <button
-                                onClick={() => handleRemove(abbrev)}
+                                onClick={() => handleRemove(item)}
                                 className="text-muted hover:text-red-500"
-                                aria-label={`Remove ${abbrev}`}
+                                aria-label={`Remove ${item}`}
                             >
                                 <X className="w-3 h-3" />
                             </button>
@@ -130,19 +139,19 @@ export const TTSAbbreviationSettings: React.FC = () => {
                 </div>
             </div>
 
-            <div className="pt-2 border-t border-border flex justify-between items-center">
+            <div className="flex justify-between items-center">
                 <button
                     onClick={handleReset}
-                    className="flex items-center gap-2 text-xs text-muted hover:text-foreground transition-colors"
+                    className="flex items-center gap-1 text-[10px] text-muted hover:text-foreground transition-colors"
                 >
                     <RotateCcw className="w-3 h-3" />
-                    Reset to Defaults
+                    Reset
                 </button>
 
                 <div className="flex gap-2">
                      <button
                         onClick={handleDownload}
-                        className="flex items-center gap-1 text-xs text-muted hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 text-[10px] text-muted hover:text-foreground transition-colors"
                         title="Download CSV"
                     >
                         <Download className="w-3 h-3" />
@@ -150,7 +159,7 @@ export const TTSAbbreviationSettings: React.FC = () => {
                     </button>
                     <button
                         onClick={handleUploadClick}
-                        className="flex items-center gap-1 text-xs text-muted hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 text-[10px] text-muted hover:text-foreground transition-colors"
                         title="Upload CSV"
                     >
                         <Upload className="w-3 h-3" />
@@ -162,10 +171,60 @@ export const TTSAbbreviationSettings: React.FC = () => {
                         ref={fileInputRef}
                         style={{ display: 'none' }}
                         onChange={handleFileChange}
-                        data-testid="csv-upload-input"
+                        data-testid={`csv-upload-${title.toLowerCase().replace(/\s+/g, '-')}`}
                     />
                 </div>
             </div>
+        </div>
+    );
+};
+
+export const TTSAbbreviationSettings: React.FC = () => {
+    const {
+        customAbbreviations, setCustomAbbreviations,
+        alwaysMerge, setAlwaysMerge,
+        sentenceStarters, setSentenceStarters
+    } = useTTSStore();
+
+    const defaultAbbreviations = [
+        'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
+        'e.g.', 'i.e.'
+    ];
+
+    return (
+        <div className="space-y-4">
+            <StringListManager
+                title="Abbreviations"
+                description="These abbreviations will not trigger a new sentence when followed by a period."
+                items={customAbbreviations}
+                onItemsChange={setCustomAbbreviations}
+                defaults={defaultAbbreviations}
+                placeholder="e.g. Dr."
+                importHeader="Abbreviation"
+                exportFilename="abbreviations.csv"
+            />
+
+            <StringListManager
+                title="Always Merge"
+                description="Words that ALWAYS merge with the next sentence (e.g. titles)."
+                items={alwaysMerge}
+                onItemsChange={setAlwaysMerge}
+                defaults={DEFAULT_ALWAYS_MERGE}
+                placeholder="e.g. Mr."
+                importHeader="AlwaysMerge"
+                exportFilename="always_merge.csv"
+            />
+
+            <StringListManager
+                title="Sentence Starters"
+                description="Words that force a split (start new sentence) if they follow an abbreviation."
+                items={sentenceStarters}
+                onItemsChange={setSentenceStarters}
+                defaults={DEFAULT_SENTENCE_STARTERS}
+                placeholder="e.g. He"
+                importHeader="SentenceStarter"
+                exportFilename="sentence_starters.csv"
+            />
         </div>
     );
 };

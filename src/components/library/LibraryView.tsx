@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { BookCard } from './BookCard';
-import { FileUploader } from './FileUploader';
+import { EmptyLibrary } from './EmptyLibrary';
 import { Grid } from 'react-window';
+import { Plus } from 'lucide-react';
 
 // Grid Configuration
 const CARD_WIDTH = 200; // Minimal width
@@ -49,8 +50,9 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
  * @returns A React component rendering the library interface.
  */
 export const LibraryView: React.FC = () => {
-  const { books, fetchBooks, isLoading, error } = useLibraryStore();
+  const { books, fetchBooks, isLoading, error, addBook, isImporting } = useLibraryStore();
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -71,6 +73,20 @@ export const LibraryView: React.FC = () => {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      addBook(e.target.files[0]);
+    }
+    // Reset input so same file can be selected again if needed
+    if (e.target.value) {
+      e.target.value = '';
+    }
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
   const columnCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
   const rowCount = Math.ceil(books.length / columnCount);
   // Re-calculating proper FixedSizeGrid usage with gaps:
@@ -84,19 +100,42 @@ export const LibraryView: React.FC = () => {
 
   return (
     <div data-testid="library-container" className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col bg-background text-foreground">
-      <header className="mb-8 flex-none">
-        <h1 className="text-3xl font-bold text-primary mb-2">My Library</h1>
-        <p className="text-secondary">Manage and read your EPUB collection</p>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        accept=".epub"
+        className="hidden"
+        data-testid="hidden-file-input"
+      />
+
+      <header className="mb-8 flex-none flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-primary mb-2">My Library</h1>
+          <p className="text-secondary">Manage and read your EPUB collection</p>
+        </div>
+        <button
+          onClick={triggerFileUpload}
+          disabled={isImporting}
+          className="flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-50"
+          aria-label="Import book"
+          data-testid="header-add-button"
+        >
+          {isImporting ? (
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+          ) : (
+            <Plus className="w-6 h-6" />
+          )}
+        </button>
       </header>
 
-      <section className="mb-12 flex-none">
-        <FileUploader />
-        {error && (
-            <div className="mt-4 p-4 bg-destructive/10 text-destructive rounded-lg">
-                {error}
-            </div>
-        )}
-      </section>
+      {error && (
+        <section className="mb-6 flex-none">
+          <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
+              {error}
+          </div>
+        </section>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center items-center py-12 flex-1">
@@ -105,9 +144,7 @@ export const LibraryView: React.FC = () => {
       ) : (
         <section className="flex-1 min-h-0" ref={containerRef}>
           {books.length === 0 ? (
-             <div className="text-center py-12 text-muted">
-                No books yet. Import one to get started!
-             </div>
+             <EmptyLibrary onImport={triggerFileUpload} />
           ) : (
              <GridAny
                 columnCount={columnCount}

@@ -16,7 +16,7 @@ export const TTSQueue: React.FC = () => {
     }, [currentIndex]); // Scroll when index changes
 
     if (queue.length === 0) {
-        return <div className="p-4 text-center text-muted text-xs">No text available.</div>;
+        return <div className="p-4 text-center text-muted text-sm">No text available.</div>;
     }
 
     return (
@@ -32,10 +32,10 @@ export const TTSQueue: React.FC = () => {
                             ref={isActive ? activeRef : null}
                             onClick={() => jumpTo(index)}
                             className={cn(
-                                "text-left text-xs p-2 rounded transition-colors duration-200 w-full",
+                                "text-left text-sm p-2 rounded transition-all duration-200 w-full",
                                 isActive
-                                    ? "bg-primary/10 text-primary border-l-2 border-primary"
-                                    : "hover:bg-muted/10 text-secondary"
+                                    ? "bg-primary/20 text-foreground border-l-4 border-primary font-medium shadow-sm"
+                                    : "text-secondary opacity-60 hover:opacity-100 hover:bg-muted/10"
                             )}
                         >
                             <p className="line-clamp-2">{item.text}</p>
