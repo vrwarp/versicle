@@ -18,6 +18,7 @@ def test_journey_search_highlight(page: Page):
     # Open Search
     print("Searching...")
     page.get_by_test_id("reader-search-button").click()
+    utils.capture_screenshot(page, "search_highlight_start")
 
     # Search for term
     search_input = page.get_by_test_id("search-input")
@@ -26,6 +27,7 @@ def test_journey_search_highlight(page: Page):
 
     # Wait for results
     expect(page.locator("button[data-testid^='search-result-']").first).to_be_visible(timeout=10000)
+    utils.capture_screenshot(page, "search_highlight_results")
 
     # Click result
     print("Clicking result...")
@@ -41,5 +43,7 @@ def test_journey_search_highlight(page: Page):
 
     frame = iframe_element.content_frame
     expect(frame.locator(".search-highlight")).to_be_visible(timeout=5000)
+
+    utils.capture_screenshot(page, "search_highlight_found")
 
     print("Search Journey Highlight Passed!")
