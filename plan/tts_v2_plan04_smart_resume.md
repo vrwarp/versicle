@@ -1,4 +1,4 @@
-# Plan: Smart Resume ("Recall" Buffer)
+# Plan: Smart Resume ("Recall" Buffer) (Implemented)
 
 ## Priority: High
 

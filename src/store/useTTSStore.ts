@@ -33,6 +33,9 @@ interface TTSState {
   /** The last error message, if any */
   lastError: string | null;
 
+  /** Timestamp when playback was last paused (for Smart Resume) */
+  lastPauseTime: number | null;
+
   /** Provider configuration */
   providerId: 'local' | 'google' | 'openai';
   apiKeys: {
@@ -67,6 +70,7 @@ interface TTSState {
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
   clearError: () => void;
+  setLastPauseTime: (time: number | null) => void;
 
   /**
    * Internal sync method called by AudioPlayerService
@@ -76,6 +80,12 @@ interface TTSState {
 }
 
 const player = AudioPlayerService.getInstance();
+
+// Bind state handler for Smart Resume
+player.bindStateHandler({
+    getLastPauseTime: () => useTTSStore.getState().lastPauseTime,
+    setLastPauseTime: (time) => useTTSStore.getState().setLastPauseTime(time),
+});
 
 /**
  * Zustand store for managing Text-to-Speech configuration and playback state.
@@ -118,6 +128,7 @@ export const useTTSStore = create<TTSState>()(
             currentIndex: 0,
             queue: [],
             lastError: null,
+            lastPauseTime: null,
             providerId: 'local',
             apiKeys: {
                 google: '',
@@ -234,6 +245,9 @@ export const useTTSStore = create<TTSState>()(
             clearError: () => {
                 set({ lastError: null });
             },
+            setLastPauseTime: (time) => {
+                set({ lastPauseTime: time });
+            },
 
             syncState: (status, activeCfi, currentIndex, queue, error) => set({
                 status,
@@ -258,6 +272,7 @@ export const useTTSStore = create<TTSState>()(
             alwaysMerge: state.alwaysMerge,
             sentenceStarters: state.sentenceStarters,
             enableCostWarning: state.enableCostWarning,
+            lastPauseTime: state.lastPauseTime,
         }),
     }
   )

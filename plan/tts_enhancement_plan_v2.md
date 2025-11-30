@@ -21,7 +21,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 **Goal:** Automatically remove non-narrative artifacts (page numbers, URLs, citations) from the text stream before synthesis to improve immersion.
 **Key Components:** `Sanitizer`, `RegexPatterns`.
 
-### 4. Smart Resume ("Recall" Buffer)
+### 4. Smart Resume ("Recall" Buffer) (Implemented)
 **Plan:** [plan/tts_v2_plan04_smart_resume.md](./tts_v2_plan04_smart_resume.md)
 **Goal:** Intelligently rewind playback (10s - 60s) upon resumption based on how long the user has been away to help regain context.
 **Key Components:** `useTTSStore` (lastPauseTime), `AudioPlayerService` logic.

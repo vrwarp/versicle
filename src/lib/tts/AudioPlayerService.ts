@@ -16,11 +16,17 @@ export interface TTSQueueItem {
     coverUrl?: string;
 }
 
+export interface AudioPlayerStateHandler {
+    getLastPauseTime: () => number | null;
+    setLastPauseTime: (time: number | null) => void;
+}
+
 type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
 
 export class AudioPlayerService {
   private static instance: AudioPlayerService;
   private provider: ITTSProvider;
+  private stateHandler: AudioPlayerStateHandler | null = null;
   private audioPlayer: AudioElementPlayer | null = null;
   private syncEngine: SyncEngine | null = null;
   private cache: TTSCache;
@@ -45,6 +51,10 @@ export class AudioPlayerService {
       AudioPlayerService.instance = new AudioPlayerService();
     }
     return AudioPlayerService.instance;
+  }
+
+  public bindStateHandler(handler: AudioPlayerStateHandler) {
+      this.stateHandler = handler;
   }
 
   private setupWebSpeech() {
@@ -261,6 +271,53 @@ export class AudioPlayerService {
 
   async resume() {
      if (this.status === 'paused') {
+        // Smart Resume Logic
+        if (this.stateHandler) {
+            const lastPause = this.stateHandler.getLastPauseTime();
+            if (lastPause) {
+                const elapsedMs = Date.now() - lastPause;
+                const elapsedSec = elapsedMs / 1000;
+                let rewindSec = 0;
+
+                // < 5 min: 0s
+                // 5 min - 24h: 10s
+                // > 24h: 60s
+                if (elapsedSec > 24 * 3600) {
+                     rewindSec = 60;
+                } else if (elapsedSec > 5 * 60) {
+                     rewindSec = 10;
+                }
+
+                if (rewindSec > 0) {
+                    console.log(`[SmartResume] Rewinding ${rewindSec}s (away for ${elapsedSec}s)`);
+
+                    if (this.provider instanceof WebSpeechProvider) {
+                         // Local provider: rewind by index (approx 1 index per 10s? Sentence length varies.)
+                         // Plan says: "If elapsed > 5min, currentIndex = max(0, currentIndex - 2)."
+                         const rewindCount = rewindSec >= 60 ? 5 : 2;
+                         const newIndex = Math.max(0, this.currentIndex - rewindCount);
+
+                         if (newIndex !== this.currentIndex) {
+                             this.currentIndex = newIndex;
+                             // We must call play() to start from the new index.
+                             // Force status to 'stopped' so play() doesn't try to resume().
+                             this.setStatus('stopped');
+                             this.play();
+                             this.stateHandler.setLastPauseTime(null);
+                             return;
+                         }
+                    } else if (this.audioPlayer) {
+                         // Cloud provider: seek time
+                         const currentTime = this.audioPlayer.getCurrentTime();
+                         const newTime = Math.max(0, currentTime - rewindSec);
+                         this.audioPlayer.seek(newTime);
+                         // Continue to resume below
+                    }
+                }
+                this.stateHandler.setLastPauseTime(null);
+            }
+        }
+
         if (this.provider instanceof WebSpeechProvider && this.provider.resume) {
              this.provider.resume();
              this.setStatus('playing');
@@ -278,6 +335,9 @@ export class AudioPlayerService {
         this.provider.pause();
     } else if (this.audioPlayer) {
         this.audioPlayer.pause();
+    }
+    if (this.stateHandler) {
+        this.stateHandler.setLastPauseTime(Date.now());
     }
     this.setStatus('paused');
   }
