@@ -19,6 +19,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 
 ### 3. Text Sanitization Engine
 **Plan:** [plan/tts_v2_plan03_text_sanitization.md](./tts_v2_plan03_text_sanitization.md)
+**Status:** **Completed**
 **Goal:** Automatically remove non-narrative artifacts (page numbers, URLs, citations) from the text stream before synthesis to improve immersion.
 **Key Components:** `Sanitizer`, `RegexPatterns`.
 

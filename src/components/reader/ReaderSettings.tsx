@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useReaderStore } from '../../store/useReaderStore';
+import { useTTSStore } from '../../store/useTTSStore';
 import { X, Mic } from 'lucide-react';
 import { LexiconManager } from './LexiconManager';
 
@@ -25,6 +26,8 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
     setGestureMode
   } = useReaderStore();
 
+  const { sanitizationEnabled, setSanitizationEnabled } = useTTSStore();
+
   const [isLexiconOpen, setIsLexiconOpen] = useState(false);
 
   const fontOptions = [
@@ -44,6 +47,32 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
       </div>
 
       <div className="p-4 space-y-6">
+        {/* Audio Settings */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Audio</label>
+          <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-750 p-2 rounded-lg border border-gray-100 dark:border-gray-700">
+             <div className="flex flex-col">
+                <span className="text-sm font-medium dark:text-gray-200">Text Sanitization</span>
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">Remove URLs, page numbers & citations</span>
+             </div>
+             <button
+               data-testid="settings-toggle-sanitization"
+               onClick={() => setSanitizationEnabled(!sanitizationEnabled)}
+               className={`w-10 h-6 flex items-center rounded-full p-1 transition-colors ${
+                 sanitizationEnabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'
+               }`}
+               aria-pressed={sanitizationEnabled}
+               aria-label="Toggle Text Sanitization"
+             >
+                <div
+                  className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
+                    sanitizationEnabled ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+             </button>
+          </div>
+        </div>
+
         {/* Controls */}
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Controls</label>

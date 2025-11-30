@@ -1,6 +1,7 @@
 import type { Rendition } from 'epubjs';
 import { TextSegmenter } from './tts/TextSegmenter';
 import { useTTSStore } from '../store/useTTSStore';
+import { Sanitizer } from './tts/processors/Sanitizer';
 
 /**
  * Represents a sentence and its corresponding location (CFI) in the book.
@@ -38,7 +39,7 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
     const body = doc.body;
 
     // Initialize segmenter
-    const { customAbbreviations, alwaysMerge, sentenceStarters } = useTTSStore.getState();
+    const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
     const segmenter = new TextSegmenter('en', customAbbreviations, alwaysMerge, sentenceStarters);
 
     let textBuffer = '';
@@ -54,8 +55,14 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
         const segments = segmenter.segment(textBuffer);
 
         for (const segment of segments) {
+            let processedText = segment.text;
+
+            if (sanitizationEnabled) {
+                processedText = Sanitizer.sanitize(processedText);
+            }
+
             // Only process non-empty segments
-            if (!segment.text.trim()) continue;
+            if (!processedText.trim()) continue;
 
             const start = segment.index;
             const end = segment.index + segment.length;
@@ -89,7 +96,7 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
                  try {
                     const cfi = contents.cfiFromRange(range);
                     sentences.push({
-                        text: segment.text.trim(),
+                        text: processedText.trim(),
                         cfi: cfi
                     });
                 } catch (e) {
