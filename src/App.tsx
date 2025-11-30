@@ -2,11 +2,13 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { LibraryView } from './components/library/LibraryView';
 import { ReaderView } from './components/reader/ReaderView';
 import { ThemeSynchronizer } from './components/ThemeSynchronizer';
+import { GlobalSettingsDialog } from './components/GlobalSettingsDialog';
 
 function App() {
   return (
     <Router>
       <ThemeSynchronizer />
+      <GlobalSettingsDialog />
       <div className="min-h-screen bg-background text-foreground">
         <Routes>
           <Route path="/" element={<LibraryView />} />

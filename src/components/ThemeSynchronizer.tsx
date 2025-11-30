@@ -1,22 +1,30 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useReaderStore } from '../store/useReaderStore';
 
-export const ThemeSynchronizer: React.FC = () => {
+/**
+ * Synchronizes the reader theme with the document root class.
+ * This ensures that Tailwind's dark mode and custom CSS variables work correctly.
+ */
+export const ThemeSynchronizer = () => {
   const { currentTheme } = useReaderStore();
 
   useEffect(() => {
-    const root = document.documentElement;
+    const root = window.document.documentElement;
     root.classList.remove('light', 'dark', 'sepia');
 
-    if (currentTheme === 'dark') {
+    if (currentTheme === 'light') {
+      root.classList.add('light');
+    } else if (currentTheme === 'dark') {
       root.classList.add('dark');
     } else if (currentTheme === 'sepia') {
       root.classList.add('sepia');
-    } else {
-      root.classList.add('light');
+    } else if (currentTheme === 'custom') {
+        // For custom theme, we might need a way to inject variables or class
+        // Current implementation of 'custom' in ReaderView just changes epub colors.
+        // For UI, we might fallback to light or dark depending on brightness?
+        // Let's assume light for now or handle 'custom' class if we define it.
+        root.classList.add('light');
     }
-    // For 'custom', we currently default to light/default classes,
-    // or we could inspect customTheme brightness to decide.
   }, [currentTheme]);
 
   return null;

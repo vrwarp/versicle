@@ -16,17 +16,16 @@ def test_journey_lexicon(page: Page):
     # Wait for book to load
     page.wait_for_timeout(2000)
 
-    # Open Settings
-    print("Opening Settings...")
-    page.locator('[aria-label="Settings"]').click()
+    # Open Audio Deck
+    print("Opening Audio Deck...")
+    page.get_by_test_id("reader-tts-button").click()
 
-    # Verify Settings Panel is visible
-    expect(page.get_by_test_id("settings-panel")).to_be_visible()
+    # Switch to Settings
+    page.get_by_role("button", name="Settings").click()
 
     # Open Lexicon Manager
     print("Opening Pronunciation Lexicon...")
-    # The button text is "Pronunciation Lexicon"
-    page.get_by_text("Pronunciation Lexicon").click()
+    page.get_by_text("Manage Pronunciation Rules").click()
 
     # Verify Dialog is open
     print("Verifying Dialog visibility...")
@@ -96,7 +95,8 @@ def test_journey_lexicon(page: Page):
     # No, it's just passed as prop.
     # Maybe because of animation/rendering timing?
     # Let's try locating by text "Close" which we know works generally.
-    page.get_by_text("Close", exact=True).click()
+    # Handle strict mode violation (X button vs Footer button)
+    page.get_by_role("button", name="Close").last.click()
 
     expect(page.get_by_role("heading", name="Pronunciation Lexicon", exact=True)).not_to_be_visible()
 

@@ -9,6 +9,7 @@ import { useReaderStore } from '../../store/useReaderStore';
 interface LexiconManagerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTerm?: string;
 }
 
 // Simple internal Button component since ui/Button doesn't exist
@@ -34,7 +35,7 @@ const Button = ({ children, onClick, variant = 'primary', className = '', size =
     );
 };
 
-export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
+export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManagerProps) {
   const [rules, setRules] = useState<LexiconRule[]>([]);
   const [editingRule, setEditingRule] = useState<Partial<LexiconRule> | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -49,8 +50,12 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
   useEffect(() => {
     if (open) {
       loadRules();
+      if (initialTerm) {
+          setIsAdding(true);
+          setEditingRule({ original: initialTerm, replacement: '' });
+      }
     }
-  }, [open, scope, currentBookId]);
+  }, [open, scope, currentBookId, initialTerm]);
 
   const loadRules = async () => {
     if (scope === 'global') {

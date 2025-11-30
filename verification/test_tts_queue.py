@@ -106,7 +106,9 @@ def test_tts_queue(page: Page):
 
     # Additional check: Close TTS
     print("Closing TTS controls...")
-    page.get_by_test_id("reader-tts-button").click()
+    # Use Close button inside the panel or Escape key
+    # page.get_by_test_id("reader-tts-button").click() # This is blocked by overlay
+    page.keyboard.press("Escape")
     page.wait_for_timeout(500)
 
     # Removed tts_queue_closed screenshot

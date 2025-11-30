@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { Copy, StickyNote, X } from 'lucide-react';
+import { Copy, StickyNote, X, Mic } from 'lucide-react';
 
 const COLORS = [
   { name: 'Yellow', value: '#ffff00', class: 'highlight-yellow' },
@@ -12,9 +12,10 @@ const COLORS = [
 interface Props {
   bookId: string;
   onClose: () => void;
+  onFixPronunciation?: (text: string) => void;
 }
 
-export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose }) => {
+export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronunciation }) => {
   const { popover, addAnnotation, hidePopover } = useAnnotationStore();
   const [isEditingNote, setIsEditingNote] = React.useState(false);
   const [noteText, setNoteText] = React.useState('');
@@ -109,6 +110,11 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose }) => {
       <button data-testid="popover-add-note-button" onClick={handleNoteClick} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Add Note">
         <StickyNote className="w-4 h-4" />
       </button>
+      {onFixPronunciation && (
+          <button data-testid="popover-fix-pronunciation-button" onClick={() => { onFixPronunciation(popover.text); hidePopover(); onClose(); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Fix Pronunciation">
+            <Mic className="w-4 h-4" />
+          </button>
+      )}
       <button data-testid="popover-copy-button" onClick={handleCopy} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Copy">
         <Copy className="w-4 h-4" />
       </button>

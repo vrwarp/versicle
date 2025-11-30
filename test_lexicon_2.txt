@@ -1,0 +1,172 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.1, pluggy-1.6.0
+rootdir: /app
+plugins: playwright-0.7.2, base-url-2.1.0
+collected 1 item
+
+verification/test_journey_lexicon.py F                                   [100%]
+
+=================================== FAILURES ===================================
+________________________ test_journey_lexicon[chromium] ________________________
+
+page = <Page url='http://localhost:5173/read/aa60c456-4d85-4183-aec7-e71fe5594761'>
+
+    def test_journey_lexicon(page: Page):
+        print("Starting Lexicon Journey...")
+        utils.reset_app(page)
+        utils.ensure_library_with_book(page)
+
+        # Open Book
+        print("Opening book...")
+        page.locator('[data-testid="book-card"]').click()
+        expect(page).to_have_url(re.compile(r".*/read/.*"))
+
+        # Wait for book to load
+        page.wait_for_timeout(2000)
+
+        # Open Audio Deck
+        print("Opening Audio Deck...")
+        page.get_by_test_id("reader-tts-button").click()
+
+        # Switch to Settings
+        page.get_by_role("button", name="Settings").click()
+
+        # Open Lexicon Manager
+        print("Opening Pronunciation Lexicon...")
+        page.get_by_text("Manage Pronunciation Rules").click()
+
+        # Verify Dialog is open
+        print("Verifying Dialog visibility...")
+        expect(page.get_by_role("heading", name="Pronunciation Lexicon", exact=True)).to_be_visible()
+
+        utils.capture_screenshot(page, "lexicon_01_dialog_open")
+
+        # Click Add Rule
+        print("Adding new rule...")
+        page.get_by_test_id("lexicon-add-rule-btn").click()
+
+        # Verify Regex Checkbox exists
+        print("Verifying Regex capability...")
+        regex_checkbox = page.get_by_test_id("lexicon-regex-checkbox")
+        expect(regex_checkbox).to_be_visible()
+
+        # Toggle Regex
+        regex_checkbox.check()
+        expect(regex_checkbox).to_be_checked()
+        regex_checkbox.uncheck()
+        expect(regex_checkbox).not_to_be_checked()
+        regex_checkbox.check() # Leave checked for the rule
+
+        # Check for Cancel Button (Bug Reproduction)
+        print("Verifying Cancel button visibility...")
+        cancel_btn = page.get_by_test_id("lexicon-cancel-rule-btn")
+        expect(cancel_btn).to_be_visible()
+
+        # Check containment (Bug Reproduction: Ensure button is inside the box)
+        print("Verifying button containment...")
+        container = page.locator('.border.rounded', has=page.get_by_test_id("lexicon-input-original")).first
+        box = container.bounding_box()
+        btn_box = cancel_btn.bounding_box()
+
+        # Check if button is fully inside container (right edge)
+        # The button shouldn't extend significantly beyond the container's right edge
+        assert btn_box['x'] + btn_box['width'] <= box['x'] + box['width'] + 5, f"Cancel button is outside the container: btn_right={btn_box['x'] + btn_box['width']}, container_right={box['x'] + box['width']}"
+
+        # Enter Rule Details
+        print("Filling rule details...")
+        page.get_by_test_id("lexicon-input-original").fill("s/he")
+        page.get_by_test_id("lexicon-input-replacement").fill("they")
+
+        # Save Rule
+        page.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Verify Rule appears in list with Regex badge
+        print("Verifying rule in list...")
+        expect(page.get_by_text("s/he")).to_be_visible()
+        expect(page.get_by_text("they")).to_be_visible()
+
+        # Verify Regex badge
+        expect(page.get_by_test_id("lexicon-regex-badge")).to_be_visible()
+
+        utils.capture_screenshot(page, "lexicon_02_rule_added")
+
+        # Close Dialog
+        print("Closing Lexicon...")
+        # Attempting to click the close button by searching for the "Close" text if test-id fails,
+        # or perhaps the locator needs to wait specifically for the element to be attached.
+        # The previous attempt with force=True timed out waiting for the element.
+        # It implies get_by_test_id("lexicon-close-btn") is not finding the element.
+        # Let's inspect LexiconManager.tsx again.
+        # footer={<Button data-testid="lexicon-close-btn" ...>Close</Button>}
+        # This looks correct.
+        # However, maybe the Dialog component logic renders footer conditionally?
+        # No, it's just passed as prop.
+        # Maybe because of animation/rendering timing?
+        # Let's try locating by text "Close" which we know works generally.
+>       page.get_by_text("Close", exact=True).click()
+
+verification/test_journey_lexicon.py:98:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/sync_api/_generated.py:15543: in click
+    self._sync(
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_locator.py:160: in click
+    return await self._frame.click(self._selector, strict=True, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_frame.py:549: in click
+    await self._channel.send("click", self._timeout, locals_to_params(locals()))
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x7fe25c173560>
+cb = <function Channel.send.<locals>.<lambda> at 0x7fe25bdc3ba0>
+is_internal = False, title = None
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        st: List[inspect.FrameInfo] = getattr(
+            task, "__pw_stack__", None
+        ) or inspect.stack(0)
+
+        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.Error: Locator.click: Error: strict mode violation: get_by_text("Close", exact=True) resolved to 2 elements:
+E               1) <span class="sr-only">Close</span> aka get_by_role("button", name="Close").first
+E               2) <button class="px-4 py-2 rounded font-medium transition-colors flex items-center justify-center bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 ">Close</button> aka locator("div").filter(has_text=re.compile(r"^Close$")).get_by_role("button")
+E
+E           Call log:
+E             - waiting for get_by_text("Close", exact=True)
+
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_connection.py:558: Error
+----------------------------- Captured stdout call -----------------------------
+Starting Lexicon Journey...
+PAGE LOG: [vite] connecting...
+PAGE LOG: [vite] connected.
+PAGE LOG: %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold
+PAGE LOG: ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+PAGE LOG: ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+Opening book...
+PAGE LOG: Book indexed for search
+Opening Audio Deck...
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Opening Pronunciation Lexicon...
+Verifying Dialog visibility...
+Adding new rule...
+Verifying Regex capability...
+Verifying Cancel button visibility...
+Verifying button containment...
+Filling rule details...
+Verifying rule in list...
+Closing Lexicon...
+=========================== short test summary info ============================
+FAILED verification/test_journey_lexicon.py::test_journey_lexicon[chromium]
+============================== 1 failed in 6.89s ===============================

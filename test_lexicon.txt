@@ -1,0 +1,99 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.1, pluggy-1.6.0
+rootdir: /app
+plugins: playwright-0.7.2, base-url-2.1.0
+collected 1 item
+
+verification/test_journey_lexicon.py F                                   [100%]
+
+=================================== FAILURES ===================================
+________________________ test_journey_lexicon[chromium] ________________________
+
+page = <Page url='http://localhost:5173/read/55e108ba-c417-498a-8b44-4fe971bc42f9'>
+
+    def test_journey_lexicon(page: Page):
+        print("Starting Lexicon Journey...")
+        utils.reset_app(page)
+        utils.ensure_library_with_book(page)
+
+        # Open Book
+        print("Opening book...")
+        page.locator('[data-testid="book-card"]').click()
+        expect(page).to_have_url(re.compile(r".*/read/.*"))
+
+        # Wait for book to load
+        page.wait_for_timeout(2000)
+
+        # Open Audio Deck
+        print("Opening Audio Deck...")
+>       page.get_by_test_id("reader-tts-button").click()
+
+verification/test_journey_lexicon.py:21:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/sync_api/_generated.py:15543: in click
+    self._sync(
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_locator.py:160: in click
+    return await self._frame.click(self._selector, strict=True, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_frame.py:549: in click
+    await self._channel.send("click", self._timeout, locals_to_params(locals()))
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x7f8d186671d0>
+cb = <function Channel.send.<locals>.<lambda> at 0x7f8d182a7c40>
+is_internal = False, title = None
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        st: List[inspect.FrameInfo] = getattr(
+            task, "__pw_stack__", None
+        ) or inspect.stack(0)
+
+        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.TimeoutError: Locator.click: Timeout 2000ms exceeded.
+E           Call log:
+E             - waiting for get_by_test_id("reader-tts-button")
+
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_connection.py:558: TimeoutError
+----------------------------- Captured stdout call -----------------------------
+Starting Lexicon Journey...
+PAGE LOG: [vite] connecting...
+PAGE LOG: [vite] connected.
+PAGE LOG: %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold
+PAGE LOG: ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+PAGE LOG: ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+Opening book...
+PAGE ERROR: initialTerm is not defined
+PAGE ERROR: initialTerm is not defined
+PAGE LOG: The above error occurred in the <LexiconManager> component:
+
+    at LexiconManager (http://localhost:5173/src/components/reader/LexiconManager.tsx?t=1764516506841:33:34)
+    at div
+    at div
+    at div
+    at ReaderView (http://localhost:5173/src/components/reader/ReaderView.tsx?t=1764516506842:42:18)
+    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=68d9ae90:4108:5)
+    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=68d9ae90:4578:5)
+    at div
+    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=68d9ae90:4521:15)
+    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=68d9ae90:5267:5)
+    at App
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+PAGE ERROR: initialTerm is not defined
+Opening Audio Deck...
+=========================== short test summary info ============================
+FAILED verification/test_journey_lexicon.py::test_journey_lexicon[chromium]
+============================== 1 failed in 8.63s ===============================

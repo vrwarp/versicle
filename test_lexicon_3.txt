@@ -1,0 +1,9 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.1, pluggy-1.6.0
+rootdir: /app
+plugins: playwright-0.7.2, base-url-2.1.0
+collected 1 item
+
+verification/test_journey_lexicon.py .                                   [100%]
+
+============================== 1 passed in 6.95s ===============================

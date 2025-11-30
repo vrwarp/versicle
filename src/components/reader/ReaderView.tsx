@@ -3,20 +3,22 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ePub, { type Book, type Rendition, type Location } from 'epubjs';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useTTSStore } from '../../store/useTTSStore';
+import { useUIStore } from '../../store/useUIStore';
 import { useTTS } from '../../hooks/useTTS';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
-import { ReaderSettings } from './ReaderSettings';
-import { TTSQueue } from './TTSQueue';
-import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
-import { TTSCostIndicator } from './TTSCostIndicator';
+import { LexiconManager } from './LexiconManager';
+import { VisualSettings } from './VisualSettings';
 import { GestureOverlay } from './GestureOverlay';
 import { Toast } from '../ui/Toast';
 import { Dialog } from '../ui/Dialog';
+import { Popover, PopoverTrigger } from '../ui/Popover';
+import { Sheet, SheetTrigger } from '../ui/Sheet';
+import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter, RotateCcw, RotateCw, Maximize, Minimize } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 
 /**
@@ -54,24 +56,9 @@ export const ReaderView: React.FC = () => {
       isPlaying,
       status,
       play,
-      pause,
       activeCfi,
-      rate,
-      setRate,
-      voice,
-      setVoice,
-      voices: availableVoices,
-      providerId,
-      setProviderId,
-      apiKeys,
-      setApiKey,
       lastError,
       clearError,
-      enableCostWarning,
-      setEnableCostWarning,
-      prerollEnabled,
-      setPrerollEnabled,
-      seek,
       queue
   } = useTTSStore();
 
@@ -83,7 +70,7 @@ export const ReaderView: React.FC = () => {
   } = useAnnotationStore();
 
   // Use TTS Hook
-  const { sentences } = useTTS(renditionRef.current);
+  useTTS(renditionRef.current);
 
   // Highlight Active TTS Sentence
   useEffect(() => {
@@ -213,11 +200,12 @@ export const ReaderView: React.FC = () => {
 
   const [showToc, setShowToc] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showTTS, setShowTTS] = useState(false);
-  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
-  const [showCostWarning, setShowCostWarning] = useState(false);
   const [immersiveMode, setImmersiveMode] = useState(false);
+
+  const [lexiconOpen, setLexiconOpen] = useState(false);
+  const [lexiconText, setLexiconText] = useState('');
+
+  const { setGlobalSettingsOpen } = useUIStore();
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -685,13 +673,26 @@ export const ReaderView: React.FC = () => {
             <button data-testid="reader-search-button" aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
                     <Search className="w-5 h-5 text-secondary" />
             </button>
-            <button data-testid="reader-tts-button" aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
-                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-            </button>
+            <Sheet>
+                <SheetTrigger asChild>
+                    <button data-testid="reader-tts-button" aria-label="Open Audio Deck" className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
+                        <Headphones className="w-5 h-5" />
+                    </button>
+                </SheetTrigger>
+                <UnifiedAudioPanel />
+            </Sheet>
             <button data-testid="reader-immersive-enter-button" aria-label="Enter Immersive Mode" onClick={() => setImmersiveMode(true)} className="p-2 rounded-full hover:bg-border">
                 <Maximize className="w-5 h-5 text-secondary" />
             </button>
-            <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-border">
+            <Popover>
+                <PopoverTrigger asChild>
+                    <button data-testid="reader-visual-settings-button" aria-label="Visual Settings" className="p-2 rounded-full hover:bg-border">
+                        <Type className="w-5 h-5 text-secondary" />
+                    </button>
+                </PopoverTrigger>
+                <VisualSettings />
+            </Popover>
+            <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setGlobalSettingsOpen(true)} className="p-2 rounded-full hover:bg-border">
                 <Settings className="w-5 h-5 text-secondary" />
             </button>
             </div>
@@ -811,216 +812,15 @@ export const ReaderView: React.FC = () => {
          <div className="flex-1 relative min-w-0 flex flex-col items-center">
             <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full max-w-2xl h-full overflow-hidden px-6 md:px-8" />
 
-             <AnnotationPopover bookId={id || ''} onClose={handleClearSelection} />
-
-             {/* TTS Controls */}
-             {showTTS && (
-                 <div data-testid="tts-panel" className="absolute top-2 right-14 w-80 bg-surface shadow-lg rounded-lg p-4 border border-border z-30 max-h-[80vh] overflow-y-auto">
-                     <div className="flex justify-between items-center mb-2">
-                         <h3 className="text-sm font-bold text-foreground">Text to Speech</h3>
-                         <button onClick={() => {setShowTTS(false); setShowVoiceSettings(false);}}><X className="w-4 h-4 text-muted" /></button>
-                     </div>
-
-                     {!showVoiceSettings ? (
-                        <>
-                            <div className="flex items-center gap-2 mb-4">
-                                <button
-                                    data-testid="tts-seek-back-button"
-                                    onClick={() => seek(-15)}
-                                    disabled={providerId === 'local'}
-                                    className={`p-2 rounded hover:bg-muted/10 ${providerId === 'local' ? 'opacity-30 cursor-not-allowed' : 'text-secondary'}`}
-                                    aria-label="Skip Back 15s"
-                                    title={providerId === 'local' ? 'Not available for local TTS' : 'Skip Back 15s'}
-                                >
-                                    <RotateCcw className="w-4 h-4" />
-                                </button>
-
-                                <button
-                                    data-testid="tts-play-pause-button"
-                                    onClick={() => {
-                                        if (isPlaying) {
-                                            pause();
-                                        } else {
-                                            // Check cost warning
-                                            if (providerId !== 'local' && sentences.length > 0 && enableCostWarning) {
-                                                const totalChars = sentences.reduce((sum, s) => sum + s.text.length, 0);
-                                                // Warn if total text is large (e.g. > 5000 chars ~ 1 page/chapter depending)
-                                                if (totalChars > 5000) {
-                                                    setShowCostWarning(true);
-                                                    return;
-                                                }
-                                            }
-                                            play();
-                                        }
-                                    }}
-                                    className="flex-1 bg-primary text-background py-2 rounded hover:opacity-90 flex justify-center items-center"
-                                >
-                                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                                </button>
-
-                                <button
-                                    data-testid="tts-seek-forward-button"
-                                    onClick={() => seek(15)}
-                                    disabled={providerId === 'local'}
-                                    className={`p-2 rounded hover:bg-muted/10 ${providerId === 'local' ? 'opacity-30 cursor-not-allowed' : 'text-secondary'}`}
-                                    aria-label="Skip Forward 15s"
-                                    title={providerId === 'local' ? 'Not available for local TTS' : 'Skip Forward 15s'}
-                                >
-                                    <RotateCw className="w-4 h-4" />
-                                </button>
-
-                                <button
-                                    data-testid="tts-settings-button"
-                                    onClick={() => setShowVoiceSettings(true)}
-                                    className="p-2 bg-secondary text-surface rounded hover:opacity-90 ml-2"
-                                    aria-label="Voice Settings"
-                                >
-                                    <Settings className="w-4 h-4" />
-                                </button>
-                            </div>
-                            <div className="mb-2">
-                                <label className="block text-xs text-muted mb-1">Speed: {rate}x</label>
-                                <input
-                                    data-testid="tts-speed-slider"
-                                    type="range"
-                                    min="0.5"
-                                    max="2"
-                                    step="0.1"
-                                    value={rate}
-                                    onChange={(e) => setRate(parseFloat(e.target.value))}
-                                    className="w-full accent-primary"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs text-muted mb-1">Voice</label>
-                                <select
-                                    data-testid="tts-voice-select"
-                                    className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
-                                    value={voice?.name || ''}
-                                    onChange={(e) => {
-                                        const selected = availableVoices.find(v => v.name === e.target.value);
-                                        setVoice(selected || null);
-                                    }}
-                                >
-                                    <option value="">Default</option>
-                                    {availableVoices.map(v => (
-                                        <option key={v.id} value={v.name}>{v.name.slice(0, 30)}...</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </>
-                     ) : (
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between mb-2">
-                                <button onClick={() => setShowVoiceSettings(false)} className="text-xs text-primary flex items-center">
-                                    <ArrowLeft className="w-3 h-3 mr-1" /> Back
-                                </button>
-                                <TTSCostIndicator />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-semibold text-muted mb-1">Provider</label>
-                                <select
-                                    data-testid="tts-provider-select"
-                                    className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
-                                    value={providerId}
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    onChange={(e) => setProviderId(e.target.value as any)}
-                                >
-                                    <option value="local">Local (Free)</option>
-                                    <option value="google">Google Cloud TTS</option>
-                                    <option value="openai">OpenAI TTS</option>
-                                </select>
-                            </div>
-
-                            {providerId === 'google' && (
-                                <div>
-                                    <label className="block text-xs font-semibold text-muted mb-1">Google API Key</label>
-                                    <input
-                                        type="password"
-                                        className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
-                                        value={apiKeys.google}
-                                        onChange={(e) => setApiKey('google', e.target.value)}
-                                        placeholder="Enter Google API Key"
-                                    />
-                                    <p className="text-[10px] text-muted mt-1">
-                                        Needs Cloud Text-to-Speech API enabled.
-                                    </p>
-                                </div>
-                            )}
-
-                            {providerId === 'openai' && (
-                                <div>
-                                    <label className="block text-xs font-semibold text-muted mb-1">OpenAI API Key</label>
-                                    <input
-                                        type="password"
-                                        className="w-full text-xs p-1 border rounded bg-background text-foreground border-border"
-                                        value={apiKeys.openai}
-                                        onChange={(e) => setApiKey('openai', e.target.value)}
-                                        placeholder="Enter OpenAI API Key"
-                                    />
-                                </div>
-                            )}
-
-                            <div className="pt-2 border-t border-border">
-                                <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={enableCostWarning}
-                                        onChange={(e) => setEnableCostWarning(e.target.checked)}
-                                        className="accent-primary"
-                                    />
-                                    <span className="text-xs text-foreground">Warn before large synthesis</span>
-                                </label>
-                                <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={prerollEnabled}
-                                        onChange={(e) => setPrerollEnabled(e.target.checked)}
-                                        className="accent-primary"
-                                    />
-                                    <span className="text-xs text-foreground">Announce Chapter Title</span>
-                                </label>
-                                <TTSAbbreviationSettings />
-                            </div>
-                        </div>
-                     )}
-
-                     <TTSQueue />
-                 </div>
-             )}
-
-            {/* Cost Warning Dialog */}
-            <Dialog
-                isOpen={showCostWarning}
-                onClose={() => setShowCostWarning(false)}
-                title="Cost Warning"
-                description={`You are about to listen to a large section (~${sentences.reduce((sum, s) => sum + s.text.length, 0).toLocaleString()} chars). This may incur costs with ${providerId === 'google' ? 'Google Cloud' : 'OpenAI'}.`}
-                footer={
-                    <>
-                        <button
-                            onClick={() => setShowCostWarning(false)}
-                            className="px-3 py-1 text-sm text-secondary hover:text-primary"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={() => {
-                                setShowCostWarning(false);
-                                play();
-                            }}
-                            className="px-3 py-1 text-sm bg-primary text-background rounded hover:opacity-90"
-                        >
-                            Proceed
-                        </button>
-                    </>
-                }
-            />
-
-            {/* Advanced Settings Modal */}
-            {showSettings && (
-                <ReaderSettings onClose={() => setShowSettings(false)} />
-            )}
+             <AnnotationPopover
+                bookId={id || ''}
+                onClose={handleClearSelection}
+                onFixPronunciation={(text) => {
+                    setLexiconText(text);
+                    setLexiconOpen(true);
+                }}
+             />
+             <LexiconManager open={lexiconOpen} onOpenChange={setLexiconOpen} initialTerm={lexiconText} />
          </div>
       </div>
 

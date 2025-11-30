@@ -3,7 +3,8 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { BookCard } from './BookCard';
 import { EmptyLibrary } from './EmptyLibrary';
 import { Grid } from 'react-window';
-import { Upload } from 'lucide-react';
+import { Upload, Settings } from 'lucide-react';
+import { useUIStore } from '../../store/useUIStore';
 
 // Grid Configuration
 const CARD_WIDTH = 200; // Minimal width
@@ -51,6 +52,7 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
  */
 export const LibraryView: React.FC = () => {
   const { books, fetchBooks, isLoading, error, addBook, isImporting } = useLibraryStore();
+  const { setGlobalSettingsOpen } = useUIStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -114,20 +116,30 @@ export const LibraryView: React.FC = () => {
           <h1 className="text-3xl font-bold text-primary mb-2">My Library</h1>
           <p className="text-secondary">Manage and read your EPUB collection</p>
         </div>
-        <button
-          onClick={triggerFileUpload}
-          disabled={isImporting}
-          className="flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
-          aria-label="Import book"
-          data-testid="header-add-button"
-        >
-          {isImporting ? (
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-          ) : (
-            <Upload className="w-4 h-4" />
-          )}
-          <span className="font-medium">Import Book</span>
-        </button>
+        <div className="flex gap-2">
+            <button
+              onClick={() => setGlobalSettingsOpen(true)}
+              className="flex items-center justify-center p-2 rounded-md bg-secondary text-secondary-foreground hover:opacity-90 transition-colors shadow-sm"
+              aria-label="Settings"
+              data-testid="header-settings-button"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+            <button
+              onClick={triggerFileUpload}
+              disabled={isImporting}
+              className="flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+              aria-label="Import book"
+              data-testid="header-add-button"
+            >
+              {isImporting ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+              ) : (
+                <Upload className="w-4 h-4" />
+              )}
+              <span className="font-medium">Import Book</span>
+            </button>
+        </div>
       </header>
 
       {error && (
