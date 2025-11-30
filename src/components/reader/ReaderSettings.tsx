@@ -1,6 +1,7 @@
 import React from 'react';
 import { useReaderStore } from '../../store/useReaderStore';
-import { X } from 'lucide-react';
+import { useTTSStore } from '../../store/useTTSStore';
+import { X, Check } from 'lucide-react';
 
 interface ReaderSettingsProps {
   onClose: () => void;
@@ -21,6 +22,8 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
     viewMode,
     setViewMode
   } = useReaderStore();
+
+  const { sanitizationEnabled, setSanitizationEnabled } = useTTSStore();
 
   const fontOptions = [
     { label: 'Serif', value: 'Merriweather, Georgia, serif' },
@@ -128,6 +131,33 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Audio Settings */}
+        <div>
+           <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Audio</label>
+
+           <div className="flex items-center justify-between">
+              <span className="text-sm dark:text-gray-300">Sanitize Text</span>
+              <button
+                data-testid="settings-audio-sanitization"
+                onClick={() => setSanitizationEnabled(!sanitizationEnabled)}
+                className={`w-10 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${
+                  sanitizationEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <div
+                  className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out flex items-center justify-center ${
+                    sanitizationEnabled ? 'translate-x-4' : ''
+                  }`}
+                >
+                    {sanitizationEnabled && <Check size={10} className="text-blue-600" />}
+                </div>
+              </button>
+           </div>
+           <p className="text-[10px] text-gray-400 mt-1">
+             Removes page numbers, citations, and URLs from spoken text.
+           </p>
         </div>
 
         {/* Typography */}

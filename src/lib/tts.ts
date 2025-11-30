@@ -1,5 +1,6 @@
 import type { Rendition } from 'epubjs';
 import { TextSegmenter } from './tts/TextSegmenter';
+import { Sanitizer } from './tts/processors/Sanitizer';
 import { useTTSStore } from '../store/useTTSStore';
 
 /**
@@ -38,7 +39,7 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
     const body = doc.body;
 
     // Initialize segmenter
-    const { customAbbreviations, alwaysMerge, sentenceStarters } = useTTSStore.getState();
+    const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
     const segmenter = new TextSegmenter('en', customAbbreviations, alwaysMerge, sentenceStarters);
 
     let textBuffer = '';
@@ -51,6 +52,8 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
             return;
         }
 
+        // We use the original text buffer for segmentation to ensure correct CFI mapping.
+        // Sanitization is applied to the segment text afterwards.
         const segments = segmenter.segment(textBuffer);
 
         for (const segment of segments) {
@@ -88,10 +91,18 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
             if (startSet && endSet) {
                  try {
                     const cfi = contents.cfiFromRange(range);
-                    sentences.push({
-                        text: segment.text.trim(),
-                        cfi: cfi
-                    });
+                    let finalText = segment.text.trim();
+
+                    if (sanitizationEnabled && finalText) {
+                        finalText = Sanitizer.sanitize(finalText);
+                    }
+
+                    if (finalText) {
+                        sentences.push({
+                            text: finalText,
+                            cfi: cfi
+                        });
+                    }
                 } catch (e) {
                     console.warn("Failed to generate CFI for range", e);
                 }

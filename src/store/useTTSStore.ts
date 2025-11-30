@@ -50,6 +50,9 @@ interface TTSState {
   /** Whether to show cost warning dialogs */
   enableCostWarning: boolean;
 
+  /** Whether to sanitize text (remove URLs, page numbers, citations) */
+  sanitizationEnabled: boolean;
+
   /** Actions */
   play: () => void;
   pause: () => void;
@@ -63,6 +66,7 @@ interface TTSState {
   setAlwaysMerge: (words: string[]) => void;
   setSentenceStarters: (words: string[]) => void;
   setEnableCostWarning: (enable: boolean) => void;
+  setSanitizationEnabled: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
@@ -130,6 +134,7 @@ export const useTTSStore = create<TTSState>()(
             ],
             alwaysMerge: DEFAULT_ALWAYS_MERGE,
             sentenceStarters: DEFAULT_SENTENCE_STARTERS,
+            sanitizationEnabled: true,
 
             play: () => {
                 player.play();
@@ -192,6 +197,9 @@ export const useTTSStore = create<TTSState>()(
             },
             setEnableCostWarning: (enable) => {
                 set({ enableCostWarning: enable });
+            },
+            setSanitizationEnabled: (enable) => {
+                set({ sanitizationEnabled: enable });
             },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
@@ -258,6 +266,7 @@ export const useTTSStore = create<TTSState>()(
             alwaysMerge: state.alwaysMerge,
             sentenceStarters: state.sentenceStarters,
             enableCostWarning: state.enableCostWarning,
+            sanitizationEnabled: state.sanitizationEnabled,
         }),
     }
   )

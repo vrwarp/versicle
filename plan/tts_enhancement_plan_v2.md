@@ -19,6 +19,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 ### 3. Text Sanitization Engine
 **Plan:** [plan/tts_v2_plan03_text_sanitization.md](./tts_v2_plan03_text_sanitization.md)
 **Goal:** Automatically remove non-narrative artifacts (page numbers, URLs, citations) from the text stream before synthesis to improve immersion.
+**Status:** **Implemented** ✅
 **Key Components:** `Sanitizer`, `RegexPatterns`.
 
 ### 4. Smart Resume ("Recall" Buffer)
@@ -95,7 +96,7 @@ Most features in the roadmap are loosely coupled, but some share critical depend
 
 1.  **Plan 01 (Audio Graph)** - *Foundation for everything.*
 2.  **Plan 02 (Media Session)** - *Easy win, high value.*
-3.  **Plan 03 (Sanitization)** - *Improves quality immediately.*
+3.  **Plan 03 (Sanitization)** - *Implemented.* ✅
 4.  **Plan 04 (Smart Resume)** - *Easy logic, high value.*
 5.  **Plan 05 (Sleep Timer)** - *Easy logic.*
 6.  **Plan 06 (Smart Speed)** - *Requires Plan 01.*
