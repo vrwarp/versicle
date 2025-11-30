@@ -147,6 +147,7 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
                            <div className="flex flex-col gap-1 w-full">
                                <div className="flex items-center gap-2 w-full">
                                     <input
+                                        data-testid="lexicon-input-original"
                                         className="border p-1 rounded flex-1 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                         value={editingRule.original}
                                         onChange={e => setEditingRule({...editingRule, original: e.target.value})}
@@ -154,17 +155,19 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
                                     />
                                     <span className="text-gray-500">→</span>
                                     <input
+                                        data-testid="lexicon-input-replacement"
                                         className="border p-1 rounded flex-1 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                         value={editingRule.replacement}
                                         onChange={e => setEditingRule({...editingRule, replacement: e.target.value})}
                                         placeholder="Replacement"
                                     />
-                                    <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
-                                    <button onClick={() => setEditingRule(null)} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
+                                    <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
+                                    <button data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
                                </div>
                                <div className="flex items-center gap-2">
                                    <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                                        <input
+                                           data-testid="lexicon-regex-checkbox"
                                            type="checkbox"
                                            checked={editingRule.isRegex || false}
                                            onChange={e => setEditingRule({...editingRule, isRegex: e.target.checked})}
@@ -179,7 +182,7 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
                        <>
                            <div className="flex-1 grid grid-cols-2 gap-4">
                                <div className="flex items-center gap-2">
-                                   {rule.isRegex && <span className="text-[10px] uppercase font-bold text-purple-600 border border-purple-200 bg-purple-50 px-1 rounded">Re</span>}
+                                   {rule.isRegex && <span data-testid="lexicon-regex-badge" className="text-[10px] uppercase font-bold text-purple-600 border border-purple-200 bg-purple-50 px-1 rounded">Re</span>}
                                    <span className="font-medium text-sm text-gray-900 dark:text-gray-100">{rule.original}</span>
                                </div>
                                <span className="text-sm text-gray-500 dark:text-gray-400">{rule.replacement}</span>
@@ -205,6 +208,7 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
               <div className="flex flex-col gap-2 p-2 border rounded bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
                    <div className="flex items-center gap-2">
                         <input
+                            data-testid="lexicon-input-original"
                             className="border p-1 rounded flex-1 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                             value={editingRule?.original || ''}
                             onChange={e => setEditingRule({...editingRule, original: e.target.value})}
@@ -213,17 +217,19 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
                         />
                         <span className="text-gray-500">→</span>
                         <input
+                            data-testid="lexicon-input-replacement"
                             className="border p-1 rounded flex-1 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                             value={editingRule?.replacement || ''}
                             onChange={e => setEditingRule({...editingRule, replacement: e.target.value})}
                             placeholder="Replacement"
                         />
-                        <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
-                        <button onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
+                        <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
+                        <button data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
                    </div>
                    <div className="flex items-center gap-2">
                        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                            <input
+                               data-testid="lexicon-regex-checkbox"
                                type="checkbox"
                                checked={editingRule?.isRegex || false}
                                onChange={e => setEditingRule({...editingRule, isRegex: e.target.checked})}
@@ -234,7 +240,7 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
                    </div>
               </div>
           ) : (
-              <Button onClick={() => { setIsAdding(true); setEditingRule({}); }} variant="outline" className="w-full flex items-center justify-center gap-2 text-sm">
+              <Button data-testid="lexicon-add-rule-btn" onClick={() => { setIsAdding(true); setEditingRule({}); }} variant="outline" className="w-full flex items-center justify-center gap-2 text-sm">
                   <Plus size={16} /> Add Rule
               </Button>
           )}
@@ -244,12 +250,13 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
               <h4 className="text-xs font-semibold mb-2 text-gray-500 uppercase">Test Pronunciation</h4>
               <div className="flex gap-2">
                   <input
+                      data-testid="lexicon-test-input"
                       className="flex-1 border p-2 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       placeholder="Type a sentence containing your words..."
                       value={testInput}
                       onChange={e => setTestInput(e.target.value)}
                   />
-                  <Button onClick={handleTest} variant="outline" className="p-2">
+                  <Button data-testid="lexicon-test-btn" onClick={handleTest} variant="outline" className="p-2">
                       <Volume2 size={18} />
                   </Button>
               </div>
