@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { LexiconService } from '../../lib/tts/LexiconService';
 import type { LexiconRule } from '../../types/db';
 import { Plus, Trash2, Volume2, Save, X } from 'lucide-react';
@@ -14,12 +14,6 @@ interface LexiconManagerProps {
 // Simple internal Button component since ui/Button doesn't exist
 const Button = ({ children, onClick, variant = 'primary', className = '', size = 'default', ...props }: any) => {
     const baseClass = "px-4 py-2 rounded font-medium transition-colors flex items-center justify-center";
-    const variants: Record<string, string> = {
-        primary: "bg-primary text-primary-foreground hover:bg-primary/90",
-        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        icon: "p-2 w-10 h-10"
-    };
 
     // Quick fix for semantic classes if they don't map directly in this project's tailwind config
     // Actually project uses `bg-blue-500` etc in ReaderSettings, let's stick to simple classes or reuse what works.
@@ -46,7 +40,7 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
   const [isAdding, setIsAdding] = useState(false);
   const lexiconService = LexiconService.getInstance();
 
-  const currentBookId = useReaderStore(state => state.book?.id);
+  const currentBookId = useReaderStore(state => state.currentBookId);
   const [scope, setScope] = useState<'global' | 'book'>('global');
 
   const [testInput, setTestInput] = useState('');
@@ -77,7 +71,7 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
       id: editingRule.id,
       original: editingRule.original,
       replacement: editingRule.replacement,
-      bookId: scope === 'book' ? currentBookId : undefined
+      bookId: scope === 'book' ? (currentBookId || undefined) : undefined
     });
 
     setIsAdding(false);
@@ -98,7 +92,7 @@ export function LexiconManager({ open, onOpenChange }: LexiconManagerProps) {
               id: editingRule.id || 'temp',
               original: editingRule.original,
               replacement: editingRule.replacement,
-              bookId: scope === 'book' ? currentBookId : undefined,
+              bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
               created: 0
           } as LexiconRule;
 
