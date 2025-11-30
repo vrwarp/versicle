@@ -323,7 +323,21 @@ export const ReaderView: React.FC = () => {
           // However, for large books this blocks. We can do it in background or rely on percentage from chapters if locations not ready.
           // Let's try to generate minimal locations for progress bar to work reasonably.
            // This is heavy, maybe we skip for step 03 or do it async without await?
-           book.locations.generate(1000);
+           book.locations.generate(1000).then(() => {
+               // Update progress immediately if we are already at a location
+               if (rendition.location && rendition.location.start) {
+                   const cfi = rendition.location.start.cfi;
+                   const pct = book.locations.percentageFromCfi(cfi);
+
+                   // Get chapter title (simplified)
+                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                   const item = book.spine.get(rendition.location.start.href) as any;
+                   const title = item ? (item.label || 'Chapter') : 'Unknown';
+
+                   updateLocation(cfi, pct, title);
+                   saveProgress(id, cfi, pct);
+               }
+           });
 
            // Index for Search (Async)
            // Only index if not already done? Or just do it every time for now (simplicity)
