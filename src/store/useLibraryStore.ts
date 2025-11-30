@@ -73,7 +73,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   removeBook: async (id: string) => {
     try {
       const db = await getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations'], 'readwrite');
+      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon'], 'readwrite');
       await tx.objectStore('books').delete(id);
       await tx.objectStore('files').delete(id);
       await tx.objectStore('locations').delete(id);
@@ -84,6 +84,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       while (cursor) {
         await cursor.delete();
         cursor = await cursor.continue();
+      }
+
+      // Delete lexicon rules for this book
+      const lexiconIndex = tx.objectStore('lexicon').index('by_bookId');
+      let lexiconCursor = await lexiconIndex.openCursor(IDBKeyRange.only(id));
+      while (lexiconCursor) {
+        await lexiconCursor.delete();
+        lexiconCursor = await lexiconCursor.continue();
       }
 
       await tx.done;

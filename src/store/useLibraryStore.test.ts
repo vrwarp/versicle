@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useLibraryStore } from './useLibraryStore';
 import { getDB } from '../db/db';
-import type { BookMetadata } from '../types/db';
+import type { BookMetadata, LexiconRule } from '../types/db';
 
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
@@ -51,10 +51,11 @@ describe('useLibraryStore', () => {
 
     // Clear IndexedDB
     const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'annotations'], 'readwrite');
+    const tx = db.transaction(['books', 'files', 'annotations', 'lexicon'], 'readwrite');
     await tx.objectStore('books').clear();
     await tx.objectStore('files').clear();
     await tx.objectStore('annotations').clear();
+    await tx.objectStore('lexicon').clear();
     await tx.done;
   });
 
@@ -163,5 +164,30 @@ describe('useLibraryStore', () => {
 
       // Verify annotation is deleted
       expect(await db.get('annotations', 'note-1')).toBeUndefined();
+  });
+
+  it('should delete associated lexicon rules when removing a book', async () => {
+      // Add a book
+      await useLibraryStore.getState().addBook(mockFile);
+
+      const db = await getDB();
+      const rule: LexiconRule = {
+          id: 'rule-1',
+          bookId: mockBook.id,
+          original: 'hello',
+          replacement: 'hi',
+          created: Date.now()
+      };
+
+      await db.put('lexicon', rule);
+
+      // Verify rule exists
+      expect(await db.get('lexicon', 'rule-1')).toEqual(rule);
+
+      // Remove the book
+      await useLibraryStore.getState().removeBook(mockBook.id);
+
+      // Verify rule is deleted
+      expect(await db.get('lexicon', 'rule-1')).toBeUndefined();
   });
 });
