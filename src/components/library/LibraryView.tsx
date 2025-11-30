@@ -117,7 +117,7 @@ export const LibraryView: React.FC = () => {
         <button
           onClick={triggerFileUpload}
           disabled={isImporting}
-          className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
           aria-label="Import book"
           data-testid="header-add-button"
         >
