@@ -54,13 +54,21 @@ export const LibraryView: React.FC = () => {
 
   // Use previous count to detect new additions
   const prevBookCount = useRef(0);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
-    fetchBooks();
+    fetchBooks().then(() => {
+        // Mark as initialized after first fetch
+        // Use timeout to ensure state update has processed if needed,
+        // though fetchBooks awaiting set({ books }) is synchronous in zustand usually.
+        hasInitialized.current = true;
+        prevBookCount.current = useLibraryStore.getState().books.length;
+    });
   }, [fetchBooks]);
 
   useEffect(() => {
-      if (books.length > prevBookCount.current && prevBookCount.current !== 0) {
+      // If books increased and we have initialized (so it's not the initial fetch of existing books)
+      if (hasInitialized.current && books.length > prevBookCount.current) {
           // New book added
           setToast({ message: 'Book imported successfully', type: 'success', visible: true });
       }

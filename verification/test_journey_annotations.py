@@ -12,9 +12,16 @@ def test_annotations_journey(page: Page):
     expect(page.get_by_test_id("reader-back-button")).to_be_visible()
 
     # Wait for iframe content
-    # Using more robust selector
     frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
     frame.locator("body").wait_for(timeout=2000)
+
+    # 0. Verify Empty Annotations State
+    print("Verifying Empty Annotations State...")
+    page.get_by_test_id("reader-annotations-button").click()
+    expect(page.get_by_text("No annotations yet")).to_be_visible()
+    utils.capture_screenshot(page, "annotations_0_empty")
+    # Close sidebar
+    page.get_by_test_id("reader-annotations-button").click()
 
     # 1. Create Highlight
     print("Creating Highlight...")

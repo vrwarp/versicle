@@ -17,6 +17,14 @@ def test_search_journey(page: Page):
     search_input = page.get_by_test_id("search-input")
     expect(search_input).to_be_visible()
 
+    # 1. Verify Empty State (No results found)
+    print("Verifying Empty Search State...")
+    search_input.fill("supercalifragilistic")
+    search_input.press("Enter")
+    expect(page.get_by_text('No results found for "supercalifragilistic"')).to_be_visible()
+    utils.capture_screenshot(page, "search_empty_state")
+
+    # 2. Positive Search
     # Retry search until results found (indexing might take time)
     for i in range(20):
         print(f"Search attempt {i+1}...")
@@ -27,11 +35,6 @@ def test_search_journey(page: Page):
         page.wait_for_timeout(500)
 
         # Check for results using data-testid
-        # Since I added data-testid to the button inside the li, I can look for those
-        # But for counting, I can check how many elements match the pattern or parent container
-
-        # Actually I can't wildcard match test-id easily in playwright without regex locator
-        # But I can search within the sidebar
         results = page.get_by_test_id("reader-search-sidebar").locator("button[data-testid^='search-result-']")
         count = results.count()
         print(f"List items count: {count}")
