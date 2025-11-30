@@ -66,6 +66,11 @@ describe('ReaderView', () => {
           font: mockFont,
           default: mockDefault
         },
+        hooks: {
+          content: {
+            register: vi.fn()
+          }
+        },
         annotations: mockAnnotations,
         on: vi.fn(),
         off: vi.fn(),
