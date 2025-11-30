@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useTTSStore } from '../../store/useTTSStore';
-import { X, Mic, Check} from 'lucide-react';
+import { X, Mic } from 'lucide-react';
 import { LexiconManager } from './LexiconManager';
 
 interface ReaderSettingsProps {
