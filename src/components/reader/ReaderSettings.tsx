@@ -23,7 +23,9 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
     viewMode,
     setViewMode,
     gestureMode,
-    setGestureMode
+    setGestureMode,
+    shouldForceFont,
+    setShouldForceFont
   } = useReaderStore();
 
   const { sanitizationEnabled, setSanitizationEnabled } = useTTSStore();
@@ -184,6 +186,24 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
         {/* Typography */}
         <div>
            <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Typography</label>
+
+           {/* Force Font/Style */}
+           <div className="flex items-center justify-between mb-4 bg-gray-50 dark:bg-gray-750 p-2 rounded-lg border border-gray-100 dark:border-gray-700">
+               <div className="flex flex-col">
+                   <span className="text-sm font-medium dark:text-gray-200">Force Theme Style</span>
+                   <span className="text-[10px] text-gray-500 dark:text-gray-400">Override book fonts & colors</span>
+               </div>
+               <label className="relative inline-flex items-center cursor-pointer">
+                   <input
+                       type="checkbox"
+                       checked={shouldForceFont}
+                       onChange={(e) => setShouldForceFont(e.target.checked)}
+                       className="sr-only peer"
+                       data-testid="settings-force-font"
+                   />
+                   <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+               </label>
+           </div>
 
            {/* Font Family */}
            <div className="mb-3">

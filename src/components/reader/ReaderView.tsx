@@ -47,7 +47,8 @@ export const ReaderView: React.FC = () => {
     reset,
     progress,
     currentChapterTitle,
-    viewMode
+    viewMode,
+    shouldForceFont
   } = useReaderStore();
 
   const {
@@ -273,36 +274,52 @@ export const ReaderView: React.FC = () => {
           setToc(nav.toc);
 
           // Register themes
-          rendition.themes.register('light', `
-            body { background: #ffffff !important; color: #000000 !important; }
-            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            a { color: #0000ee !important; }
-          `);
-          rendition.themes.register('dark', `
-            body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            a { color: #6ab0f3 !important; }
-          `);
-          rendition.themes.register('sepia', `
-            body { background: #f4ecd8 !important; color: #5b4636 !important; }
-            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            a { color: #0000ee !important; }
-          `);
-          rendition.themes.register('custom', `
-            body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
-            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-          `);
+          // Function to generate theme CSS
+          const getThemeCSS = (themeName: string, bg: string, fg: string, linkColor: string | null) => {
+              // Base rules
+              let css = `
+                  body { background: ${bg} !important; color: ${fg} !important; }
+                  p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+              `;
+
+              if (linkColor) {
+                  css += `a { color: ${linkColor} !important; }`;
+              }
+
+              // If Force Font is enabled, we add aggressive overrides
+              if (shouldForceFont) {
+                  css += `
+                      * {
+                          font-family: ${fontFamily} !important;
+                          line-height: ${lineHeight} !important;
+                          text-align: justify !important;
+                      }
+                  `;
+              }
+              return css;
+          };
+
+          rendition.themes.register('light', getThemeCSS('light', '#ffffff', '#000000', '#0000ee'));
+          rendition.themes.register('dark', getThemeCSS('dark', '#1a1a1a', '#f5f5f5', '#6ab0f3'));
+          rendition.themes.register('sepia', getThemeCSS('sepia', '#f4ecd8', '#5b4636', '#0000ee'));
+          rendition.themes.register('custom', getThemeCSS('custom', customTheme.bg, customTheme.fg, null));
 
           rendition.themes.select(currentTheme);
           rendition.themes.fontSize(`${fontSize}%`);
-          rendition.themes.font(fontFamily);
-          // Apply line-height via default rule as a workaround since there's no direct API
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition.themes as any).default({
-              p: { 'line-height': `${lineHeight} !important` },
-              // Also ensure body has it for general text
-              body: { 'line-height': `${lineHeight} !important` }
-          });
+
+          if (!shouldForceFont) {
+             rendition.themes.font(fontFamily);
+             // Apply line-height via default rule as a workaround since there's no direct API
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (rendition.themes as any).default({
+                 p: { 'line-height': `${lineHeight} !important` },
+                 // Also ensure body has it for general text
+                 body: { 'line-height': `${lineHeight} !important` }
+             });
+          } else {
+             // If forced, we used * selector in theme css, but we can also set it here to be safe
+             rendition.themes.font(fontFamily);
+          }
 
           // Display at saved location or start
           const startLocation = metadata?.currentCfi || undefined;
@@ -454,24 +471,52 @@ export const ReaderView: React.FC = () => {
   // Handle Theme/Font/Layout changes
   useEffect(() => {
     if (renditionRef.current) {
-      // Re-register custom theme in case colors changed
-      renditionRef.current.themes.register('custom', `
-        body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
-        p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-      `);
+      const getThemeCSS = (themeName: string, bg: string, fg: string, linkColor: string | null) => {
+          let css = `
+              body { background: ${bg} !important; color: ${fg} !important; }
+              p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+          `;
+          if (linkColor) {
+              css += `a { color: ${linkColor} !important; }`;
+          }
+          if (shouldForceFont) {
+              css += `
+                  * {
+                      font-family: ${fontFamily} !important;
+                      line-height: ${lineHeight} !important;
+                      text-align: justify !important;
+                  }
+                  h1, h2, h3, h4, h5, h6 {
+                      font-weight: bold !important;
+                  }
+              `;
+          }
+          return css;
+      };
+
+      // Re-register all themes to update the forced styles
+      renditionRef.current.themes.register('light', getThemeCSS('light', '#ffffff', '#000000', '#0000ee'));
+      renditionRef.current.themes.register('dark', getThemeCSS('dark', '#1a1a1a', '#f5f5f5', '#6ab0f3'));
+      renditionRef.current.themes.register('sepia', getThemeCSS('sepia', '#f4ecd8', '#5b4636', '#0000ee'));
+      renditionRef.current.themes.register('custom', getThemeCSS('custom', customTheme.bg, customTheme.fg, null));
 
       renditionRef.current.themes.select(currentTheme);
       renditionRef.current.themes.fontSize(`${fontSize}%`);
-      renditionRef.current.themes.font(fontFamily);
 
-      // Update line height
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (renditionRef.current.themes as any).default({
-        p: { 'line-height': `${lineHeight} !important` },
-        body: { 'line-height': `${lineHeight} !important` }
-      });
+      if (!shouldForceFont) {
+          renditionRef.current.themes.font(fontFamily);
+          // Update line height normally
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (renditionRef.current.themes as any).default({
+            p: { 'line-height': `${lineHeight} !important` },
+            body: { 'line-height': `${lineHeight} !important` }
+          });
+      } else {
+          // When forced, the theme CSS handles it, but setting font also helps with the body
+          renditionRef.current.themes.font(fontFamily);
+      }
     }
-  }, [currentTheme, customTheme, fontSize, fontFamily, lineHeight]);
+  }, [currentTheme, customTheme, fontSize, fontFamily, lineHeight, shouldForceFont]);
 
   // Handle View Mode changes
   useEffect(() => {

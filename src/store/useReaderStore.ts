@@ -32,6 +32,8 @@ interface ReaderState {
   viewMode: 'paginated' | 'scrolled';
   /** Flag for Gesture Mode Overlay */
   gestureMode: boolean;
+  /** Flag to force theme fonts and ignore book styles */
+  shouldForceFont: boolean;
 
   /** Sets the loading state. */
   setIsLoading: (isLoading: boolean) => void;
@@ -47,6 +49,8 @@ interface ReaderState {
   setLineHeight: (height: number) => void;
   /** Sets the font size. */
   setFontSize: (size: number) => void;
+  /** Sets the force font state. */
+  setShouldForceFont: (force: boolean) => void;
   /**
    * Updates the current reading location.
    * @param cfi - The new CFI location.
@@ -84,6 +88,7 @@ export const useReaderStore = create<ReaderState>()(
       toc: [],
       viewMode: 'paginated',
       gestureMode: false,
+      shouldForceFont: false,
 
       setIsLoading: (isLoading) => set({ isLoading }),
       setCurrentBookId: (id) => set({ currentBookId: id }),
@@ -92,6 +97,7 @@ export const useReaderStore = create<ReaderState>()(
       setFontFamily: (fontFamily) => set({ fontFamily }),
       setLineHeight: (lineHeight) => set({ lineHeight }),
       setFontSize: (size) => set({ fontSize: size }),
+      setShouldForceFont: (force) => set({ shouldForceFont: force }),
       updateLocation: (cfi, progress, chapterTitle) =>
         set((state) => ({
           currentCfi: cfi,
@@ -121,6 +127,7 @@ export const useReaderStore = create<ReaderState>()(
         fontSize: state.fontSize,
         viewMode: state.viewMode,
         gestureMode: state.gestureMode,
+        shouldForceFont: state.shouldForceFont,
       }),
     }
   )
