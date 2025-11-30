@@ -55,4 +55,4 @@ def test_verify_progress_bar(page: Page):
     expect(page.get_by_test_id("progress-bar")).to_be_visible()
 
     # 5. Capture screenshot
-    capture_screenshot(page, name="library_with_progress_bar")
+    capture_screenshot(page, name="library_progress_bar")

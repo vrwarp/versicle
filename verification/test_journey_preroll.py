@@ -61,6 +61,7 @@ def test_preroll_journey(page: Page):
         text = page.get_by_test_id("queue-item-0").inner_text()
         if "Estimated reading time" in text:
             print("Preroll item found and verified.")
+            utils.capture_screenshot(page, "preroll_queue_item")
         else:
             print(f"Preroll item text mismatch: {text}")
     else:

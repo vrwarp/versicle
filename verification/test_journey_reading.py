@@ -63,7 +63,7 @@ def test_reading_journey(page: Page):
     page.wait_for_timeout(2000)
     text_3 = get_frame_text()
     print(f"Page 3 Text: {text_3}")
-    utils.capture_screenshot(page, "reading_04_page_3")
+    # reading_04_page_3 removed as redundant
 
     # Verify we navigated
     if text_3 == initial_text:
@@ -104,7 +104,7 @@ def test_reading_journey(page: Page):
     print("Testing Keyboard Shortcuts...")
     page.keyboard.press("ArrowRight")
     page.wait_for_timeout(1000)
-    utils.capture_screenshot(page, "reading_08_keyboard_right")
+    # reading_08_keyboard_right removed as redundant
 
     text_key = get_frame_text()
     print(f"After Key Right Text: {text_key}")

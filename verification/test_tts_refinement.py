@@ -58,7 +58,7 @@ def test_tts_refinement(page: Page):
     assert "bg-primary/20" in classes
     assert "border-l-4" in classes
 
-    utils.capture_screenshot(page, "verify_tts_refinement_queue")
+    utils.capture_screenshot(page, "tts_queue_styling")
 
     # 5. Verify Cost Indicator in Settings
     print("Verifying Cost Indicator...")
@@ -78,5 +78,5 @@ def test_tts_refinement(page: Page):
     # Let's switch to Google just to see if UI updates
     page.get_by_test_id("tts-provider-select").select_option("google")
 
-    utils.capture_screenshot(page, "verify_tts_refinement_settings")
+    utils.capture_screenshot(page, "tts_settings_cost_indicator")
     print("Verification Complete.")

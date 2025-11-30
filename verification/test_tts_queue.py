@@ -109,5 +109,5 @@ def test_tts_queue(page: Page):
     page.get_by_test_id("reader-tts-button").click()
     page.wait_for_timeout(500)
 
-    utils.capture_screenshot(page, "tts_queue_closed")
+    # Removed tts_queue_closed screenshot
     print("Test Passed: TTS Queue populated successfully.")

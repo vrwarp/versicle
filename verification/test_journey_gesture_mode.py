@@ -1,7 +1,7 @@
 
 import pytest
 from playwright.sync_api import Page, expect
-from verification.utils import reset_app
+from verification.utils import reset_app, capture_screenshot
 
 def test_journey_gesture_mode(page: Page):
     """
@@ -25,10 +25,6 @@ def test_journey_gesture_mode(page: Page):
     # The toggle is in the "Controls" section.
     # We find the checkbox for Gesture Mode.
     checkbox = page.locator("input[type='checkbox']").first
-    # Ensure it's the right one - maybe we should have added a testid, but let's assume it's the first or use text nearby
-    # The label contains "Gesture Mode".
-    # Since I didn't add a testid to the input in ReaderSettings.tsx (I added it to layout/theme buttons but not the new input explicitly in the test file earlier, wait, I did not add testid to the input itself in the patch, just label structure)
-    # I should update ReaderSettings.tsx to have data-testid="settings-gesture-mode-toggle" for robustness, but here I can use layout.
 
     checkbox.check(force=True)
 
@@ -54,10 +50,7 @@ def test_journey_gesture_mode(page: Page):
         print(f"Warning: Could not catch transient feedback in time, but proceeding to screenshot. Error: {e}")
 
     # 7. Take Screenshot
-    # We need to save it to verification/screenshots/
-    import os
-    os.makedirs("verification/screenshots", exist_ok=True)
-    page.screenshot(path="verification/screenshots/gesture_mode.png")
+    capture_screenshot(page, "gesture_mode_active")
 
     # 8. Exit Gesture Mode
     page.click("text=Exit Gesture Mode")

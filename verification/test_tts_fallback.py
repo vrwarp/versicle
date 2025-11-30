@@ -82,4 +82,11 @@ def test_tts_fallback(page: Page):
     assert "Google Cloud API Key is missing" in logs_text
     assert "Falling back to WebSpeechProvider" in logs_text
 
+    # Check if error toast is visible
+    try:
+         expect(page.locator("text=Google Cloud API Key is missing")).to_be_visible(timeout=1000)
+         utils.capture_screenshot(page, "tts_fallback_error_toast")
+    except:
+         print("Error toast not caught in screenshot timeframe.")
+
     print("Fallback logs verified!")

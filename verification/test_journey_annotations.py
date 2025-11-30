@@ -62,7 +62,7 @@ def test_annotations_journey(page: Page):
 
     if not selection_success:
         print("Could not select text for highlighting.")
-        utils.capture_screenshot(page, "annotations_failed_selection")
+        # Removed debug screenshot annotations_failed_selection
         return
 
     # Check for Popover (using test id)
