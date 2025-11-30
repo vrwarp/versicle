@@ -61,7 +61,7 @@ describe('BookCard', () => {
   });
 
   it('should render progress bar when progress > 0', () => {
-    const bookWithProgress = { ...mockBook, progress: 45 };
+    const bookWithProgress = { ...mockBook, progress: 0.45 };
     renderWithRouter(<BookCard book={bookWithProgress} />);
 
     const progressBar = screen.getByTestId('progress-bar');
