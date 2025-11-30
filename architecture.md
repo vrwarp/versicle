@@ -2,7 +2,7 @@
 
 ## Overview
 
-Versicle is a local-first, web-based EPUB reader and manager. It runs entirely in the browser, using IndexedDB for storage, React for the UI, and `epub.js` for rendering. It features advanced capabilities like Text-to-Speech (TTS) with sentence highlighting, full-text search, and annotation management.
+Versicle is a local-first, web-based EPUB reader and manager. It runs entirely in the browser, utilizing IndexedDB for persistent storage, React for the UI, and `epub.js` for rendering. The system is designed for privacy and performance, featuring advanced Text-to-Speech (TTS) capabilities, full-text search, and annotation management without relying on external servers for core functionality.
 
 ## System Architecture
 
@@ -28,6 +28,7 @@ graph TD
         APS[AudioPlayerService]
         Lexicon[LexiconService]
         CostEst[CostEstimator]
+        MediaMgr[MediaSessionManager]
     end
 
     subgraph "TTS Engine"
@@ -35,6 +36,7 @@ graph TD
         Sanitizer[Sanitizer]
         Sync[SyncEngine]
         Cache[TTSCache]
+        AudioPlayer[AudioElementPlayer]
         Provider[ITTSProvider]
     end
 
@@ -68,6 +70,8 @@ graph TD
     APS --> CostEst
     APS --> Sync
     APS --> Cache
+    APS --> MediaMgr
+    APS --> AudioPlayer
     Segmenter --> Sanitizer
 
     APS --> DB
@@ -78,178 +82,246 @@ graph TD
 
 ## Directory Structure
 
-*   `src/components/`: React components (Library, Reader, UI).
-*   `src/db/`: IndexedDB configuration and schema.
-*   `src/hooks/`: React hooks (e.g., `useTTS`).
-*   `src/lib/`: Core logic and utilities.
-    *   `ingestion.ts`: EPUB processing.
-    *   `search.ts`: Search client.
-    *   `tts/`: TTS engine and providers.
-*   `src/store/`: Zustand state stores.
-*   `src/workers/`: Web Workers (Search).
-*   `src/types/`: TypeScript definitions.
+*   `src/components/`: React UI components.
+    *   `library/`: Components for the library view (book grid, upload).
+    *   `reader/`: Components for the reader view (renderer, controls, panels).
+    *   `ui/`: Reusable primitive components (dialogs, toasts).
+*   `src/db/`: IndexedDB configuration and schema definitions.
+*   `src/hooks/`: Custom React hooks.
+*   `src/lib/`: Core application logic and utilities.
+    *   `ingestion.ts`: EPUB processing logic.
+    *   `search.ts`: Client-side search interface.
+    *   `search-engine.ts`: Worker-side search logic.
+    *   `tts/`: Complete Text-to-Speech engine (services, providers, processors).
+*   `src/store/`: Zustand state management stores.
+*   `src/types/`: TypeScript type definitions.
+*   `src/workers/`: Web Worker entry points.
+*   `verification/`: Playwright visual verification tests.
 
-## Modules
+---
 
-### 1. Ingestion Module (`src/lib/ingestion.ts`)
+## Detailed Module Reference
 
-Handles the import of EPUB files into the system.
+### 1. Data Types (`src/types/`)
 
-*   `processEpub(file: File): Promise<string>`
-    *   **Purpose**: Parses an EPUB file, extracts metadata and cover image, and persists the binary and metadata to IndexedDB.
-    *   **Parameters**:
-        *   `file` (File): The uploaded EPUB file.
-    *   **Returns**: `Promise<string>` - The UUID of the newly created book.
+#### `src/types/db.ts`
+Defines the data structures persisted in IndexedDB.
 
-### 2. Search Module
+*   **`interface BookMetadata`**: Metadata for a stored book.
+    *   `id`: Unique UUID.
+    *   `title`: Book title.
+    *   `author`: Author name.
+    *   `description`: Book description.
+    *   `coverUrl`: Ephemeral Blob URL for display.
+    *   `coverBlob`: Binary Blob of the cover image.
+    *   `addedAt`: Timestamp of import.
+    *   `lastRead`: Timestamp of last access.
+    *   `progress`: Reading progress (0-1).
+    *   `currentCfi`: Last read location (CFI).
+*   **`interface Annotation`**: User-created highlights and notes.
+    *   `id`: Unique UUID.
+    *   `bookId`: ID of the book.
+    *   `cfiRange`: The CFI range of the selection.
+    *   `text`: The selected text content.
+    *   `type`: 'highlight' or 'note'.
+    *   `color`: Color identifier (e.g., 'yellow').
+    *   `note`: Optional user note.
+    *   `created`: Timestamp.
+*   **`interface CachedSegment`**: Cached TTS audio.
+    *   `key`: SHA-256 hash key.
+    *   `audio`: ArrayBuffer of the audio.
+    *   `alignment`: Optional word-level alignment data.
+    *   `createdAt`: Timestamp.
+    *   `lastAccessed`: Timestamp for LRU eviction.
+*   **`interface LexiconRule`**: Pronunciation replacement rule.
+    *   `id`: Unique UUID.
+    *   `original`: Text to replace.
+    *   `replacement`: Replacement text (phonetic).
+    *   `isRegex`: Whether `original` is a regex pattern.
+    *   `bookId`: Optional book ID scope.
 
-Implements full-text search using `FlexSearch` in a Web Worker to avoid blocking the main thread.
+---
 
-#### Client (`src/lib/search.ts`)
-*   `class SearchClient` (Singleton `searchClient`)
-    *   `indexBook(book: Book, bookId: string): Promise<void>`
-        *   **Purpose**: Extracts text from all spine items of a book and sends it to the worker for indexing.
-    *   `search(query: string, bookId: string): Promise<SearchResult[]>`
-        *   **Purpose**: Sends a search query to the worker.
-        *   **Returns**: `Promise` resolving to an array of results with excerpts and CFIs.
-    *   `terminate(): void`
-        *   **Purpose**: Terminates the underlying Web Worker.
+### 2. Database (`src/db/`)
 
-#### Engine (`src/lib/search-engine.ts`)
-*   `class SearchEngine` (Runs inside Worker)
-    *   `indexBook(bookId: string, sections: { id: string; href: string; text: string }[]): void`
-        *   **Purpose**: Creates a FlexSearch index for the book and adds documents.
-    *   `search(bookId: string, query: string): SearchResult[]`
-        *   **Purpose**: Queries the index and generates text excerpts.
+#### `src/db/db.ts`
+Manages the IndexedDB connection using the `idb` library.
 
-### 3. Text-to-Speech (TTS) Module
+*   **`interface EpubLibraryDB`**: The database schema definition.
+    *   Stores: `books`, `files`, `locations`, `annotations`, `tts_cache`, `lexicon`.
+*   **`initDB()`**
+    *   **Purpose**: Opens the `EpubLibraryDB` database (version 4) and handles schema migrations.
+    *   **Returns**: `Promise<IDBPDatabase<EpubLibraryDB>>`.
+*   **`getDB()`**
+    *   **Purpose**: Returns the active database connection, initializing it if necessary.
+    *   **Returns**: `Promise<IDBPDatabase<EpubLibraryDB>>`.
 
-Orchestrates audio playback, text synchronization, and provider management.
+---
 
-#### Service (`src/lib/tts/AudioPlayerService.ts`)
-*   `class AudioPlayerService` (Singleton)
-    *   `static getInstance(): AudioPlayerService`
-    *   `setBookId(bookId: string | null): void`
-        *   **Purpose**: Sets context for loading book-specific lexicon rules.
-    *   `setProvider(provider: ITTSProvider): void`
-        *   **Purpose**: Switches the active TTS provider (Local vs. Cloud).
-    *   `init(): Promise<void>`
-        *   **Purpose**: Initializes the current provider.
-    *   `getVoices(): Promise<TTSVoice[]>`
-        *   **Purpose**: Retrieves available voices from the provider.
-    *   `setQueue(items: TTSQueueItem[], startIndex?: number): void`
-        *   **Purpose**: Loads a new queue of text segments to play.
-    *   `play(): Promise<void>`
-        *   **Purpose**: Starts or resumes playback. Handles buffering, caching, and rule application.
-    *   `pause(): void`
-        *   **Purpose**: Pauses playback and records timestamp for smart resume.
-    *   `resume(): Promise<void>`
-        *   **Purpose**: Resumes playback. Implements "Smart Resume" to rewind slightly if paused for a long time.
-    *   `stop(): void`
-        *   **Purpose**: Stops playback and resets state.
-    *   `next(): void`
-        *   **Purpose**: Skips to the next item in the queue.
-    *   `prev(): void`
-        *   **Purpose**: Skips to the previous item.
-    *   `seek(offset: number): void`
-        *   **Purpose**: Seeks forward/backward by `offset` seconds (Cloud only).
-    *   `setSpeed(speed: number): void`
-    *   `setVoice(voiceId: string): void`
-    *   `subscribe(listener: PlaybackListener): () => void`
-        *   **Purpose**: registers a callback for state changes (playing, paused, activeCfi).
-    *   `generatePreroll(chapterTitle: string, wordCount: number, speed?: number): string`
-        *   **Purpose**: Generates an announcement string for the chapter (e.g., "Chapter 1. Estimated time...").
+### 3. State Management (`src/store/`)
 
-#### Segmentation (`src/lib/tts/TextSegmenter.ts`)
-*   `class TextSegmenter`
-    *   `constructor(locale: string, abbreviations: string[], alwaysMerge: string[], sentenceStarters: string[])`
-    *   `segment(text: string): TextSegment[]`
-        *   **Purpose**: Splits text into sentences using `Intl.Segmenter` and custom heuristic merging logic (handling "Mr.", "Dr.", etc.).
+#### `src/store/useLibraryStore.ts`
+Manages the collection of books.
 
-#### Processing (`src/lib/tts/processors/Sanitizer.ts`)
-*   `class Sanitizer`
-    *   `static sanitize(text: string): string`
-        *   **Purpose**: Cleans text before speech (removes URLs, page numbers, citations).
+*   **State**:
+    *   `books`: `BookMetadata[]`.
+    *   `isLoading`: `boolean`.
+    *   `isImporting`: `boolean`.
+    *   `error`: `string | null`.
+*   **Actions**:
+    *   `fetchBooks()`: Loads all books from DB, sorted by `addedAt`.
+    *   `addBook(file: File)`: Processes and adds a new EPUB file.
+    *   `removeBook(id: string)`: Deletes a book and all associated data (files, annotations, etc.) from DB.
 
-#### Lexicon (`src/lib/tts/LexiconService.ts`)
-*   `class LexiconService` (Singleton)
-    *   `getRules(bookId?: string): Promise<LexiconRule[]>`
-    *   `saveRule(rule): Promise<void>`
-    *   `deleteRule(id): Promise<void>`
-    *   `applyLexicon(text: string, rules: LexiconRule[]): string`
-        *   **Purpose**: Applies pronunciation replacements (regex or string) to text.
-    *   `getRulesHash(rules: LexiconRule[]): Promise<string>`
-        *   **Purpose**: Generates a hash for cache invalidation.
+#### `src/store/useReaderStore.ts`
+Manages the reader's view state and settings. Persists to `localStorage`.
 
-#### Caching (`src/lib/tts/TTSCache.ts`)
-*   `class TTSCache`
-    *   `generateKey(text, voiceId, speed, pitch, lexiconHash): Promise<string>`
-    *   `get(key): Promise<CachedSegment | undefined>`
-    *   `put(key, audio, alignment?): Promise<void>`
-        *   **Purpose**: Persists synthesized audio to IndexedDB to save costs/bandwidth.
+*   **State**:
+    *   `currentBookId`: `string | null`.
+    *   `viewMode`: `'paginated' | 'scrolled'`.
+    *   `currentTheme`: `'light' | 'dark' | 'sepia' | 'custom'`.
+    *   `fontFamily`: `string`.
+    *   `fontSize`: `number` (percentage).
+    *   `lineHeight`: `number`.
+    *   `currentCfi`: `string | null` (current location).
+    *   `progress`: `number` (0-100).
+    *   `toc`: `NavigationItem[]`.
+    *   `gestureMode`: `boolean`.
+*   **Actions**:
+    *   `updateLocation(cfi, progress, chapterTitle)`: Updates current position.
+    *   `setTheme(...)`, `setFontSize(...)`, etc.: Setters for visual preferences.
+    *   `setGestureMode(enabled)`: Toggles the touch gesture overlay.
 
-#### Cost Control (`src/lib/tts/CostEstimator.ts`)
-*   `class CostEstimator` (Singleton)
-    *   `track(text: string): void`
-        *   **Purpose**: Adds character count to the session total.
-    *   `estimateCost(text: string, provider: 'google' | 'openai'): number`
+#### `src/store/useTTSStore.ts`
+Manages Text-to-Speech configuration and playback state. Persists settings.
 
-#### Synchronization (`src/lib/tts/SyncEngine.ts`)
-*   `class SyncEngine`
-    *   `loadAlignment(alignment: AlignmentData[]): void`
-    *   `updateTime(currentTime: number): void`
-        *   **Purpose**: Triggers callbacks when audio playback time matches a word/sentence boundary.
+*   **State**:
+    *   `isPlaying`: `boolean`.
+    *   `status`: `'playing' | 'paused' | 'stopped' | 'loading' | 'completed'`.
+    *   `rate`: `number` (speed).
+    *   `voice`: `TTSVoice | null`.
+    *   `providerId`: `'local' | 'google' | 'openai'`.
+    *   `activeCfi`: `string | null`.
+    *   `queue`: `TTSQueueItem[]`.
+    *   `lastPauseTime`: `number | null` (for smart resume).
+    *   `customAbbreviations`: `string[]` (for segmenter).
+*   **Actions**:
+    *   `play()`, `pause()`, `stop()`: Controls playback via `AudioPlayerService`.
+    *   `setRate(rate)`, `setVoice(voice)`: Configures playback.
+    *   `setProviderId(id)`: Switches provider and re-initializes.
+    *   `loadVoices()`: Fetches available voices from the current provider.
+    *   `syncState(...)`: Internal action used by `AudioPlayerService` listeners.
 
-#### Providers (`src/lib/tts/providers/`)
-*   **Interface `ITTSProvider`**:
-    *   `init(): Promise<void>`
-    *   `getVoices(): Promise<TTSVoice[]>`
-    *   `synthesize(text, voiceId, speed): Promise<SpeechSegment>`
-*   **Implementations**:
-    *   `WebSpeechProvider`: Uses browser's `speechSynthesis`.
-    *   `GoogleTTSProvider`: Uses Google Cloud Text-to-Speech API.
-    *   `OpenAIProvider`: Uses OpenAI Audio API.
+#### `src/store/useAnnotationStore.ts`
+Manages user annotations and the popover UI.
 
-### 4. State Management (Zustand)
+*   **State**:
+    *   `annotations`: `Annotation[]`.
+    *   `popover`: `{ visible, x, y, cfiRange, text }`.
+*   **Actions**:
+    *   `loadAnnotations(bookId)`: Fetches annotations for a book.
+    *   `addAnnotation(...)`, `deleteAnnotation(id)`: CRUD operations on annotations.
+    *   `showPopover(...)`, `hidePopover()`: Controls the annotation menu visibility.
 
-Located in `src/store/`.
+---
 
-*   **`useLibraryStore`**:
-    *   **State**: `books` (metadata list), `isLoading`.
-    *   **Actions**: `fetchBooks()`, `addBook(file)`, `removeBook(id)`.
-*   **`useReaderStore`**:
-    *   **State**: `currentBookId`, `currentCfi`, `progress`, `currentTheme` ('light'|'dark'|'sepia'|'custom'), `fontSize`, `viewMode` ('paginated'|'scrolled'), `toc`.
-    *   **Actions**: `updateLocation(cfi, progress)`, `setTheme(theme)`, `setFontSize(size)`, `setViewMode(mode)`.
-    *   **Persistence**: Persists to `localStorage` (reader settings).
-*   **`useTTSStore`**:
-    *   **State**: `status` (playing/stopped), `activeCfi`, `voice`, `rate`, `providerId` ('local'|'google'|'openai'), `apiKeys`, `customAbbreviations`.
-    *   **Actions**: `play()`, `pause()`, `setRate()`, `setProviderId()`, `setApiKey()`.
-*   **`useAnnotationStore`**:
-    *   **State**: `annotations` (list).
-    *   **Actions**: `loadAnnotations(bookId)`, `addAnnotation()`, `deleteAnnotation()`, `showPopover()`.
-*   **`useCostStore`**:
-    *   **State**: `sessionCharacters`.
-    *   **Actions**: `addUsage(count)`, `resetSession()`.
+### 4. Core Logic (`src/lib/`)
 
-### 5. Persistence (`src/db/db.ts`)
+#### Ingestion (`src/lib/ingestion.ts`)
+*   **`processEpub(file: File): Promise<string>`**
+    *   **Purpose**: Parses an uploaded EPUB, extracts the cover image (handling Blob URLs), and saves the binary and metadata to IndexedDB.
+    *   **Parameters**: `file` - The uploaded EPUB file.
+    *   **Returns**: The UUID of the new book.
 
-Uses `idb` to manage `EpubLibraryDB`.
+#### Search Client (`src/lib/search.ts`)
+*   **`class SearchClient` (Singleton)**
+    *   **`indexBook(book: Book, bookId: string): Promise<void>`**
+        *   **Purpose**: Extracts text from all book chapters and sends it to the worker for indexing.
+    *   **`search(query: string, bookId: string): Promise<SearchResult[]>`**
+        *   **Purpose**: Sends a search request to the worker and awaits results via a correlation ID.
+    *   **`terminate()`**: Kills the worker.
 
-*   `initDB()` / `getDB()`: Opens the database (v4).
-*   **Object Stores**:
-    *   `books`: Metadata (`id`, `title`, `coverBlob`, `progress`, `currentCfi`).
-    *   `files`: Raw EPUB `ArrayBuffer`.
-    *   `locations`: Cached `epub.js` locations JSON (for performance).
-    *   `annotations`: User highlights and notes (`cfiRange`, `text`, `color`).
-    *   `tts_cache`: Audio blobs and alignment data indexed by hash.
-    *   `lexicon`: Pronunciation rules.
+#### Search Engine (`src/lib/search-engine.ts`)
+*   **`class SearchEngine`** (Runs in Worker)
+    *   Uses `FlexSearch` to index and search text.
+    *   **`indexBook(bookId, sections)`**: Creates a document index for the book.
+    *   **`search(bookId, query)`**: Returns matches with text excerpts.
 
-### 6. User Interface (`src/components/`)
+#### Text-to-Speech (`src/lib/tts/`)
 
-*   **`LibraryView`**: Grid of books, drag-and-drop upload.
-*   **`ReaderView`**:
+**Service: `AudioPlayerService` (`src/lib/tts/AudioPlayerService.ts`)**
+The central controller for TTS. Singleton.
+
+*   **Methods**:
+    *   `init()`: Initializes the active provider.
+    *   `play()`: Starts playback. Handles lexicon application, caching (for cloud), and cost tracking.
+    *   `pause()`: Pauses playback and records timestamp.
+    *   `resume()`: Resumes playback. Implements "Smart Resume" (rewinds context based on pause duration).
+    *   `stop()`: Stops playback and resets state.
+    *   `setQueue(items, startIndex)`: Loads a new playlist of sentences.
+    *   `setProvider(provider)`: Swaps the TTS engine (Local <-> Cloud).
+    *   `generatePreroll(chapterTitle, wordCount, speed)`: Creates a spoken intro string.
+    *   `subscribe(listener)`: Allows UI to listen to state changes.
+
+**Segmentation: `TextSegmenter` (`src/lib/tts/TextSegmenter.ts`)**
+*   **`segment(text: string): TextSegment[]`**
+    *   **Purpose**: Splits text into sentences.
+    *   **Logic**: Uses `Intl.Segmenter` combined with custom heuristic merging for abbreviations (e.g., "Mr.", "Dr.") and sentence starters to prevent incorrect splits.
+
+**Caching: `TTSCache` (`src/lib/tts/TTSCache.ts`)**
+*   **`generateKey(text, voiceId, speed, ...): Promise<string>`**: Creates a SHA-256 hash key.
+*   **`get(key)`**: Retrieves cached audio/alignment from IndexedDB.
+*   **`put(key, audio, alignment)`**: Saves synthesis results.
+
+**Lexicon: `LexiconService` (`src/lib/tts/LexiconService.ts`)**
+*   **`applyLexicon(text, rules)`**: Performs text replacements (string or regex) before synthesis.
+*   **`getRules(bookId?)`**: Fetches global and book-specific rules.
+
+**Sync: `SyncEngine` (`src/lib/tts/SyncEngine.ts`)**
+*   **`updateTime(currentTime)`**: Updates the active word/sentence index based on audio playback time.
+*   **`loadAlignment(data)`**: Loads timing data from the provider.
+
+**Player Wrapper: `AudioElementPlayer` (`src/lib/tts/AudioElementPlayer.ts`)**
+*   Wraps `HTMLAudioElement` to handle Blob playback, cleanup (`revokeObjectURL`), and event mapping.
+
+**Session: `MediaSessionManager` (`src/lib/tts/MediaSessionManager.ts`)**
+*   Interacts with the browser's Media Session API to support hardware media keys (Play, Pause, Next, Prev) and lock screen metadata.
+
+#### Utilities (`src/lib/tts.ts`)
+*   **`extractSentences(rendition: Rendition): SentenceNode[]`**
+    *   **Purpose**: Traverses the DOM of the current `epub.js` view to extract text nodes, handling block-level elements to preserve structure, and segments them into sentences for TTS.
+
+---
+
+### 5. Components (`src/components/`)
+
+#### Reader (`src/components/reader/ReaderView.tsx`)
+The core reading interface.
+*   **Responsibilities**:
     *   Initializes `epub.js` `Rendition`.
-    *   Manages layout (Paginated vs. Scrolled).
-    *   Injects custom styles for Themes and Highlights.
-    *   Connects `useTTS` hook to `epub.js` DOM.
-    *   Handles "Immersive Mode" and Gesture controls.
+    *   Manages "Paginated" vs "Scrolled" view modes.
+    *   Injects custom CSS for Themes and Highlights.
+    *   Highlights the active TTS sentence (`activeCfi`).
+    *   Handles text selection for Annotations (with fallback for iframe events).
+    *   Integrates `GestureOverlay` for touch controls.
+    *   Manages sidebars (TOC, Annotations, Search).
+
+#### Library (`src/components/library/LibraryView.tsx`)
+The bookshelf interface.
+*   **Responsibilities**:
+    *   Displays grid of `BookCard` components.
+    *   Handles file uploads via `FileUploader` (drag-and-drop).
+    *   Provides search/filter for the library.
+
+#### Audio Panel (`src/components/reader/UnifiedAudioPanel.tsx`)
+A side panel (Sheet) for advanced audio controls.
+*   Contains `TTSQueue` (visual playback list) and playback controls.
+
+---
+
+### 6. Workers (`src/workers/`)
+
+#### `search.worker.ts`
+*   **Input**: `INDEX_BOOK` or `SEARCH` messages.
+*   **Output**: `SEARCH_RESULTS` or status updates.
+*   **Purpose**: Offloads heavy text processing and indexing to a background thread to keep the UI responsive.
