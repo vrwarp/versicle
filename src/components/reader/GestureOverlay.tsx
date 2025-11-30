@@ -159,6 +159,8 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
       <div className="absolute top-4 right-4">
         <button
             onClick={onClose}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
             className="text-white/50 border border-white/30 rounded-full px-3 py-1 text-sm hover:bg-white/10"
         >
             Exit Gesture Mode
