@@ -27,6 +27,14 @@ describe('TextSegmenter', () => {
     expect(segmenter.segment("")).toHaveLength(0);
   });
 
+  it('merges default ALWAYS_MERGE titles even if abbreviations list is empty', () => {
+    const segmenter = new TextSegmenter();
+    const text = "Mr. Smith went home.";
+    const segments = segmenter.segment(text);
+    expect(segments).toHaveLength(1);
+    expect(segments[0].text).toBe("Mr. Smith went home.");
+  });
+
   describe('Fallback behavior', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let originalSegmenter: any;

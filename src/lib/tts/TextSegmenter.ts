@@ -40,6 +40,11 @@ export class TextSegmenter {
         this.abbreviations = new Set(abbreviations);
         this.alwaysMerge = new Set(alwaysMerge);
         this.sentenceStarters = new Set(sentenceStarters);
+
+        // Ensure alwaysMerge items are also in abbreviations so they trigger the merge logic
+        for (const item of this.alwaysMerge) {
+            this.abbreviations.add(item);
+        }
     }
 
     segment(text: string): TextSegment[] {

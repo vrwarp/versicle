@@ -60,6 +60,17 @@ vi.mock('../../store/useTTSStore', () => ({
     }
 }));
 
+// Mock LexiconService to avoid DB calls during fake timers
+vi.mock('./LexiconService', () => ({
+    LexiconService: {
+        getInstance: vi.fn().mockReturnValue({
+            getRules: vi.fn().mockResolvedValue([]),
+            applyLexicon: vi.fn((text) => text),
+            getRulesHash: vi.fn().mockResolvedValue('hash'),
+        })
+    }
+}));
+
 describe('AudioPlayerService - Smart Resume', () => {
     let service: AudioPlayerService;
     let mockStore: any;
