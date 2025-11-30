@@ -29,11 +29,14 @@ def test_abbrev_settings(page: Page):
         tts_panel.locator("button").nth(2).click()
 
     # 3. Verify TTS/Abbreviation settings are visible.
-    expect(page.get_by_text("Sentence Segmentation")).to_be_visible(timeout=2000)
+    # The header has changed from "Sentence Segmentation" to specific sections like "Abbreviations"
+    expect(page.get_by_role("heading", name="Abbreviations")).to_be_visible(timeout=2000)
+    expect(page.get_by_role("heading", name="Always Merge")).to_be_visible(timeout=2000)
+    expect(page.get_by_role("heading", name="Sentence Starters")).to_be_visible(timeout=2000)
 
-    # Check for Export/Import buttons
-    expect(page.locator("button[title='Download CSV']")).to_be_visible(timeout=2000)
-    expect(page.locator("button[title='Upload CSV']")).to_be_visible(timeout=2000)
+    # Check for Export/Import buttons (we have 3 sets now)
+    expect(page.locator("button[title='Download CSV']")).to_have_count(3, timeout=2000)
+    expect(page.locator("button[title='Upload CSV']")).to_have_count(3, timeout=2000)
 
     # Take screenshot of the settings panel
     utils.capture_screenshot(page, "abbrev_settings")

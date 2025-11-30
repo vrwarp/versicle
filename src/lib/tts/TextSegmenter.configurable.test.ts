@@ -23,12 +23,14 @@ describe('TextSegmenter with Custom Abbreviations', () => {
 
   it('merges segments when abbreviation is provided', () => {
     // "MyAbbrev." is definitely not standard.
-    const text = "This is MyAbbrev. It should be one sentence.";
+    // Note: We use "Smith" (Proper Noun) instead of "It" (Pronoun) because
+    // the segmenter heuristic prevents merging if the next word is a common sentence starter (like "It").
+    const text = "This is MyAbbrev. Smith is here.";
 
     // First, verify it splits without custom abbrev
     const segmenterDefault = new TextSegmenter();
     const segmentsDefault = segmenterDefault.segment(text);
-    // Likely 2 segments: "This is MyAbbrev. ", "It should be one sentence."
+    // Likely 2 segments: "This is MyAbbrev. ", "Smith is here."
 
     // If it splits:
     if (segmentsDefault.length > 1) {
@@ -37,7 +39,7 @@ describe('TextSegmenter with Custom Abbreviations', () => {
         const segmentsCustom = segmenterCustom.segment(text);
 
         expect(segmentsCustom).toHaveLength(1);
-        expect(segmentsCustom[0].text).toBe("This is MyAbbrev. It should be one sentence.");
+        expect(segmentsCustom[0].text).toBe("This is MyAbbrev. Smith is here.");
     } else {
         console.warn("Intl.Segmenter didn't split the test sentence. Skipping merge test.");
     }
@@ -49,5 +51,15 @@ describe('TextSegmenter with Custom Abbreviations', () => {
       const segments = segmenter.segment(text);
       expect(segments).toHaveLength(1);
       expect(segments[0].text).toBe("Dr. No is a movie.");
+  });
+
+  it('disables sentence starter heuristic when empty list passed', () => {
+      // By default "Dr." + "He" splits because "He" is a starter.
+      // If we pass empty sentenceStarters, it should merge (because "Dr." is an abbreviation).
+      const segmenter = new TextSegmenter('en', ['Dr.'], [], []);
+      const text = "I visited the Dr. He was nice.";
+      const segments = segmenter.segment(text);
+      expect(segments).toHaveLength(1);
+      expect(segments[0].text.trim()).toBe("I visited the Dr. He was nice.");
   });
 });

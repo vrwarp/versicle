@@ -68,6 +68,12 @@ declare module 'epubjs' {
     export interface Rendition {
         settings: Record<string, unknown>;
         themes: Themes;
+        hooks: {
+            content: {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                register(callback: (contents: any) => void): void;
+            };
+        };
         display(target?: string): Promise<void>;
         next(): Promise<void>;
         prev(): Promise<void>;

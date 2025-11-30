@@ -17,7 +17,9 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
     fontFamily,
     setFontFamily,
     lineHeight,
-    setLineHeight
+    setLineHeight,
+    viewMode,
+    setViewMode
   } = useReaderStore();
 
   const fontOptions = [
@@ -37,6 +39,35 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
       </div>
 
       <div className="p-4 space-y-6">
+        {/* Layout Selection */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Layout</label>
+          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <button
+              data-testid="settings-layout-paginated"
+              onClick={() => setViewMode('paginated')}
+              className={`flex-1 py-1 px-2 rounded text-xs font-medium transition-all ${
+                viewMode === 'paginated'
+                  ? 'bg-white dark:bg-gray-600 shadow-sm text-blue-600 dark:text-blue-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+            >
+              Paginated
+            </button>
+            <button
+              data-testid="settings-layout-scrolled"
+              onClick={() => setViewMode('scrolled')}
+              className={`flex-1 py-1 px-2 rounded text-xs font-medium transition-all ${
+                viewMode === 'scrolled'
+                  ? 'bg-white dark:bg-gray-600 shadow-sm text-blue-600 dark:text-blue-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+            >
+              Scrolled
+            </button>
+          </div>
+        </div>
+
         {/* Theme Selection */}
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Theme</label>

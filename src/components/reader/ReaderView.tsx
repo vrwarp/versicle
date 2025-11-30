@@ -10,11 +10,12 @@ import { AnnotationList } from './AnnotationList';
 import { ReaderSettings } from './ReaderSettings';
 import { TTSQueue } from './TTSQueue';
 import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
+import { TTSCostIndicator } from './TTSCostIndicator';
 import { Toast } from '../ui/Toast';
 import { Dialog } from '../ui/Dialog';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter, RotateCcw, RotateCw } from 'lucide-react';
 
 /**
  * The main reader interface component.
@@ -43,7 +44,8 @@ export const ReaderView: React.FC = () => {
     setCurrentBookId,
     reset,
     progress,
-    currentChapterTitle
+    currentChapterTitle,
+    viewMode
   } = useReaderStore();
 
   const {
@@ -63,7 +65,8 @@ export const ReaderView: React.FC = () => {
       lastError,
       clearError,
       enableCostWarning,
-      setEnableCostWarning
+      setEnableCostWarning,
+      seek
   } = useTTSStore();
 
   const {
@@ -202,6 +205,7 @@ export const ReaderView: React.FC = () => {
   const [showTTS, setShowTTS] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [showCostWarning, setShowCostWarning] = useState(false);
+  const [immersiveMode, setImmersiveMode] = useState(false);
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -239,7 +243,7 @@ export const ReaderView: React.FC = () => {
           const rendition = book.renderTo(viewerRef.current, {
             width: '100%',
             height: '100%',
-            flow: 'paginated',
+            flow: viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated',
             manager: 'default',
           });
           renditionRef.current = rendition;
@@ -311,16 +315,6 @@ export const ReaderView: React.FC = () => {
             const range = (rendition as any).getRange(cfiRange);
             if (range) {
                 const rect = range.getBoundingClientRect();
-                // Adjust rect coordinates based on the iframe position if needed,
-                // but usually getBoundingClientRect inside iframe is relative to iframe viewport?
-                // Wait, getRange returns a DOM Range. getBoundingClientRect is relative to viewport.
-                // Since epub.js renders in an iframe, we need to account for iframe position?
-                // Actually `rendition.getRange(cfiRange)` returns a range in the iframe document.
-                // We need to map that to the main window.
-
-                // However, the popover will be rendered in the main window.
-                // We need to translate iframe coordinates to main window coordinates.
-                // `viewerRef.current` contains the iframe.
                 const iframe = viewerRef.current?.querySelector('iframe');
                 if (iframe) {
                    const iframeRect = iframe.getBoundingClientRect();
@@ -330,16 +324,60 @@ export const ReaderView: React.FC = () => {
                        cfiRange,
                        range.toString()
                    );
-
-                   // Clear selection (optional, but keep it so user sees what they selected)
-                   // contents.window.getSelection().removeAllRanges();
                 }
             }
           });
 
-          // Clear popover on click elsewhere
-          rendition.on('click', () => {
+          // Manual selection listener to handle cases where epub.js event fails (e.g. after highlighting)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          rendition.hooks.content.register((contents: any) => {
+              const doc = contents.document;
+              doc.addEventListener('mouseup', () => {
+                  const selection = contents.window.getSelection();
+                  if (!selection || selection.isCollapsed) return;
+
+                  // Wait a tick to let epub.js handle it first (if it works)
+                  setTimeout(() => {
+                      const range = selection.getRangeAt(0);
+                      if (!range) return;
+
+                      // Check if we are selecting inside the same range (optional)
+
+                      const cfi = contents.cfiFromRange(range);
+                      if (cfi) {
+                           const rect = range.getBoundingClientRect();
+                           const iframe = viewerRef.current?.querySelector('iframe');
+                           if (iframe) {
+                               const iframeRect = iframe.getBoundingClientRect();
+                               showPopover(
+                                   rect.left + iframeRect.left,
+                                   rect.top + iframeRect.top,
+                                   cfi,
+                                   range.toString()
+                               );
+                           }
+                      }
+                  }, 10);
+              });
+          });
+
+          // Clear popover on click elsewhere and toggle immersive mode
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          rendition.on('click', (e: any) => {
              hidePopover();
+
+             // Check if click was on a link or interactive element
+             const target = e?.target as HTMLElement;
+             const isLink = target?.tagName?.toLowerCase() === 'a' || target?.closest('a');
+
+             // Check if text is selected (using window.getSelection inside iframe)
+             const iframe = viewerRef.current?.querySelector('iframe');
+             const selection = iframe?.contentWindow?.getSelection();
+             const hasSelection = selection && selection.toString().length > 0;
+
+             if (!isLink && !hasSelection) {
+                 setImmersiveMode(prev => !prev);
+             }
           });
 
           rendition.on('relocated', (location: Location) => {
@@ -416,6 +454,20 @@ export const ReaderView: React.FC = () => {
       });
     }
   }, [currentTheme, customTheme, fontSize, fontFamily, lineHeight]);
+
+  // Handle View Mode changes
+  useEffect(() => {
+      if (renditionRef.current) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (renditionRef.current as any).flow(viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated');
+
+          // Re-display current location to ensure proper rendering after flow change
+          const currentLoc = useReaderStore.getState().currentCfi;
+          if (currentLoc) {
+              renditionRef.current.display(currentLoc);
+          }
+      }
+  }, [viewMode]);
 
   const handleClearSelection = () => {
       const iframe = viewerRef.current?.querySelector('iframe');
@@ -495,36 +547,38 @@ export const ReaderView: React.FC = () => {
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-surface shadow-sm z-10">
-        <div className="flex items-center gap-2">
-          <button data-testid="reader-back-button" aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-border">
-            <ArrowLeft className="w-5 h-5 text-secondary" />
-          </button>
-          <button data-testid="reader-toc-button" aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
-            <List className="w-5 h-5 text-secondary" />
-          </button>
-          <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
-            <Highlighter className="w-5 h-5 text-secondary" />
-          </button>
-        </div>
-        <h1 className="text-sm font-medium truncate max-w-xs text-foreground">
-             {currentChapterTitle || 'Reading'}
-        </h1>
-        <div className="flex items-center gap-2">
-           <button data-testid="reader-search-button" aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
-                <Search className="w-5 h-5 text-secondary" />
-           </button>
-           <button data-testid="reader-tts-button" aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-           </button>
-           <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-border">
-            <Settings className="w-5 h-5 text-secondary" />
-          </button>
-        </div>
-      </header>
+      {!immersiveMode && (
+        <header className="flex items-center justify-between px-6 md:px-8 py-2 bg-surface shadow-sm z-10">
+            <div className="flex items-center gap-2">
+            <button data-testid="reader-back-button" aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-border">
+                <ArrowLeft className="w-5 h-5 text-secondary" />
+            </button>
+            <button data-testid="reader-toc-button" aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
+                <List className="w-5 h-5 text-secondary" />
+            </button>
+            <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
+                <Highlighter className="w-5 h-5 text-secondary" />
+            </button>
+            </div>
+            <h1 className="text-sm font-medium truncate max-w-xs text-foreground">
+                {currentChapterTitle || 'Reading'}
+            </h1>
+            <div className="flex items-center gap-2">
+            <button data-testid="reader-search-button" aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
+                    <Search className="w-5 h-5 text-secondary" />
+            </button>
+            <button data-testid="reader-tts-button" aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
+                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+            </button>
+            <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-border">
+                <Settings className="w-5 h-5 text-secondary" />
+            </button>
+            </div>
+        </header>
+      )}
 
       {/* Main Content */}
-      <div className="flex-1 relative overflow-hidden flex">
+      <div className="flex-1 relative overflow-hidden flex justify-center">
          {/* TOC Sidebar */}
          {showToc && (
              <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
@@ -626,8 +680,8 @@ export const ReaderView: React.FC = () => {
          )}
 
          {/* Reader Area */}
-         <div className="flex-1 relative min-w-0">
-            <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full h-full overflow-hidden" />
+         <div className="flex-1 relative min-w-0 flex flex-col items-center">
+            <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full max-w-2xl h-full overflow-hidden px-6 md:px-8" />
 
              <AnnotationPopover bookId={id || ''} onClose={handleClearSelection} />
 
@@ -642,6 +696,17 @@ export const ReaderView: React.FC = () => {
                      {!showVoiceSettings ? (
                         <>
                             <div className="flex items-center gap-2 mb-4">
+                                <button
+                                    data-testid="tts-seek-back-button"
+                                    onClick={() => seek(-15)}
+                                    disabled={providerId === 'local'}
+                                    className={`p-2 rounded hover:bg-muted/10 ${providerId === 'local' ? 'opacity-30 cursor-not-allowed' : 'text-secondary'}`}
+                                    aria-label="Skip Back 15s"
+                                    title={providerId === 'local' ? 'Not available for local TTS' : 'Skip Back 15s'}
+                                >
+                                    <RotateCcw className="w-4 h-4" />
+                                </button>
+
                                 <button
                                     data-testid="tts-play-pause-button"
                                     onClick={() => {
@@ -660,14 +725,26 @@ export const ReaderView: React.FC = () => {
                                             play();
                                         }
                                     }}
-                                    className="flex-1 bg-primary text-background py-1 rounded hover:opacity-90 flex justify-center"
+                                    className="flex-1 bg-primary text-background py-2 rounded hover:opacity-90 flex justify-center items-center"
                                 >
-                                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                                    {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                                 </button>
+
+                                <button
+                                    data-testid="tts-seek-forward-button"
+                                    onClick={() => seek(15)}
+                                    disabled={providerId === 'local'}
+                                    className={`p-2 rounded hover:bg-muted/10 ${providerId === 'local' ? 'opacity-30 cursor-not-allowed' : 'text-secondary'}`}
+                                    aria-label="Skip Forward 15s"
+                                    title={providerId === 'local' ? 'Not available for local TTS' : 'Skip Forward 15s'}
+                                >
+                                    <RotateCw className="w-4 h-4" />
+                                </button>
+
                                 <button
                                     data-testid="tts-settings-button"
                                     onClick={() => setShowVoiceSettings(true)}
-                                    className="px-2 py-1 bg-secondary text-surface rounded hover:opacity-90"
+                                    className="p-2 bg-secondary text-surface rounded hover:opacity-90 ml-2"
                                     aria-label="Voice Settings"
                                 >
                                     <Settings className="w-4 h-4" />
@@ -706,9 +783,12 @@ export const ReaderView: React.FC = () => {
                         </>
                      ) : (
                         <div className="space-y-4">
-                            <button onClick={() => setShowVoiceSettings(false)} className="text-xs text-primary mb-2 flex items-center">
-                                <ArrowLeft className="w-3 h-3 mr-1" /> Back
-                            </button>
+                            <div className="flex items-center justify-between mb-2">
+                                <button onClick={() => setShowVoiceSettings(false)} className="text-xs text-primary flex items-center">
+                                    <ArrowLeft className="w-3 h-3 mr-1" /> Back
+                                </button>
+                                <TTSCostIndicator />
+                            </div>
 
                             <div>
                                 <label className="block text-xs font-semibold text-muted mb-1">Provider</label>
@@ -818,27 +898,29 @@ export const ReaderView: React.FC = () => {
       />
 
       {/* Footer / Controls */}
-      <footer className="bg-surface border-t border-border p-2 flex items-center justify-between z-10">
-          <button data-testid="reader-prev-page" aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-border rounded-full">
-              <ChevronLeft className="w-6 h-6 text-secondary" />
-          </button>
+      {!immersiveMode && (
+        <footer className="bg-surface border-t border-border px-6 md:px-8 py-2 flex items-center justify-between z-10">
+            <button data-testid="reader-prev-page" aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-border rounded-full">
+                <ChevronLeft className="w-6 h-6 text-secondary" />
+            </button>
 
-          <div className="flex-1 mx-4">
-              <div className="h-1 bg-border rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${progress * 100}%` }}
-                  />
-              </div>
-              <div className="text-center text-xs text-muted mt-1">
-                  {Math.round(progress * 100)}%
-              </div>
-          </div>
+            <div className="flex-1 mx-4">
+                <div className="h-1 bg-border rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{ width: `${progress * 100}%` }}
+                    />
+                </div>
+                <div className="text-center text-xs text-muted mt-1">
+                    {Math.round(progress * 100)}%
+                </div>
+            </div>
 
-          <button data-testid="reader-next-page" aria-label="Next Page" onClick={handleNext} className="p-2 hover:bg-border rounded-full">
-              <ChevronRight className="w-6 h-6 text-secondary" />
-          </button>
-      </footer>
+            <button data-testid="reader-next-page" aria-label="Next Page" onClick={handleNext} className="p-2 hover:bg-border rounded-full">
+                <ChevronRight className="w-6 h-6 text-secondary" />
+            </button>
+        </footer>
+      )}
     </div>
   );
 };

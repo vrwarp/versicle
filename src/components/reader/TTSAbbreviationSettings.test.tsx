@@ -14,10 +14,17 @@ vi.mock('lucide-react', () => ({
 
 // Mock useTTSStore
 const mockSetCustomAbbreviations = vi.fn();
+const mockSetAlwaysMerge = vi.fn();
+const mockSetSentenceStarters = vi.fn();
+
 vi.mock('../../store/useTTSStore', () => ({
     useTTSStore: vi.fn(() => ({
         customAbbreviations: ['Mr.', 'Dr.'],
         setCustomAbbreviations: mockSetCustomAbbreviations,
+        alwaysMerge: ['Mr.'],
+        setAlwaysMerge: mockSetAlwaysMerge,
+        sentenceStarters: ['He'],
+        setSentenceStarters: mockSetSentenceStarters
     })),
 }));
 
@@ -32,13 +39,13 @@ describe('TTSAbbreviationSettings', () => {
         global.URL.revokeObjectURL = vi.fn();
     });
 
-    it('renders export and import buttons', () => {
+    it('renders export and import buttons for all sections', () => {
         render(<TTSAbbreviationSettings />);
-        expect(screen.getByTitle('Download CSV')).toBeInTheDocument();
-        expect(screen.getByTitle('Upload CSV')).toBeInTheDocument();
+        expect(screen.getAllByTitle('Download CSV')).toHaveLength(3);
+        expect(screen.getAllByTitle('Upload CSV')).toHaveLength(3);
     });
 
-    it('handles download', () => {
+    it('handles download for abbreviations', () => {
         render(<TTSAbbreviationSettings />);
 
         const clickMock = vi.fn();
@@ -53,7 +60,8 @@ describe('TTSAbbreviationSettings', () => {
              return originalCreateElement(tagName, options);
         });
 
-        fireEvent.click(screen.getByTitle('Download CSV'));
+        const downloadButtons = screen.getAllByTitle('Download CSV');
+        fireEvent.click(downloadButtons[0]); // Abbreviations
 
         expect(createElementSpy).toHaveBeenCalledWith('a');
         expect(clickMock).toHaveBeenCalled();
@@ -62,39 +70,21 @@ describe('TTSAbbreviationSettings', () => {
         createElementSpy.mockRestore();
     });
 
-    it('handles upload', async () => {
+    it('handles upload for abbreviations', async () => {
         render(<TTSAbbreviationSettings />);
 
         const file = new File(['Abbreviation\nNew1.\nNew2.'], 'test.csv', { type: 'text/csv' });
-        const input = screen.getByTestId('csv-upload-input');
+        const input = screen.getByTestId('csv-upload-abbreviations');
 
         // Mock FileReader
         const mockReadAsText = vi.fn();
-        const mockFileReaderInstance = {
-            readAsText: mockReadAsText,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            onload: null as any,
-            result: '',
-        };
 
-        // Use a class-like mock for FileReader
         const MockFileReader = class {
             readAsText = mockReadAsText;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             onload = null as any;
             result = '';
             constructor() {
-                // Return the shared instance so we can control it from the test
-                // This is a bit of a hack to access the instance created inside the component
-                Object.assign(this, mockFileReaderInstance);
-                // We update our outer reference so we can trigger callbacks on the *actual* instance used by the component
-                // (though in this case since we share state via mockFileReaderInstance's methods it might be enough,
-                // but 'onload' is assigned TO the instance, so we need to capture the instance).
-                // Actually, let's just use the shared methods, but we need to capture the 'onload' assignment.
-                // The component does: reader.onload = ...
-                // So we need to be able to read 'onload' back from the instance.
-
-                // Let's capture this instance in a variable accessible to the test
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (global as any).__mockFileReader = this;
             }
@@ -118,11 +108,12 @@ describe('TTSAbbreviationSettings', () => {
         vi.unstubAllGlobals();
     });
 
-     it('handles upload without header', async () => {
+     it('handles upload for sentence starters without header', async () => {
         render(<TTSAbbreviationSettings />);
 
-        const file = new File(['MyAbbrev.'], 'test.csv', { type: 'text/csv' });
-        const input = screen.getByTestId('csv-upload-input');
+        const file = new File(['NewStarter'], 'test.csv', { type: 'text/csv' });
+        // Sentence Starters is the 3rd section
+        const input = screen.getByTestId('csv-upload-sentence-starters');
 
         const mockReadAsText = vi.fn();
 
@@ -144,11 +135,11 @@ describe('TTSAbbreviationSettings', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const readerInstance = (global as any).__mockFileReader;
 
-        readerInstance.result = 'MyAbbrev.';
+        readerInstance.result = 'NewStarter';
         readerInstance.onload({ target: { result: readerInstance.result } });
 
         expect(window.confirm).toHaveBeenCalled();
-        expect(mockSetCustomAbbreviations).toHaveBeenCalledWith(['MyAbbrev.']);
+        expect(mockSetSentenceStarters).toHaveBeenCalledWith(['NewStarter']);
 
         vi.unstubAllGlobals();
     });
