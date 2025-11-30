@@ -311,24 +311,6 @@ export const ReaderView: React.FC = () => {
           // Generate locations for progress tracking
           await book.ready;
 
-          // Check for cached locations
-          const savedLocations = await db.get('locations', id);
-          if (savedLocations) {
-              book.locations.load(savedLocations.locations);
-              // Update progress immediately
-              updateProgressFromLocations(rendition, book);
-          } else {
-              // Generate if not cached
-              book.locations.generate(1000).then(async () => {
-                   // Save to DB
-                   const locationStr = book.locations.save();
-                   const db = await getDB();
-                   await db.put('locations', { bookId: id, locations: locationStr });
-
-                   updateProgressFromLocations(rendition, book);
-               });
-          }
-
           // Helper to update progress once locations are ready
           const updateProgressFromLocations = (r: Rendition, b: Book) => {
                // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -351,6 +333,24 @@ export const ReaderView: React.FC = () => {
                    saveProgress(id, cfi, pct);
                }
           };
+
+          // Check for cached locations
+          const savedLocations = await db.get('locations', id);
+          if (savedLocations) {
+              book.locations.load(savedLocations.locations);
+              // Update progress immediately
+              updateProgressFromLocations(rendition, book);
+          } else {
+              // Generate if not cached
+              book.locations.generate(1000).then(async () => {
+                   // Save to DB
+                   const locationStr = book.locations.save();
+                   const db = await getDB();
+                   await db.put('locations', { bookId: id, locations: locationStr });
+
+                   updateProgressFromLocations(rendition, book);
+               });
+          }
 
            // Index for Search (Async)
            // Only index if not already done? Or just do it every time for now (simplicity)
