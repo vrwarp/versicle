@@ -1,55 +1,50 @@
-# Plan: Audio Pipeline Infrastructure (Web Audio Graph)
+# TTS v2 Plan 01: Web Audio Graph Migration
 
-## Priority: Critical (Foundation)
+## Goal
+Migrate the current `AudioElement`-based playback to a **Web Audio API** based architecture.
 
-This plan establishes the core Web Audio API infrastructure required for advanced features like gapless playback, silence trimming, and ambience mixing. It replaces the simple `AudioElementPlayer` with a robust `WebAudioEngine` for managing audio streams.
+## Status
+- **Pending**
 
-## Goals
-- Create a `WebAudioEngine` singleton to manage the `AudioContext`.
-- Implement a Directed Acyclic Graph (DAG) for audio routing (Voice -> Gain -> Master -> Destination).
-- Implement precise buffer scheduling for gapless playback of TTS segments.
-- Handle browser autoplay policies and background audio lifecycle (iOS/Android quirks).
-
-## Proposed Files
-- `src/lib/tts/audio/WebAudioEngine.ts`: Core engine class.
-- `src/lib/tts/audio/AudioGraph.ts`: Manages the nodes (Gain, Compressor, etc.).
-- `src/lib/tts/audio/BufferScheduler.ts`: Handles the timing and queuing of `AudioBuffer`s.
+## Rationale
+The current implementation uses a standard HTML5 `<audio>` element. While simple, it has significant limitations for a high-end TTS experience:
+*   **Gaps:** There is often a noticeable delay between sentences as the next URL loads.
+*   **Precision:** Synchronizing visual highlighters with audio is limited by the update rate of `timeupdate` events.
+*   **Effects:** We cannot easily apply DSP effects (equalizer, compressor, silence trimming).
+*   **Mixing:** We cannot mix in ambient sounds (Plan 11) or earcons (Plan 12) seamlessly.
 
 ## Feasibility Analysis
-The current `AudioPlayerService` relies on `AudioElementPlayer` which wraps the HTML5 `<audio>` element. While simple, this approach has limitations regarding gapless playback (crucial for sentence-by-sentence TTS) and advanced DSP (needed for Plan 06 and 11).
+- **Feasibility:** High. Web Audio API is standard.
+- **Complexity:** High. Requires rewriting the core playback loop in `AudioPlayerService`.
+- **Dependencies:** None, but many other plans (06, 11) depend on this.
+- **Risk:** Memory management with `AudioBuffer` decoding. Must implement a sliding window buffer (keep ~3-5 sentences decoded) to avoid OOM on mobile.
 
-Switching to the Web Audio API (`AudioContext`) is highly feasible and standard practice for these requirements. The codebase is already structured with a service layer that can swap the underlying player implementation (`AudioElementPlayer` vs `WebAudioEngine`).
+## Design
 
-**Risks:**
-- **Mobile Autoplay:** iOS Safari requires `AudioContext` to be resumed inside a user interaction handler. The `resume()` method must be wired to the first "Play" click.
-- **Memory Management:** `AudioBuffer` objects can consume significant memory if not garbage collected. The `BufferScheduler` must rigorously manage source nodes and buffers.
-- **Background Audio:** Web Audio API contexts can be suspended by the OS when the screen locks. A common workaround (playing a silent `<audio>` element in parallel) might be needed to keep the `AudioContext` alive on iOS.
+### 1. `WebAudioEngine` Class
+A new singleton class that manages the `AudioContext`.
 
-## Implementation Plan
+```typescript
+class WebAudioEngine {
+  context: AudioContext;
+  scheduler: BufferScheduler;
 
-1. **Scaffold `WebAudioEngine`**
-   - Create `src/lib/tts/audio/WebAudioEngine.ts` implementing a singleton pattern.
-   - Initialize `AudioContext` lazily.
-   - Implement `suspend()` and `resume()` methods.
+  play(buffer: AudioBuffer, time: number);
+  scheduleNext(buffer: AudioBuffer); // Seamlessly appends to the timeline
+}
+```
 
-2. **Build the Audio Graph (`AudioGraph.ts`)**
-   - Construct the node chain: `Source` (placeholder) -> `VoiceGainNode` -> `DynamicsCompressorNode` (to normalize volume) -> `MasterGainNode` -> `Destination`.
-   - Expose properties for `voiceVolume` and `masterVolume`.
+### 2. `BufferScheduler`
+Responsible for queuing up `AudioBufferSourceNodes` to play back-to-back without gaps. It needs to look ahead and fetch/decode the next segment before the current one finishes.
 
-3. **Develop `BufferScheduler`**
-   - Create `src/lib/tts/audio/BufferScheduler.ts`.
-   - Maintain a queue of `{ buffer: AudioBuffer, startTime: number }`.
-   - Use `context.currentTime` to schedule the next buffer immediately after the previous one (`startTime = prevEndTime`).
-   - Implement a lookahead system: always schedule 1-2 sentences ahead to prevent gaps.
+### 3. Changes to `AudioPlayerService`
+*   Instead of setting `audio.src = url`, it will now fetch the blob, decode it using `context.decodeAudioData()`, and pass the `AudioBuffer` to the engine.
+*   It must maintain a "lookahead" buffer of at least 2-3 sentences to ensure gapless playback.
 
-4. **Update `AudioPlayerService`**
-   - Replace `AudioElementPlayer` with `WebAudioEngine` in the `setupCloudPlayback` method.
-   - Modify `play()` to feed blobs into the `WebAudioEngine` (which will decode them to `AudioBuffer`s).
-   - Ensure the fallback path to `WebSpeechProvider` remains intact.
-
-5. **Verify Background Playback**
-   - Test specifically on mobile.
-   - If audio cuts out on lock screen, implement the "silent html audio" trick: loop a 1-second silent MP3 in a hidden `<audio>` tag whenever the `WebAudioEngine` is active.
-
-6. **Pre-commit Steps**
-   - Ensure proper testing, verification, review, and reflection are done.
+## Implementation Steps
+1.  Create `src/lib/tts/audio/WebAudioEngine.ts` scaffolding.
+2.  Implement `fetchAndDecode` in `AudioPlayerService`.
+3.  Create a basic `schedule` function to play two buffers back-to-back.
+4.  Refactor `AudioPlayerService` to use the new engine.
+5.  Handle "Pause" (requires `context.suspend()` or stopping nodes and tracking offset).
+6.  Handle "Seek" (requires recalculating start times).
