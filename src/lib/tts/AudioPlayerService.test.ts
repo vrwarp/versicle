@@ -63,6 +63,8 @@ describe('AudioPlayerService', () => {
     });
 
     it('should handle fallback from cloud to local on error', async () => {
+        vi.useFakeTimers();
+
         // Setup a mock cloud provider that fails
         const mockCloudProvider = {
             id: 'cloud',
@@ -89,26 +91,21 @@ describe('AudioPlayerService', () => {
         // Use real console.warn to avoid clutter but let's spy it to ensure it logs
         const consoleSpy = vi.spyOn(console, 'warn');
 
-        await service.play();
+        const playPromise = service.play();
+        await playPromise;
 
         // Check if fallback happened
         expect(setProviderSpy).toHaveBeenCalled();
-        // The last call to setProvider should be with WebSpeechProvider (or we verify instance type if we could)
-        // Since we mock WebSpeechProvider class, we can check if it was instantiated?
-        // But verifying setProvider called is good enough.
-
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Falling back"));
 
-        // Verify listener got error
-        // The listener is called multiple times:
-        // 1. Initial subscribe (stopped, null)
-        // 2. play start (loading, null)
-        // 3. fallback error (loading, "Cloud voice failed...")
-        // 4. retry play (loading, null) or whatever next state
+        // Flush timeout (500ms) for retry
+        vi.advanceTimersByTime(500);
 
-        // Just check if any call had the error message
+        // Verify listener got error
         const errorCalls = listener.mock.calls.filter(args => args[4] && args[4].includes("Cloud voice failed"));
         expect(errorCalls.length).toBeGreaterThan(0);
         expect(errorCalls[0][4]).toContain("API Quota Exceeded");
+
+        vi.useRealTimers();
     });
 });

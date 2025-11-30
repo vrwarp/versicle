@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { extractSentences } from '../tts';
-import { useTTSStore } from '../../store/useTTSStore';
 
 // Mock useTTSStore
 vi.mock('../../store/useTTSStore', () => ({
@@ -14,6 +13,7 @@ vi.mock('../../store/useTTSStore', () => ({
 // Mock ePub.js structures
 class MockRendition {
     document: Document;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     contents: any[];
 
     constructor(doc: Document) {
@@ -37,6 +37,7 @@ describe('extractSentences inline element fragmentation', () => {
             'text/html'
         );
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rendition = new MockRendition(dom) as any;
 
         const sentences = extractSentences(rendition);
@@ -55,6 +56,7 @@ describe('extractSentences inline element fragmentation', () => {
             'text/html'
         );
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rendition = new MockRendition(dom) as any;
 
         const sentences = extractSentences(rendition);
@@ -68,6 +70,7 @@ describe('extractSentences inline element fragmentation', () => {
             '<p>Sentence one. <b>Sentence</b> two.</p>',
             'text/html'
         );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rendition = new MockRendition(dom) as any;
         const sentences = extractSentences(rendition);
 
@@ -81,6 +84,7 @@ describe('extractSentences inline element fragmentation', () => {
             '<div>Outer text. <p>Inner paragraph.</p> Post text.</div>',
             'text/html'
         );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rendition = new MockRendition(dom) as any;
         const sentences = extractSentences(rendition);
 
