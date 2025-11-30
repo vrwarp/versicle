@@ -46,13 +46,8 @@ def test_immersive_mode(page: Page):
     page.wait_for_timeout(2000)
 
     # 2. Toggle Immersive Mode
-    # Click center of viewport.
-    # We need to make sure we click the reader area, not the header/footer.
-    viewport_size = page.viewport_size
-    if viewport_size:
-        x = viewport_size['width'] / 2
-        y = viewport_size['height'] / 2
-        page.mouse.click(x, y)
+    # Click the "Enter Immersive Mode" button.
+    page.get_by_test_id("reader-immersive-enter-button").click()
 
     # Wait for state update - INCREASED TIMEOUT
     page.wait_for_timeout(2000)
@@ -64,8 +59,8 @@ def test_immersive_mode(page: Page):
     page.screenshot(path="verification/screenshots/sprint1_2_immersive.png")
 
     # 3. Toggle Back
-    if viewport_size:
-        page.mouse.click(x, y)
+    # Click the "Exit Immersive Mode" button.
+    page.get_by_test_id("reader-immersive-exit-button").click()
 
     page.wait_for_timeout(2000)
 

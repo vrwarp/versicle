@@ -16,7 +16,7 @@ import { Toast } from '../ui/Toast';
 import { Dialog } from '../ui/Dialog';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter, RotateCcw, RotateCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, Play, Pause, X, Search, Highlighter, RotateCcw, RotateCw, Maximize, Minimize } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 
 /**
@@ -383,23 +383,9 @@ export const ReaderView: React.FC = () => {
               });
           });
 
-          // Clear popover on click elsewhere and toggle immersive mode
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          rendition.on('click', (e: any) => {
+          // Clear popover on click elsewhere
+          rendition.on('click', () => {
              hidePopover();
-
-             // Check if click was on a link or interactive element
-             const target = e?.target as HTMLElement;
-             const isLink = target?.tagName?.toLowerCase() === 'a' || target?.closest('a');
-
-             // Check if text is selected (using window.getSelection inside iframe)
-             const iframe = viewerRef.current?.querySelector('iframe');
-             const selection = iframe?.contentWindow?.getSelection();
-             const hasSelection = selection && selection.toString().length > 0;
-
-             if (!isLink && !hasSelection) {
-                 setImmersiveMode(prev => !prev);
-             }
           });
 
           rendition.on('relocated', (location: Location) => {
@@ -590,13 +576,25 @@ export const ReaderView: React.FC = () => {
   const { setGestureMode } = useReaderStore();
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground">
+    <div className="flex flex-col h-screen bg-background text-foreground relative">
       {/* Gesture Overlay */}
       <GestureOverlay
           onNextChapter={handleNext}
           onPrevChapter={handlePrev}
           onClose={() => setGestureMode(false)}
       />
+
+      {/* Immersive Mode Exit Button */}
+      {immersiveMode && (
+        <button
+            data-testid="reader-immersive-exit-button"
+            aria-label="Exit Immersive Mode"
+            onClick={() => setImmersiveMode(false)}
+            className="absolute top-4 right-4 z-50 p-2 rounded-full bg-surface/50 hover:bg-surface shadow-md backdrop-blur-sm transition-colors"
+        >
+            <Minimize className="w-5 h-5 text-foreground" />
+        </button>
+      )}
 
       {/* Header */}
       {!immersiveMode && (
@@ -621,6 +619,9 @@ export const ReaderView: React.FC = () => {
             </button>
             <button data-testid="reader-tts-button" aria-label="Text to Speech" onClick={() => setShowTTS(!showTTS)} className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
                     {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+            </button>
+            <button data-testid="reader-immersive-enter-button" aria-label="Enter Immersive Mode" onClick={() => setImmersiveMode(true)} className="p-2 rounded-full hover:bg-border">
+                <Maximize className="w-5 h-5 text-secondary" />
             </button>
             <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-full hover:bg-border">
                 <Settings className="w-5 h-5 text-secondary" />
