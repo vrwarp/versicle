@@ -2,13 +2,31 @@
 
 This directory contains reusable UI components built with Radix UI and Tailwind CSS.
 
-## Badge Variants
+## Common Variants
 
-The `Badge` component supports the following variants to convey different semantic meanings:
+Many components (Button, Badge) share a common set of semantic variants to ensure visual consistency:
 
-- **default**: Primary emphasis (e.g., active status).
-- **secondary**: Secondary emphasis (e.g., informational tags).
-- **destructive**: Critical or error states (e.g., failure indicators).
-- **outline**: Neutral or subtle emphasis (e.g., optional attributes).
+- **default**: Primary emphasis (e.g., solid background, light text).
+- **secondary**: Secondary emphasis (e.g., muted background).
+- **destructive**: Critical actions or errors (e.g., red background).
+- **outline**: Low emphasis with a border.
+- **ghost**: Minimal emphasis (transparent background, hover effect).
 
-These variants align with the project's design system tokens.
+## Component Specifics
+
+### Badge
+Used for status indicators or tags.
+- Variants: `default`, `secondary`, `destructive`, `outline`.
+
+### Button
+Interactive trigger elements.
+- Variants: `default`, `secondary`, `destructive`, `outline`, `ghost`, `link`.
+- `link`: Appears as a text link.
+
+### Sheet
+A side drawer component (wraps Radix UI Dialog).
+- **side**: Controls placement (`top`, `bottom`, `left`, `right`). Default is `right`.
+
+### Modal
+A centered dialog component (wraps Radix UI Dialog).
+- Standard modal behavior with backdrop.
