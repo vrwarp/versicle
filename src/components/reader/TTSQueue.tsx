@@ -5,14 +5,74 @@ import { cn } from '../../lib/utils';
 export const TTSQueue: React.FC = () => {
     const { queue, currentIndex, jumpTo } = useTTSStore();
     const activeRef = useRef<HTMLButtonElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const prevIndexRef = useRef<number | null>(null);
+
+    // Reset previous index when queue changes (e.g. new chapter)
+    useEffect(() => {
+        prevIndexRef.current = null;
+    }, [queue]);
 
     useEffect(() => {
-        if (activeRef.current) {
-            activeRef.current.scrollIntoView({
+        const container = containerRef.current;
+        const currentEl = activeRef.current;
+
+        if (!container || !currentEl) {
+            // Even if refs are missing, we should update prevIndex if possible,
+            // but without refs we can't do much.
+            if (currentEl) prevIndexRef.current = currentIndex;
+            return;
+        }
+
+        const lastIndex = prevIndexRef.current;
+        let shouldScroll = false;
+
+        // Check if element is visible in container
+        const isElementInView = (el: HTMLElement) => {
+            const elRect = el.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+
+            // Check intersection
+            return (
+                elRect.bottom > containerRect.top &&
+                elRect.top < containerRect.bottom
+            );
+        };
+
+        // Always scroll if:
+        // 1. First run after mount or queue change (lastIndex === null)
+        // 2. We are at the start of the queue (currentIndex === 0) - handles chapter resets
+        if (lastIndex === null || currentIndex === 0) {
+            shouldScroll = true;
+        } else {
+            // Check visibility
+            const currentVisible = isElementInView(currentEl);
+
+            // Check previous element visibility
+            let prevVisible = false;
+            // We use the lastIndex to find the previous element
+            // This works even if we jumped (e.g. 5 -> 10), checking if 5 was visible.
+            const prevEl = container.querySelector(`[data-testid="tts-queue-item-${lastIndex}"]`) as HTMLElement;
+            if (prevEl) {
+                prevVisible = isElementInView(prevEl);
+            }
+
+            // Scroll if we are already following (current visible)
+            // or if we were following the previous item (prev visible)
+            if (currentVisible || prevVisible) {
+                shouldScroll = true;
+            }
+        }
+
+        if (shouldScroll) {
+            currentEl.scrollIntoView({
                 behavior: 'smooth',
                 block: 'center',
             });
         }
+
+        prevIndexRef.current = currentIndex;
+
     }, [currentIndex]); // Scroll when index changes
 
     if (queue.length === 0) {
@@ -22,7 +82,11 @@ export const TTSQueue: React.FC = () => {
     return (
         <div data-testid="tts-queue-container" className="flex flex-col gap-1 mt-4 border-t border-border pt-4">
             <h4 data-testid="tts-queue-header" className="text-xs font-bold text-muted mb-2 uppercase tracking-wide">Queue</h4>
-            <div data-testid="tts-queue-list" className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-muted">
+            <div
+                data-testid="tts-queue-list"
+                ref={containerRef}
+                className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-muted"
+            >
                 {queue.map((item, index) => {
                     const isActive = index === currentIndex;
                     return (
