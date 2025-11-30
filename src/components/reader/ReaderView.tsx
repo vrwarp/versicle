@@ -272,32 +272,50 @@ export const ReaderView: React.FC = () => {
           setToc(nav.toc);
 
           // Register themes
+          // Note: We use specific selectors for hover to ensure we override any book-specific styles
+          // while avoiding the generic *:hover which causes issues.
+          const hoverSelector = 'html body p:hover, html body span:hover, html body div:hover, html body h1:hover, html body h2:hover, html body h3:hover, html body h4:hover, html body h5:hover, html body h6:hover, html body li:hover, html body blockquote:hover, html body td:hover, html body pre:hover';
+          const hoverReset = `
+            ${hoverSelector} {
+              color: inherit !important;
+              background: transparent !important;
+            }
+          `;
+
           rendition.themes.register('light', `
             body { background: #ffffff !important; color: #000000 !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            *:hover { color: inherit !important; background: transparent !important; }
+            ${hoverReset}
             a { color: #0000ee !important; }
             a:hover { color: #0000ee !important; text-decoration: underline !important; }
           `);
           rendition.themes.register('dark', `
             body { background: #1a1a1a !important; color: #f5f5f5 !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            *:hover { color: inherit !important; background: transparent !important; }
+            ${hoverReset}
             a { color: #6ab0f3 !important; }
             a:hover { color: #6ab0f3 !important; text-decoration: underline !important; }
           `);
           rendition.themes.register('sepia', `
             body { background: #f4ecd8 !important; color: #5b4636 !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            *:hover { color: inherit !important; background: transparent !important; }
+            ${hoverReset}
             a { color: #0000ee !important; }
             a:hover { color: #0000ee !important; text-decoration: underline !important; }
           `);
           rendition.themes.register('custom', `
             body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            *:hover { color: inherit !important; background: transparent !important; }
+            ${hoverReset}
           `);
+
+          // Inject a manual style tag to ensure specificity wins over any later injected styles if possible
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          rendition.hooks.content.register((contents: any) => {
+             const style = contents.document.createElement('style');
+             style.innerHTML = hoverReset;
+             contents.document.head.appendChild(style);
+          });
 
           rendition.themes.select(currentTheme);
           rendition.themes.fontSize(`${fontSize}%`);
@@ -445,10 +463,13 @@ export const ReaderView: React.FC = () => {
   useEffect(() => {
     if (renditionRef.current) {
       // Re-register custom theme in case colors changed
+      // Note: We duplicate the hover selector here to ensure it applies to custom themes dynamically
+      const hoverSelector = 'html body p:hover, html body span:hover, html body div:hover, html body h1:hover, html body h2:hover, html body h3:hover, html body h4:hover, html body h5:hover, html body h6:hover, html body li:hover, html body blockquote:hover, html body td:hover, html body pre:hover';
+
       renditionRef.current.themes.register('custom', `
         body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
         p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-        *:hover { color: inherit !important; background: transparent !important; }
+        ${hoverSelector} { color: inherit !important; background: transparent !important; }
       `);
 
       renditionRef.current.themes.select(currentTheme);
