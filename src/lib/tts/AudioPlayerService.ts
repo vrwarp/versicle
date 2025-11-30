@@ -4,6 +4,7 @@ import { AudioElementPlayer } from './AudioElementPlayer';
 import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { TTSCache } from './TTSCache';
 import { CostEstimator } from './CostEstimator';
+import { MediaSessionManager } from './MediaSessionManager';
 
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading';
 
@@ -23,6 +24,7 @@ export class AudioPlayerService {
   private provider: ITTSProvider;
   private audioPlayer: AudioElementPlayer | null = null;
   private syncEngine: SyncEngine | null = null;
+  private mediaSessionManager: MediaSessionManager;
   private cache: TTSCache;
   private queue: TTSQueueItem[] = [];
   private currentIndex: number = 0;
@@ -37,6 +39,15 @@ export class AudioPlayerService {
   private constructor() {
     this.provider = new WebSpeechProvider();
     this.cache = new TTSCache();
+    this.mediaSessionManager = new MediaSessionManager({
+        onPlay: () => this.resume(),
+        onPause: () => this.pause(),
+        onStop: () => this.stop(),
+        onPrev: () => this.prev(),
+        onNext: () => this.next(),
+        onSeekBackward: () => this.seek(-10),
+        onSeekForward: () => this.seek(10),
+    });
     this.setupWebSpeech();
   }
 
@@ -90,33 +101,13 @@ export class AudioPlayerService {
           });
       }
 
-      this.setupMediaSession();
-  }
-
-  private setupMediaSession() {
-      if ('mediaSession' in navigator) {
-          navigator.mediaSession.setActionHandler('play', () => {
-              this.resume();
-          });
-          navigator.mediaSession.setActionHandler('pause', () => {
-              this.pause();
-          });
-          navigator.mediaSession.setActionHandler('previoustrack', () => {
-              this.prev();
-          });
-          navigator.mediaSession.setActionHandler('nexttrack', () => {
-              this.next();
-          });
-          navigator.mediaSession.setActionHandler('stop', () => {
-              this.stop();
-          });
-      }
+      // Note: MediaSession setup is now handled in the constructor via MediaSessionManager
   }
 
   private updateMediaSessionMetadata() {
-      if ('mediaSession' in navigator && this.queue[this.currentIndex]) {
+      if (this.queue[this.currentIndex]) {
           const item = this.queue[this.currentIndex];
-          navigator.mediaSession.metadata = new MediaMetadata({
+          this.mediaSessionManager.setMetadata({
               title: item.title || 'Chapter Text',
               artist: item.author || 'Versicle',
               album: item.bookTitle || '',
@@ -350,9 +341,9 @@ export class AudioPlayerService {
 
   private setStatus(status: TTSStatus) {
       this.status = status;
-      if ('mediaSession' in navigator) {
-         navigator.mediaSession.playbackState = (status === 'playing') ? 'playing' : (status === 'paused' ? 'paused' : 'none');
-      }
+      this.mediaSessionManager.setPlaybackState(
+          status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
+      );
 
       const currentCfi = (this.queue[this.currentIndex] && (status === 'playing' || status === 'loading' || status === 'paused'))
         ? this.queue[this.currentIndex].cfi
