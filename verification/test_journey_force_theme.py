@@ -8,11 +8,12 @@ def test_journey_force_theme(page: Page):
     Test the Force Theme Style toggle user journey.
     1. Load the demo book (Alice in Wonderland).
     2. Navigate to Chapter I (which has formatted text).
-    3. Capture screenshot of default rendering.
-    4. Enable 'Force Theme Style'.
-    5. Capture screenshot of forced rendering.
-    6. Disable 'Force Theme Style'.
-    7. Capture screenshot to verify revert.
+    3. Inject 'Stubborn' styles (Courier, Red, Line-height 3) to simulate a hard-to-style book.
+    4. Capture screenshot (should show Stubborn styles).
+    5. Enable 'Force Theme Style'.
+    6. Capture screenshot (should show Default/Clean styles, overriding Stubborn).
+    7. Disable 'Force Theme Style'.
+    8. Capture screenshot (should revert to Stubborn).
     """
 
     # 1. Reset and load app
@@ -22,66 +23,64 @@ def test_journey_force_theme(page: Page):
     page.get_by_text("Load Demo Book").click()
 
     # Wait for book to appear in library and click it
-    # We assume the demo book is "Alice's Adventures in Wonderland"
     page.get_by_text("Alice's Adventures in Wonderland").click()
 
     page.wait_for_selector("[data-testid='reader-iframe-container']", timeout=10000)
 
     # 2. Navigate to Chapter I
-    # Open TOC
     page.get_by_test_id("reader-toc-button").click()
-
-    # Wait for TOC to be visible
     page.wait_for_selector("[data-testid='reader-toc-sidebar']")
-
-    # Click Chapter I
-    # Alice TOC usually has "Down the Rabbit-Hole" as Chapter I
     page.get_by_text("I. Down the Rabbit-Hole").click()
-
-    # Wait for navigation (content update)
-    # The iframe content changes. It's hard to hook into that exactly without internals.
-    # We'll wait a bit.
     page.wait_for_timeout(2000)
 
-    # 3. Screenshot Default
-    print("Capturing default screenshot")
-    capture_screenshot(page, "force_theme_01_default")
+    # 3. Inject Stubborn Styles
+    reader_frame = None
+    for frame in page.frames:
+        if "epubjs" in (frame.name or "") or (frame.url and "blob:" in frame.url):
+            reader_frame = frame
+            break
 
-    # 4. Enable Force Theme
-    # Open Settings
+    if reader_frame:
+        print("Injecting stubborn styles...")
+        reader_frame.evaluate("""
+            const style = document.createElement('style');
+            style.id = 'stubborn-style';
+            style.textContent = 'p, div, span { font-family: "Courier New", monospace !important; line-height: 3.0 !important; color: red !important; }';
+            document.head.appendChild(style);
+        """)
+        page.wait_for_timeout(1000)
+    else:
+        print("WARNING: Could not find reader frame to inject styles")
+
+    # 4. Screenshot Stubborn
+    print("Capturing stubborn screenshot")
+    capture_screenshot(page, "force_theme_01_stubborn")
+
+    # 5. Enable Force Theme
     page.get_by_test_id("reader-settings-button").click()
-
-    # Wait for settings
     expect(page.get_by_test_id("settings-panel")).to_be_visible()
-
-    # Toggle Force Font
-    # The toggle is visually an input[type=checkbox] inside a label.
-    # The input is usually hidden (sr-only) or overlapped by the pseudo-element toggle UI.
-    # We should click the label or force the click on the input.
-    # Given the test failure "intercepts pointer events", we force click or check via label.
     page.get_by_test_id("settings-force-font").click(force=True)
-
-    # Close Settings to see the book better
     page.get_by_test_id("settings-close-button").click()
 
-    # Wait for styles to apply
     page.wait_for_timeout(1000)
 
-    # 5. Screenshot Forced
+    # 6. Screenshot Forced
     print("Capturing forced screenshot")
     capture_screenshot(page, "force_theme_02_forced")
 
-    # 6. Disable Force Theme
+    # Verify CSS override
+    if reader_frame:
+        font_family = reader_frame.evaluate("window.getComputedStyle(document.querySelector('p')).fontFamily")
+        print(f"Computed Font Family in Forced Mode: {font_family}")
+        # Expect strict default (e.g. Serif) not Courier
+
+    # 7. Disable Force Theme
     page.get_by_test_id("reader-settings-button").click()
     page.get_by_test_id("settings-force-font").click(force=True)
     page.get_by_test_id("settings-close-button").click()
 
-    # Wait for revert
     page.wait_for_timeout(1000)
 
-    # 7. Screenshot Reverted
+    # 8. Screenshot Reverted
     print("Capturing reverted screenshot")
     capture_screenshot(page, "force_theme_03_reverted")
-
-    # Optional: Basic assertion that screenshots 1 and 2 are likely different is hard programmatically here,
-    # but the screenshots will serve as visual verification.
