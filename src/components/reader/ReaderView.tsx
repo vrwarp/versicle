@@ -292,37 +292,7 @@ export const ReaderView: React.FC = () => {
           (rendition.themes as any).default({
               p: { 'line-height': `${lineHeight} !important` },
               // Also ensure body has it for general text
-              body: { 'line-height': `${lineHeight} !important` },
-              '.tts-highlight': {
-                  'fill': 'yellow',
-                  'background-color': 'rgba(255, 255, 0, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              },
-              '.highlight-yellow': {
-                  'fill': 'yellow',
-                  'background-color': 'rgba(255, 255, 0, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              },
-              '.highlight-green': {
-                  'fill': 'green',
-                  'background-color': 'rgba(0, 255, 0, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              },
-              '.highlight-blue': {
-                  'fill': 'blue',
-                  'background-color': 'rgba(0, 0, 255, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              },
-              '.highlight-red': {
-                  'fill': 'red',
-                  'background-color': 'rgba(255, 0, 0, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              }
+              body: { 'line-height': `${lineHeight} !important` }
           });
 
           // Display at saved location or start
