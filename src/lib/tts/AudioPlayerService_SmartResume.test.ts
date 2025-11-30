@@ -44,15 +44,18 @@ describe('AudioPlayerService Smart Resume', () => {
     let service: AudioPlayerService;
     let mockStateHandler: any; // eslint-disable-line @typescript-eslint/no-explicit-any
     let lastPauseTime: number | null = null;
+    let enableSmartResume = true;
 
     beforeEach(() => {
         vi.clearAllMocks();
 
         // Setup state handler mock
         lastPauseTime = null;
+        enableSmartResume = true;
         mockStateHandler = {
             getLastPauseTime: vi.fn().mockImplementation(() => lastPauseTime),
-            setLastPauseTime: vi.fn().mockImplementation((time) => { lastPauseTime = time; })
+            setLastPauseTime: vi.fn().mockImplementation((time) => { lastPauseTime = time; }),
+            getEnableSmartResume: vi.fn().mockImplementation(() => enableSmartResume)
         };
 
         service = AudioPlayerService.getInstance();
@@ -79,6 +82,18 @@ describe('AudioPlayerService Smart Resume', () => {
         service.pause();
         expect(mockStateHandler.setLastPauseTime).toHaveBeenCalled();
         expect(lastPauseTime).not.toBeNull();
+    });
+
+    it('should NOT rewind if smart resume is disabled', async () => {
+        enableSmartResume = false;
+
+        // Mock 6 mins elapsed
+        service.pause();
+        lastPauseTime = Date.now() - (6 * 60 * 1000);
+
+        await service.resume();
+
+        expect((service as any).currentIndex).toBe(3); // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
     it('should rewind 0s if paused for < 5 min (WebSpeech)', async () => {
@@ -137,11 +152,22 @@ describe('AudioPlayerService Smart Resume', () => {
         expect((service as any).currentIndex).toBe(0); // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
+    it('should rewind to chapter start (index 0) if paused for > 48 hours (WebSpeech)', async () => {
+        const mockProvider = new WebSpeechProvider();
+        service.setProvider(mockProvider);
+
+        (service as any).currentIndex = 4; // eslint-disable-line @typescript-eslint/no-explicit-any
+        service.pause();
+        lastPauseTime = Date.now() - (49 * 3600 * 1000); // 49 hours
+
+        await service.resume();
+
+        // Should go to 0
+        expect((service as any).currentIndex).toBe(0); // eslint-disable-line @typescript-eslint/no-explicit-any
+    });
+
     it('should rewind 10s if paused for > 5 min (Cloud)', async () => {
-        // Mock Cloud Provider (AudioElementPlayer)
-        // Create a dummy object that IS NOT WebSpeechProvider
-        // The service checks instanceof WebSpeechProvider.
-        // We can just pass a plain object that implements ITTSProvider
+        // Mock Cloud Provider
         const mockCloudProvider: any = { // eslint-disable-line @typescript-eslint/no-explicit-any
             init: vi.fn(),
             getVoices: vi.fn(),
@@ -199,5 +225,30 @@ describe('AudioPlayerService Smart Resume', () => {
 
         // 1000 - 60 = 940
         expect(mockAudioPlayer.seek).toHaveBeenCalledWith(940);
+    });
+
+    it('should rewind to 0s (chapter start) if paused for > 48 hours (Cloud)', async () => {
+        const mockCloudProvider: any = { init: vi.fn(), getVoices: vi.fn(), synthesize: vi.fn(), stop: vi.fn() }; // eslint-disable-line @typescript-eslint/no-explicit-any
+        service.setProvider(mockCloudProvider);
+        const mockAudioPlayer = {
+            getCurrentTime: vi.fn().mockReturnValue(1000),
+            seek: vi.fn(),
+            resume: vi.fn().mockResolvedValue(undefined),
+            pause: vi.fn(),
+            stop: vi.fn(),
+            setRate: vi.fn(),
+            setOnTimeUpdate: vi.fn(),
+            setOnEnded: vi.fn(),
+            setOnError: vi.fn(),
+        };
+        (service as any).audioPlayer = mockAudioPlayer; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+        service.pause();
+        lastPauseTime = Date.now() - (49 * 3600 * 1000); // 49 hours
+
+        await service.resume();
+
+        // Should seek to 0
+        expect(mockAudioPlayer.seek).toHaveBeenCalledWith(0);
     });
 });

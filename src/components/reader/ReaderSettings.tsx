@@ -1,6 +1,7 @@
 import React from 'react';
 import { useReaderStore } from '../../store/useReaderStore';
-import { X } from 'lucide-react';
+import { useTTSStore } from '../../store/useTTSStore';
+import { X, Rewind } from 'lucide-react';
 
 interface ReaderSettingsProps {
   onClose: () => void;
@@ -22,6 +23,8 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
     setViewMode
   } = useReaderStore();
 
+  const { enableSmartResume, setEnableSmartResume } = useTTSStore();
+
   const fontOptions = [
     { label: 'Serif', value: 'Merriweather, Georgia, serif' },
     { label: 'Sans-Serif', value: 'Roboto, Helvetica, Arial, sans-serif' },
@@ -39,6 +42,30 @@ export const ReaderSettings: React.FC<ReaderSettingsProps> = ({ onClose }) => {
       </div>
 
       <div className="p-4 space-y-6">
+        {/* Audio Settings - Smart Resume */}
+        <div>
+           <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Audio</label>
+           <div className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-750 border border-gray-100 dark:border-gray-700">
+               <div className="flex items-center gap-2">
+                  <Rewind className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                  <div>
+                      <span className="block text-xs font-medium dark:text-gray-200">Smart Resume</span>
+                      <span className="block text-[10px] text-gray-500 dark:text-gray-400">Rewind after long pause</span>
+                  </div>
+               </div>
+               <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    data-testid="settings-smart-resume"
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={enableSmartResume}
+                    onChange={(e) => setEnableSmartResume(e.target.checked)}
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+               </label>
+           </div>
+        </div>
+
         {/* Layout Selection */}
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase">Layout</label>

@@ -53,6 +53,9 @@ interface TTSState {
   /** Whether to show cost warning dialogs */
   enableCostWarning: boolean;
 
+  /** Enable Smart Resume (rewind after pause) */
+  enableSmartResume: boolean;
+
   /** Actions */
   play: () => void;
   pause: () => void;
@@ -66,6 +69,7 @@ interface TTSState {
   setAlwaysMerge: (words: string[]) => void;
   setSentenceStarters: (words: string[]) => void;
   setEnableCostWarning: (enable: boolean) => void;
+  setEnableSmartResume: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
@@ -85,6 +89,7 @@ const player = AudioPlayerService.getInstance();
 player.bindStateHandler({
     getLastPauseTime: () => useTTSStore.getState().lastPauseTime,
     setLastPauseTime: (time) => useTTSStore.getState().setLastPauseTime(time),
+    getEnableSmartResume: () => useTTSStore.getState().enableSmartResume,
 });
 
 /**
@@ -135,6 +140,7 @@ export const useTTSStore = create<TTSState>()(
                 openai: ''
             },
             enableCostWarning: true,
+            enableSmartResume: true,
             customAbbreviations: [
                 'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
                 'e.g.', 'i.e.'
@@ -204,6 +210,9 @@ export const useTTSStore = create<TTSState>()(
             setEnableCostWarning: (enable) => {
                 set({ enableCostWarning: enable });
             },
+            setEnableSmartResume: (enable) => {
+                set({ enableSmartResume: enable });
+            },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
                 const { providerId, apiKeys } = get();
@@ -272,6 +281,7 @@ export const useTTSStore = create<TTSState>()(
             alwaysMerge: state.alwaysMerge,
             sentenceStarters: state.sentenceStarters,
             enableCostWarning: state.enableCostWarning,
+            enableSmartResume: state.enableSmartResume,
             lastPauseTime: state.lastPauseTime,
         }),
     }

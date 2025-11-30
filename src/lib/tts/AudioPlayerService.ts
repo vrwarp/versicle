@@ -19,6 +19,7 @@ export interface TTSQueueItem {
 export interface AudioPlayerStateHandler {
     getLastPauseTime: () => number | null;
     setLastPauseTime: (time: number | null) => void;
+    getEnableSmartResume: () => boolean;
 }
 
 type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
@@ -272,30 +273,37 @@ export class AudioPlayerService {
   async resume() {
      if (this.status === 'paused') {
         // Smart Resume Logic
-        if (this.stateHandler) {
+        if (this.stateHandler && this.stateHandler.getEnableSmartResume && this.stateHandler.getEnableSmartResume()) {
             const lastPause = this.stateHandler.getLastPauseTime();
             if (lastPause) {
                 const elapsedMs = Date.now() - lastPause;
                 const elapsedSec = elapsedMs / 1000;
                 let rewindSec = 0;
+                let rewindToStart = false;
 
                 // < 5 min: 0s
                 // 5 min - 24h: 10s
                 // > 24h: 60s
-                if (elapsedSec > 24 * 3600) {
+                // > 48h: Rewind to start of chapter
+                if (elapsedSec > 48 * 3600) {
+                     rewindToStart = true;
+                } else if (elapsedSec > 24 * 3600) {
                      rewindSec = 60;
                 } else if (elapsedSec > 5 * 60) {
                      rewindSec = 10;
                 }
 
-                if (rewindSec > 0) {
-                    console.log(`[SmartResume] Rewinding ${rewindSec}s (away for ${elapsedSec}s)`);
+                if (rewindToStart || rewindSec > 0) {
+                    console.log(`[SmartResume] Rewinding (away for ${elapsedSec}s)`);
 
                     if (this.provider instanceof WebSpeechProvider) {
-                         // Local provider: rewind by index (approx 1 index per 10s? Sentence length varies.)
-                         // Plan says: "If elapsed > 5min, currentIndex = max(0, currentIndex - 2)."
-                         const rewindCount = rewindSec >= 60 ? 5 : 2;
-                         const newIndex = Math.max(0, this.currentIndex - rewindCount);
+                         let newIndex = this.currentIndex;
+                         if (rewindToStart) {
+                             newIndex = 0;
+                         } else {
+                             const rewindCount = rewindSec >= 60 ? 5 : 2;
+                             newIndex = Math.max(0, this.currentIndex - rewindCount);
+                         }
 
                          if (newIndex !== this.currentIndex) {
                              this.currentIndex = newIndex;
@@ -307,10 +315,13 @@ export class AudioPlayerService {
                              return;
                          }
                     } else if (this.audioPlayer) {
-                         // Cloud provider: seek time
-                         const currentTime = this.audioPlayer.getCurrentTime();
-                         const newTime = Math.max(0, currentTime - rewindSec);
-                         this.audioPlayer.seek(newTime);
+                         if (rewindToStart) {
+                             this.audioPlayer.seek(0);
+                         } else {
+                             const currentTime = this.audioPlayer.getCurrentTime();
+                             const newTime = Math.max(0, currentTime - rewindSec);
+                             this.audioPlayer.seek(newTime);
+                         }
                          // Continue to resume below
                     }
                 }
