@@ -267,21 +267,28 @@ export const ReaderView: React.FC = () => {
           rendition.themes.register('light', `
             body { background: #ffffff !important; color: #000000 !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+            *:hover { color: inherit !important; background: transparent !important; }
             a { color: #0000ee !important; }
+            a:hover { color: #0000ee !important; text-decoration: underline !important; }
           `);
           rendition.themes.register('dark', `
             body { background: #1a1a1a !important; color: #f5f5f5 !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+            *:hover { color: inherit !important; background: transparent !important; }
             a { color: #6ab0f3 !important; }
+            a:hover { color: #6ab0f3 !important; text-decoration: underline !important; }
           `);
           rendition.themes.register('sepia', `
             body { background: #f4ecd8 !important; color: #5b4636 !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+            *:hover { color: inherit !important; background: transparent !important; }
             a { color: #0000ee !important; }
+            a:hover { color: #0000ee !important; text-decoration: underline !important; }
           `);
           rendition.themes.register('custom', `
             body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+            *:hover { color: inherit !important; background: transparent !important; }
           `);
 
           rendition.themes.select(currentTheme);
@@ -447,6 +454,7 @@ export const ReaderView: React.FC = () => {
       renditionRef.current.themes.register('custom', `
         body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
         p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+        *:hover { color: inherit !important; background: transparent !important; }
       `);
 
       renditionRef.current.themes.select(currentTheme);
