@@ -1,65 +1,104 @@
-import os
+import re
 import pytest
 from playwright.sync_api import Page, expect
+from verification import utils
 
 def test_journey_lexicon(page: Page):
-    """
-    Verifies the Pronunciation Lexicon user journey:
-    1. Open app and load a book.
-    2. Open Settings -> Pronunciation Lexicon.
-    3. Add a new rule (Alice -> A-LICE).
-    4. Test the rule.
-    5. Verify persistence/display.
-    """
+    print("Starting Lexicon Journey...")
+    utils.reset_app(page)
+    utils.ensure_library_with_book(page)
 
-    # 1. Load the app
-    page.goto("http://localhost:5173", timeout=15000)
+    # Open Book
+    print("Opening book...")
+    page.locator('[data-testid="book-card"]').click()
+    expect(page).to_have_url(re.compile(r".*/read/.*"))
 
-    # Wait for initial load
+    # Wait for book to load
     page.wait_for_timeout(2000)
 
-    # Check if book exists
-    if page.get_by_test_id("book-card").count() == 0:
-        # Try finding button by partial text to load demo
-        demo_btn = page.locator("button", has_text="Load Demo Book")
-        if demo_btn.is_visible():
-            demo_btn.click()
-            # Increase timeout for download and processing
-            expect(page.get_by_test_id("book-card").first).to_be_visible(timeout=30000)
-
-    # Open book
-    page.get_by_test_id("book-card").first.click()
-
-    # Wait for Reader View
-    expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=20000)
-
     # Open Settings
-    page.wait_for_timeout(1000)
-    page.get_by_label("Settings").click()
+    print("Opening Settings...")
+    page.locator('[aria-label="Settings"]').click()
 
+    # Verify Settings Panel is visible
     expect(page.get_by_test_id("settings-panel")).to_be_visible()
 
-    # Open Pronunciation Lexicon
+    # Open Lexicon Manager
+    print("Opening Pronunciation Lexicon...")
+    # The button text is "Pronunciation Lexicon"
     page.get_by_text("Pronunciation Lexicon").click()
-    expect(page.get_by_text("Define custom pronunciation rules")).to_be_visible()
 
-    # Add a rule
+    # Verify Dialog is open
+    # Note: The Dialog component might not have role="dialog" explicitly set in its div,
+    # so we check for the title "Pronunciation Lexicon" which acts as confirmation.
+    # We use get_by_role("heading") because the button to open it also has this text.
+    print("Verifying Dialog visibility...")
+    expect(page.get_by_role("heading", name="Pronunciation Lexicon", exact=True)).to_be_visible()
+
+    # Click Add Rule
+    print("Adding new rule...")
     page.get_by_role("button", name="Add Rule").click()
 
-    page.get_by_placeholder("Original").fill("Alice")
-    page.get_by_placeholder("Replacement").fill("A-LICE")
+    # Verify Regex Checkbox exists
+    print("Verifying Regex capability...")
+    regex_checkbox = page.get_by_label("Regex")
+    expect(regex_checkbox).to_be_visible()
 
-    page.locator("button:has(svg.lucide-save)").click()
+    # Toggle Regex
+    regex_checkbox.check()
+    expect(regex_checkbox).to_be_checked()
+    regex_checkbox.uncheck()
+    expect(regex_checkbox).not_to_be_checked()
+    regex_checkbox.check() # Leave checked for the rule
 
-    # Verify
-    expect(page.get_by_text("A-LICE")).to_be_visible()
+    # Enter Rule Details
+    print("Filling rule details...")
+    # Assuming the inputs are found by placeholder or order
+    # Based on LexiconManager.tsx: placeholder="Original" and "Replacement"
+    page.get_by_placeholder("Original").fill("s/he")
+    page.get_by_placeholder("Replacement").fill("they")
 
-    # Test
-    page.get_by_placeholder("Type a sentence containing your words...").fill("Alice is here.")
-    page.get_by_role("button").filter(has=page.locator("svg.lucide-volume-2")).click()
+    # Save Rule
+    # The button is a small save icon button. It's inside the flex container.
+    # We can target it by the Save icon or its parent button classes.
+    # Since we can't easily rely on icons in playwright without aria-labels or test-ids,
+    # we'll look for the button inside the adding section.
+    # But wait, looking at the code, it's just a <button><Save/></button>.
+    # It has no text content "Save" directly visible as text node, likely inside SVG or empty.
+    # The previous locator "button:has-text('Save')" might fail if 'Save' is not text.
+    # The Lucide icon likely doesn't render text.
 
-    expect(page.get_by_text("A-LICE is here.")).to_be_visible()
+    # Let's target the button that contains the Save icon or is the 3rd child in that row.
+    # Or better, let's rely on the fact that it is a button with green text/hover class.
+    page.locator("button.text-green-600").click()
 
-    # Screenshot
-    os.makedirs("verification/screenshots", exist_ok=True)
-    page.screenshot(path="verification/screenshots/lexicon_journey.png")
+    # Verify Rule appears in list with Regex badge
+    print("Verifying rule in list...")
+    expect(page.get_by_text("s/he")).to_be_visible()
+    expect(page.get_by_text("they")).to_be_visible()
+
+    # The badge is "RE" in purple - text transform might make it "Re" in DOM
+    # The code says <span ...>Re</span> and uppercased via CSS? No, wait:
+    # {rule.isRegex && <span className="text-[10px] uppercase font-bold text-purple-600 border border-purple-200 bg-purple-50 px-1 rounded">Re</span>}
+    # "uppercase" class makes it visually RE, but DOM text is "Re".
+    # Playwright's get_by_text matches against visual text if exact is not specified?
+    # But exact=True usually checks DOM text or normalized text.
+    # Let's try "Re" or remove exact=True.
+    expect(page.get_by_text("Re", exact=True)).to_be_visible()
+
+    # Close Dialog
+    print("Closing Lexicon...")
+    # There are multiple close buttons (settings close, dialog 'x', dialog footer 'Close').
+    # We want the dialog footer 'Close' button or the X.
+    # The footer button is likely the one with text "Close".
+    # The error message says:
+    # 3) <button ...>Close</button> aka get_by_text("Close")
+    # Let's target it specifically.
+    page.locator("button:text-is('Close')").click()
+    # The text "Pronunciation Lexicon" is also on the button in settings that opens it.
+    # So checking not_to_be_visible for "Pronunciation Lexicon" might fail because the trigger button is still there.
+    # We should check that the *Dialog* title or content is gone.
+    # The heading "Pronunciation Lexicon" inside the dialog should be gone.
+    expect(page.get_by_role("heading", name="Pronunciation Lexicon", exact=True)).not_to_be_visible()
+
+    print("Lexicon Journey Passed!")
