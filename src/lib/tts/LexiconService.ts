@@ -106,4 +106,81 @@ export class LexiconService {
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
+
+  /**
+   * Converts rules to a CSV string.
+   * Format: Original,Replacement,IsRegex
+   */
+  rulesToCSV(rules: LexiconRule[]): string {
+    const header = 'Original,Replacement,IsRegex\n';
+    const escapeCsv = (str: string) => {
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+
+    const rows = rules.map(rule => {
+        return `${escapeCsv(rule.original)},${escapeCsv(rule.replacement)},${rule.isRegex ? 'true' : 'false'}`;
+    });
+
+    return header + rows.join('\n');
+  }
+
+  /**
+   * Parses rules from a CSV string.
+   * Format: Original,Replacement,IsRegex
+   */
+  csvToRules(csvContent: string): Omit<LexiconRule, 'id' | 'created' | 'bookId'>[] {
+    const lines = csvContent.split(/\r?\n/).filter(line => line.trim() !== '');
+    if (lines.length < 2) return []; // Header + 1 row minimum
+
+    const rules: Omit<LexiconRule, 'id' | 'created' | 'bookId'>[] = [];
+    const header = lines[0].toLowerCase();
+
+    // Basic validation
+    if (!header.includes('original') || !header.includes('replacement')) {
+        throw new Error('Invalid CSV header. Expected Original,Replacement,IsRegex');
+    }
+
+    // A simple CSV parser that handles quoted fields
+    const parseLine = (line: string): string[] => {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    current += '"';
+                    i++; // Skip next quote
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current);
+        return result;
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+        const cols = parseLine(lines[i]);
+        if (cols.length >= 2) {
+            rules.push({
+                original: cols[0],
+                replacement: cols[1],
+                isRegex: cols[2]?.trim().toLowerCase() === 'true'
+            });
+        }
+    }
+
+    return rules;
+  }
 }
