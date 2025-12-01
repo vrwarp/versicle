@@ -280,6 +280,41 @@ export const ReaderView: React.FC = () => {
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
           `);
 
+          // Register highlight themes
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition.themes as any).default({
+              '.tts-highlight': {
+                  'fill': 'yellow',
+                  'background-color': 'rgba(255, 255, 0, 0.3)',
+                  'fill-opacity': '0.3',
+                  'mix-blend-mode': 'multiply'
+              },
+              '.highlight-yellow': {
+                  'fill': 'yellow',
+                  'background-color': 'rgba(255, 255, 0, 0.3)',
+                  'fill-opacity': '0.3',
+                  'mix-blend-mode': 'multiply'
+              },
+              '.highlight-green': {
+                  'fill': 'green',
+                  'background-color': 'rgba(0, 255, 0, 0.3)',
+                  'fill-opacity': '0.3',
+                  'mix-blend-mode': 'multiply'
+              },
+              '.highlight-blue': {
+                  'fill': 'blue',
+                  'background-color': 'rgba(0, 0, 255, 0.3)',
+                  'fill-opacity': '0.3',
+                  'mix-blend-mode': 'multiply'
+              },
+              '.highlight-red': {
+                  'fill': 'red',
+                  'background-color': 'rgba(255, 0, 0, 0.3)',
+                  'fill-opacity': '0.3',
+                  'mix-blend-mode': 'multiply'
+              }
+          });
+
           rendition.themes.select(currentTheme);
           rendition.themes.fontSize(`${fontSize}%`);
           rendition.themes.font(fontFamily);
