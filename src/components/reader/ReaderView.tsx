@@ -107,20 +107,32 @@ export const ReaderView: React.FC = () => {
   // We use a ref to track which annotations have been added to the rendition to avoid duplicates.
   const addedAnnotations = useRef<Set<string>>(new Set());
 
+  // Helper to get annotation styles object for epub.js
+  const getAnnotationStyles = (color: string) => {
+      switch (color) {
+          case 'red': return { fill: 'red', backgroundColor: 'rgba(255, 0, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
+          case 'green': return { fill: 'green', backgroundColor: 'rgba(0, 255, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
+          case 'blue': return { fill: 'blue', backgroundColor: 'rgba(0, 0, 255, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
+          default: return { fill: 'yellow', backgroundColor: 'rgba(255, 255, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
+      }
+  };
+
   useEffect(() => {
     const rendition = renditionRef.current;
     if (rendition) {
       // Add new annotations
       annotations.forEach(annotation => {
         if (!addedAnnotations.current.has(annotation.id)) {
+           const className = annotation.color === 'yellow' ? 'highlight-yellow' :
+               annotation.color === 'green' ? 'highlight-green' :
+               annotation.color === 'blue' ? 'highlight-blue' :
+               annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow';
+
            // eslint-disable-next-line @typescript-eslint/no-explicit-any
            (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, () => {
                 console.log("Clicked annotation", annotation.id);
                 // TODO: Open edit/delete menu, perhaps via a new state/popover
-            }, annotation.color === 'yellow' ? 'highlight-yellow' :
-               annotation.color === 'green' ? 'highlight-green' :
-               annotation.color === 'blue' ? 'highlight-blue' :
-               annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow');
+            }, className, getAnnotationStyles(annotation.color));
            addedAnnotations.current.add(annotation.id);
         }
       });
@@ -280,6 +292,17 @@ export const ReaderView: React.FC = () => {
             body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
           `);
+
+          // Register TTS highlight theme
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition.themes as any).default({
+              '.tts-highlight': {
+                  'fill': 'yellow',
+                  'background-color': 'rgba(255, 255, 0, 0.3)',
+                  'fill-opacity': '0.3',
+                  'mix-blend-mode': 'multiply'
+              }
+          });
 
           rendition.themes.select(currentTheme);
           rendition.themes.fontSize(`${fontSize}%`);
