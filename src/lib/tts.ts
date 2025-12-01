@@ -52,7 +52,36 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
             return;
         }
 
-        const segments = segmenter.segment(textBuffer);
+        // Check if we are inside a PRE tag (or nested within one)
+        const firstNode = textNodes.length > 0 ? textNodes[0].node : null;
+        let isPre = false;
+        if (firstNode && firstNode.parentElement) {
+            // Use closest if available (standard in browsers) or traverse up
+            const parent = firstNode.parentElement;
+            // Check for 'pre' (HTML/XHTML) or 'PRE' (canonical uppercase)
+            // Using closest is robust for nested elements like <pre><code>...</code></pre>
+            if (parent.closest) {
+                isPre = !!parent.closest('pre, PRE');
+            } else {
+                 // Fallback if closest is missing (unlikely in modern envs but safe)
+                 let current: Element | null = parent;
+                 while (current) {
+                     if (current.tagName.toUpperCase() === 'PRE') {
+                         isPre = true;
+                         break;
+                     }
+                     current = current.parentElement;
+                 }
+            }
+        }
+
+        // Replace newlines with spaces to avoid splitting sentences on newlines within block tags,
+        // unless we are in a PRE tag where formatting should be preserved.
+        // This preserves the string length so that indices mapping to textNodes remains valid.
+        // We also handle carriage returns for safety.
+        const textForSegmentation = isPre ? textBuffer : textBuffer.replace(/[\n\r]/g, ' ');
+
+        const segments = segmenter.segment(textForSegmentation);
 
         for (const segment of segments) {
             let processedText = segment.text;
