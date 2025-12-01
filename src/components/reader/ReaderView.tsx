@@ -403,6 +403,18 @@ export const ReaderView: React.FC = () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           rendition.hooks.content.register((contents: any) => {
               const doc = contents.document;
+
+              // Helper to inject styles reliably
+              const style = doc.createElement('style');
+              style.innerHTML = `
+                  .tts-highlight { fill: yellow; background-color: rgba(255, 255, 0, 0.3); fill-opacity: 0.3; mix-blend-mode: multiply; }
+                  .highlight-yellow { fill: yellow; background-color: rgba(255, 255, 0, 0.3); fill-opacity: 0.3; mix-blend-mode: multiply; }
+                  .highlight-green { fill: green; background-color: rgba(0, 255, 0, 0.3); fill-opacity: 0.3; mix-blend-mode: multiply; }
+                  .highlight-blue { fill: blue; background-color: rgba(0, 0, 255, 0.3); fill-opacity: 0.3; mix-blend-mode: multiply; }
+                  .highlight-red { fill: red; background-color: rgba(255, 0, 0, 0.3); fill-opacity: 0.3; mix-blend-mode: multiply; }
+              `;
+              doc.head.appendChild(style);
+
               doc.addEventListener('mouseup', () => {
                   const selection = contents.window.getSelection();
                   if (!selection || selection.isCollapsed) return;
