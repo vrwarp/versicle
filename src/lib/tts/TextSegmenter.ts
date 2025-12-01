@@ -1,16 +1,26 @@
+/**
+ * Represents a segment of text (e.g., a sentence) with its location.
+ */
 export interface TextSegment {
+    /** The text content of the segment. */
     text: string;
+    /** The start index of the segment in the original text. */
     index: number;
+    /** The length of the segment. */
     length: number;
 }
 
-// Abbreviations that are almost exclusively titles and should always trigger a merge
-// regardless of the next word.
+/**
+ * Abbreviations that are almost exclusively titles and should always trigger a merge
+ * regardless of the next word.
+ */
 export const DEFAULT_ALWAYS_MERGE = ['Mr.', 'Mrs.', 'Ms.', 'Prof.', 'Gen.', 'Rep.', 'Sen.'];
 
-// Words that strongly indicate the start of a new sentence.
-// If the next segment starts with one of these, we should not merge,
-// even if the previous segment ended with an ambiguous abbreviation (like "Dr.").
+/**
+ * Words that strongly indicate the start of a new sentence.
+ * If the next segment starts with one of these, we should not merge,
+ * even if the previous segment ended with an ambiguous abbreviation (like "Dr.").
+ */
 export const DEFAULT_SENTENCE_STARTERS = [
     'He', 'She', 'It', 'They', 'We', 'You', 'I',
     'The', 'A', 'An', 'This', 'That', 'These', 'Those',
@@ -22,12 +32,24 @@ export const DEFAULT_SENTENCE_STARTERS = [
     "What", "Who", "What's", "Who's"
 ];
 
+/**
+ * Robust text segmentation utility using Intl.Segmenter with fallback and post-processing.
+ * Handles edge cases like abbreviations (e.g., "Mr.", "i.e.") to prevent incorrect sentence splitting.
+ */
 export class TextSegmenter {
     private segmenter: Intl.Segmenter | undefined;
     private abbreviations: Set<string>;
     private alwaysMerge: Set<string>;
     private sentenceStarters: Set<string>;
 
+    /**
+     * Initializes the TextSegmenter.
+     *
+     * @param locale - The locale for Intl.Segmenter (default 'en').
+     * @param abbreviations - List of abbreviations to consider for merging.
+     * @param alwaysMerge - List of words that always force a merge (e.g., titles).
+     * @param sentenceStarters - List of words that definitely start a new sentence.
+     */
     constructor(
         locale: string = 'en',
         abbreviations: string[] = [],
@@ -47,6 +69,12 @@ export class TextSegmenter {
         }
     }
 
+    /**
+     * Segments a text string into sentences or logical units.
+     *
+     * @param text - The text to segment.
+     * @returns An array of TextSegment objects.
+     */
     segment(text: string): TextSegment[] {
         if (!text) return [];
 
@@ -62,6 +90,12 @@ export class TextSegmenter {
         return this.fallbackSegment(text);
     }
 
+    /**
+     * Post-processes raw segments to merge incorrectly split sentences (e.g., due to abbreviations).
+     *
+     * @param segments - The raw segments from Intl.Segmenter.
+     * @returns The refined list of segments.
+     */
     private postProcess(segments: TextSegment[]): TextSegment[] {
         const merged: TextSegment[] = [];
 
@@ -123,6 +157,12 @@ export class TextSegmenter {
         return merged;
     }
 
+    /**
+     * Fallback segmentation logic using simple regex if Intl.Segmenter is unavailable.
+     *
+     * @param text - The text to segment.
+     * @returns An array of TextSegment objects.
+     */
     private fallbackSegment(text: string): TextSegment[] {
         const sentences: TextSegment[] = [];
         const sentenceRegex = /([^.!?]+[.!?]+)/g;

@@ -2,6 +2,12 @@ import React, { useEffect, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { cn } from '../../lib/utils';
 
+/**
+ * Displays the current TTS playback queue.
+ * Automatically scrolls to the active sentence being spoken.
+ *
+ * @returns A React component rendering the queue list.
+ */
 export const TTSQueue: React.FC = () => {
     const { queue, currentIndex, jumpTo } = useTTSStore();
     const activeRef = useRef<HTMLButtonElement>(null);

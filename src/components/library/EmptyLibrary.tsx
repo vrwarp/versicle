@@ -2,10 +2,21 @@ import React from 'react';
 import { BookOpen } from 'lucide-react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 
+/**
+ * Props for EmptyLibrary component.
+ */
 interface EmptyLibraryProps {
+  /** Callback to trigger the file import dialog. */
   onImport: () => void;
 }
 
+/**
+ * Renders an empty state message when no books are in the library.
+ * Provides options to import a book or load a demo book.
+ *
+ * @param props - Component props.
+ * @returns A React component for the empty library state.
+ */
 export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
   const { addBook, isImporting } = useLibraryStore();
 

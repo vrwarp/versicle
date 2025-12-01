@@ -1,17 +1,33 @@
 import type { ITTSProvider, SpeechSegment, TTSVoice } from './types';
 
+/**
+ * Abstract base class for Cloud TTS providers.
+ * Handles common logic like fetching audio blobs from a URL.
+ */
 export abstract class BaseCloudProvider implements ITTSProvider {
   abstract id: string;
   protected voices: TTSVoice[] = [];
 
   abstract init(): Promise<void>;
 
+  /**
+   * Returns the cached list of voices for this provider.
+   */
   async getVoices(): Promise<TTSVoice[]> {
     return this.voices;
   }
 
   abstract synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment>;
 
+  /**
+   * Helper method to perform a POST request and return the response as a Blob.
+   *
+   * @param url - The API endpoint URL.
+   * @param body - The JSON body of the request.
+   * @param headers - Optional additional headers.
+   * @returns A Promise resolving to the audio Blob.
+   * @throws Error if the fetch request fails.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   protected async fetchAudio(url: string, body: any, headers: Record<string, string> = {}): Promise<Blob> {
     const response = await fetch(url, {

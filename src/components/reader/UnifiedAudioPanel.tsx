@@ -10,6 +10,13 @@ import { TTSQueue } from './TTSQueue';
 import { Play, Pause, RotateCcw, RotateCw, Mic, RefreshCw } from 'lucide-react';
 import { LexiconManager } from './LexiconManager';
 
+/**
+ * A comprehensive panel for controlling Text-to-Speech playback and settings.
+ * Includes playback controls, queue visualization, and configuration options
+ * like speed, voice selection, and pronunciation rules.
+ *
+ * @returns A React component rendering the audio panel.
+ */
 export const UnifiedAudioPanel = () => {
   const {
     isPlaying,

@@ -1,6 +1,10 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { SpeechSegment } from './types';
 
+/**
+ * A mock cloud provider for testing purposes.
+ * Simulates cloud TTS behavior without making actual network requests.
+ */
 export class MockCloudProvider extends BaseCloudProvider {
   id = 'mock-cloud';
 
@@ -16,6 +20,9 @@ export class MockCloudProvider extends BaseCloudProvider {
     // No-op
   }
 
+  /**
+   * Simulates synthesis by returning a dummy WAV blob and sentence alignment.
+   */
   async synthesize(): Promise<SpeechSegment> {
     // Create a dummy audio blob (1 second of silence or just valid header)
     // For testing without actual audio files, we can try to fetch a known small file

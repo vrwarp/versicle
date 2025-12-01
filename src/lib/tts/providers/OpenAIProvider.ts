@@ -1,5 +1,9 @@
 import type { ITTSProvider, TTSVoice, SpeechSegment } from './types';
 
+/**
+ * TTS Provider for OpenAI's Audio API.
+ * Uses models like 'tts-1' or 'tts-1-hd'.
+ */
 export class OpenAIProvider implements ITTSProvider {
   id = 'openai';
   private apiKey: string | null = null;
@@ -16,18 +20,38 @@ export class OpenAIProvider implements ITTSProvider {
       if (apiKey) this.apiKey = apiKey;
   }
 
+  /**
+   * Sets the API Key for OpenAI.
+   *
+   * @param key - The API Key.
+   */
   setApiKey(key: string) {
       this.apiKey = key;
   }
 
+  /**
+   * Initializes the provider.
+   * OpenAI voices are static, so this is effectively a no-op.
+   */
   async init(): Promise<void> {
       // No init needed really, voices are static
   }
 
+  /**
+   * Returns the static list of OpenAI voices.
+   */
   async getVoices(): Promise<TTSVoice[]> {
       return this.voices;
   }
 
+  /**
+   * Synthesizes text using OpenAI's API.
+   * Note: OpenAI does not currently return alignment timestamps.
+   *
+   * @param text - The text to synthesize.
+   * @param voiceId - The voice model name (e.g., 'alloy').
+   * @param speed - Speaking speed.
+   */
   async synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment> {
       if (!this.apiKey) {
           throw new Error("OpenAI API Key missing");

@@ -102,9 +102,19 @@ pytest verification/test_journey_reading.py
 
 *Note: Verification tests generate screenshots in `verification/screenshots/`. Validated "golden" screenshots are stored in `verification/goldens/`.*
 
-## Architecture
+## Architecture & Documentation
 
+The codebase is fully documented with JSDoc (TypeScript) and Google Style Docstrings (Python).
 For a detailed deep-dive into the codebase, including comprehensive module references and diagrams, please refer to [architecture.md](architecture.md).
+
+### Directory Structure
+
+*   `src/components`: React UI components (Reader, Library, UI kit).
+*   `src/lib`: Core business logic (TTS, Search, Ingestion).
+*   `src/store`: Global state management (Zustand).
+*   `src/db`: IndexedDB schema and connection logic.
+*   `verification`: Playwright visual verification suite.
+*   `plan`: Implementation plans and design docs.
 
 ## Contributing
 

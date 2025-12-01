@@ -1,5 +1,9 @@
 import type { ITTSProvider, TTSVoice, SpeechSegment, Timepoint } from './types';
 
+/**
+ * TTS Provider for Google Cloud Text-to-Speech API.
+ * Requires a valid API Key.
+ */
 export class GoogleTTSProvider implements ITTSProvider {
   id = 'google';
   private apiKey: string | null = null;
@@ -11,10 +15,18 @@ export class GoogleTTSProvider implements ITTSProvider {
     }
   }
 
+  /**
+   * Sets the API Key for Google Cloud.
+   *
+   * @param key - The API Key.
+   */
   setApiKey(key: string) {
       this.apiKey = key;
   }
 
+  /**
+   * Initializes the provider by fetching available voices.
+   */
   async init(): Promise<void> {
     if (!this.apiKey) return;
     try {
@@ -24,6 +36,9 @@ export class GoogleTTSProvider implements ITTSProvider {
     }
   }
 
+  /**
+   * Returns the list of available Google TTS voices.
+   */
   async getVoices(): Promise<TTSVoice[]> {
     if (this.voices.length === 0 && this.apiKey) {
       await this.fetchVoices();
@@ -31,6 +46,9 @@ export class GoogleTTSProvider implements ITTSProvider {
     return this.voices;
   }
 
+  /**
+   * Fetches voices from the Google Cloud API.
+   */
   private async fetchVoices() {
       if (!this.apiKey) return;
 
@@ -50,6 +68,14 @@ export class GoogleTTSProvider implements ITTSProvider {
       }));
   }
 
+  /**
+   * Synthesizes text using Google Cloud TTS.
+   * Returns an MP3 blob and optional alignment data.
+   *
+   * @param text - The text to synthesize.
+   * @param voiceId - The voice name.
+   * @param speed - Speaking rate.
+   */
   async synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment> {
     if (!this.apiKey) {
       throw new Error('Google Cloud API Key is missing');

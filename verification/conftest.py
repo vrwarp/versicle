@@ -3,6 +3,16 @@ from playwright.sync_api import Page, expect
 
 @pytest.fixture(scope="session")
 def browser_context_args(browser_context_args):
+    """
+    Configures the browser context arguments for the session.
+    Sets the base URL and viewport size.
+
+    Args:
+        browser_context_args: Default arguments from pytest-playwright.
+
+    Returns:
+        Updated dictionary of context arguments.
+    """
     return {
         **browser_context_args,
         "base_url": "http://localhost:5173",
@@ -11,6 +21,16 @@ def browser_context_args(browser_context_args):
 
 @pytest.fixture(scope="session")
 def browser_type_launch_args(browser_type_launch_args):
+    """
+    Configures the browser launch arguments.
+    Disables web security to allow local file/blob access in iframes.
+
+    Args:
+        browser_type_launch_args: Default launch arguments.
+
+    Returns:
+        Updated dictionary of launch arguments.
+    """
     return {
         **browser_type_launch_args,
         "args": ["--disable-web-security", "--disable-features=IsolateOrigins,site-per-process"],
@@ -18,6 +38,13 @@ def browser_type_launch_args(browser_type_launch_args):
 
 @pytest.fixture(autouse=True)
 def configure_page(page: Page):
+    """
+    Configures default timeouts for the Page object and assertions.
+    Ensures tests fail fast if elements are missing (2000ms).
+
+    Args:
+        page: The Playwright Page object.
+    """
     # Set default timeout for actions (click, wait_for_selector, etc) to 2000ms
     page.set_default_timeout(2000)
     page.set_default_navigation_timeout(2000)
@@ -27,6 +54,13 @@ def configure_page(page: Page):
 
 @pytest.fixture(autouse=True)
 def attach_console_listeners(page: Page):
+    """
+    Attaches console listeners to print browser logs to the Python console.
+    Useful for debugging frontend errors during tests.
+
+    Args:
+        page: The Playwright Page object.
+    """
     # Enable console logging for debugging
     page.on("console", lambda msg: print(f"PAGE LOG: {msg.text}"))
     page.on("pageerror", lambda err: print(f"PAGE ERROR: {err}"))

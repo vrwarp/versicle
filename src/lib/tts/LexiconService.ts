@@ -2,11 +2,20 @@ import { getDB } from '../../db/db';
 import type { LexiconRule } from '../../types/db';
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Service for managing pronunciation lexicon rules.
+ * Handles CRUD operations for rules stored in IndexedDB and applies them to text.
+ */
 export class LexiconService {
   private static instance: LexiconService;
 
   private constructor() {}
 
+  /**
+   * Retrieves the singleton instance of the LexiconService.
+   *
+   * @returns The singleton instance.
+   */
   static getInstance(): LexiconService {
     if (!LexiconService.instance) {
       LexiconService.instance = new LexiconService();
@@ -16,6 +25,9 @@ export class LexiconService {
 
   /**
    * Retrieves all rules applicable to a specific book (Global + Book Specific).
+   *
+   * @param bookId - Optional ID of the book to filter by.
+   * @returns A Promise that resolves to an array of LexiconRule objects.
    */
   async getRules(bookId?: string): Promise<LexiconRule[]> {
     const db = await getDB();
@@ -27,7 +39,10 @@ export class LexiconService {
   }
 
   /**
-   * Adds or updates a rule.
+   * Adds or updates a lexicon rule in the database.
+   *
+   * @param rule - The rule object to save (excluding ID and created date).
+   * @returns A Promise that resolves when the rule is saved.
    */
   async saveRule(rule: Omit<LexiconRule, 'id' | 'created'> & { id?: string }): Promise<void> {
     const db = await getDB();
@@ -43,7 +58,10 @@ export class LexiconService {
   }
 
   /**
-   * Deletes a rule by ID.
+   * Deletes a lexicon rule by its ID.
+   *
+   * @param id - The unique identifier of the rule to delete.
+   * @returns A Promise that resolves when the rule is deleted.
    */
   async deleteRule(id: string): Promise<void> {
     const db = await getDB();
@@ -51,8 +69,12 @@ export class LexiconService {
   }
 
   /**
-   * Applies the given rules to the text.
-   * Performs a case-insensitive match but preserves the case of the replacement.
+   * Applies the applicable lexicon rules to the provided text.
+   * Performs replacement based on string matching or regular expressions.
+   *
+   * @param text - The original text.
+   * @param rules - The list of rules to apply.
+   * @returns The text with replacements applied.
    */
   applyLexicon(text: string, rules: LexiconRule[]): string {
     let processedText = text;
@@ -92,6 +114,10 @@ export class LexiconService {
 
   /**
    * Generates a hash of the rules to use for cache invalidation.
+   * This ensures that cached audio is invalidated if the lexicon rules change.
+   *
+   * @param rules - The list of rules to hash.
+   * @returns A Promise that resolves to the SHA-256 hash string.
    */
   async getRulesHash(rules: LexiconRule[]): Promise<string> {
       if (rules.length === 0) return '';

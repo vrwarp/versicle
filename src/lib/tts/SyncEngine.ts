@@ -1,11 +1,22 @@
 
+/**
+ * Represents the alignment data for a specific point in time.
+ */
 export interface AlignmentData {
-  time: number; // Start time in seconds
+  /** Start time in seconds for this segment. */
+  time: number;
+  /** The type of segment ('word' or 'sentence'). */
   type: 'word' | 'sentence';
-  textOffset?: number; // Character offset in the original text (optional)
-  value?: string; // The word or sentence text
+  /** Character offset in the original text (optional). */
+  textOffset?: number;
+  /** The text content of the word or sentence (optional). */
+  value?: string;
 }
 
+/**
+ * Manages the synchronization between audio playback time and text highlighting.
+ * Efficiently determines which text segment corresponds to the current playback time.
+ */
 export class SyncEngine {
   private alignment: AlignmentData[] = [];
   private onHighlightCallback: ((index: number, length?: number) => void) | null = null;
@@ -13,11 +24,21 @@ export class SyncEngine {
 
   constructor() {}
 
+  /**
+   * Loads the alignment data for the current audio track.
+   *
+   * @param alignment - An array of AlignmentData objects.
+   */
   public loadAlignment(alignment: AlignmentData[]) {
     this.alignment = alignment.sort((a, b) => a.time - b.time);
     this.currentIdx = -1;
   }
 
+  /**
+   * Updates the current playback time and triggers highlight callbacks if necessary.
+   *
+   * @param currentTime - The current playback time in seconds.
+   */
   public updateTime(currentTime: number) {
     if (this.alignment.length === 0) return;
 
@@ -54,10 +75,20 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * Sets the callback to be invoked when a new segment should be highlighted.
+   *
+   * @param callback - Function receiving the character index and optional length.
+   */
   public setOnHighlight(callback: (index: number, length?: number) => void) {
     this.onHighlightCallback = callback;
   }
 
+  /**
+   * Triggers the highlight callback for a specific alignment segment.
+   *
+   * @param data - The active AlignmentData segment.
+   */
   private emitHighlight(data: AlignmentData) {
     if (this.onHighlightCallback) {
         // We assume textOffset is available or we pass just index if that's what we have

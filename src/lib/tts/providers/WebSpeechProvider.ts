@@ -3,6 +3,10 @@ import type { ITTSProvider, SpeechSegment, TTSVoice } from './types';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TTSCallback = (event: { type: 'start' | 'end' | 'boundary' | 'error', charIndex?: number, error?: any }) => void;
 
+/**
+ * TTS Provider implementation using the browser's native Web Speech API.
+ * This provider works offline and costs nothing, but voice quality varies by browser/OS.
+ */
 export class WebSpeechProvider implements ITTSProvider {
   id = 'local';
   private synth: SpeechSynthesis;
@@ -14,6 +18,10 @@ export class WebSpeechProvider implements ITTSProvider {
     this.synth = window.speechSynthesis;
   }
 
+  /**
+   * Initializes the Web Speech provider by loading available voices.
+   * Handles the asynchronous nature of `speechSynthesis.getVoices()`.
+   */
   async init(): Promise<void> {
     // If we have voices, we are good.
     if (this.voicesLoaded && this.voices.length > 0) return;
@@ -69,6 +77,11 @@ export class WebSpeechProvider implements ITTSProvider {
     });
   }
 
+  /**
+   * Returns the list of available local voices.
+   *
+   * @returns A promise resolving to the list of voices.
+   */
   async getVoices(): Promise<TTSVoice[]> {
     // If we don't have voices, try init again.
     // Also, even if voicesLoaded is false, we might have voices now available in the browser
@@ -99,6 +112,15 @@ export class WebSpeechProvider implements ITTSProvider {
     }));
   }
 
+  /**
+   * Synthesizes speech using `SpeechSynthesisUtterance`.
+   * Note: This method does not return audio data; it triggers native playback.
+   *
+   * @param text - The text to speak.
+   * @param voiceId - The name of the voice to use.
+   * @param speed - The playback rate.
+   * @returns A Promise resolving to a SpeechSegment (with isNative: true).
+   */
   async synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment> {
     this.cancel(); // specific method to stop previous
 
@@ -122,27 +144,43 @@ export class WebSpeechProvider implements ITTSProvider {
     return { isNative: true };
   }
 
+  /**
+   * Stops playback.
+   */
   stop(): void {
     this.cancel();
   }
 
+  /**
+   * Pauses playback.
+   */
   pause(): void {
     if (this.synth.speaking) {
       this.synth.pause();
     }
   }
 
+  /**
+   * Resumes playback.
+   */
   resume(): void {
     if (this.synth.paused) {
       this.synth.resume();
     }
   }
 
+  /**
+   * Cancels the current utterance.
+   */
   private cancel() {
     this.synth.cancel();
   }
 
-  // Event handling registration
+  /**
+   * Registers a callback for TTS events (start, end, boundary, error).
+   *
+   * @param callback - The event handler.
+   */
   on(callback: TTSCallback) {
     this.callback = callback;
   }
