@@ -1,6 +1,8 @@
 # Versicle
 
-**Versicle** is a sophisticated, local-first web-based EPUB reader designed for privacy, performance, and advanced reading capabilities. It runs entirely in the browser, leveraging modern web standards (IndexedDB, Web Workers) to manage your library without external servers.
+> **Note:** This repository was almost entirely built using Google Jules and is an exploration of that tool.
+
+**Versicle** is a sophisticated, local-first web-based EPUB reader designed for advanced reading capabilities. It runs entirely in the browser, leveraging modern web standards (IndexedDB, Web Workers) to manage your library without external servers.
 
 It features a high-performance reading engine, full-text search, annotation support, and an advanced Text-to-Speech (TTS) system with support for both local (Web Speech API) and cloud-based (Google, OpenAI) voices.
 
@@ -42,7 +44,7 @@ It features a high-performance reading engine, full-text search, annotation supp
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/versicle.git
+    git clone https://github.com/vrwarp/versicle.git
     cd versicle
     ```
 
