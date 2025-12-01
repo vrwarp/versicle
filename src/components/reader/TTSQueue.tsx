@@ -76,12 +76,12 @@ export const TTSQueue: React.FC = () => {
     }, [currentIndex]); // Scroll when index changes
 
     if (queue.length === 0) {
-        return <div className="p-4 text-center text-muted text-sm">No text available.</div>;
+        return <div className="p-4 text-center text-muted-foreground text-sm">No text available.</div>;
     }
 
     return (
         <div data-testid="tts-queue-container" className="flex flex-col h-full p-4 gap-1">
-            <h4 data-testid="tts-queue-header" className="text-xs font-bold text-muted mb-2 uppercase tracking-wide">Queue</h4>
+            <h4 data-testid="tts-queue-header" className="text-xs font-bold text-muted-foreground mb-2 uppercase tracking-wide">Queue</h4>
             <div
                 data-testid="tts-queue-list"
                 ref={containerRef}
@@ -99,7 +99,7 @@ export const TTSQueue: React.FC = () => {
                                 "text-left text-sm p-2 rounded transition-all duration-200 w-full",
                                 isActive
                                     ? "bg-primary/20 text-foreground border-l-4 border-primary font-medium shadow-sm"
-                                    : "text-secondary opacity-60 hover:opacity-100 hover:bg-muted/10"
+                                    : "text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted/10"
                             )}
                         >
                             <p className="line-clamp-2">{item.text}</p>
