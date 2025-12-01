@@ -6,7 +6,7 @@ Unify the playback experience. The user is in a "Listening Room" mental state. T
 ## 2. Key Changes
 *   **New Component:** `UnifiedAudioPanel.tsx`.
 *   **Merge:** Combine `TTSQueue` (existing) and `TTSPanel` (settings) logic.
-*   **Consolidation:** Move Sanitization settings here (as they affect the listening stream).
+*   **Consolidation:** Move Sanitization settings and Gesture Mode toggles here (as they are audio-centric).
 *   **UX Pattern:** A Side Panel with a persistent player header ("The Stage") and switchable content area ("Queue" vs "Settings").
 
 ## 3. Implementation Specification
@@ -105,6 +105,13 @@ export const UnifiedAudioPanel = () => {
                    <label className="text-sm">Skip URLs & Citations</label>
                    <Switch checked={sanitization.enabled} onCheckedChange={sanitization.toggle} />
                 </div>
+                <div className="flex items-center justify-between">
+                   <div>
+                      <div className="text-sm">Gesture Mode</div>
+                      <div className="text-xs text-muted-foreground">Swipe to turn pages</div>
+                   </div>
+                   <Switch checked={gestures.enabled} onCheckedChange={gestures.toggle} />
+                </div>
                 {/* Add Smart Resume Toggle if available in store */}
              </section>
 
@@ -158,4 +165,5 @@ export const UnifiedAudioPanel = () => {
 *   Side panel combines Player and Settings.
 *   User can toggle between Queue and Settings.
 *   Sanitization options are present in the Settings view.
+*   Gesture Mode toggle is present in the Settings view.
 *   API Keys are **NOT** present (moved to System Engine).

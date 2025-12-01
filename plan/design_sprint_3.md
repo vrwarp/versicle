@@ -22,13 +22,13 @@ Currently, settings and controls are scattered or grouped by implementation deta
 ### 3.2 The Audio Deck (`UnifiedAudioPanel.tsx`)
 *   **Goal:** Unite "Player" and "Voice Settings".
 *   **Location:** Side Panel (replacing the fragmented `TTSQueue` and `TTSPanel`).
-*   **Content:** Playback controls, Queue, Voice selection, Speed, Sanitization toggles.
+*   **Content:** Playback controls, Queue, Voice selection, Speed, Sanitization toggles, Gesture Mode toggles.
 *   **Philosophy:** Users shouldn't leave the player to change the voice.
 
 ### 3.3 The System Engine (`GlobalSettings.tsx`)
 *   **Goal:** A centralized place for "Set and Forget" configuration.
 *   **Location:** A Modal Dialog (via a 'Gear' icon).
-*   **Content:** API Keys, Abbreviations, Gesture Mode toggles, Data management.
+*   **Content:** API Keys, Abbreviations, Data management.
 
 ### 3.4 Integration Logic
 *   **Header Icons:** Map `Aa` to Visual Controller, `Headphones` to Audio Deck, `Gear` to System Engine.

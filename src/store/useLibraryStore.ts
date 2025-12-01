@@ -29,6 +29,8 @@ interface LibraryState {
    * @param id - The unique identifier of the book to remove.
    */
   removeBook: (id: string) => Promise<void>;
+  /** Resets the library state (mostly for UI, database clear should be separate). */
+  reset: () => void;
 }
 
 /**
@@ -102,4 +104,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       set({ error: 'Failed to remove book.' });
     }
   },
+  reset: () => {
+      set({ books: [], isLoading: false, isImporting: false, error: null });
+  }
 }));

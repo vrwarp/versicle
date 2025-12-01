@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
+import { useReaderStore } from '../../store/useReaderStore';
 import { SheetContent, SheetHeader, SheetTitle } from '../ui/Sheet';
 import { Button } from '../ui/Button';
 import { Slider } from '../ui/Slider';
@@ -11,6 +12,7 @@ import { Play, Pause, RotateCcw, RotateCw, Mic, RefreshCw } from 'lucide-react';
 import { LexiconManager } from './LexiconManager';
 
 export const UnifiedAudioPanel = () => {
+  const { gestureMode, setGestureMode } = useReaderStore();
   const {
     isPlaying,
     play,
@@ -142,6 +144,13 @@ export const UnifiedAudioPanel = () => {
                  <div className="flex items-center justify-between">
                     <label className="text-sm">Announce Chapter Titles</label>
                     <Switch checked={prerollEnabled} onCheckedChange={setPrerollEnabled} />
+                 </div>
+                 <div className="flex items-center justify-between">
+                    <div>
+                       <div className="text-sm">Gesture Mode</div>
+                       <div className="text-xs text-muted-foreground">Swipe to turn pages</div>
+                    </div>
+                    <Switch checked={gestureMode} onCheckedChange={setGestureMode} />
                  </div>
               </section>
 

@@ -7,7 +7,7 @@ Create a centralized "Engine Room" for global configuration. These are "set and 
 *   **New Component:** `GlobalSettingsDialog.tsx`.
 *   **Location:** Modal Dialog (not a side panel).
 *   **Access:** Triggered by a 'Gear' icon in the main navigation (Library and Reader).
-*   **Content:** General (Gestures), TTS Engine (Keys, Provider), Dictionary (Abbreviations).
+*   **Content:** General (Immersive Mode), TTS Engine (Keys, Provider), Dictionary (Abbreviations).
 
 ## 3. Implementation Specification
 
@@ -48,13 +48,6 @@ export const GlobalSettingsDialog = ({ open, onOpenChange }) => {
              <div className="space-y-6">
                 <div>
                    <h3 className="text-lg font-medium mb-2">Interaction</h3>
-                   <div className="flex items-center justify-between py-2 border-b">
-                      <div>
-                         <div className="font-medium">Gesture Mode</div>
-                         <div className="text-sm text-muted-foreground">Swipe to turn pages</div>
-                      </div>
-                      <Switch checked={gestures.enabled} onCheckedChange={gestures.toggle} />
-                   </div>
                    <div className="flex items-center justify-between py-2 border-b">
                       <div>
                          <div className="font-medium">Immersive Mode</div>
@@ -132,11 +125,10 @@ export const GlobalSettingsDialog = ({ open, onOpenChange }) => {
 4.  **Triggers:**
     *   Add a Gear icon to the Library header.
     *   Add a Gear icon to the Reader header (Top Right).
-5.  **Migration:** Move logic from `TTSAbbreviationSettings`, `TTSPanel` (keys), and `ReaderSettings` (gestures) into this dialog.
+5.  **Migration:** Move logic from `TTSAbbreviationSettings` and `TTSPanel` (keys) into this dialog.
 
 ## 4. Acceptance Criteria
 *   Modal opens from both Library and Reader.
 *   API Keys are securely editable here.
-*   Gestures can be toggled.
 *   Abbreviations can be managed.
 *   UI is distinct from the reading/listening controls.

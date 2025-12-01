@@ -67,6 +67,8 @@ interface TTSState {
   setPitch: (pitch: number) => void;
   setVoice: (voice: TTSVoice | null) => void;
   setProviderId: (id: 'local' | 'google' | 'openai') => void;
+  setGoogleKey: (key: string) => void;
+  setOpenaiKey: (key: string) => void;
   setApiKey: (provider: 'google' | 'openai', key: string) => void;
   setCustomAbbreviations: (abbrevs: string[]) => void;
   setAlwaysMerge: (words: string[]) => void;
@@ -79,6 +81,7 @@ interface TTSState {
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
   clearError: () => void;
+   reset: () => void;
 
   /**
    * Internal sync method called by AudioPlayerService
@@ -196,6 +199,12 @@ export const useTTSStore = create<TTSState>()(
                      get().setProviderId(providerId);
                 }
             },
+            setGoogleKey: (key: string) => {
+                get().setApiKey('google', key);
+            },
+            setOpenaiKey: (key: string) => {
+                get().setApiKey('openai', key);
+            },
             setCustomAbbreviations: (abbrevs) => {
                 set({ customAbbreviations: abbrevs });
             },
@@ -257,6 +266,26 @@ export const useTTSStore = create<TTSState>()(
             },
             clearError: () => {
                 set({ lastError: null });
+            },
+            reset: () => {
+                // Stop player
+                player.stop();
+                set({
+                    isPlaying: false,
+                    status: 'stopped',
+                    rate: 1.0,
+                    pitch: 1.0,
+                    voice: null,
+                    activeCfi: null,
+                    currentIndex: 0,
+                    queue: [],
+                    lastError: null,
+                    lastPauseTime: null,
+                    providerId: 'local',
+                    // Keep keys maybe? Or wipe them if it's a full reset.
+                    // Assuming full reset:
+                    apiKeys: { google: '', openai: '' }
+                });
             },
 
             syncState: (status, activeCfi, currentIndex, queue, error) => set({
