@@ -53,5 +53,25 @@ def test_engine_room_journey(page: Page):
     expect(page.get_by_role("dialog")).to_be_visible()
     expect(page.get_by_role("button", name="General")).to_be_visible()
 
-    utils.capture_screenshot(page, "engine_room_01_open")
+    # Capture General Tab
+    # In the React component, the active tab uses Button variant="secondary" which doesn't set data-state="active".
+    # Instead, we should check if it has the secondary background color class, or just take the screenshot as verified by visibility of content.
+    # Since we already verified "Gesture Mode" is visible, we are on General tab.
+    utils.capture_screenshot(page, "settings_01_general")
+
+    # Capture Dictionary Tab
+    page.get_by_role("button", name="Dictionary").click()
+    expect(page.get_by_text("Text Segmentation")).to_be_visible()
+    utils.capture_screenshot(page, "settings_02_dictionary")
+
+    # Capture Data Management Tab
+    page.get_by_role("button", name="Data Management").click()
+    expect(page.get_by_text("Danger Zone")).to_be_visible()
+    utils.capture_screenshot(page, "settings_03_data")
+
+    # Capture TTS Tab
+    page.get_by_role("button", name="TTS Engine").click()
+    expect(page.get_by_text("Provider Configuration")).to_be_visible()
+    utils.capture_screenshot(page, "settings_04_tts")
+
     print("Engine Room Journey Passed!")
