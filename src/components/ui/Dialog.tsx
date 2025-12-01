@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface DialogProps {
@@ -16,7 +17,7 @@ interface DialogProps {
 export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, description, children, footer }) => {
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-surface border border-border rounded-lg shadow-lg w-full max-w-md p-6 relative animate-in zoom-in-95 duration-200">
         <button
@@ -31,6 +32,7 @@ export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, descript
         <div className="mb-6 text-foreground">{children}</div>
         {footer && <div className="flex justify-end gap-2">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
