@@ -784,13 +784,13 @@ export const ReaderView: React.FC = () => {
                             onClick={() => setShowSearch(false)}
                             className="p-2 hover:bg-border rounded"
                          >
-                            <X className="w-4 h-4 text-muted" />
+                            <X className="w-4 h-4 text-muted-foreground" />
                          </button>
                      </div>
                  </div>
                  <div className="flex-1 overflow-y-auto p-4">
                      {isSearching ? (
-                         <div className="text-center text-muted">Searching...</div>
+                         <div className="text-center text-muted-foreground">Searching...</div>
                      ) : (
                          <ul className="space-y-4">
                              {searchResults.map((result, idx) => (
@@ -808,7 +808,7 @@ export const ReaderView: React.FC = () => {
                                             }
                                         }}
                                      >
-                                         <p className="text-xs text-muted mb-1">Result {idx + 1}</p>
+                                         <p className="text-xs text-muted-foreground mb-1">Result {idx + 1}</p>
                                          <p className="text-sm text-foreground line-clamp-3">
                                              {result.excerpt}
                                          </p>
@@ -816,7 +816,7 @@ export const ReaderView: React.FC = () => {
                                  </li>
                              ))}
                              {searchResults.length === 0 && searchQuery && !isSearching && (
-                                 <div className="text-center text-muted text-sm">No results found</div>
+                                 <div className="text-center text-muted-foreground text-sm">No results found</div>
                              )}
                          </ul>
                      )}
@@ -864,7 +864,7 @@ export const ReaderView: React.FC = () => {
                         style={{ width: `${progress * 100}%` }}
                     />
                 </div>
-                <div className="text-center text-xs text-muted mt-1">
+                <div className="text-center text-xs text-muted-foreground mt-1">
                     {Math.round(progress * 100)}%
                 </div>
             </div>

@@ -9,6 +9,8 @@ import { Switch } from '../ui/Switch';
 import { TTSQueue } from './TTSQueue';
 import { Play, Pause, RotateCcw, RotateCw, Mic } from 'lucide-react';
 import { LexiconManager } from './LexiconManager';
+import { CostEstimator } from '../../lib/tts/CostEstimator';
+import { Dialog } from '../ui/Dialog';
 
 export const UnifiedAudioPanel = () => {
   const {
@@ -25,11 +27,15 @@ export const UnifiedAudioPanel = () => {
     sanitizationEnabled,
     setSanitizationEnabled,
     prerollEnabled,
-    setPrerollEnabled
+    setPrerollEnabled,
+    enableCostWarning,
+    queue
   } = useTTSStore();
 
   const [view, setView] = useState<'queue' | 'settings'>('queue');
   const [isLexiconOpen, setIsLexiconOpen] = useState(false);
+  const [showCostWarning, setShowCostWarning] = useState(false);
+  const [pendingPlay, setPendingPlay] = useState(false);
 
   // Helper for voice selection
   const handleVoiceChange = (voiceId: string) => {
@@ -41,6 +47,43 @@ export const UnifiedAudioPanel = () => {
       setVoice(selected || null);
   };
 
+  const handlePlay = () => {
+     if (isPlaying) {
+         pause();
+         return;
+     }
+
+     if (providerId !== 'local' && enableCostWarning) {
+         // Calculate total characters in queue
+         const totalChars = queue.reduce((acc, item) => acc + item.text.length, 0);
+
+         // Threshold from test seems to be 5000 chars?
+         // Let's use 5000 as a reasonable chapter length warning trigger
+         if (totalChars > 5000) {
+             setPendingPlay(true);
+             setShowCostWarning(true);
+             return;
+         }
+     }
+
+     play();
+  };
+
+  const confirmPlay = () => {
+      setShowCostWarning(false);
+      setPendingPlay(false);
+      play();
+  };
+
+  const cancelPlay = () => {
+      setShowCostWarning(false);
+      setPendingPlay(false);
+  };
+
+  const estimate = providerId !== 'local'
+      ? CostEstimator.getInstance().estimateCost(queue.map(i => i.text).join(' '), providerId)
+      : 0;
+
   return (
     <SheetContent side="right" className="w-full sm:w-[400px] flex flex-col p-0 gap-0" data-testid="tts-panel">
        <SheetHeader className="p-4 border-b">
@@ -48,13 +91,13 @@ export const UnifiedAudioPanel = () => {
        </SheetHeader>
 
        {/* Stage */}
-       <div className="player-stage bg-muted/30 p-4 border-b">
+       <div className="player-stage bg-muted p-4 border-b">
           {/* Main Controls */}
           <div className="flex justify-center items-center gap-6 mb-4">
              <Button variant="ghost" size="icon" onClick={() => seek(-15)} disabled={providerId === 'local'} aria-label="Rewind 15s">
                 <RotateCcw className="h-6 w-6" />
              </Button>
-             <Button size="icon" className="h-12 w-12 rounded-full" onClick={isPlaying ? pause : play} aria-label={isPlaying ? "Pause" : "Play"}>
+             <Button data-testid="tts-play-pause-button" size="icon" className="h-12 w-12 rounded-full" onClick={handlePlay} aria-label={isPlaying ? "Pause" : "Play"}>
                 {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
              </Button>
              <Button variant="ghost" size="icon" onClick={() => seek(15)} disabled={providerId === 'local'} aria-label="Forward 15s">
@@ -148,6 +191,19 @@ export const UnifiedAudioPanel = () => {
        </div>
 
        <LexiconManager open={isLexiconOpen} onOpenChange={setIsLexiconOpen} />
+
+       <Dialog
+           isOpen={showCostWarning}
+           onClose={cancelPlay}
+           title="Cost Warning"
+           description={`This chapter contains approximately ${queue.reduce((acc, i) => acc + i.text.length, 0)} characters. Estimated cost: $${estimate.toFixed(4)}.`}
+           footer={
+               <>
+                   <Button variant="ghost" onClick={cancelPlay}>Cancel</Button>
+                   <Button onClick={confirmPlay}>Proceed</Button>
+               </>
+           }
+       />
     </SheetContent>
   );
 };

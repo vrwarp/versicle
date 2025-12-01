@@ -13,38 +13,80 @@
   -moz-osx-font-smoothing: grayscale;
 
   /* Light Theme (Default) */
-  --primary: #0f172a;
-  --secondary: #475569;
+  --primary: #0f172a; /* Slate 900 */
+  --primary-foreground: #f8fafc; /* Slate 50 */
+
+  --secondary: #f1f5f9; /* Slate 100 */
+  --secondary-foreground: #0f172a; /* Slate 900 */
+
+  --muted: #f1f5f9; /* Slate 100 */
+  --muted-foreground: #64748b; /* Slate 500 */
+
+  --accent: #f1f5f9; /* Slate 100 */
+  --accent-foreground: #0f172a; /* Slate 900 */
+
+  --destructive: #ef4444; /* Red 500 */
+  --destructive-foreground: #f8fafc; /* Slate 50 */
+
   --background: #ffffff;
-  --surface: #f8fafc;
-  --border: #e2e8f0;
-  --destructive: #dc2626;
-  --foreground: #0f172a;
-  --muted: #64748b;
+  --foreground: #0f172a; /* Slate 900 */
+
+  --surface: #ffffff; /* White */
+  --border: #e2e8f0; /* Slate 200 */
+  --input: #e2e8f0; /* Slate 200 */
+  --ring: #0f172a; /* Slate 900 */
 }
 
 .dark {
   /* Dark Theme */
-  --primary: #f8fafc;
-  --secondary: #94a3b8;
-  --background: #020617;
-  --surface: #0f172a;
-  --border: #1e293b;
-  --destructive: #ef4444;
-  --foreground: #f8fafc;
-  --muted: #94a3b8;
+  --primary: #f8fafc; /* Slate 50 */
+  --primary-foreground: #0f172a; /* Slate 900 */
+
+  --secondary: #1e293b; /* Slate 800 */
+  --secondary-foreground: #f8fafc; /* Slate 50 */
+
+  --muted: #1e293b; /* Slate 800 */
+  --muted-foreground: #94a3b8; /* Slate 400 */
+
+  --accent: #1e293b; /* Slate 800 */
+  --accent-foreground: #f8fafc; /* Slate 50 */
+
+  --destructive: #ef4444; /* Red 500 (kept consistent) */
+  --destructive-foreground: #f8fafc; /* Slate 50 */
+
+  --background: #020617; /* Slate 950 */
+  --foreground: #f8fafc; /* Slate 50 */
+
+  --surface: #0f172a; /* Slate 900 */
+  --border: #1e293b; /* Slate 800 */
+  --input: #1e293b; /* Slate 800 */
+  --ring: #cbd5e1; /* Slate 300 */
 }
 
 .sepia {
   /* Sepia Theme */
-  --primary: #78350f;
-  --secondary: #92400e;
-  --background: #fffbeb;
-  --surface: #fef3c7;
-  --border: #fde68a;
-  --destructive: #b91c1c;
-  --foreground: #78350f;
-  --muted: #92400e;
+  --primary: #78350f; /* Amber 900 */
+  --primary-foreground: #fffbeb; /* Amber 50 */
+
+  --secondary: #fef3c7; /* Amber 100 */
+  --secondary-foreground: #78350f; /* Amber 900 */
+
+  --muted: #fef3c7; /* Amber 100 */
+  --muted-foreground: #92400e; /* Amber 700 */
+
+  --accent: #fde68a; /* Amber 200 */
+  --accent-foreground: #78350f; /* Amber 900 */
+
+  --destructive: #b91c1c; /* Red 700 */
+  --destructive-foreground: #fffbeb; /* Amber 50 */
+
+  --background: #fffbeb; /* Amber 50 */
+  --foreground: #78350f; /* Amber 900 */
+
+  --surface: #fffbeb; /* Amber 50 */
+  --border: #fde68a; /* Amber 200 */
+  --input: #fde68a; /* Amber 200 */
+  --ring: #78350f; /* Amber 900 */
 }
 
 body {

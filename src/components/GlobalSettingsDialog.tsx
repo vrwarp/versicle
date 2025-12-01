@@ -44,7 +44,7 @@ export const GlobalSettingsDialog = () => {
         <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
             <ModalContent className="max-w-3xl h-[600px] flex p-0 overflow-hidden gap-0 sm:rounded-lg">
                 {/* Sidebar */}
-                <div className="w-1/4 bg-muted/30 border-r p-4 space-y-2">
+                <div className="w-1/4 bg-muted border-r p-4 space-y-2">
                     <h2 className="text-lg font-semibold mb-4 px-2">Settings</h2>
                     <Button variant={activeTab === 'general' ? 'secondary' : 'ghost'} className="w-full justify-start" onClick={() => setActiveTab('general')}>
                         General

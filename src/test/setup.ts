@@ -40,6 +40,9 @@ global.ResizeObserver = class {
   disconnect = vi.fn();
 };
 
+// Mock HTMLElement.scrollIntoView
+HTMLElement.prototype.scrollIntoView = vi.fn();
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();

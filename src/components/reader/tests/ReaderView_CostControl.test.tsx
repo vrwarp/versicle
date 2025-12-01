@@ -121,6 +121,29 @@ describe('ReaderView Cost Warning', () => {
     });
 
     it('shows warning dialog when text > 5000 chars and provider is paid', async () => {
+        // Mock queue in store to have > 5000 chars
+        (useTTSStore as unknown as jest.Mock).mockReturnValue({
+            isPlaying: false,
+            play: mockPlay,
+            pause: mockPause,
+            activeCfi: null,
+            rate: 1.0,
+            voice: null,
+            voices: [],
+            providerId: 'google', // Paid provider
+            apiKeys: { google: 'test-key' },
+            enableCostWarning: true,
+            setEnableCostWarning: mockSetEnableCostWarning,
+            setProviderId: vi.fn(),
+            lastError: null,
+            clearError: vi.fn(),
+            setVoice: vi.fn(),
+            setRate: vi.fn(),
+            queue: [{ text: 'A'.repeat(6000), cfi: 'cfi1' }], // Queue > 5000 chars
+            currentIndex: 0,
+            jumpTo: vi.fn()
+        });
+
         render(
             <MemoryRouter initialEntries={['/read/123']}>
                 <Routes>

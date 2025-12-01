@@ -96,8 +96,8 @@ const StringListManager: React.FC<StringListManagerProps> = ({
     return (
         <div className="mb-6 last:mb-0">
             <div>
-                <h4 className="text-xs font-semibold text-muted mb-1 uppercase">{title}</h4>
-                <p className="text-[10px] text-muted mb-2">
+                <h4 className="text-xs font-semibold text-muted-foreground mb-1 uppercase">{title}</h4>
+                <p className="text-[10px] text-muted-foreground mb-2">
                     {description}
                 </p>
 
@@ -120,16 +120,16 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                     </button>
                 </div>
 
-                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 border border-border rounded bg-muted/20 mb-2">
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 border border-border rounded bg-muted mb-2">
                     {items.length === 0 && (
-                         <span className="text-[10px] text-muted p-1">No items set.</span>
+                         <span className="text-[10px] text-muted-foreground p-1">No items set.</span>
                     )}
                     {items.map((item) => (
                         <div key={item} className="flex items-center gap-1 bg-background border border-border px-2 py-1 rounded text-xs">
                             <span>{item}</span>
                             <button
                                 onClick={() => handleRemove(item)}
-                                className="text-muted hover:text-red-500"
+                                className="text-muted-foreground hover:text-red-500"
                                 aria-label={`Remove ${item}`}
                             >
                                 <X className="w-3 h-3" />
@@ -142,7 +142,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
             <div className="flex justify-between items-center">
                 <button
                     onClick={handleReset}
-                    className="flex items-center gap-1 text-[10px] text-muted hover:text-foreground transition-colors"
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                 >
                     <RotateCcw className="w-3 h-3" />
                     Reset
@@ -151,7 +151,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                 <div className="flex gap-2">
                      <button
                         onClick={handleDownload}
-                        className="flex items-center gap-1 text-[10px] text-muted hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                         title="Download CSV"
                     >
                         <Download className="w-3 h-3" />
@@ -159,7 +159,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                     </button>
                     <button
                         onClick={handleUploadClick}
-                        className="flex items-center gap-1 text-[10px] text-muted hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                         title="Upload CSV"
                     >
                         <Upload className="w-3 h-3" />

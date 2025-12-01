@@ -160,7 +160,7 @@ describe('ReaderView', () => {
       renderComponent();
       await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
 
-      const settingsBtn = screen.getByLabelText('Settings');
+      const settingsBtn = screen.getByLabelText('Visual Settings');
       fireEvent.click(settingsBtn);
 
       const darkThemeBtn = screen.getByLabelText('Select dark theme');
