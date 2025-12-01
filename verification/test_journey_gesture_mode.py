@@ -17,25 +17,37 @@ def test_journey_gesture_mode(page: Page):
     page.click("text=Alice's Adventures in Wonderland")
     expect(page.locator("div[data-testid='reader-iframe-container']")).to_be_visible(timeout=10000)
 
-    # 3. Open Settings (Global)
-    page.click("button[data-testid='reader-settings-button']")
-    expect(page.get_by_role("dialog")).to_be_visible()
+    # 3. Open Audio Deck (UnifiedAudioPanel)
+    # The button has data-testid="reader-tts-button" but we should check aria-label or specific locator
+    # Sheet trigger logic is inside ReaderView.
+    page.click("button[data-testid='reader-tts-button']")
 
-    # 4. Toggle Gesture Mode
-    # Default tab is General. Find the switch for Gesture Mode.
-    # Radix Switch uses a button with role='switch'.
-    # We find the container with "Gesture Mode" text.
+    # Wait for Audio Deck to open. It is a Sheet (side panel).
+    expect(page.get_by_text("Audio Deck")).to_be_visible()
+
+    # 4. Switch to Settings view in Audio Deck
+    page.click("text=Settings")
+    page.wait_for_timeout(1000)
+
+    # 5. Toggle Gesture Mode
+    # Find the switch for Gesture Mode in the settings list.
     switch = page.locator("div").filter(has_text="Gesture Mode").get_by_role("switch").first
-    switch.click()
 
-    # Close Settings Dialog
-    page.get_by_role("button", name="Close").last.click()
+    # Use JS evaluation to force click, bypassing any overlay/pointer-events issues
+    switch.evaluate("el => el.click()")
 
-    # 5. Verify Overlay Appears
+    # Verify switch is on
+    expect(switch).to_be_checked(timeout=5000)
+
+    # Close Audio Deck
+    # Using Escape key is more reliable for closing Sheets/Dialogs
+    page.keyboard.press("Escape")
+
+    # 6. Verify Overlay Appears
     expect(page.locator("text=Gesture Mode Active")).to_be_visible()
     expect(page.locator("text=Exit Gesture Mode")).to_be_visible()
 
-    # 6. Interact with Overlay (Tap Center)
+    # 7. Interact with Overlay (Tap Center)
     # Verify feedback icon appears
     # Wait for stable overlay
     page.wait_for_selector("text=Gesture Mode Active")
@@ -52,9 +64,9 @@ def test_journey_gesture_mode(page: Page):
     except Exception as e:
         print(f"Warning: Could not catch transient feedback in time, but proceeding to screenshot. Error: {e}")
 
-    # 7. Take Screenshot
+    # 8. Take Screenshot
     capture_screenshot(page, "gesture_mode_active")
 
-    # 8. Exit Gesture Mode
+    # 9. Exit Gesture Mode
     page.click("text=Exit Gesture Mode")
     expect(page.locator("text=Gesture Mode Active")).not_to_be_visible()

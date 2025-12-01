@@ -17,9 +17,6 @@ interface GlobalSettingsDialogProps {
 export const GlobalSettingsDialog = ({ open, onOpenChange }: GlobalSettingsDialogProps) => {
   const [activeTab, setActiveTab] = useState<'general' | 'tts' | 'dictionary' | 'data'>('general');
   const { providerId, setProviderId, apiKeys, setGoogleKey, setOpenaiKey } = useTTSStore();
-  // We need to add immersiveMode to useReaderStore in the next step, for now using a placeholder or existing if I find it.
-  // The plan said "General" tab should include "Immersive Mode". I will assume it will be in useReaderStore.
-  // I will check useReaderStore again, I remember not seeing immersiveMode. I will use a local state or just comment it out for now until I add it to the store.
   const { immersiveMode, setImmersiveMode } = useReaderStore();
 
   // Data management

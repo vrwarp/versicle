@@ -18,7 +18,13 @@ export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, descript
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-surface border border-border rounded-lg shadow-lg w-full max-w-md p-6 relative animate-in zoom-in-95 duration-200">
+      <div
+        className="bg-surface border border-border rounded-lg shadow-lg w-full max-w-md p-6 relative animate-in zoom-in-95 duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+        aria-describedby={description ? "dialog-description" : undefined}
+      >
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-muted hover:text-foreground"
@@ -26,8 +32,8 @@ export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, descript
         >
           <X size={20} />
         </button>
-        <h2 className="text-lg font-bold text-foreground mb-2">{title}</h2>
-        {description && <p className="text-sm text-muted mb-4">{description}</p>}
+        <h2 id="dialog-title" className="text-lg font-bold text-foreground mb-2">{title}</h2>
+        {description && <p id="dialog-description" className="text-sm text-muted mb-4">{description}</p>}
         <div className="mb-6 text-foreground">{children}</div>
         {footer && <div className="flex justify-end gap-2">{footer}</div>}
       </div>

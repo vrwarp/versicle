@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ePub, { type Book, type Rendition, type Location } from 'epubjs';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useTTSStore } from '../../store/useTTSStore';
+import { useUIStore } from '../../store/useUIStore';
 import { useTTS } from '../../hooks/useTTS';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
@@ -14,7 +15,6 @@ import { Toast } from '../ui/Toast';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
-import { GlobalSettingsDialog } from '../ui/GlobalSettingsDialog';
 import { getDB } from '../../db/db';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
@@ -219,7 +219,7 @@ export const ReaderView: React.FC = () => {
   const [lexiconOpen, setLexiconOpen] = useState(false);
   const [lexiconText, setLexiconText] = useState('');
 
-  const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
+  const { setGlobalSettingsOpen } = useUIStore();
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -988,8 +988,6 @@ export const ReaderView: React.FC = () => {
               clearError();
           }}
       />
-
-      <GlobalSettingsDialog open={globalSettingsOpen} onOpenChange={setGlobalSettingsOpen} />
 
       {/* Footer / Controls */}
       {!immersiveMode && (
