@@ -21,6 +21,8 @@
   --destructive: #dc2626;
   --foreground: #0f172a;
   --muted: #64748b;
+  --input: #e2e8f0;
+  --ring: #94a3b8;
 }
 
 .dark {
@@ -33,6 +35,8 @@
   --destructive: #ef4444;
   --foreground: #f8fafc;
   --muted: #94a3b8;
+  --input: #1e293b;
+  --ring: #cbd5e1;
 }
 
 .sepia {
@@ -45,6 +49,8 @@
   --destructive: #b91c1c;
   --foreground: #78350f;
   --muted: #92400e;
+  --input: #fde68a;
+  --ring: #92400e;
 }
 
 body {

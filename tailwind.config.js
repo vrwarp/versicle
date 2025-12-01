@@ -16,6 +16,8 @@ export default {
         border: 'var(--border)',
         destructive: 'var(--destructive)',
         muted: 'var(--muted)',
+        input: 'var(--input)',
+        ring: 'var(--ring)',
       },
     },
   },
