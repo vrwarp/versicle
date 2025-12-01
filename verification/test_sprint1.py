@@ -1,6 +1,7 @@
 
 import pytest
 from playwright.sync_api import Page, expect
+from verification import utils
 
 def test_immersive_mode(page: Page):
     """
@@ -34,7 +35,7 @@ def test_immersive_mode(page: Page):
     expect(header).to_be_visible()
 
     # Screenshot 1: Default View
-    page.screenshot(path="verification/screenshots/sprint1_1_default.png")
+    utils.capture_screenshot(page, "sprint1_1_default")
 
     # Wait for book content to be fully loaded and interactive
     # The click listener is attached to the rendition, which wraps the iframe content.
@@ -56,7 +57,7 @@ def test_immersive_mode(page: Page):
     expect(header).to_be_hidden()
 
     # Screenshot 2: Immersive View
-    page.screenshot(path="verification/screenshots/sprint1_2_immersive.png")
+    utils.capture_screenshot(page, "sprint1_2_immersive")
 
     # 3. Toggle Back
     # Click the "Exit Immersive Mode" button.
@@ -68,7 +69,7 @@ def test_immersive_mode(page: Page):
     expect(header).to_be_visible()
 
     # Screenshot 3: Restored View
-    page.screenshot(path="verification/screenshots/sprint1_3_restored.png")
+    utils.capture_screenshot(page, "sprint1_3_restored")
 
 def test_optimal_line_length(page: Page):
     """
@@ -105,4 +106,4 @@ def test_optimal_line_length(page: Page):
     assert padding_left in ["24px", "32px"]
 
     # Screenshot 4: Layout Verification
-    page.screenshot(path="verification/screenshots/sprint1_4_layout.png")
+    utils.capture_screenshot(page, "sprint1_4_layout")

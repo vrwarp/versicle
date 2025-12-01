@@ -1,11 +1,12 @@
 import pytest
 from playwright.sync_api import Page, expect
 
-@pytest.fixture(scope="session")
-def browser_context_args(browser_context_args):
+@pytest.fixture(scope="session", params=["desktop", "mobile"])
+def browser_context_args(request, browser_context_args):
     """
     Configures the browser context arguments for the session.
     Sets the base URL and viewport size.
+    Parameterized for desktop and mobile.
 
     Args:
         browser_context_args: Default arguments from pytest-playwright.
@@ -13,11 +14,20 @@ def browser_context_args(browser_context_args):
     Returns:
         Updated dictionary of context arguments.
     """
-    return {
-        **browser_context_args,
-        "base_url": "http://localhost:5173",
-        "viewport": {"width": 1280, "height": 720},
-    }
+    if request.param == "mobile":
+        return {
+            **browser_context_args,
+            "base_url": "http://localhost:5173",
+            "viewport": {"width": 375, "height": 667},
+            "is_mobile": True,
+            "has_touch": True,
+        }
+    else:
+        return {
+            **browser_context_args,
+            "base_url": "http://localhost:5173",
+            "viewport": {"width": 1280, "height": 720},
+        }
 
 @pytest.fixture(scope="session")
 def browser_type_launch_args(browser_type_launch_args):

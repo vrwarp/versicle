@@ -29,13 +29,17 @@ def capture_screenshot(page: Page, name: str):
     """
     Captures a screenshot of the current page state.
     Saves it to 'verification/screenshots/'.
+    Appends '_mobile' or '_desktop' based on viewport width.
 
     Args:
         page: The Playwright Page object.
         name: The filename (without extension) for the screenshot.
     """
     os.makedirs('verification/screenshots', exist_ok=True)
-    page.screenshot(path=f"verification/screenshots/{name}.png")
+    viewport = page.viewport_size
+    width = viewport['width'] if viewport else 1280
+    suffix = "mobile" if width < 600 else "desktop"
+    page.screenshot(path=f"verification/screenshots/{name}_{suffix}.png")
 
 def get_reader_frame(page: Page) -> Frame | None:
     """

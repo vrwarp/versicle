@@ -1,5 +1,6 @@
 from playwright.sync_api import sync_playwright
 import os
+from verification import utils
 
 def run():
     with sync_playwright() as p:
@@ -32,13 +33,12 @@ def run():
         page.wait_for_timeout(1000)
 
         # Take screenshot of Scrolled Mode Settings
-        os.makedirs("verification/screenshots", exist_ok=True)
-        page.screenshot(path="verification/screenshots/scrolled_mode_settings.png")
+        utils.capture_screenshot(page, "scrolled_mode_settings")
 
         # Close settings to see the view (though difficult to visualize scrolling in static image without content overflow)
         page.locator('[data-testid="settings-close-button"]').click()
         page.wait_for_timeout(500)
-        page.screenshot(path="verification/screenshots/scrolled_mode_view.png")
+        utils.capture_screenshot(page, "scrolled_mode_view")
 
         browser.close()
 
