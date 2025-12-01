@@ -820,14 +820,14 @@ export const ReaderView: React.FC = () => {
             <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
                 <Highlighter className="w-5 h-5 text-secondary" />
             </button>
+            <button data-testid="reader-search-button" aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
+                    <Search className="w-5 h-5 text-secondary" />
+            </button>
             </div>
             <h1 className="text-sm font-medium truncate max-w-xs text-foreground">
                 {currentChapterTitle || 'Reading'}
             </h1>
             <div className="flex items-center gap-2">
-            <button data-testid="reader-search-button" aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
-                    <Search className="w-5 h-5 text-secondary" />
-            </button>
             <Sheet>
                 <SheetTrigger asChild>
                     <button data-testid="reader-tts-button" aria-label="Open Audio Deck" className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
