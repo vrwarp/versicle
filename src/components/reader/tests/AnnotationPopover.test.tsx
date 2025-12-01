@@ -10,6 +10,7 @@ vi.mock('lucide-react', () => ({
   Highlighter: () => <span data-testid="icon-highlighter" />,
   StickyNote: () => <span data-testid="icon-note" />,
   X: () => <span data-testid="icon-close" />,
+  Mic: () => <span data-testid="icon-mic" />,
 }));
 
 describe('AnnotationPopover', () => {
@@ -33,13 +34,10 @@ describe('AnnotationPopover', () => {
 
     render(<AnnotationPopover bookId="book1" onClose={vi.fn()} />);
     expect(screen.getByTestId('icon-close')).toBeInTheDocument();
-    expect(screen.getByTitle('Yellow')).toBeInTheDocument();
-    expect(screen.getByTitle('Green')).toBeInTheDocument();
-    expect(screen.getByTitle('Blue')).toBeInTheDocument();
-    expect(screen.getByTitle('Red')).toBeInTheDocument();
+    expect(screen.getByTitle('Highlight')).toBeInTheDocument();
   });
 
-  it('should add annotation on color click', async () => {
+  it('should add annotation on highlight click', async () => {
     const addAnnotationMock = vi.fn();
     useAnnotationStore.setState({
       popover: { visible: true, x: 100, y: 100, cfiRange: 'cfi', text: 'text' },
@@ -50,7 +48,7 @@ describe('AnnotationPopover', () => {
     const onCloseMock = vi.fn();
     render(<AnnotationPopover bookId="book1" onClose={onCloseMock} />);
 
-    fireEvent.click(screen.getByTitle('Yellow'));
+    fireEvent.click(screen.getByTitle('Highlight'));
 
     await waitFor(() => {
       expect(addAnnotationMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -58,7 +56,6 @@ describe('AnnotationPopover', () => {
         cfiRange: 'cfi',
         text: 'text',
         type: 'highlight',
-        color: 'yellow',
       }));
       expect(onCloseMock).toHaveBeenCalled();
     });

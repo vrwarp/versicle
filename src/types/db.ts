@@ -19,7 +19,7 @@ export interface Annotation {
   cfiRange: string;
   text: string; // The selected text
   type: 'highlight' | 'note';
-  color: string;
+  // color: removed in favor of single default style
   note?: string;
   created: number;
 }

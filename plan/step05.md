@@ -19,7 +19,6 @@ interface Annotation {
   cfiRange: string;    // The epubcfi range string
   text: string;        // The selected text content
   type: 'highlight' | 'note';
-  color: string;       // e.g., "yellow", "#ff0000", "class-name"
   note?: string;       // Optional user text
   created: number;     // Timestamp
 }
@@ -40,20 +39,20 @@ interface Annotation {
       const range = rendition.getRange(cfiRange);
       const rect = range.getBoundingClientRect();
 
-      // 2. Show Popover Menu (Highlight Colors, Note Icon) at `rect`
+      // 2. Show Popover Menu (Highlight, Add Note) at `rect`
       setShowPopover({ x: rect.left, y: rect.top, cfiRange });
     });
     ```
-*   **UI:** A floating menu component (using a portal or absolute positioning) that offers color choices (Yellow, Green, Blue, Red) and a "Copy" button.
+*   **UI:** A floating menu component (using a portal or absolute positioning) that offers a "Highlight" button and a "Copy" button.
 
 ### **2. Creating a Highlight**
-*   **Action:** User clicks a color (e.g., Yellow).
+*   **Action:** User clicks "Highlight".
 *   **Process:**
     1.  Generate a UUID.
     2.  Save the annotation object to IndexedDB.
     3.  Apply the highlight visually:
         ```typescript
-        rendition.annotations.add('highlight', cfiRange, {}, null, `highlight-${color}`);
+        rendition.annotations.add('highlight', cfiRange, {}, null, `highlight-default`);
         ```
     4.  Clear the browser text selection: `window.getSelection()?.removeAllRanges()`.
 
@@ -74,7 +73,7 @@ interface Annotation {
 *   `AnnotationList.tsx`: New component for the sidebar tab.
 
 ### **Styles**
-*   Define CSS classes for highlights (e.g., `.highlight-yellow { fill: yellow; fill-opacity: 0.3; mix-blend-mode: multiply; }`).
+*   Define CSS classes for highlights (e.g., `.highlight-default { fill: yellow; fill-opacity: 0.3; mix-blend-mode: multiply; }`).
 *   Inject these styles using `rendition.themes.default(...)`.
 
 ## **5.5 Verification**

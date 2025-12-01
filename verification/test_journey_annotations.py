@@ -66,12 +66,12 @@ def test_annotations_journey(page: Page):
         return
 
     # Check for Popover (using test id)
-    expect(page.get_by_test_id("popover-color-yellow")).to_be_visible(timeout=2000)
+    expect(page.get_by_test_id("popover-highlight-button")).to_be_visible(timeout=2000)
     utils.capture_screenshot(page, "annotations_1_popover")
 
-    # Click Yellow
-    page.get_by_test_id("popover-color-yellow").click()
-    expect(page.get_by_test_id("popover-color-yellow")).not_to_be_visible()
+    # Click Highlight
+    page.get_by_test_id("popover-highlight-button").click()
+    expect(page.get_by_test_id("popover-highlight-button")).not_to_be_visible()
 
     # Verify in Sidebar
     print("Verifying Highlight in Sidebar...")

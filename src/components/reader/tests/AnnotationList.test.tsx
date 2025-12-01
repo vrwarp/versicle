@@ -23,8 +23,8 @@ describe('AnnotationList', () => {
 
   it('should render annotations', () => {
     const annotations = [
-      { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', color: 'yellow', created: Date.now() },
-      { id: '2', bookId: 'b1', cfiRange: 'cfi2', text: 'Annotation 2', type: 'note', color: 'green', note: 'My Note', created: Date.now() },
+      { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', created: Date.now() },
+      { id: '2', bookId: 'b1', cfiRange: 'cfi2', text: 'Annotation 2', type: 'note', note: 'My Note', created: Date.now() },
     ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: annotations as any });
@@ -39,7 +39,7 @@ describe('AnnotationList', () => {
   it('should navigate on click', () => {
     const onNavigateMock = vi.fn();
     const annotations = [
-      { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', color: 'yellow', created: Date.now() },
+      { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', created: Date.now() },
     ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: annotations as any });
@@ -53,7 +53,7 @@ describe('AnnotationList', () => {
   it('should delete annotation', () => {
     const deleteAnnotationMock = vi.fn();
     const annotations = [
-      { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', color: 'yellow', created: Date.now() },
+      { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', created: Date.now() },
     ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: annotations as any, deleteAnnotation: deleteAnnotationMock });
@@ -68,7 +68,7 @@ describe('AnnotationList', () => {
   it('should edit note', () => {
     const updateAnnotationMock = vi.fn();
     const annotations = [
-      { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', color: 'yellow', created: Date.now() },
+      { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', created: Date.now() },
     ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: annotations as any, updateAnnotation: updateAnnotationMock });

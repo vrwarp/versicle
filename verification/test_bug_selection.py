@@ -55,11 +55,11 @@ def test_selection_popover_reappearance(page: Page):
     """)
 
     # Expect popover to appear
-    expect(page.get_by_test_id("popover-color-yellow")).to_be_visible(timeout=3000)
+    expect(page.get_by_test_id("popover-highlight-button")).to_be_visible(timeout=3000)
 
-    # Click highlight (yellow)
-    page.get_by_test_id("popover-color-yellow").click()
-    expect(page.get_by_test_id("popover-color-yellow")).not_to_be_visible()
+    # Click highlight
+    page.get_by_test_id("popover-highlight-button").click()
+    expect(page.get_by_test_id("popover-highlight-button")).not_to_be_visible()
 
     # 2. Second Selection (Different text)
     print("Step 2: Second Selection")
@@ -95,6 +95,6 @@ def test_selection_popover_reappearance(page: Page):
 
     # Expect popover to appear again
     # This was failing before the fix because epub.js listeners stopped firing
-    expect(page.get_by_test_id("popover-color-yellow")).to_be_visible(timeout=3000)
+    expect(page.get_by_test_id("popover-highlight-button")).to_be_visible(timeout=3000)
 
     print("Selection Bug Verification Passed!")
