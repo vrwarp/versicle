@@ -6,6 +6,7 @@ import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
 import { useReaderStore } from '../../store/useReaderStore';
 import { LEXICON_SAMPLE_CSV } from '../../lib/tts/lexiconSample';
+import { LexiconCSV } from '../../lib/tts/CsvUtils';
 
 interface LexiconManagerProps {
   open: boolean;
@@ -106,13 +107,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
   };
 
   const handleExport = () => {
-    const headers = "original,replacement,isRegex";
-    const rows = rules.map(r => {
-        const original = r.original.replace(/"/g, '""');
-        const replacement = r.replacement.replace(/"/g, '""');
-        return `"${original}","${replacement}",${!!r.isRegex}`;
-    });
-    const csv = [headers, ...rows].join('\n');
+    const csv = LexiconCSV.generate(rules);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -124,39 +119,6 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     URL.revokeObjectURL(url);
   };
 
-  const parseCSV = (text: string) => {
-      const lines = text.trim().split('\n');
-      if (lines.length < 2) return []; // Header only or empty
-
-      const result = [];
-      // Skip header
-      for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-
-          // Simple CSV regex for parsing: matches "quoted" or unquoted,
-          const matches = line.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g);
-          if (matches && matches.length >= 2) {
-             const clean = matches.map(m => {
-                 let s = m.replace(/^,/, '');
-                 if (s.startsWith('"') && s.endsWith('"')) {
-                     s = s.slice(1, -1).replace(/""/g, '"');
-                 }
-                 return s;
-             });
-
-             if (clean.length >= 2) {
-                 result.push({
-                     original: clean[0],
-                     replacement: clean[1],
-                     isRegex: clean[2]?.toLowerCase() === 'true' || clean[2] === '1'
-                 });
-             }
-          }
-      }
-      return result;
-  };
-
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -165,7 +127,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
       reader.onload = async (evt) => {
           const text = evt.target?.result as string;
           if (text) {
-              const newRules = parseCSV(text);
+              const newRules = LexiconCSV.parse(text);
               for (const r of newRules) {
                   await lexiconService.saveRule({
                       original: r.original,

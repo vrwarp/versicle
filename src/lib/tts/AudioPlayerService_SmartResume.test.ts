@@ -73,6 +73,7 @@ vi.mock('./LexiconService', () => ({
 
 describe('AudioPlayerService - Smart Resume', () => {
     let service: AudioPlayerService;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockStore: any;
 
     beforeEach(async () => {
@@ -86,6 +87,7 @@ describe('AudioPlayerService - Smart Resume', () => {
             lastPauseTime: null,
             setLastPauseTime: vi.fn((time) => { mockStore.lastPauseTime = time; }),
         };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useTTSStore.getState as any).mockImplementation(() => mockStore);
 
         // Setup queue
@@ -173,6 +175,7 @@ describe('AudioPlayerService - Smart Resume', () => {
                 init: vi.fn(),
                 synthesize: vi.fn(),
                 getVoices: vi.fn(),
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any;
             service.setProvider(mockCloudProvider);
             service['audioPlayer'] = new AudioElementPlayer();

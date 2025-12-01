@@ -9,6 +9,7 @@ describe('WebSpeechProvider', () => {
   let mockUtterance: any;
 
   beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
     const listeners: Record<string, Function[]> = {};
 
     mockSynth = {
@@ -19,10 +20,12 @@ describe('WebSpeechProvider', () => {
       resume: vi.fn(),
       paused: false,
       speaking: false,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
       addEventListener: vi.fn((event: string, callback: Function) => {
          if (!listeners[event]) listeners[event] = [];
          listeners[event].push(callback);
       }),
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
       removeEventListener: vi.fn((event: string, callback: Function) => {
          if (listeners[event]) {
              listeners[event] = listeners[event].filter(cb => cb !== callback);

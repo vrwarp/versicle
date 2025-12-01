@@ -34,6 +34,8 @@ def test_preroll_journey(page: Page):
 
     expect(preroll_switch).to_have_attribute("aria-checked", "true")
 
+    utils.capture_screenshot(page, "preroll_01_enabled")
+
     # Reload page to verify persistence
     print("Reloading to check persistence...")
     page.reload()
@@ -44,6 +46,8 @@ def test_preroll_journey(page: Page):
 
     preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
     expect(preroll_switch).to_have_attribute("aria-checked", "true")
+
+    utils.capture_screenshot(page, "preroll_02_persisted")
 
     print("Settings persistence verified.")
 
@@ -69,7 +73,7 @@ def test_preroll_journey(page: Page):
         text = page.get_by_test_id("queue-item-0").inner_text()
         if "Estimated reading time" in text:
             print("Preroll item found and verified.")
-            utils.capture_screenshot(page, "preroll_queue_item")
+            utils.capture_screenshot(page, "preroll_03_queue_item")
         else:
             print(f"Preroll item text mismatch: {text}")
     else:

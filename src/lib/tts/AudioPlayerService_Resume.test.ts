@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
 
 // --- Mocks ---
@@ -7,7 +7,6 @@ const resumeSpy = vi.fn();
 const synthesizeSpy = vi.fn().mockResolvedValue({ isNative: true });
 const pauseSpy = vi.fn();
 const stopSpy = vi.fn();
-const cancelSpy = vi.fn(); // synthesize calls cancel internally usually, or provider does.
 
 vi.mock('./providers/WebSpeechProvider', () => {
   return {

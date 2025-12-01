@@ -1,32 +1,20 @@
 # UI Components
 
-This directory contains reusable UI components built with Radix UI and Tailwind CSS.
+This directory contains reusable UI components, serving as the design system for the application. Many are built using Radix UI primitives and styled with Tailwind CSS to ensure consistency and accessibility.
 
-## Common Variants
+## Files
 
-Many components (Button, Badge) share a common set of semantic variants to ensure visual consistency:
-
-- **default**: Primary emphasis (e.g., solid background, light text).
-- **secondary**: Secondary emphasis (e.g., muted background).
-- **destructive**: Critical actions or errors (e.g., red background).
-- **outline**: Low emphasis with a border.
-- **ghost**: Minimal emphasis (transparent background, hover effect).
-
-## Component Specifics
-
-### Badge
-Used for status indicators or tags.
-- Variants: `default`, `secondary`, `destructive`, `outline`.
-
-### Button
-Interactive trigger elements.
-- Variants: `default`, `secondary`, `destructive`, `outline`, `ghost`, `link`.
-- `link`: Appears as a text link.
-
-### Sheet
-A side drawer component (wraps Radix UI Dialog).
-- **side**: Controls placement (`top`, `bottom`, `left`, `right`). Default is `right`.
-
-### Modal
-A centered dialog component (wraps Radix UI Dialog).
-- Standard modal behavior with backdrop.
+*   **`Badge.tsx`**: A small status indicator or tag. Supports variants like `default`, `secondary`, `destructive`, and `outline`.
+*   **`Button.tsx`**: The primary interactive element. Supports multiple variants (`default`, `secondary`, `destructive`, `outline`, `ghost`, `link`) and sizes.
+*   **`Dialog.tsx`**: A standard modal dialog component built on Radix UI's Dialog primitive.
+    *   `Dialog.test.tsx`: Unit tests for the `Dialog` component.
+*   **`Input.tsx`**: A styled HTML input element for text entry.
+*   **`Label.tsx`**: A semantic label component for form controls.
+*   **`Modal.tsx`**: A higher-level wrapper around `Dialog`, providing a standardized layout with Title, Description, Content, and Footer.
+*   **`Popover.tsx`**: A floating content popover triggered by a button or element, used for menus and settings.
+*   **`Select.tsx`**: A dropdown selection component for choosing one value from a list.
+*   **`Sheet.tsx`**: A side drawer component that slides in from the edge of the screen, used for the Audio Panel and TOC.
+*   **`Slider.tsx`**: A range slider input, used for settings like font size or playback speed.
+*   **`Switch.tsx`**: A toggle switch component for boolean settings.
+*   **`Tabs.tsx`**: A tabbed interface component for organizing content into multiple views (e.g., in Global Settings).
+*   **`Toast.tsx`**: A notification toast component for displaying temporary messages (success, error, info).

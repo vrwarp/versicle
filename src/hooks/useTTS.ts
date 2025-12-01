@@ -19,7 +19,10 @@ export const useTTS = (rendition: Rendition | null) => {
     rate
   } = useTTSStore();
 
-  const currentChapterTitle = useReaderStore(state => state.currentChapterTitle);
+  const { currentChapterTitle, currentCfi } = useReaderStore(state => ({
+      currentChapterTitle: state.currentChapterTitle,
+      currentCfi: state.currentCfi
+  }));
 
   const [sentences, setSentences] = useState<SentenceNode[]>([]);
   const player = AudioPlayerService.getInstance();
@@ -72,6 +75,8 @@ export const useTTS = (rendition: Rendition | null) => {
     };
 
     rendition.on('rendered', loadSentences);
+    rendition.on('relocated', loadSentences);
+
     // Also try immediately if already rendered
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((rendition as any).getContents().length > 0) {
@@ -81,8 +86,10 @@ export const useTTS = (rendition: Rendition | null) => {
     return () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).off('rendered', loadSentences);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (rendition as any).off('relocated', loadSentences);
     };
-  }, [rendition, player]);
+  }, [rendition, player, currentCfi]); // Re-run when CFI changes to ensure sync
 
   // Cleanup on unmount
   useEffect(() => {

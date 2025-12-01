@@ -75,6 +75,7 @@ describe('AudioPlayerService', () => {
     it('should transition to completed status when queue finishes', async () => {
         // Use the WebSpeechProvider mock class to create a mock instance that passes instanceof checks
         const { WebSpeechProvider } = await import('./providers/WebSpeechProvider');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mockInstance = new WebSpeechProvider() as any;
 
         service.setProvider(mockInstance);

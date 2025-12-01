@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../../lib/tts/TextSegmenter';
 import { X, Plus, RotateCcw, Download, Upload } from 'lucide-react';
+import { SimpleListCSV } from '../../lib/tts/CsvUtils';
 
 interface StringListManagerProps {
     title: string;
@@ -40,7 +41,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
     };
 
     const handleDownload = () => {
-        const csvContent = `${importHeader}\n` + items.join("\n");
+        const csvContent = SimpleListCSV.generate(items, importHeader);
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         if (link.download !== undefined) {
@@ -68,13 +69,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
             const text = e.target?.result as string;
             if (!text) return;
 
-            // Simple CSV parse: split by newline
-            const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line);
-
-            // Remove header if it looks like one (case-insensitive check against configured header)
-            if (lines.length > 0 && lines[0].toLowerCase() === importHeader.toLowerCase()) {
-                lines.shift();
-            }
+            const lines = SimpleListCSV.parse(text, importHeader);
 
             if (lines.length === 0) {
                 alert('No items found in file.');

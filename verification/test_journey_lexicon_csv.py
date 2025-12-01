@@ -1,7 +1,7 @@
 import os
 import pytest
 from playwright.sync_api import Page, expect
-from verification.utils import reset_app
+from verification import utils
 
 def test_journey_lexicon_csv(page: Page):
     """
@@ -13,12 +13,14 @@ def test_journey_lexicon_csv(page: Page):
     """
 
     # 1. Reset App and Open Settings
-    reset_app(page)
+    utils.reset_app(page)
 
     # Open Global Settings
     page.get_by_test_id("header-settings-button").click()
     page.get_by_role("button", name="Dictionary").click()
     page.get_by_role("button", name="Manage Rules").click()
+
+    utils.capture_screenshot(page, "lexicon_csv_01_initial_empty")
 
     # 2. Download Sample
     with page.expect_download() as download_info:
@@ -48,6 +50,8 @@ def test_journey_lexicon_csv(page: Page):
 
         # Verify regex badge
         expect(page.get_by_test_id("lexicon-regex-badge").first).to_be_visible()
+
+        utils.capture_screenshot(page, "lexicon_csv_02_imported")
 
     finally:
         # Playwright cleans up downloads automatically but explicitly deleting if we moved it would be needed

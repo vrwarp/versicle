@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MediaSessionManager } from './MediaSessionManager';
 
 describe('MediaSessionManager', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mediaSessionMock: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let callbacks: any;
 
   beforeEach(() => {
@@ -30,6 +32,7 @@ describe('MediaSessionManager', () => {
 
     // Mock MediaMetadata constructor
     vi.stubGlobal('MediaMetadata', class {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         constructor(public init: any) {}
     });
   });
