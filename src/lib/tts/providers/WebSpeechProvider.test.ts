@@ -9,6 +9,8 @@ describe('WebSpeechProvider', () => {
   let mockUtterance: any;
 
   beforeEach(() => {
+    const listeners: Record<string, Function[]> = {};
+
     mockSynth = {
       getVoices: vi.fn().mockReturnValue([]),
       speak: vi.fn(),
@@ -17,6 +19,21 @@ describe('WebSpeechProvider', () => {
       resume: vi.fn(),
       paused: false,
       speaking: false,
+      addEventListener: vi.fn((event: string, callback: Function) => {
+         if (!listeners[event]) listeners[event] = [];
+         listeners[event].push(callback);
+      }),
+      removeEventListener: vi.fn((event: string, callback: Function) => {
+         if (listeners[event]) {
+             listeners[event] = listeners[event].filter(cb => cb !== callback);
+         }
+      }),
+      // Helper to trigger events
+      dispatchEvent: (event: string) => {
+          if (listeners[event]) {
+              listeners[event].forEach(cb => cb());
+          }
+      }
     };
 
     mockUtterance = {
@@ -55,17 +72,13 @@ describe('WebSpeechProvider', () => {
 
        const initPromise = provider.init();
 
-       // simulate voices changed
-       if (mockSynth.onvoiceschanged) {
-           mockSynth.onvoiceschanged();
-       } else {
-           // If onvoiceschanged wasn't set (because sync call returned voices?), but here we mocked [] first.
-           // The implementation checks voices.length immediately.
-           // If 0, it sets onvoiceschanged.
-       }
+       // simulate voices changed using dispatchEvent helper
+       mockSynth.dispatchEvent('voiceschanged');
 
        await initPromise;
        expect(mockSynth.getVoices).toHaveBeenCalled();
+       expect(mockSynth.addEventListener).toHaveBeenCalledWith('voiceschanged', expect.any(Function));
+       expect(mockSynth.removeEventListener).toHaveBeenCalledWith('voiceschanged', expect.any(Function));
     });
   });
 

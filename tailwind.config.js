@@ -16,6 +16,22 @@ export default {
         border: 'var(--border)',
         destructive: 'var(--destructive)',
         muted: 'var(--muted)',
+
+        // Added mappings
+        popover: {
+          DEFAULT: 'var(--popover)',
+          foreground: 'var(--popover-foreground)',
+        },
+        accent: {
+          DEFAULT: 'var(--accent)',
+          foreground: 'var(--accent-foreground)',
+        },
+        card: {
+          DEFAULT: 'var(--card)',
+          foreground: 'var(--card-foreground)',
+        },
+        input: 'var(--input)',
+        ring: 'var(--ring)',
       },
     },
   },

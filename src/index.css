@@ -21,6 +21,16 @@
   --destructive: #dc2626;
   --foreground: #0f172a;
   --muted: #64748b;
+
+  /* Added for shadcn/ui components */
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --input: #e2e8f0;
+  --ring: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
 }
 
 .dark {
@@ -33,6 +43,16 @@
   --destructive: #ef4444;
   --foreground: #f8fafc;
   --muted: #94a3b8;
+
+  /* Added for shadcn/ui components */
+  --popover: #020617;
+  --popover-foreground: #f8fafc;
+  --accent: #1e293b;
+  --accent-foreground: #f8fafc;
+  --input: #1e293b;
+  --ring: #f8fafc;
+  --card: #020617;
+  --card-foreground: #f8fafc;
 }
 
 .sepia {
@@ -45,6 +65,16 @@
   --destructive: #b91c1c;
   --foreground: #78350f;
   --muted: #92400e;
+
+  /* Added for shadcn/ui components */
+  --popover: #fffbeb;
+  --popover-foreground: #78350f;
+  --accent: #fef3c7;
+  --accent-foreground: #78350f;
+  --input: #fde68a;
+  --ring: #78350f;
+  --card: #fffbeb;
+  --card-foreground: #78350f;
 }
 
 body {
