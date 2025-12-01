@@ -16,8 +16,6 @@ export const GlobalSettingsDialog = () => {
     const [activeTab, setActiveTab] = useState('general');
     const [isLexiconOpen, setIsLexiconOpen] = useState(false);
 
-    const { gestureMode, setGestureMode } = useReaderStore();
-
     const {
         providerId, setProviderId,
         apiKeys, setApiKey
@@ -67,14 +65,10 @@ export const GlobalSettingsDialog = () => {
                     {activeTab === 'general' && (
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-medium mb-2">Interaction</h3>
-                                <div className="flex items-center justify-between py-2 border-b">
-                                    <div>
-                                        <div className="font-medium">Gesture Mode</div>
-                                        <div className="text-sm text-muted-foreground">Swipe to turn pages</div>
-                                    </div>
-                                    <Switch checked={gestureMode} onCheckedChange={setGestureMode} />
-                                </div>
+                                <h3 className="text-lg font-medium mb-2">General Settings</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    General application settings. More options coming soon.
+                                </p>
                             </div>
                         </div>
                     )}
