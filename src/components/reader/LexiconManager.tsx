@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { LexiconService } from '../../lib/tts/LexiconService';
 import type { LexiconRule } from '../../types/db';
-import { Plus, Trash2, Volume2, Save, X } from 'lucide-react';
+import { Plus, Trash2, Volume2, Save, X, Download, Upload } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
 import { useReaderStore } from '../../store/useReaderStore';
+import { LEXICON_SAMPLE_CSV } from '../../lib/tts/lexiconSample';
 
 interface LexiconManagerProps {
   open: boolean;
@@ -23,6 +24,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
   const [testInput, setTestInput] = useState('');
   const [testOutput, setTestOutput] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadRules = useCallback(async () => {
     if (scope === 'global') {
@@ -91,6 +93,95 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
       window.speechSynthesis.speak(u);
   };
 
+  const handleDownloadSample = () => {
+    const blob = new Blob([LEXICON_SAMPLE_CSV], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lexicon_sample.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = () => {
+    const headers = "original,replacement,isRegex";
+    const rows = rules.map(r => {
+        const original = r.original.replace(/"/g, '""');
+        const replacement = r.replacement.replace(/"/g, '""');
+        return `"${original}","${replacement}",${!!r.isRegex}`;
+    });
+    const csv = [headers, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lexicon_${scope}${scope === 'book' ? '_' + currentBookId : ''}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const parseCSV = (text: string) => {
+      const lines = text.trim().split('\n');
+      if (lines.length < 2) return []; // Header only or empty
+
+      const result = [];
+      // Skip header
+      for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+
+          // Simple CSV regex for parsing: matches "quoted" or unquoted,
+          const matches = line.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g);
+          if (matches && matches.length >= 2) {
+             const clean = matches.map(m => {
+                 let s = m.replace(/^,/, '');
+                 if (s.startsWith('"') && s.endsWith('"')) {
+                     s = s.slice(1, -1).replace(/""/g, '"');
+                 }
+                 return s;
+             });
+
+             if (clean.length >= 2) {
+                 result.push({
+                     original: clean[0],
+                     replacement: clean[1],
+                     isRegex: clean[2]?.toLowerCase() === 'true' || clean[2] === '1'
+                 });
+             }
+          }
+      }
+      return result;
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+          const text = evt.target?.result as string;
+          if (text) {
+              const newRules = parseCSV(text);
+              for (const r of newRules) {
+                  await lexiconService.saveRule({
+                      original: r.original,
+                      replacement: r.replacement,
+                      isRegex: r.isRegex,
+                      bookId: scope === 'book' ? (currentBookId || undefined) : undefined
+                  });
+              }
+              loadRules();
+          }
+          // Reset input
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      };
+      reader.readAsText(file);
+  };
+
   return (
     <UiDialog
         isOpen={open}
@@ -101,21 +192,38 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
         }
     >
-        <div className="flex space-x-4 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
-            <button
-                onClick={() => setScope('global')}
-                className={`pb-1 px-2 ${scope === 'global' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
-            >
-                Global
-            </button>
-            {currentBookId && (
+        <div className="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
+            <div className="flex space-x-4">
                 <button
-                    onClick={() => setScope('book')}
-                    className={`pb-1 px-2 ${scope === 'book' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                    onClick={() => setScope('global')}
+                    className={`pb-1 px-2 ${scope === 'global' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
                 >
-                    This Book
+                    Global
                 </button>
-            )}
+                {currentBookId && (
+                    <button
+                        onClick={() => setScope('book')}
+                        className={`pb-1 px-2 ${scope === 'book' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                    >
+                        This Book
+                    </button>
+                )}
+            </div>
+
+            <div className="flex gap-2">
+                <Button data-testid="lexicon-download-sample" variant="ghost" size="sm" onClick={handleDownloadSample} title="Download Sample CSV">
+                    <Download size={14} className="mr-1" /> Sample
+                </Button>
+                <Button data-testid="lexicon-export" variant="ghost" size="sm" onClick={handleExport} title="Export to CSV">
+                    <Download size={14} className="mr-1" /> Export
+                </Button>
+                <Button data-testid="lexicon-import-btn" asChild variant="ghost" size="sm" title="Import from CSV">
+                    <label className="cursor-pointer flex items-center">
+                        <Upload size={14} className="mr-1" /> Import
+                        <input data-testid="lexicon-import-input" ref={fileInputRef} type="file" className="hidden" accept=".csv" onChange={handleImport} />
+                    </label>
+                </Button>
+            </div>
         </div>
 
         <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">

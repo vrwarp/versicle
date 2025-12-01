@@ -8,11 +8,13 @@ import { Switch } from './ui/Switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Input } from './ui/Input';
 import { TTSAbbreviationSettings } from './reader/TTSAbbreviationSettings';
+import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
 
 export const GlobalSettingsDialog = () => {
     const { isGlobalSettingsOpen, setGlobalSettingsOpen } = useUIStore();
     const [activeTab, setActiveTab] = useState('general');
+    const [isLexiconOpen, setIsLexiconOpen] = useState(false);
 
     const { gestureMode, setGestureMode } = useReaderStore();
 
@@ -121,12 +123,23 @@ export const GlobalSettingsDialog = () => {
                     )}
 
                     {activeTab === 'dictionary' && (
-                        <div className="space-y-4">
-                            <h3 className="text-lg font-medium">Text Segmentation</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Define abbreviations that should not trigger a sentence break.
-                            </p>
-                            <TTSAbbreviationSettings />
+                        <div className="space-y-8">
+                            <div className="space-y-4">
+                                <h3 className="text-lg font-medium">Pronunciation Lexicon</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Manage global and book-specific pronunciation rules.
+                                </p>
+                                <Button onClick={() => setIsLexiconOpen(true)}>Manage Rules</Button>
+                                <LexiconManager open={isLexiconOpen} onOpenChange={setIsLexiconOpen} />
+                            </div>
+
+                            <div className="border-t pt-4 space-y-4">
+                                <h3 className="text-lg font-medium">Text Segmentation</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Define abbreviations that should not trigger a sentence break.
+                                </p>
+                                <TTSAbbreviationSettings />
+                            </div>
                         </div>
                     )}
 
