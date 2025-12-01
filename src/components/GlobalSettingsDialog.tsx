@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { useUIStore } from '../store/useUIStore';
-import { useReaderStore } from '../store/useReaderStore';
 import { useTTSStore } from '../store/useTTSStore';
 import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
-import { Switch } from './ui/Switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Input } from './ui/Input';
 import { TTSAbbreviationSettings } from './reader/TTSAbbreviationSettings';
