@@ -27,13 +27,7 @@ def test_journey_lexicon_csv(page: Page):
     # Verify filename
     assert download.suggested_filename == "lexicon_sample.csv"
 
-    # Save to temp path to verify content if needed, but we can trust the download event for now
-    # or just use the known sample content to create a file for import
-
     # 3. Import Sample CSV
-    # We will create a temp file with the known sample content to ensure consistent test environment
-    # instead of relying on the downloaded file path which might be tricky in some environments
-
     sample_csv_content = """original,replacement,isRegex
 "Dr.","Doctor",false
 "API","A.P.I.",false
@@ -46,33 +40,10 @@ def test_journey_lexicon_csv(page: Page):
 
     try:
         # Upload the file
-        # The input is hidden, so we target it by data-testid if possible or make it visible?
-        # In our implementation we gave it data-testid="lexicon-import-input"
-
-        # We need to use set_input_files on the input element.
-        # It's hidden but Playwright can handle it if we locate it.
         page.locator('input[data-testid="lexicon-import-input"]').set_input_files(temp_csv_path)
 
         # 4. Verify rules are added
-        # We expect "Dr." -> "Doctor" and "cat|dog" -> "pet" (Regex)
-
-        # Wait for list to update
-        # We might have duplicates or multiple elements (e.g., input and list item)
-        # We can target the list item specifically or just use .first if we don't care where it is,
-        # but to be rigorous, let's verify there is at least one visible instance in the list.
-
-        # The list items are rendered as:
-        # <span class="font-medium text-sm ...">{rule.original}</span>
-
-        # Use .first to avoid strict mode violation if duplicates appear (though they shouldn't if sanitized)
-        # But wait, the error says:
-        # 1) <span ...>Dr.</span>
-        # 2) <span>Dr.</span>
-        # This implies it might be matching something else?
-        # Maybe the sample text displayed in the previous test step? Or the CSV content itself if printed?
-        # Or maybe the "Dr." text is in the "Test Pronunciation" area if we had typed it? No.
-
-        # Let's target by specific structure if possible, or just be happy if one is visible.
+        # Use .first to avoid potential duplicates or strict mode violations
         expect(page.get_by_text("Dr.", exact=True).first).to_be_visible()
         expect(page.get_by_text("Doctor", exact=True).first).to_be_visible()
 
