@@ -19,7 +19,7 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
   onClose
 }) => {
   const { isPlaying, play, pause, seek, rate, setRate } = useTTSStore();
-  const { gestureMode } = useReaderStore(); // Assuming we add this to store
+  const { gestureMode } = useReaderStore();
 
   const [icon, setIcon] = useState<React.ReactNode | null>(null);
   const [iconKey, setIconKey] = useState(0);
@@ -150,7 +150,7 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center select-none touch-none"
+      className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center select-none touch-none"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       // Prevent defaults to stop scrolling/zooming

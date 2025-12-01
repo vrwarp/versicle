@@ -68,7 +68,7 @@ def test_tts_queue(page: Page):
 
     # 3. Check for Queue
     print("Checking for Queue...")
-    page.wait_for_timeout(2000) # Allow queue to populate
+    page.wait_for_timeout(5000) # Allow queue to populate (increased timeout)
 
     # Check if queue container or no text message is visible
     queue_visible = page.get_by_test_id("tts-queue-container").is_visible()

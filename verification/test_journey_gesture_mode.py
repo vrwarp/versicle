@@ -17,22 +17,71 @@ def test_journey_gesture_mode(page: Page):
     page.click("text=Alice's Adventures in Wonderland")
     expect(page.locator("div[data-testid='reader-iframe-container']")).to_be_visible(timeout=10000)
 
-    # 3. Open Settings (Global)
-    page.click("button[data-testid='reader-settings-button']")
-    expect(page.get_by_role("dialog")).to_be_visible()
+    # 3. Open Audio Panel
+    print("Opening Audio Panel...")
+    page.click("button[data-testid='reader-tts-button']")
+    expect(page.get_by_test_id("tts-panel")).to_be_visible()
 
-    # 4. Toggle Gesture Mode
-    # Default tab is General. Find the switch for Gesture Mode.
-    # Radix Switch uses a button with role='switch'.
-    # We find the container with "Gesture Mode" text.
-    switch = page.locator("div").filter(has_text="Gesture Mode").get_by_role("switch").first
-    switch.click()
+    # 4. Switch to Settings View in Audio Panel
+    print("Switching to Settings...")
+    page.get_by_role("button", name="Settings").click()
 
-    # Close Settings Dialog
-    page.get_by_role("button", name="Close").last.click()
+    # 5. Toggle Gesture Mode
+    print("Finding Gesture Mode switch...")
+    # More precise locator: target the specific row div
+    # using class matching or exact text match on label
+
+    # Locate the label and get the switch next to it (or in same container)
+    label = page.get_by_text("Gesture Mode (Eyes Free)", exact=True)
+    expect(label).to_be_visible()
+
+    # The switch is likely a sibling or in the parent div.
+    # In UnifiedAudioPanel:
+    # <div className="flex items-center justify-between">
+    #    <label ...>
+    #    <Switch ...>
+    # </div>
+
+    # So we can get parent of label, then find switch
+    container = label.locator("..")
+    switch = container.get_by_role("switch")
+    expect(switch).to_be_visible()
+
+    # Check initial state (should be unchecked)
+    state = switch.get_attribute("aria-checked")
+    print(f"Initial switch state: {state}")
+
+    print("Clicking switch...")
+    switch.click(force=True)
+    page.wait_for_timeout(500) # Wait for react state update
+
+    # Check new state
+    new_state = switch.get_attribute("aria-checked")
+    print(f"New switch state: {new_state}")
+
+    if new_state != "true":
+        print("Switch did not toggle! attempting JS click.")
+        switch.evaluate("e => e.click()")
+        page.wait_for_timeout(500)
+        print(f"State after JS click: {switch.get_attribute('aria-checked')}")
+
+    # Close Audio Panel to see overlay
+    print("Closing Audio Panel...")
+    # Click outside (left side of screen) to close sheet
+    page.mouse.click(10, 300)
+    page.wait_for_timeout(500) # Wait for animation
 
     # 5. Verify Overlay Appears
-    expect(page.locator("text=Gesture Mode Active")).to_be_visible()
+    print("Verifying Overlay...")
+    # Wait specifically for the text
+    try:
+        expect(page.locator("text=Gesture Mode Active")).to_be_visible(timeout=5000)
+    except Exception:
+        print("Overlay text not visible. Dumping body text...")
+        # print(page.inner_text("body"))
+        capture_screenshot(page, "gesture_fail_overlay_missing")
+        raise
+
     expect(page.locator("text=Exit Gesture Mode")).to_be_visible()
 
     # 6. Interact with Overlay (Tap Center)
@@ -40,10 +89,8 @@ def test_journey_gesture_mode(page: Page):
     # Wait for stable overlay
     page.wait_for_selector("text=Gesture Mode Active")
 
-    # Trigger interaction. Note that "Playing" feedback is very short (800ms fade).
-    # We might miss it if play/pause is fast.
-    # Let's try to verify just that the click happens, or check screenshot.
-    # But if we want to assert, we should be fast.
+    # Trigger interaction.
+    print("Tapping center...")
     page.mouse.click(500, 300)
 
     # Try to catch the feedback
@@ -56,5 +103,6 @@ def test_journey_gesture_mode(page: Page):
     capture_screenshot(page, "gesture_mode_active")
 
     # 8. Exit Gesture Mode
+    print("Exiting Gesture Mode...")
     page.click("text=Exit Gesture Mode")
     expect(page.locator("text=Gesture Mode Active")).not_to_be_visible()
