@@ -106,4 +106,103 @@ export class LexiconService {
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
+
+  /**
+   * Generates a CSV string from the given rules.
+   */
+  generateCSV(rules: LexiconRule[]): string {
+    const headers = ['Original', 'Replacement', 'Is Regex'];
+    const rows = rules.map(rule => {
+      const escape = (str: string) => {
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+      return [
+        escape(rule.original),
+        escape(rule.replacement),
+        rule.isRegex ? 'true' : 'false'
+      ].join(',');
+    });
+    return [headers.join(','), ...rows].join('\n');
+  }
+
+  /**
+   * Parses a CSV string into rule objects.
+   */
+  parseCSV(csvContent: string): Omit<LexiconRule, 'id' | 'created' | 'bookId'>[] {
+    const lines = csvContent.split(/\r?\n/).filter(line => line.trim() !== '');
+    if (lines.length === 0) return [];
+
+    // Simple parser that handles quotes
+    const parseLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuote = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuote && line[i + 1] === '"') {
+             current += '"';
+             i++;
+          } else {
+             inQuote = !inQuote;
+          }
+        } else if (char === ',' && !inQuote) {
+          result.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current);
+      return result;
+    };
+
+    // Check header
+    const headers = parseLine(lines[0]).map(h => h.trim().toLowerCase());
+
+    // Validate headers roughly
+    if (!headers.includes('original') || !headers.includes('replacement')) {
+         throw new Error('Invalid CSV format. Missing "Original" or "Replacement" headers.');
+    }
+
+    const originalIdx = headers.indexOf('original');
+    const replacementIdx = headers.indexOf('replacement');
+    // Allow 'is regex' or 'isregex' or 'regex'
+    let isRegexIdx = headers.indexOf('is regex');
+    if (isRegexIdx === -1) isRegexIdx = headers.indexOf('isregex');
+    if (isRegexIdx === -1) isRegexIdx = headers.indexOf('regex');
+
+    const rules: Omit<LexiconRule, 'id' | 'created' | 'bookId'>[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+       const cols = parseLine(lines[i]);
+       if (cols.length < 2) continue; // Skip empty or invalid lines
+
+       const original = cols[originalIdx];
+       const replacement = cols[replacementIdx];
+
+       if (!original) continue;
+
+       let isRegex = false;
+       if (isRegexIdx !== -1 && cols[isRegexIdx]) {
+           isRegex = cols[isRegexIdx].toLowerCase() === 'true';
+       }
+
+       rules.push({ original, replacement, isRegex });
+    }
+
+    return rules;
+  }
+
+  getSampleCSV(): string {
+      return `Original,Replacement,Is Regex
+Cat,Dog,false
+"Dr\\.",Doctor,true
+"Mr\\.",Mister,true
+Resume,Rez-oo-may,false`;
+  }
 }

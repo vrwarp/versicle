@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { LexiconService } from '../../lib/tts/LexiconService';
 import type { LexiconRule } from '../../types/db';
-import { Plus, Trash2, Volume2, Save, X } from 'lucide-react';
+import { Plus, Trash2, Volume2, Save, X, Upload, Download, FileText } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
 import { useReaderStore } from '../../store/useReaderStore';
@@ -23,6 +23,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
   const [testInput, setTestInput] = useState('');
   const [testOutput, setTestOutput] = useState('');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadRules = useCallback(async () => {
     if (scope === 'global') {
@@ -91,6 +93,62 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
       window.speechSynthesis.speak(u);
   };
 
+  const handleExport = () => {
+      const csv = lexiconService.generateCSV(rules);
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lexicon_${scope}_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+  };
+
+  const handleImportClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+          const content = event.target?.result as string;
+          try {
+              const newRules = lexiconService.parseCSV(content);
+              let addedCount = 0;
+              for (const r of newRules) {
+                  await lexiconService.saveRule({
+                      original: r.original,
+                      replacement: r.replacement,
+                      isRegex: r.isRegex,
+                      bookId: scope === 'book' ? (currentBookId || undefined) : undefined
+                  });
+                  addedCount++;
+              }
+              alert(`Successfully imported ${addedCount} rules.`);
+              loadRules();
+          } catch (err) {
+              alert('Failed to parse CSV: ' + (err as Error).message);
+          }
+      };
+      reader.readAsText(file);
+      // Reset input
+      e.target.value = '';
+  };
+
+  const handleDownloadSample = () => {
+      const csv = lexiconService.getSampleCSV();
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'lexicon_sample.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+  };
+
   return (
     <UiDialog
         isOpen={open}
@@ -101,21 +159,42 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
         }
     >
-        <div className="flex space-x-4 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
-            <button
-                onClick={() => setScope('global')}
-                className={`pb-1 px-2 ${scope === 'global' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
-            >
-                Global
-            </button>
-            {currentBookId && (
+        <div className="flex flex-col gap-2 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
+            <div className="flex space-x-4">
                 <button
-                    onClick={() => setScope('book')}
-                    className={`pb-1 px-2 ${scope === 'book' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                    onClick={() => setScope('global')}
+                    className={`pb-1 px-2 ${scope === 'global' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
                 >
-                    This Book
+                    Global
+                </button>
+                {currentBookId && (
+                    <button
+                        onClick={() => setScope('book')}
+                        className={`pb-1 px-2 ${scope === 'book' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                    >
+                        This Book
                 </button>
             )}
+            </div>
+             <div className="flex justify-end gap-3 mt-2">
+                <input
+                    type="file"
+                    accept=".csv"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    data-testid="lexicon-file-input"
+                />
+                <button data-testid="lexicon-import-btn" onClick={handleImportClick} className="text-xs flex items-center gap-1 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200">
+                    <Upload size={14} /> Import CSV
+                </button>
+                <button data-testid="lexicon-export-btn" onClick={handleExport} className="text-xs flex items-center gap-1 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200">
+                    <Download size={14} /> Export CSV
+                </button>
+                 <button data-testid="lexicon-sample-btn" onClick={handleDownloadSample} className="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                    <FileText size={14} /> Sample CSV
+                </button>
+            </div>
         </div>
 
         <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
