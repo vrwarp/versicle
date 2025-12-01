@@ -39,9 +39,9 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
     <div
       onClick={() => navigate(`/read/${book.id}`)}
       data-testid="book-card"
-      className="group flex flex-col bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-gray-200 h-full cursor-pointer"
+      className="group flex flex-col bg-card text-card-foreground rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-border h-full cursor-pointer"
     >
-      <div className="aspect-[2/3] w-full bg-gray-100 relative overflow-hidden shadow-inner">
+      <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner">
         {coverUrl ? (
           <img
             src={coverUrl}
@@ -49,20 +49,20 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
             className="w-full h-full object-cover transition-transform group-hover:scale-105"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-400">
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground/50">
             <span className="text-4xl font-light">Aa</span>
           </div>
         )}
       </div>
       <div className="p-3 flex flex-col flex-1">
-        <h3 data-testid="book-title" className="font-semibold text-gray-900 line-clamp-2 mb-1" title={book.title}>
+        <h3 data-testid="book-title" className="font-semibold text-foreground line-clamp-2 mb-1" title={book.title}>
           {book.title}
         </h3>
-        <p className="text-sm text-gray-500 line-clamp-1" title={book.author}>
+        <p className="text-sm text-muted-foreground line-clamp-1" title={book.author}>
           {book.author || 'Unknown Author'}
         </p>
         {book.progress !== undefined && book.progress > 0 && (
-          <div className="w-full h-1.5 bg-gray-200 rounded-full mt-3 overflow-hidden" data-testid="progress-container">
+          <div className="w-full h-1.5 bg-secondary rounded-full mt-3 overflow-hidden" data-testid="progress-container">
             <div
               className="h-full bg-primary transition-all duration-300 ease-out"
               style={{ width: `${Math.min(100, Math.max(0, book.progress * 100))}%` }}

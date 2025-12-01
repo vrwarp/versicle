@@ -13,66 +13,102 @@
   -moz-osx-font-smoothing: grayscale;
 
   /* Light Theme (Default) */
-  --primary: #0f172a;
-  --secondary: #475569;
+  --primary: #2563eb; /* Blue 600 */
+  --primary-foreground: #ffffff;
+
+  --secondary: #f1f5f9; /* Slate 100 */
+  --secondary-foreground: #0f172a; /* Slate 900 */
+
   --background: #ffffff;
-  --surface: #f8fafc;
-  --border: #e2e8f0;
-  --destructive: #dc2626;
-  --foreground: #0f172a;
-  --muted: #64748b;
+  --foreground: #0f172a; /* Slate 900 */
+
+  --surface: #f8fafc; /* Slate 50 */
+  --border: #e2e8f0; /* Slate 200 */
+
+  --destructive: #dc2626; /* Red 600 */
+  --destructive-foreground: #ffffff;
+
+  --muted: #f1f5f9; /* Slate 100 */
+  --muted-foreground: #64748b; /* Slate 500 */
 
   /* Added for shadcn/ui components */
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --accent: #f1f5f9;
+
+  --accent: #f1f5f9; /* Slate 100 */
   --accent-foreground: #0f172a;
+
   --input: #e2e8f0;
-  --ring: #0f172a;
+  --ring: #2563eb; /* Match Primary */
+
   --card: #ffffff;
   --card-foreground: #0f172a;
 }
 
 .dark {
   /* Dark Theme */
-  --primary: #f8fafc;
-  --secondary: #94a3b8;
-  --background: #020617;
-  --surface: #0f172a;
-  --border: #1e293b;
-  --destructive: #ef4444;
-  --foreground: #f8fafc;
-  --muted: #94a3b8;
+  --primary: #3b82f6; /* Blue 500 */
+  --primary-foreground: #ffffff;
+
+  --secondary: #1e293b; /* Slate 800 */
+  --secondary-foreground: #f8fafc; /* Slate 50 */
+
+  --background: #020617; /* Slate 950 */
+  --foreground: #f8fafc; /* Slate 50 */
+
+  --surface: #0f172a; /* Slate 900 */
+  --border: #1e293b; /* Slate 800 */
+
+  --destructive: #ef4444; /* Red 500 */
+  --destructive-foreground: #ffffff;
+
+  --muted: #1e293b; /* Slate 800 */
+  --muted-foreground: #94a3b8; /* Slate 400 */
 
   /* Added for shadcn/ui components */
   --popover: #020617;
   --popover-foreground: #f8fafc;
-  --accent: #1e293b;
+
+  --accent: #1e293b; /* Slate 800 */
   --accent-foreground: #f8fafc;
+
   --input: #1e293b;
-  --ring: #f8fafc;
+  --ring: #3b82f6; /* Match Primary */
+
   --card: #020617;
   --card-foreground: #f8fafc;
 }
 
 .sepia {
   /* Sepia Theme */
-  --primary: #78350f;
-  --secondary: #92400e;
-  --background: #fffbeb;
-  --surface: #fef3c7;
-  --border: #fde68a;
-  --destructive: #b91c1c;
-  --foreground: #78350f;
-  --muted: #92400e;
+  --primary: #ea580c; /* Orange 600 */
+  --primary-foreground: #ffffff;
+
+  --secondary: #fef3c7; /* Amber 100 */
+  --secondary-foreground: #78350f; /* Amber 900 */
+
+  --background: #fffbeb; /* Amber 50 */
+  --foreground: #78350f; /* Amber 900 */
+
+  --surface: #fef3c7; /* Amber 100 */
+  --border: #fde68a; /* Amber 200 */
+
+  --destructive: #b91c1c; /* Red 700 */
+  --destructive-foreground: #ffffff;
+
+  --muted: #fef3c7; /* Amber 100 */
+  --muted-foreground: #92400e; /* Amber 700 */
 
   /* Added for shadcn/ui components */
   --popover: #fffbeb;
   --popover-foreground: #78350f;
+
   --accent: #fef3c7;
   --accent-foreground: #78350f;
+
   --input: #fde68a;
-  --ring: #78350f;
+  --ring: #ea580c; /* Match Primary */
+
   --card: #fffbeb;
   --card-foreground: #78350f;
 }

@@ -673,13 +673,13 @@ export const ReaderView: React.FC = () => {
         <header className="flex items-center justify-between px-6 md:px-8 py-2 bg-surface shadow-sm z-10">
             <div className="flex items-center gap-2">
             <button data-testid="reader-back-button" aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-border">
-                <ArrowLeft className="w-5 h-5 text-secondary" />
+                <ArrowLeft className="w-5 h-5 text-muted-foreground" />
             </button>
             <button data-testid="reader-toc-button" aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
-                <List className="w-5 h-5 text-secondary" />
+                <List className="w-5 h-5 text-muted-foreground" />
             </button>
             <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
-                <Highlighter className="w-5 h-5 text-secondary" />
+                <Highlighter className="w-5 h-5 text-muted-foreground" />
             </button>
             </div>
             <h1 className="text-sm font-medium truncate max-w-xs text-foreground">
@@ -687,29 +687,29 @@ export const ReaderView: React.FC = () => {
             </h1>
             <div className="flex items-center gap-2">
             <button data-testid="reader-search-button" aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
-                    <Search className="w-5 h-5 text-secondary" />
+                    <Search className="w-5 h-5 text-muted-foreground" />
             </button>
             <Sheet>
                 <SheetTrigger asChild>
-                    <button data-testid="reader-tts-button" aria-label="Open Audio Deck" className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-secondary'}`}>
+                    <button data-testid="reader-tts-button" aria-label="Open Audio Deck" className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-muted-foreground'}`}>
                         <Headphones className="w-5 h-5" />
                     </button>
                 </SheetTrigger>
                 <UnifiedAudioPanel />
             </Sheet>
             <button data-testid="reader-immersive-enter-button" aria-label="Enter Immersive Mode" onClick={() => setImmersiveMode(true)} className="p-2 rounded-full hover:bg-border">
-                <Maximize className="w-5 h-5 text-secondary" />
+                <Maximize className="w-5 h-5 text-muted-foreground" />
             </button>
             <Popover>
                 <PopoverTrigger asChild>
                     <button data-testid="reader-visual-settings-button" aria-label="Visual Settings" className="p-2 rounded-full hover:bg-border">
-                        <Type className="w-5 h-5 text-secondary" />
+                        <Type className="w-5 h-5 text-muted-foreground" />
                     </button>
                 </PopoverTrigger>
                 <VisualSettings />
             </Popover>
             <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setGlobalSettingsOpen(true)} className="p-2 rounded-full hover:bg-border">
-                <Settings className="w-5 h-5 text-secondary" />
+                <Settings className="w-5 h-5 text-muted-foreground" />
             </button>
             </div>
         </header>
@@ -727,7 +727,7 @@ export const ReaderView: React.FC = () => {
                              <li key={item.id}>
                                  <button
                                     data-testid={`toc-item-${index}`}
-                                    className="text-left w-full text-sm text-secondary hover:text-primary"
+                                    className="text-left w-full text-sm text-muted-foreground hover:text-primary"
                                     onClick={() => {
                                         renditionRef.current?.display(item.href);
                                         setShowToc(false);
@@ -784,13 +784,13 @@ export const ReaderView: React.FC = () => {
                             onClick={() => setShowSearch(false)}
                             className="p-2 hover:bg-border rounded"
                          >
-                            <X className="w-4 h-4 text-muted" />
+                            <X className="w-4 h-4 text-muted-foreground" />
                          </button>
                      </div>
                  </div>
                  <div className="flex-1 overflow-y-auto p-4">
                      {isSearching ? (
-                         <div className="text-center text-muted">Searching...</div>
+                         <div className="text-center text-muted-foreground">Searching...</div>
                      ) : (
                          <ul className="space-y-4">
                              {searchResults.map((result, idx) => (
@@ -808,7 +808,7 @@ export const ReaderView: React.FC = () => {
                                             }
                                         }}
                                      >
-                                         <p className="text-xs text-muted mb-1">Result {idx + 1}</p>
+                                         <p className="text-xs text-muted-foreground mb-1">Result {idx + 1}</p>
                                          <p className="text-sm text-foreground line-clamp-3">
                                              {result.excerpt}
                                          </p>
@@ -816,7 +816,7 @@ export const ReaderView: React.FC = () => {
                                  </li>
                              ))}
                              {searchResults.length === 0 && searchQuery && !isSearching && (
-                                 <div className="text-center text-muted text-sm">No results found</div>
+                                 <div className="text-center text-muted-foreground text-sm">No results found</div>
                              )}
                          </ul>
                      )}
@@ -854,7 +854,7 @@ export const ReaderView: React.FC = () => {
       {!immersiveMode && (
         <footer className="bg-surface border-t border-border px-6 md:px-8 py-2 flex items-center justify-between z-10">
             <button data-testid="reader-prev-page" aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-border rounded-full">
-                <ChevronLeft className="w-6 h-6 text-secondary" />
+                <ChevronLeft className="w-6 h-6 text-muted-foreground" />
             </button>
 
             <div className="flex-1 mx-4">
@@ -864,13 +864,13 @@ export const ReaderView: React.FC = () => {
                         style={{ width: `${progress * 100}%` }}
                     />
                 </div>
-                <div className="text-center text-xs text-muted mt-1">
+                <div className="text-center text-xs text-muted-foreground mt-1">
                     {Math.round(progress * 100)}%
                 </div>
             </div>
 
             <button data-testid="reader-next-page" aria-label="Next Page" onClick={handleNext} className="p-2 hover:bg-border rounded-full">
-                <ChevronRight className="w-6 h-6 text-secondary" />
+                <ChevronRight className="w-6 h-6 text-muted-foreground" />
             </button>
         </footer>
       )}
