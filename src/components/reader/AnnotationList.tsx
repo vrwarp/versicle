@@ -69,7 +69,7 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
                                 <span data-testid="annotation-note-text" className="truncate">{annotation.note}</span>
                             </div>
                         )}
-                        <p data-testid="annotation-text" className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3 border-l-2 pl-2" style={{ borderColor: annotation.color }}>
+                        <p data-testid="annotation-text" className="text-sm text-gray-800 dark:text-gray-200 line-clamp-3 border-l-2 pl-2 border-yellow-400">
                             {annotation.text}
                         </p>
                         <p className="text-xs text-gray-400 mt-1">

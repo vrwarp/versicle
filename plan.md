@@ -103,7 +103,7 @@ We use idb to wrap the native API with Promises. The database EpubLibraryDB (v1)
 | :---- | :---- | :---- |
 | **books** | id (UUID) | Metadata: Title, Author, Cover (Blob), addedAt. |
 | **files** | bookId | Raw ArrayBuffer of the EPUB file. Separated from metadata to keep the UI snappy. |
-| **annotations** | id (UUID) | CFI Range, color, notes, and bookId. |
+| **annotations** | id (UUID) | CFI Range, notes, and bookId. |
 
 Ref: 3
 
@@ -191,8 +191,6 @@ Client-side search is implemented using **FlexSearch**.
 2. **Querying:** The UI sends a message to the Worker; the Worker queries the index and returns the CFI of the match.
 3. **Highlighting:** rendition.annotations.add("highlight", cfiRange) is used to visually mark search results.
 
-Ref: 5
-
 ### **7.3 Annotations (Highlighting)**
 
 epub.js provides a robust annotation API based on **Canonical Fragment Identifiers (CFI)**.
@@ -251,12 +249,12 @@ epub.js provides a robust annotation API based on **Canonical Fragment Identifie
   - Implement sentence-level highlighting using `epub.js` annotations.
   - Add playback controls (Play/Pause, Rate, Voice Select).
 
-- [ ] Step 5: **Implement Annotations.**
-  - [ ] Design the data model for annotations (highlight range, color, note).
-  - [ ] Create `AnnotationManager` or similar logic to handle storage in IndexedDB.
-  - [ ] Implement UI for selecting text and creating a highlight.
-  - [ ] Show existing highlights on the page.
-  - [ ] Add a sidebar/panel to list all annotations for the current book.
+- [x] Step 5: **Implement Annotations.**
+  - [x] Design the data model for annotations (highlight range, notes).
+  - [x] Create `AnnotationManager` or similar logic to handle storage in IndexedDB.
+  - [x] Implement UI for selecting text and creating a highlight.
+  - [x] Show existing highlights on the page.
+  - [x] Add a sidebar/panel to list all annotations for the current book.
 
 - [x] Step 6: **Advanced Theming.**
   - [x] Expand settings menu to support font selection (serif, sans-serif, monospace).
