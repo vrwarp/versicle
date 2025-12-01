@@ -89,13 +89,11 @@ export const UnifiedAudioPanel = () => {
        </div>
 
        {/* Content */}
-       <div className="flex-1 overflow-y-auto">
+       <div className="flex-1 min-h-0 flex flex-col">
          {view === 'queue' ? (
-           <div className="h-full">
-              <TTSQueue />
-           </div>
+            <TTSQueue />
          ) : (
-           <div className="p-6 space-y-8">
+           <div className="p-6 space-y-8 flex-1 overflow-y-auto">
               <section className="space-y-4">
                  <h3 className="text-sm font-medium text-muted-foreground">Voice & Pace</h3>
                  <div className="space-y-2">

@@ -80,12 +80,12 @@ export const TTSQueue: React.FC = () => {
     }
 
     return (
-        <div data-testid="tts-queue-container" className="flex flex-col gap-1 mt-4 border-t border-border pt-4">
+        <div data-testid="tts-queue-container" className="flex flex-col h-full p-4 gap-1">
             <h4 data-testid="tts-queue-header" className="text-xs font-bold text-muted mb-2 uppercase tracking-wide">Queue</h4>
             <div
                 data-testid="tts-queue-list"
                 ref={containerRef}
-                className="flex flex-col gap-1 max-h-60 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-muted"
+                className="flex flex-col gap-1 flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-muted"
             >
                 {queue.map((item, index) => {
                     const isActive = index === currentIndex;
