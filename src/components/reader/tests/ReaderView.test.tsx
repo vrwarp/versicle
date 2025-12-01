@@ -160,12 +160,21 @@ describe('ReaderView', () => {
       renderComponent();
       await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
 
-      const settingsBtn = screen.getByLabelText('Visual Settings');
-      fireEvent.click(settingsBtn);
+      // Open Visual Settings (Theme, Font, etc.)
+      const visualSettingsBtn = screen.getByLabelText('Visual Settings');
+      fireEvent.click(visualSettingsBtn);
 
-      const darkThemeBtn = screen.getByLabelText('Select dark theme');
+      // Change Theme
+      const darkThemeBtn = await screen.findByLabelText('Select dark theme');
       fireEvent.click(darkThemeBtn);
 
       expect(useReaderStore.getState().currentTheme).toBe('dark');
+
+      // Toggle Force Theme
+      // We use getByRole for switch as it might not be labeled by text directly in a way JSDOM likes with Radix
+      const forceThemeSwitch = screen.getByRole('switch', { name: 'Force Theme' });
+      fireEvent.click(forceThemeSwitch);
+
+      expect(useReaderStore.getState().shouldForceFont).toBe(true);
   });
 });

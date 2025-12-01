@@ -48,7 +48,8 @@ export const ReaderView: React.FC = () => {
     reset,
     progress,
     currentChapterTitle,
-    viewMode
+    viewMode,
+    shouldForceFont
   } = useReaderStore();
 
   const {
@@ -106,20 +107,32 @@ export const ReaderView: React.FC = () => {
   // We use a ref to track which annotations have been added to the rendition to avoid duplicates.
   const addedAnnotations = useRef<Set<string>>(new Set());
 
+  // Helper to get annotation styles object for epub.js
+  const getAnnotationStyles = (color: string) => {
+      switch (color) {
+          case 'red': return { fill: 'red', backgroundColor: 'rgba(255, 0, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
+          case 'green': return { fill: 'green', backgroundColor: 'rgba(0, 255, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
+          case 'blue': return { fill: 'blue', backgroundColor: 'rgba(0, 0, 255, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
+          default: return { fill: 'yellow', backgroundColor: 'rgba(255, 255, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
+      }
+  };
+
   useEffect(() => {
     const rendition = renditionRef.current;
     if (rendition) {
       // Add new annotations
       annotations.forEach(annotation => {
         if (!addedAnnotations.current.has(annotation.id)) {
+           const className = annotation.color === 'yellow' ? 'highlight-yellow' :
+               annotation.color === 'green' ? 'highlight-green' :
+               annotation.color === 'blue' ? 'highlight-blue' :
+               annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow';
+
            // eslint-disable-next-line @typescript-eslint/no-explicit-any
            (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, () => {
                 console.log("Clicked annotation", annotation.id);
                 // TODO: Open edit/delete menu, perhaps via a new state/popover
-            }, annotation.color === 'yellow' ? 'highlight-yellow' :
-               annotation.color === 'green' ? 'highlight-green' :
-               annotation.color === 'blue' ? 'highlight-blue' :
-               annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow');
+            }, className, getAnnotationStyles(annotation.color));
            addedAnnotations.current.add(annotation.id);
         }
       });
@@ -279,6 +292,17 @@ export const ReaderView: React.FC = () => {
             body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
             p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
           `);
+
+          // Register TTS highlight theme
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition.themes as any).default({
+              '.tts-highlight': {
+                  'fill': 'yellow',
+                  'background-color': 'rgba(255, 255, 0, 0.3)',
+                  'fill-opacity': '0.3',
+                  'mix-blend-mode': 'multiply'
+              }
+          });
 
           rendition.themes.select(currentTheme);
           rendition.themes.fontSize(`${fontSize}%`);
@@ -455,17 +479,132 @@ export const ReaderView: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, navigate]);
 
-  // Handle Theme/Font/Layout changes
+  // Apply Forced Theme Styles
+  // Ref to store the current styles calculation function to be used by hook
+  const applyStylesRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    const applyStyles = () => {
+      if (!renditionRef.current) return;
+
+      const getStyles = () => {
+        if (!shouldForceFont) return '';
+
+        let bg, fg, linkColor;
+        switch (currentTheme) {
+          case 'dark':
+            bg = '#1a1a1a'; fg = '#f5f5f5'; linkColor = '#6ab0f3';
+            break;
+          case 'sepia':
+            bg = '#f4ecd8'; fg = '#5b4636'; linkColor = '#0000ee';
+            break;
+          case 'custom':
+            bg = customTheme.bg; fg = customTheme.fg; linkColor = customTheme.fg;
+            break;
+          default: // light
+            bg = '#ffffff'; fg = '#000000'; linkColor = '#0000ee';
+        }
+
+        return `
+          html body *, html body p, html body div, html body span, html body h1, html body h2, html body h3, html body h4, html body h5, html body h6 {
+            font-family: ${fontFamily} !important;
+            line-height: ${lineHeight} !important;
+            color: ${fg} !important;
+            background-color: transparent !important;
+            text-align: left !important;
+          }
+          html, body {
+            background: ${bg} !important;
+          }
+          a, a * {
+            color: ${linkColor} !important;
+            text-decoration: none !important;
+          }
+          a:hover, a:hover * {
+            text-decoration: underline !important;
+          }
+        `;
+      };
+
+      const css = getStyles();
+
+      // Apply to active contents
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (renditionRef.current as any).getContents().forEach((content: any) => {
+        const doc = content.document;
+        let style = doc.getElementById('force-theme-style');
+        if (!style) {
+          style = doc.createElement('style');
+          style.id = 'force-theme-style';
+          doc.head.appendChild(style);
+        }
+        style.textContent = css;
+      });
+    };
+
+    applyStylesRef.current = applyStyles;
+    applyStyles();
+  }, [shouldForceFont, currentTheme, customTheme, fontFamily, lineHeight]);
+
+  // Register hook to apply styles on new content load
+  useEffect(() => {
+      const rendition = renditionRef.current;
+      if (!rendition) return;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hook = (content: any) => {
+          const doc = content.document;
+          if (!doc.getElementById('force-theme-style')) {
+              const style = doc.createElement('style');
+              style.id = 'force-theme-style';
+              doc.head.appendChild(style);
+
+              // Apply current styles immediately
+              applyStylesRef.current();
+          }
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (rendition.hooks.content as any).register(hook);
+
+      return () => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition.hooks.content as any).deregister(hook);
+      };
+  }, []);
+
+  // Handle Standard Theme/Font/Layout changes (via epub.js themes)
   useEffect(() => {
     if (renditionRef.current) {
-      // Re-register custom theme in case colors changed
-      renditionRef.current.themes.register('custom', `
+      // Standard non-forced themes (Strings to avoid epub.js object registration bugs)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const themes = renditionRef.current.themes as any;
+
+      themes.register('light', `
+        body { background: #ffffff !important; color: #000000 !important; }
+        p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+        a { color: #0000ee !important; }
+      `);
+      themes.register('dark', `
+        body { background: #1a1a1a !important; color: #f5f5f5 !important; }
+        p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+        a { color: #6ab0f3 !important; }
+      `);
+      themes.register('sepia', `
+        body { background: #f4ecd8 !important; color: #5b4636 !important; }
+        p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+        a { color: #0000ee !important; }
+      `);
+      themes.register('custom', `
         body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
         p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+        a { color: ${customTheme.fg} !important; }
       `);
 
-      renditionRef.current.themes.select(currentTheme);
+      themes.select(currentTheme);
       renditionRef.current.themes.fontSize(`${fontSize}%`);
+
+      // Always set font (forced styles override via style tag if active)
       renditionRef.current.themes.font(fontFamily);
 
       // Update line height

@@ -5,6 +5,7 @@ import { Slider } from "../ui/Slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/Select"
 import { Tabs, TabsList, TabsTrigger } from "../ui/Tabs"
 import { Label } from "../ui/Label"
+import { Switch } from "../ui/Switch"
 import { cn } from "../../lib/utils"
 
 interface ThemeSwatchProps {
@@ -32,7 +33,8 @@ export const VisualSettings = () => {
     fontSize, setFontSize,
     fontFamily, setFontFamily,
     viewMode, setViewMode,
-    lineHeight, setLineHeight
+    lineHeight, setLineHeight,
+    shouldForceFont, setShouldForceFont
   } = useReaderStore();
 
   return (
@@ -76,6 +78,14 @@ export const VisualSettings = () => {
              <SelectItem value="monospace">Monospace</SelectItem>
            </SelectContent>
         </Select>
+        <div className="flex items-center justify-between mt-3">
+          <Label htmlFor="force-font-switch" className="text-sm">Force Theme</Label>
+          <Switch
+            id="force-font-switch"
+            checked={shouldForceFont}
+            onCheckedChange={setShouldForceFont}
+          />
+        </div>
       </div>
 
       {/* 3. The "Format" Row (Layout) */}

@@ -32,6 +32,8 @@ interface ReaderState {
   viewMode: 'paginated' | 'scrolled';
   /** Flag for Gesture Mode Overlay */
   gestureMode: boolean;
+  /** Whether to force the theme font and ignore book styles. */
+  shouldForceFont: boolean;
 
   /** Sets the loading state. */
   setIsLoading: (isLoading: boolean) => void;
@@ -60,6 +62,8 @@ interface ReaderState {
   setViewMode: (mode: 'paginated' | 'scrolled') => void;
   /** Sets gesture mode state */
   setGestureMode: (enabled: boolean) => void;
+  /** Sets whether to force the theme font. */
+  setShouldForceFont: (force: boolean) => void;
   /** Resets the reader state to default values. */
   reset: () => void;
 }
@@ -84,6 +88,7 @@ export const useReaderStore = create<ReaderState>()(
       toc: [],
       viewMode: 'paginated',
       gestureMode: false,
+      shouldForceFont: false,
 
       setIsLoading: (isLoading) => set({ isLoading }),
       setCurrentBookId: (id) => set({ currentBookId: id }),
@@ -101,6 +106,7 @@ export const useReaderStore = create<ReaderState>()(
       setToc: (toc) => set({ toc }),
       setViewMode: (mode) => set({ viewMode: mode }),
       setGestureMode: (enabled) => set({ gestureMode: enabled }),
+      setShouldForceFont: (force) => set({ shouldForceFont: force }),
       reset: () => set({
         isLoading: false,
         currentBookId: null,
@@ -121,6 +127,7 @@ export const useReaderStore = create<ReaderState>()(
         fontSize: state.fontSize,
         viewMode: state.viewMode,
         gestureMode: state.gestureMode,
+        shouldForceFont: state.shouldForceFont,
       }),
     }
   )
