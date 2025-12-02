@@ -42,7 +42,7 @@ describe('Dialog', () => {
     render(
       <Dialog isOpen={true} onClose={onClose} title="Test Title" />
     );
-    const closeButton = screen.getByLabelText('Close');
+    const closeButton = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalled();
   });
