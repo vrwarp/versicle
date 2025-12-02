@@ -405,18 +405,6 @@ export class AudioPlayerService {
          } else {
              // Force restart if speed changed, resume not supported, or was stopped
              this.status = 'stopped';
-             // We can't call play() directly here if we came from play() to avoid infinite loop
-             // But play() checks status==paused -> resume().
-             // If we are here, we are doing logic.
-             // If we need to restart:
-             // We are essentially in play() logic but with rewind check done.
-             // We should call play() but bypass the initial checks?
-             // Or just fall through to play logic if we extract it?
-             // Simpler: Set status to stopped and call play() (which will skip resume() check as status is stopped)
-
-             // Wait, if I call play() now, it will check status. Status is stopped.
-             // It will check DB again? Yes.
-             // But we cleared lastPauseTime in DB! So it won't loop.
              return this.play();
          }
 
@@ -481,14 +469,13 @@ export class AudioPlayerService {
   }
 
   stop() {
+    // Save state before stopping (e.g. navigation away)
+    this.savePlaybackState();
+
     this.setStatus('stopped');
     this.silentAudio.pause();
     this.silentAudio.currentTime = 0;
     this.notifyListeners(null);
-
-    // We DO NOT clear playback state on stop anymore, because stop is called when navigating away.
-    // We only clear it if we finished the book?
-    // For now, let's keep it persisted so we can resume if user closes app.
 
     if (this.provider instanceof WebSpeechProvider && this.provider.stop) {
         this.provider.stop();
