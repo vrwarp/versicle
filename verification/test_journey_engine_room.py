@@ -19,8 +19,9 @@ def test_engine_room_journey(page: Page):
 
     # Verify Dialog Open
     expect(page.get_by_role("dialog")).to_be_visible()
-    # Check sidebar header
-    expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
+    # Check sidebar header (only visible on desktop)
+    if page.viewport_size["width"] >= 640:
+        expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
 
     # Verify Tabs exist
     expect(page.get_by_role("button", name="General")).to_be_visible()

@@ -44,26 +44,27 @@ export const GlobalSettingsDialog = () => {
 
     return (
         <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
-            <ModalContent className="max-w-3xl h-[600px] flex p-0 overflow-hidden gap-0 sm:rounded-lg">
+            <ModalContent className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg">
                 {/* Sidebar */}
-                <div className="w-1/4 bg-muted/30 border-r p-4 space-y-2">
-                    <h2 className="text-lg font-semibold mb-4 px-2">Settings</h2>
-                    <Button variant={activeTab === 'general' ? 'secondary' : 'ghost'} className="w-full justify-start" onClick={() => setActiveTab('general')}>
+                <div className="w-full sm:w-1/4 bg-muted/30 border-b sm:border-r sm:border-b-0 p-2 sm:p-4 flex flex-row sm:flex-col gap-2 overflow-x-auto sm:overflow-visible items-center sm:items-stretch shrink-0">
+                    <h2 className="text-lg font-semibold mb-4 px-2 hidden sm:block">Settings</h2>
+                    <Button variant={activeTab === 'general' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('general')}>
                         General
                     </Button>
-                    <Button variant={activeTab === 'tts' ? 'secondary' : 'ghost'} className="w-full justify-start" onClick={() => setActiveTab('tts')}>
+                    <Button variant={activeTab === 'tts' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('tts')}>
                         TTS Engine
                     </Button>
-                    <Button variant={activeTab === 'dictionary' ? 'secondary' : 'ghost'} className="w-full justify-start" onClick={() => setActiveTab('dictionary')}>
+                    <Button variant={activeTab === 'dictionary' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('dictionary')}>
                         Dictionary
                     </Button>
-                    <Button variant={activeTab === 'data' ? 'secondary' : 'ghost'} className="w-full justify-start text-destructive hover:text-destructive" onClick={() => setActiveTab('data')}>
+                    {/* Add margin to last item to prevent overlap with Close button on mobile */}
+                    <Button variant={activeTab === 'data' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0 text-destructive hover:text-destructive mr-10 sm:mr-0" onClick={() => setActiveTab('data')}>
                         Data Management
                     </Button>
                 </div>
 
                 {/* Content */}
-                <div className="w-3/4 p-8 overflow-y-auto">
+                <div className="w-full sm:w-3/4 p-4 sm:p-8 overflow-y-auto flex-1">
                     {activeTab === 'general' && (
                         <div className="space-y-6">
                             <div>
