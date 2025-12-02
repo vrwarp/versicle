@@ -35,9 +35,9 @@ export async function processEpub(file: File): Promise<string> {
 
   const newBook: BookMetadata = {
     id: bookId,
-    title: metadata.title,
-    author: metadata.creator,
-    description: metadata.description,
+    title: metadata.title || 'Untitled',
+    author: metadata.creator || 'Unknown Author',
+    description: metadata.description || '',
     addedAt: Date.now(),
     coverBlob: coverBlob,
   };

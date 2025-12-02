@@ -101,4 +101,34 @@ describe('ingestion', () => {
     expect(book?.title).toBe('No Cover Book');
     expect(book?.coverBlob).toBeUndefined();
   });
+
+  it('should use default values when metadata is missing', async () => {
+     vi.resetModules();
+     const epubjs = await import('epubjs');
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     (epubjs.default as any).mockImplementation(() => ({
+      ready: Promise.resolve(),
+      loaded: {
+        metadata: Promise.resolve({
+            // Missing title, creator, and description
+        }),
+      },
+      coverUrl: vi.fn(() => Promise.resolve(null)),
+    }));
+
+    const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
+    if (!mockFile.arrayBuffer) {
+        mockFile.arrayBuffer = async () => new ArrayBuffer(8);
+    }
+
+    const bookId = await processEpub(mockFile);
+
+    const db = await getDB();
+    const book = await db.get('books', bookId);
+
+    expect(book).toBeDefined();
+    expect(book?.title).toBe('Untitled');
+    expect(book?.author).toBe('Unknown Author');
+    expect(book?.description).toBe('');
+  });
 });
