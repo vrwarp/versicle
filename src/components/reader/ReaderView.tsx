@@ -665,10 +665,16 @@ export const ReaderView: React.FC = () => {
 
   const handlePrev = () => {
       console.log("Navigating to previous page");
+      if (status === 'playing' || status === 'loading') {
+          setAutoPlayNext(true);
+      }
       renditionRef.current?.prev();
   };
   const handleNext = () => {
       console.log("Navigating to next page");
+      if (status === 'playing' || status === 'loading') {
+          setAutoPlayNext(true);
+      }
       renditionRef.current?.next();
   };
 
