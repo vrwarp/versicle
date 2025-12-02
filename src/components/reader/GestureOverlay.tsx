@@ -2,7 +2,8 @@ import React, { useRef, useState } from 'react';
 import {
   Play, Pause, RotateCcw, RotateCw,
   Volume1, Volume2,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight,
+  Rewind, FastForward
 } from 'lucide-react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
@@ -18,7 +19,7 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
   onPrevChapter,
   onClose
 }) => {
-  const { isPlaying, play, pause, seek, rate, setRate } = useTTSStore();
+  const { isPlaying, play, pause, seek, rate, setRate, providerId } = useTTSStore();
   const { gestureMode } = useReaderStore(); // Assuming we add this to store
 
   const [icon, setIcon] = useState<React.ReactNode | null>(null);
@@ -76,11 +77,19 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
       if (x < width * 0.25) {
         // Left Zone: Rewind
         seek(-15);
-        showFeedback(<RotateCcw size={64} />, "-15s");
+        if (providerId === 'local') {
+          showFeedback(<Rewind size={64} />, "Previous");
+        } else {
+          showFeedback(<RotateCcw size={64} />, "-15s");
+        }
       } else if (x > width * 0.75) {
         // Right Zone: Forward
         seek(15);
-        showFeedback(<RotateCw size={64} />, "+15s");
+        if (providerId === 'local') {
+          showFeedback(<FastForward size={64} />, "Next");
+        } else {
+          showFeedback(<RotateCw size={64} />, "+15s");
+        }
       } else {
         // Center Zone: Play/Pause
         if (isPlaying) {
@@ -167,12 +176,12 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
         </button>
       </div>
 
-      <div className="text-white/30 text-center pointer-events-none">
-        <p className="mb-8 text-lg font-light">Gesture Mode Active</p>
-        <div className="grid grid-cols-3 gap-8 text-xs opacity-50 max-w-sm mx-auto">
+      <div className="text-white text-center pointer-events-none">
+        <p className="mb-8 text-xl font-medium">Gesture Mode Active</p>
+        <div className="grid grid-cols-3 gap-8 text-sm opacity-90 max-w-sm mx-auto font-medium">
             <div className="flex flex-col items-center">
                 <span className="mb-1">Tap Left</span>
-                <span>Rewind</span>
+                <span>{providerId === 'local' ? 'Previous' : 'Rewind'}</span>
             </div>
             <div className="flex flex-col items-center">
                 <span className="mb-1">Tap Center</span>
@@ -180,7 +189,7 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
             </div>
             <div className="flex flex-col items-center">
                 <span className="mb-1">Tap Right</span>
-                <span>Forward</span>
+                <span>{providerId === 'local' ? 'Next' : 'Forward'}</span>
             </div>
             <div className="flex flex-col items-center col-span-3 mt-4">
                 <span>Swipe Vertical: Speed | Horizontal: Chapter</span>
