@@ -13,12 +13,25 @@ jobs:
         with:
           node-version: 18
           cache: 'npm'
-      - run: npm ci
+
+      - name: Install Frontend Deps
+        run: npm ci
+
+      - name: Install Python Deps
+        run: |
+          pip install pytest playwright pytest-playwright
+          playwright install --with-deps chromium
+
+      - name: Build and Start App
+        run: |
+          npm run build
+          npm run preview -- --port 5173 &
+          npx wait-on http://localhost:5173
+
       - name: Run Tests
         env:
           CI: true
-          DEBUG: vitest:*
         # COMMAND MODIFICATION:
         # --pool=forks: Use child processes for better isolation and clean memory release.
         # --maxWorkers=1: Run one test file at a time. Serial execution.
-        run: npm test -- --run --reporter=verbose --pool=forks --maxWorkers=1
+        run: npm test -- --run --reporter=verbose
