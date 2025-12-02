@@ -783,8 +783,22 @@ export const ReaderView: React.FC = () => {
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') handlePrev();
-      if (e.key === 'ArrowRight') handleNext();
+      if (e.key === 'ArrowLeft') {
+        const { status, currentIndex, jumpTo } = useTTSStore.getState();
+        if (status === 'playing' || status === 'paused') {
+          if (currentIndex > 0) jumpTo(currentIndex - 1);
+        } else {
+          handlePrev();
+        }
+      }
+      if (e.key === 'ArrowRight') {
+        const { status, currentIndex, queue, jumpTo } = useTTSStore.getState();
+        if (status === 'playing' || status === 'paused') {
+          if (currentIndex < queue.length - 1) jumpTo(currentIndex + 1);
+        } else {
+          handleNext();
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
