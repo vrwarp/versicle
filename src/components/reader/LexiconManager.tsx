@@ -154,8 +154,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
         }
     >
-        <div className="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
-            <div className="flex space-x-4">
+        <div className="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-gray-700 pb-2 overflow-x-auto gap-4">
+            <div className="flex space-x-4 shrink-0">
                 <button
                     onClick={() => setScope('global')}
                     className={`pb-1 px-2 ${scope === 'global' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
@@ -172,7 +172,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                 )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
                 <Button data-testid="lexicon-download-sample" variant="ghost" size="sm" onClick={handleDownloadSample} title="Download Sample CSV">
                     <Download size={14} className="mr-1" /> Sample
                 </Button>
