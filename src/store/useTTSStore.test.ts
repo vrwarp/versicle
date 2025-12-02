@@ -49,23 +49,34 @@ describe('useTTSStore', () => {
 
   // Updated test: setPlaying doesn't exist anymore, it's driven by player events
   it('should sync state from player', () => {
-    useTTSStore.getState().syncState('playing', null);
-    expect(useTTSStore.getState().isPlaying).toBe(true);
+    const store = useTTSStore.getState();
+    // Use the syncState method that is exposed on the store for internal/testing use
+    // Note: TypeScript might complain if it's internal, but for tests it should be fine if public in interface
+    // Checking interface... syncState is in TTSState but marked @internal.
+    // We can cast or just call it.
 
-    useTTSStore.getState().syncState('paused', null);
+    store.syncState('playing', null, 0, [], null);
+    expect(useTTSStore.getState().isPlaying).toBe(true);
+    expect(useTTSStore.getState().status).toBe('playing');
+
+    store.syncState('paused', null, 0, [], null);
     expect(useTTSStore.getState().isPlaying).toBe(false);
+    expect(useTTSStore.getState().status).toBe('paused');
+
+    // Test the fix: 'loading' should result in isPlaying = true
+    store.syncState('loading', null, 0, [], null);
+    expect(useTTSStore.getState().isPlaying).toBe(true);
+    expect(useTTSStore.getState().status).toBe('loading');
+
+    store.syncState('stopped', null, 0, [], null);
+    expect(useTTSStore.getState().isPlaying).toBe(false);
+    expect(useTTSStore.getState().status).toBe('stopped');
   });
 
   it('should call player methods on play, pause, stop', () => {
     const playSpy = vi.spyOn(useTTSStore.getState(), 'play');
     useTTSStore.getState().play();
     expect(playSpy).toHaveBeenCalled();
-    // Verification of underlying player calls requires mocking instance access or testing side effects
-    // but since we mocked AudioPlayerService.getInstance(), we assume it calls it.
-
-    // Note: useTTSStore.isPlaying is ONLY updated via subscription callback.
-    // So calling .play() won't immediately update .isPlaying to true in the store
-    // unless the mock triggers the callback.
   });
 
   it('should set rate', () => {
