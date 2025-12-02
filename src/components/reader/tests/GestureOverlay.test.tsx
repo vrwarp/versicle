@@ -17,6 +17,9 @@ vi.mock('lucide-react', () => ({
   Volume2: () => <div data-testid="icon-faster">Faster</div>,
   ChevronLeft: () => <div data-testid="icon-prev">Prev</div>,
   ChevronRight: () => <div data-testid="icon-next">Next</div>,
+  X: () => <div data-testid="icon-close">Close</div>,
+  Rewind: () => <div data-testid="icon-rewind">Rewind</div>,
+  FastForward: () => <div data-testid="icon-forward">Forward</div>,
 }));
 
 describe('GestureOverlay', () => {
@@ -41,10 +44,15 @@ describe('GestureOverlay', () => {
       pause: mockPause,
       seek: mockSeek,
       rate: 1.0,
-      setRate: mockSetRate
+      setRate: mockSetRate,
+      providerId: 'cloud'
     });
     // Set window dimensions for tap zones
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1000 });
+
+    // Mock Pointer Capture methods which are missing in JSDOM
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
   });
 
   it('renders nothing when gestureMode is false', () => {
@@ -64,8 +72,8 @@ describe('GestureOverlay', () => {
     const overlay = screen.getByText('Gesture Mode Active').parentElement!;
 
     // Simulate center tap
-    fireEvent.touchStart(overlay, { touches: [{ clientX: 500, clientY: 500 }] });
-    fireEvent.touchEnd(overlay, { changedTouches: [{ clientX: 500, clientY: 500 }] });
+    fireEvent.pointerDown(overlay, { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(overlay, { clientX: 500, clientY: 500, pointerId: 1 });
 
     expect(mockPlay).toHaveBeenCalled();
 
@@ -78,8 +86,8 @@ describe('GestureOverlay', () => {
     const overlay = screen.getByText('Gesture Mode Active').parentElement!;
 
     // Simulate left tap (< 250px)
-    fireEvent.touchStart(overlay, { touches: [{ clientX: 100, clientY: 500 }] });
-    fireEvent.touchEnd(overlay, { changedTouches: [{ clientX: 100, clientY: 500 }] });
+    fireEvent.pointerDown(overlay, { clientX: 100, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(overlay, { clientX: 100, clientY: 500, pointerId: 1 });
 
     expect(mockSeek).toHaveBeenCalledWith(-15);
     expect(screen.getByTestId('icon-rewind')).toBeInTheDocument();
@@ -90,8 +98,8 @@ describe('GestureOverlay', () => {
     const overlay = screen.getByText('Gesture Mode Active').parentElement!;
 
     // Simulate right tap (> 750px)
-    fireEvent.touchStart(overlay, { touches: [{ clientX: 900, clientY: 500 }] });
-    fireEvent.touchEnd(overlay, { changedTouches: [{ clientX: 900, clientY: 500 }] });
+    fireEvent.pointerDown(overlay, { clientX: 900, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(overlay, { clientX: 900, clientY: 500, pointerId: 1 });
 
     expect(mockSeek).toHaveBeenCalledWith(15);
     expect(screen.getByTestId('icon-forward')).toBeInTheDocument();
@@ -101,8 +109,8 @@ describe('GestureOverlay', () => {
     render(<GestureOverlay onClose={mockClose} />);
     const overlay = screen.getByText('Gesture Mode Active').parentElement!;
 
-    fireEvent.touchStart(overlay, { touches: [{ clientX: 500, clientY: 500 }] });
-    fireEvent.touchEnd(overlay, { changedTouches: [{ clientX: 500, clientY: 400 }] }); // 100px up
+    fireEvent.pointerDown(overlay, { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(overlay, { clientX: 500, clientY: 400, pointerId: 1 }); // 100px up
 
     expect(mockSetRate).toHaveBeenCalledWith(1.1);
     expect(screen.getByTestId('icon-faster')).toBeInTheDocument();
@@ -112,8 +120,8 @@ describe('GestureOverlay', () => {
     render(<GestureOverlay onClose={mockClose} />);
     const overlay = screen.getByText('Gesture Mode Active').parentElement!;
 
-    fireEvent.touchStart(overlay, { touches: [{ clientX: 500, clientY: 500 }] });
-    fireEvent.touchEnd(overlay, { changedTouches: [{ clientX: 500, clientY: 600 }] }); // 100px down
+    fireEvent.pointerDown(overlay, { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(overlay, { clientX: 500, clientY: 600, pointerId: 1 }); // 100px down
 
     expect(mockSetRate).toHaveBeenCalledWith(0.9);
     expect(screen.getByTestId('icon-slower')).toBeInTheDocument();
@@ -123,8 +131,8 @@ describe('GestureOverlay', () => {
     render(<GestureOverlay onNextChapter={mockNext} onClose={mockClose} />);
     const overlay = screen.getByText('Gesture Mode Active').parentElement!;
 
-    fireEvent.touchStart(overlay, { touches: [{ clientX: 500, clientY: 500 }] });
-    fireEvent.touchEnd(overlay, { changedTouches: [{ clientX: 400, clientY: 500 }] }); // 100px left (dx = -100)
+    fireEvent.pointerDown(overlay, { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(overlay, { clientX: 400, clientY: 500, pointerId: 1 }); // 100px left (dx = -100)
 
     expect(mockNext).toHaveBeenCalled();
     expect(screen.getByTestId('icon-next')).toBeInTheDocument();
@@ -134,8 +142,8 @@ describe('GestureOverlay', () => {
     render(<GestureOverlay onPrevChapter={mockPrev} onClose={mockClose} />);
     const overlay = screen.getByText('Gesture Mode Active').parentElement!;
 
-    fireEvent.touchStart(overlay, { touches: [{ clientX: 500, clientY: 500 }] });
-    fireEvent.touchEnd(overlay, { changedTouches: [{ clientX: 600, clientY: 500 }] }); // 100px right (dx = 100)
+    fireEvent.pointerDown(overlay, { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(overlay, { clientX: 600, clientY: 500, pointerId: 1 }); // 100px right (dx = 100)
 
     expect(mockPrev).toHaveBeenCalled();
     expect(screen.getByTestId('icon-prev')).toBeInTheDocument();

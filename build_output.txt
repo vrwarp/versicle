@@ -1,0 +1,28 @@
+
+> versicle@0.0.0 build
+> tsc -b && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 2014 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/registerSW.js                       0.13 kB
+dist/manifest.webmanifest                0.36 kB
+dist/index.html                          0.76 kB │ gzip:   0.39 kB
+dist/assets/search.worker-BSLOFd5C.js   51.42 kB
+dist/assets/index-kR3ZOPW8.css          35.96 kB │ gzip:   6.84 kB
+dist/assets/index-BnmVzbCA.js          801.15 kB │ gzip: 245.70 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 7.49s
+
+PWA v1.2.0
+mode      generateSW
+precache  8 entries (872.37 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-8c29f6e4.js

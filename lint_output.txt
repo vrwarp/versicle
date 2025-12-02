@@ -1,0 +1,23 @@
+
+> versicle@0.0.0 lint
+> eslint .
+
+
+/app/src/components/reader/ReaderView.tsx
+  748:6  warning  React Hook useEffect has a missing dependency: 'handleNext'. Either include it or remove the dependency array                     react-hooks/exhaustive-deps
+  813:6  warning  React Hook useEffect has missing dependencies: 'handleNext' and 'handlePrev'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/src/components/ui/Badge.tsx
+  35:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/app/src/components/ui/Button.tsx
+  56:18  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/app/src/hooks/useTTS.ts
+  92:6  warning  React Hook useEffect has missing dependencies: 'currentChapterTitle', 'prerollEnabled', and 'rate'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/src/lib/tts/AudioPlayerService_MediaSession.test.ts
+  215:9  warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+
+✖ 6 problems (0 errors, 6 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.

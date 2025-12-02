@@ -1,0 +1,229 @@
+
+> versicle@0.0.0 test
+> vitest --run
+
+
+[1m[46m RUN [49m[22m [36mv4.0.14 [39m[90m/app[39m
+
+ [32m✓[39m src/components/reader/tests/GestureOverlay.test.tsx [2m([22m[2m9 tests[22m[2m)[22m[32m 174[2mms[22m[39m
+ [32m✓[39m src/lib/ingestion.integration.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 1003[2mms[22m[39m
+     [33m[2m✓[22m[39m should process a real epub file (Alice in Wonderland) and extract metadata + cover [33m 1000[2mms[22m[39m
+Not implemented: HTMLMediaElement's pause() method
+[90mstderr[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2minitializes epub.js and renders book
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstdout[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2minitializes epub.js and renders book
+[22m[39mBook indexed for search
+
+[90mstderr[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2minitializes epub.js and renders book
+[22m[39mError loading book: TypeError: Cannot read properties of undefined (reading 'content')
+    at loadBook [90m(/app/[39msrc/components/reader/ReaderView.tsx:401:27[90m)[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:105:5)[39m
+
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+[90mstdout[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2mhandles navigation (next/prev)
+[22m[39mBook indexed for search
+
+[90mstderr[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2mhandles navigation (next/prev)
+[22m[39mError loading book: TypeError: Cannot read properties of undefined (reading 'content')
+    at loadBook [90m(/app/[39msrc/components/reader/ReaderView.tsx:401:27[90m)[39m
+
+[90mstdout[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2mhandles navigation (next/prev)
+[22m[39mNavigating to next page
+Navigating to previous page
+
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+[90mstdout[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2mtoggles TOC
+[22m[39mBook indexed for search
+
+[90mstderr[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2mtoggles TOC
+[22m[39mError loading book: TypeError: Cannot read properties of undefined (reading 'content')
+    at loadBook [90m(/app/[39msrc/components/reader/ReaderView.tsx:401:27[90m)[39m
+
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+[90mstdout[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2mupdates settings
+[22m[39mBook indexed for search
+
+[90mstderr[2m | src/components/reader/tests/ReaderView.test.tsx[2m > [22m[2mReaderView[2m > [22m[2mupdates settings
+[22m[39mError loading book: TypeError: Cannot read properties of undefined (reading 'content')
+    at loadBook [90m(/app/[39msrc/components/reader/ReaderView.tsx:401:27[90m)[39m
+[90m    at runNextTicks (node:internal/process/task_queues:65:5)[39m
+[90m    at processTimers (node:internal/timers:520:9)[39m
+
+Not implemented: HTMLMediaElement's pause() method
+[90mstderr[2m | src/components/reader/tests/ReaderView.test.tsx
+[22m[39mWebSpeechProvider: Voice loading timed out or no voices available.
+
+ [32m✓[39m src/components/reader/tests/ReaderView.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[33m 1129[2mms[22m[39m
+     [33m[2m✓[22m[39m updates settings [33m 767[2mms[22m[39m
+[90mstderr[2m | src/components/ui/Dialog.test.tsx[2m > [22m[2mDialog[2m > [22m[2mrenders title and description when open
+[22m[39mWarning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+
+[90mstderr[2m | src/components/ui/Dialog.test.tsx[2m > [22m[2mDialog[2m > [22m[2mrenders children content
+[22m[39mWarning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+
+[90mstderr[2m | src/components/ui/Dialog.test.tsx[2m > [22m[2mDialog[2m > [22m[2mcalls onClose when close button is clicked
+[22m[39mWarning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+
+[90mstderr[2m | src/components/ui/Dialog.test.tsx[2m > [22m[2mDialog[2m > [22m[2mrenders footer
+[22m[39mWarning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+
+ [32m✓[39m src/components/ui/Dialog.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 743[2mms[22m[39m
+     [33m[2m✓[22m[39m renders title and description when open [33m 356[2mms[22m[39m
+ [32m✓[39m src/components/reader/tests/AnnotationList.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 397[2mms[22m[39m
+[90mstderr[2m | src/components/library/BookCard.test.tsx[2m > [22m[2mBookCard[2m > [22m[2mshould render book info
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/components/library/BookCard.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[33m 320[2mms[22m[39m
+ [32m✓[39m src/components/reader/tests/TTSQueue.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 330[2mms[22m[39m
+ [32m✓[39m src/integration.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 174[2mms[22m[39m
+ [32m✓[39m src/components/reader/tests/TTSQueue_AutoScroll.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 99[2mms[22m[39m
+ [32m✓[39m src/components/reader/TTSAbbreviationSettings.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 146[2mms[22m[39m
+ [32m✓[39m src/components/library/LibraryView.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 125[2mms[22m[39m
+ [32m✓[39m src/components/reader/tests/AnnotationPopover.test.tsx [2m([22m[2m4 tests[22m[2m)[22m[32m 123[2mms[22m[39m
+ [32m✓[39m src/components/library/FileUploader.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 97[2mms[22m[39m
+ [32m✓[39m src/lib/tts.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 57[2mms[22m[39m
+ [32m✓[39m src/lib/tts/extractSentences.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 90[2mms[22m[39m
+ [32m✓[39m src/lib/search.repro.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 61[2mms[22m[39m
+[90mstderr[2m | src/store/useAnnotationStore.test.ts[2m > [22m[2museAnnotationStore[2m > [22m[2mshould delete annotation
+[22m[39mWarning: An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at TestComponent (/app/node_modules/@testing-library/react/dist/pure.js:329:5)
+
+[90mstderr[2m | src/store/useAnnotationStore.test.ts[2m > [22m[2museAnnotationStore[2m > [22m[2mshould update annotation
+[22m[39mWarning: An update to TestComponent inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at TestComponent (/app/node_modules/@testing-library/react/dist/pure.js:329:5)
+
+ [32m✓[39m src/store/useAnnotationStore.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 71[2mms[22m[39m
+ [32m✓[39m src/hooks/useTTS.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+[90mstderr[2m | src/lib/tts/AudioPlayerService.test.ts[2m > [22m[2mAudioPlayerService[2m > [22m[2mshould handle fallback from cloud to local on error
+[22m[39mPlay error Error: API Quota Exceeded
+    at [90m/app/[39msrc/lib/tts/AudioPlayerService.test.ts:115:51
+    at [90mfile:///app/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:145:11
+    at [90mfile:///app/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:919:26
+    at [90mfile:///app/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1244:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///app/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1210:10[90m)[39m
+    at [90mfile:///app/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1654:37
+    at Traces.$ [90m(file:///app/[39mnode_modules/[4mvitest[24m/dist/chunks/traces.U4xDYhzZ.js:115:27[90m)[39m
+    at trace [90m(file:///app/[39mnode_modules/[4mvitest[24m/dist/chunks/test.DqQZzsWf.js:234:21[90m)[39m
+    at runTest [90m(file:///app/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1654:12[90m)[39m
+Falling back to WebSpeechProvider...
+
+ [32m✓[39m src/lib/tts/AudioPlayerService.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+[90mstderr[2m | src/hooks/use-local-storage.test.ts[2m > [22m[2museLocalStorage[2m > [22m[2mshould handle parsing errors gracefully
+[22m[39mError reading localStorage key "test-key": SyntaxError: Unexpected token 'i', "invalid-json" is not valid JSON
+    at JSON.parse (<anonymous>)
+    at readValue [90m(/app/[39msrc/hooks/use-local-storage.ts:22:26[90m)[39m
+    at mountState [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:16167:20[90m)[39m
+    at Object.useState [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:16880:16[90m)[39m
+    at useState [90m(/app/[39mnode_modules/[4mreact[24m/cjs/react.development.js:1622:21[90m)[39m
+    at useLocalStorage [90m(/app/[39msrc/hooks/use-local-storage.ts:29:41[90m)[39m
+    at [90m/app/[39msrc/hooks/use-local-storage.test.ts:50:41
+    at TestComponent [90m(/app/[39mnode_modules/[4m@testing-library/react[24m/dist/pure.js:331:27[90m)[39m
+    at renderWithHooks [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:15486:18[90m)[39m
+    at mountIndeterminateComponent [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:20103:13[90m)[39m
+Error reading localStorage key "test-key": SyntaxError: Unexpected token 'i', "invalid-json" is not valid JSON
+    at JSON.parse (<anonymous>)
+    at readValue [90m(/app/[39msrc/hooks/use-local-storage.ts:22:26[90m)[39m
+    at [90m/app/[39msrc/hooks/use-local-storage.ts:51:20
+    at commitHookEffectListMount [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:23189:26[90m)[39m
+    at commitPassiveMountOnFiber [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:24970:11[90m)[39m
+    at commitPassiveMountEffects_complete [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:24930:9[90m)[39m
+    at commitPassiveMountEffects_begin [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:24917:7[90m)[39m
+    at commitPassiveMountEffects [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:24905:3[90m)[39m
+    at flushPassiveEffectsImpl [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:27078:3[90m)[39m
+    at flushPassiveEffects [90m(/app/[39mnode_modules/[4mreact-dom[24m/cjs/react-dom.development.js:27023:14[90m)[39m
+
+ [32m✓[39m src/hooks/use-local-storage.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 58[2mms[22m[39m
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+ [32m✓[39m src/lib/tts/AudioPlayerService_SmartResume.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 32[2mms[22m[39m
+ [32m✓[39m src/lib/tts/TextSegmenter.configurable.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m src/lib/tts/TextSegmenter.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m src/store/useLibraryStore.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m src/lib/tts/TextSegmenter.regression.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m src/lib/tts/AudioPlayerService_MediaSession.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+[90mstdout[2m | src/lib/tts/TextSegmenter.perf.test.ts[2m > [22m[2mTextSegmenter Performance[2m > [22m[2mavoids unnecessary string splitting during post-processing
+[22m[39mSplit called 0 times for 100 sentences.
+
+ [32m✓[39m src/lib/tts/TextSegmenter.perf.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m src/hooks/use-local-storage-bug.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 36[2mms[22m[39m
+ [32m✓[39m src/lib/ingestion.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+Not implemented: HTMLMediaElement's pause() method
+Not implemented: HTMLMediaElement's pause() method
+[90mstdout[2m | src/lib/tts/AudioPlayerService_Resume.test.ts[2m > [22m[2mAudioPlayerService - Resume Speed Bug[2m > [22m[2mrestarts the sentence with new speed if speed changes while paused
+[22m[39mPassed: Synthesize called with new speed.
+
+ [32m✓[39m src/lib/tts/AudioPlayerService_Resume.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m src/lib/search.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m src/lib/tts/TTSCache.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+ [32m✓[39m src/lib/tts/MediaSessionManager.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m src/lib/tts/CsvUtils.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m src/lib/tts/providers/WebSpeechProvider.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m src/lib/utils.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/lib/search-engine.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/lib/tts/AudioElementPlayer.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m src/store/useTTSStore.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/lib/tts/SyncEngine.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/lib/tts/processors/Sanitizer.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/lib/tts/LexiconService.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/store/useReaderStore.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/lib/tts/lexiconSample.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/lib/tts/CostEstimator.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m45 passed[39m[22m[90m (45)[39m
+[2m      Tests [22m [1m[32m226 passed[39m[22m[90m (226)[39m
+[2m   Start at [22m 23:06:59
+[2m   Duration [22m 25.32s[2m (transform 2.23s, setup 11.30s, import 4.85s, tests 5.73s, environment 38.85s)[22m
