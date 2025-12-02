@@ -188,7 +188,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             </div>
         </div>
 
-        <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
+        <div data-testid="lexicon-list-container" className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
           {/* List */}
           <div className="space-y-2">
             {rules.map(rule => (
