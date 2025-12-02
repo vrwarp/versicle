@@ -30,6 +30,10 @@ export interface BookMetadata {
   progress?: number;
   /** The Canonical Fragment Identifier (CFI) of the last read position. */
   currentCfi?: string;
+  /** The CFI of the last spoken sentence during TTS playback. */
+  lastPlayedCfi?: string;
+  /** Timestamp when TTS playback was last paused, for smart resume. */
+  lastPauseTime?: number;
 }
 
 /**
