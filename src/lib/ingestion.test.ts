@@ -110,8 +110,7 @@ describe('ingestion', () => {
       ready: Promise.resolve(),
       loaded: {
         metadata: Promise.resolve({
-            // Missing title and creator
-            description: 'A book with no metadata',
+            // Missing title, creator, and description
         }),
       },
       coverUrl: vi.fn(() => Promise.resolve(null)),
@@ -130,5 +129,6 @@ describe('ingestion', () => {
     expect(book).toBeDefined();
     expect(book?.title).toBe('Untitled');
     expect(book?.author).toBe('Unknown Author');
+    expect(book?.description).toBe('');
   });
 });
