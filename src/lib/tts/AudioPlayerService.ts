@@ -55,6 +55,17 @@ export class AudioPlayerService {
         onNext: () => this.next(),
         onSeekBackward: () => this.seek(-10),
         onSeekForward: () => this.seek(10),
+        onSeekTo: (details) => {
+            if (details.seekTime !== undefined && details.seekTime !== null) {
+                if (this.audioPlayer) {
+                    this.audioPlayer.seek(details.seekTime);
+                } else {
+                    // For WebSpeech, we can't seek to absolute time accurately.
+                    // We could try to approximate by sentence index but it's risky.
+                    console.warn("SeekTo not supported for local TTS");
+                }
+            }
+        },
     });
     this.setupWebSpeech();
   }
@@ -98,6 +109,13 @@ export class AudioPlayerService {
 
           this.audioPlayer.setOnTimeUpdate((time) => {
               this.syncEngine?.updateTime(time);
+              if (this.audioPlayer) {
+                  this.mediaSessionManager.setPositionState({
+                      duration: this.audioPlayer.getDuration() || 0,
+                      playbackRate: this.speed,
+                      position: time
+                  });
+              }
           });
 
           this.audioPlayer.setOnEnded(() => {
@@ -161,6 +179,7 @@ export class AudioPlayerService {
     this.queue = items;
     this.currentIndex = startIndex;
 
+    this.updateMediaSessionMetadata();
     this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
   }
 
