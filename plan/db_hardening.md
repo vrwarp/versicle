@@ -26,12 +26,13 @@ The current database implementation relies on IndexedDB (via `idb`) with a scatt
 
 We will address these issues in three phases.
 
-### Phase 1: Architecture & Error Handling
+### Phase 1: Architecture & Error Handling (COMPLETED)
 **Goal**: Centralize database access to ensure consistent error handling, logging, and connection management.
-- Create a `DBService` class/module to wrap `idb`.
-- Implement a global `DatabaseError` type to differentiate between logical errors, storage errors (Quota), and unknown errors.
-- Throttle high-frequency writes (like progress saving).
-- Add specific handling for `QuotaExceededError`.
+- **Done**: Created `DBService` class/module to wrap `idb`.
+- **Done**: Implemented global `DatabaseError` and `StorageFullError` types.
+- **Done**: Throttled high-frequency writes (progress saving) via debouncing in `DBService`.
+- **Done**: Added handling for `QuotaExceededError` in `TTSCache` and `DBService`.
+- **Done**: Refactored `ReaderView` and `useLibraryStore` to use `DBService`.
 
 ### Phase 2: Integrity & Maintenance
 **Goal**: Ensure data consistency and provide tools to fix "broken" states.

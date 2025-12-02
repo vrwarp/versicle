@@ -1,6 +1,7 @@
 import { getDB } from '../../db/db';
 import type { CachedSegment } from '../../types/db';
 import type { Timepoint } from './providers/types';
+import { dbService } from '../../db/DBService';
 
 /**
  * Handles caching of synthesized audio segments to IndexedDB.
@@ -40,7 +41,7 @@ export class TTSCache {
     if (segment) {
       // Update lastAccessed asynchronously
       segment.lastAccessed = Date.now();
-      db.put('tts_cache', segment);
+      db.put('tts_cache', segment).catch(console.warn);
     }
 
     return segment;
@@ -63,8 +64,21 @@ export class TTSCache {
       createdAt: Date.now(),
       lastAccessed: Date.now(),
     };
-    await db.put('tts_cache', segment);
-
-    // Optional: Prune cache if too large (can be done later or in a separate job)
+    try {
+        await db.put('tts_cache', segment);
+    } catch (error) {
+         // Attempt to cleanup and retry if quota exceeded (rudimentary)
+         if ((error as Error).name === 'QuotaExceededError') {
+             await dbService.cleanupCache();
+             // Try once more
+             try {
+                await db.put('tts_cache', segment);
+             } catch (retryError) {
+                 console.warn("Failed to cache audio after cleanup:", retryError);
+             }
+         } else {
+             console.warn("Failed to cache audio:", error);
+         }
+    }
   }
 }
