@@ -73,13 +73,13 @@ export const UnifiedAudioPanel = () => {
        <div className="player-stage bg-muted/30 p-4 border-b">
           {/* Main Controls */}
           <div className="flex justify-center items-center gap-6 mb-4">
-             <Button variant="ghost" size="icon" onClick={() => seek(-15)} disabled={providerId === 'local'} aria-label="Rewind 15s">
+             <Button data-testid="tts-rewind-button" variant="ghost" size="icon" onClick={() => seek(-15)} aria-label={providerId === 'local' ? "Previous Sentence" : "Rewind 15s"}>
                 <RotateCcw className="h-6 w-6" />
              </Button>
              <Button data-testid="tts-play-pause-button" size="icon" className="h-12 w-12 rounded-full" onClick={isPlaying ? pause : play} aria-label={isPlaying ? "Pause" : "Play"}>
                 {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
              </Button>
-             <Button variant="ghost" size="icon" onClick={() => seek(15)} disabled={providerId === 'local'} aria-label="Forward 15s">
+             <Button data-testid="tts-forward-button" variant="ghost" size="icon" onClick={() => seek(15)} aria-label={providerId === 'local' ? "Next Sentence" : "Forward 15s"}>
                 <RotateCw className="h-6 w-6" />
              </Button>
           </div>

@@ -411,6 +411,12 @@ export class AudioPlayerService {
       if (this.audioPlayer && this.status !== 'stopped') {
           const currentTime = this.audioPlayer.getCurrentTime();
           this.audioPlayer.seek(currentTime + offset);
+      } else if (this.provider instanceof WebSpeechProvider) {
+          if (offset > 0) {
+              this.next();
+          } else {
+              this.prev();
+          }
       }
   }
 
