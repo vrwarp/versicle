@@ -12,7 +12,7 @@ def test_search_button_position(page: Page):
     reset_app(page)
 
     # Check if book exists
-    if page.locator('div[data-testid="book-card"]').count() == 0:
+    if page.locator("[data-testid^='book-card-']").first.count() == 0:
         # Handle empty library if needed
         demo_btn = page.get_by_role("button", name="Load Demo Book")
         if demo_btn.count() > 0 and demo_btn.is_visible():
@@ -27,7 +27,7 @@ def test_search_button_position(page: Page):
             page.wait_for_load_state("networkidle")
 
     # Wait for book card to appear
-    book_card = page.locator('div[data-testid="book-card"]').first
+    book_card = page.locator("[data-testid^='book-card-']").first.first
     # Use a reasonable timeout
     book_card.wait_for(timeout=30000)
 

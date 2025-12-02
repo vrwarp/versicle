@@ -31,7 +31,7 @@ def test_import_error(page: Page):
             utils.capture_screenshot(page, "import_error_visible")
         else:
             print("No error message visible. Verifying no book added.")
-            expect(page.get_by_test_id("book-card")).not_to_be_visible()
+            expect(page.locator("[data-testid^='book-card-']").first).not_to_be_visible()
             utils.capture_screenshot(page, "import_error_prevented")
 
         print("Import Error Journey Passed!")

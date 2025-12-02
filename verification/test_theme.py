@@ -12,7 +12,7 @@ def test_theme(page: Page):
     print("Uploading book...")
     file_input = page.get_by_test_id("hidden-file-input")
     file_input.set_input_files("src/test/fixtures/alice.epub")
-    expect(page.get_by_test_id("book-card")).to_be_visible(timeout=2000)
+    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible(timeout=2000)
 
     # 2. Verify Light Theme (Default)
     html = page.locator("html")

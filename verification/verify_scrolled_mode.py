@@ -20,7 +20,7 @@ def run():
              file_path = "verification/alice.epub"
 
         page.locator('input[type="file"]').set_input_files(file_path)
-        page.locator('[data-testid="book-card"]').click()
+        page.locator("[data-testid^='book-card-']").first.click()
 
         # Wait for reader
         page.wait_for_selector('[data-testid="reader-iframe-container"]')

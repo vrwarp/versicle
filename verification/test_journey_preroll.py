@@ -11,7 +11,7 @@ def test_preroll_journey(page: Page):
 
     # Open Book
     print("Opening book...")
-    page.locator('[data-testid="book-card"]').click()
+    page.locator("[data-testid^='book-card-']").first.click()
     expect(page.get_by_test_id("reader-audio-button")).to_be_visible(timeout=5000)
 
     # Open TTS Panel

@@ -22,18 +22,18 @@ def test_library_journey(page: Page):
     # Verify book appears
     # Cap timeout at 2000ms
     # Using data-testid instead of text for more resilience
-    expect(page.get_by_test_id("book-card")).to_be_visible(timeout=2000)
+    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible(timeout=2000)
     utils.capture_screenshot(page, "library_2_with_book")
 
     # 3. Persistence Check
     print("Reloading to check persistence...")
     page.reload()
-    expect(page.get_by_test_id("book-card")).to_be_visible(timeout=2000)
+    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible(timeout=2000)
     # library_3_persistence removed as redundant
 
     # 4. Navigation Check (Clicking book)
     print("Clicking book to verify navigation...")
-    page.get_by_test_id("book-card").click()
+    page.locator("[data-testid^='book-card-']").first.click()
     expect(page).to_have_url(re.compile(r".*/read/.*"), timeout=2000)
 
     # Verify we are in reader view (Back button exists)

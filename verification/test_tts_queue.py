@@ -16,7 +16,7 @@ def test_tts_queue(page: Page):
 
     # Click on the first book (Alice in Wonderland)
     print("Opening book...")
-    page.get_by_test_id("book-card").click()
+    page.locator("[data-testid^='book-card-']").first.click()
 
     # Wait for reader to load
     print("Waiting for reader...")

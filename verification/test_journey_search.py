@@ -8,7 +8,7 @@ def test_search_journey(page: Page):
     utils.ensure_library_with_book(page)
 
     # Open Book
-    page.get_by_test_id("book-card").click()
+    page.locator("[data-testid^='book-card-']").first.click()
     expect(page.get_by_test_id("reader-back-button")).to_be_visible()
 
     # Open Search

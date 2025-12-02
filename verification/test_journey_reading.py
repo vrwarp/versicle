@@ -11,7 +11,7 @@ def test_reading_journey(page: Page):
     # Open Book
     print("Opening book...")
     # Using locator with data-testid to be more precise
-    page.locator('[data-testid="book-card"]').click()
+    page.locator("[data-testid^='book-card-']").first.click()
     expect(page).to_have_url(re.compile(r".*/read/.*"))
     expect(page.get_by_test_id("reader-back-button")).to_be_visible()
 

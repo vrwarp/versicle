@@ -21,7 +21,7 @@ interface BookCardProps {
  */
 export const BookCard: React.FC<BookCardProps> = ({ book }) => {
   const navigate = useNavigate();
-  const { removeBook, offloadBook, restoreBook, isImporting } = useLibraryStore();
+  const { removeBook, offloadBook, restoreBook } = useLibraryStore();
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);

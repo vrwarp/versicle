@@ -43,7 +43,7 @@ def test_engine_room_journey(page: Page):
     # 2. Test from Reader
     print("Testing from Reader...")
     utils.ensure_library_with_book(page)
-    page.locator('[data-testid="book-card"]').click()
+    page.locator("[data-testid^='book-card-']").first.click()
     expect(page).to_have_url(re.compile(r".*/read/.*"))
     page.wait_for_timeout(2000)
 

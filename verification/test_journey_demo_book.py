@@ -15,7 +15,7 @@ def test_demo_book_journey(page: Page):
     page.get_by_text("Load Demo Book (Alice in Wonderland)").click()
 
     # 3. Verify book appears
-    expect(page.get_by_test_id("book-card")).to_be_visible(timeout=5000) # Slightly higher timeout for fetch
+    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible(timeout=5000) # Slightly higher timeout for fetch
     utils.capture_screenshot(page, "library_demo_loaded")
 
     # 4. Verify Metadata

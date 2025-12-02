@@ -44,11 +44,11 @@ def test_verify_progress_bar(page: Page):
         page.goto("http://localhost:5173/")
 
     # 4. Check for progress bar
-    page.wait_for_selector('[data-testid="book-card"]', timeout=5000)
+    page.wait_for_selector('[data-testid^="book-card-"]', timeout=5000)
 
     # Force reload to ensure library fetches latest book data if state wasn't updated
     page.reload()
-    page.wait_for_selector('[data-testid="book-card"]', timeout=5000)
+    page.wait_for_selector('[data-testid^="book-card-"]', timeout=5000)
 
     # Verify progress bar is visible
     # We expect some progress > 0
