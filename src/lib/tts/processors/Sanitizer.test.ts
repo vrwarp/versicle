@@ -52,4 +52,22 @@ describe('Sanitizer', () => {
       const input = 'See https://wikipedia.org for details [1].';
       expect(Sanitizer.sanitize(input)).toBe('See wikipedia.org for details .');
   });
+
+  it('should preserve closing parenthesis when URL is inside parentheses', () => {
+      const input = '(See https://example.com/path)';
+      // Expect the closing parenthesis to remain
+      expect(Sanitizer.sanitize(input)).toBe('(See example.com)');
+  });
+
+  it('should handle URLs ending in parentheses by keeping the domain', () => {
+      // Valid URL ending in ')'
+      // Since parentheses are balanced, the closing ')' is part of the URL and should be replaced.
+      const input = 'Check https://en.wikipedia.org/wiki/Earth_(planet).';
+      expect(Sanitizer.sanitize(input)).toBe('Check en.wikipedia.org.');
+  });
+
+  it('should handle complex parenthesized URLs', () => {
+      // Unbalanced closing ')' outside the URL
+      expect(Sanitizer.sanitize('(Check https://site.com/foo(bar))')).toBe('(Check site.com)');
+  });
 });

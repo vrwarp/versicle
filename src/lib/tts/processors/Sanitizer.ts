@@ -29,7 +29,16 @@ export class Sanitizer {
         // But to be safe and efficient, let's make a local global regex.
 
         const urlRegex = new RegExp(RegexPatterns.URL, 'g');
-        processed = processed.replace(urlRegex, (_match, domain) => {
+        processed = processed.replace(urlRegex, (match, domain) => {
+            // Check for unbalanced trailing parentheses
+            if (match.endsWith(')')) {
+                const openCount = (match.match(/\(/g) || []).length;
+                const closeCount = (match.match(/\)/g) || []).length;
+                if (closeCount > openCount) {
+                    // Assume the last ')' is a closing punctuation mark, not part of the URL
+                    return domain + ')';
+                }
+            }
             return domain;
         });
 
