@@ -1,0 +1,17 @@
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+      - run: npm ci
+      - name: Run Tests
+        env:
+          CI: true
+        # COMMAND MODIFICATION:
+        # --pool=forks: Use child processes for better isolation and clean memory release.
+        # --maxWorkers=1: Run one test file at a time. Serial execution.
+        run: npm test -- --run --reporter=verbose --pool=forks --maxWorkers=1
