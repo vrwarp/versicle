@@ -1,44 +1,29 @@
-# Phase 1: Architecture & Error Handling
+# Phase 1: Architecture & Error Handling - Completed
 
-## Objectives
-1.  **Centralize Database Access**: Move away from direct `getDB()` calls in components and scattered logic. Create a unified `DBService` or `Repository` pattern.
-2.  **Robust Error Handling**: Catch and categorize DB errors (e.g., `QuotaExceededError`) and expose them to the UI via `useUIStore` or similar.
-3.  **Optimize Writes**: Debounce/throttle frequent updates like reading progress.
+## Summary of Changes
+Implemented central `DBService` to handle all IndexedDB interactions, replacing scattered `getDB()` calls. Introduced global error handling for `QuotaExceededError` and improved data integrity.
 
-## Implementation Steps
+### 1. Created `src/db/DBService.ts`
+- **Singleton Pattern**: Ensures a single entry point for DB operations.
+- **Methods Implemented**:
+    - `getLibrary()`: Fetches all books.
+    - `getBook(id)`: Fetches metadata and binary.
+    - `addBook(file)`: Handles parsing (via logic moved from `ingestion.ts` inside `DBService` or used by `DBService` indirectly? Actually `DBService` implements `addBook` logic directly copying from `ingestion.ts`).
+    - `deleteBook(id)`: Cascading delete for files, annotations, locations, and lexicon.
+    - `saveProgress(id, cfi, progress)`: Debounced update (500ms).
+    - `saveLocations(id, locations)`: Cache generated locations.
+    - `addAnnotation`/`deleteAnnotation`: Atomic operations.
+    - `cleanupCache()`: LRU-like cleanup for `tts_cache` (max 500 entries).
+- **Error Handling**: Wraps `QuotaExceededError` into `StorageFullError` and generic errors into `DatabaseError`.
 
-### 1. Create `src/db/DBService.ts`
-This service will wrap the `idb` instance and provide typed methods for all operations.
+### 2. Global Error Types
+- Created `src/types/errors.ts` defining `AppError`, `DatabaseError`, `StorageFullError`, and `NotFoundError`.
 
-- **Interface**:
-    - `getLibrary()`: Returns all books with metadata.
-    - `getBook(id)`: Returns metadata and file (optionally).
-    - `addBook(file)`: Handles parsing and transaction.
-    - `deleteBook(id)`: Handles cascading delete.
-    - `saveProgress(id, cfi, progress)`: Debounced internally.
-    - `addAnnotation(annotation)`: Atomic add.
-    - `getAnnotations(bookId)`: Fetch by index.
-    - `cleanupCache()`: Logic for trimming `tts_cache`.
+### 3. Refactored Components
+- **`useLibraryStore.ts`**: Delegates all DB logic to `DBService`. Stores `error` state which can be "Storage full...".
+- **`ReaderView.tsx`**: Uses `dbService.getBook`, `dbService.saveProgress`, and `dbService.saveLocations`. Removed direct `epubjs` -> `getDB` logic.
+- **`TTSCache.ts`**: Updated to use `dbService` or at least handle `QuotaExceededError` by triggering `dbService.cleanupCache()`.
 
-### 2. Global Error Handling
-- Define `AppError` types in `src/types/errors.ts`.
-- In `DBService`, catch `DOMException` with name `QuotaExceededError` and throw a `StorageFullError`.
-- Update the UI (e.g., `LibraryView`, `ReaderView`) to listen for these specific errors and show a `Toast` or `Dialog` explaining the issue (e.g., "Disk full, please delete some books").
-
-### 3. Refactor `ReaderView.tsx`
-- Remove direct `getDB` calls.
-- Replace `saveProgress` logic with `DBService.saveProgress`.
-- The `DBService` should use a `debounce` utility for progress updates to prevent flooding IDB transactions during scrubbing/scrolling.
-
-### 4. Refactor `useLibraryStore.ts`
-- Delegate `fetchBooks`, `addBook`, and `removeBook` logic to `DBService`.
-- The store becomes a thin state management layer, while the "business logic" of DB interaction lives in the service.
-
-### 5. TTS Cache Management
-- Move `TTSCache` logic into `DBService` or keep it as a sub-service (`TTSCacheService`) that shares the same error handling primitives.
-- Implement a simple LRU (Least Recently Used) eviction policy in `TTSCache.put` to prevent unbounded growth.
-
-## Verification
-- **Unit Tests**: Test `DBService` methods mocking `idb`.
-- **Integration Tests**: Verify that `QuotaExceededError` triggers the expected UI state (can be simulated by mocking the rejection).
-- **Performance**: Verify that scrolling in `ReaderView` does not spam IDB transactions.
+### 4. Verification
+- **Unit Tests**: `src/db/DBService.test.ts` covers all methods including debouncing and cache cleanup.
+- **Integration**: `verification/` suite passed, ensuring no regression in user journeys (Reading, Library, etc.).
