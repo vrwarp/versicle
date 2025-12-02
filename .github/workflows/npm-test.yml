@@ -17,7 +17,7 @@ jobs:
       - name: Run Tests
         env:
           CI: true
-          DEBUG: *
+          DEBUG: vitest:*
         # COMMAND MODIFICATION:
         # --pool=forks: Use child processes for better isolation and clean memory release.
         # --maxWorkers=1: Run one test file at a time. Serial execution.
