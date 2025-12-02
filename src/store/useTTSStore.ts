@@ -26,6 +26,8 @@ interface TTSState {
   voices: TTSVoice[];
   /** The CFI of the currently spoken sentence or segment. */
   activeCfi: string | null;
+  /** The CFI of the last played sentence (persisted for resume). */
+  lastPlayedCfi: string | null;
   /** Current index in the playback queue */
   currentIndex: number;
   /** The playback queue */
@@ -102,14 +104,15 @@ export const useTTSStore = create<TTSState>()(
 
         // Subscribe to player updates
         player.subscribe((status, activeCfi, currentIndex, queue, error) => {
-            set({
+            set((state) => ({
                 status,
                 isPlaying: status === 'playing',
                 activeCfi,
+                lastPlayedCfi: activeCfi || state.lastPlayedCfi, // Keep last known if active becomes null
                 currentIndex,
                 queue,
                 lastError: error
-            });
+            }));
 
             // If fallback happened (provider mismatch), we should update our providerId state
             // But checking provider type from here is hard without exposing it on player.
@@ -127,6 +130,7 @@ export const useTTSStore = create<TTSState>()(
             voice: null,
             voices: [],
             activeCfi: null,
+            lastPlayedCfi: null,
             currentIndex: 0,
             queue: [],
             lastError: null,
@@ -285,6 +289,7 @@ export const useTTSStore = create<TTSState>()(
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,
             lastPauseTime: state.lastPauseTime,
+            lastPlayedCfi: state.lastPlayedCfi,
         }),
     }
   )

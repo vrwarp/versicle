@@ -223,6 +223,11 @@ export class AudioPlayerService {
         return this.resume();
     }
 
+    if (this.status === 'stopped') {
+        // Check for smart resume (rewind) if we are starting fresh
+        this.applySmartResume();
+    }
+
     if (this.currentIndex >= this.queue.length) {
         this.setStatus('stopped');
         this.notifyListeners(null);
@@ -319,7 +324,6 @@ export class AudioPlayerService {
 
   async resume(): Promise<void> {
      if (this.status === 'paused') {
-        // Smart Resume Logic
         const ttsStore = useTTSStore.getState();
         const lastPauseTime = ttsStore ? ttsStore.lastPauseTime : null;
         const now = Date.now();
@@ -328,46 +332,35 @@ export class AudioPlayerService {
             elapsed = now - lastPauseTime;
         }
 
-        // Reset pause time
+        // Check if we need to smart resume (rewind) due to long pause
+        // If so, delegate to play() which handles applySmartResume()
+        if (elapsed > 5 * 60 * 1000) {
+            // Do NOT clear lastPauseTime here, applySmartResume needs it
+            this.status = 'stopped';
+            return this.play();
+        }
+
+        // Normal resume (short pause) - clear pause time
         if (ttsStore) {
             ttsStore.setLastPauseTime(null);
         }
 
         if (this.provider instanceof WebSpeechProvider) {
-            // Local provider: rewind by index
-            if (elapsed > 5 * 60 * 1000) { // 5 minutes
-                 // Rewind 2 sentences, clamp to 0
-                 // Note: WebSpeech pause/resume is fragile. Often better to just restart segment if "rewind" needed.
-                 // But strictly speaking, if we just call resume(), it continues where it left off.
-                 // To rewind, we must modify currentIndex and call play().
-                 const rewindAmount = elapsed > 24 * 60 * 60 * 1000 ? 5 : 2; // Rewind more if away for a day
-                 const newIndex = Math.max(0, this.currentIndex - rewindAmount);
-
-                 if (newIndex !== this.currentIndex) {
-                     this.currentIndex = newIndex;
-                     // Set status to stopped so play() starts fresh
-                     this.setStatus('stopped');
-                     return this.play();
-                 }
-            }
-
             if (this.provider.resume && this.speed === this.currentSpeechSpeed) {
                 this.provider.resume();
                 this.setStatus('playing');
             } else {
-                // Force restart if speed changed or resume not supported
                 this.status = 'stopped';
                 return this.play();
             }
 
         } else if (this.audioPlayer) {
-             // Cloud provider: rewind by time
+             // Cloud provider: rewind by time (only possible if audio player is active/paused)
              if (elapsed > 5 * 60 * 1000) {
                  const rewindSeconds = elapsed > 24 * 60 * 60 * 1000 ? 60 : 10;
                  const currentTime = this.audioPlayer.getCurrentTime();
                  const newTime = Math.max(0, currentTime - rewindSeconds);
                  this.audioPlayer.seek(newTime);
-                 // Toast notification could go here if we had a way to trigger it from service
              }
 
              await this.audioPlayer.resume();
@@ -376,6 +369,25 @@ export class AudioPlayerService {
      } else {
          this.play();
      }
+  }
+
+  private applySmartResume() {
+      const ttsStore = useTTSStore.getState();
+      const lastPauseTime = ttsStore ? ttsStore.lastPauseTime : null;
+
+      if (lastPauseTime) {
+          const elapsed = Date.now() - lastPauseTime;
+          // Clear pause time so we don't rewind again next time
+          ttsStore.setLastPauseTime(null);
+
+          // If more than 5 minutes have passed, rewind
+          if (elapsed > 5 * 60 * 1000) {
+              const rewindAmount = elapsed > 24 * 60 * 60 * 1000 ? 5 : 2;
+              const newIndex = Math.max(0, this.currentIndex - rewindAmount);
+              console.log(`Smart Resume: Rewinding ${rewindAmount} sentences (Elapsed: ${Math.round(elapsed/60000)}m)`);
+              this.currentIndex = newIndex;
+          }
+      }
   }
 
   pause() {
@@ -396,16 +408,18 @@ export class AudioPlayerService {
   }
 
   stop() {
+    // If we are playing, record pause time before stopping (for potential resume later)
+    if (this.status === 'playing') {
+        const ttsStore = useTTSStore.getState();
+        if (ttsStore) {
+            ttsStore.setLastPauseTime(Date.now());
+        }
+    }
+
     this.setStatus('stopped');
     this.silentAudio.pause();
     this.silentAudio.currentTime = 0;
     this.notifyListeners(null);
-
-    // Clear pause time on stop (we don't smart resume from stop)
-    const ttsStore = useTTSStore.getState();
-    if (ttsStore) {
-        ttsStore.setLastPauseTime(null);
-    }
 
     if (this.provider instanceof WebSpeechProvider && this.provider.stop) {
         this.provider.stop();

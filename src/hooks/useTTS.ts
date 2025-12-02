@@ -48,6 +48,16 @@ export const useTTS = (rendition: Rendition | null) => {
                cfi: s.cfi
            }));
 
+           // Try to restore playback position from persistent store
+           const { lastPlayedCfi } = useTTSStore.getState();
+           let startIndex = 0;
+           if (lastPlayedCfi) {
+               const index = queue.findIndex(item => item.cfi === lastPlayedCfi);
+               if (index !== -1) {
+                   startIndex = index;
+               }
+           }
+
            if (prerollEnabled && queue.length > 0) {
                // Calculate word count
                const wordCount = extracted.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
@@ -63,9 +73,11 @@ export const useTTS = (rendition: Rendition | null) => {
                };
 
                queue.unshift(prerollItem);
+               // Adjust startIndex if preroll added
+               if (startIndex !== 0 || lastPlayedCfi) startIndex++;
            }
 
-           player.setQueue(queue);
+           player.setQueue(queue, startIndex);
 
        } catch (e) {
            console.error("Failed to extract sentences", e);
