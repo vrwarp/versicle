@@ -43,9 +43,17 @@ export class AudioPlayerService {
   // State for current book context (to filter rules)
   private currentBookId: string | null = null;
 
+  // Silent audio for Media Session "anchoring" (Local TTS)
+  private silentAudio: HTMLAudioElement;
+
   private constructor() {
     this.provider = new WebSpeechProvider();
     this.cache = new TTSCache();
+
+    // Initialize silent audio loop to keep MediaSession active
+    // 1 second of silence
+    this.silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+    this.silentAudio.loop = true;
     this.lexiconService = LexiconService.getInstance();
     this.mediaSessionManager = new MediaSessionManager({
         onPlay: () => this.resume(),
@@ -55,6 +63,17 @@ export class AudioPlayerService {
         onNext: () => this.next(),
         onSeekBackward: () => this.seek(-10),
         onSeekForward: () => this.seek(10),
+        onSeekTo: (details) => {
+            if (details.seekTime !== undefined && details.seekTime !== null) {
+                if (this.audioPlayer) {
+                    this.audioPlayer.seek(details.seekTime);
+                } else {
+                    // For WebSpeech, we can't seek to absolute time accurately.
+                    // We could try to approximate by sentence index but it's risky.
+                    console.warn("SeekTo not supported for local TTS");
+                }
+            }
+        },
     });
     this.setupWebSpeech();
   }
@@ -78,7 +97,13 @@ export class AudioPlayerService {
        this.provider.on((event) => {
            if (event.type === 'start') {
                this.setStatus('playing');
+               // Ensure silent audio is playing to keep MediaSession active
+               // Only play if not already playing to avoid audio artifacts/interruptions
+               if (this.silentAudio.paused) {
+                   this.silentAudio.play().catch(e => console.warn("Silent audio play failed", e));
+               }
            } else if (event.type === 'end') {
+               // Don't stop silent audio here, wait for playNext or stop
                this.playNext();
            } else if (event.type === 'boundary') {
                // We might use this for word-level sync in future
@@ -98,6 +123,13 @@ export class AudioPlayerService {
 
           this.audioPlayer.setOnTimeUpdate((time) => {
               this.syncEngine?.updateTime(time);
+              if (this.audioPlayer) {
+                  this.mediaSessionManager.setPositionState({
+                      duration: this.audioPlayer.getDuration() || 0,
+                      playbackRate: this.speed,
+                      position: time
+                  });
+              }
           });
 
           this.audioPlayer.setOnEnded(() => {
@@ -161,6 +193,7 @@ export class AudioPlayerService {
     this.queue = items;
     this.currentIndex = startIndex;
 
+    this.updateMediaSessionMetadata();
     this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
   }
 
@@ -348,6 +381,7 @@ export class AudioPlayerService {
   pause() {
     if (this.provider instanceof WebSpeechProvider && this.provider.pause) {
         this.provider.pause();
+        this.silentAudio.pause();
     } else if (this.audioPlayer) {
         this.audioPlayer.pause();
     }
@@ -363,6 +397,8 @@ export class AudioPlayerService {
 
   stop() {
     this.setStatus('stopped');
+    this.silentAudio.pause();
+    this.silentAudio.currentTime = 0;
     this.notifyListeners(null);
 
     // Clear pause time on stop (we don't smart resume from stop)

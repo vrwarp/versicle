@@ -14,7 +14,7 @@ def test_immersive_mode(page: Page):
     page.goto('http://localhost:5173/')
 
     # Wait for library to load
-    expect(page.get_by_text("Library")).to_be_visible()
+    expect(page.get_by_role("heading", name="My Library")).to_be_visible()
 
     # Upload book if not present
     if page.get_by_text("Alice's Adventures in Wonderland").count() == 0:
