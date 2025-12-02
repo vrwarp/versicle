@@ -33,9 +33,6 @@ interface TTSState {
   /** The last error message, if any */
   lastError: string | null;
 
-  /** Timestamp when playback was last paused, for smart resume. */
-  lastPauseTime: number | null;
-
   /** Provider configuration */
   providerId: 'local' | 'google' | 'openai';
   apiKeys: {
@@ -74,7 +71,6 @@ interface TTSState {
   setEnableCostWarning: (enable: boolean) => void;
   setPrerollEnabled: (enable: boolean) => void;
   setSanitizationEnabled: (enable: boolean) => void;
-  setLastPauseTime: (time: number | null) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
@@ -130,7 +126,6 @@ export const useTTSStore = create<TTSState>()(
             currentIndex: 0,
             queue: [],
             lastError: null,
-            lastPauseTime: null,
             providerId: 'local',
             apiKeys: {
                 google: '',
@@ -214,9 +209,6 @@ export const useTTSStore = create<TTSState>()(
             setSanitizationEnabled: (enable) => {
                 set({ sanitizationEnabled: enable });
             },
-            setLastPauseTime: (time) => {
-                set({ lastPauseTime: time });
-            },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
                 const { providerId, apiKeys } = get();
@@ -284,7 +276,6 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: state.enableCostWarning,
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,
-            lastPauseTime: state.lastPauseTime,
         }),
     }
   )

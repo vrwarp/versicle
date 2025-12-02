@@ -6,7 +6,7 @@ import { TTSCache } from './TTSCache';
 import { CostEstimator } from './CostEstimator';
 import { LexiconService } from './LexiconService';
 import { MediaSessionManager } from './MediaSessionManager';
-import { useTTSStore } from '../../store/useTTSStore';
+import { getDB } from '../../db/db';
 
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
@@ -42,6 +42,9 @@ export class AudioPlayerService {
 
   // State for current book context (to filter rules)
   private currentBookId: string | null = null;
+
+  // Track if we have already attempted to restore session state for the current book
+  private sessionRestored: boolean = false;
 
   // Silent audio for Media Session "anchoring" (Local TTS)
   private silentAudio: HTMLAudioElement;
@@ -89,7 +92,10 @@ export class AudioPlayerService {
    * Sets the current book ID to allow loading book-specific lexicon rules.
    */
   setBookId(bookId: string | null) {
-      this.currentBookId = bookId;
+      if (this.currentBookId !== bookId) {
+          this.currentBookId = bookId;
+          this.sessionRestored = false; // Reset restoration flag for new book
+      }
   }
 
   private setupWebSpeech() {
@@ -223,6 +229,37 @@ export class AudioPlayerService {
         return this.resume();
     }
 
+    // If stopped, we might want to resume from a saved state (Switch Book case)
+    if (this.status === 'stopped' && this.currentBookId && !this.sessionRestored) {
+        // Mark session as restored so we don't try again for this book instance
+        // unless setBookId is called again
+        this.sessionRestored = true;
+
+        try {
+            const db = await getDB();
+            const book = await db.get('books', this.currentBookId);
+            if (book) {
+                // Restore Playback Position (lastPlayedCfi)
+                // Only override if we are at the default start (index 0)
+                // This allows users to manually navigate and play without being forced back
+                if (book.lastPlayedCfi && this.currentIndex === 0) {
+                     // Find index in queue
+                     const index = this.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
+                     if (index >= 0) {
+                         this.currentIndex = index;
+                     }
+                }
+
+                // If we have a lastPauseTime, we should also consider "Resume" logic (smart rewind)
+                if (book.lastPauseTime) {
+                     return this.resume(); // Delegate to resume which handles DB fetch & rewind
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to restore playback state", e);
+        }
+    }
+
     if (this.currentIndex >= this.queue.length) {
         this.setStatus('stopped');
         this.notifyListeners(null);
@@ -318,64 +355,115 @@ export class AudioPlayerService {
   }
 
   async resume(): Promise<void> {
-     if (this.status === 'paused') {
-        // Smart Resume Logic
-        const ttsStore = useTTSStore.getState();
-        const lastPauseTime = ttsStore ? ttsStore.lastPauseTime : null;
-        const now = Date.now();
-        let elapsed = 0;
-        if (lastPauseTime) {
-            elapsed = now - lastPauseTime;
-        }
+     // Smart Resume Logic
+     let lastPauseTime: number | null = null;
 
-        // Reset pause time
-        if (ttsStore) {
-            ttsStore.setLastPauseTime(null);
-        }
+     // Fetch last pause time from DB if bookId is set
+     if (this.currentBookId) {
+         try {
+             const db = await getDB();
+             const book = await db.get('books', this.currentBookId);
+             if (book && book.lastPauseTime) {
+                 lastPauseTime = book.lastPauseTime;
 
-        if (this.provider instanceof WebSpeechProvider) {
-            // Local provider: rewind by index
-            if (elapsed > 5 * 60 * 1000) { // 5 minutes
-                 // Rewind 2 sentences, clamp to 0
-                 // Note: WebSpeech pause/resume is fragile. Often better to just restart segment if "rewind" needed.
-                 // But strictly speaking, if we just call resume(), it continues where it left off.
-                 // To rewind, we must modify currentIndex and call play().
-                 const rewindAmount = elapsed > 24 * 60 * 60 * 1000 ? 5 : 2; // Rewind more if away for a day
-                 const newIndex = Math.max(0, this.currentIndex - rewindAmount);
-
-                 if (newIndex !== this.currentIndex) {
-                     this.currentIndex = newIndex;
-                     // Set status to stopped so play() starts fresh
-                     this.setStatus('stopped');
-                     return this.play();
-                 }
-            }
-
-            if (this.provider.resume && this.speed === this.currentSpeechSpeed) {
-                this.provider.resume();
-                this.setStatus('playing');
-            } else {
-                // Force restart if speed changed or resume not supported
-                this.status = 'stopped';
-                return this.play();
-            }
-
-        } else if (this.audioPlayer) {
-             // Cloud provider: rewind by time
-             if (elapsed > 5 * 60 * 1000) {
-                 const rewindSeconds = elapsed > 24 * 60 * 60 * 1000 ? 60 : 10;
-                 const currentTime = this.audioPlayer.getCurrentTime();
-                 const newTime = Math.max(0, currentTime - rewindSeconds);
-                 this.audioPlayer.seek(newTime);
-                 // Toast notification could go here if we had a way to trigger it from service
+                 // Clear it so we don't use it again for this session
+                 book.lastPauseTime = undefined;
+                 await db.put('books', book);
              }
-
-             await this.audioPlayer.resume();
-             this.setStatus('playing');
-        }
-     } else {
-         this.play();
+         } catch (e) {
+             console.warn("Failed to fetch/clear lastPauseTime from DB", e);
+         }
      }
+
+     const now = Date.now();
+     let elapsed = 0;
+     if (lastPauseTime) {
+         elapsed = now - lastPauseTime;
+     }
+
+     if (this.provider instanceof WebSpeechProvider) {
+         // Local provider: rewind by index
+         if (elapsed > 5 * 60 * 1000) { // 5 minutes
+              // Rewind 2 sentences, clamp to 0
+              // Note: WebSpeech pause/resume is fragile. Often better to just restart segment if "rewind" needed.
+              // But strictly speaking, if we just call resume(), it continues where it left off.
+              // To rewind, we must modify currentIndex and call play().
+              const rewindAmount = elapsed > 24 * 60 * 60 * 1000 ? 5 : 2; // Rewind more if away for a day
+              const newIndex = Math.max(0, this.currentIndex - rewindAmount);
+
+              if (newIndex !== this.currentIndex) {
+                  this.currentIndex = newIndex;
+                  // Set status to stopped so play() starts fresh
+                  this.setStatus('stopped');
+                  return this.play();
+              }
+         }
+
+         if (this.status === 'paused' && this.provider.resume && this.speed === this.currentSpeechSpeed) {
+             this.provider.resume();
+             this.setStatus('playing');
+         } else {
+             // Force restart if speed changed, resume not supported, or was stopped
+             this.status = 'stopped';
+             // We can't call play() directly here if we came from play() to avoid infinite loop
+             // But play() checks status==paused -> resume().
+             // If we are here, we are doing logic.
+             // If we need to restart:
+             // We are essentially in play() logic but with rewind check done.
+             // We should call play() but bypass the initial checks?
+             // Or just fall through to play logic if we extract it?
+             // Simpler: Set status to stopped and call play() (which will skip resume() check as status is stopped)
+
+             // Wait, if I call play() now, it will check status. Status is stopped.
+             // It will check DB again? Yes.
+             // But we cleared lastPauseTime in DB! So it won't loop.
+             return this.play();
+         }
+
+     } else if (this.audioPlayer) {
+          // Cloud provider: rewind by time
+          if (elapsed > 5 * 60 * 1000) {
+              const rewindSeconds = elapsed > 24 * 60 * 60 * 1000 ? 60 : 10;
+              const currentTime = this.audioPlayer.getCurrentTime();
+              const newTime = Math.max(0, currentTime - rewindSeconds);
+              this.audioPlayer.seek(newTime);
+              // Toast notification could go here if we had a way to trigger it from service
+          }
+
+          if (this.status === 'paused') {
+             await this.audioPlayer.resume();
+          } else {
+              // If stopped, we need to play from scratch but maybe with offset?
+              // Actually AudioElementPlayer reset on stop.
+              // So if we were stopped, we can't "resume" at audio level unless we reload blob.
+              // So we must play().
+              return this.play();
+          }
+          this.setStatus('playing');
+     }
+  }
+
+  private async savePlaybackState() {
+      if (!this.currentBookId) return;
+
+      try {
+          const db = await getDB();
+          const tx = db.transaction('books', 'readwrite');
+          const store = tx.objectStore('books');
+          const book = await store.get(this.currentBookId);
+
+          if (book) {
+              book.lastPauseTime = Date.now();
+              const currentItem = this.queue[this.currentIndex];
+              if (currentItem && currentItem.cfi) {
+                  book.lastPlayedCfi = currentItem.cfi;
+              }
+              await store.put(book);
+          }
+          await tx.done;
+      } catch (e) {
+          console.error("Failed to save playback state", e);
+      }
   }
 
   pause() {
@@ -387,10 +475,7 @@ export class AudioPlayerService {
     }
 
     // Record pause time
-    const ttsStore = useTTSStore.getState();
-    if (ttsStore) {
-        ttsStore.setLastPauseTime(Date.now());
-    }
+    this.savePlaybackState();
 
     this.setStatus('paused');
   }
@@ -401,11 +486,9 @@ export class AudioPlayerService {
     this.silentAudio.currentTime = 0;
     this.notifyListeners(null);
 
-    // Clear pause time on stop (we don't smart resume from stop)
-    const ttsStore = useTTSStore.getState();
-    if (ttsStore) {
-        ttsStore.setLastPauseTime(null);
-    }
+    // We DO NOT clear playback state on stop anymore, because stop is called when navigating away.
+    // We only clear it if we finished the book?
+    // For now, let's keep it persisted so we can resume if user closes app.
 
     if (this.provider instanceof WebSpeechProvider && this.provider.stop) {
         this.provider.stop();
@@ -419,7 +502,9 @@ export class AudioPlayerService {
           this.currentIndex++;
           this.play();
       } else {
+          // Finished book/chapter
           this.stop();
+          // Optionally clear state here?
       }
   }
 
