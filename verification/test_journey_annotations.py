@@ -82,7 +82,7 @@ def test_journey_annotations(page: Page):
     page.reload()
 
     # Wait for book to reload
-    expect(page.get_by_test_id("reader-back-button")).to_be_visible(timeout=10000)
+    expect(page.get_by_test_id("reader-back-button")).to_be_visible(timeout=5000)
     frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
     frame.locator("body").wait_for(timeout=5000)
 

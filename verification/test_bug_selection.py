@@ -17,7 +17,7 @@ def test_selection_popover_reappearance(page: Page):
 
     # Wait for iframe content
     frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
-    frame.locator("body").wait_for(timeout=2000)
+    frame.locator("body").wait_for(timeout=5000)
 
     # Navigate to next page to ensure text content
     page.get_by_test_id("reader-next-page").click()

@@ -24,14 +24,14 @@ def test_journey_backup_restore(page: Page):
     # Wait for processing - wait for the card to be visible
     # Using selector similar to test_journey_smart_delete.py
     book_card = page.locator("[data-testid^='book-card-']").first
-    expect(book_card).to_be_visible(timeout=30000)
+    expect(book_card).to_be_visible(timeout=5000)
 
     # Click to open reader
     book_card.click()
 
     # Wait for reader to load
     # Use existing test id for iframe container or back button
-    expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=15000)
+    expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=5000)
 
     # 2. Add Annotation
     # Skip actual annotation on text for now as it's flaky, rely on adding a Lexicon rule
@@ -108,7 +108,8 @@ def test_journey_backup_restore(page: Page):
     page.set_input_files("data-testid=backup-file-input", backup_path)
 
     # Wait for reload (Restore triggers reload)
-    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=20000)
+    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=5000)
+    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=5000)
 
     # 6. Verify Restore
     # Book should be back
@@ -143,7 +144,7 @@ def test_journey_full_backup_restore(page: Page):
     page.set_input_files("data-testid=hidden-file-input", "public/books/alice.epub")
 
     book_card = page.locator("[data-testid^='book-card-']").first
-    expect(book_card).to_be_visible(timeout=30000)
+    expect(book_card).to_be_visible(timeout=5000)
 
     # 2. Export Full Backup
     page.click("button[aria-label='Settings']") # Header settings
@@ -179,7 +180,7 @@ def test_journey_full_backup_restore(page: Page):
     page.set_input_files("data-testid=backup-file-input", backup_path)
 
     # Wait for reload
-    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=20000)
+    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=5000)
 
     # 5. Verify Restore
     expect(book_card).to_be_visible()

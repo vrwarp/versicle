@@ -26,7 +26,7 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
     # Wait for book to appear
     # CSS selector matching attribute starting with value
     book_card = page.locator("[data-testid^='book-card-']").first
-    expect(book_card).to_be_visible(timeout=10000)
+    expect(book_card).to_be_visible(timeout=5000)
 
     # 2. Offload Book
     print("Offloading book...")
@@ -77,7 +77,7 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
     # Looking at ReaderView.tsx, it returns a <div> with class "flex flex-col h-screen...".
     # It contains "reader-back-button", "reader-toc-button", etc.
     # We can check for one of those.
-    expect(page.locator("data-testid=reader-back-button")).to_be_visible(timeout=10000)
+    expect(page.locator("data-testid=reader-back-button")).to_be_visible(timeout=5000)
 
     capture_screenshot(page, "reader_smart_delete_success")
 
@@ -90,7 +90,7 @@ def test_delete_book_completely(page: Page, demo_epub_path):
     # Import
     page.locator("data-testid=hidden-file-input").set_input_files(demo_epub_path)
     book_card = page.locator("[data-testid^='book-card-']").first
-    expect(book_card).to_be_visible(timeout=10000)
+    expect(book_card).to_be_visible(timeout=5000)
 
     # Delete
     book_card.hover()

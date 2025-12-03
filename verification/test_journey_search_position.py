@@ -29,16 +29,16 @@ def test_search_button_position(page: Page):
     # Wait for book card to appear
     book_card = page.locator("[data-testid^='book-card-']").first.first
     # Use a reasonable timeout
-    book_card.wait_for(timeout=30000)
+    book_card.wait_for(timeout=5000)
 
     # Open the book
     book_card.click()
 
     # Wait for reader to load
-    page.wait_for_selector('div[data-testid="reader-iframe-container"]', timeout=40000)
+    page.wait_for_selector('div[data-testid="reader-iframe-container"]', timeout=5000)
 
     # Ensure the header is visible
-    page.wait_for_selector('header', timeout=10000)
+    page.wait_for_selector('header', timeout=5000)
 
     # Locate the search button
     search_btn = page.locator('button[data-testid="reader-search-button"]')
