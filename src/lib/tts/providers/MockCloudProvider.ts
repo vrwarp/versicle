@@ -23,7 +23,7 @@ export class MockCloudProvider extends BaseCloudProvider {
   /**
    * Simulates synthesis by returning a dummy WAV blob and sentence alignment.
    */
-  async synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
+  async synthesize(_text: string, _voiceId: string, _speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
     // Create a dummy audio blob (1 second of silence or just valid header)
 
     // Simulate network delay
