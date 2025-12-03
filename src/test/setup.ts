@@ -71,6 +71,23 @@ if (!Element.prototype.releasePointerCapture) {
   (Element.prototype as any).releasePointerCapture = vi.fn();
 }
 
+// Polyfill Blob.prototype.text for JSDOM 20+ which might still lack it or if env issues
+if (!Blob.prototype.text) {
+  Blob.prototype.text = function() {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsText(this);
+    });
+  };
+}
+
+// Polyfill File.prototype.text (File inherits from Blob but sometimes needs explicit help in JSDOM)
+if (typeof File !== 'undefined' && !File.prototype.text) {
+  File.prototype.text = Blob.prototype.text;
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
