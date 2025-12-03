@@ -202,7 +202,33 @@ export class AudioPlayerService {
     return this.provider.getVoices();
   }
 
+  private isQueueEqual(newItems: TTSQueueItem[]): boolean {
+      if (this.queue.length !== newItems.length) return false;
+      for (let i = 0; i < this.queue.length; i++) {
+          if (this.queue[i].text !== newItems[i].text) return false;
+          if (this.queue[i].cfi !== newItems[i].cfi) return false;
+          // Check title for preroll or other metadata changes that might be relevant
+          if (this.queue[i].title !== newItems[i].title) return false;
+      }
+      return true;
+  }
+
   setQueue(items: TTSQueueItem[], startIndex: number = 0) {
+    // If the queue is effectively the same, we should update it (to catch metadata changes)
+    // but NOT stop playback or reset the index, allowing for seamless continuation.
+    // This is crucial for "scrolled-doc" mode where relocation events fire frequently
+    // with the same content.
+    if (this.isQueueEqual(items)) {
+        this.queue = items;
+        // Don't update currentIndex or stop()
+        // But we should verify if startIndex matches currentIndex?
+        // Usually setQueue is called with startIndex=0 by default from extractors.
+        // If we are playing at index 5, and receive same queue with startIndex 0,
+        // we want to stay at 5.
+        // If the caller EXPLICITLY wanted to reset, they would probably stop() first or use jumpTo().
+        return;
+    }
+
     this.stop();
     this.queue = items;
     this.currentIndex = startIndex;
