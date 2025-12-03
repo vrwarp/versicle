@@ -46,6 +46,9 @@ export class AudioPlayerService {
   // Track if we have already attempted to restore session state for the current book
   private sessionRestored: boolean = false;
 
+  // Track if we are currently playing a preview (e.g. from Lexicon)
+  private isPreviewing: boolean = false;
+
   // Silent audio for Media Session "anchoring" (Local TTS)
   private silentAudio: HTMLAudioElement;
 
@@ -109,6 +112,11 @@ export class AudioPlayerService {
                    this.silentAudio.play().catch(e => console.warn("Silent audio play failed", e));
                }
            } else if (event.type === 'end') {
+               if (this.isPreviewing) {
+                   this.isPreviewing = false;
+                   this.setStatus('stopped');
+                   return;
+               }
                // Don't stop silent audio here, wait for playNext or stop
                this.playNext();
            } else if (event.type === 'boundary') {
@@ -147,6 +155,11 @@ export class AudioPlayerService {
           });
 
           this.audioPlayer.setOnEnded(() => {
+              if (this.isPreviewing) {
+                  this.isPreviewing = false;
+                  this.setStatus('stopped');
+                  return;
+              }
               this.playNext();
           });
 
@@ -229,6 +242,46 @@ export class AudioPlayerService {
           this.stop();
           this.currentIndex = index;
           this.play();
+      }
+  }
+
+  /**
+   * Plays a standalone text segment for preview purposes (e.g. Lexicon testing).
+   * Stops any current playback.
+   */
+  async preview(text: string): Promise<void> {
+      this.stop();
+      this.isPreviewing = true;
+      this.setStatus('playing');
+
+      try {
+          const voiceId = this.voiceId || '';
+
+          if (this.provider instanceof WebSpeechProvider) {
+               this.currentSpeechSpeed = this.speed;
+               await this.provider.synthesize(text, voiceId, this.speed);
+          } else {
+               // Cloud provider flow (without caching for previews to save complexity,
+               // though it costs money. Preview text is usually short.)
+               // Note: We track cost because we are hitting the API.
+               CostEstimator.getInstance().track(text);
+
+               const result = await this.provider.synthesize(text, voiceId, this.speed);
+
+               if (result.audio && this.audioPlayer) {
+                   this.audioPlayer.setRate(this.speed);
+                   await this.audioPlayer.playBlob(result.audio);
+               } else {
+                   // If no audio returned (unexpected for cloud), stop.
+                   this.setStatus('stopped');
+                   this.isPreviewing = false;
+               }
+          }
+      } catch (e) {
+          console.error("Preview error", e);
+          this.setStatus('stopped');
+          this.isPreviewing = false;
+          this.notifyError(e instanceof Error ? e.message : "Preview error");
       }
   }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { LexiconService } from '../../lib/tts/LexiconService';
+import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import type { LexiconRule } from '../../types/db';
 import { Plus, Trash2, Volume2, Save, X, Download, Upload } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -90,8 +91,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
       const result = lexiconService.applyLexicon(testInput, tempRules);
       setTestOutput(result);
 
-      const u = new SpeechSynthesisUtterance(result);
-      window.speechSynthesis.speak(u);
+      AudioPlayerService.getInstance().preview(result);
   };
 
   const handleDownloadSample = () => {
