@@ -8,11 +8,13 @@ import { Input } from './ui/Input';
 import { TTSAbbreviationSettings } from './reader/TTSAbbreviationSettings';
 import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
+import { maintenanceService } from '../lib/MaintenanceService';
 
 export const GlobalSettingsDialog = () => {
     const { isGlobalSettingsOpen, setGlobalSettingsOpen } = useUIStore();
     const [activeTab, setActiveTab] = useState('general');
     const [isLexiconOpen, setIsLexiconOpen] = useState(false);
+    const [orphanScanResult, setOrphanScanResult] = useState<string | null>(null);
 
     const {
         providerId, setProviderId,
@@ -35,6 +37,27 @@ export const GlobalSettingsDialog = () => {
 
             // Reload
             window.location.reload();
+        }
+    };
+
+    const handleRepairDB = async () => {
+        setOrphanScanResult('Scanning...');
+        try {
+            const report = await maintenanceService.scanForOrphans();
+            const total = report.files + report.annotations + report.locations + report.lexicon;
+            if (total > 0) {
+                if (confirm(`Found orphans:\n- Files: ${report.files}\n- Annotations: ${report.annotations}\n- Locations: ${report.locations}\n- Lexicon: ${report.lexicon}\n\nDelete them?`)) {
+                    await maintenanceService.pruneOrphans();
+                    setOrphanScanResult('Repair complete. Orphans removed.');
+                } else {
+                    setOrphanScanResult('Repair cancelled.');
+                }
+            } else {
+                setOrphanScanResult('Database is healthy. No orphans found.');
+            }
+        } catch (e) {
+            console.error(e);
+            setOrphanScanResult('Error during repair check console.');
         }
     };
 
@@ -137,11 +160,28 @@ export const GlobalSettingsDialog = () => {
                     )}
 
                     {activeTab === 'data' && (
-                        <div className="space-y-4">
-                            <h3 className="text-lg font-medium text-destructive">Danger Zone</h3>
-                            <Button variant="destructive" onClick={handleClearAllData}>
-                                Clear All Data
-                            </Button>
+                        <div className="space-y-6">
+                            <div className="space-y-4">
+                                <h3 className="text-lg font-medium">Maintenance</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Tools to keep the database healthy.
+                                </p>
+                                <div className="flex flex-col gap-2">
+                                    <Button onClick={handleRepairDB} variant="outline">
+                                        Check & Repair Database
+                                    </Button>
+                                    {orphanScanResult && (
+                                        <p className="text-sm text-muted-foreground">{orphanScanResult}</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="border-t pt-4 space-y-4">
+                                <h3 className="text-lg font-medium text-destructive">Danger Zone</h3>
+                                <Button variant="destructive" onClick={handleClearAllData}>
+                                    Clear All Data
+                                </Button>
+                            </div>
                         </div>
                     )}
                 </div>

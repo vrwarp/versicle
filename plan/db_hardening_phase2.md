@@ -1,39 +1,32 @@
-# Phase 2: Integrity & Maintenance
+# Phase 2: Integrity & Maintenance (COMPLETED)
 
 ## Objectives
 1.  **Data Consistency**: Ensure no orphaned records exist in the database.
 2.  **Schema Validation**: Verify that data read from IDB matches the expected runtime types.
 3.  **Startup Checks**: Run a lightweight health check on application boot.
 
-## Implementation Steps
+## Implementation Details
 
 ### 1. Schema Validation (Runtime)
-- Introduce a lightweight validation library (like `zod`) or write custom type guards.
-- In `DBService.getLibrary()`, validate that each record matches the `BookMetadata` schema.
-- If a record is malformed, log it and potentially mark it as "corrupted" in the UI rather than crashing the app.
+- **Implemented**: `src/db/validators.ts` with `validateBookMetadata`.
+- **Integration**: `DBService.getLibrary()` now filters out books that fail validation, logging an error for each corrupted record found. This prevents the library view from crashing due to malformed data.
 
 ### 2. Orphan Detection Routine
-- Create a `MaintenanceService`.
-- **Function**: `scanForOrphans()`
-    - Get all `bookIds` from `books` store.
-    - Check `files` store: Ensure every file has a corresponding book.
-    - Check `annotations`: Ensure every annotation's `bookId` exists in `books`.
-    - Check `lexicon`: Ensure rule `bookId`s exist.
-- **Action**: Provide a "Repair" button in Global Settings -> Data Management that runs this scan and deletes orphans.
+- **Implemented**: `MaintenanceService` in `src/lib/MaintenanceService.ts`.
+- **Functions**:
+    - `scanForOrphans()`: Checks `files`, `annotations`, `locations`, and `lexicon` stores for entries referencing non-existent books.
+    - `pruneOrphans()`: Deletes identified orphaned records transactionally.
+- **UI**: Added "Maintenance" section to `GlobalSettingsDialog` (Data Management tab) with a "Check & Repair Database" button.
 
 ### 3. Safe Mode
-- If `initDB` fails (e.g., version error, corruption), the app should not white-screen.
-- Wrap the main app initialization in a `try/catch`.
-- If DB fails to open, render a `SafeModeView` instead of `App`.
-    - Options in Safe Mode:
-        - "Reset Database" (Dangerous, wipes everything).
-        - "Export Logs" (if available).
-        - "Try Again".
+- **Implemented**: `src/components/SafeModeView.tsx`.
+- **Logic**: `App.tsx` now attempts to initialize the database before rendering the main router. If `getDB()` fails (e.g., corruption, version error), it catches the error and renders `SafeModeView`.
+- **Features**:
+    - Displays the error message.
+    - "Try Again" button (reloads).
+    - "Reset Database" button (deletes DB and reloads).
 
-### 4. Binary Verification (Optional but recommended)
-- When opening a book, check if `files` entry exists and is a valid `ArrayBuffer`.
-- If missing/corrupt, flag the book in the Library view (e.g., "File Missing") and disable the "Read" button, offering a "Delete" option instead.
-
-## Verification
-- **Manual Testing**: Manually insert bad data (orphaned annotations) via DevTools, run the Repair tool, and verify cleanup.
-- **Simulated Corruption**: Modify IDB to remove a binary file, verify the app handles it gracefully (shows error instead of crashing).
+### 4. Verification
+- **Test Suite**: Added `verification/test_safe_mode.py` and `verification/test_maintenance.py`.
+    - `test_safe_mode`: Simulates a DB open failure and verifies the Safe Mode UI appears.
+    - `test_maintenance`: Injects orphaned records into IndexedDB and verifies that the Repair tool detects and removes them.
