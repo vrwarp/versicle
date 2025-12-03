@@ -106,6 +106,63 @@ class DBService {
     }
   }
 
+  async offloadBook(id: string): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const tx = db.transaction(['books', 'files'], 'readwrite');
+      const bookStore = tx.objectStore('books');
+      const book = await bookStore.get(id);
+
+      if (!book) throw new Error('Book not found');
+
+      // If missing hash, calculate it from existing file before deleting
+      if (!book.fileHash) {
+        const fileStore = tx.objectStore('files');
+        const arrayBuffer = await fileStore.get(id);
+        if (arrayBuffer) {
+          const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          book.fileHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+        }
+      }
+
+      book.isOffloaded = true;
+      await bookStore.put(book);
+      await tx.objectStore('files').delete(id);
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async restoreBook(id: string, file: File): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const book = await db.get('books', id);
+
+      if (!book) throw new Error('Book not found');
+      if (!book.fileHash) throw new Error('Cannot verify file (missing hash).');
+
+      const arrayBuffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const fileHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+
+      if (fileHash !== book.fileHash) {
+        throw new Error('File verification failed: Checksum mismatch.');
+      }
+
+      const tx = db.transaction(['books', 'files'], 'readwrite');
+      await tx.objectStore('files').put(arrayBuffer, id);
+
+      book.isOffloaded = false;
+      await tx.objectStore('books').put(book);
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
   // --- Progress Operations ---
 
   private saveProgressTimeout: NodeJS.Timeout | null = null;
