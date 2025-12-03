@@ -2,6 +2,7 @@ import { getDB } from './db';
 import type { BookMetadata, Annotation, CachedSegment, BookLocations } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub } from '../lib/ingestion';
+import { validateBookMetadata } from './validators';
 
 class DBService {
   private async getDB() {
@@ -28,7 +29,16 @@ class DBService {
     try {
       const db = await this.getDB();
       const books = await db.getAll('books');
-      return books.sort((a, b) => b.addedAt - a.addedAt);
+
+      const validBooks = books.filter((book) => {
+        const isValid = validateBookMetadata(book);
+        if (!isValid) {
+          console.error('DB Integrity: Found corrupted book record', book);
+        }
+        return isValid;
+      });
+
+      return validBooks.sort((a, b) => b.addedAt - a.addedAt);
     } catch (error) {
       this.handleError(error);
     }
