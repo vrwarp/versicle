@@ -79,8 +79,13 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
 
         await service.play();
         expect(synthesizeSpy).toHaveBeenCalledTimes(1);
-        // Default speed is 1.0
-        expect(synthesizeSpy).toHaveBeenCalledWith(expect.any(String), expect.any(String), 1.0);
+        // Default speed is 1.0, and now it accepts a signal as the 4th argument
+        expect(synthesizeSpy).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.any(String),
+            1.0,
+            expect.any(AbortSignal)
+        );
 
         // 2. Pause
         service.pause();
@@ -110,6 +115,8 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
 
         // Use standard expect to fail the test until fixed
         expect(synthesizeSpy).toHaveBeenCalledTimes(2);
+        // Check 4th argument is AbortSignal for the second call too
         expect(synthesizeSpy.mock.calls[1][2]).toBe(2.0);
+        expect(synthesizeSpy.mock.calls[1][3]).toBeInstanceOf(AbortSignal);
     });
 });
