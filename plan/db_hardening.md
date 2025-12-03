@@ -35,11 +35,13 @@ We will address these issues in three phases.
 - **Done**: Refactored `TTSCache.ts` and `AudioPlayerService.ts` to use `DBService`.
 - **Done**: Updated tests to mock `DBService` instead of direct DB access.
 
-### Phase 2: Integrity & Maintenance
+### Phase 2: Integrity & Maintenance (COMPLETED)
 **Goal**: Ensure data consistency and provide tools to fix "broken" states.
-- Implement a "Health Check" routine that runs on startup (or on demand) to identify and clean orphaned records (e.g., annotations for non-existent books).
-- Add a "Safe Mode" for the app if the DB fails to open, allowing the user to export data or reset the DB.
-- Validate data structures on read (Schema Validation) to prevent runtime crashes due to malformed data.
+- **Done**: Implemented `src/db/validators.ts` to validate book metadata on read.
+- **Done**: Created `src/lib/MaintenanceService.ts` to scan and prune orphaned files, annotations, locations, and lexicon entries.
+- **Done**: Added "Safe Mode" (`src/components/SafeModeView.tsx`) to handle critical DB failures gracefully on startup.
+- **Done**: Added "Repair Database" tool in Global Settings -> Data Management.
+- **Done**: Verified via `test_safe_mode.py` and `test_maintenance.py`.
 
 ### Phase 3: Backup & Restore (Snapshots)
 **Goal**: Enable full data portability and disaster recovery.
