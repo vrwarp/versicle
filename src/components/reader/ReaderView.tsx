@@ -15,7 +15,7 @@ import { Toast } from '../ui/Toast';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
-import { getDB } from '../../db/db';
+import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
@@ -245,9 +245,7 @@ export const ReaderView: React.FC = () => {
       setCurrentBookId(id);
 
       try {
-        const db = await getDB();
-        const fileData = await db.get('files', id);
-        const metadata = await db.get('books', id);
+        const { file: fileData, metadata } = await dbService.getBook(id);
 
         if (!fileData) {
           console.error('Book file not found');
@@ -349,12 +347,12 @@ export const ReaderView: React.FC = () => {
                    const title = item ? (item.label || 'Chapter') : 'Unknown';
 
                    updateLocation(cfi, pct, title);
-                   saveProgress(id, cfi, pct);
+                   dbService.saveProgress(id, cfi, pct);
                }
           };
 
           // Check for cached locations
-          const savedLocations = await db.get('locations', id);
+          const savedLocations = await dbService.getLocations(id);
           if (savedLocations) {
               book.locations.load(savedLocations.locations);
               // Update progress immediately
@@ -364,8 +362,7 @@ export const ReaderView: React.FC = () => {
               book.locations.generate(1000).then(async () => {
                    // Save to DB
                    const locationStr = book.locations.save();
-                   const db = await getDB();
-                   await db.put('locations', { bookId: id, locations: locationStr });
+                   await dbService.saveLocations(id, locationStr);
 
                    updateProgressFromLocations(rendition, book);
                });
@@ -463,8 +460,8 @@ export const ReaderView: React.FC = () => {
 
             updateLocation(cfi, percentage, title);
 
-            // Persist to DB (debouncing would be good here)
-            saveProgress(id, cfi, percentage);
+            // Persist to DB (debounced via DBService)
+            dbService.saveProgress(id, cfi, percentage);
           });
         }
       } catch (error) {
@@ -642,24 +639,6 @@ export const ReaderView: React.FC = () => {
       const iframe = viewerRef.current?.querySelector('iframe');
       if (iframe && iframe.contentWindow) {
           iframe.contentWindow.getSelection()?.removeAllRanges();
-      }
-  };
-
-  const saveProgress = async (bookId: string, cfi: string, progress: number) => {
-      try {
-          const db = await getDB();
-          const tx = db.transaction('books', 'readwrite');
-          const store = tx.objectStore('books');
-          const book = await store.get(bookId);
-          if (book) {
-              book.currentCfi = cfi;
-              book.progress = progress;
-              book.lastRead = Date.now();
-              await store.put(book);
-          }
-          await tx.done;
-      } catch (err) {
-          console.error("Failed to save progress", err);
       }
   };
 

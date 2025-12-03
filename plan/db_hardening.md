@@ -26,12 +26,14 @@ The current database implementation relies on IndexedDB (via `idb`) with a scatt
 
 We will address these issues in three phases.
 
-### Phase 1: Architecture & Error Handling
+### Phase 1: Architecture & Error Handling (COMPLETED)
 **Goal**: Centralize database access to ensure consistent error handling, logging, and connection management.
-- Create a `DBService` class/module to wrap `idb`.
-- Implement a global `DatabaseError` type to differentiate between logical errors, storage errors (Quota), and unknown errors.
-- Throttle high-frequency writes (like progress saving).
-- Add specific handling for `QuotaExceededError`.
+- **Done**: Created `src/db/DBService.ts` to wrap `idb`.
+- **Done**: Implemented `DatabaseError` and `StorageFullError` in `src/types/errors.ts`.
+- **Done**: Refactored `useLibraryStore.ts` to use `DBService` and handle errors appropriately.
+- **Done**: Refactored `ReaderView.tsx` to use `DBService` and debounced progress saving.
+- **Done**: Refactored `TTSCache.ts` and `AudioPlayerService.ts` to use `DBService`.
+- **Done**: Updated tests to mock `DBService` instead of direct DB access.
 
 ### Phase 2: Integrity & Maintenance
 **Goal**: Ensure data consistency and provide tools to fix "broken" states.

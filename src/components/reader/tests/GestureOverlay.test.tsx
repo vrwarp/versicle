@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { GestureOverlay } from '../GestureOverlay';
 import { useReaderStore } from '../../../store/useReaderStore';
 import { useTTSStore } from '../../../store/useTTSStore';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Mock dependencies
 vi.mock('../../../store/useReaderStore');

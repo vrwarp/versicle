@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { getDB } from '../db/db';
+import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
-import { processEpub } from '../lib/ingestion';
+import { StorageFullError } from '../types/errors';
 
 /**
  * State interface for the Library store.
@@ -44,12 +44,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   fetchBooks: async () => {
     set({ isLoading: true, error: null });
     try {
-      const db = await getDB();
-      const books = await db.getAll('books');
-
-      // Sort by addedAt descending
-      books.sort((a, b) => b.addedAt - a.addedAt);
-
+      const books = await dbService.getLibrary();
       set({ books, isLoading: false });
     } catch (err) {
       console.error('Failed to fetch books:', err);
@@ -60,42 +55,23 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   addBook: async (file: File) => {
     set({ isImporting: true, error: null });
     try {
-      await processEpub(file);
+      await dbService.addBook(file);
       // Refresh library
       await get().fetchBooks();
       set({ isImporting: false });
     } catch (err) {
       console.error('Failed to import book:', err);
-      set({ error: 'Failed to import book.', isImporting: false });
+      let errorMessage = 'Failed to import book.';
+      if (err instanceof StorageFullError) {
+          errorMessage = 'Device storage full. Please delete some books.';
+      }
+      set({ error: errorMessage, isImporting: false });
     }
   },
 
   removeBook: async (id: string) => {
     try {
-      const db = await getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon'], 'readwrite');
-      await tx.objectStore('books').delete(id);
-      await tx.objectStore('files').delete(id);
-      await tx.objectStore('locations').delete(id);
-
-      // Delete annotations for this book
-      const index = tx.objectStore('annotations').index('by_bookId');
-      let cursor = await index.openCursor(IDBKeyRange.only(id));
-      while (cursor) {
-        await cursor.delete();
-        cursor = await cursor.continue();
-      }
-
-      // Delete lexicon rules for this book
-      const lexiconIndex = tx.objectStore('lexicon').index('by_bookId');
-      let lexiconCursor = await lexiconIndex.openCursor(IDBKeyRange.only(id));
-      while (lexiconCursor) {
-        await lexiconCursor.delete();
-        lexiconCursor = await lexiconCursor.continue();
-      }
-
-      await tx.done;
-
+      await dbService.deleteBook(id);
       await get().fetchBooks();
     } catch (err) {
       console.error('Failed to remove book:', err);

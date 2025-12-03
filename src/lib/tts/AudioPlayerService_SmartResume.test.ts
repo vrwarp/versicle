@@ -2,6 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { AudioElementPlayer } from './AudioElementPlayer';
+import { dbService } from '../../db/DBService';
+
+// Mock DBService
+vi.mock('../../db/DBService', () => ({
+  dbService: {
+    getBook: vi.fn(),
+    getBookMetadata: vi.fn(),
+    updatePlaybackState: vi.fn(),
+  }
+}));
 
 // Define hoisted mocks first to avoid reference errors
 const { mockDB, mockBook } = vi.hoisted(() => {
@@ -117,6 +127,13 @@ describe('AudioPlayerService - Smart Resume', () => {
         // Reset singleton logic
         service = AudioPlayerService.getInstance();
         service.stop();
+        service.setBookId('test-book-id');
+
+        // Mock DBService responses
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (dbService.getBookMetadata as any).mockResolvedValue({ lastPauseTime: null });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (dbService.getBook as any).mockResolvedValue({ metadata: { lastPlayedCfi: null } });
 
         // IMPORTANT: Set Book ID to enable DB logic
         service.setBookId('test-book-id');
@@ -141,9 +158,12 @@ describe('AudioPlayerService - Smart Resume', () => {
 
         service.pause();
 
-        await vi.advanceTimersByTimeAsync(100);
-
-        expect(mockBook.lastPauseTime).toBe(now);
+        // Now we expect DBService to be called
+        expect(dbService.updatePlaybackState).toHaveBeenCalledWith(
+            'test-book-id',
+            'cfi4', // The cfi of current index 3 ('Sentence 4') is 'cfi4'
+            now
+        );
     });
 
     it('should set lastPauseTime on stop', async () => {
@@ -152,10 +172,11 @@ describe('AudioPlayerService - Smart Resume', () => {
         vi.setSystemTime(now);
 
         service.stop();
-
-        await vi.advanceTimersByTimeAsync(100);
-
-        expect(mockBook.lastPauseTime).toBe(now);
+        expect(dbService.updatePlaybackState).toHaveBeenCalledWith(
+            'test-book-id',
+            'cfi4',
+            null
+        );
     });
 
     describe('WebSpeechProvider (Local)', () => {
@@ -168,9 +189,14 @@ describe('AudioPlayerService - Smart Resume', () => {
             const now = 1000000;
             vi.setSystemTime(now);
 
-            // Simulate paused state
+            // Simulate paused state in DB
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (dbService.getBookMetadata as any).mockResolvedValue({
+                lastPauseTime: now - (4 * 60 * 1000) // 4 mins ago
+            });
+
+            // Need to mock that resume finds the time
             service['status'] = 'paused';
-            mockBook.lastPauseTime = now - (4 * 60 * 1000); // 4 mins ago
 
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
@@ -186,8 +212,14 @@ describe('AudioPlayerService - Smart Resume', () => {
             const now = 1000000;
             vi.setSystemTime(now);
 
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (dbService.getBookMetadata as any).mockResolvedValue({
+                lastPauseTime: now - (6 * 60 * 1000) // 6 mins ago
+            });
+
+            // Set current index before "pausing" logic simulation
+            service['currentIndex'] = 3;
             service['status'] = 'paused';
-            mockBook.lastPauseTime = now - (6 * 60 * 1000); // 6 mins ago
 
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
@@ -201,8 +233,12 @@ describe('AudioPlayerService - Smart Resume', () => {
             const now = 1000000 + (25 * 60 * 60 * 1000); // 25 hours later
             vi.setSystemTime(now);
 
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (dbService.getBookMetadata as any).mockResolvedValue({
+                lastPauseTime: 1000000
+            });
+
             service['status'] = 'paused';
-            mockBook.lastPauseTime = 1000000;
 
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
@@ -229,8 +265,12 @@ describe('AudioPlayerService - Smart Resume', () => {
             const now = 1000000;
             vi.setSystemTime(now);
 
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (dbService.getBookMetadata as any).mockResolvedValue({
+                lastPauseTime: now - (4 * 60 * 1000)
+            });
+
             service['status'] = 'paused';
-            mockBook.lastPauseTime = now - (4 * 60 * 1000);
 
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
@@ -244,8 +284,12 @@ describe('AudioPlayerService - Smart Resume', () => {
             const now = 1000000;
             vi.setSystemTime(now);
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (dbService.getBookMetadata as any).mockResolvedValue({
+                lastPauseTime: now - (6 * 60 * 1000)
+            });
+
             service['status'] = 'paused';
-            mockBook.lastPauseTime = now - (6 * 60 * 1000);
 
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
@@ -259,8 +303,12 @@ describe('AudioPlayerService - Smart Resume', () => {
             const now = 1000000 + (25 * 60 * 60 * 1000);
             vi.setSystemTime(now);
 
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (dbService.getBookMetadata as any).mockResolvedValue({
+                lastPauseTime: 1000000
+            });
+
             service['status'] = 'paused';
-            mockBook.lastPauseTime = 1000000;
 
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);

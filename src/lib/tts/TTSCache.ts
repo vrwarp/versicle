@@ -1,4 +1,4 @@
-import { getDB } from '../../db/db';
+import { dbService } from '../../db/DBService';
 import type { CachedSegment } from '../../types/db';
 import type { Timepoint } from './providers/types';
 
@@ -34,16 +34,7 @@ export class TTSCache {
    * @returns A Promise that resolves to the CachedSegment or undefined if not found.
    */
   async get(key: string): Promise<CachedSegment | undefined> {
-    const db = await getDB();
-    const segment = await db.get('tts_cache', key);
-
-    if (segment) {
-      // Update lastAccessed asynchronously
-      segment.lastAccessed = Date.now();
-      db.put('tts_cache', segment);
-    }
-
-    return segment;
+    return await dbService.getCachedSegment(key);
   }
 
   /**
@@ -55,16 +46,6 @@ export class TTSCache {
    * @returns A Promise that resolves when the segment is stored.
    */
   async put(key: string, audio: ArrayBuffer, alignment?: Timepoint[]): Promise<void> {
-    const db = await getDB();
-    const segment: CachedSegment = {
-      key,
-      audio,
-      alignment,
-      createdAt: Date.now(),
-      lastAccessed: Date.now(),
-    };
-    await db.put('tts_cache', segment);
-
-    // Optional: Prune cache if too large (can be done later or in a separate job)
+    await dbService.cacheSegment(key, audio, alignment);
   }
 }

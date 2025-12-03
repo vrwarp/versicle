@@ -6,7 +6,7 @@ import { TTSCache } from './TTSCache';
 import { CostEstimator } from './CostEstimator';
 import { LexiconService } from './LexiconService';
 import { MediaSessionManager } from './MediaSessionManager';
-import { getDB } from '../../db/db';
+import { dbService } from '../../db/DBService';
 
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
@@ -236,8 +236,7 @@ export class AudioPlayerService {
         this.sessionRestored = true;
 
         try {
-            const db = await getDB();
-            const book = await db.get('books', this.currentBookId);
+            const book = await dbService.getBookMetadata(this.currentBookId);
             if (book) {
                 // Restore Playback Position (lastPlayedCfi)
                 // Only override if we are at the default start (index 0)
@@ -355,20 +354,20 @@ export class AudioPlayerService {
   }
 
   async resume(): Promise<void> {
+     // Mark session as restored to prevent play() from re-triggering restoration logic
+     this.sessionRestored = true;
+
      // Smart Resume Logic
      let lastPauseTime: number | null = null;
 
      // Fetch last pause time from DB if bookId is set
      if (this.currentBookId) {
          try {
-             const db = await getDB();
-             const book = await db.get('books', this.currentBookId);
+             const book = await dbService.getBookMetadata(this.currentBookId);
              if (book && book.lastPauseTime) {
                  lastPauseTime = book.lastPauseTime;
-
                  // Clear it so we don't use it again for this session
-                 book.lastPauseTime = undefined;
-                 await db.put('books', book);
+                 await dbService.updatePlaybackState(this.currentBookId, undefined, null);
              }
          } catch (e) {
              console.warn("Failed to fetch/clear lastPauseTime from DB", e);
@@ -434,24 +433,20 @@ export class AudioPlayerService {
   private async savePlaybackState() {
       if (!this.currentBookId) return;
 
-      try {
-          const db = await getDB();
-          const tx = db.transaction('books', 'readwrite');
-          const store = tx.objectStore('books');
-          const book = await store.get(this.currentBookId);
+      const currentItem = this.queue[this.currentIndex];
+      const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
 
-          if (book) {
-              book.lastPauseTime = Date.now();
-              const currentItem = this.queue[this.currentIndex];
-              if (currentItem && currentItem.cfi) {
-                  book.lastPlayedCfi = currentItem.cfi;
-              }
-              await store.put(book);
-          }
-          await tx.done;
-      } catch (e) {
-          console.error("Failed to save playback state", e);
-      }
+      // We only save pause time if paused, otherwise null if we wanted to clear it on stop?
+      // Actually stop() calls this.
+      // If stopped, do we want to clear lastPauseTime?
+      // If we stop (e.g. exit book), we probably want to resume next time.
+      // But if we stop naturally (end of book), maybe not.
+      // Current logic in tests expects setLastPauseTime(null) on stop.
+
+      const isPaused = this.status === 'paused';
+      const lastPauseTime = isPaused ? Date.now() : null;
+
+      await dbService.updatePlaybackState(this.currentBookId, lastPlayedCfi, lastPauseTime);
   }
 
   pause() {
@@ -462,10 +457,10 @@ export class AudioPlayerService {
         this.audioPlayer.pause();
     }
 
+    this.setStatus('paused');
+
     // Record pause time
     this.savePlaybackState();
-
-    this.setStatus('paused');
   }
 
   stop() {

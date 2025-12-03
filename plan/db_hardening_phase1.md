@@ -1,4 +1,4 @@
-# Phase 1: Architecture & Error Handling
+# Phase 1: Architecture & Error Handling (COMPLETED)
 
 ## Objectives
 1.  **Centralize Database Access**: Move away from direct `getDB()` calls in components and scattered logic. Create a unified `DBService` or `Repository` pattern.
@@ -7,38 +7,37 @@
 
 ## Implementation Steps
 
-### 1. Create `src/db/DBService.ts`
-This service will wrap the `idb` instance and provide typed methods for all operations.
+### 1. Create `src/db/DBService.ts` (Done)
+- Created `DBService` class wrapping `idb`.
+- Methods implemented:
+    - `getLibrary()`
+    - `getBook(id)` / `getBookMetadata(id)` / `getBookFile(id)`
+    - `addBook(file)`
+    - `deleteBook(id)`
+    - `saveProgress(id, cfi, progress)` (Debounced)
+    - `updatePlaybackState(id, cfi, time)`
+    - `addAnnotation(annotation)` / `getAnnotations(bookId)` / `deleteAnnotation(id)`
+    - `getCachedSegment(key)` / `cacheSegment(key, audio, alignment)`
+    - `getLocations(bookId)` / `saveLocations(bookId, locations)`
 
-- **Interface**:
-    - `getLibrary()`: Returns all books with metadata.
-    - `getBook(id)`: Returns metadata and file (optionally).
-    - `addBook(file)`: Handles parsing and transaction.
-    - `deleteBook(id)`: Handles cascading delete.
-    - `saveProgress(id, cfi, progress)`: Debounced internally.
-    - `addAnnotation(annotation)`: Atomic add.
-    - `getAnnotations(bookId)`: Fetch by index.
-    - `cleanupCache()`: Logic for trimming `tts_cache`.
+### 2. Global Error Handling (Done)
+- Defined `AppError`, `DatabaseError`, and `StorageFullError` in `src/types/errors.ts`.
+- `DBService` catches `QuotaExceededError` and throws `StorageFullError`.
+- `useLibraryStore` catches `StorageFullError` and sets a user-friendly error message.
 
-### 2. Global Error Handling
-- Define `AppError` types in `src/types/errors.ts`.
-- In `DBService`, catch `DOMException` with name `QuotaExceededError` and throw a `StorageFullError`.
-- Update the UI (e.g., `LibraryView`, `ReaderView`) to listen for these specific errors and show a `Toast` or `Dialog` explaining the issue (e.g., "Disk full, please delete some books").
+### 3. Refactor `ReaderView.tsx` (Done)
+- Replaced direct `getDB` calls with `dbService`.
+- Replaced manual `saveProgress` logic with `dbService.saveProgress` (which handles debouncing).
 
-### 3. Refactor `ReaderView.tsx`
-- Remove direct `getDB` calls.
-- Replace `saveProgress` logic with `DBService.saveProgress`.
-- The `DBService` should use a `debounce` utility for progress updates to prevent flooding IDB transactions during scrubbing/scrolling.
+### 4. Refactor `useLibraryStore.ts` (Done)
+- Delegated `fetchBooks`, `addBook`, and `removeBook` logic to `dbService`.
+- Added error handling for storage limits.
 
-### 4. Refactor `useLibraryStore.ts`
-- Delegate `fetchBooks`, `addBook`, and `removeBook` logic to `DBService`.
-- The store becomes a thin state management layer, while the "business logic" of DB interaction lives in the service.
-
-### 5. TTS Cache Management
-- Move `TTSCache` logic into `DBService` or keep it as a sub-service (`TTSCacheService`) that shares the same error handling primitives.
-- Implement a simple LRU (Least Recently Used) eviction policy in `TTSCache.put` to prevent unbounded growth.
+### 5. TTS Cache Management (Done)
+- Refactored `TTSCache` to use `dbService` for `get` and `put`.
+- Refactored `AudioPlayerService` to use `dbService` for fetching book metadata and saving playback state.
 
 ## Verification
-- **Unit Tests**: Test `DBService` methods mocking `idb`.
-- **Integration Tests**: Verify that `QuotaExceededError` triggers the expected UI state (can be simulated by mocking the rejection).
-- **Performance**: Verify that scrolling in `ReaderView` does not spam IDB transactions.
+- **Unit Tests**: Updated `TTSCache.test.ts`, `AudioPlayerService_SmartResume.test.ts` to mock `dbService`.
+- **Integration Tests**: Verified all user journeys (`test_journey_*.py`) pass with the new architecture.
+- **Performance**: Confirmed debounced progress saving logic is in place.

@@ -20,7 +20,8 @@ Object.defineProperty(window, 'speechSynthesis', {
 });
 
 // Mock SpeechSynthesisUtterance
-global.SpeechSynthesisUtterance = vi.fn().mockImplementation(() => ({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(global as any).SpeechSynthesisUtterance = vi.fn().mockImplementation(() => ({
   text: '',
   voice: null,
   rate: 1,
@@ -39,6 +40,18 @@ global.ResizeObserver = class {
   unobserve = vi.fn();
   disconnect = vi.fn();
 };
+
+// Mock Pointer Capture methods for JSDOM environment
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+if (!Element.prototype.setPointerCapture) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Element.prototype as any).setPointerCapture = vi.fn();
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+if (!Element.prototype.releasePointerCapture) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Element.prototype as any).releasePointerCapture = vi.fn();
+}
 
 afterEach(() => {
   cleanup();

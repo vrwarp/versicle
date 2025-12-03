@@ -1,22 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TTSCache } from './TTSCache';
-import * as dbModule from '../../db/db';
+import { dbService } from '../../db/DBService';
 
-vi.mock('../../db/db', () => ({
-  getDB: vi.fn(),
+vi.mock('../../db/DBService', () => ({
+  dbService: {
+    getCachedSegment: vi.fn(),
+    cacheSegment: vi.fn(),
+  },
 }));
 
 describe('TTSCache', () => {
   let cache: TTSCache;
-  const mockDb = {
-    get: vi.fn(),
-    put: vi.fn(),
-  };
 
   beforeEach(() => {
     cache = new TTSCache();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(dbModule.getDB).mockResolvedValue(mockDb as any);
     vi.clearAllMocks();
   });
 
@@ -43,30 +40,25 @@ describe('TTSCache', () => {
 
   describe('get', () => {
     it('should return undefined if key not found', async () => {
-      mockDb.get.mockResolvedValue(undefined);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (dbService.getCachedSegment as any).mockResolvedValue(undefined);
       const result = await cache.get('some-key');
       expect(result).toBeUndefined();
-      expect(mockDb.get).toHaveBeenCalledWith('tts_cache', 'some-key');
+      expect(dbService.getCachedSegment).toHaveBeenCalledWith('some-key');
     });
 
-    it('should return segment and update lastAccessed if found', async () => {
+    it('should return segment', async () => {
       const mockSegment = {
         key: 'some-key',
         audio: new ArrayBuffer(0),
         createdAt: 1000,
         lastAccessed: 1000,
       };
-      mockDb.get.mockResolvedValue(mockSegment);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (dbService.getCachedSegment as any).mockResolvedValue(mockSegment);
 
       const result = await cache.get('some-key');
       expect(result).toBe(mockSegment);
-      expect(mockDb.put).toHaveBeenCalledWith('tts_cache', expect.objectContaining({
-          ...mockSegment,
-          lastAccessed: expect.any(Number)
-      }));
-      // Verify lastAccessed was updated (should be greater than original)
-      const updatedSegment = mockDb.put.mock.calls[0][1];
-      expect(updatedSegment.lastAccessed).toBeGreaterThan(1000);
     });
   });
 
@@ -76,12 +68,7 @@ describe('TTSCache', () => {
         const audio = new ArrayBuffer(10);
         await cache.put(key, audio);
 
-        expect(mockDb.put).toHaveBeenCalledWith('tts_cache', expect.objectContaining({
-            key,
-            audio,
-            createdAt: expect.any(Number),
-            lastAccessed: expect.any(Number)
-        }));
+        expect(dbService.cacheSegment).toHaveBeenCalledWith(key, audio, undefined);
     });
 
     it('should store alignment if provided', async () => {
@@ -90,11 +77,7 @@ describe('TTSCache', () => {
         const alignment = [{ timeSeconds: 0, charIndex: 0 }];
         await cache.put(key, audio, alignment);
 
-        expect(mockDb.put).toHaveBeenCalledWith('tts_cache', expect.objectContaining({
-            key,
-            audio,
-            alignment
-        }));
+        expect(dbService.cacheSegment).toHaveBeenCalledWith(key, audio, alignment);
     });
   });
 });

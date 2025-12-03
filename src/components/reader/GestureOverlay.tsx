@@ -58,7 +58,9 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
   const handlePointerUp = (e: React.PointerEvent) => {
     e.currentTarget.releasePointerCapture(e.pointerId);
 
-    if (!touchStart.current) return;
+    if (!touchStart.current) {
+        return;
+    }
 
     const touchEnd = {
       x: e.clientX,
@@ -78,9 +80,12 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
     const TAP_TIMEOUT = 300;    // ms
 
     // TAP DETECTION
+    // Note: Use clientX from the original touchStart event for tap zone logic,
+    // or rely on touchEnd x if we assume minimal movement.
+    // Since we validated movement < THRESHOLD, touchEnd.x is roughly equal to touchStart.x
     if (duration < TAP_TIMEOUT && absDx < TAP_THRESHOLD && absDy < TAP_THRESHOLD) {
       const width = window.innerWidth;
-      const x = touchEnd.x;
+      const x = touchStart.current.x; // Use start position for tap zone consistency
 
       if (x < width * 0.25) {
         // Left Zone: Rewind
