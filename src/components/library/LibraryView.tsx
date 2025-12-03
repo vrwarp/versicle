@@ -101,7 +101,7 @@ export const LibraryView: React.FC = () => {
   const GridAny = Grid as any;
 
   return (
-    <div data-testid="library-container" className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col bg-background text-foreground">
+    <div data-testid="library-view" className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col bg-background text-foreground">
       <input
         type="file"
         ref={fileInputRef}
