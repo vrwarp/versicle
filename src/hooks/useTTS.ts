@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
 import { useReaderStore } from '../store/useReaderStore';
 import { extractSentences, type SentenceNode } from '../lib/tts';
@@ -19,13 +19,13 @@ export const useTTS = (rendition: Rendition | null) => {
     rate
   } = useTTSStore();
 
-  const { currentChapterTitle, currentCfi } = useReaderStore(state => ({
-      currentChapterTitle: state.currentChapterTitle,
-      currentCfi: state.currentCfi
+  const { currentChapterTitle } = useReaderStore(state => ({
+      currentChapterTitle: state.currentChapterTitle
   }));
 
   const [sentences, setSentences] = useState<SentenceNode[]>([]);
   const player = AudioPlayerService.getInstance();
+  const lastLoadedHref = useRef<string | null>(null);
 
   // Load voices on mount
   useEffect(() => {
@@ -38,6 +38,21 @@ export const useTTS = (rendition: Rendition | null) => {
 
     const loadSentences = () => {
        try {
+           // Check if chapter has changed
+           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           const currentLocation = (rendition as any).currentLocation();
+           const currentHref = currentLocation?.start?.href;
+
+           // If we have loaded this chapter already, don't reload queue
+           // This prevents queue reset on page turns in paginated mode
+           if (currentHref && currentHref === lastLoadedHref.current) {
+               return;
+           }
+
+           if (currentHref) {
+               lastLoadedHref.current = currentHref;
+           }
+
            const extracted = extractSentences(rendition);
            setSentences(extracted);
 
@@ -89,7 +104,7 @@ export const useTTS = (rendition: Rendition | null) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).off('relocated', loadSentences);
     };
-  }, [rendition, player, currentCfi]); // Re-run when CFI changes to ensure sync
+  }, [rendition, player]); // Removed currentCfi dependency
 
   // Cleanup on unmount
   useEffect(() => {
