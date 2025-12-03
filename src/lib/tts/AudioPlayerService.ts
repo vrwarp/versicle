@@ -114,6 +114,14 @@ export class AudioPlayerService {
            } else if (event.type === 'boundary') {
                // We might use this for word-level sync in future
            } else if (event.type === 'error') {
+               // Ignore 'interrupted' or 'canceled' errors as they are expected during navigation
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               const errorType = (event.error as any)?.error || event.error;
+               if (errorType === 'interrupted' || errorType === 'canceled') {
+                   // Do not stop, as this likely means we are just starting a new sentence
+                   return;
+               }
+
                console.error("TTS Provider Error", event.error);
                this.setStatus('stopped');
                this.notifyError("Playback Error: " + (event.error?.message || "Unknown error"));
@@ -266,7 +274,15 @@ export class AudioPlayerService {
     }
 
     const item = this.queue[this.currentIndex];
-    this.setStatus('loading');
+
+    // Only set loading if we are NOT already playing.
+    // This prevents flickering "Pause" -> "Play" -> "Pause" in UI during sentence transitions.
+    // If we are playing, we are just transitioning to next sentence, so effectively still active.
+    if (this.status !== 'playing') {
+        this.setStatus('loading');
+    }
+
+    // Always notify listeners of the new active CFI, even if status didn't change
     this.notifyListeners(item.cfi);
     this.updateMediaSessionMetadata();
 

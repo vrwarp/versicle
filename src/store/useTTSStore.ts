@@ -100,7 +100,9 @@ export const useTTSStore = create<TTSState>()(
         player.subscribe((status, activeCfi, currentIndex, queue, error) => {
             set({
                 status,
-                isPlaying: status === 'playing',
+                // Treat 'loading' as playing to prevent UI flicker (play/pause button)
+                // during transitions between sentences or while buffering.
+                isPlaying: status === 'playing' || status === 'loading',
                 activeCfi,
                 currentIndex,
                 queue,
@@ -253,7 +255,7 @@ export const useTTSStore = create<TTSState>()(
 
             syncState: (status, activeCfi, currentIndex, queue, error) => set({
                 status,
-                isPlaying: status === 'playing',
+                isPlaying: status === 'playing' || status === 'loading',
                 activeCfi,
                 currentIndex,
                 queue,
