@@ -24,14 +24,14 @@ def test_journey_backup_restore(page: Page):
     # Wait for processing - wait for the card to be visible
     # Using selector similar to test_journey_smart_delete.py
     book_card = page.locator("[data-testid^='book-card-']").first
-    expect(book_card).to_be_visible(timeout=30000)
+    expect(book_card).to_be_visible(timeout=5000)
 
     # Click to open reader
     book_card.click()
 
     # Wait for reader to load
     # Use existing test id for iframe container or back button
-    expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=15000)
+    expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=5000)
 
     # 2. Add Annotation
     # Skip actual annotation on text for now as it's flaky, rely on adding a Lexicon rule
@@ -95,7 +95,7 @@ def test_journey_backup_restore(page: Page):
     # Use specific testid
     page.click("data-testid=menu-delete")
 
-    expect(book_card).not_to_be_visible()
+    expect(book_card).not_to_be_visible(timeout=5000)
 
     # 5. Restore Backup
     page.click("button[aria-label='Settings']")
@@ -108,18 +108,18 @@ def test_journey_backup_restore(page: Page):
     page.set_input_files("data-testid=backup-file-input", backup_path)
 
     # Wait for reload (Restore triggers reload)
-    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=20000)
+    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=5000)
 
     # 6. Verify Restore
     # Book should be back
-    expect(book_card).to_be_visible()
+    expect(book_card).to_be_visible(timeout=5000)
 
     # Since it was a light backup, the book should be "Offloaded" (cloud icon)
     # Check for offloaded status - use the same selector as smart delete test
     # expect(page.locator(".bg-black\\/20 > svg")).to_be_visible()
     # Or explicitly check for the status badge if it exists
     # The offload indicator is a div with bg-black/20
-    expect(page.locator(".bg-black\\/20")).to_be_visible()
+    expect(page.locator(".bg-black\\/20")).to_be_visible(timeout=5000)
 
     capture_screenshot(page, "backup_restore_complete")
 
@@ -143,7 +143,7 @@ def test_journey_full_backup_restore(page: Page):
     page.set_input_files("data-testid=hidden-file-input", "public/books/alice.epub")
 
     book_card = page.locator("[data-testid^='book-card-']").first
-    expect(book_card).to_be_visible(timeout=30000)
+    expect(book_card).to_be_visible(timeout=5000)
 
     # 2. Export Full Backup
     page.click("button[aria-label='Settings']") # Header settings
@@ -169,7 +169,7 @@ def test_journey_full_backup_restore(page: Page):
     page.locator("data-testid=book-menu-trigger").click(force=True)
     page.once("dialog", lambda dialog: dialog.accept())
     page.click("data-testid=menu-delete")
-    expect(book_card).not_to_be_visible()
+    expect(book_card).not_to_be_visible(timeout=5000)
 
     # 4. Restore Backup
     page.click("button[aria-label='Settings']")
@@ -179,13 +179,13 @@ def test_journey_full_backup_restore(page: Page):
     page.set_input_files("data-testid=backup-file-input", backup_path)
 
     # Wait for reload
-    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=20000)
+    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=5000)
 
     # 5. Verify Restore
-    expect(book_card).to_be_visible()
+    expect(book_card).to_be_visible(timeout=5000)
 
     # Should NOT be offloaded (no cloud icon overlay)
-    expect(page.locator(".bg-black\\/20")).not_to_be_visible()
+    expect(page.locator(".bg-black\\/20")).not_to_be_visible(timeout=5000)
 
     capture_screenshot(page, "full_backup_restore_complete")
 

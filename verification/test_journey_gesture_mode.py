@@ -11,15 +11,15 @@ def test_journey_gesture_mode(page: Page):
 
     # 1. Load Demo Book
     page.click("text=Load Demo Book (Alice in Wonderland)")
-    expect(page.locator("text=Alice's Adventures in Wonderland")).to_be_visible(timeout=10000)
+    expect(page.locator("text=Alice's Adventures in Wonderland")).to_be_visible(timeout=5000)
 
     # 2. Open Book
     page.click("text=Alice's Adventures in Wonderland")
-    expect(page.locator("div[data-testid='reader-iframe-container']")).to_be_visible(timeout=10000)
+    expect(page.locator("div[data-testid='reader-iframe-container']")).to_be_visible(timeout=5000)
 
     # 3. Open Audio Panel (UnifiedAudioPanel)
     page.click("button[data-testid='reader-audio-button']")
-    expect(page.get_by_test_id("tts-panel")).to_be_visible()
+    expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=5000)
 
     # Switch to Settings view in Audio Panel
     page.click("button:has-text('Settings')")
@@ -32,16 +32,16 @@ def test_journey_gesture_mode(page: Page):
 
     # The Audio Panel should close automatically when Gesture Mode is enabled.
     # So we don't need to manually close it.
-    expect(page.get_by_test_id("tts-panel")).not_to_be_visible()
+    expect(page.get_by_test_id("tts-panel")).not_to_be_visible(timeout=5000)
 
     # 5. Verify Overlay Appears
-    expect(page.locator("text=Gesture Mode Active")).to_be_visible()
-    expect(page.get_by_label("Exit Gesture Mode")).to_be_visible()
+    expect(page.locator("text=Gesture Mode Active")).to_be_visible(timeout=5000)
+    expect(page.get_by_label("Exit Gesture Mode")).to_be_visible(timeout=5000)
 
     # 6. Interact with Overlay (Tap Center)
     # Verify feedback icon appears
     # Wait for stable overlay
-    page.wait_for_selector("text=Gesture Mode Active")
+    page.wait_for_selector("text=Gesture Mode Active", timeout=5000)
 
     # Trigger interaction. Note that "Playing" feedback is very short (800ms fade).
     # We might miss it if play/pause is fast.
@@ -60,4 +60,4 @@ def test_journey_gesture_mode(page: Page):
 
     # 8. Exit Gesture Mode
     page.get_by_label("Exit Gesture Mode").click()
-    expect(page.locator("text=Gesture Mode Active")).not_to_be_visible()
+    expect(page.locator("text=Gesture Mode Active")).not_to_be_visible(timeout=5000)

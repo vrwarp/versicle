@@ -11,41 +11,44 @@ def test_search_button_position(page: Page):
     # Load app
     reset_app(page)
 
-    # Check if book exists
-    if page.locator("[data-testid^='book-card-']").first.count() == 0:
-        # Handle empty library if needed
+    # Robustly ensure we have a book or can load one
+    # Wait for either a book card or the empty library state (demo button)
+    try:
+        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book')", timeout=5000)
+    except:
+        pytest.fail("Neither book card nor Load Demo Book button appeared within 5s")
+
+    # If no book card is present, try to load demo book
+    if page.locator("[data-testid^='book-card-']").count() == 0:
         demo_btn = page.get_by_role("button", name="Load Demo Book")
-        if demo_btn.count() > 0 and demo_btn.is_visible():
+        if demo_btn.is_visible():
             print("Loading Demo Book...")
             demo_btn.click()
+            # Wait for book card to appear after clicking
+            expect(page.locator("[data-testid^='book-card-']").first).to_be_visible(timeout=5000)
+        else:
+             pytest.fail("Library empty but Load Demo Book button not visible")
 
-            # Wait a bit for processing
-            page.wait_for_timeout(3000)
-
-            # Reload page to ensure list updates
-            page.reload()
-            page.wait_for_load_state("networkidle")
-
-    # Wait for book card to appear
-    book_card = page.locator("[data-testid^='book-card-']").first.first
-    # Use a reasonable timeout
-    book_card.wait_for(timeout=30000)
+    # Get the book card locator
+    book_card = page.locator("[data-testid^='book-card-']").first
+    expect(book_card).to_be_visible(timeout=5000)
 
     # Open the book
     book_card.click()
 
     # Wait for reader to load
-    page.wait_for_selector('div[data-testid="reader-iframe-container"]', timeout=40000)
+    page.wait_for_selector('div[data-testid="reader-iframe-container"]', timeout=5000)
 
     # Ensure the header is visible
-    page.wait_for_selector('header', timeout=10000)
+    page.wait_for_selector('header', timeout=5000)
 
     # Locate the search button
     search_btn = page.locator('button[data-testid="reader-search-button"]')
-    expect(search_btn).to_be_visible()
+    expect(search_btn).to_be_visible(timeout=5000)
 
     # Verify position
     annotations_btn = page.locator('button[data-testid="reader-annotations-button"]')
+    expect(annotations_btn).to_be_visible(timeout=5000)
 
     # Check bounding boxes
     search_box = search_btn.bounding_box()
