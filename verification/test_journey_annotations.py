@@ -9,7 +9,7 @@ def test_journey_annotations(page: Page):
 
     # Open Book
     page.locator("[data-testid^='book-card-']").first.click()
-    expect(page.get_by_test_id("reader-back-button")).to_be_visible()
+    expect(page.get_by_test_id("reader-back-button")).to_be_visible(timeout=5000)
 
     # Wait for iframe content
     frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
@@ -66,7 +66,7 @@ def test_journey_annotations(page: Page):
     # Click Yellow Highlight
     expect(page.get_by_test_id("popover-color-yellow")).to_be_visible(timeout=3000)
     page.get_by_test_id("popover-color-yellow").click()
-    expect(page.get_by_test_id("popover-color-yellow")).not_to_be_visible()
+    expect(page.get_by_test_id("popover-color-yellow")).not_to_be_visible(timeout=5000)
 
     # Verify logic via test helper exposed on window
     # Wait for annotations to be processed
@@ -82,7 +82,7 @@ def test_journey_annotations(page: Page):
     page.reload()
 
     # Wait for book to reload
-    expect(page.get_by_test_id("reader-back-button")).to_be_visible(timeout=10000)
+    expect(page.get_by_test_id("reader-back-button")).to_be_visible(timeout=5000)
     frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
     frame.locator("body").wait_for(timeout=5000)
 
@@ -100,8 +100,8 @@ def test_journey_annotations(page: Page):
     # 4. Verify Sidebar (sanity check)
     print("Verifying Sidebar...")
     page.get_by_test_id("reader-annotations-button").click()
-    expect(page.get_by_test_id("reader-annotations-sidebar")).to_be_visible()
-    expect(page.locator("li[data-testid^='annotation-item-']").first).to_be_visible()
+    expect(page.get_by_test_id("reader-annotations-sidebar")).to_be_visible(timeout=5000)
+    expect(page.locator("li[data-testid^='annotation-item-']").first).to_be_visible(timeout=5000)
 
     utils.capture_screenshot(page, "annotations_3_sidebar_check")
 
