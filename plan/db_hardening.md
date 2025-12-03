@@ -28,8 +28,8 @@ We will address these issues in three phases.
 
 ### Phase 1: Architecture & Error Handling
 **Goal**: Centralize database access to ensure consistent error handling, logging, and connection management.
-- Create a `DBService` class/module to wrap `idb`.
-- Implement a global `DatabaseError` type to differentiate between logical errors, storage errors (Quota), and unknown errors.
+- [x] Create a `DBService` class/module to wrap `idb`. (Completed)
+- [x] Implement a global `DatabaseError` type to differentiate between logical errors, storage errors (Quota), and unknown errors. (Completed)
 - Throttle high-frequency writes (like progress saving).
 - Add specific handling for `QuotaExceededError`.
 
