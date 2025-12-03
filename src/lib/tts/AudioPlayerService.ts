@@ -35,6 +35,9 @@ export class AudioPlayerService {
   private status: TTSStatus = 'stopped';
   private listeners: PlaybackListener[] = [];
 
+  // Concurrency Control
+  private currentOperation: AbortController | null = null;
+
   // Settings
   private speed: number = 1.0;
   private currentSpeechSpeed: number = 1.0;
@@ -72,7 +75,6 @@ export class AudioPlayerService {
                     this.audioPlayer.seek(details.seekTime);
                 } else {
                     // For WebSpeech, we can't seek to absolute time accurately.
-                    // We could try to approximate by sentence index but it's risky.
                     console.warn("SeekTo not supported for local TTS");
                 }
             }
@@ -161,8 +163,6 @@ export class AudioPlayerService {
                // We rely on queue index for active CFI.
           });
       }
-
-      // Note: MediaSession setup is now handled in the constructor via MediaSessionManager
   }
 
   private updateMediaSessionMetadata() {
@@ -179,17 +179,13 @@ export class AudioPlayerService {
 
   // Allow switching providers
   public setProvider(provider: ITTSProvider) {
-      // Don't restart if it's the same provider type and instance logic,
-      // but here we usually pass a new instance.
+      this.cancelCurrentOperation();
       this.stop();
       this.provider = provider;
       if (provider instanceof WebSpeechProvider) {
           this.setupWebSpeech();
-          // We can keep audioPlayer around or null it.
-          // Nulling it saves memory.
           this.audioPlayer = null;
       } else {
-          // Cloud provider
           this.setupCloudPlayback();
       }
   }
@@ -203,6 +199,7 @@ export class AudioPlayerService {
   }
 
   setQueue(items: TTSQueueItem[], startIndex: number = 0) {
+    this.cancelCurrentOperation();
     this.stop();
     this.queue = items;
     this.currentIndex = startIndex;
@@ -213,11 +210,9 @@ export class AudioPlayerService {
 
   /**
    * Generates a pre-roll announcement text.
-   * "Chapter 5. The Wedding. Estimated reading time: 14 minutes."
    */
   public generatePreroll(chapterTitle: string, wordCount: number, speed: number = 1.0): string {
-      const WORDS_PER_MINUTE = 180; // Average reading speed
-      // Adjust WPM by speed
+      const WORDS_PER_MINUTE = 180;
       const adjustedWpm = WORDS_PER_MINUTE * speed;
       const minutes = Math.max(1, Math.round(wordCount / adjustedWpm));
 
@@ -226,46 +221,55 @@ export class AudioPlayerService {
 
   jumpTo(index: number) {
       if (index >= 0 && index < this.queue.length) {
+          this.cancelCurrentOperation();
           this.stop();
           this.currentIndex = index;
           this.play();
       }
   }
 
+  private cancelCurrentOperation() {
+      if (this.currentOperation) {
+          this.currentOperation.abort();
+          this.currentOperation = null;
+      }
+  }
+
   async play(): Promise<void> {
+    // 1. Acquire Lock (Last Writer Wins)
+    this.cancelCurrentOperation();
+    const abortController = new AbortController();
+    this.currentOperation = abortController;
+    const signal = abortController.signal;
+
     if (this.status === 'paused') {
         return this.resume();
     }
 
-    // If stopped, we might want to resume from a saved state (Switch Book case)
+    // 2. Restore State Logic (only if starting from stopped/fresh)
     if (this.status === 'stopped' && this.currentBookId && !this.sessionRestored) {
-        // Mark session as restored so we don't try again for this book instance
-        // unless setBookId is called again
         this.sessionRestored = true;
-
         try {
             const book = await dbService.getBookMetadata(this.currentBookId);
+            if (signal.aborted) return;
+
             if (book) {
-                // Restore Playback Position (lastPlayedCfi)
-                // Only override if we are at the default start (index 0)
-                // This allows users to manually navigate and play without being forced back
                 if (book.lastPlayedCfi && this.currentIndex === 0) {
-                     // Find index in queue
                      const index = this.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
                      if (index >= 0) {
                          this.currentIndex = index;
                      }
                 }
-
-                // If we have a lastPauseTime, we should also consider "Resume" logic (smart rewind)
                 if (book.lastPauseTime) {
-                     return this.resume(); // Delegate to resume which handles DB fetch & rewind
+                     return this.resume();
                 }
             }
         } catch (e) {
             console.warn("Failed to restore playback state", e);
         }
     }
+
+    if (signal.aborted) return;
 
     if (this.currentIndex >= this.queue.length) {
         this.setStatus('stopped');
@@ -275,32 +279,36 @@ export class AudioPlayerService {
 
     const item = this.queue[this.currentIndex];
 
-    // Only set loading if we are NOT already playing.
-    // This prevents flickering "Pause" -> "Play" -> "Pause" in UI during sentence transitions.
-    // If we are playing, we are just transitioning to next sentence, so effectively still active.
+    // Transition to LOADING (only if not already playing)
     if (this.status !== 'playing') {
         this.setStatus('loading');
     }
 
-    // Always notify listeners of the new active CFI, even if status didn't change
     this.notifyListeners(item.cfi);
     this.updateMediaSessionMetadata();
 
     try {
         const voiceId = this.voiceId || '';
 
-        // Retrieve and apply lexicon rules
+        // 3. Pre-process (Lexicon)
         const rules = await this.lexiconService.getRules(this.currentBookId || undefined);
+        if (signal.aborted) return;
+
         const processedText = this.lexiconService.applyLexicon(item.text, rules);
         const lexiconHash = await this.lexiconService.getRulesHash(rules);
 
         if (this.provider instanceof WebSpeechProvider) {
              this.currentSpeechSpeed = this.speed;
-             await this.provider.synthesize(processedText, voiceId, this.speed);
+             // WebSpeechProvider now accepts signal
+             await this.provider.synthesize(processedText, voiceId, this.speed, signal);
         } else {
              // Cloud provider flow with Caching
+             // Note: cache.get/put are not cancellable but we check aborted after
              const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed, 1.0, lexiconHash);
+             if (signal.aborted) return;
+
              const cached = await this.cache.get(cacheKey);
+             if (signal.aborted) return;
 
              let result: SpeechSegment;
 
@@ -311,24 +319,20 @@ export class AudioPlayerService {
                      isNative: false
                  };
              } else {
-                 // Track cost before calling synthesis
-                 // We only track when we actually hit the API (cache miss)
-                 // Note: We track the ORIGINAL text length, not the processed one,
-                 // as that's what the user sees, though technically we send processed text.
-                 // Actually, cloud providers charge by input characters.
-                 // If replacement is much longer, cost increases.
-                 // Let's track processed text to be accurate.
                  CostEstimator.getInstance().track(processedText);
+                 result = await this.provider.synthesize(processedText, voiceId, this.speed, signal);
+                 if (signal.aborted) return;
 
-                 result = await this.provider.synthesize(processedText, voiceId, this.speed);
                  if (result.audio) {
-                     await this.cache.put(
-                         cacheKey,
-                         await result.audio.arrayBuffer(),
-                         result.alignment
-                     );
+                     // Fire and forget cache update
+                     const audioBuffer = await result.audio.arrayBuffer();
+                     // Don't await this if we want to play immediately, but for safety let's await.
+                     // Or better: void execution
+                     this.cache.put(cacheKey, audioBuffer, result.alignment).catch(console.error);
                  }
              }
+
+             if (signal.aborted) return;
 
              if (result.audio && this.audioPlayer) {
                  if (result.alignment && this.syncEngine) {
@@ -346,6 +350,11 @@ export class AudioPlayerService {
              }
         }
     } catch (e) {
+        if (signal.aborted || (e instanceof DOMException && e.name === 'AbortError')) {
+            // Cancelled intentionally
+            return;
+        }
+
         console.error("Play error", e);
 
         // Error Handling & Fallback logic
@@ -357,8 +366,10 @@ export class AudioPlayerService {
             this.setProvider(new WebSpeechProvider());
             // Retry playback with new provider
             await this.init();
-            // Defer play to allow error state to propagate to UI (avoid batching)
+            // Retry with valid logic
             setTimeout(() => {
+                // We should probably check if we are still active/wanted?
+                // But this is a fallback.
                 this.play();
             }, 500);
             return;
@@ -370,25 +381,29 @@ export class AudioPlayerService {
   }
 
   async resume(): Promise<void> {
-     // Mark session as restored to prevent play() from re-triggering restoration logic
+     this.cancelCurrentOperation();
+     const abortController = new AbortController();
+     this.currentOperation = abortController;
+     const signal = abortController.signal;
+
      this.sessionRestored = true;
 
-     // Smart Resume Logic
      let lastPauseTime: number | null = null;
-
-     // Fetch last pause time from DB if bookId is set
      if (this.currentBookId) {
          try {
              const book = await dbService.getBookMetadata(this.currentBookId);
+             if (signal.aborted) return;
              if (book && book.lastPauseTime) {
                  lastPauseTime = book.lastPauseTime;
-                 // Clear it so we don't use it again for this session
-                 await dbService.updatePlaybackState(this.currentBookId, undefined, null);
+                 // Fire and forget clear
+                 dbService.updatePlaybackState(this.currentBookId, undefined, null).catch(console.error);
              }
          } catch (e) {
              console.warn("Failed to fetch/clear lastPauseTime from DB", e);
          }
      }
+
+     if (signal.aborted) return;
 
      const now = Date.now();
      let elapsed = 0;
@@ -397,20 +412,15 @@ export class AudioPlayerService {
      }
 
      if (this.provider instanceof WebSpeechProvider) {
-         // Local provider: rewind by index
-         if (elapsed > 5 * 60 * 1000) { // 5 minutes
-              // Rewind 2 sentences, clamp to 0
-              // Note: WebSpeech pause/resume is fragile. Often better to just restart segment if "rewind" needed.
-              // But strictly speaking, if we just call resume(), it continues where it left off.
-              // To rewind, we must modify currentIndex and call play().
-              const rewindAmount = elapsed > 24 * 60 * 60 * 1000 ? 5 : 2; // Rewind more if away for a day
+         // Local provider: rewind by index logic
+         if (elapsed > 5 * 60 * 1000) {
+              const rewindAmount = elapsed > 24 * 60 * 60 * 1000 ? 5 : 2;
               const newIndex = Math.max(0, this.currentIndex - rewindAmount);
 
               if (newIndex !== this.currentIndex) {
                   this.currentIndex = newIndex;
-                  // Set status to stopped so play() starts fresh
                   this.setStatus('stopped');
-                  return this.play();
+                  return this.play(); // Redirect to play which will handle locking again
               }
          }
 
@@ -418,28 +428,21 @@ export class AudioPlayerService {
              this.provider.resume();
              this.setStatus('playing');
          } else {
-             // Force restart if speed changed, resume not supported, or was stopped
              this.status = 'stopped';
              return this.play();
          }
 
      } else if (this.audioPlayer) {
-          // Cloud provider: rewind by time
           if (elapsed > 5 * 60 * 1000) {
               const rewindSeconds = elapsed > 24 * 60 * 60 * 1000 ? 60 : 10;
               const currentTime = this.audioPlayer.getCurrentTime();
               const newTime = Math.max(0, currentTime - rewindSeconds);
               this.audioPlayer.seek(newTime);
-              // Toast notification could go here if we had a way to trigger it from service
           }
 
           if (this.status === 'paused') {
              await this.audioPlayer.resume();
           } else {
-              // If stopped, we need to play from scratch but maybe with offset?
-              // Actually AudioElementPlayer reset on stop.
-              // So if we were stopped, we can't "resume" at audio level unless we reload blob.
-              // So we must play().
               return this.play();
           }
           this.setStatus('playing');
@@ -451,21 +454,20 @@ export class AudioPlayerService {
 
       const currentItem = this.queue[this.currentIndex];
       const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
-
-      // We only save pause time if paused, otherwise null if we wanted to clear it on stop?
-      // Actually stop() calls this.
-      // If stopped, do we want to clear lastPauseTime?
-      // If we stop (e.g. exit book), we probably want to resume next time.
-      // But if we stop naturally (end of book), maybe not.
-      // Current logic in tests expects setLastPauseTime(null) on stop.
-
       const isPaused = this.status === 'paused';
       const lastPauseTime = isPaused ? Date.now() : null;
 
-      await dbService.updatePlaybackState(this.currentBookId, lastPlayedCfi, lastPauseTime);
+      try {
+        await dbService.updatePlaybackState(this.currentBookId, lastPlayedCfi, lastPauseTime);
+      } catch (e) {
+          console.error("Failed to save playback state", e);
+      }
   }
 
   pause() {
+    // Acquire lock (stop any pending play operations)
+    this.cancelCurrentOperation();
+
     if (this.provider instanceof WebSpeechProvider && this.provider.pause) {
         this.provider.pause();
         this.silentAudio.pause();
@@ -474,13 +476,12 @@ export class AudioPlayerService {
     }
 
     this.setStatus('paused');
-
-    // Record pause time
     this.savePlaybackState();
   }
 
   stop() {
-    // Save state before stopping (e.g. navigation away)
+    this.cancelCurrentOperation();
+
     this.savePlaybackState();
 
     this.setStatus('stopped');
@@ -496,17 +497,21 @@ export class AudioPlayerService {
   }
 
   next() {
+      // User intent: go to next.
+      // Cancel whatever is happening.
+      this.cancelCurrentOperation();
+
       if (this.currentIndex < this.queue.length - 1) {
           this.currentIndex++;
           this.play();
       } else {
-          // Finished book/chapter
           this.stop();
-          // Optionally clear state here?
       }
   }
 
   prev() {
+      this.cancelCurrentOperation();
+
       if (this.currentIndex > 0) {
           this.currentIndex--;
           this.play();
@@ -516,12 +521,10 @@ export class AudioPlayerService {
   setSpeed(speed: number) {
       this.speed = speed;
       if (this.status === 'playing') {
-          // Restart current to apply speed if needed, or update dynamically
           if (this.audioPlayer) {
               this.audioPlayer.setRate(speed);
           } else {
-              // WebSpeech needs restart to change speed usually
-              this.play();
+              this.play(); // Restart for WebSpeech
           }
       }
   }
@@ -547,6 +550,14 @@ export class AudioPlayerService {
   }
 
   private playNext() {
+      // This is called automatically when audio ends.
+      // We should check if we are stopped?
+      // If status is 'stopped', we shouldn't play next automatically unless intended?
+      // Usually playNext is called by "ended" event.
+      // If user stopped manually, we cleared listeners?
+      // No, listeners are static.
+      // But we check status.
+
       if (this.status !== 'stopped') {
           if (this.currentIndex < this.queue.length - 1) {
               this.currentIndex++;
@@ -573,9 +584,7 @@ export class AudioPlayerService {
 
   subscribe(listener: PlaybackListener) {
     this.listeners.push(listener);
-    // Immediately notify with current state
     const currentCfi = this.queue[this.currentIndex]?.cfi || null;
-    // Defer execution to avoid issues if called during store initialization
     setTimeout(() => {
         listener(this.status, currentCfi, this.currentIndex, this.queue, null);
     }, 0);

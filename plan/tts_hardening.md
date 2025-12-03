@@ -46,6 +46,11 @@ We will address these issues in three distinct phases.
 *   Formalize the `status` transitions into a strict State Machine (e.g., cannot go from `loading` to `playing` if `stop` was requested).
 *   Centralize state ownership to reduce sync overhead.
 
+**Status:** Completed.
+*   Implemented `AbortController` based "Last Writer Wins" logic in `AudioPlayerService`.
+*   Updated `ITTSProvider` to support `AbortSignal`.
+*   Verified concurrency with unit tests.
+
 ### Phase 2: Session Snapshots & Persistence
 **Goal:** Enable "Instant Resume" and crash recovery.
 *   **Queue Snapshotting:** Persist the current `queue` (text + CFIs) to IndexedDB whenever it changes.
@@ -62,4 +67,4 @@ We will address these issues in three distinct phases.
 
 ## Next Steps
 
-We will proceed by implementing **Phase 1**, followed by **Phase 2** and **Phase 3**. Detailed implementation plans for each phase follow.
+We will proceed by implementing **Phase 2** and **Phase 3**.

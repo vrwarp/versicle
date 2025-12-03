@@ -38,6 +38,11 @@ export class AudioElementPlayer {
     };
 
     this.audio.onerror = () => {
+      // If we stopped intentionally (src cleared), we might get an error or abort.
+      // Filter out aborts if they were intentional.
+      if (this.audio.error && this.audio.error.code === MediaError.MEDIA_ERR_ABORTED && this.audio.src === '') {
+          return;
+      }
       if (this.onErrorCallback) {
         this.onErrorCallback(this.audio.error);
       }
@@ -61,7 +66,7 @@ export class AudioElementPlayer {
    * @returns A Promise that resolves when playback begins.
    */
   public playBlob(blob: Blob): Promise<void> {
-    this.revokeCurrentUrl();
+    this.stop(); // Stop previous before loading new
     const url = URL.createObjectURL(blob);
     this.currentObjectUrl = url;
     this.audio.src = url;
@@ -75,7 +80,7 @@ export class AudioElementPlayer {
    * @returns A Promise that resolves when playback begins.
    */
   public playUrl(url: string): Promise<void> {
-    this.revokeCurrentUrl();
+    this.stop();
     this.audio.src = url;
     return this.audio.play();
   }
@@ -102,6 +107,8 @@ export class AudioElementPlayer {
   public stop() {
     this.audio.pause();
     this.audio.currentTime = 0;
+    this.audio.removeAttribute('src'); // Clear src to stop loading
+    this.audio.load(); // Force reset
     this.revokeCurrentUrl();
   }
 

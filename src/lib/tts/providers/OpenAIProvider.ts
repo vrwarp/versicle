@@ -51,8 +51,9 @@ export class OpenAIProvider implements ITTSProvider {
    * @param text - The text to synthesize.
    * @param voiceId - The voice model name (e.g., 'alloy').
    * @param speed - Speaking speed.
+   * @param signal - Optional AbortSignal.
    */
-  async synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment> {
+  async synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
       if (!this.apiKey) {
           throw new Error("OpenAI API Key missing");
       }
@@ -70,7 +71,8 @@ export class OpenAIProvider implements ITTSProvider {
               voice: voiceId,
               speed: speed,
               response_format: 'mp3'
-          })
+          }),
+          signal
       });
 
       if (!response.ok) {

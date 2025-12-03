@@ -1,4 +1,4 @@
-# Phase 1: Concurrency Safety & State Machine
+# Phase 1: Concurrency Safety & State Machine (Completed)
 
 ## Objective
 Eliminate race conditions in the `AudioPlayerService` and ensure that rapid user interactions (Play/Pause/Next/Prev) result in a deterministic state.
@@ -51,3 +51,10 @@ Define valid transitions to prevent invalid states.
 ## Verification
 *   **Automated:** New unit tests in `AudioPlayerService.concurrency.test.ts`.
 *   **Manual:** "Spam click" verification in the Listening Room.
+
+## Status: Completed
+*   Implemented `AbortController` in `AudioPlayerService` for `play`, `pause`, `stop`, `next`, `prev`, `resume`.
+*   Updated `ITTSProvider` interface to accept `AbortSignal`.
+*   Updated `WebSpeechProvider`, `GoogleTTSProvider`, `OpenAIProvider`, `MockCloudProvider` to accept signal.
+*   Updated `AudioElementPlayer` to stop properly.
+*   Added `AudioPlayerService.concurrency.test.ts` verifying "Last Writer Wins" and cancellation on stop/pause.

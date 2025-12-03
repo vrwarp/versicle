@@ -23,10 +23,16 @@ export class MockCloudProvider extends BaseCloudProvider {
   /**
    * Simulates synthesis by returning a dummy WAV blob and sentence alignment.
    */
-  async synthesize(): Promise<SpeechSegment> {
+  async synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
     // Create a dummy audio blob (1 second of silence or just valid header)
-    // For testing without actual audio files, we can try to fetch a known small file
-    // or construct a minimal WAV.
+
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+    }
+
     // Constructing a minimal WAV blob:
     const wavHeader = new Uint8Array([
       0x52, 0x49, 0x46, 0x46, // RIFF
@@ -43,11 +49,6 @@ export class MockCloudProvider extends BaseCloudProvider {
       0x64, 0x61, 0x74, 0x61, // data
       0x00, 0x00, 0x00, 0x00  // Subchunk2Size (0 data)
     ]);
-
-    // In a real mock we might want some duration.
-    // But this is enough to verify the pipeline doesn't crash on "play".
-    // Actually, browsers might reject 0-length audio.
-    // Let's rely on a fetch to a dummy public file if possible, or just this.
 
     return {
       isNative: false,
