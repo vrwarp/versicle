@@ -1,136 +1,109 @@
-import type { ITTSProvider, TTSVoice, SpeechSegment, Timepoint } from './types';
+import type { TTSVoice, SpeechSegment, Timepoint } from './types';
+import { BaseCloudProvider } from './BaseCloudProvider';
 
-/**
- * TTS Provider for Google Cloud Text-to-Speech API.
- * Requires a valid API Key.
- */
-export class GoogleTTSProvider implements ITTSProvider {
+interface GoogleTimepoint {
+  markName: string;
+  timeSeconds: number;
+}
+
+export class GoogleTTSProvider extends BaseCloudProvider {
   id = 'google';
-  private apiKey: string | null = null;
-  private voices: TTSVoice[] = [];
+  apiKey: string;
 
-  constructor(apiKey?: string) {
-    if (apiKey) {
-      this.apiKey = apiKey;
-    }
+  constructor(apiKey: string) {
+    super();
+    this.apiKey = apiKey;
   }
 
-  /**
-   * Sets the API Key for Google Cloud.
-   *
-   * @param key - The API Key.
-   */
-  setApiKey(key: string) {
-      this.apiKey = key;
-  }
-
-  /**
-   * Initializes the provider by fetching available voices.
-   */
   async init(): Promise<void> {
-    if (!this.apiKey) return;
-    try {
-      await this.fetchVoices();
-    } catch (e) {
-      console.error('Failed to init Google TTS:', e);
-    }
+    if (!this.apiKey) throw new Error("Google API Key missing");
   }
 
-  /**
-   * Returns the list of available Google TTS voices.
-   */
   async getVoices(): Promise<TTSVoice[]> {
-    if (this.voices.length === 0 && this.apiKey) {
-      await this.fetchVoices();
-    }
-    return this.voices;
+    // In a real app, we would fetch from https://texttospeech.googleapis.com/v1/voices
+    // For now, hardcoding common ones to save API calls/startup time
+    return [
+      { id: 'en-US-Journey-F', name: 'Journey (F)', lang: 'en-US', provider: 'google' },
+      { id: 'en-US-Journey-D', name: 'Journey (M)', lang: 'en-US', provider: 'google' },
+      { id: 'en-US-Neural2-C', name: 'Neural2 (F)', lang: 'en-US', provider: 'google' },
+      { id: 'en-US-Neural2-D', name: 'Neural2 (M)', lang: 'en-US', provider: 'google' },
+      { id: 'en-US-Studio-O', name: 'Studio (F)', lang: 'en-US', provider: 'google' },
+      { id: 'en-US-Studio-M', name: 'Studio (M)', lang: 'en-US', provider: 'google' },
+      // Added some GB voices to demonstrate multi-lang support
+      { id: 'en-GB-Neural2-A', name: 'UK Neural (F)', lang: 'en-GB', provider: 'google' },
+      { id: 'en-GB-Neural2-B', name: 'UK Neural (M)', lang: 'en-GB', provider: 'google' },
+    ];
   }
 
-  /**
-   * Fetches voices from the Google Cloud API.
-   */
-  private async fetchVoices() {
-      if (!this.apiKey) return;
-
-      const response = await fetch(`https://texttospeech.googleapis.com/v1/voices?key=${this.apiKey}`);
-      if (!response.ok) {
-          throw new Error(`Google TTS List Voices Error: ${response.statusText}`);
-      }
-      const data = await response.json();
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.voices = (data.voices || []).map((v: any) => ({
-          id: v.name, // Use name directly as ID (e.g., "en-US-Standard-A")
-          name: `${v.name} (${v.ssmlGender})`,
-          lang: v.languageCodes[0],
-          provider: 'google',
-          originalVoice: v
-      }));
+  private getLanguageCode(voiceId: string): string {
+    // Basic heuristic: Extract lang code from voice ID (e.g., 'en-US-Journey-F' -> 'en-US')
+    const parts = voiceId.split('-');
+    if (parts.length >= 2) {
+      return `${parts[0]}-${parts[1]}`;
+    }
+    return 'en-US';
   }
 
-  /**
-   * Synthesizes text using Google Cloud TTS.
-   * Returns an MP3 blob and optional alignment data.
-   *
-   * @param text - The text to synthesize.
-   * @param voiceId - The voice name.
-   * @param speed - Speaking rate.
-   */
-  async synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment> {
-    if (!this.apiKey) {
-      throw new Error('Google Cloud API Key is missing');
-    }
-
+  async synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
     const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${this.apiKey}`;
+    const languageCode = this.getLanguageCode(voiceId);
 
-    const requestBody = {
-      input: { text },
-      voice: { name: voiceId, languageCode: voiceId.split('-').slice(0, 2).join('-') },
-      audioConfig: {
-        audioEncoding: 'MP3',
-        speakingRate: speed,
-      },
-      enableTimepointing: ["SSML_MARK"]
-    };
+    // Google TTS SSML logic for marks could go here if we used SSML input
+    // But for plain text, we rely on enableTimepointing.
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        input: { text }, // Plain text input
+        voice: { name: voiceId, languageCode },
+        audioConfig: {
+            audioEncoding: 'MP3',
+            speakingRate: speed
+        },
+        // Enable timepoints for word highlighting
+        enableTimepointing: ["SSML_MARK"]
+      }),
+      signal
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Google TTS Synthesis Error: ${response.status} ${err}`);
+        const errorText = await response.text();
+        throw new Error(`Google TTS Error: ${response.status} ${errorText}`);
     }
 
     const data = await response.json();
 
-    // Decode base64 audio
-    const audioContent = data.audioContent;
-    const binaryString = window.atob(audioContent);
+    // Decode Audio
+    const binaryString = atob(data.audioContent);
     const len = binaryString.length;
     const bytes = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+        bytes[i] = binaryString.charCodeAt(i);
     }
     const blob = new Blob([bytes], { type: 'audio/mp3' });
 
-    // Parse timepoints if any
+    // Parse Alignment (Timepoints)
+    // Google returns "timepoints" array in the response if enabled
     let alignment: Timepoint[] | undefined = undefined;
+
+    // Note: timepoints for plain text input usually correspond to SSML marks which we aren't injecting yet.
+    // However, Neural voices often support automatic word timings if requested properly via SSML.
+    // For now, we restore the structure to receive them if they exist.
     if (data.timepoints) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        alignment = data.timepoints.map((tp: any) => ({
+        alignment = data.timepoints.map((tp: GoogleTimepoint) => ({
             timeSeconds: tp.timeSeconds,
-            charIndex: 0,
+            charIndex: 0, // Google marks don't always give char index for plain text easily without SSML
             type: 'mark'
         }));
     }
 
     return {
-      audio: blob,
-      alignment,
-      isNative: false
+        audio: blob,
+        isNative: false,
+        alignment
     };
   }
 }

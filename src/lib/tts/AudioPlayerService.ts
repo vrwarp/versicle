@@ -35,6 +35,9 @@ export class AudioPlayerService {
   private status: TTSStatus = 'stopped';
   private listeners: PlaybackListener[] = [];
 
+  // Concurrency Control
+  private currentOperation: AbortController | null = null;
+
   // Settings
   private speed: number = 1.0;
   private currentSpeechSpeed: number = 1.0;
@@ -252,13 +255,30 @@ export class AudioPlayerService {
 
   jumpTo(index: number) {
       if (index >= 0 && index < this.queue.length) {
-          this.stop();
+          // Instead of calling stop() which clears everything, we just cancel current op
+          this.abortCurrentOperation();
           this.currentIndex = index;
           this.play();
       }
   }
 
+  /**
+   * Cancels any pending synthesis or playback operations.
+   */
+  private abortCurrentOperation() {
+    if (this.currentOperation) {
+      this.currentOperation.abort();
+      this.currentOperation = null;
+    }
+  }
+
   async play(): Promise<void> {
+    // Cancel any previous operation (Last Writer Wins)
+    this.abortCurrentOperation();
+    const controller = new AbortController();
+    this.currentOperation = controller;
+    const signal = controller.signal;
+
     if (this.status === 'paused') {
         return this.resume();
     }
@@ -294,39 +314,46 @@ export class AudioPlayerService {
     }
 
     if (this.currentIndex >= this.queue.length) {
-        this.setStatus('stopped');
-        this.notifyListeners(null);
+        if (!signal.aborted) {
+          this.setStatus('stopped');
+          this.notifyListeners(null);
+        }
         return;
     }
 
     const item = this.queue[this.currentIndex];
 
     // Only set loading if we are NOT already playing.
-    // This prevents flickering "Pause" -> "Play" -> "Pause" in UI during sentence transitions.
-    // If we are playing, we are just transitioning to next sentence, so effectively still active.
-    if (this.status !== 'playing') {
+    if (this.status !== 'playing' && !signal.aborted) {
         this.setStatus('loading');
     }
 
     // Always notify listeners of the new active CFI, even if status didn't change
-    this.notifyListeners(item.cfi);
-    this.updateMediaSessionMetadata();
+    if (!signal.aborted) {
+      this.notifyListeners(item.cfi);
+      this.updateMediaSessionMetadata();
+    }
 
     try {
         const voiceId = this.voiceId || '';
 
         // Retrieve and apply lexicon rules
+        if (signal.aborted) return;
         const rules = await this.lexiconService.getRules(this.currentBookId || undefined);
         const processedText = this.lexiconService.applyLexicon(item.text, rules);
         const lexiconHash = await this.lexiconService.getRulesHash(rules);
 
+        if (signal.aborted) return;
+
         if (this.provider instanceof WebSpeechProvider) {
              this.currentSpeechSpeed = this.speed;
-             await this.provider.synthesize(processedText, voiceId, this.speed);
+             await this.provider.synthesize(processedText, voiceId, this.speed, signal);
         } else {
              // Cloud provider flow with Caching
              const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed, 1.0, lexiconHash);
              const cached = await this.cache.get(cacheKey);
+
+             if (signal.aborted) return;
 
              let result: SpeechSegment;
 
@@ -338,15 +365,9 @@ export class AudioPlayerService {
                  };
              } else {
                  // Track cost before calling synthesis
-                 // We only track when we actually hit the API (cache miss)
-                 // Note: We track the ORIGINAL text length, not the processed one,
-                 // as that's what the user sees, though technically we send processed text.
-                 // Actually, cloud providers charge by input characters.
-                 // If replacement is much longer, cost increases.
-                 // Let's track processed text to be accurate.
                  CostEstimator.getInstance().track(processedText);
 
-                 result = await this.provider.synthesize(processedText, voiceId, this.speed);
+                 result = await this.provider.synthesize(processedText, voiceId, this.speed, signal);
                  if (result.audio) {
                      await this.cache.put(
                          cacheKey,
@@ -355,6 +376,8 @@ export class AudioPlayerService {
                      );
                  }
              }
+
+             if (signal.aborted) return;
 
              if (result.audio && this.audioPlayer) {
                  if (result.alignment && this.syncEngine) {
@@ -368,10 +391,20 @@ export class AudioPlayerService {
 
                  this.audioPlayer.setRate(this.speed);
                  await this.audioPlayer.playBlob(result.audio);
-                 this.setStatus('playing');
+                 if (!signal.aborted) {
+                   this.setStatus('playing');
+                 }
              }
         }
     } catch (e) {
+        // If operation was cancelled, just ignore
+        if (signal.aborted) return;
+
+        // Check if error is an AbortError (sometimes it leaks through)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (e instanceof Error && e.name === 'AbortError') return;
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+
         console.error("Play error", e);
 
         // Error Handling & Fallback logic
@@ -383,10 +416,15 @@ export class AudioPlayerService {
             this.setProvider(new WebSpeechProvider());
             // Retry playback with new provider
             await this.init();
-            // Defer play to allow error state to propagate to UI (avoid batching)
-            setTimeout(() => {
-                this.play();
-            }, 500);
+
+            // Re-call play() safely
+            if (this.currentOperation === controller) {
+                // If we are still the active operation (unlikely as we just set provider which stops),
+                // but effectively we are starting a NEW operation.
+                setTimeout(() => {
+                    this.play();
+                }, 500);
+            }
             return;
         }
 
@@ -396,6 +434,11 @@ export class AudioPlayerService {
   }
 
   async resume(): Promise<void> {
+     // Ensure we lock this operation too, though play() handles most
+     this.abortCurrentOperation();
+     const controller = new AbortController();
+     this.currentOperation = controller;
+
      // Mark session as restored to prevent play() from re-triggering restoration logic
      this.sessionRestored = true;
 
@@ -478,13 +521,6 @@ export class AudioPlayerService {
       const currentItem = this.queue[this.currentIndex];
       const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
 
-      // We only save pause time if paused, otherwise null if we wanted to clear it on stop?
-      // Actually stop() calls this.
-      // If stopped, do we want to clear lastPauseTime?
-      // If we stop (e.g. exit book), we probably want to resume next time.
-      // But if we stop naturally (end of book), maybe not.
-      // Current logic in tests expects setLastPauseTime(null) on stop.
-
       const isPaused = this.status === 'paused';
       const lastPauseTime = isPaused ? Date.now() : null;
 
@@ -492,6 +528,8 @@ export class AudioPlayerService {
   }
 
   pause() {
+    this.abortCurrentOperation();
+
     if (this.provider instanceof WebSpeechProvider && this.provider.pause) {
         this.provider.pause();
         this.silentAudio.pause();
@@ -506,6 +544,8 @@ export class AudioPlayerService {
   }
 
   stop() {
+    this.abortCurrentOperation();
+
     // Save state before stopping (e.g. navigation away)
     this.savePlaybackState();
 

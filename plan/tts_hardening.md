@@ -19,6 +19,7 @@ This document outlines a comprehensive plan to harden the TTS system, ensuring i
     *   Multiple audio streams playing simultaneously (if `stop()` doesn't catch the previous pending promise).
     *   Queue index corruption (incrementing twice).
     *   Cost estimation double-counting.
+*   **Status (Phase 1):** Addressed via `AbortController` and "Last Writer Wins" strategy in `AudioPlayerService`.
 
 ### 3. Queue Volatility & Dependency on Layout
 *   **Issue:** The TTS queue is derived purely from the `epub.js` rendered view via the `useTTS` hook. It is stored only in memory.
@@ -40,11 +41,12 @@ This document outlines a comprehensive plan to harden the TTS system, ensuring i
 
 We will address these issues in three distinct phases.
 
-### Phase 1: Concurrency Safety & State Machine
+### Phase 1: Concurrency Safety & State Machine (Completed)
 **Goal:** Prevent invalid states and race conditions.
-*   Implement a robust **Mutex/Lock** pattern for the `play()` action.
-*   Formalize the `status` transitions into a strict State Machine (e.g., cannot go from `loading` to `playing` if `stop` was requested).
-*   Centralize state ownership to reduce sync overhead.
+*   **Done:** Refactored `AudioPlayerService` to use `AbortController` for all async operations.
+*   **Done:** Updated `ITTSProvider` interface and all implementations (`WebSpeech`, `OpenAI`, `Google`, `Mock`) to accept `AbortSignal`.
+*   **Done:** Implemented "Last Writer Wins" strategy for `play()`, `resume()`, `stop()`.
+*   **Verified:** New concurrency tests in `src/lib/tts/AudioPlayerService.concurrency.test.ts` pass, proving that rapid calls result in only one active operation.
 
 ### Phase 2: Session Snapshots & Persistence
 **Goal:** Enable "Instant Resume" and crash recovery.
@@ -62,4 +64,4 @@ We will address these issues in three distinct phases.
 
 ## Next Steps
 
-We will proceed by implementing **Phase 1**, followed by **Phase 2** and **Phase 3**. Detailed implementation plans for each phase follow.
+We will proceed by implementing **Phase 2**, followed by **Phase 3**. Detailed implementation plans for each phase follow.

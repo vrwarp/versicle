@@ -71,6 +71,18 @@ if (!Element.prototype.releasePointerCapture) {
   (Element.prototype as any).releasePointerCapture = vi.fn();
 }
 
+// Polyfill Blob.arrayBuffer for JSDOM
+if (!Blob.prototype.arrayBuffer) {
+  Blob.prototype.arrayBuffer = function() {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(this);
+    });
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();

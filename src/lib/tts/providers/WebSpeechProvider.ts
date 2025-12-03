@@ -119,9 +119,14 @@ export class WebSpeechProvider implements ITTSProvider {
    * @param text - The text to speak.
    * @param voiceId - The name of the voice to use.
    * @param speed - The playback rate.
+   * @param signal - Optional AbortSignal to cancel the operation.
    * @returns A Promise resolving to a SpeechSegment (with isNative: true).
    */
-  async synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment> {
+  async synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+
     this.cancel(); // specific method to stop previous
 
     // Ensure voices are loaded before speaking
@@ -129,17 +134,33 @@ export class WebSpeechProvider implements ITTSProvider {
         await this.init();
     }
 
+    if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+    }
+
     const utterance = new SpeechSynthesisUtterance(text);
     const voice = this.voices.find(v => v.name === voiceId);
     if (voice) utterance.voice = voice;
     utterance.rate = speed;
 
-    utterance.onstart = () => this.emit('start');
+    utterance.onstart = () => {
+      if (signal?.aborted) {
+        this.cancel();
+        return;
+      }
+      this.emit('start');
+    };
     utterance.onend = () => this.emit('end');
     utterance.onerror = (e) => this.emit('error', { error: e });
     utterance.onboundary = (e) => this.emit('boundary', { charIndex: e.charIndex });
 
     this.synth.speak(utterance);
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        this.cancel();
+      });
+    }
 
     return { isNative: true };
   }

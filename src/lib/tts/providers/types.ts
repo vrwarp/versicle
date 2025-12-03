@@ -66,9 +66,10 @@ export interface ITTSProvider {
    * @param text - The text to synthesize.
    * @param voiceId - The ID of the voice to use.
    * @param speed - The playback speed (rate).
+   * @param signal - Optional AbortSignal to cancel the operation.
    * @returns A Promise resolving to a SpeechSegment.
    */
-  synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment>;
+  synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment>;
 
   /**
    * Optional: Cancels current synthesis or playback if handled natively.
