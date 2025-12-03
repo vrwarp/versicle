@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { useTTSStore } from '../store/useTTSStore';
 import { Modal, ModalContent } from './ui/Modal';
@@ -9,12 +9,15 @@ import { TTSAbbreviationSettings } from './reader/TTSAbbreviationSettings';
 import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
+import { backupService } from '../lib/BackupService';
 
 export const GlobalSettingsDialog = () => {
     const { isGlobalSettingsOpen, setGlobalSettingsOpen } = useUIStore();
     const [activeTab, setActiveTab] = useState('general');
     const [isLexiconOpen, setIsLexiconOpen] = useState(false);
     const [orphanScanResult, setOrphanScanResult] = useState<string | null>(null);
+    const [backupStatus, setBackupStatus] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const {
         providerId, setProviderId,
@@ -58,6 +61,58 @@ export const GlobalSettingsDialog = () => {
         } catch (e) {
             console.error(e);
             setOrphanScanResult('Error during repair check console.');
+        }
+    };
+
+    const handleExportLight = async () => {
+        try {
+            setBackupStatus('Exporting metadata...');
+            await backupService.createLightBackup();
+            setBackupStatus('Metadata export complete.');
+        } catch (error) {
+            console.error(error);
+            setBackupStatus('Export failed.');
+        }
+    };
+
+    const handleExportFull = async () => {
+        try {
+            setBackupStatus('Starting full backup...');
+            await backupService.createFullBackup((percent, msg) => {
+                setBackupStatus(`Backup: ${percent}% - ${msg}`);
+            });
+            setTimeout(() => setBackupStatus('Full backup complete.'), 2000);
+        } catch (error) {
+            console.error(error);
+            setBackupStatus('Full backup failed. Check console.');
+        }
+    };
+
+    const handleRestoreClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!confirm('Restoring a backup will merge data into your library. Existing books will be updated. Continue?')) {
+            e.target.value = '';
+            return;
+        }
+
+        try {
+            setBackupStatus('Starting restore...');
+            await backupService.restoreBackup(file, (percent, msg) => {
+                setBackupStatus(`Restore: ${percent}% - ${msg}`);
+            });
+            setBackupStatus('Restore complete! Reloading...');
+            setTimeout(() => window.location.reload(), 1500);
+        } catch (error) {
+            console.error(error);
+            setBackupStatus(`Restore failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+            e.target.value = '';
         }
     };
 
@@ -161,7 +216,40 @@ export const GlobalSettingsDialog = () => {
 
                     {activeTab === 'data' && (
                         <div className="space-y-6">
-                            <div className="space-y-4">
+                             <div className="space-y-4">
+                                <h3 className="text-lg font-medium">Backup & Restore</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Export your library and settings to a file, or restore from a previous backup.
+                                </p>
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <Button onClick={handleExportFull} variant="outline" className="flex-1">
+                                            Export Full Backup (ZIP)
+                                        </Button>
+                                        <Button onClick={handleExportLight} variant="outline" className="flex-1">
+                                            Export Metadata Only (JSON)
+                                        </Button>
+                                    </div>
+                                    <Button onClick={handleRestoreClick} variant="default" className="w-full">
+                                        Restore Backup
+                                    </Button>
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        className="hidden"
+                                        accept=".zip,.json,.vbackup"
+                                        onChange={handleFileChange}
+                                        data-testid="backup-file-input"
+                                    />
+                                    {backupStatus && (
+                                        <p className="text-sm text-blue-600 dark:text-blue-400 font-medium animate-pulse">
+                                            {backupStatus}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="border-t pt-4 space-y-4">
                                 <h3 className="text-lg font-medium">Maintenance</h3>
                                 <p className="text-sm text-muted-foreground">
                                     Tools to keep the database healthy.
