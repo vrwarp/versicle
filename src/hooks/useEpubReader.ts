@@ -1,5 +1,5 @@
-import { useState, useEffect, MutableRefObject } from 'react';
-import ePub, { Book, Rendition } from 'epubjs';
+import { useState, useEffect, type MutableRefObject } from 'react';
+import ePub, { type Book, type Rendition } from 'epubjs';
 
 export interface UseEpubReaderOptions {
   viewerRef: MutableRefObject<HTMLDivElement | null>;
