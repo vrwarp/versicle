@@ -13,13 +13,19 @@ export interface SearchResult {
     cfi?: string;
 }
 
+type WorkerResponse =
+    | { type: 'SEARCH_RESULTS'; id: string; results: SearchResult[] }
+    | { type: 'ACK'; id: string }
+    | { type: 'INDEX_COMPLETE'; bookId: string; id?: string }
+    | { type: 'ERROR'; id?: string; error: string };
+
 /**
  * Client-side handler for interacting with the search worker.
  * Manages off-main-thread indexing and searching of books.
  */
 class SearchClient {
     private worker: Worker | null = null;
-    private listeners: Map<string, (data: unknown) => void> = new Map();
+    private listeners: Map<string, (data: WorkerResponse) => void> = new Map();
 
     /**
      * Retrieves the existing Web Worker instance or creates a new one if it doesn't exist.
@@ -28,26 +34,60 @@ class SearchClient {
      */
     private getWorker() {
         if (!this.worker) {
-             this.worker = new Worker(new URL('../workers/search.worker.ts', import.meta.url), {
+            this.worker = new Worker(new URL('../workers/search.worker.ts', import.meta.url), {
                 type: 'module'
             });
 
-            this.worker.onmessage = (e) => {
-                const { type, id, results } = e.data;
-                if (type === 'SEARCH_RESULTS' && id) {
+            this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+                const { id } = e.data;
+                if (id && this.listeners.has(id)) {
                     const listener = this.listeners.get(id);
-                    if (listener) listener(results);
-                } else if (type === 'INDEX_COMPLETE') {
-                    // Handle completion if needed
+                    if (listener) listener(e.data);
                 }
+            };
+
+            this.worker.onerror = (e) => {
+                console.error('Search worker error', e);
+                // Reject all pending listeners
+                for (const [, listener] of this.listeners) {
+                    listener({ type: 'ERROR', error: 'Worker crashed' });
+                }
+                this.listeners.clear();
+                this.terminate();
             };
         }
         return this.worker;
     }
 
     /**
+     * Sends a message to the worker and waits for a response with a matching ID.
+     *
+     * @param type - The message type.
+     * @param payload - The message payload.
+     * @returns A Promise that resolves with the worker's response.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private sendMessage<T extends WorkerResponse>(type: string, payload: any): Promise<T> {
+        return new Promise((resolve, reject) => {
+            const id = uuidv4();
+            const worker = this.getWorker();
+
+            this.listeners.set(id, (response: WorkerResponse) => {
+                if (response.type === 'ERROR') {
+                    reject(new Error(response.error));
+                } else {
+                    resolve(response as T);
+                }
+                this.listeners.delete(id);
+            });
+
+            worker.postMessage({ type, id, payload });
+        });
+    }
+
+    /**
      * Extracts text content from a book's spine items and sends it to the worker for indexing.
-     * Uses batch processing to avoid blocking the main thread.
+     * Uses batch processing to avoid blocking the main thread and confirms each batch.
      *
      * @param book - The epubjs Book object to be indexed.
      * @param bookId - The unique identifier of the book.
@@ -56,7 +96,7 @@ class SearchClient {
      */
     async indexBook(book: Book, bookId: string, onProgress?: (percent: number) => void) {
         // Init/Clear index
-        this.getWorker().postMessage({ type: 'INIT_INDEX', payload: { bookId } });
+        await this.sendMessage('INIT_INDEX', { bookId });
 
         const spineItems = (book.spine as unknown as { items: unknown[] }).items;
         const total = spineItems.length;
@@ -87,24 +127,18 @@ class SearchClient {
             }
 
             if (sections.length > 0) {
-                this.getWorker().postMessage({
-                    type: 'ADD_TO_INDEX',
-                    payload: { bookId, sections }
-                });
+                await this.sendMessage('ADD_TO_INDEX', { bookId, sections });
             }
 
             if (onProgress) {
                 onProgress(Math.min(1.0, (i + batch.length) / total));
             }
 
-            // Yield to main thread
+            // Yield to main thread (optional if await sendMessage provides enough gap, but safer to keep)
             await new Promise(resolve => setTimeout(resolve, 0));
         }
 
-        this.getWorker().postMessage({
-            type: 'FINISH_INDEXING',
-            payload: { bookId }
-        });
+        await this.sendMessage('FINISH_INDEXING', { bookId });
     }
 
     /**
@@ -114,20 +148,12 @@ class SearchClient {
      * @param bookId - The unique identifier of the book to search.
      * @returns A Promise that resolves to an array of SearchResult objects.
      */
-    search(query: string, bookId: string): Promise<SearchResult[]> {
-        return new Promise((resolve) => {
-            const id = uuidv4();
-            this.listeners.set(id, (data) => {
-                resolve(data as SearchResult[]);
-                this.listeners.delete(id);
-            });
-
-            this.getWorker().postMessage({
-                type: 'SEARCH',
-                id,
-                payload: { query, bookId }
-            });
-        });
+    async search(query: string, bookId: string): Promise<SearchResult[]> {
+        const response = await this.sendMessage<{ type: 'SEARCH_RESULTS'; id: string; results: SearchResult[] }>(
+            'SEARCH',
+            { query, bookId }
+        );
+        return response.results;
     }
 
     /**
@@ -137,6 +163,11 @@ class SearchClient {
         if (this.worker) {
             this.worker.terminate();
             this.worker = null;
+            // Reject any remaining listeners?
+            for (const [, listener] of this.listeners) {
+                listener({ type: 'ERROR', error: 'Worker terminated' });
+            }
+            this.listeners.clear();
         }
     }
 }

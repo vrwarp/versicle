@@ -6,30 +6,31 @@ class MockWorker {
   onmessage: ((e: MessageEvent) => void) | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   postMessage(data: any) {
-    if (data.type === 'INDEX_BOOK') {
-       // Legacy path, should not be called by new implementation
-    } else if (data.type === 'INIT_INDEX') {
-        // Init
-    } else if (data.type === 'ADD_TO_INDEX') {
-        // Add
-    } else if (data.type === 'FINISH_INDEXING') {
-        // Finish
-    } else if (data.type === 'SEARCH') {
-        const id = data.id;
-        setTimeout(() => {
-            if (this.onmessage) {
-                this.onmessage({
-                    data: {
-                        type: 'SEARCH_RESULTS',
-                        id,
-                        results: [
-                            { href: 'chap1.html', excerpt: '...found match...' }
-                        ]
-                    }
-                } as MessageEvent);
-            }
-        }, 10);
-    }
+    const id = data.id;
+
+    setTimeout(() => {
+        if (!this.onmessage) return;
+
+        if (data.type === 'INIT_INDEX' || data.type === 'ADD_TO_INDEX') {
+            this.onmessage({
+                data: { type: 'ACK', id }
+            } as MessageEvent);
+        } else if (data.type === 'FINISH_INDEXING') {
+            this.onmessage({
+                data: { type: 'INDEX_COMPLETE', bookId: data.payload?.bookId, id }
+            } as MessageEvent);
+        } else if (data.type === 'SEARCH') {
+            this.onmessage({
+                data: {
+                    type: 'SEARCH_RESULTS',
+                    id,
+                    results: [
+                        { href: 'chap1.html', excerpt: '...found match...' }
+                    ]
+                }
+            } as MessageEvent);
+        }
+    }, 0);
   }
   terminate() {}
 }

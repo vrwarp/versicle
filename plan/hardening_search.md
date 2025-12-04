@@ -32,7 +32,7 @@ Instead of "all-at-once", data is streamed to the worker.
   - Use a lightweight HTML-to-Text parser (DOMParser) on the string content instead of full rendering logic.
   - *Fallback:* If we must use `load()`, ensure we destroy/unload the view to free memory.
 
-### 2.3. Robust Worker Communication
+### 2.3. Robust Worker Communication (Implemented)
 - **Action:** Implement a strict request/response protocol with IDs.
 - **Action:** Add `worker.onerror` handler in `SearchClient` to reject pending promises.
 - **Action:** Wrap worker message handling in `try-catch` and post `ERROR` messages back to client.
@@ -45,8 +45,12 @@ Instead of "all-at-once", data is streamed to the worker.
 
 1.  **Modify `search.worker.ts`** (Done):
     - Added `ADD_TO_INDEX` and `INIT_INDEX` message types.
+    - Added `ACK` and `INDEX_COMPLETE` response types.
+    - Implemented global error handling with `try-catch`.
 2.  **Refactor `SearchClient.ts`** (Done):
     - Changed `indexBook` to iterate and dispatch batches.
     - Added logic to handle progress updates via callback.
+    - Implemented `sendMessage` with Promise-based response handling.
+    - Added `worker.onerror` to handle crashes gracefully.
 3.  **Update `ReaderView.tsx`**:
     - Listen for "Indexing..." status to show a spinner or non-intrusive indicator.
