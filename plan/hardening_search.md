@@ -41,7 +41,7 @@ Instead of "all-at-once", data is streamed to the worker.
 - **Action:** Wrapped worker message handling in `try-catch` blocks to catch synchronous errors and report them back as `ERROR` messages.
 - **Action:** `indexBook` now awaits acknowledgment for `INIT_INDEX` and each `ADD_TO_INDEX` batch, ensuring backpressure and reliable error detection.
 
-### 2.4. Memory Management
+### 2.4. Memory Management (Implemented)
 - **Action:** Explicitly `terminate()` the worker when the book is closed (in `ReaderView` cleanup).
 - **Action:** Check if `FlexSearch` index is too large. If so, limit results or warn.
 
@@ -56,5 +56,7 @@ Instead of "all-at-once", data is streamed to the worker.
     - Added logic to handle progress updates via callback.
     - Implemented `send()` method with `pendingRequests` management.
     - Updated `indexBook` to await worker acknowledgments.
-3.  **Update `ReaderView.tsx`**:
-    - Listen for "Indexing..." status to show a spinner or non-intrusive indicator.
+3.  **Update `ReaderView.tsx`** (Done):
+    - Implemented worker termination on component unmount.
+4.  **Update `search-engine.ts`** (Done):
+    - Added warning if index size exceeds threshold.

@@ -49,6 +49,13 @@ export class SearchEngine {
             this.indexes.set(bookId, index);
         }
 
+        // Check if the number of documents being added is excessively large
+        // to prevent potential memory issues or worker crashes.
+        const LARGE_INDEX_THRESHOLD = 2000;
+        if (sections.length > LARGE_INDEX_THRESHOLD) {
+            console.warn(`Search Index Warning: Adding ${sections.length} documents. Index size may impact performance.`);
+        }
+
         sections.forEach(section => {
             index.add({
                 id: section.href,

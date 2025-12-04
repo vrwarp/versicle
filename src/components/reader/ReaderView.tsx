@@ -478,6 +478,8 @@ export const ReaderView: React.FC = () => {
         bookRef.current = null;
       }
       renditionRef.current = null;
+      // Terminate search worker to free memory
+      searchClient.terminate();
       reset();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
