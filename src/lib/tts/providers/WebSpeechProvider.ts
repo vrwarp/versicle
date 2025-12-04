@@ -14,7 +14,6 @@ export class WebSpeechProvider implements ITTSProvider {
   private voices: SpeechSynthesisVoice[] = [];
   private callback: TTSCallback | null = null;
   private voicesLoaded = false;
-  private activeUtteranceId: string | null = null;
 
   constructor() {
     this.synth = window.speechSynthesis;
@@ -133,7 +132,6 @@ export class WebSpeechProvider implements ITTSProvider {
     }
 
     const utteranceId = uuidv4();
-    this.activeUtteranceId = utteranceId;
 
     const utterance = new SpeechSynthesisUtterance(text);
     const voice = this.voices.find(v => v.name === voiceId);
@@ -157,7 +155,6 @@ export class WebSpeechProvider implements ITTSProvider {
    * Stops playback.
    */
   stop(): void {
-    this.activeUtteranceId = null; // Clear active ID on stop
     this.cancel();
   }
 
