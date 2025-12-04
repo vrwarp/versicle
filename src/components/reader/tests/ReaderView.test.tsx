@@ -47,6 +47,7 @@ describe('ReaderView', () => {
   const mockSelect = vi.fn();
   const mockFontSize = vi.fn();
   const mockFont = vi.fn();
+  const mockFlow = vi.fn(); // Mock flow method
   const mockAnnotations = { add: vi.fn(), remove: vi.fn() };
   const mockDefault = vi.fn();
 
@@ -60,6 +61,7 @@ describe('ReaderView', () => {
         display: mockDisplay,
         prev: mockPrev,
         next: mockNext,
+        flow: mockFlow, // Add flow method to mock
         themes: {
           register: mockRegister,
           select: mockSelect,

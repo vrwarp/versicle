@@ -16,13 +16,14 @@
 
 ## 2. Hardening Strategy
 
-### 2.1. Custom Hook: `useEpubReader`
+### 2.1. Custom Hook: `useEpubReader` (Implemented)
 Extract the lifecycle management into a hook to decouple logic from UI.
 
 - **Action:** Create `src/hooks/useEpubReader.ts`.
   - **Inputs:** `file`, `viewerRef`, `options`.
   - **Outputs:** `book`, `rendition`, `isReady`, `error`.
   - **Internal:** Handles `ePub()` creation, `renderTo`, cleanup (`destroy`), and event binding (`relocated`, `selected`).
+  - **Status:** Implemented in `src/hooks/useEpubReader.ts` and integrated into `ReaderView.tsx`.
 
 ### 2.2. Robust Highlighting
 - **Action:** Replace manual DOM manipulation with `rendition.annotations.add`.
@@ -40,9 +41,9 @@ Extract the lifecycle management into a hook to decouple logic from UI.
 
 ## 3. Implementation Plan
 
-1.  **Create `useEpubReader`**:
+1.  **Create `useEpubReader`**: (Completed)
     - Move `bookRef`, `renditionRef` management there.
-2.  **Refactor `ReaderView`**:
+2.  **Refactor `ReaderView`**: (Completed)
     - Use the hook.
     - Simplify the render loop.
 3.  **Search Highlighting**:

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import ePub, { type Book, type Rendition, type Location } from 'epubjs';
+import { type Book, type Rendition, type Location } from 'epubjs';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -19,6 +19,7 @@ import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
+import { useEpubReader } from '../../hooks/useEpubReader';
 
 /**
  * The main reader interface component.
@@ -32,6 +33,11 @@ export const ReaderView: React.FC = () => {
   const navigate = useNavigate();
   const viewerRef = useRef<HTMLDivElement>(null);
 
+  // Reader Data State
+  const [bookData, setBookData] = useState<ArrayBuffer | null>(null);
+  const [initialLocation, setInitialLocation] = useState<string | undefined>(undefined);
+
+  // Compatibility Refs (for listeners and existing logic)
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
   const [isRenditionReady, setIsRenditionReady] = useState(false);
@@ -69,6 +75,215 @@ export const ReaderView: React.FC = () => {
     showPopover,
     hidePopover
   } = useAnnotationStore();
+
+  // --- Data Fetching ---
+  useEffect(() => {
+    if (!id) return;
+
+    const fetchData = async () => {
+        setIsLoading(true);
+        setCurrentBookId(id);
+        AudioPlayerService.getInstance().setBookId(id);
+
+        try {
+            const { file, metadata } = await dbService.getBook(id);
+            if (!file) {
+                console.error('Book file not found');
+                navigate('/');
+                return;
+            }
+            setBookData(file);
+            setInitialLocation(metadata?.currentCfi || undefined);
+        } catch (err) {
+            console.error('Error loading book data:', err);
+            setIsLoading(false);
+            navigate('/');
+        }
+    };
+
+    fetchData();
+
+    return () => {
+        setBookData(null);
+        setInitialLocation(undefined);
+        reset();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, navigate]);
+
+  // --- EPUB Reader Hook ---
+  const { book, rendition, isReady, error: readerError } = useEpubReader({
+      viewerRef,
+      source: bookData,
+      viewMode
+  });
+
+  // Sync refs and Setup Logic
+  useEffect(() => {
+      bookRef.current = book;
+      renditionRef.current = rendition;
+      setIsRenditionReady(isReady);
+
+      if (readerError) {
+          console.error("EPUB Reader Error:", readerError);
+          setIsLoading(false);
+          // Could show toast here
+      }
+
+      // Initial Setup when Reader is Ready
+      if (book && rendition && isReady) {
+          const setup = async () => {
+               try {
+                   // 1. Navigation/TOC
+                   const nav = await book.loaded.navigation;
+                   setToc(nav.toc);
+
+                   // 2. Register Themes (Initial)
+                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                   const themes = rendition.themes as any;
+
+                   themes.register('light', `
+                    body { background: #ffffff !important; color: #000000 !important; }
+                    p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+                    a { color: #0000ee !important; }
+                   `);
+                   themes.register('dark', `
+                    body { background: #1a1a1a !important; color: #f5f5f5 !important; }
+                    p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+                    a { color: #6ab0f3 !important; }
+                   `);
+                   themes.register('sepia', `
+                    body { background: #f4ecd8 !important; color: #5b4636 !important; }
+                    p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+                    a { color: #0000ee !important; }
+                   `);
+                   // Note: We use default values here, dynamic updates handled in separate effect
+                   themes.register('custom', `
+                    body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
+                    p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
+                  `);
+
+                   themes.select(currentTheme);
+                   themes.fontSize(`${fontSize}%`);
+                   themes.font(fontFamily);
+
+                    // Register TTS highlight theme
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (rendition.themes as any).default({
+                        '.tts-highlight': {
+                            'fill': 'yellow',
+                            'background-color': 'rgba(255, 255, 0, 0.3)',
+                            'fill-opacity': '0.3',
+                            'mix-blend-mode': 'multiply'
+                        }
+                    });
+
+                    // Update line height
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (rendition.themes as any).default({
+                        p: { 'line-height': `${lineHeight} !important` },
+                        body: { 'line-height': `${lineHeight} !important` }
+                    });
+
+                   // 3. Display
+                   await rendition.display(initialLocation);
+
+                   // 4. Locations & Progress
+                   await book.ready;
+
+                   const updateProgressFromLocations = (r: Rendition, b: Book) => {
+                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                       const currentLoc = (r as any).location;
+                       if (currentLoc && currentLoc.start) {
+                           const cfi = currentLoc.start.cfi;
+                           let pct = 0;
+                           try {
+                               pct = b.locations.percentageFromCfi(cfi);
+                           } catch {
+                               // Ignore
+                           }
+                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                           const item = b.spine.get(currentLoc.start.href) as any;
+                           const title = item ? (item.label || 'Chapter') : 'Unknown';
+                           updateLocation(cfi, pct, title);
+                           if (id) dbService.saveProgress(id, cfi, pct);
+                       }
+                   };
+
+                   if (id) {
+                       const savedLocations = await dbService.getLocations(id);
+                       if (savedLocations) {
+                           book.locations.load(savedLocations.locations);
+                           updateProgressFromLocations(rendition, book);
+                       } else {
+                           book.locations.generate(1000).then(async () => {
+                               const locationStr = book.locations.save();
+                               await dbService.saveLocations(id, locationStr);
+                               updateProgressFromLocations(rendition, book);
+                           });
+                       }
+                   }
+
+                   // 5. Index for Search
+                   if (id) {
+                       searchClient.indexBook(book, id).then(() => {
+                           console.log("Book indexed for search");
+                       });
+                   }
+
+                   // 6. Event Listeners
+                   rendition.on('selected', (cfiRange: string) => {
+                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                       const range = (rendition as any).getRange(cfiRange);
+                       if (range) {
+                           const rect = range.getBoundingClientRect();
+                           const iframe = viewerRef.current?.querySelector('iframe');
+                           if (iframe) {
+                               const iframeRect = iframe.getBoundingClientRect();
+                               showPopover(
+                                   rect.left + iframeRect.left,
+                                   rect.top + iframeRect.top,
+                                   cfiRange,
+                                   range.toString()
+                               );
+                           }
+                       }
+                   });
+
+                   rendition.on('click', () => {
+                        hidePopover();
+                   });
+
+                   rendition.on('relocated', (location: Location) => {
+                        const cfi = location.start.cfi;
+                        if (cfi === useReaderStore.getState().currentCfi) return;
+
+                        hidePopover();
+                        let percentage = 0;
+                        try {
+                            percentage = book.locations.percentageFromCfi(cfi);
+                        } catch { /* ignore */ }
+
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const item = book.spine.get(location.start.href) as any;
+                        const title = item ? (item.label || 'Chapter') : 'Unknown';
+
+                        updateLocation(cfi, percentage, title);
+                        if (id) dbService.saveProgress(id, cfi, percentage);
+                   });
+
+                   setIsLoading(false);
+
+               } catch (err) {
+                   console.error("Error during book setup:", err);
+                   setIsLoading(false);
+               }
+          };
+
+          setup();
+      }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book, rendition, isReady, readerError, id]); // Intentionally omitting mutable/stable deps like initialLocation to avoid re-runs
 
   // Use TTS Hook
   useTTS(renditionRef.current);
@@ -132,7 +347,6 @@ export const ReaderView: React.FC = () => {
            // eslint-disable-next-line @typescript-eslint/no-explicit-any
            (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, () => {
                 console.log("Clicked annotation", annotation.id);
-                // TODO: Open edit/delete menu, perhaps via a new state/popover
             }, className, getAnnotationStyles(annotation.color));
            addedAnnotations.current.add(annotation.id);
         }
@@ -142,27 +356,14 @@ export const ReaderView: React.FC = () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).__reader_added_annotations_count = addedAnnotations.current.size;
 
-      // Handle removals (if annotations were deleted from store)
-      // This requires iterating over addedAnnotations and checking if they exist in `annotations`
-      // For now, since `epubjs` annotations API is append-only mostly, we would need to remove by CFI.
-      // But `rendition.annotations.remove` takes CFI and type.
-      // If we delete an annotation, we need to know its CFI.
-      // A full sync might be: clear all highlights and re-add?
-      // Or just track better.
-      // For simplicity in this iteration: we only ADD.
-      // Real implementation should probably clear specific CFIs if removed.
-
       const currentIds = new Set(annotations.map(a => a.id));
       addedAnnotations.current.forEach(id => {
           if (!currentIds.has(id)) {
-              // Find the annotation object (we don't have it anymore if it's gone from store)
-              // We need to store map of ID -> CFI in ref to remove it.
-              // For now, let's just accept we might have stale highlights until reload if we don't implement full sync.
-              // Improving:
+              // Should handle removal
           }
       });
     }
-  }, [annotations, isRenditionReady]); // Dependencies updated to ensure re-run when rendition is ready
+  }, [annotations, isRenditionReady]);
 
   // Handle TTS Errors
   const showToast = useToastStore(state => state.showToast);
@@ -173,315 +374,6 @@ export const ReaderView: React.FC = () => {
           clearError(); // Clear immediately so it doesn't persist in TTS store
       }
   }, [lastError, showToast, clearError]);
-
-  // Inject Custom CSS for Highlights
-  useEffect(() => {
-      const rendition = renditionRef.current;
-      if (rendition) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition.themes as any).default({
-              '.tts-highlight': {
-                  'fill': 'yellow',
-                  'background-color': 'rgba(255, 255, 0, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              },
-              '.highlight-yellow': {
-                  'fill': 'yellow',
-                  'background-color': 'rgba(255, 255, 0, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              },
-              '.highlight-green': {
-                  'fill': 'green',
-                  'background-color': 'rgba(0, 255, 0, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              },
-              '.highlight-blue': {
-                  'fill': 'blue',
-                  'background-color': 'rgba(0, 0, 255, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              },
-              '.highlight-red': {
-                  'fill': 'red',
-                  'background-color': 'rgba(255, 0, 0, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              }
-          });
-      }
-  }, []); // removed renditionRef.current, technically should depend on it but ref stable
-
-  const [showToc, setShowToc] = useState(false);
-  const [showAnnotations, setShowAnnotations] = useState(false);
-  const [immersiveMode, setImmersiveMode] = useState(false);
-
-  const [lexiconOpen, setLexiconOpen] = useState(false);
-  const [lexiconText, setLexiconText] = useState('');
-
-  const { setGlobalSettingsOpen } = useUIStore();
-
-  const [audioPanelOpen, setAudioPanelOpen] = useState(false);
-
-  // Search State
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeSearchQuery, setActiveSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-
-  // Initialize Book
-  useEffect(() => {
-    if (!id) return;
-
-    // Update AudioPlayerService with current book context
-    AudioPlayerService.getInstance().setBookId(id);
-
-    const loadBook = async () => {
-      setIsLoading(true);
-      setCurrentBookId(id);
-
-      try {
-        const { file: fileData, metadata } = await dbService.getBook(id);
-
-        if (!fileData) {
-          console.error('Book file not found');
-          navigate('/');
-          return;
-        }
-
-        if (bookRef.current) {
-          bookRef.current.destroy();
-        }
-
-        const book = ePub(fileData as ArrayBuffer);
-        bookRef.current = book;
-
-        if (viewerRef.current) {
-          const rendition = book.renderTo(viewerRef.current, {
-            width: '100%',
-            height: '100%',
-            flow: viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated',
-            manager: 'default',
-          });
-          renditionRef.current = rendition;
-          setIsRenditionReady(true);
-
-          // Disable spreads to prevent layout issues
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition as any).spread('none');
-
-          // Load navigation/TOC
-          const nav = await book.loaded.navigation;
-          setToc(nav.toc);
-
-          // Register themes
-          rendition.themes.register('light', `
-            body { background: #ffffff !important; color: #000000 !important; }
-            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            a { color: #0000ee !important; }
-          `);
-          rendition.themes.register('dark', `
-            body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            a { color: #6ab0f3 !important; }
-          `);
-          rendition.themes.register('sepia', `
-            body { background: #f4ecd8 !important; color: #5b4636 !important; }
-            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-            a { color: #0000ee !important; }
-          `);
-          rendition.themes.register('custom', `
-            body { background: ${customTheme.bg} !important; color: ${customTheme.fg} !important; }
-            p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-          `);
-
-          // Register TTS highlight theme
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition.themes as any).default({
-              '.tts-highlight': {
-                  'fill': 'yellow',
-                  'background-color': 'rgba(255, 255, 0, 0.3)',
-                  'fill-opacity': '0.3',
-                  'mix-blend-mode': 'multiply'
-              }
-          });
-
-          rendition.themes.select(currentTheme);
-          rendition.themes.fontSize(`${fontSize}%`);
-          rendition.themes.font(fontFamily);
-          // Apply line-height via default rule as a workaround since there's no direct API
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition.themes as any).default({
-              p: { 'line-height': `${lineHeight} !important` },
-              // Also ensure body has it for general text
-              body: { 'line-height': `${lineHeight} !important` }
-          });
-
-          // Display at saved location or start
-          const startLocation = metadata?.currentCfi || undefined;
-          await rendition.display(startLocation);
-
-          // Generate locations for progress tracking
-          await book.ready;
-
-          // Helper to update progress once locations are ready
-          const updateProgressFromLocations = (r: Rendition, b: Book) => {
-               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-               const currentLoc = (r as any).location;
-               if (currentLoc && currentLoc.start) {
-                   const cfi = currentLoc.start.cfi;
-                   let pct = 0;
-                   try {
-                       pct = b.locations.percentageFromCfi(cfi);
-                   } catch {
-                       // Ignore if locations somehow failed
-                   }
-
-                   // Get chapter title (simplified)
-                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                   const item = b.spine.get(currentLoc.start.href) as any;
-                   const title = item ? (item.label || 'Chapter') : 'Unknown';
-
-                   updateLocation(cfi, pct, title);
-                   dbService.saveProgress(id, cfi, pct);
-               }
-          };
-
-          // Check for cached locations
-          const savedLocations = await dbService.getLocations(id);
-          if (savedLocations) {
-              book.locations.load(savedLocations.locations);
-              // Update progress immediately
-              updateProgressFromLocations(rendition, book);
-          } else {
-              // Generate if not cached
-              book.locations.generate(1000).then(async () => {
-                   // Save to DB
-                   const locationStr = book.locations.save();
-                   await dbService.saveLocations(id, locationStr);
-
-                   updateProgressFromLocations(rendition, book);
-               });
-          }
-
-           // Index for Search (Async)
-           // Only index if not already done? Or just do it every time for now (simplicity)
-           searchClient.indexBook(book, id).then(() => {
-               console.log("Book indexed for search");
-           });
-
-          // Text Selection Listener
-          rendition.on('selected', (cfiRange: string) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const range = (rendition as any).getRange(cfiRange);
-            if (range) {
-                const rect = range.getBoundingClientRect();
-                const iframe = viewerRef.current?.querySelector('iframe');
-                if (iframe) {
-                   const iframeRect = iframe.getBoundingClientRect();
-                   showPopover(
-                       rect.left + iframeRect.left,
-                       rect.top + iframeRect.top,
-                       cfiRange,
-                       range.toString()
-                   );
-                }
-            }
-          });
-
-          // Manual selection listener to handle cases where epub.js event fails (e.g. after highlighting)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          rendition.hooks.content.register((contents: any) => {
-              const doc = contents.document;
-              doc.addEventListener('mouseup', () => {
-                  const selection = contents.window.getSelection();
-                  if (!selection || selection.isCollapsed) return;
-
-                  // Wait a tick to let epub.js handle it first (if it works)
-                  setTimeout(() => {
-                      const range = selection.getRangeAt(0);
-                      if (!range) return;
-
-                      // Check if we are selecting inside the same range (optional)
-
-                      const cfi = contents.cfiFromRange(range);
-                      if (cfi) {
-                           const rect = range.getBoundingClientRect();
-                           const iframe = viewerRef.current?.querySelector('iframe');
-                           if (iframe) {
-                               const iframeRect = iframe.getBoundingClientRect();
-                               showPopover(
-                                   rect.left + iframeRect.left,
-                                   rect.top + iframeRect.top,
-                                   cfi,
-                                   range.toString()
-                               );
-                           }
-                      }
-                  }, 10);
-              });
-          });
-
-          // Clear popover on click elsewhere
-          rendition.on('click', () => {
-             hidePopover();
-          });
-
-          rendition.on('relocated', (location: Location) => {
-            const cfi = location.start.cfi;
-
-            // Prevent infinite loop if CFI hasn't changed
-            if (cfi === useReaderStore.getState().currentCfi) return;
-
-            hidePopover();
-            // Calculate progress
-            // Note: book.locations.percentageFromCfi(cfi) only works if locations are generated.
-            // If not generated, it might return 0 or throw.
-            // We can check book.locations.length()
-            let percentage = 0;
-            try {
-                percentage = book.locations.percentageFromCfi(cfi);
-            } catch {
-                // Locations not ready yet
-            }
-
-            // Get chapter title
-            // Usually we find the spine item and check TOC.
-            // Simplified:
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const item = book.spine.get(location.start.href) as any;
-            const title = item ? (item.label || 'Chapter') : 'Unknown';
-            // Actually getting title from spine is tricky without matching TOC.
-            // We'll leave title as is or implement proper TOC lookup later.
-
-            updateLocation(cfi, percentage, title);
-
-            // Persist to DB (debounced via DBService)
-            dbService.saveProgress(id, cfi, percentage);
-          });
-        }
-      } catch (error) {
-        console.error('Error loading book:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadBook();
-
-    return () => {
-      if (bookRef.current) {
-        bookRef.current.destroy();
-        bookRef.current = null;
-      }
-      renditionRef.current = null;
-      reset();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, navigate]);
 
   // Apply Forced Theme Styles
   // Ref to store the current styles calculation function to be used by hook
@@ -548,7 +440,7 @@ export const ReaderView: React.FC = () => {
 
     applyStylesRef.current = applyStyles;
     applyStyles();
-  }, [shouldForceFont, currentTheme, customTheme, fontFamily, lineHeight]);
+  }, [shouldForceFont, currentTheme, customTheme, fontFamily, lineHeight, isRenditionReady]);
 
   // Register hook to apply styles on new content load
   useEffect(() => {
@@ -566,6 +458,31 @@ export const ReaderView: React.FC = () => {
               // Apply current styles immediately
               applyStylesRef.current();
           }
+
+          // Re-attach manual selection listener
+           const docEl = content.document;
+           docEl.addEventListener('mouseup', () => {
+               const selection = content.window.getSelection();
+               if (!selection || selection.isCollapsed) return;
+               setTimeout(() => {
+                   const range = selection.getRangeAt(0);
+                   if (!range) return;
+                   const cfi = content.cfiFromRange(range);
+                   if (cfi) {
+                        const rect = range.getBoundingClientRect();
+                        const iframe = viewerRef.current?.querySelector('iframe');
+                        if (iframe) {
+                            const iframeRect = iframe.getBoundingClientRect();
+                            showPopover(
+                                rect.left + iframeRect.left,
+                                rect.top + iframeRect.top,
+                                cfi,
+                                range.toString()
+                            );
+                        }
+                   }
+               }, 10);
+           });
       };
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -575,7 +492,7 @@ export const ReaderView: React.FC = () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (rendition.hooks.content as any).deregister(hook);
       };
-  }, []);
+  }, [rendition, isRenditionReady]); // Only run when rendition becomes ready/changes
 
   // Handle Standard Theme/Font/Layout changes (via epub.js themes)
   useEffect(() => {
@@ -607,8 +524,6 @@ export const ReaderView: React.FC = () => {
 
       themes.select(currentTheme);
       renditionRef.current.themes.fontSize(`${fontSize}%`);
-
-      // Always set font (forced styles override via style tag if active)
       renditionRef.current.themes.font(fontFamily);
 
       // Update line height
@@ -618,14 +533,11 @@ export const ReaderView: React.FC = () => {
         body: { 'line-height': `${lineHeight} !important` }
       });
     }
-  }, [currentTheme, customTheme, fontSize, fontFamily, lineHeight]);
+  }, [currentTheme, customTheme, fontSize, fontFamily, lineHeight, isRenditionReady]);
 
-  // Handle View Mode changes
+  // Handle View Mode changes - already handled in hook, but we might need to re-display
   useEffect(() => {
       if (renditionRef.current) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (renditionRef.current as any).flow(viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated');
-
           // Re-display current location to ensure proper rendering after flow change
           const currentLoc = useReaderStore.getState().currentCfi;
           if (currentLoc) {
@@ -727,15 +639,13 @@ export const ReaderView: React.FC = () => {
 
   // Trigger auto-play when new chapter loads (queue changes)
   useEffect(() => {
-      // Check if we are waiting to auto-play and the player is stopped (meaning new queue loaded)
-      // We also check queue length to ensure we actually have content
       if (autoPlayNext && status === 'stopped' && queue.length > 0) {
           play();
           setAutoPlayNext(false);
       }
   }, [status, autoPlayNext, play, queue]);
 
-  // Handle Container Resize (e.g. sidebar toggle)
+  // Handle Container Resize
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -799,16 +709,27 @@ export const ReaderView: React.FC = () => {
       }
   }, [gestureMode]);
 
+  const [showToc, setShowToc] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(false);
+  const [immersiveMode, setImmersiveMode] = useState(false);
+  const [lexiconOpen, setLexiconOpen] = useState(false);
+  const [lexiconText, setLexiconText] = useState('');
+  const { setGlobalSettingsOpen } = useUIStore();
+  const [audioPanelOpen, setAudioPanelOpen] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
   return (
     <div className="flex flex-col h-screen bg-background text-foreground relative">
-      {/* Gesture Overlay */}
       <GestureOverlay
           onNextChapter={handleNext}
           onPrevChapter={handlePrev}
           onClose={() => setGestureMode(false)}
       />
 
-      {/* Immersive Mode Exit Button */}
       {immersiveMode && (
         <button
             data-testid="reader-immersive-exit-button"
@@ -820,7 +741,6 @@ export const ReaderView: React.FC = () => {
         </button>
       )}
 
-      {/* Header */}
       {!immersiveMode && (
         <header className="flex items-center justify-between px-6 md:px-8 py-2 bg-surface shadow-sm z-10">
             <div className="flex items-center gap-2">
@@ -867,9 +787,7 @@ export const ReaderView: React.FC = () => {
         </header>
       )}
 
-      {/* Main Content */}
       <div className="flex-1 relative overflow-hidden flex justify-center">
-         {/* TOC Sidebar */}
          {showToc && (
              <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
                  <div className="p-4">
@@ -894,7 +812,6 @@ export const ReaderView: React.FC = () => {
              </div>
          )}
 
-         {/* Annotations Sidebar */}
          {showAnnotations && (
              <div data-testid="reader-annotations-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
                  <div className="p-4 border-b border-border">
@@ -907,7 +824,6 @@ export const ReaderView: React.FC = () => {
              </div>
          )}
 
-         {/* Search Sidebar */}
          {showSearch && (
              <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
                  <div className="p-4 border-b border-border">
@@ -953,7 +869,6 @@ export const ReaderView: React.FC = () => {
                                         onClick={async () => {
                                             if (renditionRef.current) {
                                                 await renditionRef.current.display(result.href);
-                                                // Small delay to ensure rendering is complete before searching DOM
                                                 setTimeout(() => {
                                                     scrollToText(activeSearchQuery);
                                                 }, 500);
@@ -976,7 +891,6 @@ export const ReaderView: React.FC = () => {
              </div>
          )}
 
-         {/* Reader Area */}
          <div className="flex-1 relative min-w-0 flex flex-col items-center">
             <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full max-w-2xl h-full overflow-hidden px-6 md:px-8" />
 
@@ -992,7 +906,6 @@ export const ReaderView: React.FC = () => {
          </div>
       </div>
 
-      {/* Footer / Controls */}
       {!immersiveMode && (
         <footer className="bg-surface border-t border-border px-6 md:px-8 py-2 flex items-center justify-between z-10">
             <button data-testid="reader-prev-page" aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-border rounded-full">
