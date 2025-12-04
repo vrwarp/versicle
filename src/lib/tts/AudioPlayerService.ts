@@ -48,8 +48,6 @@ export class AudioPlayerService {
 
   // Track if we are currently playing a preview (e.g. from Lexicon)
   private isPreviewing: boolean = false;
-  // Track active utterance ID to ignore stale events (WebSpeech specific)
-  private activeUtteranceId: string | null = null;
 
   // Silent audio for Media Session "anchoring" (Local TTS)
   private silentAudio: HTMLAudioElement;
@@ -106,16 +104,6 @@ export class AudioPlayerService {
   private setupWebSpeech() {
     if (this.provider instanceof WebSpeechProvider) {
        this.provider.on((event) => {
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           const utteranceId = (event as any).utteranceId;
-
-           // If we have an active utterance ID and this event doesn't match, ignore it
-           // This handles race conditions where stop() triggers 'end' from previous utterance
-           // while a new preview utterance has already started.
-           if (this.activeUtteranceId && utteranceId && utteranceId !== this.activeUtteranceId) {
-               return;
-           }
-
            if (event.type === 'start') {
                this.setStatus('playing');
                // Ensure silent audio is playing to keep MediaSession active
@@ -127,7 +115,6 @@ export class AudioPlayerService {
                if (this.isPreviewing) {
                    this.isPreviewing = false;
                    this.setStatus('stopped');
-                   this.activeUtteranceId = null;
                    return;
                }
                // Don't stop silent audio here, wait for playNext or stop
@@ -298,13 +285,7 @@ export class AudioPlayerService {
 
           if (this.provider instanceof WebSpeechProvider) {
                this.currentSpeechSpeed = this.speed;
-               const result = await this.provider.synthesize(text, voiceId, this.speed);
-               // Capture the utterance ID if provided
-               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-               if ((result as any).utteranceId) {
-                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                   this.activeUtteranceId = (result as any).utteranceId;
-               }
+               await this.provider.synthesize(text, voiceId, this.speed);
           } else {
                // Cloud provider flow (without caching for previews to save complexity,
                // though it costs money. Preview text is usually short.)
@@ -394,12 +375,7 @@ export class AudioPlayerService {
 
         if (this.provider instanceof WebSpeechProvider) {
              this.currentSpeechSpeed = this.speed;
-             const result = await this.provider.synthesize(processedText, voiceId, this.speed);
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             if ((result as any).utteranceId) {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  this.activeUtteranceId = (result as any).utteranceId;
-             }
+             await this.provider.synthesize(processedText, voiceId, this.speed);
         } else {
              // Cloud provider flow with Caching
              const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed, 1.0, lexiconHash);
@@ -587,7 +563,6 @@ export class AudioPlayerService {
     this.savePlaybackState();
 
     this.setStatus('stopped');
-    this.activeUtteranceId = null; // Clear any active utterance ID on stop
     this.silentAudio.pause();
     this.silentAudio.currentTime = 0;
     this.notifyListeners(null);
