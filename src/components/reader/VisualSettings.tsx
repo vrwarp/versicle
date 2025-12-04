@@ -1,5 +1,5 @@
 import { useReaderStore } from "../../store/useReaderStore"
-import { PopoverContent } from "../ui/Popover"
+import { PopoverContent, PopoverClose } from "../ui/Popover"
 import { Button } from "../ui/Button"
 import { Slider } from "../ui/Slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/Select"
@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "../ui/Tabs"
 import { Label } from "../ui/Label"
 import { Switch } from "../ui/Switch"
 import { cn } from "../../lib/utils"
+import { X } from "lucide-react"
 
 interface ThemeSwatchProps {
   mode: 'light' | 'dark' | 'sepia'
@@ -38,7 +39,14 @@ export const VisualSettings = () => {
   } = useReaderStore();
 
   return (
-    <PopoverContent className="w-80 p-4">
+    <PopoverContent className="w-80 p-4 relative">
+      <PopoverClose className="absolute right-2 top-2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground" asChild>
+        <Button variant="ghost" size="icon" className="h-6 w-6">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </Button>
+      </PopoverClose>
+
       {/* 1. The "Ambience" Row (Themes) */}
       <div className="section-theme mb-6">
         <Label className="mb-2 block">Ambience</Label>
