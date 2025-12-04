@@ -586,6 +586,7 @@ export class AudioPlayerService {
         if (this.provider.id === 'local' && this.provider.pause) {
             this.provider.pause();
             this.silentAudio.pause();
+            // TODO: Move silent audio logic to WebSpeechProvider (see plan/refactor_silent_audio.md)
         } else if (this.audioPlayer) {
             this.audioPlayer.pause();
         }
