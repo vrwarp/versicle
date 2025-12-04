@@ -6,30 +6,32 @@ class MockWorker {
   onmessage: ((e: MessageEvent) => void) | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   postMessage(data: any) {
-    if (data.type === 'INDEX_BOOK') {
-       // Legacy path, should not be called by new implementation
-    } else if (data.type === 'INIT_INDEX') {
-        // Init
-    } else if (data.type === 'ADD_TO_INDEX') {
-        // Add
-    } else if (data.type === 'FINISH_INDEXING') {
-        // Finish
-    } else if (data.type === 'SEARCH') {
-        const id = data.id;
-        setTimeout(() => {
-            if (this.onmessage) {
-                this.onmessage({
-                    data: {
-                        type: 'SEARCH_RESULTS',
-                        id,
-                        results: [
-                            { href: 'chap1.html', excerpt: '...found match...' }
-                        ]
-                    }
-                } as MessageEvent);
-            }
-        }, 10);
-    }
+    const { id, type } = data;
+
+    // Simulate async response
+    setTimeout(() => {
+        if (!this.onmessage) return;
+
+        if (type === 'INDEX_BOOK') {
+           // Legacy path, should not be called by new implementation
+        } else if (type === 'INIT_INDEX') {
+            this.onmessage({ data: { id, type: 'ACK' } } as MessageEvent);
+        } else if (type === 'ADD_TO_INDEX') {
+            this.onmessage({ data: { id, type: 'ACK' } } as MessageEvent);
+        } else if (type === 'FINISH_INDEXING') {
+            this.onmessage({ data: { id, type: 'ACK' } } as MessageEvent);
+        } else if (type === 'SEARCH') {
+            this.onmessage({
+                data: {
+                    type: 'SEARCH_RESULTS',
+                    id,
+                    results: [
+                        { href: 'chap1.html', excerpt: '...found match...' }
+                    ]
+                }
+            } as MessageEvent);
+        }
+    }, 10);
   }
   terminate() {}
 }
