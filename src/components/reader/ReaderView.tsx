@@ -11,7 +11,7 @@ import { AnnotationList } from './AnnotationList';
 import { LexiconManager } from './LexiconManager';
 import { VisualSettings } from './VisualSettings';
 import { GestureOverlay } from './GestureOverlay';
-import { Toast } from '../ui/Toast';
+import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
@@ -165,15 +165,14 @@ export const ReaderView: React.FC = () => {
   }, [annotations, isRenditionReady]); // Dependencies updated to ensure re-run when rendition is ready
 
   // Handle TTS Errors
-  const [toastMessage, setToastMessage] = useState('');
-  const [showToast, setShowToast] = useState(false);
+  const showToast = useToastStore(state => state.showToast);
 
   useEffect(() => {
       if (lastError) {
-          setToastMessage(lastError);
-          setShowToast(true);
+          showToast(lastError, 'error');
+          clearError(); // Clear immediately so it doesn't persist in TTS store
       }
-  }, [lastError]);
+  }, [lastError, showToast, clearError]);
 
   // Inject Custom CSS for Highlights
   useEffect(() => {
@@ -992,16 +991,6 @@ export const ReaderView: React.FC = () => {
              <LexiconManager open={lexiconOpen} onOpenChange={setLexiconOpen} initialTerm={lexiconText} />
          </div>
       </div>
-
-      {/* Toast Notification */}
-      <Toast
-          message={toastMessage}
-          isVisible={showToast}
-          onClose={() => {
-              setShowToast(false);
-              clearError();
-          }}
-      />
 
       {/* Footer / Controls */}
       {!immersiveMode && (

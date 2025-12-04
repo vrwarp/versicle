@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { EmptyLibrary } from './EmptyLibrary';
 import { Grid } from 'react-window';
@@ -53,6 +54,7 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
 export const LibraryView: React.FC = () => {
   const { books, fetchBooks, isLoading, error, addBook, isImporting } = useLibraryStore();
   const { setGlobalSettingsOpen } = useUIStore();
+  const showToast = useToastStore(state => state.showToast);
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -77,7 +79,11 @@ export const LibraryView: React.FC = () => {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      addBook(e.target.files[0]);
+      addBook(e.target.files[0]).then(() => {
+        showToast("Book imported successfully", "success");
+      }).catch((err) => {
+        showToast(`Import failed: ${err.message}`, "error");
+      });
     }
     // Reset input so same file can be selected again if needed
     if (e.target.value) {

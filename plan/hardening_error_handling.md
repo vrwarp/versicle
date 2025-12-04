@@ -4,7 +4,7 @@
 
 ### Current Implementation
 - **Global:** `App.tsx` handles DB init errors but nothing else.
-- **UI:** `Toast.tsx` exists but is manually triggered.
+- **UI:** `Toast.tsx` exists and is now managed by a centralized store.
 - **Logging:** `console.error` is scattered.
 - **Types:** `AppError`, `DatabaseError` exist.
 
@@ -22,11 +22,11 @@
   - Logs the stack trace.
 - **Action:** Wrap `ReaderView` and `LibraryView` in this boundary in `App.tsx` or their respective parent containers. (Done)
 
-### 2.2. Centralized Toast System
-- **Action:** Create `useToastStore` (Zustand).
-  - Actions: `showToast(message, type: 'info'|'error'|'success')`, `hideToast()`.
-- **Action:** Place a global `<ToastContainer />` in `App.tsx`.
-- **Action:** Replace local `showToast` states in components with this global store.
+### 2.2. Centralized Toast System (Implemented)
+- **Status:** Complete
+- **Components:** `src/store/useToastStore.ts`, `src/components/ui/ToastContainer.tsx`, `src/components/ui/Toast.tsx`
+- **Actions:** `showToast(message, type: 'info'|'error'|'success')`, `hideToast()`.
+- **Integration:** `App.tsx` includes `<ToastContainer />`. `ReaderView` uses `useToastStore` for error feedback.
 
 ### 2.3. Unhandled Promise Rejection Handler
 - **Action:** Add a global event listener for `unhandledrejection` in `App.tsx` (or `main.tsx`).
@@ -41,12 +41,12 @@
 
 ## 3. Implementation Plan
 
-1.  **Create `logger.ts`** and `useToastStore.ts`.
+1.  **Create `logger.ts`** and `useToastStore.ts` (Toast Store Complete).
 2.  **Create `ErrorBoundary.tsx`**.
 3.  **Update `App.tsx`**:
     - Wrap routes.
-    - Add global toast container.
+    - Add global toast container (Complete).
     - Add window error listeners.
 4.  **Refactor Components**:
-    - `ReaderView` to use `useToastStore`.
+    - `ReaderView` to use `useToastStore` (Complete).
     - `DBService` to use `Logger`.

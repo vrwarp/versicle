@@ -3,6 +3,7 @@ import { LibraryView } from './components/library/LibraryView';
 import { ReaderView } from './components/reader/ReaderView';
 import { ThemeSynchronizer } from './components/ThemeSynchronizer';
 import { GlobalSettingsDialog } from './components/GlobalSettingsDialog';
+import { ToastContainer } from './components/ui/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useEffect, useState } from 'react';
 import { getDB } from './db/db';
@@ -69,6 +70,7 @@ function App() {
     <Router>
       <ThemeSynchronizer />
       <GlobalSettingsDialog />
+      <ToastContainer />
       <div className="min-h-screen bg-background text-foreground">
         <Routes>
           <Route path="/" element={

@@ -79,6 +79,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           errorMessage = 'Device storage full. Please delete some books.';
       }
       set({ error: errorMessage, isImporting: false });
+      throw err; // Re-throw so components can handle UI feedback (e.g. Toasts)
     }
   },
 
