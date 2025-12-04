@@ -7,6 +7,7 @@ import { CostEstimator } from './CostEstimator';
 import { LexiconService } from './LexiconService';
 import { MediaSessionManager } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
+import { AsyncMutex } from '../utils/AsyncMutex';
 
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
@@ -34,6 +35,7 @@ export class AudioPlayerService {
   private currentIndex: number = 0;
   private status: TTSStatus = 'stopped';
   private listeners: PlaybackListener[] = [];
+  private mutex = new AsyncMutex();
 
   // Settings
   private speed: number = 1.0;
@@ -68,17 +70,21 @@ export class AudioPlayerService {
         onSeekForward: () => this.seek(10),
         onSeekTo: (details) => {
             if (details.seekTime !== undefined && details.seekTime !== null) {
-                if (this.audioPlayer) {
-                    this.audioPlayer.seek(details.seekTime);
-                } else {
-                    // For WebSpeech, we can't seek to absolute time accurately.
-                    // We could try to approximate by sentence index but it's risky.
-                    console.warn("SeekTo not supported for local TTS");
-                }
+                this.seekFromMediaSession(details.seekTime);
             }
         },
     });
     this.setupWebSpeech();
+  }
+
+  private async seekFromMediaSession(time: number) {
+      await this.mutex.runExclusive(async () => {
+        if (this.audioPlayer) {
+            this.audioPlayer.seek(time);
+        } else {
+             console.warn("SeekTo not supported for local TTS");
+        }
+      });
   }
 
   static getInstance(): AudioPlayerService {
@@ -103,22 +109,17 @@ export class AudioPlayerService {
        this.provider.on((event) => {
            if (event.type === 'start') {
                this.setStatus('playing');
-               // Ensure silent audio is playing to keep MediaSession active
-               // Only play if not already playing to avoid audio artifacts/interruptions
                if (this.silentAudio.paused) {
                    this.silentAudio.play().catch(e => console.warn("Silent audio play failed", e));
                }
            } else if (event.type === 'end') {
-               // Don't stop silent audio here, wait for playNext or stop
                this.playNext();
            } else if (event.type === 'boundary') {
-               // We might use this for word-level sync in future
+               // Future use
            } else if (event.type === 'error') {
-               // Ignore 'interrupted' or 'canceled' errors as they are expected during navigation
                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                const errorType = (event.error as any)?.error || event.error;
                if (errorType === 'interrupted' || errorType === 'canceled') {
-                   // Do not stop, as this likely means we are just starting a new sentence
                    return;
                }
 
@@ -157,12 +158,9 @@ export class AudioPlayerService {
           });
 
           this.syncEngine?.setOnHighlight(() => {
-               // Currently no action needed if we assume sentence-level blobs.
-               // We rely on queue index for active CFI.
+               // Currently no action needed
           });
       }
-
-      // Note: MediaSession setup is now handled in the constructor via MediaSessionManager
   }
 
   private updateMediaSessionMetadata() {
@@ -177,29 +175,73 @@ export class AudioPlayerService {
       }
   }
 
-  // Allow switching providers
-  public setProvider(provider: ITTSProvider) {
-      // Don't restart if it's the same provider type and instance logic,
-      // but here we usually pass a new instance.
-      this.stop();
+  public async setProvider(provider: ITTSProvider): Promise<void> {
+      return this.mutex.runExclusive(() => this._setProvider(provider));
+  }
+
+  public async init(): Promise<void> {
+    return this.mutex.runExclusive(async () => {
+         await this.provider.init();
+    });
+  }
+
+  public async getVoices(): Promise<TTSVoice[]> {
+      return this.mutex.runExclusive(() => this.provider.getVoices());
+  }
+
+  public async setQueue(items: TTSQueueItem[], startIndex: number = 0): Promise<void> {
+      return this.mutex.runExclusive(() => this._setQueue(items, startIndex));
+  }
+
+  public async play(): Promise<void> {
+      return this.mutex.runExclusive(() => this._play());
+  }
+
+  public async pause(): Promise<void> {
+      return this.mutex.runExclusive(() => this._pause());
+  }
+
+  public async resume(): Promise<void> {
+      return this.mutex.runExclusive(() => this._resume());
+  }
+
+  public async stop(): Promise<void> {
+      return this.mutex.runExclusive(() => this._stop());
+  }
+
+  public async next(): Promise<void> {
+      return this.mutex.runExclusive(() => this._next());
+  }
+
+  public async prev(): Promise<void> {
+      return this.mutex.runExclusive(() => this._prev());
+  }
+
+  public async jumpTo(index: number): Promise<void> {
+      return this.mutex.runExclusive(() => this._jumpTo(index));
+  }
+
+  public async setSpeed(speed: number): Promise<void> {
+      return this.mutex.runExclusive(() => this._setSpeed(speed));
+  }
+
+  public async setVoice(voiceId: string): Promise<void> {
+      return this.mutex.runExclusive(() => this._setVoice(voiceId));
+  }
+
+  public async seek(offset: number): Promise<void> {
+      return this.mutex.runExclusive(() => this._seek(offset));
+  }
+
+  private async _setProvider(provider: ITTSProvider) {
+      await this._stop();
       this.provider = provider;
       if (provider instanceof WebSpeechProvider) {
           this.setupWebSpeech();
-          // We can keep audioPlayer around or null it.
-          // Nulling it saves memory.
           this.audioPlayer = null;
       } else {
-          // Cloud provider
           this.setupCloudPlayback();
       }
-  }
-
-  async init() {
-    await this.provider.init();
-  }
-
-  async getVoices(): Promise<TTSVoice[]> {
-    return this.provider.getVoices();
   }
 
   private isQueueEqual(newItems: TTSQueueItem[]): boolean {
@@ -207,29 +249,18 @@ export class AudioPlayerService {
       for (let i = 0; i < this.queue.length; i++) {
           if (this.queue[i].text !== newItems[i].text) return false;
           if (this.queue[i].cfi !== newItems[i].cfi) return false;
-          // Check title for preroll or other metadata changes that might be relevant
           if (this.queue[i].title !== newItems[i].title) return false;
       }
       return true;
   }
 
-  setQueue(items: TTSQueueItem[], startIndex: number = 0) {
-    // If the queue is effectively the same, we should update it (to catch metadata changes)
-    // but NOT stop playback or reset the index, allowing for seamless continuation.
-    // This is crucial for "scrolled-doc" mode where relocation events fire frequently
-    // with the same content.
+  private async _setQueue(items: TTSQueueItem[], startIndex: number = 0) {
     if (this.isQueueEqual(items)) {
         this.queue = items;
-        // Don't update currentIndex or stop()
-        // But we should verify if startIndex matches currentIndex?
-        // Usually setQueue is called with startIndex=0 by default from extractors.
-        // If we are playing at index 5, and receive same queue with startIndex 0,
-        // we want to stay at 5.
-        // If the caller EXPLICITLY wanted to reset, they would probably stop() first or use jumpTo().
         return;
     }
 
-    this.stop();
+    await this._stop();
     this.queue = items;
     this.currentIndex = startIndex;
 
@@ -237,55 +268,40 @@ export class AudioPlayerService {
     this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
   }
 
-  /**
-   * Generates a pre-roll announcement text.
-   * "Chapter 5. The Wedding. Estimated reading time: 14 minutes."
-   */
   public generatePreroll(chapterTitle: string, wordCount: number, speed: number = 1.0): string {
-      const WORDS_PER_MINUTE = 180; // Average reading speed
-      // Adjust WPM by speed
+      const WORDS_PER_MINUTE = 180;
       const adjustedWpm = WORDS_PER_MINUTE * speed;
       const minutes = Math.max(1, Math.round(wordCount / adjustedWpm));
-
       return `${chapterTitle}. Estimated reading time: ${minutes} minute${minutes === 1 ? '' : 's'}.`;
   }
 
-  jumpTo(index: number) {
+  private async _jumpTo(index: number) {
       if (index >= 0 && index < this.queue.length) {
-          this.stop();
+          await this._stop();
           this.currentIndex = index;
-          this.play();
+          await this._play();
       }
   }
 
-  async play(): Promise<void> {
+  private async _play() {
     if (this.status === 'paused') {
-        return this.resume();
+        return this._resume();
     }
 
-    // If stopped, we might want to resume from a saved state (Switch Book case)
     if (this.status === 'stopped' && this.currentBookId && !this.sessionRestored) {
-        // Mark session as restored so we don't try again for this book instance
-        // unless setBookId is called again
         this.sessionRestored = true;
 
         try {
             const book = await dbService.getBookMetadata(this.currentBookId);
             if (book) {
-                // Restore Playback Position (lastPlayedCfi)
-                // Only override if we are at the default start (index 0)
-                // This allows users to manually navigate and play without being forced back
                 if (book.lastPlayedCfi && this.currentIndex === 0) {
-                     // Find index in queue
                      const index = this.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
                      if (index >= 0) {
                          this.currentIndex = index;
                      }
                 }
-
-                // If we have a lastPauseTime, we should also consider "Resume" logic (smart rewind)
                 if (book.lastPauseTime) {
-                     return this.resume(); // Delegate to resume which handles DB fetch & rewind
+                     return this._resume();
                 }
             }
         } catch (e) {
@@ -301,21 +317,15 @@ export class AudioPlayerService {
 
     const item = this.queue[this.currentIndex];
 
-    // Only set loading if we are NOT already playing.
-    // This prevents flickering "Pause" -> "Play" -> "Pause" in UI during sentence transitions.
-    // If we are playing, we are just transitioning to next sentence, so effectively still active.
     if (this.status !== 'playing') {
         this.setStatus('loading');
     }
 
-    // Always notify listeners of the new active CFI, even if status didn't change
     this.notifyListeners(item.cfi);
     this.updateMediaSessionMetadata();
 
     try {
         const voiceId = this.voiceId || '';
-
-        // Retrieve and apply lexicon rules
         const rules = await this.lexiconService.getRules(this.currentBookId || undefined);
         const processedText = this.lexiconService.applyLexicon(item.text, rules);
         const lexiconHash = await this.lexiconService.getRulesHash(rules);
@@ -324,7 +334,6 @@ export class AudioPlayerService {
              this.currentSpeechSpeed = this.speed;
              await this.provider.synthesize(processedText, voiceId, this.speed);
         } else {
-             // Cloud provider flow with Caching
              const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed, 1.0, lexiconHash);
              const cached = await this.cache.get(cacheKey);
 
@@ -337,15 +346,7 @@ export class AudioPlayerService {
                      isNative: false
                  };
              } else {
-                 // Track cost before calling synthesis
-                 // We only track when we actually hit the API (cache miss)
-                 // Note: We track the ORIGINAL text length, not the processed one,
-                 // as that's what the user sees, though technically we send processed text.
-                 // Actually, cloud providers charge by input characters.
-                 // If replacement is much longer, cost increases.
-                 // Let's track processed text to be accurate.
                  CostEstimator.getInstance().track(processedText);
-
                  result = await this.provider.synthesize(processedText, voiceId, this.speed);
                  if (result.audio) {
                      await this.cache.put(
@@ -374,17 +375,15 @@ export class AudioPlayerService {
     } catch (e) {
         console.error("Play error", e);
 
-        // Error Handling & Fallback logic
         if (!(this.provider instanceof WebSpeechProvider)) {
             const errorMessage = e instanceof Error ? e.message : "Cloud TTS error";
             this.notifyError(`Cloud voice failed (${errorMessage}). Switching to local backup.`);
 
             console.warn("Falling back to WebSpeechProvider...");
-            this.setProvider(new WebSpeechProvider());
-            // Retry playback with new provider
-            await this.init();
-            // Defer play to allow error state to propagate to UI (avoid batching)
-            setTimeout(() => {
+            await this._setProvider(new WebSpeechProvider());
+            await this.provider.init();
+
+             setTimeout(() => {
                 this.play();
             }, 500);
             return;
@@ -395,20 +394,15 @@ export class AudioPlayerService {
     }
   }
 
-  async resume(): Promise<void> {
-     // Mark session as restored to prevent play() from re-triggering restoration logic
+  private async _resume() {
      this.sessionRestored = true;
-
-     // Smart Resume Logic
      let lastPauseTime: number | null = null;
 
-     // Fetch last pause time from DB if bookId is set
      if (this.currentBookId) {
          try {
              const book = await dbService.getBookMetadata(this.currentBookId);
              if (book && book.lastPauseTime) {
                  lastPauseTime = book.lastPauseTime;
-                 // Clear it so we don't use it again for this session
                  await dbService.updatePlaybackState(this.currentBookId, undefined, null);
              }
          } catch (e) {
@@ -423,20 +417,14 @@ export class AudioPlayerService {
      }
 
      if (this.provider instanceof WebSpeechProvider) {
-         // Local provider: rewind by index
-         if (elapsed > 5 * 60 * 1000) { // 5 minutes
-              // Rewind 2 sentences, clamp to 0
-              // Note: WebSpeech pause/resume is fragile. Often better to just restart segment if "rewind" needed.
-              // But strictly speaking, if we just call resume(), it continues where it left off.
-              // To rewind, we must modify currentIndex and call play().
-              const rewindAmount = elapsed > 24 * 60 * 60 * 1000 ? 5 : 2; // Rewind more if away for a day
+         if (elapsed > 5 * 60 * 1000) {
+              const rewindAmount = elapsed > 24 * 60 * 60 * 1000 ? 5 : 2;
               const newIndex = Math.max(0, this.currentIndex - rewindAmount);
 
               if (newIndex !== this.currentIndex) {
                   this.currentIndex = newIndex;
-                  // Set status to stopped so play() starts fresh
                   this.setStatus('stopped');
-                  return this.play();
+                  return this._play();
               }
          }
 
@@ -444,29 +432,22 @@ export class AudioPlayerService {
              this.provider.resume();
              this.setStatus('playing');
          } else {
-             // Force restart if speed changed, resume not supported, or was stopped
              this.status = 'stopped';
-             return this.play();
+             return this._play();
          }
 
      } else if (this.audioPlayer) {
-          // Cloud provider: rewind by time
           if (elapsed > 5 * 60 * 1000) {
               const rewindSeconds = elapsed > 24 * 60 * 60 * 1000 ? 60 : 10;
               const currentTime = this.audioPlayer.getCurrentTime();
               const newTime = Math.max(0, currentTime - rewindSeconds);
               this.audioPlayer.seek(newTime);
-              // Toast notification could go here if we had a way to trigger it from service
           }
 
           if (this.status === 'paused') {
              await this.audioPlayer.resume();
           } else {
-              // If stopped, we need to play from scratch but maybe with offset?
-              // Actually AudioElementPlayer reset on stop.
-              // So if we were stopped, we can't "resume" at audio level unless we reload blob.
-              // So we must play().
-              return this.play();
+              return this._play();
           }
           this.setStatus('playing');
      }
@@ -477,21 +458,13 @@ export class AudioPlayerService {
 
       const currentItem = this.queue[this.currentIndex];
       const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
-
-      // We only save pause time if paused, otherwise null if we wanted to clear it on stop?
-      // Actually stop() calls this.
-      // If stopped, do we want to clear lastPauseTime?
-      // If we stop (e.g. exit book), we probably want to resume next time.
-      // But if we stop naturally (end of book), maybe not.
-      // Current logic in tests expects setLastPauseTime(null) on stop.
-
       const isPaused = this.status === 'paused';
       const lastPauseTime = isPaused ? Date.now() : null;
 
       await dbService.updatePlaybackState(this.currentBookId, lastPlayedCfi, lastPauseTime);
   }
 
-  pause() {
+  private async _pause() {
     if (this.provider instanceof WebSpeechProvider && this.provider.pause) {
         this.provider.pause();
         this.silentAudio.pause();
@@ -500,14 +473,11 @@ export class AudioPlayerService {
     }
 
     this.setStatus('paused');
-
-    // Record pause time
-    this.savePlaybackState();
+    await this.savePlaybackState();
   }
 
-  stop() {
-    // Save state before stopping (e.g. navigation away)
-    this.savePlaybackState();
+  private async _stop() {
+    await this.savePlaybackState();
 
     this.setStatus('stopped');
     this.silentAudio.pause();
@@ -521,62 +491,62 @@ export class AudioPlayerService {
     }
   }
 
-  next() {
+  private async _next() {
       if (this.currentIndex < this.queue.length - 1) {
           this.currentIndex++;
-          this.play();
+          await this._play();
       } else {
-          // Finished book/chapter
-          this.stop();
-          // Optionally clear state here?
+          await this._stop();
       }
   }
 
-  prev() {
+  private async _prev() {
       if (this.currentIndex > 0) {
           this.currentIndex--;
-          this.play();
+          await this._play();
       }
   }
 
-  setSpeed(speed: number) {
+  private async _setSpeed(speed: number) {
       this.speed = speed;
       if (this.status === 'playing') {
-          // Restart current to apply speed if needed, or update dynamically
           if (this.audioPlayer) {
               this.audioPlayer.setRate(speed);
           } else {
-              // WebSpeech needs restart to change speed usually
-              this.play();
+              await this._play();
           }
       }
   }
 
-  seek(offset: number) {
+  private async _seek(offset: number) {
       if (this.audioPlayer && this.status !== 'stopped') {
           const currentTime = this.audioPlayer.getCurrentTime();
           this.audioPlayer.seek(currentTime + offset);
       } else if (this.provider instanceof WebSpeechProvider) {
           if (offset > 0) {
-              this.next();
+              await this._next();
           } else {
-              this.prev();
+              await this._prev();
           }
       }
   }
 
-  setVoice(voiceId: string) {
+  private async _setVoice(voiceId: string) {
       this.voiceId = voiceId;
       if (this.status === 'playing') {
-          this.play();
+          await this._play();
       }
   }
 
-  private playNext() {
+  private async playNext() {
+      return this.mutex.runExclusive(() => this._playNext());
+  }
+
+  private async _playNext() {
       if (this.status !== 'stopped') {
           if (this.currentIndex < this.queue.length - 1) {
               this.currentIndex++;
-              this.play();
+              await this._play();
           } else {
               this.setStatus('completed');
               this.notifyListeners(null);
@@ -599,9 +569,7 @@ export class AudioPlayerService {
 
   subscribe(listener: PlaybackListener) {
     this.listeners.push(listener);
-    // Immediately notify with current state
     const currentCfi = this.queue[this.currentIndex]?.cfi || null;
-    // Defer execution to avoid issues if called during store initialization
     setTimeout(() => {
         listener(this.status, currentCfi, this.currentIndex, this.queue, null);
     }, 0);

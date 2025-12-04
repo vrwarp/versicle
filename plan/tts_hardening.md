@@ -14,11 +14,9 @@ This document outlines a comprehensive plan to harden the TTS system, ensuring i
 *   **Fragility:** Rapid mounting/unmounting of components (e.g., toggling the Audio Panel) can cause listener leaks or missed state updates.
 
 ### 2. Concurrency & Race Conditions
-*   **Issue:** The `play()` method in `AudioPlayerService` is asynchronous (awaiting synthesis) but lacks a locking mechanism.
-*   **Risk:** Rapidly clicking "Next" or "Play" triggers multiple parallel execution contexts. This can result in:
-    *   Multiple audio streams playing simultaneously (if `stop()` doesn't catch the previous pending promise).
-    *   Queue index corruption (incrementing twice).
-    *   Cost estimation double-counting.
+*   **Issue:** The `play()` method in `AudioPlayerService` is asynchronous (awaiting synthesis) but previously lacked a locking mechanism.
+*   **Risk:** Rapidly clicking "Next" or "Play" triggers multiple parallel execution contexts.
+    *   **Status:** **[Addressed in Phase 1]** An `AsyncMutex` has been implemented to serialize operations, preventing race conditions during the critical "loading" phase.
 
 ### 3. Queue Volatility & Dependency on Layout
 *   **Issue:** The TTS queue is derived purely from the `epub.js` rendered view via the `useTTS` hook. It is stored only in memory.
@@ -42,7 +40,7 @@ We will address these issues in three distinct phases.
 
 ### Phase 1: Concurrency Safety & State Machine
 **Goal:** Prevent invalid states and race conditions.
-*   Implement a robust **Mutex/Lock** pattern for the `play()` action.
+*   **[COMPLETED]** Implement a robust **Mutex/Lock** pattern for the `play()` action.
 *   Formalize the `status` transitions into a strict State Machine (e.g., cannot go from `loading` to `playing` if `stop` was requested).
 *   Centralize state ownership to reduce sync overhead.
 
@@ -62,4 +60,4 @@ We will address these issues in three distinct phases.
 
 ## Next Steps
 
-We will proceed by implementing **Phase 1**, followed by **Phase 2** and **Phase 3**. Detailed implementation plans for each phase follow.
+We have completed **Step 1 of Phase 1**. The next immediate step is **Phase 1, Step 2: AbortController** to enable "Last Writer Wins" cancellation behavior.

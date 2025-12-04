@@ -75,7 +75,7 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
 
     it('restarts the sentence with new speed if speed changes while paused', async () => {
         // 1. Setup queue and play
-        service.setQueue([{ text: "Sentence 1", cfi: "cfi1" }]);
+        await service.setQueue([{ text: "Sentence 1", cfi: "cfi1" }]);
 
         await service.play();
         expect(synthesizeSpy).toHaveBeenCalledTimes(1);
@@ -83,13 +83,13 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
         expect(synthesizeSpy).toHaveBeenCalledWith(expect.any(String), expect.any(String), 1.0);
 
         // 2. Pause
-        service.pause();
+        await service.pause();
         expect(pauseSpy).toHaveBeenCalled();
         // @ts-expect-error Check status
         expect(service.status).toBe('paused');
 
         // 3. Change speed while paused
-        service.setSpeed(2.0);
+        await service.setSpeed(2.0);
 
         // 4. Resume
         await service.resume();

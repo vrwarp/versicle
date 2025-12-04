@@ -78,7 +78,8 @@ describe('AudioPlayerService', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mockInstance = new WebSpeechProvider() as any;
 
-        service.setProvider(mockInstance);
+        // Ensure we await setProvider because it's now async (uses mutex)
+        await service.setProvider(mockInstance);
 
         // Ensure setupWebSpeech() was called and listener registered
         expect(mockInstance.on).toHaveBeenCalled();
@@ -87,7 +88,7 @@ describe('AudioPlayerService', () => {
         const listener = onCall[0];
 
         // Set queue with 1 item
-        service.setQueue([{ text: "1", cfi: "1" }]);
+        await service.setQueue([{ text: "1", cfi: "1" }]);
 
         // Call play() to set status to 'loading'/'playing'
         // (playNext check requires status !== 'stopped')
@@ -99,6 +100,9 @@ describe('AudioPlayerService', () => {
 
         // Trigger 'end' event on the provider listener
         listener({ type: 'end' });
+
+        // Wait a tick for async execution (if needed due to mutex in playNext)
+        await new Promise(r => setTimeout(r, 0));
 
         // Check status transition
         // @ts-expect-error Access private property
@@ -116,11 +120,11 @@ describe('AudioPlayerService', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any;
 
-        // Force provider to be cloud
-        service.setProvider(mockCloudProvider);
+        // Force provider to be cloud (await it!)
+        await service.setProvider(mockCloudProvider);
 
         // Setup queue
-        service.setQueue([{ text: "Hello", cfi: "cfi1" }]);
+        await service.setQueue([{ text: "Hello", cfi: "cfi1" }]);
 
         // Listener to catch error notification
         const listener = vi.fn();

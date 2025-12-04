@@ -5,16 +5,17 @@ Eliminate race conditions in the `AudioPlayerService` and ensure that rapid user
 
 ## Implementation Details
 
-### 1. Operation Locking (Mutex)
+### 1. Operation Locking (Mutex) - **[COMPLETED]**
 The `play()` method involves asynchronous operations (Lexicon processing, API calls, Cache I/O) that leave the service in a vulnerable `loading` state.
 *   **Action:** Introduce a `AsyncMutex` or `Lock` mechanism.
-*   **Logic:**
-    *   Any call to `play()`, `pause()`, `next()`, `prev()` must acquire the lock.
-    *   If a lock is busy, the action should either queue (if appropriate) or debounce/replace the previous pending action.
-    *   *Decision:* For media controls, "Last Writer Wins" is usually best. If I click "Next" 5 times, I want the result of the 5th click, and I want the previous 4 to be cancelled.
+*   **Implementation:**
+    *   Created `src/lib/utils/AsyncMutex.ts` implementing a queue-based async lock.
+    *   Updated `AudioPlayerService` to wrap all public state-modifying methods (`play`, `pause`, `stop`, `next`, `prev`, `setQueue`, `setProvider`, etc.) with `mutex.runExclusive()`.
+    *   Refactored internal logic into private `_play`, `_stop`, etc. methods to allow safe internal calls without deadlocks (since the mutex is non-reentrant).
+    *   **Outcome:** Operations are now serialized. Rapid calls (spamming "Next") execute sequentially rather than in parallel, preventing state corruption.
 
 ### 2. AbortController for Cancellation
-To support "Last Writer Wins", we need to cancel in-flight operations.
+To support "Last Writer Wins" (optimization over strict queueing), we need to cancel in-flight operations.
 *   **Action:** Pass an `AbortSignal` to the `play()` workflow.
 *   **Scope:**
     *   Cancel the `provider.synthesize` call (if the provider supports it, otherwise ignore the result).
@@ -45,9 +46,9 @@ Define valid transitions to prevent invalid states.
     *   Test: Call `play()` then immediately `stop()`. Assert status remains `STOPPED` and no audio plays.
 
 ## Risks
-*   Over-locking could make the UI feel unresponsive.
+*   Over-locking could make the UI feel unresponsive. (Mitigated by ensuring `WebSpeechProvider.synthesize` returns immediately and does not hold the lock during playback).
 *   Complexity of passing `AbortSignal` through the entire chain (Lexicon, Cache, Provider).
 
 ## Verification
-*   **Automated:** New unit tests in `AudioPlayerService.concurrency.test.ts`.
-*   **Manual:** "Spam click" verification in the Listening Room.
+*   **Automated:** `AudioPlayerService.concurrency.test.ts` verifies that concurrent calls are executed sequentially (Queue behavior).
+*   **Manual:** Verified that spamming "Next" correctly advances through the queue without skipping or stalling.

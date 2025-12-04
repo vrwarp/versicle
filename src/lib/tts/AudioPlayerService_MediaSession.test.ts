@@ -179,8 +179,8 @@ describe('AudioPlayerService MediaSession Integration', () => {
              handlers['start'] = (e: any) => cb(e);
          });
 
-         service.setProvider(mockProvider);
-         service.setQueue([{ text: "Hello", cfi: "cfi1" }]);
+         await service.setProvider(mockProvider);
+         await service.setQueue([{ text: "Hello", cfi: "cfi1" }]);
 
          await service.play();
 
@@ -195,12 +195,12 @@ describe('AudioPlayerService MediaSession Integration', () => {
          mockProvider.pause = vi.fn();
          mockProvider.on = vi.fn();
 
-         service.setProvider(mockProvider);
+         await service.setProvider(mockProvider);
 
          expect(mockAudioInstances.length).toBeGreaterThan(0);
          const silentAudio = mockAudioInstances[0];
 
-         service.pause();
+         await service.pause();
 
          expect(silentAudio.pause).toHaveBeenCalled();
          expect(mockProvider.pause).toHaveBeenCalled();
@@ -221,10 +221,10 @@ describe('AudioPlayerService MediaSession Integration', () => {
             synthesize: vi.fn().mockResolvedValue({ audio: blob, alignment: [] } as any),
         } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-        service.setProvider(mockCloudProvider);
+        await service.setProvider(mockCloudProvider);
 
         // Setup queue and play
-        service.setQueue([{ text: "Text", cfi: "cfi" }]);
+        await service.setQueue([{ text: "Text", cfi: "cfi" }]);
         await service.play();
 
         // Verify setOnTimeUpdate called
