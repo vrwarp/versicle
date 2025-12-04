@@ -2,7 +2,6 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { LexiconManager } from '../LexiconManager';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LexiconService } from '../../../lib/tts/LexiconService';
 
 // Mock DB and other dependencies
 vi.mock('../../../lib/tts/LexiconService', () => {
@@ -10,7 +9,8 @@ vi.mock('../../../lib/tts/LexiconService', () => {
     getRules: vi.fn().mockResolvedValue([]),
     saveRule: vi.fn().mockResolvedValue(undefined),
     deleteRule: vi.fn().mockResolvedValue(undefined),
-    applyLexicon: vi.fn((text, rules) => text),
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    applyLexicon: vi.fn((text, _rules) => text),
   };
   return {
     LexiconService: {
@@ -21,10 +21,12 @@ vi.mock('../../../lib/tts/LexiconService', () => {
 
 // Mock UI components
 vi.mock('../ui/Dialog', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Dialog: ({ isOpen, children }: any) => (isOpen ? <div data-testid="lexicon-dialog">{children}</div> : null),
 }));
 
 vi.mock('../../store/useReaderStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useReaderStore: (selector: any) => selector({ currentBookId: 'book1' }),
 }));
 

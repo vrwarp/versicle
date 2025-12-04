@@ -19,10 +19,12 @@ export interface SearchResult {
  */
 class SearchClient {
     private worker: Worker | null = null;
-    private listeners: Map<string, (data: unknown) => void> = new Map();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private pendingRequests: Map<string, { resolve: (data: any) => void; reject: (err: any) => void }> = new Map();
 
     /**
      * Retrieves the existing Web Worker instance or creates a new one if it doesn't exist.
+     * Sets up the robust message handling protocol.
      *
      * @returns The active Search Web Worker.
      */
@@ -33,21 +35,52 @@ class SearchClient {
             });
 
             this.worker.onmessage = (e) => {
-                const { type, id, results } = e.data;
-                if (type === 'SEARCH_RESULTS' && id) {
-                    const listener = this.listeners.get(id);
-                    if (listener) listener(results);
-                } else if (type === 'INDEX_COMPLETE') {
-                    // Handle completion if needed
+                const { id, type, results, error } = e.data;
+                const pending = this.pendingRequests.get(id);
+
+                if (pending) {
+                    if (type === 'ERROR') {
+                        pending.reject(new Error(error));
+                    } else if (type === 'SEARCH_RESULTS') {
+                        pending.resolve(results);
+                    } else if (type === 'ACK') {
+                        pending.resolve(null);
+                    }
+                    this.pendingRequests.delete(id);
                 }
+            };
+
+            this.worker.onerror = (e) => {
+                console.error('Search Worker Error:', e);
+                // Reject all pending requests
+                for (const { reject } of this.pendingRequests.values()) {
+                    reject(new Error(`Worker error: ${e.message}`));
+                }
+                this.pendingRequests.clear();
             };
         }
         return this.worker;
     }
 
     /**
+     * Sends a request to the worker and waits for the response.
+     *
+     * @param type - The message type.
+     * @param payload - The payload data.
+     * @returns A Promise resolving to the response data (or null for ACK).
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private send(type: string, payload: any): Promise<any> {
+        return new Promise((resolve, reject) => {
+            const id = uuidv4();
+            this.pendingRequests.set(id, { resolve, reject });
+            this.getWorker().postMessage({ id, type, payload });
+        });
+    }
+
+    /**
      * Extracts text content from a book's spine items and sends it to the worker for indexing.
-     * Uses batch processing to avoid blocking the main thread.
+     * Uses batch processing to avoid blocking the main thread and robustly awaits worker acknowledgment.
      *
      * @param book - The epubjs Book object to be indexed.
      * @param bookId - The unique identifier of the book.
@@ -56,7 +89,7 @@ class SearchClient {
      */
     async indexBook(book: Book, bookId: string, onProgress?: (percent: number) => void) {
         // Init/Clear index
-        this.getWorker().postMessage({ type: 'INIT_INDEX', payload: { bookId } });
+        await this.send('INIT_INDEX', { bookId });
 
         const spineItems = (book.spine as unknown as { items: unknown[] }).items;
         const total = spineItems.length;
@@ -87,24 +120,20 @@ class SearchClient {
             }
 
             if (sections.length > 0) {
-                this.getWorker().postMessage({
-                    type: 'ADD_TO_INDEX',
-                    payload: { bookId, sections }
-                });
+                // Wait for the worker to acknowledge receipt and addition of this batch
+                await this.send('ADD_TO_INDEX', { bookId, sections });
             }
 
             if (onProgress) {
                 onProgress(Math.min(1.0, (i + batch.length) / total));
             }
 
-            // Yield to main thread
+            // Yield to main thread (still useful to let UI render between extraction steps,
+            // though await send() already yields, explicit yield ensures checking event loop)
             await new Promise(resolve => setTimeout(resolve, 0));
         }
 
-        this.getWorker().postMessage({
-            type: 'FINISH_INDEXING',
-            payload: { bookId }
-        });
+        await this.send('FINISH_INDEXING', { bookId });
     }
 
     /**
@@ -114,20 +143,8 @@ class SearchClient {
      * @param bookId - The unique identifier of the book to search.
      * @returns A Promise that resolves to an array of SearchResult objects.
      */
-    search(query: string, bookId: string): Promise<SearchResult[]> {
-        return new Promise((resolve) => {
-            const id = uuidv4();
-            this.listeners.set(id, (data) => {
-                resolve(data as SearchResult[]);
-                this.listeners.delete(id);
-            });
-
-            this.getWorker().postMessage({
-                type: 'SEARCH',
-                id,
-                payload: { query, bookId }
-            });
-        });
+    async search(query: string, bookId: string): Promise<SearchResult[]> {
+        return this.send('SEARCH', { query, bookId });
     }
 
     /**
@@ -137,6 +154,12 @@ class SearchClient {
         if (this.worker) {
             this.worker.terminate();
             this.worker = null;
+
+            // Reject any pending requests since the worker is dead
+            for (const { reject } of this.pendingRequests.values()) {
+                reject(new Error('Worker terminated'));
+            }
+            this.pendingRequests.clear();
         }
     }
 }

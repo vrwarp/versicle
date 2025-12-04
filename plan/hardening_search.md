@@ -32,10 +32,14 @@ Instead of "all-at-once", data is streamed to the worker.
   - Use a lightweight HTML-to-Text parser (DOMParser) on the string content instead of full rendering logic.
   - *Fallback:* If we must use `load()`, ensure we destroy/unload the view to free memory.
 
-### 2.3. Robust Worker Communication
+### 2.3. Robust Worker Communication (Implemented)
 - **Action:** Implement a strict request/response protocol with IDs.
-- **Action:** Add `worker.onerror` handler in `SearchClient` to reject pending promises.
-- **Action:** Wrap worker message handling in `try-catch` and post `ERROR` messages back to client.
+  - Every message sent to the worker includes a UUID `id`.
+  - The `SearchClient` maintains a map of `pendingRequests` with resolve/reject callbacks.
+  - The worker echoes the `id` in `ACK`, `SEARCH_RESULTS`, or `ERROR` responses.
+- **Action:** Add `worker.onerror` handler in `SearchClient` to reject all pending promises if the worker crashes.
+- **Action:** Wrapped worker message handling in `try-catch` blocks to catch synchronous errors and report them back as `ERROR` messages.
+- **Action:** `indexBook` now awaits acknowledgment for `INIT_INDEX` and each `ADD_TO_INDEX` batch, ensuring backpressure and reliable error detection.
 
 ### 2.4. Memory Management
 - **Action:** Explicitly `terminate()` the worker when the book is closed (in `ReaderView` cleanup).
@@ -45,8 +49,12 @@ Instead of "all-at-once", data is streamed to the worker.
 
 1.  **Modify `search.worker.ts`** (Done):
     - Added `ADD_TO_INDEX` and `INIT_INDEX` message types.
+    - Implemented strict request/response types with IDs.
+    - Added global `try-catch` and error reporting.
 2.  **Refactor `SearchClient.ts`** (Done):
     - Changed `indexBook` to iterate and dispatch batches.
     - Added logic to handle progress updates via callback.
+    - Implemented `send()` method with `pendingRequests` management.
+    - Updated `indexBook` to await worker acknowledgments.
 3.  **Update `ReaderView.tsx`**:
     - Listen for "Indexing..." status to show a spinner or non-intrusive indicator.
