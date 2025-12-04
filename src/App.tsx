@@ -9,10 +9,33 @@ import { useEffect, useState } from 'react';
 import { getDB } from './db/db';
 import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
+import { useToastStore } from './store/useToastStore';
+import { StorageFullError } from './types/errors';
 
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [dbError, setDbError] = useState<unknown>(null);
+
+  useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('Unhandled Promise Rejection:', event.reason);
+
+      // Check for critical errors
+      if (event.reason instanceof StorageFullError) {
+        useToastStore.getState().showToast(event.reason.message, 'error', 5000);
+      } else if (event.reason?.name === 'QuotaExceededError' ||
+                 (typeof event.reason === 'object' && event.reason !== null && 'name' in event.reason && (event.reason as any).name === 'QuotaExceededError')) {
+        // Sometimes it might come as a raw QuotaExceededError if not wrapped
+        useToastStore.getState().showToast('Storage limit exceeded. Please free up space.', 'error', 5000);
+      }
+    };
+
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   useEffect(() => {
     const init = async () => {

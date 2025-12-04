@@ -28,7 +28,8 @@
 - **Actions:** `showToast(message, type: 'info'|'error'|'success')`, `hideToast()`.
 - **Integration:** `App.tsx` includes `<ToastContainer />`. `ReaderView` uses `useToastStore` for error feedback.
 
-### 2.3. Unhandled Promise Rejection Handler
+### 2.3. Unhandled Promise Rejection Handler (Implemented)
+- **Status:** Complete
 - **Action:** Add a global event listener for `unhandledrejection` in `App.tsx` (or `main.tsx`).
   - Log the error.
   - If it's a critical known error (e.g. `StorageFull`), trigger a global Toast.
@@ -46,7 +47,7 @@
 3.  **Update `App.tsx`**:
     - Wrap routes.
     - Add global toast container (Complete).
-    - Add window error listeners.
+    - Add window error listeners (Complete).
 4.  **Refactor Components**:
     - `ReaderView` to use `useToastStore` (Complete).
     - `DBService` to use `Logger`.
