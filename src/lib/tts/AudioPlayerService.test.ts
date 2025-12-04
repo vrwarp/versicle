@@ -7,7 +7,7 @@ vi.mock('./providers/WebSpeechProvider', () => {
     WebSpeechProvider: class {
       init = vi.fn().mockResolvedValue(undefined);
       getVoices = vi.fn().mockResolvedValue([]);
-      synthesize = vi.fn();
+      synthesize = vi.fn().mockResolvedValue({ isNative: true, utteranceId: 'mock-id' });
       stop = vi.fn();
       on = vi.fn();
     }
@@ -98,7 +98,8 @@ describe('AudioPlayerService', () => {
         const notifySpy = vi.spyOn(service, 'notifyListeners');
 
         // Trigger 'end' event on the provider listener
-        listener({ type: 'end' });
+        // Must include the utteranceId that matched the mocked synthesize return value
+        listener({ type: 'end', utteranceId: 'mock-id' });
 
         // Check status transition
         // @ts-expect-error Access private property

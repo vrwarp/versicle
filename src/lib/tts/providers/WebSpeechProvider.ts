@@ -1,7 +1,8 @@
 import type { ITTSProvider, SpeechSegment, TTSVoice } from './types';
+import { v4 as uuidv4 } from 'uuid';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TTSCallback = (event: { type: 'start' | 'end' | 'boundary' | 'error', charIndex?: number, error?: any }) => void;
+type TTSCallback = (event: { type: 'start' | 'end' | 'boundary' | 'error', charIndex?: number, error?: any, utteranceId?: string }) => void;
 
 /**
  * TTS Provider implementation using the browser's native Web Speech API.
@@ -13,6 +14,7 @@ export class WebSpeechProvider implements ITTSProvider {
   private voices: SpeechSynthesisVoice[] = [];
   private callback: TTSCallback | null = null;
   private voicesLoaded = false;
+  private activeUtteranceId: string | null = null;
 
   constructor() {
     this.synth = window.speechSynthesis;
@@ -119,8 +121,9 @@ export class WebSpeechProvider implements ITTSProvider {
    * @param text - The text to speak.
    * @param voiceId - The name of the voice to use.
    * @param speed - The playback rate.
-   * @returns A Promise resolving to a SpeechSegment (with isNative: true).
+   * @returns A Promise resolving to a SpeechSegment (with isNative: true) and the utterance ID.
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async synthesize(text: string, voiceId: string, speed: number): Promise<SpeechSegment> {
     this.cancel(); // specific method to stop previous
 
@@ -129,25 +132,32 @@ export class WebSpeechProvider implements ITTSProvider {
         await this.init();
     }
 
+    const utteranceId = uuidv4();
+    this.activeUtteranceId = utteranceId;
+
     const utterance = new SpeechSynthesisUtterance(text);
     const voice = this.voices.find(v => v.name === voiceId);
     if (voice) utterance.voice = voice;
     utterance.rate = speed;
 
-    utterance.onstart = () => this.emit('start');
-    utterance.onend = () => this.emit('end');
-    utterance.onerror = (e) => this.emit('error', { error: e });
-    utterance.onboundary = (e) => this.emit('boundary', { charIndex: e.charIndex });
+    utterance.onstart = () => this.emit('start', { utteranceId });
+    utterance.onend = () => this.emit('end', { utteranceId });
+    utterance.onerror = (e) => this.emit('error', { error: e, utteranceId });
+    utterance.onboundary = (e) => this.emit('boundary', { charIndex: e.charIndex, utteranceId });
 
     this.synth.speak(utterance);
 
-    return { isNative: true };
+    // We return the ID on the object so the caller can track it if needed, though strictly SpeechSegment doesn't have it.
+    // However, the caller (AudioPlayerService) can't see it via the interface return unless we cast it or change the interface.
+    // But we are emitting it in the events, which is what matters for the listener.
+    return { isNative: true, utteranceId } as SpeechSegment & { utteranceId: string };
   }
 
   /**
    * Stops playback.
    */
   stop(): void {
+    this.activeUtteranceId = null; // Clear active ID on stop
     this.cancel();
   }
 
