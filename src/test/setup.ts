@@ -83,9 +83,27 @@ if (!Blob.prototype.text) {
   };
 }
 
+// Polyfill Blob.prototype.arrayBuffer if missing
+if (!Blob.prototype.arrayBuffer) {
+    Blob.prototype.arrayBuffer = function() {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as ArrayBuffer);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(this);
+        });
+    };
+}
+
 // Polyfill File.prototype.text (File inherits from Blob but sometimes needs explicit help in JSDOM)
-if (typeof File !== 'undefined' && !File.prototype.text) {
-  File.prototype.text = Blob.prototype.text;
+if (typeof File !== 'undefined') {
+    if (!File.prototype.text) {
+        File.prototype.text = Blob.prototype.text;
+    }
+    // Ensure File inherits arrayBuffer if not present (although it should from Blob)
+    if (!File.prototype.arrayBuffer) {
+        File.prototype.arrayBuffer = Blob.prototype.arrayBuffer;
+    }
 }
 
 afterEach(() => {

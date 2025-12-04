@@ -257,7 +257,11 @@ export const ReaderView: React.FC = () => {
           bookRef.current.destroy();
         }
 
-        const book = ePub(fileData as ArrayBuffer);
+        // Pass fileData (Blob or ArrayBuffer) directly to ePub.
+        // We cast to any because epub.js types might not fully reflect Blob support in all contexts yet,
+        // but we updated our d.ts to allow it.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const book = ePub(fileData as any);
         bookRef.current = book;
 
         if (viewerRef.current) {

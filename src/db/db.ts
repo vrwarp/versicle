@@ -22,7 +22,7 @@ export interface EpubLibraryDB extends DBSchema {
    */
   files: {
     key: string;
-    value: ArrayBuffer;
+    value: ArrayBuffer | Blob;
   };
   /**
    * Store for generated locations cache.

@@ -11,9 +11,18 @@ import type { BookMetadata } from '../types/db';
  * @throws Will throw an error if the file cannot be parsed or database operations fail.
  */
 export async function processEpub(file: File): Promise<string> {
+  // Calculate SHA-256 hash using arrayBuffer for hashing only
   const arrayBuffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const fileHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  // Free up arrayBuffer reference if possible (JS garbage collection will handle it)
+  // We don't need arrayBuffer for ePub(file) as we pass the File object directly.
+
+  // Pass file directly to epub.js (supports Blob/File)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const book = (ePub as any)(arrayBuffer);
+  const book = (ePub as any)(file);
 
   await book.ready;
 
@@ -30,11 +39,6 @@ export async function processEpub(file: File): Promise<string> {
       console.warn('Failed to retrieve cover blob:', error);
     }
   }
-
-  // Calculate SHA-256 hash
-  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const fileHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
   const bookId = uuidv4();
 
@@ -53,7 +57,8 @@ export async function processEpub(file: File): Promise<string> {
 
   const tx = db.transaction(['books', 'files'], 'readwrite');
   await tx.objectStore('books').add(newBook);
-  await tx.objectStore('files').add(arrayBuffer, bookId);
+  // Store the File object (Blob) directly instead of ArrayBuffer
+  await tx.objectStore('files').add(file, bookId);
   await tx.done;
 
   return bookId;

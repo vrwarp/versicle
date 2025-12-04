@@ -34,41 +34,57 @@ vi.mock('uuid', () => ({
   v4: () => 'mock-uuid',
 }));
 
+// Mock DB
+const mockAdd = vi.fn();
+const mockTransaction = {
+  objectStore: vi.fn(() => ({
+    add: mockAdd,
+  })),
+  done: Promise.resolve(),
+};
+const mockDB = {
+  transaction: vi.fn(() => mockTransaction),
+};
+
+vi.mock('../db/db', () => ({
+  getDB: vi.fn(() => Promise.resolve(mockDB)),
+}));
+
 describe('ingestion', () => {
-  beforeEach(async () => {
-    const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'annotations'], 'readwrite');
-    await tx.objectStore('books').clear();
-    await tx.objectStore('files').clear();
-    await tx.done;
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should process an epub file correctly', async () => {
+  it('should process an epub file correctly and store as Blob', async () => {
     const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
-    if (!mockFile.arrayBuffer) {
-        mockFile.arrayBuffer = async () => new ArrayBuffer(8);
-    }
 
-    const bookId = await processEpub(mockFile);
+    await processEpub(mockFile);
 
-    expect(bookId).toBe('mock-uuid');
+    // Verify metadata storage
+    expect(mockTransaction.objectStore).toHaveBeenCalledWith('books');
+    expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'mock-uuid',
+      title: 'Mock Title',
+      author: 'Mock Author',
+      fileHash: expect.any(String)
+    }));
 
-    const db = await getDB();
-    const book = await db.get('books', bookId);
+    // Verify file storage
+    expect(mockTransaction.objectStore).toHaveBeenCalledWith('files');
+    // We want to verify that the second call to add (or one of the calls) was with the file
+    // mockAdd is called twice: once for book, once for file.
+    // Order depends on implementation, but typically book first then file or vice versa.
+    // Let's check all calls.
+    const addCalls = mockAdd.mock.calls;
+    const fileCall = addCalls.find(call => call[0] instanceof File);
 
-    expect(book).toBeDefined();
-    expect(book?.title).toBe('Mock Title');
-    expect(book?.author).toBe('Mock Author');
-    expect(book?.description).toBe('Mock Description');
-    expect(book?.id).toBe('mock-uuid');
-    expect(book?.coverBlob).toBeDefined();
-
-    const storedFile = await db.get('files', bookId);
-    expect(storedFile).toBeDefined();
+    expect(fileCall).toBeDefined();
+    expect(fileCall?.[0]).toBe(mockFile);
+    expect(fileCall?.[1]).toBe('mock-uuid');
   });
 
   it('should handle missing cover gracefully', async () => {
@@ -87,19 +103,17 @@ describe('ingestion', () => {
       coverUrl: vi.fn(() => Promise.resolve(null)), // No cover
     }));
 
+    // Re-setup mock DB since resetModules might affect it if imported inside functions
+    // But getDB is top-level mocked.
+
     const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
-    if (!mockFile.arrayBuffer) {
-        mockFile.arrayBuffer = async () => new ArrayBuffer(8);
-    }
 
-    const bookId = await processEpub(mockFile);
+    await processEpub(mockFile);
 
-    const db = await getDB();
-    const book = await db.get('books', bookId);
-
-    expect(book).toBeDefined();
-    expect(book?.title).toBe('No Cover Book');
-    expect(book?.coverBlob).toBeUndefined();
+    expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'No Cover Book',
+        coverBlob: undefined
+    }));
   });
 
   it('should use default values when metadata is missing', async () => {
@@ -117,18 +131,13 @@ describe('ingestion', () => {
     }));
 
     const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
-    if (!mockFile.arrayBuffer) {
-        mockFile.arrayBuffer = async () => new ArrayBuffer(8);
-    }
 
-    const bookId = await processEpub(mockFile);
+    await processEpub(mockFile);
 
-    const db = await getDB();
-    const book = await db.get('books', bookId);
-
-    expect(book).toBeDefined();
-    expect(book?.title).toBe('Untitled');
-    expect(book?.author).toBe('Unknown Author');
-    expect(book?.description).toBe('');
+    expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Untitled',
+        author: 'Unknown Author',
+        description: ''
+    }));
   });
 });

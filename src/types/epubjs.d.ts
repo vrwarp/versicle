@@ -114,6 +114,6 @@ declare module 'epubjs' {
       }
     }
 
-    function ePub(data: string | ArrayBuffer, options?: BookOptions): Book;
+    function ePub(data: string | ArrayBuffer | Blob | File, options?: BookOptions): Book;
     export default ePub;
   }

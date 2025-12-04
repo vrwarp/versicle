@@ -214,11 +214,18 @@ export class BackupService {
             const zipFile = zip.file(`files/${book.id}.epub`);
             if (zipFile) {
                 // Async decompression
-                const arrayBuffer = await zipFile.async('arraybuffer');
+                // Store as ArrayBuffer initially, as zip.async('blob') is also valid but JSZip returns promises.
+                // We want to store whatever is most efficient.
+                // zip.file(...).async('blob') returns a Blob.
+                // Since we now support Blob in DB, let's use that if possible.
+                // However, 'blob' output type in JSZip might rely on Blob constructor which is fine in browser.
+
+                // Let's use 'blob' to be consistent with ingestion.
+                const fileBlob = await zipFile.async('blob');
 
                 // New short-lived transaction for file write
                 const fileTx = db.transaction(['books', 'files'], 'readwrite');
-                await fileTx.objectStore('files').put(arrayBuffer, book.id);
+                await fileTx.objectStore('files').put(fileBlob, book.id);
 
                 // Update book status to not offloaded
                 const bookRecord = await fileTx.objectStore('books').get(book.id);

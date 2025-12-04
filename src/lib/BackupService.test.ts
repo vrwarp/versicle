@@ -69,7 +69,8 @@ describe('BackupService', () => {
         return Promise.resolve([]);
       });
 
-      (dbService.getBookFile as any).mockResolvedValue(new ArrayBuffer(10));
+      // Mock getBookFile returning a Blob (which JSZip accepts)
+      (dbService.getBookFile as any).mockResolvedValue(new Blob(['dummy content']));
 
       const onProgress = vi.fn();
       await service.createFullBackup(onProgress);
