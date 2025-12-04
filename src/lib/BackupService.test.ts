@@ -1,9 +1,7 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BackupService, BackupManifest } from './BackupService';
 import { dbService } from '../db/DBService';
-import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { getDB } from '../db/db';
 
 // Mock DB
 const mockDB = {
@@ -51,6 +49,7 @@ describe('BackupService', () => {
       expect(mockDB.getAll).toHaveBeenCalledWith('annotations');
       expect(saveAs).toHaveBeenCalled();
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const blob = (saveAs as any).mock.calls[0][0];
       expect(blob).toBeInstanceOf(Blob);
 
@@ -69,6 +68,7 @@ describe('BackupService', () => {
         return Promise.resolve([]);
       });
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (dbService.getBookFile as any).mockResolvedValue(new ArrayBuffer(10));
 
       const onProgress = vi.fn();
@@ -78,6 +78,7 @@ describe('BackupService', () => {
       expect(saveAs).toHaveBeenCalled();
       expect(onProgress).toHaveBeenCalled();
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const blob = (saveAs as any).mock.calls[0][0];
       // We can't easily verify zip content without unzipping, but we know saveAs was called.
       expect(blob).toBeInstanceOf(Blob);

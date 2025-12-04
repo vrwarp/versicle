@@ -15,12 +15,12 @@
 
 ## 2. Hardening Strategy
 
-### 2.1. React Error Boundaries
-- **Action:** Create `src/components/ErrorBoundary.tsx`.
+### 2.1. React Error Boundaries (Completed)
+- **Action:** Create `src/components/ErrorBoundary.tsx`. (Done)
   - Catches render errors.
   - Displays a friendly "Something went wrong" UI with a "Reload" button.
   - Logs the stack trace.
-- **Action:** Wrap `ReaderView` and `LibraryView` in this boundary in `App.tsx` or their respective parent containers.
+- **Action:** Wrap `ReaderView` and `LibraryView` in this boundary in `App.tsx` or their respective parent containers. (Done)
 
 ### 2.2. Centralized Toast System
 - **Action:** Create `useToastStore` (Zustand).
