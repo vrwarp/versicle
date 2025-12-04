@@ -45,6 +45,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
       if (initialTerm) {
           setIsAdding(true);
           setEditingRule({ original: initialTerm, replacement: '' });
+          setTestInput(initialTerm);
       }
     }
   }, [open, loadRules, initialTerm]);
