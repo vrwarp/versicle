@@ -2,27 +2,57 @@ import ePub from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
 import type { BookMetadata } from '../types/db';
+import CryptoJS from 'crypto-js';
 
-const MAX_FILE_SIZE_FOR_HASH = 100 * 1024 * 1024; // 100MB limit for in-memory hashing
+// Chunk size for hashing (e.g., 2MB)
+const HASH_CHUNK_SIZE = 2 * 1024 * 1024;
 
 /**
- * Computes the SHA-256 hash of a file.
- * Handles large files by validating size limit to prevent OOM.
+ * Computes the SHA-256 hash of a file incrementally using chunks.
+ * This avoids loading the entire file into memory.
  *
  * @param file - The file to hash.
  * @returns The hex string representation of the hash.
  */
-async function computeFileHash(file: File): Promise<string> {
-  if (file.size > MAX_FILE_SIZE_FOR_HASH) {
-     throw new Error(`File too large for hashing (${(file.size / 1024 / 1024).toFixed(2)}MB). Limit is ${MAX_FILE_SIZE_FOR_HASH / 1024 / 1024}MB.`);
-  }
+export async function computeFileHash(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // CryptoJS.algo.SHA256.create() gives us an incremental hasher
+    const algo = CryptoJS.algo.SHA256.create();
+    let offset = 0;
 
-  // We still have to read the file for crypto.subtle.digest as it doesn't support streaming from File/Blob directly yet in all envs without FileReader loop.
-  // For V1 hardening, we stick to arrayBuffer but with a size check.
-  const arrayBuffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    const readNextChunk = () => {
+      if (offset >= file.size) {
+        // Finalize hash
+        const hash = algo.finalize();
+        resolve(hash.toString(CryptoJS.enc.Hex));
+        return;
+      }
+
+      const chunk = file.slice(offset, offset + HASH_CHUNK_SIZE);
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          const arrayBuffer = e.target.result as ArrayBuffer;
+          // Convert ArrayBuffer to crypto-js WordArray
+          const wordArray = CryptoJS.lib.WordArray.create(arrayBuffer);
+          algo.update(wordArray);
+          offset += HASH_CHUNK_SIZE;
+          readNextChunk();
+        } else {
+          reject(new Error('Failed to read chunk'));
+        }
+      };
+
+      reader.onerror = (e) => {
+        reject(e.target?.error || new Error('FileReader error'));
+      };
+
+      reader.readAsArrayBuffer(chunk);
+    };
+
+    readNextChunk();
+  });
 }
 
 
@@ -54,11 +84,7 @@ export async function processEpub(file: File): Promise<string> {
     }
   }
 
-  // Calculate SHA-256 hash
-  // We do this separately to avoid holding the buffer during ePub parsing if possible,
-  // although sequentially it might still spike memory if we don't rely on garbage collection.
-  // Ideally, ePub parsing and hashing could be parallel, but hashing requires reading the full file.
-  // We prioritize ePub parsing success first.
+  // Calculate SHA-256 hash incrementally
   const fileHash = await computeFileHash(file);
 
   const bookId = uuidv4();
