@@ -51,7 +51,6 @@ self.onmessage = async (e: MessageEvent<SearchRequest>) => {
     }
 
     else if (type === 'FINISH_INDEXING') {
-      const { bookId } = payload;
       // Potentially optimize index here if needed in future
       self.postMessage({ id, type: 'ACK' });
     }
