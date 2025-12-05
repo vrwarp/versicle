@@ -109,4 +109,35 @@ def test_reading_journey(page: Page):
     text_key = get_frame_text()
     print(f"After Key Right Text: {text_key}")
 
+    # 4. Mock TTS Verification (New Step)
+    print("Testing Mock TTS via App UI...")
+
+    # Open Audio Panel
+    page.get_by_test_id("reader-audio-button").click()
+    expect(page.get_by_test_id("unified-audio-panel")).to_be_visible()
+
+    # Start Playback
+    print("Clicking Play...")
+    play_btn = page.get_by_role("button", name="Play")
+    play_btn.click()
+
+    # Wait for Mock TTS debug output
+    debug_el = page.locator("#tts-debug-output")
+    expect(debug_el).to_be_visible(timeout=5000)
+
+    # Assert we are hearing something
+    # Content depends on where we are, but it shouldn't be empty
+    expect(debug_el).not_to_be_empty()
+
+    current_word = debug_el.inner_text()
+    print(f"Mock TTS Speaking: {current_word}")
+
+    # Pause
+    print("Clicking Pause...")
+    page.get_by_role("button", name="Pause").click()
+
+    # Verify debug output stops updating (or we can check UI state)
+    # Checking UI state is better
+    expect(page.get_by_role("button", name="Play")).to_be_visible()
+
     print("Reading Journey Passed!")

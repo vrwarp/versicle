@@ -23,8 +23,8 @@ To implement a full-featured, deterministic polyfill for the Web Speech API (Spe
 
 The solution implements a **Client-Server model** entirely within the browser context.
 
-* **The Client (Main Thread):** A Polyfill replacing window.speechSynthesis. It handles the API surface area, manages SpeechSynthesisUtterance instances, and bridges communication to the worker.  
-* **The Server (Service Worker):** A mock-tts-sw.js script running in a background thread. It acts as the "Audio Engine," managing the playback queue, calculating word durations, and emitting timing events.
+* **The Client (Main Thread):** A Polyfill replacing `window.speechSynthesis` and `window.SpeechSynthesisUtterance`. It handles the API surface area, manages Utterance instances, and bridges communication to the worker.
+* **The Server (Service Worker):** A `mock-tts-sw.js` script running in a background thread. It acts as the "Audio Engine," managing the playback queue, calculating word durations, and emitting timing events.
 
 ### **3.1 Component Diagram**
 
@@ -68,10 +68,12 @@ The Service Worker acts as the source of truth for timing. It replaces the opaqu
   * SPEAKING: Processing queue.  
   * PAUSED: Queue preserved, timers cleared.
 
-### **4.2 The Polyfill (tts-polyfill.ts)**
+### **4.2 The Polyfill (mock_tts_polyfill.js)**
 
 This component must strictly adhere to the IDL definitions of the Web Speech API to ensure the WebSpeechProvider in the application interacts with it transparently.
 
+* **Robust Injection:**
+  * Uses `delete window.speechSynthesis` followed by `Object.defineProperty` to forcibly replace the native global, handling browser-specific read-only properties.
 * **Voice Masquerading:**  
   * Must expose getVoices() returning at least one SpeechSynthesisVoice object.  
   * Crucially, it must trigger the voiceschanged event shortly after load to unblock the application's initialization logic.  
@@ -91,10 +93,10 @@ To verify the system visually and programmatically:
 | :---- | :---- | :---- |
 | **Race Conditions** | Tests flake if SW registration is slow. | The test setup (conftest.py) must await the serviceworker.ready promise before triggering app logic. |
 | **Event Mismatch** | App logic (e.g., highlighting) breaks if charIndex is wrong. | The SW tokenizer must replicate the naive whitespace splitting used by most browser engines for English. |
-| **Silent Audio** | The app's WebSpeechProvider plays a silent WAV loop to keep sessions alive. | The Polyfill must verify it strictly mocks the *Synthesis* API, not HTMLAudioElement. The native Audio class remains untouched. |
+| **Global Override Failure** | Tests use native TTS or crash. | Polyfill uses `delete` operator and explicit property definition to ensure override success. |
 
 ## **6\. Deployment Strategy**
 
-1. Place mock-tts-sw.js in public/ (served at root).  
-2. Inject tts-polyfill.ts (compiled to JS) via Playwright's add\_init\_script.  
+1. Place `mock-tts-sw.js` in `public/` (served at root).
+2. Inject `mock_tts_polyfill.js` via Playwright's `add_init_script`.
 3. Tests run with no changes to the application code (zero-intrusion testing).

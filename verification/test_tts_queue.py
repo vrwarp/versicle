@@ -27,12 +27,14 @@ def test_tts_queue(page: Page):
     print("Opening TTS controls...")
     page.get_by_test_id("reader-audio-button").click()
 
-    # Wait for popup
+    # Wait for panel (it's unified-audio-panel now, but old test used tts-panel)
+    # The current codebase uses "unified-audio-panel"
     try:
-        expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=5000)
+        expect(page.get_by_test_id("unified-audio-panel")).to_be_visible(timeout=5000)
     except:
+        # Retry click just in case
         page.get_by_test_id("reader-audio-button").click()
-        expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=5000)
+        expect(page.get_by_test_id("unified-audio-panel")).to_be_visible(timeout=5000)
 
     # Search for text by paging forward
     found_text = False
@@ -52,13 +54,7 @@ def test_tts_queue(page: Page):
             break
 
         print("Queue empty. Navigating to next page...")
-        # We need to click outside the TTS panel if it overlays the next button,
-        # BUT the TTS panel is a Sheet (Side panel), so it shouldn't block the footer next button completely
-        # depending on screen size. In mobile view it covers.
-        # In desktop (default 1280x720 in playwright?), it might be a sidebar.
-        # Let's check viewport. Playwright default is 1280x720. Sheet is usually right side.
-        # Footer buttons are at bottom.
-        # If blocked, we can use keyboard.
+        # Use keyboard to navigate
         page.keyboard.press("ArrowRight")
         page.wait_for_timeout(2000)
 
@@ -74,6 +70,17 @@ def test_tts_queue(page: Page):
     # Verify content
     first_item = page.locator("[data-testid^='tts-queue-item-']").first
     print(f"First item text: {first_item.text_content()}")
+
+    # Verify Mock TTS output matches playback if we play
+    print("Playing to verify Mock TTS output...")
+    page.get_by_role("button", name="Play").click()
+
+    # Check debug output
+    debug_el = page.locator("#tts-debug-output")
+    expect(debug_el).to_be_visible(timeout=5000)
+    expect(debug_el).not_to_be_empty()
+
+    print(f"Mock TTS Output: {debug_el.inner_text()}")
 
     utils.capture_screenshot(page, "tts_queue_verification")
 

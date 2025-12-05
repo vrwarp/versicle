@@ -1,5 +1,11 @@
 import pytest
+import os
 from playwright.sync_api import Page, expect
+
+# Read the polyfill content once
+POLYFILL_PATH = os.path.join(os.path.dirname(__file__), 'mock_tts_polyfill.js')
+with open(POLYFILL_PATH, 'r') as f:
+    MOCK_TTS_POLYFILL_JS = f.read()
 
 @pytest.fixture(scope="session", params=["desktop", "mobile"])
 def browser_context_args(request, browser_context_args):
@@ -51,6 +57,7 @@ def configure_page(page: Page):
     """
     Configures default timeouts for the Page object and assertions.
     Ensures tests fail fast if elements are missing (2000ms).
+    Injects Mock TTS polyfill via init script.
 
     Args:
         page: The Playwright Page object.
@@ -60,6 +67,10 @@ def configure_page(page: Page):
     page.set_default_navigation_timeout(2000)
     # Set default timeout for assertions
     expect.set_options(timeout=2000)
+
+    # Inject Mock TTS Polyfill
+    page.add_init_script(MOCK_TTS_POLYFILL_JS)
+
     yield
 
 @pytest.fixture(autouse=True)

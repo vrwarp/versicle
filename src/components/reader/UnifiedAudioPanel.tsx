@@ -71,7 +71,7 @@ export const UnifiedAudioPanel = () => {
   };
 
   return (
-    <SheetContent side="right" className="w-full sm:w-[400px] flex flex-col p-0 gap-0" data-testid="tts-panel">
+    <SheetContent side="right" className="w-full sm:w-[400px] flex flex-col p-0 gap-0" data-testid="unified-audio-panel">
        <SheetHeader className="p-4 border-b">
          <SheetTitle>Audio Deck</SheetTitle>
        </SheetHeader>
