@@ -1,7 +1,7 @@
 import time
 import re
 from playwright.sync_api import Page, expect
-from utils import reset_app, ensure_library_with_book, get_reader_frame
+from verification.utils import reset_app, ensure_library_with_book, get_reader_frame
 
 def test_persistence_bug_reproduction(page: Page):
     """
