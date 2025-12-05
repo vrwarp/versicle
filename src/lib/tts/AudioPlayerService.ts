@@ -15,6 +15,7 @@ export interface TTSQueueItem {
     cfi: string | null;
     title?: string;
     author?: string;
+    bookId?: string;
     bookTitle?: string;
     coverUrl?: string;
     isPreroll?: boolean;

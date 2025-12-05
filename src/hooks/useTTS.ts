@@ -4,6 +4,7 @@ import { useReaderStore } from '../store/useReaderStore';
 import { extractSentences, type SentenceNode } from '../lib/tts';
 import type { Rendition } from 'epubjs';
 import { AudioPlayerService, type TTSQueueItem } from '../lib/tts/AudioPlayerService';
+import type { BookMetadata } from '../types/db';
 
 const NO_TEXT_MESSAGES = [
     "This chapter appears to be empty.",
@@ -23,9 +24,11 @@ const NO_TEXT_MESSAGES = [
  * Handles extracting sentences from the current rendition and synchronizing with AudioPlayerService.
  *
  * @param rendition - The current epubjs Rendition object, used to extract text content.
+ * @param metadata - The metadata of the current book.
  * @returns An object containing the extracted sentences for the current view.
  */
-export const useTTS = (rendition: Rendition | null) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const useTTS = (rendition: Rendition | null, metadata?: BookMetadata | null) => {
   const {
     loadVoices,
     prerollEnabled,
@@ -40,10 +43,37 @@ export const useTTS = (rendition: Rendition | null) => {
   const player = AudioPlayerService.getInstance();
   const lastLoadedHref = useRef<string | null>(null);
 
+  // Manage temporary cover URL to prevent memory leaks
+  const [generatedCoverUrl, setGeneratedCoverUrl] = useState<string | undefined>(undefined);
+
   // Load voices on mount
   useEffect(() => {
       loadVoices();
   }, [loadVoices]);
+
+  // Generate and cleanup cover URL
+  useEffect(() => {
+      let url: string | undefined = undefined;
+
+      if (metadata?.coverUrl) {
+          setGeneratedCoverUrl(metadata.coverUrl);
+      } else if (metadata?.coverBlob) {
+          try {
+              url = URL.createObjectURL(metadata.coverBlob);
+              setGeneratedCoverUrl(url);
+          } catch (e) {
+              console.error("Failed to create object URL for cover", e);
+          }
+      } else {
+          setGeneratedCoverUrl(undefined);
+      }
+
+      return () => {
+          if (url) {
+              URL.revokeObjectURL(url);
+          }
+      };
+  }, [metadata?.coverUrl, metadata?.coverBlob]);
 
   // Load sentences when chapter changes
   useEffect(() => {
@@ -71,10 +101,18 @@ export const useTTS = (rendition: Rendition | null) => {
 
            let queue: TTSQueueItem[] = [];
 
+           const baseItem = {
+               bookId: metadata?.id,
+               bookTitle: metadata?.title,
+               author: metadata?.author,
+               coverUrl: generatedCoverUrl,
+           };
+
            if (extracted.length === 0) {
                // Handle empty chapter
                const randomMessage = NO_TEXT_MESSAGES[Math.floor(Math.random() * NO_TEXT_MESSAGES.length)];
                queue.push({
+                   ...baseItem,
                    text: randomMessage,
                    cfi: null,
                    title: currentChapterTitle || "Empty Chapter",
@@ -83,8 +121,10 @@ export const useTTS = (rendition: Rendition | null) => {
            } else {
                // Map extracted sentences
                queue = extracted.map(s => ({
+                   ...baseItem,
                    text: s.text,
-                   cfi: s.cfi
+                   cfi: s.cfi,
+                   title: currentChapterTitle || "Chapter"
                }));
            }
 
@@ -96,6 +136,7 @@ export const useTTS = (rendition: Rendition | null) => {
                const prerollText = player.generatePreroll(title, wordCount, rate);
 
                const prerollItem: TTSQueueItem = {
+                   ...baseItem,
                    text: prerollText,
                    cfi: null,
                    title: title,
@@ -129,14 +170,10 @@ export const useTTS = (rendition: Rendition | null) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).off('relocated', loadSentences);
     };
-  }, [rendition, player]); // Removed currentCfi dependency
+  }, [rendition, player, metadata?.id, metadata?.title, metadata?.author, generatedCoverUrl]); // Use stable generatedCoverUrl
 
   // Cleanup on unmount
-  useEffect(() => {
-      return () => {
-          player.stop();
-      };
-  }, [player]);
+  // Removed player.stop() to allow persistent playback
 
   return {
      sentences

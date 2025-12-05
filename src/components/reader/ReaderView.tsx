@@ -13,10 +13,8 @@ import { VisualSettings } from './VisualSettings';
 import { GestureOverlay } from './GestureOverlay';
 import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
-import { Sheet, SheetTrigger } from '../ui/Sheet';
 import { Switch } from '../ui/Switch';
 import { Label } from '../ui/Label';
-import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
@@ -72,9 +70,6 @@ export const ReaderView: React.FC = () => {
     showPopover,
     hidePopover
   } = useAnnotationStore();
-
-  // Use TTS Hook
-  useTTS(renditionRef.current);
 
   // Highlight Active TTS Sentence
   useEffect(() => {
@@ -227,9 +222,7 @@ export const ReaderView: React.FC = () => {
   const [lexiconOpen, setLexiconOpen] = useState(false);
   const [lexiconText, setLexiconText] = useState('');
 
-  const { setGlobalSettingsOpen } = useUIStore();
-
-  const [audioPanelOpen, setAudioPanelOpen] = useState(false);
+  const { setGlobalSettingsOpen, setAudioPanelOpen } = useUIStore();
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -237,6 +230,12 @@ export const ReaderView: React.FC = () => {
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [bookMetadata, setBookMetadata] = useState<any>(null);
+
+  // Use TTS Hook
+  useTTS(renditionRef.current, bookMetadata);
 
   // Initialize Book
   useEffect(() => {
@@ -251,6 +250,7 @@ export const ReaderView: React.FC = () => {
 
       try {
         const { file: fileData, metadata } = await dbService.getBook(id);
+        setBookMetadata(metadata || null);
 
         if (!fileData) {
           console.error('Book file not found');
@@ -856,14 +856,14 @@ export const ReaderView: React.FC = () => {
                 {currentChapterTitle || 'Reading'}
             </h1>
             <div className="flex items-center gap-2">
-            <Sheet open={audioPanelOpen} onOpenChange={setAudioPanelOpen}>
-                <SheetTrigger asChild>
-                    <button data-testid="reader-audio-button" aria-label="Open Audio Deck" className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-muted-foreground'}`}>
-                        <Headphones className="w-5 h-5" />
-                    </button>
-                </SheetTrigger>
-                <UnifiedAudioPanel />
-            </Sheet>
+            <button
+                data-testid="reader-audio-button"
+                aria-label="Open Audio Deck"
+                className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-muted-foreground'}`}
+                onClick={() => setAudioPanelOpen(true)}
+            >
+                <Headphones className="w-5 h-5" />
+            </button>
             <button data-testid="reader-immersive-enter-button" aria-label="Enter Immersive Mode" onClick={() => setImmersiveMode(true)} className="p-2 rounded-full hover:bg-border">
                 <Maximize className="w-5 h-5 text-muted-foreground" />
             </button>
