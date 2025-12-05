@@ -54,38 +54,61 @@ export const useTTS = (rendition: Rendition | null) => {
            }
 
            const extracted = extractSentences(rendition);
-           setSentences(extracted);
 
-           // Update player queue
-           // We map SentenceNode to the format expected by AudioPlayerService
-           const queue: TTSQueueItem[] = extracted.map(s => ({
-               text: s.text,
-               cfi: s.cfi
-           }));
+           // If we extracted nothing, it might be due to a race condition (epub.js rendered event vs content availability).
+           // If we have a persisted queue in the player, we should be careful not to wipe it with an empty list
+           // unless we are fairly certain the page is truly empty.
+           // However, distinguishing "empty page" from "loading error" is hard.
+           // For now, if the player has a queue (from restoration), and we extract NOTHING, we skip the update.
+           // This fixes the "Instant Resume" bug where the queue is wiped on refresh.
+           // Limitation: If the user navigates to a truly empty chapter, the previous chapter's queue might persist.
+           // But typical chapters have at least a title.
 
-           if (prerollEnabled && queue.length > 0) {
-               // Calculate word count
-               const wordCount = extracted.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
-               const title = currentChapterTitle || "Chapter";
+           // We need to access bookId. Since we don't have it in props, we check the store or player's current context.
+           // Note: player.hasQueue(null) is false.
 
-               const prerollText = player.generatePreroll(title, wordCount, rate);
+           // We'll trust the extraction if it has content.
+           if (extracted.length > 0) {
+               setSentences(extracted);
 
-               const prerollItem: TTSQueueItem = {
-                   text: prerollText,
-                   cfi: null,
-                   title: title,
-                   isPreroll: true
-               };
+               // Update player queue
+               // We map SentenceNode to the format expected by AudioPlayerService
+               const queue: TTSQueueItem[] = extracted.map(s => ({
+                   text: s.text,
+                   cfi: s.cfi
+               }));
 
-               queue.unshift(prerollItem);
+               if (prerollEnabled && queue.length > 0) {
+                   // Calculate word count
+                   const wordCount = extracted.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
+                   const title = currentChapterTitle || "Chapter";
+
+                   const prerollText = player.generatePreroll(title, wordCount, rate);
+
+                   const prerollItem: TTSQueueItem = {
+                       text: prerollText,
+                       cfi: null,
+                       title: title,
+                       isPreroll: true
+                   };
+
+                   queue.unshift(prerollItem);
+               }
+
+               // Phase 2: Reconciliation with Persisted Queue
+               // AudioPlayerService.setQueue handles the reconciliation logic:
+               // 1. If the extracted queue is identical to the persisted queue (restored on load),
+               //    it returns early WITHOUT resetting the playback index. This preserves "Instant Resume" position.
+               // 2. If the queue differs (e.g., content change), it updates the queue and resets the index to 0.
+               player.setQueue(queue);
+           } else {
+               // Extracted empty.
+               // If player queue is also empty, we can set it (no harm).
+               // If player queue has items (restored), we DO NOT wipe it.
+               // We just update local sentences state to empty to reflect UI (if needed).
+               setSentences([]);
+               console.warn("TTS: Extracted empty sentences. Skipping queue update to preserve persistence.");
            }
-
-           // Phase 2: Reconciliation with Persisted Queue
-           // AudioPlayerService.setQueue handles the reconciliation logic:
-           // 1. If the extracted queue is identical to the persisted queue (restored on load),
-           //    it returns early WITHOUT resetting the playback index. This preserves "Instant Resume" position.
-           // 2. If the queue differs (e.g., content change), it updates the queue and resets the index to 0.
-           player.setQueue(queue);
 
        } catch (e) {
            console.error("Failed to extract sentences", e);

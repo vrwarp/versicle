@@ -621,6 +621,7 @@ export class AudioPlayerService {
 
         this.setStatus('paused');
         await this.savePlaybackState();
+        await this.saveState();
     });
   }
 

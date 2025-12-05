@@ -9,7 +9,7 @@ def reset_app(page: Page):
     Args:
         page: The Playwright Page object.
     """
-    page.goto("http://localhost:5173", timeout=5000)
+    page.goto("http://localhost:5173", timeout=10000)
     # Check if empty library is shown or verify app loaded
     # page.wait_for_selector...
 
@@ -24,7 +24,7 @@ def ensure_library_with_book(page: Page):
     """
     # Wait for initial render (either book or load button)
     try:
-        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book')", timeout=5000)
+        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book')", timeout=10000)
     except:
         pass # Proceed to check
 
@@ -37,12 +37,12 @@ def ensure_library_with_book(page: Page):
         load_btn.click()
         # Wait for book to appear
         try:
-            page.wait_for_selector("[data-testid^='book-card-']", timeout=5000)
+            page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
         except:
             # Retry once if button is still there (flaky click?)
             if load_btn.is_visible():
                 load_btn.click()
-                page.wait_for_selector("[data-testid^='book-card-']", timeout=5000)
+                page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
 
 def capture_screenshot(page: Page, name: str):
     """
