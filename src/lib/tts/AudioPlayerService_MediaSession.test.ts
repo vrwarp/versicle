@@ -169,56 +169,6 @@ describe('AudioPlayerService MediaSession Integration', () => {
         expect(actions).toContain('seekto');
     });
 
-    it('should play silent audio when WebSpeech starts', async () => {
-         // Create a provider that is an instance of WebSpeechProvider
-         const mockProvider = new WebSpeechProvider();
-         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         const handlers: any = {};
-
-         // Override methods manually
-         mockProvider.init = vi.fn().mockResolvedValue(undefined);
-         mockProvider.getVoices = vi.fn().mockResolvedValue([]);
-         mockProvider.synthesize = vi.fn().mockImplementation(() => {
-             // Simulate immediate start
-             if (handlers['start']) handlers['start']({ type: 'start' });
-             return Promise.resolve({ audio: null, alignment: [] });
-         });
-         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         mockProvider.on = vi.fn().mockImplementation((cb: any) => {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             handlers['start'] = (e: any) => cb(e);
-         });
-
-         await service.setProvider(mockProvider);
-         await service.setQueue([{ text: "Hello", cfi: "cfi1" }]);
-
-         await service.play();
-
-         // Wait for event loop to handle start event callback inside executeWithLock
-         await new Promise(resolve => setTimeout(resolve, 0));
-
-         expect(mockAudioInstances.length).toBeGreaterThan(0);
-         const silentAudio = mockAudioInstances[0];
-         expect(silentAudio.play).toHaveBeenCalled();
-    });
-
-    it('should pause silent audio when WebSpeech pauses', async () => {
-         const mockProvider = new WebSpeechProvider();
-         // Ensure properties exist
-         mockProvider.pause = vi.fn();
-         mockProvider.on = vi.fn();
-
-         await service.setProvider(mockProvider);
-
-         expect(mockAudioInstances.length).toBeGreaterThan(0);
-         const silentAudio = mockAudioInstances[0];
-
-         await service.pause();
-
-         expect(silentAudio.pause).toHaveBeenCalled();
-         expect(mockProvider.pause).toHaveBeenCalled();
-    });
-
     it('should update position state during cloud playback', async () => {
         // Polyfill Blob.arrayBuffer for JSDOM
         const blob = new Blob([]);

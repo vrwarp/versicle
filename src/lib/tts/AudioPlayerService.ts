@@ -49,9 +49,6 @@ export class AudioPlayerService {
   // Track if we are currently playing a preview (e.g. from Lexicon)
   private isPreviewing: boolean = false;
 
-  // Silent audio for Media Session "anchoring" (Local TTS)
-  private silentAudio: HTMLAudioElement;
-
   // Concurrency Control
   private currentOperation: AbortController | null = null;
   private operationLock: Promise<void> = Promise.resolve();
@@ -60,10 +57,6 @@ export class AudioPlayerService {
     this.provider = new WebSpeechProvider();
     this.cache = new TTSCache();
 
-    // Initialize silent audio loop to keep MediaSession active
-    // 1 second of silence
-    this.silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
-    this.silentAudio.loop = true;
     this.lexiconService = LexiconService.getInstance();
     this.mediaSessionManager = new MediaSessionManager({
         onPlay: () => this.resume(),
@@ -158,11 +151,6 @@ export class AudioPlayerService {
        this.provider.on((event) => {
            if (event.type === 'start') {
                this.setStatus('playing');
-               // Ensure silent audio is playing to keep MediaSession active
-               // Only play if not already playing to avoid audio artifacts/interruptions
-               if (this.silentAudio.paused) {
-                   this.silentAudio.play().catch(e => console.warn("Silent audio play failed", e));
-               }
            } else if (event.type === 'end') {
                if (this.isPreviewing) {
                    this.isPreviewing = false;
@@ -585,8 +573,6 @@ export class AudioPlayerService {
     return this.executeWithLock(async () => {
         if (this.provider.id === 'local' && this.provider.pause) {
             this.provider.pause();
-            this.silentAudio.pause();
-            // TODO: Move silent audio logic to WebSpeechProvider (see plan/refactor_silent_audio.md)
         } else if (this.audioPlayer) {
             this.audioPlayer.pause();
         }
@@ -606,8 +592,6 @@ export class AudioPlayerService {
     await this.savePlaybackState();
 
     this.setStatus('stopped');
-    this.silentAudio.pause();
-    this.silentAudio.currentTime = 0;
     this.notifyListeners(null);
 
     if (this.provider.id === 'local' && this.provider.stop) {

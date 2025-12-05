@@ -7,6 +7,8 @@ describe('WebSpeechProvider', () => {
   let mockSynth: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockUtterance: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockAudio: any;
 
   beforeEach(() => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
@@ -55,6 +57,17 @@ describe('WebSpeechProvider', () => {
         return mockUtterance;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }) as any;
+
+    // Mock Audio
+    mockAudio = {
+        play: vi.fn().mockResolvedValue(undefined),
+        pause: vi.fn(),
+        currentTime: 0,
+        loop: false,
+        paused: true
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    global.Audio = vi.fn(function() { return mockAudio; }) as any;
 
     provider = new WebSpeechProvider();
   });
@@ -119,6 +132,9 @@ describe('WebSpeechProvider', () => {
           expect(mockSynth.speak).toHaveBeenCalledWith(mockUtterance);
           expect(result).toEqual({ isNative: true });
 
+          // Check silent audio
+          expect(mockAudio.play).toHaveBeenCalled();
+
           // Test events
           if (mockUtterance.onstart) mockUtterance.onstart();
           expect(callback).toHaveBeenCalledWith({ type: 'start' });
@@ -141,25 +157,30 @@ describe('WebSpeechProvider', () => {
           if (mockUtterance.onerror) mockUtterance.onerror(errorEvent);
 
           expect(callback).toHaveBeenCalledWith({ type: 'error', error: errorEvent });
+          expect(mockAudio.pause).toHaveBeenCalled();
       });
   });
 
   describe('playback controls', () => {
-      it('stop should cancel synthesis', () => {
+      it('stop should cancel synthesis and pause silent audio', () => {
           provider.stop();
           expect(mockSynth.cancel).toHaveBeenCalled();
+          expect(mockAudio.pause).toHaveBeenCalled();
       });
 
-      it('pause should pause synthesis if speaking', () => {
+      it('pause should pause synthesis and silent audio if speaking', () => {
           mockSynth.speaking = true;
           provider.pause();
           expect(mockSynth.pause).toHaveBeenCalled();
+          expect(mockAudio.pause).toHaveBeenCalled();
       });
 
-      it('resume should resume synthesis if paused', () => {
+      it('resume should resume synthesis and silent audio if paused', () => {
           mockSynth.paused = true;
+          mockAudio.paused = true;
           provider.resume();
           expect(mockSynth.resume).toHaveBeenCalled();
+          expect(mockAudio.play).toHaveBeenCalled();
       });
   });
 });

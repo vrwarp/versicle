@@ -13,9 +13,14 @@ export class WebSpeechProvider implements ITTSProvider {
   private voices: SpeechSynthesisVoice[] = [];
   private callback: TTSCallback | null = null;
   private voicesLoaded = false;
+  private silentAudio: HTMLAudioElement;
 
   constructor() {
     this.synth = window.speechSynthesis;
+    // Initialize silent audio loop to keep MediaSession active
+    // 1 second of silence
+    this.silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+    this.silentAudio.loop = true;
   }
 
   /**
@@ -144,14 +149,27 @@ export class WebSpeechProvider implements ITTSProvider {
         throw new Error('Aborted');
     }
 
+    // Start silent audio loop to keep MediaSession active
+    if (this.silentAudio.paused) {
+        this.silentAudio.play().catch(e => console.warn("Silent audio play failed", e));
+    }
+
     const utterance = new SpeechSynthesisUtterance(text);
     const voice = this.voices.find(v => v.name === voiceId);
     if (voice) utterance.voice = voice;
     utterance.rate = speed;
 
     utterance.onstart = () => this.emit('start');
-    utterance.onend = () => this.emit('end');
-    utterance.onerror = (e) => this.emit('error', { error: e });
+    utterance.onend = () => {
+        // We do NOT pause silent audio here, because the service might play the next sentence immediately.
+        // The Service is responsible for calling stop() if playback is truly finished.
+        this.emit('end');
+    };
+    utterance.onerror = (e) => {
+        // We pause silent audio on error, as it might stop playback
+        this.pauseSilentAudio();
+        this.emit('error', { error: e });
+    };
     utterance.onboundary = (e) => this.emit('boundary', { charIndex: e.charIndex });
 
     this.synth.speak(utterance);
@@ -164,6 +182,7 @@ export class WebSpeechProvider implements ITTSProvider {
    */
   stop(): void {
     this.cancel();
+    this.pauseSilentAudio();
   }
 
   /**
@@ -173,6 +192,7 @@ export class WebSpeechProvider implements ITTSProvider {
     if (this.synth.speaking) {
       this.synth.pause();
     }
+    this.pauseSilentAudio();
   }
 
   /**
@@ -181,6 +201,9 @@ export class WebSpeechProvider implements ITTSProvider {
   resume(): void {
     if (this.synth.paused) {
       this.synth.resume();
+      if (this.silentAudio.paused) {
+          this.silentAudio.play().catch(e => console.warn("Silent audio resume failed", e));
+      }
     }
   }
 
@@ -189,6 +212,12 @@ export class WebSpeechProvider implements ITTSProvider {
    */
   private cancel() {
     this.synth.cancel();
+    // note: we don't automatically pause silent audio here because synthesize() calls cancel() before starting new one
+  }
+
+  private pauseSilentAudio() {
+      this.silentAudio.pause();
+      this.silentAudio.currentTime = 0;
   }
 
   /**
