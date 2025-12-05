@@ -23,7 +23,7 @@ While the Grid View facilitates visual recognition, it has been deemed suboptima
 
 * **Scanning Velocity (F-Pattern vs. Z-Pattern):** In a linear list display, the eye traverses a vertical trajectory along the left margin, adhering to the standard "F-Pattern" of reading. This facilitates rapid skimming of titles. Conversely, a grid layout compels a "Z-Pattern" trajectory across rows, thereby increasing the cognitive load required to process the sequence of items.  
 * **Information Foraging:** Users attempting to locate specific metadata (e.g., active reading status) encounter friction in the Grid View, as such data is frequently obscured or deemphasized to conserve spatial resources.  
-* **Data Hierarchy:** List structures permit the structured display of secondary and tertiary metadata (Author, Series Name, Series Index, Completion Percentage, File Size, Date Added) in aligned columns without compromising visual clarity. Grid structures typically tolerate only a Title and a single subsidiary data point before visual coherence is compromised.
+* **Data Hierarchy:** List structures permit the structured display of secondary and tertiary metadata (Author, Completion Percentage, File Size, Date Added) in aligned columns without compromising visual clarity. Grid structures typically tolerate only a Title and a single subsidiary data point before visual coherence is compromised.
 
 ### **2.2 Visual Design and Layout Specifications**
 
@@ -34,7 +34,7 @@ The Linear List Display shall be activated via a prominent, persistent toggle me
   * **Primary Information (Center \- Body):**  
     * **Line 1:** The Book Title. This shall be rendered in high contrast with a primary font weight (SemiBold). Text truncation via ellipsis (...) is permissible only if the string exceeds 90% of the available container width.  
   * **Secondary Information (Center \- Body):**  
-    * **Line 2:** A metadata line utilizing a lighter text color and reduced font weight. Format: "Author Name • Series Info • Progress %". This establishes a visual hierarchy wherein the item's identity is prioritized over its authorship and status.  
+    * **Line 2:** A metadata line utilizing a lighter text color and reduced font weight. Format: "Author Name • Progress %". This establishes a visual hierarchy wherein the item's identity is prioritized over its authorship and status.
   * **Action Interface (Trailing/Right):** A standardized "More Actions" menu (vertical ellipsis) or a context-sensitive status indicator shall be displayed. For example, active downloads may be represented by a circular progress ring, while active reading sessions may be denoted by an equalizer icon.
 
 ### **2.3 Interaction Design Protocols**
