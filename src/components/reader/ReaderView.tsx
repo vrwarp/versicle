@@ -230,7 +230,7 @@ export const ReaderView: React.FC = () => {
   const [showToc, setShowToc] = useState(false);
   const [useSyntheticToc, setUseSyntheticToc] = useState(false);
   const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
-  const [isGeneratingToc, setIsGeneratingToc] = useState(false);
+  // const [isGeneratingToc, setIsGeneratingToc] = useState(false); // Deprecated in favor of persisted data
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [immersiveMode, setImmersiveMode] = useState(false);
 
@@ -238,93 +238,6 @@ export const ReaderView: React.FC = () => {
   const [lexiconText, setLexiconText] = useState('');
 
   const { setGlobalSettingsOpen } = useUIStore();
-
-  const generateSyntheticToc = async () => {
-      if (!bookRef.current) return;
-      setIsGeneratingToc(true);
-      const newToc: NavigationItem[] = [];
-      const book = bookRef.current;
-
-      try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const spine = (book.spine as any);
-          // Map over spine items
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const items: any[] = [];
-          // spine.each isn't always async friendly or array-like in types, so we gather them
-          if (spine.each) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              spine.each((item: any) => items.push(item));
-          } else if (spine.items) {
-             items.push(...spine.items);
-          }
-
-          for (let i = 0; i < items.length; i++) {
-               const item = items[i];
-               try {
-                   let title = '';
-                   let doc: Document | null = null;
-
-                   try {
-                       // Try using book.load() which might return a Document
-                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                       const loaded = await (book as any).load(item.href);
-                       if (loaded instanceof Document) {
-                           doc = loaded;
-                       }
-                   } catch {
-                       // Fallback to archive extraction if load fails (e.g. if not rendered)
-                       if (book.archive) {
-                            const blob = await book.archive.getBlob(item.href);
-                            if (blob) {
-                                const text = await blobToText(blob);
-                                const parser = new DOMParser();
-                                doc = parser.parseFromString(text, "application/xhtml+xml");
-                            }
-                       }
-                   }
-
-                   if (doc) {
-                       const headings = doc.querySelectorAll('h1, h2, h3');
-                       if (headings.length > 0) {
-                            title = headings[0].textContent || '';
-                       }
-
-                       if (!title.trim()) {
-                            const p = doc.querySelector('p');
-                            if (p && p.textContent) title = p.textContent;
-                       }
-
-                       if (!title.trim()) {
-                            title = doc.body.textContent || '';
-                       }
-
-                       // Clean up
-                       title = title.replace(/\s+/g, ' ').trim();
-                       if (title.length > 60) {
-                           title = title.substring(0, 60) + '...';
-                       }
-                   }
-
-                   if (!title) title = `Chapter ${i+1}`;
-
-                   newToc.push({
-                       id: item.id || `syn-toc-${i}`,
-                       href: item.href,
-                       label: title
-                   });
-               } catch (e) {
-                    console.error("Error generating TOC item", e);
-                    newToc.push({ id: item.id || `syn-toc-${i}`, href: item.href, label: `Chapter ${i+1}` });
-               }
-          }
-          setSyntheticToc(newToc);
-      } catch (e) {
-          console.error("Error generating synthetic TOC", e);
-      } finally {
-          setIsGeneratingToc(false);
-      }
-  };
 
   const [audioPanelOpen, setAudioPanelOpen] = useState(false);
 
@@ -353,6 +266,13 @@ export const ReaderView: React.FC = () => {
           console.error('Book file not found');
           navigate('/');
           return;
+        }
+
+        // Load synthetic TOC from metadata
+        if (metadata?.syntheticToc) {
+            setSyntheticToc(metadata.syntheticToc);
+        } else {
+            setSyntheticToc([]);
         }
 
         if (bookRef.current) {
@@ -984,39 +904,30 @@ export const ReaderView: React.FC = () => {
                         <Switch
                             id="synthetic-toc-mode"
                             checked={useSyntheticToc}
-                            onCheckedChange={(checked) => {
-                                setUseSyntheticToc(checked);
-                                if (checked && syntheticToc.length === 0) {
-                                    generateSyntheticToc();
-                                }
-                            }}
+                            onCheckedChange={setUseSyntheticToc}
                         />
-                        <Label htmlFor="synthetic-toc-mode" className="text-sm font-medium">Generate Titles</Label>
+                        <Label htmlFor="synthetic-toc-mode" className="text-sm font-medium">Generated Titles</Label>
                      </div>
 
-                     {isGeneratingToc ? (
-                         <div className="text-sm text-muted-foreground animate-pulse">Generating titles...</div>
-                     ) : (
-                         <ul className="space-y-2">
-                             {(useSyntheticToc ? syntheticToc : toc).map((item, index) => (
-                                 <li key={item.id}>
-                                     <button
-                                        data-testid={`toc-item-${index}`}
-                                        className="text-left w-full text-sm text-muted-foreground hover:text-primary"
-                                        onClick={() => {
-                                            renditionRef.current?.display(item.href);
-                                            setShowToc(false);
-                                        }}
-                                     >
-                                         {item.label}
-                                     </button>
-                                 </li>
-                             ))}
-                             {useSyntheticToc && syntheticToc.length === 0 && !isGeneratingToc && (
-                                 <li className="text-sm text-muted-foreground">No chapters found.</li>
-                             )}
-                         </ul>
-                     )}
+                     <ul className="space-y-2">
+                         {(useSyntheticToc ? syntheticToc : toc).map((item, index) => (
+                             <li key={item.id}>
+                                 <button
+                                    data-testid={`toc-item-${index}`}
+                                    className="text-left w-full text-sm text-muted-foreground hover:text-primary"
+                                    onClick={() => {
+                                        renditionRef.current?.display(item.href);
+                                        setShowToc(false);
+                                    }}
+                                 >
+                                     {item.label}
+                                 </button>
+                             </li>
+                         ))}
+                         {useSyntheticToc && syntheticToc.length === 0 && (
+                             <li className="text-sm text-muted-foreground">No generated titles available.</li>
+                         )}
+                     </ul>
                  </div>
              </div>
          )}
