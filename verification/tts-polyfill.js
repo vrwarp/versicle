@@ -4,7 +4,7 @@
     if (window.__mockTTSLoaded) return;
     window.__mockTTSLoaded = true;
 
-    console.log('%c 🗣️ [MockTTS] Injecting Polyfill', 'background: #222; color: #bada55');
+    console.log('%c 🗣️ [MockTTS] Injecting Polyfill (Web Worker)', 'background: #222; color: #bada55');
 
     // Create debug element
     function ensureDebugElement() {
@@ -32,44 +32,23 @@
         ensureDebugElement();
     }
 
-    // Register Service Worker
-    if ('serviceWorker' in navigator) {
-        const originalRegister = navigator.serviceWorker.register;
+    // Initialize Web Worker
+    let worker = null;
+    try {
+        worker = new Worker('/mock-tts-worker.js');
+        console.log('🗣️ [MockTTS] Worker Initialized');
 
-        // Hijack register to block App's PWA SW
-        navigator.serviceWorker.register = function(scriptURL, options) {
-            if (scriptURL.includes('mock-tts-sw.js')) {
-                console.log('🗣️ [MockTTS] Allowing SW registration:', scriptURL);
-                return originalRegister.call(navigator.serviceWorker, scriptURL, options);
-            }
-            console.log('🗣️ [MockTTS] Blocking App SW registration:', scriptURL);
-            return Promise.resolve({
-                scope: options?.scope || '/',
-                active: null,
-                waiting: null,
-                installing: null,
-                unregister: () => Promise.resolve(true)
-            });
-        };
-
-        navigator.serviceWorker.register('/mock-tts-sw.js')
-            .then(reg => {
-                console.log('🗣️ [MockTTS] SW Registered', reg);
-                // Force update
-                if (reg.waiting) {
-                    // reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-                }
-            })
-            .catch(err => console.error('🗣️ [MockTTS] SW Registration failed', err));
-
-        navigator.serviceWorker.addEventListener('message', (event) => {
+        worker.onmessage = (event) => {
              const synth = window.speechSynthesis;
              if (synth && synth._handleMessage) {
                  synth._handleMessage(event.data);
              }
-        });
-    } else {
-        console.error('🗣️ [MockTTS] Service Worker not supported');
+        };
+        worker.onerror = (e) => {
+            console.error('🗣️ [MockTTS] Worker Error', e);
+        };
+    } catch(e) {
+        console.error('🗣️ [MockTTS] Failed to create Worker', e);
     }
 
     class MockSpeechSynthesisUtterance extends EventTarget {
@@ -106,25 +85,7 @@
                  { name: 'Mock Voice 1', lang: 'en-US', default: true, localService: true, voiceURI: 'mock-1' },
                  { name: 'Mock Voice 2', lang: 'en-GB', default: false, localService: true, voiceURI: 'mock-2' }
             ];
-            this._utteranceMap = new Map(); // id -> utterance
-            this._pendingMessages = [];
-
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    console.log('🗣️ [MockTTS] Controller changed - flushing pending messages');
-                    this._flushPending();
-                });
-            }
-        }
-
-        _flushPending() {
-             if (navigator.serviceWorker.controller) {
-                 while (this._pendingMessages.length) {
-                     const msg = this._pendingMessages.shift();
-                     console.log('🗣️ [MockTTS] Flushing message', msg.type);
-                     navigator.serviceWorker.controller.postMessage(msg);
-                 }
-             }
+            this._utteranceMap = new Map();
         }
 
         getVoices() {
@@ -145,13 +106,11 @@
                  }
             };
 
-            // Send to SW
-            if (navigator.serviceWorker.controller) {
-                 console.log('🗣️ [MockTTS] sending SPEAK to SW');
-                 navigator.serviceWorker.controller.postMessage(msg);
+            if (worker) {
+                 console.log('🗣️ [MockTTS] sending SPEAK to Worker');
+                 worker.postMessage(msg);
             } else {
-                console.log('🗣️ [MockTTS] No SW controller, queueing SPEAK');
-                this._pendingMessages.push(msg);
+                console.error('🗣️ [MockTTS] No Worker available');
             }
         }
 
@@ -161,10 +120,8 @@
             this.paused = false;
             this.pending = false;
             const msg = { type: 'CANCEL' };
-            if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage(msg);
-            } else {
-                this._pendingMessages.push(msg);
+            if (worker) {
+                worker.postMessage(msg);
             }
             this._utteranceMap.clear();
              const debugEl = document.getElementById('tts-debug');
@@ -178,10 +135,8 @@
             console.log('🗣️ [MockTTS] pause called');
             this.paused = true;
             const msg = { type: 'PAUSE' };
-            if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage(msg);
-            } else {
-                this._pendingMessages.push(msg);
+            if (worker) {
+                worker.postMessage(msg);
             }
              const debugEl = document.getElementById('tts-debug');
              if (debugEl) {
@@ -195,10 +150,8 @@
              if (this.paused) {
                  this.paused = false;
                  const msg = { type: 'RESUME' };
-                 if (navigator.serviceWorker.controller) {
-                     navigator.serviceWorker.controller.postMessage(msg);
-                 } else {
-                     this._pendingMessages.push(msg);
+                 if (worker) {
+                     worker.postMessage(msg);
                  }
                  const debugEl = document.getElementById('tts-debug');
                  if (debugEl) {
@@ -212,7 +165,7 @@
             console.log('🗣️ [MockTTS] _handleMessage received:', data.type, data);
 
             if (data.type === 'LOG') {
-                console.log(`🗣️ [MockTTS-SW] ${data.payload}`);
+                console.log(`🗣️ [MockTTS-Worker] ${data.payload}`);
                 return;
             }
 
@@ -233,7 +186,6 @@
                      debugEl.setAttribute('data-status', 'speaking');
                 }
                 if (type === 'start') {
-                     // debugEl.textContent = '[[START]]'; // Keep previous text or clear?
                      debugEl.setAttribute('data-status', 'start');
                 }
                  if (type === 'end') {
@@ -244,11 +196,8 @@
             }
 
             // Dispatch events
-            // We need to support 'onboundary', 'onstart', 'onend' properties
-
             let event;
             if (type === 'boundary') {
-                 // SpeechSynthesisEvent is globally available
                  event = new SpeechSynthesisEvent('boundary', { ...eventInit, charIndex, name, charLength: data.charLength });
                  if (utterance.onboundary) utterance.onboundary(event);
             } else if (type === 'start') {
@@ -281,7 +230,6 @@
     try {
         const mockSynth = new MockSpeechSynthesis();
 
-        // Handle read-only property using defineProperty
         Object.defineProperty(window, 'speechSynthesis', {
             value: mockSynth,
             writable: true,
@@ -290,13 +238,10 @@
 
         console.log('🗣️ [MockTTS] window.speechSynthesis overwritten');
 
-        // Trigger voiceschanged
         setTimeout(() => {
              console.log('🗣️ [MockTTS] Dispatching voiceschanged');
              mockSynth.dispatchEvent(new Event('voiceschanged'));
              if (mockSynth.onvoiceschanged) mockSynth.onvoiceschanged(new Event('voiceschanged'));
-
-             // Also dispatch on window if needed (not standard but sometimes assumed)
         }, 500);
 
     } catch (e) {

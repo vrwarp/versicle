@@ -1,10 +1,10 @@
-// public/mock-tts-sw.js
+// public/mock-tts-worker.js
 
 const WPM = 150;
 const BASE_MS_PER_WORD = (60 / WPM) * 1000;
 
 let state = 'IDLE'; // IDLE, SPEAKING, PAUSED
-let queue = []; // Array of { text, rate, client, id }
+let queue = []; // Array of { text, rate, id }
 let currentItem = null;
 let words = [];
 let currentWordIndex = 0;
@@ -12,34 +12,17 @@ let timer = null;
 
 function logToMain(msg, data) {
     const fullMsg = data ? `${msg} ${JSON.stringify(data)}` : msg;
-    // console.log(fullMsg);
-
-    self.clients.matchAll().then(clients => {
-        for (const c of clients) {
-            c.postMessage({ type: 'LOG', payload: fullMsg });
-        }
-    });
+    self.postMessage({ type: 'LOG', payload: fullMsg });
 }
 
-self.addEventListener('install', (event) => {
-    logToMain('🗣️ [MockTTS] Service Worker Installed');
-    self.skipWaiting();
-});
-
-self.addEventListener('activate', (event) => {
-    logToMain('🗣️ [MockTTS] Service Worker Activated');
-    event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('message', (event) => {
+self.onmessage = (event) => {
     const { type, payload } = event.data;
-    const client = event.source;
 
     logToMain(`🗣️ [MockTTS] Received ${type}`, payload || '');
 
     switch (type) {
         case 'SPEAK':
-            handleSpeak(payload, client);
+            handleSpeak(payload);
             break;
         case 'PAUSE':
             handlePause();
@@ -51,12 +34,12 @@ self.addEventListener('message', (event) => {
             handleCancel();
             break;
     }
-});
+};
 
-async function handleSpeak(payload, client) {
+function handleSpeak(payload) {
     logToMain('🗣️ [MockTTS] handleSpeak', payload.text.substring(0, 20));
     const { text, rate, id } = payload;
-    const item = { text, rate: rate || 1, client, id };
+    const item = { text, rate: rate || 1, id };
 
     queue.push(item);
 
@@ -114,7 +97,6 @@ function processNext() {
     const text = currentItem.text;
     const tokens = text.match(/\S+/g) || [];
 
-    // Map tokens to { word, index }
     words = [];
     let searchIndex = 0;
     for (const token of tokens) {
@@ -125,17 +107,15 @@ function processNext() {
 
     currentWordIndex = 0;
 
-    // Emit start
-    notifyClient(currentItem.client, 'start', { id: currentItem.id });
+    notifyClient('start', { id: currentItem.id });
 
     scheduleNextWord();
 }
 
 function scheduleNextWord() {
     if (currentWordIndex >= words.length) {
-        // Finished current item
         logToMain('🗣️ [MockTTS] Finished item', currentItem.id);
-        notifyClient(currentItem.client, 'end', { id: currentItem.id });
+        notifyClient('end', { id: currentItem.id });
         currentItem = null;
         processNext();
         return;
@@ -145,15 +125,12 @@ function scheduleNextWord() {
     const delay = BASE_MS_PER_WORD / currentItem.rate;
 
     timer = setTimeout(() => {
-        // Emit boundary
-        // logToMain(`%c 🗣️ [MockTTS]: "${wordObj.word}"`);
-
-        notifyClient(currentItem.client, 'boundary', {
+        notifyClient('boundary', {
             id: currentItem.id,
             charIndex: wordObj.index,
             charLength: wordObj.word.length,
             name: 'word',
-            text: wordObj.word // Extra field for convenience
+            text: wordObj.word
         });
 
         currentWordIndex++;
@@ -161,18 +138,7 @@ function scheduleNextWord() {
     }, delay);
 }
 
-function notifyClient(client, type, data) {
+function notifyClient(type, data) {
     logToMain(`🗣️ [MockTTS] notifyClient ${type}`, data);
-    const msg = { type, ...data };
-    if (client) {
-        client.postMessage(msg);
-    } else {
-        logToMain('🗣️ [MockTTS] client missing, broadcasting');
-        // Broadcast to all clients if source client is missing
-        self.clients.matchAll().then(clients => {
-            for (const c of clients) {
-                c.postMessage(msg);
-            }
-        });
-    }
+    self.postMessage({ type, ...data });
 }

@@ -1,6 +1,6 @@
 # **Technical Design Document: Deterministic Mock TTS System**
 
-**Status: Implemented**
+**Status: Implemented (Refactored to Web Worker)**
 
 Validation Test Suite for versicle
 
@@ -23,40 +23,40 @@ To implement a full-featured, deterministic polyfill for the Web Speech API (Spe
 
 ## **3\. Architecture**
 
-The solution implements a **Client-Server model** entirely within the browser context.
+The solution implements a **Client-Server model** entirely within the browser context using a **Web Worker**.
 
 * **The Client (Main Thread):** A Polyfill replacing `window.speechSynthesis`. It handles the API surface area, manages `SpeechSynthesisUtterance` instances, and bridges communication to the worker.
-* **The Server (Service Worker):** A `mock-tts-sw.js` script running in a background thread. It acts as the "Audio Engine," managing the playback queue, calculating word durations, and emitting timing events.
+* **The Server (Web Worker):** A `mock-tts-worker.js` script running in a background thread. It acts as the "Audio Engine," managing the playback queue, calculating word durations, and emitting timing events.
 
 ### **3.1 Component Diagram**
 
 ```sequenceDiagram  
     participant App as Versicle App  
     participant Poly as Mock Polyfill (Main Thread)  
-    participant SW as Service Worker (Background)
+    participant Worker as Web Worker (Background)
 
     Note over App, Poly: Initialization  
     App->>Poly: window.speechSynthesis.speak(utterance)  
     Poly->>Poly: Store utterance reference  
-    Poly->>SW: POST_MESSAGE { type: 'SPEAK', payload: text, rate }
+    Poly->>Worker: postMessage { type: 'SPEAK', payload: text, rate }
 
-    Note over SW: Processing Loop  
-    SW->>SW: Parse text -> words  
+    Note over Worker: Processing Loop
+    Worker->>Worker: Parse text -> words
     loop Every Word (calculated duration)  
-        SW->>Poly: { type: 'boundary', charIndex, word }  
+        Worker->>Poly: { type: 'boundary', charIndex, word }
         Poly->>App: utterance.onboundary(event)  
         Poly->>DOM: Update Debug DOM <div id="tts-debug">  
     end
 
-    SW->>Poly: { type: 'end' }  
+    Worker->>Poly: { type: 'end' }
     Poly->>App: utterance.onend(event)
 ```
 
 ## **4\. Implementation Details**
 
-### **4.1 The Service Worker (`public/mock-tts-sw.js`)**
+### **4.1 The Web Worker (`public/mock-tts-worker.js`)**
 
-The Service Worker acts as the source of truth for timing. It replaces the opaque "black box" of the OS TTS engine.
+The Web Worker acts as the source of truth for timing. It replaces the opaque "black box" of the OS TTS engine.
 
 * **Cadence Logic:**  
   * Standard WPM: 150.
@@ -77,7 +77,7 @@ This component strictly adheres to the IDL definitions of the Web Speech API.
   * Exposes `getVoices()` returning mock voices.
   * Triggers the `voiceschanged` event shortly after load.
 * **Event Dispatch:**  
-  * Maps messages from the SW (boundary, end) to `SpeechSynthesisEvent`.
+  * Maps messages from the Worker (boundary, end) to `SpeechSynthesisEvent`.
 * **Debug DOM:**
   * Creates and updates a `<div id="tts-debug">` element with `data-status`, `data-last-event`, and `textContent` for Playwright verification.
 
@@ -85,18 +85,15 @@ This component strictly adheres to the IDL definitions of the Web Speech API.
 
 To verify the system visually and programmatically:
 
-1. **Console Emission:** The SW logs `%c 🗣️ [MockTTS]: "word"` to the console.
+1. **Console Emission:** The Worker logs messages to the main thread via a `LOG` message type.
 2. **DOM Emission:** The Polyfill updates `#tts-debug`. Playwright asserts against this element.
 3. **Verification Suite:** A dedicated test `verification/test_mock_tts.py` validates the mock implementation itself.
 
 ## **5\. Completed Actions**
 
-1.  **Created `public/mock-tts-sw.js`:** Implements the timing loop and messaging.
-2.  **Created `verification/tts-polyfill.js`:** Implements `SpeechSynthesis` polyfill and SW registration.
-3.  **Updated `verification/conftest.py`:** Automatically injects the polyfill into every Playwright test session.
-4.  **Created `verification/test_mock_tts.py`:** Verified Sanity, Pause/Resume, and Cancel functionality of the mock system.
-5.  **Fixed `verification/test_maintenance.py`:** Resolved a pre-existing flake/bug in dialog handling.
-6.  **Verified Suite:** All tests passed locally. `npm test` passed.
+1.  **Migrated to Web Worker:** `public/mock-tts-worker.js` replaces Service Worker implementation.
+2.  **Updated Polyfill:** `verification/tts-polyfill.js` uses `new Worker()` instead of `navigator.serviceWorker`.
+3.  **Updated Tests:** `verification/test_mock_tts.py` removed Service Worker specific checks.
 
 ## **6\. Usage**
 

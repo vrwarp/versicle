@@ -2,36 +2,21 @@ import pytest
 from playwright.sync_api import Page, expect
 
 def setup_mock_tts(page: Page):
-    """Helper to ensure Mock TTS is ready and controlling."""
+    """Helper to ensure Mock TTS is ready."""
     page.goto("/")
     # Wait for initial load
     page.wait_for_timeout(1000)
 
-    # Wait for controller with retry
+    # Wait for voices to load (signifies polyfill is active)
     try:
-        page.wait_for_function("!!navigator.serviceWorker.controller", timeout=5000)
+        page.wait_for_function("window.speechSynthesis.getVoices().length > 0", timeout=5000)
     except:
-        print("Timeout waiting for SW controller, reloading...")
-
-        # Print debug info
-        debug_info = page.evaluate("""async () => {
-            const reg = await navigator.serviceWorker.getRegistration();
-            return {
-                supported: 'serviceWorker' in navigator,
-                controller: !!navigator.serviceWorker.controller,
-                registration: reg ? {
-                    scope: reg.scope,
-                    active: !!reg.active,
-                    waiting: !!reg.waiting,
-                    installing: !!reg.installing
-                } : null,
-                error: window.__swRegistrationError || null
-            };
-        }""")
-        print(f"SW Debug Info: {debug_info}")
-
-        page.reload()
-        page.wait_for_function("!!navigator.serviceWorker.controller", timeout=10000)
+        print("Timeout waiting for voices, polyfill might not be injected.")
+        # Debug info?
+        # Check if window.speechSynthesis is our mock
+        is_mock = page.evaluate("window.speechSynthesis.constructor.name === 'MockSpeechSynthesis'")
+        print(f"Is Mock Synthesis: {is_mock}")
+        raise
 
 def test_mock_tts_sanity(page: Page):
     """Verifies that the Mock TTS system is loaded and speaks correctly."""
