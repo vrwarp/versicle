@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import ePub, { type Book, type Rendition, type Location } from 'epubjs';
+import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -14,6 +14,8 @@ import { GestureOverlay } from './GestureOverlay';
 import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
+import { Switch } from '../ui/Switch';
+import { Label } from '../ui/Label';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
@@ -43,6 +45,7 @@ export const ReaderView: React.FC = () => {
     lineHeight,
     fontSize,
     updateLocation,
+    toc,
     setToc,
     setIsLoading,
     setCurrentBookId,
@@ -215,6 +218,9 @@ export const ReaderView: React.FC = () => {
   }, []); // removed renditionRef.current, technically should depend on it but ref stable
 
   const [showToc, setShowToc] = useState(false);
+  const [useSyntheticToc, setUseSyntheticToc] = useState(false);
+  const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
+  // const [isGeneratingToc, setIsGeneratingToc] = useState(false); // Deprecated in favor of persisted data
   const [showAnnotations, setShowAnnotations] = useState(false);
   const [immersiveMode, setImmersiveMode] = useState(false);
 
@@ -250,6 +256,13 @@ export const ReaderView: React.FC = () => {
           console.error('Book file not found');
           navigate('/');
           return;
+        }
+
+        // Load synthetic TOC from metadata
+        if (metadata?.syntheticToc) {
+            setSyntheticToc(metadata.syntheticToc);
+        } else {
+            setSyntheticToc([]);
         }
 
         if (bookRef.current) {
@@ -876,8 +889,18 @@ export const ReaderView: React.FC = () => {
              <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
                  <div className="p-4">
                      <h2 className="text-lg font-bold mb-4 text-foreground">Contents</h2>
+
+                     <div className="flex items-center space-x-2 mb-4">
+                        <Switch
+                            id="synthetic-toc-mode"
+                            checked={useSyntheticToc}
+                            onCheckedChange={setUseSyntheticToc}
+                        />
+                        <Label htmlFor="synthetic-toc-mode" className="text-sm font-medium">Generated Titles</Label>
+                     </div>
+
                      <ul className="space-y-2">
-                         {useReaderStore.getState().toc.map((item, index) => (
+                         {(useSyntheticToc ? syntheticToc : toc).map((item, index) => (
                              <li key={item.id}>
                                  <button
                                     data-testid={`toc-item-${index}`}
@@ -891,6 +914,9 @@ export const ReaderView: React.FC = () => {
                                  </button>
                              </li>
                          ))}
+                         {useSyntheticToc && syntheticToc.length === 0 && (
+                             <li className="text-sm text-muted-foreground">No generated titles available.</li>
+                         )}
                      </ul>
                  </div>
              </div>

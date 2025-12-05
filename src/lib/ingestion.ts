@@ -1,4 +1,4 @@
-import ePub from 'epubjs';
+import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
 import type { BookMetadata } from '../types/db';
@@ -56,6 +56,16 @@ export async function computeFileHash(file: File): Promise<string> {
 }
 
 
+// Helper to convert Blob to text using FileReader (for compatibility)
+const blobToText = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsText(blob);
+  });
+};
+
 /**
  * Processes an EPUB file, extracting metadata and cover image, and storing it in the database.
  *
@@ -71,6 +81,71 @@ export async function processEpub(file: File): Promise<string> {
   await book.ready;
 
   const metadata = await book.loaded.metadata;
+
+  // Generate Synthetic TOC
+  const syntheticToc: NavigationItem[] = [];
+  try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const spine = (book.spine as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const items: any[] = [];
+      if (spine.each) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          spine.each((item: any) => items.push(item));
+      } else if (spine.items) {
+         items.push(...spine.items);
+      }
+
+      for (let i = 0; i < items.length; i++) {
+           const item = items[i];
+           try {
+               let title = '';
+               // In ingestion context (file input), book.archive is available.
+               // We use blob extraction + DOMParser as book.load() might rely on DOM attachment or network.
+               if (book.archive) {
+                    const blob = await book.archive.getBlob(item.href);
+                    if (blob) {
+                        const text = await blobToText(blob);
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(text, "application/xhtml+xml");
+
+                        const headings = doc.querySelectorAll('h1, h2, h3');
+                        if (headings.length > 0) {
+                            title = headings[0].textContent || '';
+                        }
+
+                        if (!title.trim()) {
+                            const p = doc.querySelector('p');
+                            if (p && p.textContent) title = p.textContent;
+                        }
+
+                        if (!title.trim()) {
+                            title = doc.body.textContent || '';
+                        }
+
+                        // Clean up
+                        title = title.replace(/\s+/g, ' ').trim();
+                        if (title.length > 60) {
+                           title = title.substring(0, 60) + '...';
+                        }
+                    }
+               }
+
+               if (!title) title = `Chapter ${i+1}`;
+
+               syntheticToc.push({
+                   id: item.id || `syn-toc-${i}`,
+                   href: item.href,
+                   label: title
+               });
+           } catch (e) {
+                console.error("Error generating TOC item", e);
+                syntheticToc.push({ id: item.id || `syn-toc-${i}`, href: item.href, label: `Chapter ${i+1}` });
+           }
+      }
+  } catch (e) {
+      console.error("Error generating synthetic TOC", e);
+  }
 
   let coverBlob: Blob | undefined;
   const coverUrl = await book.coverUrl();
@@ -98,6 +173,7 @@ export async function processEpub(file: File): Promise<string> {
     coverBlob: coverBlob,
     fileHash,
     isOffloaded: false,
+    syntheticToc,
   };
 
   const db = await getDB();
