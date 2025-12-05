@@ -329,6 +329,14 @@ export class AudioPlayerService {
     });
   }
 
+  /**
+   * Persists the current queue and playback index to the database.
+   * This allows the application to restore the exact playback state (including the full queue)
+   * on the next session, enabling "Instant Resume" without waiting for text extraction.
+   *
+   * This method delegates to DBService which handles debouncing to prevent excessive writes
+   * during rapid navigation or playback.
+   */
   private persistQueue() {
       if (this.currentBookId) {
           dbService.saveTTSState(this.currentBookId, this.queue, this.currentIndex);
