@@ -10,13 +10,24 @@ let words = [];
 let currentWordIndex = 0;
 let timer = null;
 
+function logToMain(msg, data) {
+    const fullMsg = data ? `${msg} ${JSON.stringify(data)}` : msg;
+    // console.log(fullMsg);
+
+    self.clients.matchAll().then(clients => {
+        for (const c of clients) {
+            c.postMessage({ type: 'LOG', payload: fullMsg });
+        }
+    });
+}
+
 self.addEventListener('install', (event) => {
-    console.log('🗣️ [MockTTS] Service Worker Installed');
+    logToMain('🗣️ [MockTTS] Service Worker Installed');
     self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-    console.log('🗣️ [MockTTS] Service Worker Activated');
+    logToMain('🗣️ [MockTTS] Service Worker Activated');
     event.waitUntil(self.clients.claim());
 });
 
@@ -24,7 +35,7 @@ self.addEventListener('message', (event) => {
     const { type, payload } = event.data;
     const client = event.source;
 
-    console.log(`🗣️ [MockTTS] Received ${type}`, payload || '');
+    logToMain(`🗣️ [MockTTS] Received ${type}`, payload || '');
 
     switch (type) {
         case 'SPEAK':
@@ -43,8 +54,8 @@ self.addEventListener('message', (event) => {
 });
 
 async function handleSpeak(payload, client) {
+    logToMain('🗣️ [MockTTS] handleSpeak', payload.text.substring(0, 20));
     const { text, rate, id } = payload;
-    // If client is null (e.g. from controller.postMessage in some envs), we might need to find it later
     const item = { text, rate: rate || 1, client, id };
 
     queue.push(item);
@@ -55,26 +66,28 @@ async function handleSpeak(payload, client) {
 }
 
 function handlePause() {
+    logToMain('🗣️ [MockTTS] handlePause');
     if (state === 'SPEAKING') {
         state = 'PAUSED';
         if (timer) {
             clearTimeout(timer);
             timer = null;
         }
-        console.log('🗣️ [MockTTS] Paused');
+        logToMain('🗣️ [MockTTS] Paused');
     }
 }
 
 function handleResume() {
+    logToMain('🗣️ [MockTTS] handleResume');
     if (state === 'PAUSED') {
-        console.log('🗣️ [MockTTS] Resuming');
+        logToMain('🗣️ [MockTTS] Resuming');
         state = 'SPEAKING';
         scheduleNextWord();
     }
 }
 
 function handleCancel() {
-    console.log('🗣️ [MockTTS] Canceling');
+    logToMain('🗣️ [MockTTS] Canceling');
     if (timer) {
         clearTimeout(timer);
         timer = null;
@@ -90,11 +103,13 @@ function handleCancel() {
 function processNext() {
     if (queue.length === 0) {
         state = 'IDLE';
+        logToMain('🗣️ [MockTTS] Queue empty, going IDLE');
         return;
     }
 
     state = 'SPEAKING';
     currentItem = queue.shift();
+    logToMain('🗣️ [MockTTS] Processing item', currentItem.id);
 
     const text = currentItem.text;
     const tokens = text.match(/\S+/g) || [];
@@ -119,6 +134,7 @@ function processNext() {
 function scheduleNextWord() {
     if (currentWordIndex >= words.length) {
         // Finished current item
+        logToMain('🗣️ [MockTTS] Finished item', currentItem.id);
         notifyClient(currentItem.client, 'end', { id: currentItem.id });
         currentItem = null;
         processNext();
@@ -130,7 +146,7 @@ function scheduleNextWord() {
 
     timer = setTimeout(() => {
         // Emit boundary
-        // console.log(`%c 🗣️ [MockTTS]: "${wordObj.word}"`, 'color: #4ade80; font-weight: bold;');
+        // logToMain(`%c 🗣️ [MockTTS]: "${wordObj.word}"`);
 
         notifyClient(currentItem.client, 'boundary', {
             id: currentItem.id,
@@ -146,10 +162,12 @@ function scheduleNextWord() {
 }
 
 function notifyClient(client, type, data) {
+    logToMain(`🗣️ [MockTTS] notifyClient ${type}`, data);
     const msg = { type, ...data };
     if (client) {
         client.postMessage(msg);
     } else {
+        logToMain('🗣️ [MockTTS] client missing, broadcasting');
         // Broadcast to all clients if source client is missing
         self.clients.matchAll().then(clients => {
             for (const c of clients) {

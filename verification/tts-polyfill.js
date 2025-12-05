@@ -192,6 +192,12 @@
 
         _handleMessage(data) {
             console.log('🗣️ [MockTTS] _handleMessage received:', data.type, data);
+
+            if (data.type === 'LOG') {
+                console.log(`🗣️ [MockTTS-SW] ${data.payload}`);
+                return;
+            }
+
             const { type, id, charIndex, name, text } = data;
             const utterance = this._utteranceMap.get(id);
             if (!utterance) return;
