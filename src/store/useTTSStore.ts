@@ -99,7 +99,7 @@ export const useTTSStore = create<TTSState>()(
         // Subscribe to player updates
         player.subscribe((status, activeCfi, currentIndex, queue, error) => {
             console.log(`[useTTSStore] Update received. Status: ${status}, QueueLen: ${queue.length}, Index: ${currentIndex}`);
-            set((state) => {
+            set(() => {
                 // Determine if we are receiving an update that might be due to restoration
                 // We trust the player's queue unless it's empty and we have a persisted one?
                 // Actually, the player is the source of truth for runtime state.
