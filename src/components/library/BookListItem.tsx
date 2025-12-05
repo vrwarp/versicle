@@ -31,7 +31,7 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
     const navigate = useNavigate();
     const { removeBook, offloadBook, restoreBook } = useLibraryStore();
     const showToast = useToastStore(state => state.showToast);
-    const setBookId = useReaderStore(state => state.setBookId);
+    const setBookId = useReaderStore(state => state.setCurrentBookId);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const handleOpen = () => {
