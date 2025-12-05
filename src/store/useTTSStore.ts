@@ -98,15 +98,22 @@ export const useTTSStore = create<TTSState>()(
 
         // Subscribe to player updates
         player.subscribe((status, activeCfi, currentIndex, queue, error) => {
-            set({
-                status,
-                // Treat 'loading' as playing to prevent UI flicker (play/pause button)
-                // during transitions between sentences or while buffering.
-                isPlaying: status === 'playing' || status === 'loading',
-                activeCfi,
-                currentIndex,
-                queue,
-                lastError: error
+            console.log(`[useTTSStore] Update received. Status: ${status}, QueueLen: ${queue.length}, Index: ${currentIndex}`);
+            set((state) => {
+                // Determine if we are receiving an update that might be due to restoration
+                // We trust the player's queue unless it's empty and we have a persisted one?
+                // Actually, the player is the source of truth for runtime state.
+                // We just mirror it.
+                return {
+                    status,
+                    // Treat 'loading' as playing to prevent UI flicker (play/pause button)
+                    // during transitions between sentences or while buffering.
+                    isPlaying: status === 'playing' || status === 'loading',
+                    activeCfi,
+                    currentIndex,
+                    queue,
+                    lastError: error
+                };
             });
 
             // If fallback happened (provider mismatch), we should update our providerId state

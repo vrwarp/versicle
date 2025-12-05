@@ -159,8 +159,10 @@ export class AudioPlayerService {
    * Restores the queue and index from IndexedDB.
    */
   private async restoreState(bookId: string) {
+      console.log(`[TTS] Attempting to restore state for book ${bookId}`);
       const record = await dbService.getTTSQueue(bookId);
       if (record && record.items.length > 0) {
+          console.log(`[TTS] Restoring queue with ${record.items.length} items`);
           // If we are already playing or have a different queue, we might be cautious.
           // But usually setBookId is called on mount, so we can overwrite safely if stopped.
           if (this.status === 'stopped' || this.status === 'completed') {
@@ -170,7 +172,11 @@ export class AudioPlayerService {
                // Notify listeners (UI) that the queue has been restored
                this.updateMediaSessionMetadata();
                this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+          } else {
+              console.log(`[TTS] Skipping restore because status is ${this.status}`);
           }
+      } else {
+          console.log(`[TTS] No saved state found for book ${bookId}`);
       }
   }
 
@@ -180,7 +186,10 @@ export class AudioPlayerService {
    */
   private async saveState() {
       if (this.currentBookId && this.queue.length > 0) {
+          console.log(`[TTS] Saving state for book ${this.currentBookId}: ${this.queue.length} items`);
           await dbService.saveTTSQueue(this.currentBookId, this.queue, this.currentIndex);
+      } else {
+          console.log(`[TTS] Skipping save state (bookId: ${this.currentBookId}, queueLen: ${this.queue.length})`);
       }
   }
 
