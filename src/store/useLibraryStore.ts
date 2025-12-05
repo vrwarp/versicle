@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
 import { StorageFullError } from '../types/errors';
@@ -15,6 +16,13 @@ interface LibraryState {
   isImporting: boolean;
   /** Error message if an operation failed, or null. */
   error: string | null;
+  /** The current view mode of the library. */
+  viewMode: 'grid' | 'list';
+  /**
+   * Sets the view mode of the library.
+   * @param mode - The new view mode.
+   */
+  setViewMode: (mode: 'grid' | 'list') => void;
   /**
    * Fetches all books from the database and updates the store.
    */
@@ -48,14 +56,19 @@ interface LibraryState {
  * Zustand store for managing the user's library of books.
  * Handles fetching, adding, and removing books from IndexedDB.
  */
-export const useLibraryStore = create<LibraryState>((set, get) => ({
-  books: [],
-  isLoading: false,
-  isImporting: false,
-  error: null,
+export const useLibraryStore = create<LibraryState>()(
+  persist(
+    (set, get) => ({
+      books: [],
+      isLoading: false,
+      isImporting: false,
+      error: null,
+      viewMode: 'grid',
 
-  fetchBooks: async () => {
-    set({ isLoading: true, error: null });
+      setViewMode: (mode) => set({ viewMode: mode }),
+
+      fetchBooks: async () => {
+        set({ isLoading: true, error: null });
     try {
       const books = await dbService.getLibrary();
       set({ books, isLoading: false });
@@ -115,4 +128,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       set({ error: err instanceof Error ? err.message : 'Failed to restore book.', isImporting: false });
     }
   },
-}));
+}),
+{
+  name: 'library-storage',
+  partialize: (state) => ({ viewMode: state.viewMode }),
+}
+)
+);

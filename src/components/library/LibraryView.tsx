@@ -2,26 +2,20 @@ import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
+import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
 import { Grid } from 'react-window';
-import { Upload, Settings } from 'lucide-react';
+import { Upload, Settings, LayoutGrid, List as ListIcon } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 
 // Grid Configuration
 const CARD_WIDTH = 200; // Minimal width
 const CARD_HEIGHT = 320;
 const GAP = 24;
+const LIST_ITEM_HEIGHT = 88;
 
 /**
  * Renders a single cell within the virtualized grid of books.
- *
- * @param props - Properties passed by `react-window` grid.
- * @param props.columnIndex - The column index of the cell.
- * @param props.rowIndex - The row index of the cell.
- * @param props.style - The style object containing positioning for the cell.
- * @param props.books - The array of books to display.
- * @param props.columnCount - The total number of columns in the grid.
- * @returns A BookCard component wrapped in a positioned div, or null if the index is out of bounds.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => {
@@ -34,15 +28,20 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
             ...style,
             width: Number(style.width) - GAP,
             height: Number(style.height) - GAP,
-            // We simulate gap by padding effectively (reducing width/height)
-            // But 'style.left' positions rigidly.
-            // Better: Cell size = Card + Gap.
-            // Inner div size = Card.
         }}>
            <BookCard book={book} />
         </div>
     );
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ListCell = ({ rowIndex, style, books }: any) => {
+    const index = rowIndex;
+    if (index >= books.length) return <div style={style} />;
+    const book = books[index];
+    return <BookListItem book={book} style={style} />;
+}
+
 
 /**
  * The main library view component.
@@ -52,7 +51,7 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
  * @returns A React component rendering the library interface.
  */
 export const LibraryView: React.FC = () => {
-  const { books, fetchBooks, isLoading, error, addBook, isImporting } = useLibraryStore();
+  const { books, fetchBooks, isLoading, error, addBook, isImporting, viewMode, setViewMode } = useLibraryStore();
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -124,6 +123,14 @@ export const LibraryView: React.FC = () => {
         </div>
         <div className="flex gap-2">
             <button
+                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                className="flex items-center justify-center p-2 rounded-md bg-secondary text-secondary-foreground hover:opacity-90 transition-colors shadow-sm"
+                aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
+                data-testid="view-toggle-button"
+            >
+                {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
+            </button>
+            <button
               onClick={() => setGlobalSettingsOpen(true)}
               className="flex items-center justify-center p-2 rounded-md bg-secondary text-secondary-foreground hover:opacity-90 transition-colors shadow-sm"
               aria-label="Settings"
@@ -166,13 +173,13 @@ export const LibraryView: React.FC = () => {
              <EmptyLibrary onImport={triggerFileUpload} />
           ) : (
              <GridAny
-                columnCount={columnCount}
-                columnWidth={gridColumnWidth}
+                columnCount={viewMode === 'list' ? 1 : columnCount}
+                columnWidth={viewMode === 'list' ? dimensions.width : gridColumnWidth}
                 height={dimensions.height || 500}
-                rowCount={rowCount}
-                rowHeight={CARD_HEIGHT + GAP}
+                rowCount={viewMode === 'list' ? books.length : rowCount}
+                rowHeight={viewMode === 'list' ? LIST_ITEM_HEIGHT : CARD_HEIGHT + GAP}
                 width={dimensions.width}
-                cellComponent={GridCell}
+                cellComponent={viewMode === 'list' ? ListCell : GridCell}
                 cellProps={{ books, columnCount }}
              />
           )}

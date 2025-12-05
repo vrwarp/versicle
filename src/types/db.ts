@@ -39,6 +39,8 @@ export interface BookMetadata {
   fileHash?: string;
   /** Whether the binary file content has been deleted to save space. */
   isOffloaded?: boolean;
+  /** The size of the file in bytes. */
+  fileSize?: number;
   /** Synthetic Table of Contents generated during ingestion. */
   syntheticToc?: NavigationItem[];
 }
