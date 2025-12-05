@@ -166,10 +166,10 @@ export class AudioPlayerService {
           if (this.status === 'stopped' || this.status === 'completed') {
                this.queue = record.items;
                this.currentIndex = record.currentIndex;
-               // We mark session as restored so we don't try to seek again in playInternal
-               // unless specifically requested.
-               // Actually, playInternal uses sessionRestored to seek to lastPlayedCfi.
-               // We should let playInternal handle the seeking logic, but we need the queue first.
+
+               // Notify listeners (UI) that the queue has been restored
+               this.updateMediaSessionMetadata();
+               this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
           }
       }
   }
