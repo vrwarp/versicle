@@ -53,16 +53,12 @@ def test_orphan_repair(page: Page):
     # Note: Tabs are buttons in the sidebar
     page.get_by_role("button", name="Data Management").click()
 
+    # Set dialog handler BEFORE clicking
+    page.on("dialog", lambda dialog: dialog.accept())
+
     # Click "Check & Repair Database"
     print("Running Repair...")
     page.get_by_role("button", name="Check & Repair Database").click()
-
-    # Expect confirmation dialog
-    # Since we use window.confirm, we need to handle the dialog
-    # But Playwright handles dialogs automatically by dismissing them by default.
-    # We need to accept it.
-
-    page.on("dialog", lambda dialog: dialog.accept())
 
     # Wait for result text
     print("Waiting for completion...")
