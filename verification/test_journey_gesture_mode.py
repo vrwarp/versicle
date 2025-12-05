@@ -19,7 +19,7 @@ def test_journey_gesture_mode(page: Page):
 
     # 3. Open Audio Panel (UnifiedAudioPanel)
     page.click("button[data-testid='reader-audio-button']")
-    expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=5000)
+    expect(page.get_by_test_id("unified-audio-panel")).to_be_visible(timeout=5000)
 
     # Switch to Settings view in Audio Panel
     page.click("button:has-text('Settings')")
@@ -32,7 +32,7 @@ def test_journey_gesture_mode(page: Page):
 
     # The Audio Panel should close automatically when Gesture Mode is enabled.
     # So we don't need to manually close it.
-    expect(page.get_by_test_id("tts-panel")).not_to_be_visible(timeout=5000)
+    expect(page.get_by_test_id("unified-audio-panel")).not_to_be_visible(timeout=5000)
 
     # 5. Verify Overlay Appears
     expect(page.locator("text=Gesture Mode Active")).to_be_visible(timeout=5000)

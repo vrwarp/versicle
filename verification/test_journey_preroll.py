@@ -17,7 +17,7 @@ def test_preroll_journey(page: Page):
     # Open TTS Panel
     print("Opening TTS panel...")
     page.get_by_test_id("reader-audio-button").click()
-    expect(page.get_by_test_id("tts-panel")).to_be_visible()
+    expect(page.get_by_test_id("unified-audio-panel")).to_be_visible()
 
     # Open Settings
     print("Opening TTS Settings...")
