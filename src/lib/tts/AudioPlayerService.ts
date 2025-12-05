@@ -313,6 +313,8 @@ export class AudioPlayerService {
   async preview(text: string): Promise<void> {
       return this.executeWithLock(async (signal) => {
         await this.stopInternal();
+        if (signal.aborted) return;
+
         this.isPreviewing = true;
         this.setStatus('playing');
 
@@ -704,6 +706,7 @@ export class AudioPlayerService {
            // Allowed
       } else if (this.status === status) {
           // No-op
+          return;
       }
 
       this.status = status;
