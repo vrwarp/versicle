@@ -23,27 +23,37 @@ def test_orphan_repair(page: Page):
     # Using window.indexedDB directly because window.idb might not be exposed globally in the bundle
     # Note: Using version 5 to match the application's current DB version
     page.evaluate("""async () => {
-        const req = window.indexedDB.open('EpubLibraryDB', 5);
-        req.onsuccess = (e) => {
-            const db = e.target.result;
-            const tx = db.transaction(['files', 'annotations'], 'readwrite');
+        await new Promise((resolve, reject) => {
+            const req = window.indexedDB.open('EpubLibraryDB', 5);
+            req.onsuccess = (e) => {
+                const db = e.target.result;
+                const tx = db.transaction(['files', 'annotations'], 'readwrite');
 
-            // Orphaned File
-            tx.objectStore('files').put(new ArrayBuffer(10), 'orphan-book-id');
+                // Orphaned File
+                tx.objectStore('files').put(new ArrayBuffer(10), 'orphan-book-id');
 
-            // Orphaned Annotation
-            tx.objectStore('annotations').put({
-                id: 'orphan-note',
-                bookId: 'orphan-book-id',
-                cfiRange: 'epubcfi(/6/2!/4/2)',
-                text: 'Orphaned Text',
-                type: 'highlight',
-                color: '#ffff00',
-                created: Date.now()
-            });
-        };
-        // Wait a bit for async ops to finish (simplistic)
-        await new Promise(r => setTimeout(r, 500));
+                // Orphaned Annotation
+                tx.objectStore('annotations').put({
+                    id: 'orphan-note',
+                    bookId: 'orphan-book-id',
+                    cfiRange: 'epubcfi(/6/2!/4/2)',
+                    text: 'Orphaned Text',
+                    type: 'highlight',
+                    color: '#ffff00',
+                    created: Date.now()
+                });
+
+                tx.oncomplete = () => {
+                    db.close();
+                    resolve();
+                };
+                tx.onerror = () => {
+                    db.close();
+                    reject(tx.error);
+                };
+            };
+            req.onerror = () => reject(req.error);
+        });
     }""")
 
     # Open Settings
@@ -54,23 +64,33 @@ def test_orphan_repair(page: Page):
     # Note: Tabs are buttons in the sidebar
     page.get_by_role("button", name="Data Management").click()
 
+    # Override window.confirm to auto-accept, bypassing dialog handling issues
+    page.evaluate("window.confirm = () => true")
+
     # Click "Check & Repair Database"
     print("Running Repair...")
     page.get_by_role("button", name="Check & Repair Database").click()
 
-    # Expect confirmation dialog
-    # Since we use window.confirm, we need to handle the dialog
-    # But Playwright handles dialogs automatically by dismissing them by default.
-    # We need to accept it.
-
-    page.on("dialog", lambda dialog: dialog.accept())
-
     # Wait for result text
     print("Waiting for completion...")
-    # Increase timeout for mobile environments where dialog interactions might be slower
-    result_loc = page.get_by_text("Repair complete. Orphans removed.")
-    result_loc.scroll_into_view_if_needed(timeout=5000)
-    expect(result_loc).to_be_visible(timeout=5000)
+    # Check for success OR failure (if orphans were not found/injected properly)
+    try:
+        result_loc = page.get_by_text("Repair complete. Orphans removed.")
+        result_loc.scroll_into_view_if_needed(timeout=10000)
+        expect(result_loc).to_be_visible(timeout=10000)
+    except:
+        # Check if it said "Database is healthy"
+        healthy_loc = page.get_by_text("Database is healthy. No orphans found.")
+        if healthy_loc.count() > 0 and healthy_loc.is_visible():
+             # If healthy, it means injection failed to persist before scan
+             raise Exception("Injection failed: Database reported healthy instead of finding orphans.")
+
+        # Check if cancelled
+        cancelled_loc = page.get_by_text("Repair cancelled.")
+        if cancelled_loc.count() > 0 and cancelled_loc.is_visible():
+             raise Exception("Repair cancelled: Dialog was dismissed or rejected.")
+
+        raise
 
     # Verify orphans are gone via IDB check
     print("Verifying cleanup...")

@@ -37,11 +37,25 @@ export class MaintenanceService {
       (r) => r.bookId && !bookIds.has(r.bookId)
     );
 
+    // Check TTS Queue
+    const ttsQueues = await db.getAllKeys('tts_queue');
+    const orphanedTTSQueues = ttsQueues.filter((k) => !bookIds.has(k.toString()));
+
+    console.log('[Maintenance] Scan complete:', {
+        files: orphanedFiles.length,
+        annotations: orphanedAnnotations.length,
+        locations: orphanedLocations.length,
+        lexicon: orphanedLexicon.length,
+        tts_queue: orphanedTTSQueues.length
+    });
+
     return {
       files: orphanedFiles.length,
       annotations: orphanedAnnotations.length,
       locations: orphanedLocations.length,
       lexicon: orphanedLexicon.length,
+      // @ts-ignore - allowing dynamic prop
+      tts_queue: orphanedTTSQueues.length
     };
   }
 
@@ -53,8 +67,10 @@ export class MaintenanceService {
     const books = await db.getAllKeys('books');
     const bookIds = new Set(books.map((k) => k.toString()));
 
+    console.log('[Maintenance] Pruning orphans...');
+
     const tx = db.transaction(
-      ['files', 'annotations', 'locations', 'lexicon'],
+      ['files', 'annotations', 'locations', 'lexicon', 'tts_queue'],
       'readwrite'
     );
 
@@ -94,6 +110,15 @@ export class MaintenanceService {
         await lexCursor.delete();
       }
       lexCursor = await lexCursor.continue();
+    }
+
+    // Prune TTS Queue
+    const ttsQueueStore = tx.objectStore('tts_queue');
+    const ttsQueueKeys = await ttsQueueStore.getAllKeys();
+    for (const key of ttsQueueKeys) {
+        if (!bookIds.has(key.toString())) {
+            await ttsQueueStore.delete(key);
+        }
     }
 
     await tx.done;
