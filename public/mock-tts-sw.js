@@ -24,7 +24,7 @@ self.addEventListener('message', (event) => {
     const { type, payload } = event.data;
     const client = event.source;
 
-    // console.log(`🗣️ [MockTTS] Received ${type}`, payload);
+    console.log(`🗣️ [MockTTS] Received ${type}`, payload || '');
 
     switch (type) {
         case 'SPEAK':

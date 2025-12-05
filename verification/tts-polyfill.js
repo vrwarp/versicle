@@ -89,6 +89,24 @@
                  { name: 'Mock Voice 2', lang: 'en-GB', default: false, localService: true, voiceURI: 'mock-2' }
             ];
             this._utteranceMap = new Map(); // id -> utterance
+            this._pendingMessages = [];
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    console.log('🗣️ [MockTTS] Controller changed - flushing pending messages');
+                    this._flushPending();
+                });
+            }
+        }
+
+        _flushPending() {
+             if (navigator.serviceWorker.controller) {
+                 while (this._pendingMessages.length) {
+                     const msg = this._pendingMessages.shift();
+                     console.log('🗣️ [MockTTS] Flushing message', msg.type);
+                     navigator.serviceWorker.controller.postMessage(msg);
+                 }
+             }
         }
 
         getVoices() {
@@ -99,22 +117,21 @@
             this.speaking = true;
             this._utteranceMap.set(utterance._id, utterance);
 
+            const msg = {
+                 type: 'SPEAK',
+                 payload: {
+                     text: utterance.text,
+                     rate: utterance.rate,
+                     id: utterance._id
+                 }
+            };
+
             // Send to SW
             if (navigator.serviceWorker.controller) {
-                 navigator.serviceWorker.controller.postMessage({
-                     type: 'SPEAK',
-                     payload: {
-                         text: utterance.text,
-                         rate: utterance.rate,
-                         id: utterance._id
-                     }
-                 });
+                 navigator.serviceWorker.controller.postMessage(msg);
             } else {
-                console.warn('🗣️ [MockTTS] No SW controller, attempting to start one or waiting...');
-                // If not controlled yet (first load), we might miss it.
-                // In a real test scenario, we wait for readiness.
-                // Fallback: try waiting a bit?
-                // For now, assume test setup handles waiting for SW ready.
+                console.log('🗣️ [MockTTS] No SW controller, queueing SPEAK');
+                this._pendingMessages.push(msg);
             }
         }
 
@@ -122,8 +139,11 @@
             this.speaking = false;
             this.paused = false;
             this.pending = false;
+            const msg = { type: 'CANCEL' };
             if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({ type: 'CANCEL' });
+                navigator.serviceWorker.controller.postMessage(msg);
+            } else {
+                this._pendingMessages.push(msg);
             }
             this._utteranceMap.clear();
              const debugEl = document.getElementById('tts-debug');
@@ -135,8 +155,11 @@
 
         pause() {
             this.paused = true;
+            const msg = { type: 'PAUSE' };
             if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({ type: 'PAUSE' });
+                navigator.serviceWorker.controller.postMessage(msg);
+            } else {
+                this._pendingMessages.push(msg);
             }
              const debugEl = document.getElementById('tts-debug');
              if (debugEl) {
@@ -148,8 +171,11 @@
         resume() {
              if (this.paused) {
                  this.paused = false;
+                 const msg = { type: 'RESUME' };
                  if (navigator.serviceWorker.controller) {
-                     navigator.serviceWorker.controller.postMessage({ type: 'RESUME' });
+                     navigator.serviceWorker.controller.postMessage(msg);
+                 } else {
+                     this._pendingMessages.push(msg);
                  }
                  const debugEl = document.getElementById('tts-debug');
                  if (debugEl) {

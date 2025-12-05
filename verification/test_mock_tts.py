@@ -8,6 +8,9 @@ def test_mock_tts_sanity(page: Page):
     # Give time for SW registration and voices
     page.wait_for_timeout(2000)
 
+    # Ensure SW is controlling
+    page.wait_for_function("!!navigator.serviceWorker.controller", timeout=5000)
+
     # Check that voices are loaded
     voices_len = page.evaluate("window.speechSynthesis.getVoices().length")
     print(f"Voices length: {voices_len}")
@@ -34,6 +37,7 @@ def test_mock_tts_pause_resume(page: Page):
     """Verifies pause and resume functionality."""
     page.goto("/")
     page.wait_for_timeout(2000)
+    page.wait_for_function("!!navigator.serviceWorker.controller", timeout=5000)
 
     debug = page.locator("#tts-debug")
 
@@ -74,6 +78,7 @@ def test_mock_tts_cancel(page: Page):
     """Verifies cancel functionality."""
     page.goto("/")
     page.wait_for_timeout(2000)
+    page.wait_for_function("!!navigator.serviceWorker.controller", timeout=5000)
 
     debug = page.locator("#tts-debug")
 
