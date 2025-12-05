@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSQueueItem, TTSQueueRecord } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -87,12 +87,13 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon'], 'readwrite');
+      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue'], 'readwrite');
 
       await Promise.all([
           tx.objectStore('books').delete(id),
           tx.objectStore('files').delete(id),
           tx.objectStore('locations').delete(id),
+          tx.objectStore('tts_queue').delete(id),
       ]);
 
       // Delete annotations
@@ -321,6 +322,41 @@ class DBService {
       try {
           const db = await this.getDB();
           await db.put('locations', { bookId, locations });
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  // --- TTS Queue Persistence ---
+
+  async getTTSQueue(bookId: string): Promise<TTSQueueRecord | undefined> {
+      try {
+          const db = await this.getDB();
+          return await db.get('tts_queue', bookId);
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  async saveTTSQueue(bookId: string, queue: TTSQueueItem[], currentIndex: number): Promise<void> {
+      try {
+          const db = await this.getDB();
+          const record: TTSQueueRecord = {
+              bookId,
+              items: queue,
+              currentIndex,
+              updatedAt: Date.now()
+          };
+          await db.put('tts_queue', record);
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  async deleteTTSQueue(bookId: string): Promise<void> {
+      try {
+          const db = await this.getDB();
+          await db.delete('tts_queue', bookId);
       } catch (error) {
           this.handleError(error);
       }

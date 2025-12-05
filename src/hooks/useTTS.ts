@@ -80,6 +80,11 @@ export const useTTS = (rendition: Rendition | null) => {
                queue.unshift(prerollItem);
            }
 
+           // Phase 2: Reconciliation with Persisted Queue
+           // AudioPlayerService.setQueue handles the reconciliation logic:
+           // 1. If the extracted queue is identical to the persisted queue (restored on load),
+           //    it returns early WITHOUT resetting the playback index. This preserves "Instant Resume" position.
+           // 2. If the queue differs (e.g., content change), it updates the queue and resets the index to 0.
            player.setQueue(queue);
 
        } catch (e) {

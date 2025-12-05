@@ -7,18 +7,11 @@ import { CostEstimator } from './CostEstimator';
 import { LexiconService } from './LexiconService';
 import { MediaSessionManager } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
+import type { TTSQueueItem } from '../../types/db';
 
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
-export interface TTSQueueItem {
-    text: string;
-    cfi: string | null;
-    title?: string;
-    author?: string;
-    bookTitle?: string;
-    coverUrl?: string;
-    isPreroll?: boolean;
-}
+export { type TTSQueueItem };
 
 type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
 
@@ -142,6 +135,52 @@ export class AudioPlayerService {
       if (this.currentBookId !== bookId) {
           this.currentBookId = bookId;
           this.sessionRestored = false; // Reset restoration flag for new book
+
+          if (bookId) {
+              // Attempt to restore queue from persistence immediately
+              this.restoreState(bookId).catch(err => {
+                  console.warn("Failed to restore TTS state on setBookId", err);
+              });
+          } else {
+              this.queue = [];
+              this.currentIndex = 0;
+          }
+      }
+  }
+
+  /**
+   * Checks if the service already has a queue loaded for the given book.
+   */
+  hasQueue(bookId: string): boolean {
+      return this.currentBookId === bookId && this.queue.length > 0;
+  }
+
+  /**
+   * Restores the queue and index from IndexedDB.
+   */
+  private async restoreState(bookId: string) {
+      const record = await dbService.getTTSQueue(bookId);
+      if (record && record.items.length > 0) {
+          // If we are already playing or have a different queue, we might be cautious.
+          // But usually setBookId is called on mount, so we can overwrite safely if stopped.
+          if (this.status === 'stopped' || this.status === 'completed') {
+               this.queue = record.items;
+               this.currentIndex = record.currentIndex;
+               // We mark session as restored so we don't try to seek again in playInternal
+               // unless specifically requested.
+               // Actually, playInternal uses sessionRestored to seek to lastPlayedCfi.
+               // We should let playInternal handle the seeking logic, but we need the queue first.
+          }
+      }
+  }
+
+  /**
+   * Persists the current queue and index to IndexedDB.
+   * This should be debounced or called at strategic points.
+   */
+  private async saveState() {
+      if (this.currentBookId && this.queue.length > 0) {
+          await dbService.saveTTSQueue(this.currentBookId, this.queue, this.currentIndex);
       }
   }
 
@@ -272,6 +311,7 @@ export class AudioPlayerService {
         // but NOT stop playback or reset the index, allowing for seamless continuation.
         if (this.isQueueEqual(items)) {
             this.queue = items;
+            await this.saveState();
             return;
         }
 
@@ -279,6 +319,7 @@ export class AudioPlayerService {
         this.queue = items;
         this.currentIndex = startIndex;
 
+        await this.saveState();
         this.updateMediaSessionMetadata();
         this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
     });
@@ -301,6 +342,7 @@ export class AudioPlayerService {
           if (index >= 0 && index < this.queue.length) {
               await this.stopInternal();
               this.currentIndex = index;
+              await this.saveState();
               await this.playInternal(signal);
           }
       });
@@ -605,6 +647,7 @@ export class AudioPlayerService {
       return this.executeWithLock(async (signal) => {
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
+            await this.saveState();
             await this.playInternal(signal);
         } else {
             await this.stopInternal();
@@ -616,6 +659,7 @@ export class AudioPlayerService {
       return this.executeWithLock(async (signal) => {
         if (this.currentIndex > 0) {
             this.currentIndex--;
+            await this.saveState();
             await this.playInternal(signal);
         }
       });
@@ -643,11 +687,13 @@ export class AudioPlayerService {
               if (offset > 0) {
                   if (this.currentIndex < this.queue.length - 1) {
                       this.currentIndex++;
+                      await this.saveState();
                       await this.playInternal(signal);
                   }
               } else {
                   if (this.currentIndex > 0) {
                       this.currentIndex--;
+                      await this.saveState();
                       await this.playInternal(signal);
                   }
               }
@@ -671,6 +717,7 @@ export class AudioPlayerService {
           if (this.status !== 'stopped') {
               if (this.currentIndex < this.queue.length - 1) {
                   this.currentIndex++;
+                  await this.saveState();
                   await this.playInternal(signal);
               } else {
                   this.setStatus('completed');

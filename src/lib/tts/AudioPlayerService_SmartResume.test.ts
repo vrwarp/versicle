@@ -10,6 +10,8 @@ vi.mock('../../db/DBService', () => ({
     getBook: vi.fn(),
     getBookMetadata: vi.fn(),
     updatePlaybackState: vi.fn(),
+    saveTTSQueue: vi.fn(),
+    getTTSQueue: vi.fn(),
   }
 }));
 

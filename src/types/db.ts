@@ -72,6 +72,23 @@ export interface BookLocations {
   locations: string;
 }
 
+export interface TTSQueueItem {
+    text: string;
+    cfi: string | null;
+    title?: string;
+    author?: string;
+    bookTitle?: string;
+    coverUrl?: string;
+    isPreroll?: boolean;
+}
+
+export interface TTSQueueRecord {
+    bookId: string;
+    items: TTSQueueItem[];
+    currentIndex: number;
+    updatedAt: number;
+}
+
 /**
  * A cached audio segment for TTS.
  */
