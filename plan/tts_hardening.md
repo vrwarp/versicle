@@ -64,3 +64,8 @@ We will address these issues in three distinct phases.
 ## Next Steps
 
 All phases of the Hardening Plan are now complete.
+
+### Future Considerations
+*   **Server-Side Logging:** If privacy policy permits, send anonymized logs to a backend for aggregation.
+*   **Advanced Sync:** Implement word-level alignment for Cloud TTS using `AlignmentData`.
+*   **Voice Tuning:** Allow per-character voice assignments in the future.

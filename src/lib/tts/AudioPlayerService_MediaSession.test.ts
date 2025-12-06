@@ -173,14 +173,14 @@ describe('AudioPlayerService MediaSession Integration', () => {
         blob.arrayBuffer = vi.fn().mockResolvedValue(new ArrayBuffer(0));
 
         // Setup cloud provider
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mockCloudProvider = {
             id: 'cloud',
             init: vi.fn().mockResolvedValue(undefined),
             getVoices: vi.fn().mockResolvedValue([]),
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             synthesize: vi.fn().mockResolvedValue({ audio: blob, alignment: [] } as any),
-        } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any;
 
         await service.setProvider(mockCloudProvider);
 
