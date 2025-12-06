@@ -14,6 +14,12 @@ import { useEffect, useState } from 'react';
 import { getDB } from './db/db';
 import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
+
+// Expose store for testing
+if (import.meta.env.DEV) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).useTTSStore = useTTSStore;
+}
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 
