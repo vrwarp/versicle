@@ -180,7 +180,7 @@ export class AudioPlayerService {
 
   private setupWebSpeech() {
     if (this.provider.id === 'local') {
-       // @ts-ignore
+       // @ts-expect-error - WebSpeechProvider specific method
        this.provider.on((event) => {
            if (event.type === 'start') {
                this.setStatus('playing');
@@ -590,9 +590,7 @@ export class AudioPlayerService {
               }
          }
 
-         // @ts-ignore
          if (this.status === 'paused' && this.provider.resume && this.speed === this.currentSpeechSpeed) {
-             // @ts-ignore
              this.provider.resume();
              this.setStatus('playing');
          } else {

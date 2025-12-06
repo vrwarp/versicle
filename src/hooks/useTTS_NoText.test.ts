@@ -3,7 +3,7 @@ import { useTTS } from './useTTS';
 import { useReaderStore } from '../store/useReaderStore';
 import { useTTSStore } from '../store/useTTSStore';
 import * as ttsLib from '../lib/tts';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Hoist mock instance
 const { mockPlayerInstance } = vi.hoisted(() => {

@@ -2,9 +2,7 @@
 
 > **Note:** This repository was almost entirely built using Google Jules and is an exploration of that tool.
 
-**Versicle** is a sophisticated, local-first web-based EPUB reader designed for advanced reading capabilities. It runs entirely in the browser, leveraging modern web standards (IndexedDB, Web Workers) to manage your library without external servers.
-
-It features a high-performance reading engine, full-text search, annotation support, and an advanced Text-to-Speech (TTS) system with support for both local (Web Speech API) and cloud-based (Google, OpenAI) voices.
+**Versicle** is a sophisticated, local-first web-based EPUB reader designed for advanced reading capabilities. It runs entirely in the browser, utilizing IndexedDB for persistent storage, React for the UI, and `epub.js` for rendering. The system is designed for privacy and performance, featuring advanced Text-to-Speech (TTS) capabilities, full-text search, and annotation management without relying on external servers for core functionality.
 
 ## Features
 
@@ -13,7 +11,7 @@ It features a high-performance reading engine, full-text search, annotation supp
     *   **Customizable**: Light/Dark/Sepia themes, custom fonts, line height, and font size.
     *   **Modes**: Paginated and Scrolled view modes.
     *   **Immersive Mode**: Distraction-free reading.
-    *   **Touch Controls**: Swipe gestures for navigation.
+    *   **Touch Controls**: Swipe gestures for navigation and audio control.
 *   **Text-to-Speech (TTS)**:
     *   **Sentence Highlighting**: Visual karaoke-style synchronization.
     *   **Multiple Providers**: Web Speech API (Free), Google Cloud TTS, OpenAI TTS.
@@ -22,6 +20,7 @@ It features a high-performance reading engine, full-text search, annotation supp
     *   **Caching**: Cloud-generated audio is cached locally to save costs and bandwidth.
 *   **Full-Text Search**: Fast, off-main-thread search using Web Workers.
 *   **Annotations**: Highlight text (multiple colors) and add notes.
+*   **Data Management**: Backup and restore your entire library (or just metadata) to JSON/ZIP.
 *   **PWA Support**: Installable as a standalone app on desktop and mobile.
 
 ## Tech Stack
@@ -58,6 +57,30 @@ It features a high-performance reading engine, full-text search, annotation supp
     npm run dev
     ```
     The application will be available at `http://localhost:5173`.
+
+## Usage Guide
+
+### Library Management
+*   **Import**: Click "Import Book" or drag-and-drop `.epub` files onto the library view.
+*   **View Modes**: Toggle between Grid and List views using the icon in the header.
+*   **Management**: Click the "..." menu on a book card to Delete, Offload (remove file but keep data), or Restore a book.
+
+### Reading
+*   **Navigation**: Use arrow keys, on-screen buttons, or swipe gestures (if enabled) to turn pages.
+*   **Visual Settings**: Click the 'Aa' icon to change font, size, theme (Light/Dark/Sepia), and line height.
+*   **Annotations**: Select text to open the highlight menu. Click the highlight icon to view all annotations in the sidebar.
+
+### Text-to-Speech (TTS)
+*   **Playback**: Click the Headphones icon to open the Audio Panel. Press Play to start reading from the top of the current page.
+*   **Providers**:
+    *   **Local**: Uses your browser's built-in voices (Free).
+    *   **Cloud**: Configure Google Cloud or OpenAI API keys in Global Settings for high-quality neural voices.
+*   **Lexicon**: Fix mispronounced words by adding rules in Global Settings -> Dictionary, or via the "Fix Pronunciation" button in the selection menu.
+
+### Configuration
+Access Global Settings via the gear icon in the Library header.
+*   **API Keys**: Enter keys for Google Cloud or OpenAI.
+*   **Data Management**: Create backups (Light/Full) or prune orphaned data.
 
 ## Scripts
 
