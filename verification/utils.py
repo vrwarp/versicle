@@ -44,7 +44,7 @@ def ensure_library_with_book(page: Page):
                 load_btn.click()
                 page.wait_for_selector("[data-testid^='book-card-']", timeout=5000)
 
-def capture_screenshot(page: Page, name: str):
+def capture_screenshot(page: Page, name: str, hide_tts_status: bool = False):
     """
     Captures a screenshot of the current page state.
     Saves it to 'verification/screenshots/'.
@@ -53,12 +53,20 @@ def capture_screenshot(page: Page, name: str):
     Args:
         page: The Playwright Page object.
         name: The filename (without extension) for the screenshot.
+        hide_tts_status: If True, hides the TTS debug overlay before capturing.
     """
     os.makedirs('verification/screenshots', exist_ok=True)
+
+    if hide_tts_status:
+        page.evaluate("const el = document.getElementById('tts-debug'); if (el) el.style.visibility = 'hidden';")
+
     viewport = page.viewport_size
     width = viewport['width'] if viewport else 1280
     suffix = "mobile" if width < 600 else "desktop"
     page.screenshot(path=f"verification/screenshots/{name}_{suffix}.png")
+
+    if hide_tts_status:
+        page.evaluate("const el = document.getElementById('tts-debug'); if (el) el.style.visibility = 'visible';")
 
 def get_reader_frame(page: Page) -> Frame | None:
     """
