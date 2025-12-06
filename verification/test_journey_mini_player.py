@@ -1,6 +1,6 @@
 import pytest
 from playwright.sync_api import Page, expect
-from utils import reset_app, ensure_library_with_book, capture_screenshot
+from verification.utils import reset_app, ensure_library_with_book, capture_screenshot
 
 def test_journey_mini_player(page: Page):
     """
