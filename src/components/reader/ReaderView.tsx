@@ -21,6 +21,7 @@ import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { ChevronLeft, ChevronRight, List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
+import { ChapterCompass } from './ChapterCompass';
 
 /**
  * The main reader interface component.
@@ -1020,9 +1021,25 @@ export const ReaderView: React.FC = () => {
          </div>
       </div>
 
-      {/* Footer / Controls */}
+      {/* Chapter Compass Interface */}
       {!immersiveMode && (
-        <footer className="bg-surface border-t border-border px-6 md:px-8 py-2 flex items-center justify-between z-10">
+          <ChapterCompass onPrev={handlePrev} onNext={handleNext} />
+      )}
+
+      {/* Footer / Controls (Legacy - Hidden/Replaced by Compass in new design? Keeping for now but potentially hiding if redundant) */}
+      {/* The Compass Interface effectively replaces the bottom controls.
+          However, the screenshot implies it overlays the content.
+          If we want to fully implement the screenshot, we might remove the footer.
+          For this iteration, I will keep the footer but maybe hide it if the Compass is active?
+          Actually, the screenshot shows the compass *above* the nav bar?
+          "Compass Pill... above the nav bar?"
+          Let's keep the footer as the "Nav Bar" and the Compass floats above it.
+      */}
+      {!immersiveMode && (
+        <footer className="bg-surface border-t border-border px-6 md:px-8 py-2 flex items-center justify-between z-10 pb-20 md:pb-2">
+            {/* Added padding bottom on mobile to make room for floating controls if they overlap,
+                though ChapterCompass is absolute positioned. */}
+
             <button data-testid="reader-prev-page" aria-label="Previous Page" onClick={handlePrev} className="p-2 hover:bg-border rounded-full">
                 <ChevronLeft className="w-6 h-6 text-muted-foreground" />
             </button>
