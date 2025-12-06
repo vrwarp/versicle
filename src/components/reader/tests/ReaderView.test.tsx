@@ -73,6 +73,7 @@ describe('ReaderView', () => {
         off: vi.fn(),
         getContents: vi.fn(() => []),
         spread: vi.fn(),
+        flow: vi.fn(),
         resize: vi.fn(),
         hooks: {
           content: {

@@ -12,6 +12,7 @@ graph TD
         App[App.tsx]
         Library[LibraryView]
         Reader[ReaderView]
+        useEpubReader[useEpubReader Hook]
     end
 
     subgraph "State (Zustand)"
@@ -55,6 +56,9 @@ graph TD
     Reader --> ReaderStore
     Reader --> TTSStore
     Reader --> AnnotStore
+
+    Reader --> useEpubReader
+    useEpubReader --> DB
 
     LibStore --> Ingestion
     Ingestion --> DB
@@ -298,13 +302,21 @@ The central controller for TTS. Singleton.
 #### Reader (`src/components/reader/ReaderView.tsx`)
 The core reading interface.
 *   **Responsibilities**:
-    *   Initializes `epub.js` `Rendition`.
-    *   Manages "Paginated" vs "Scrolled" view modes.
-    *   Injects custom CSS for Themes and Highlights.
+    *   Manages Sidebars (TOC, Annotations, Search) and Layout.
+    *   Integrates `useEpubReader` for book rendering.
     *   Highlights the active TTS sentence (`activeCfi`).
-    *   Handles text selection for Annotations (with fallback for iframe events).
+    *   Handles text selection for Annotations.
     *   Integrates `GestureOverlay` for touch controls.
-    *   Manages sidebars (TOC, Annotations, Search).
+
+#### Reader Hook (`src/hooks/useEpubReader.ts`)
+Encapsulates the `epub.js` lifecycle.
+*   **Responsibilities**:
+    *   Loads the book from IndexedDB (`dbService`).
+    *   Initializes `epub.js` `Book` and `Rendition`.
+    *   Manages "Paginated" vs "Scrolled" view modes.
+    *   Applies Themes and forced Font overrides.
+    *   Handles `ResizeObserver` (optimized with `requestAnimationFrame`).
+    *   Exposes `book`, `rendition`, and navigation state (`toc`, `metadata`).
 
 #### Library (`src/components/library/LibraryView.tsx`)
 The bookshelf interface.
