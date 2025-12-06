@@ -11,6 +11,8 @@ import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
+import { AudioPanelWrapper } from './components/AudioPanelWrapper';
+import { MiniPlayer } from './components/reader/MiniPlayer';
 
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -94,7 +96,8 @@ function App() {
       <ThemeSynchronizer />
       <GlobalSettingsDialog />
       <ToastContainer />
-      <div className="min-h-screen bg-background text-foreground">
+      <AudioPanelWrapper />
+      <div className="min-h-screen bg-background text-foreground pb-[70px]"> {/* Add padding for mini player */}
         <Routes>
           <Route path="/" element={
             <ErrorBoundary>
@@ -108,6 +111,7 @@ function App() {
           } />
         </Routes>
       </div>
+      <MiniPlayer />
     </Router>
   );
 }

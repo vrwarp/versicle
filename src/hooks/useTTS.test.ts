@@ -107,7 +107,15 @@ describe('useTTS', () => {
         expect(ttsLib.extractSentences).toHaveBeenCalledWith(mockRendition);
         expect(result.current.sentences).toEqual(mockSentences);
         expect(mockPlayerInstance.setQueue).toHaveBeenCalledWith([
-            { text: 'Sentence 1', cfi: 'cfi1' }
+            {
+                text: 'Sentence 1',
+                cfi: 'cfi1',
+                title: 'Chapter 1',
+                author: undefined,
+                bookId: undefined,
+                bookTitle: undefined,
+                coverUrl: undefined,
+            }
         ]);
     });
 
@@ -140,15 +148,27 @@ describe('useTTS', () => {
                 text: "Chapter 1. Estimated reading time: 1 minute.",
                 cfi: null,
                 title: 'Chapter 1',
-                isPreroll: true
+                isPreroll: true,
+                author: undefined,
+                bookId: undefined,
+                bookTitle: undefined,
+                coverUrl: undefined,
             },
-            { text: 'Sentence 1', cfi: 'cfi1' }
+            {
+                text: 'Sentence 1',
+                cfi: 'cfi1',
+                title: 'Chapter 1',
+                author: undefined,
+                bookId: undefined,
+                bookTitle: undefined,
+                coverUrl: undefined,
+            }
         ]);
     });
 
-    it('should stop player on unmount', () => {
+    it('should NOT stop player on unmount', () => {
         const { unmount } = renderHook(() => useTTS(mockRendition));
         unmount();
-        expect(mockPlayerInstance.stop).toHaveBeenCalled();
+        expect(mockPlayerInstance.stop).not.toHaveBeenCalled();
     });
 });
