@@ -55,12 +55,17 @@ We will address these issues in three distinct phases.
 
 ### Phase 3: Resilience & Observability
 **Goal:** Handle external failures gracefully.
-*   **Watchdog Timer:** Detect hung `WebSpeech` processes and auto-restart.
-*   **Circuit Breaker:** Smarter logic for Cloud -> Local fallback (e.g., "cool-down" periods).
-*   **Debug Snapshots:** Ability to export the current internal state (Queue + Logs + Config) to a JSON file for user support.
+*   **[COMPLETED]** **Watchdog Timer:** Detect hung `WebSpeech` processes and auto-restart.
+*   **[COMPLETED]** **Circuit Breaker:** Smarter logic for Cloud -> Local fallback (e.g., "cool-down" periods).
+*   **[COMPLETED]** **Debug Snapshots:** Ability to export the current internal state (Queue + Logs + Config) to a JSON file for user support.
 
 ---
 
 ## Next Steps
 
-We will proceed by implementing **Phase 2** (Snapshots), followed by **Phase 3**.
+All phases of the Hardening Plan are now complete.
+
+### Future Considerations
+*   **Server-Side Logging:** If privacy policy permits, send anonymized logs to a backend for aggregation.
+*   **Advanced Sync:** Implement word-level alignment for Cloud TTS using `AlignmentData`.
+*   **Voice Tuning:** Allow per-character voice assignments in the future.

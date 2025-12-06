@@ -62,6 +62,7 @@ describe('ingestion integration', () => {
 
     // Check if storedFile is a valid Blob/File or if IDB cloning failed (empty object)
     // In JSDOM/fake-indexeddb, storing File objects might result in property loss if not fully supported.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (storedFile instanceof Blob || (storedFile && Object.keys(storedFile).length > 0 && (storedFile as any).byteLength)) {
         // Convert stored blob to array buffer for comparison
         let storedBuffer: ArrayBuffer;

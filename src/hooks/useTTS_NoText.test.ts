@@ -30,6 +30,7 @@ vi.mock('../lib/tts/AudioPlayerService', () => ({
 vi.mock('../lib/tts');
 
 describe('useTTS - No Text Behavior', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockRendition: any;
 
     beforeEach(() => {
@@ -37,12 +38,14 @@ describe('useTTS - No Text Behavior', () => {
         vi.clearAllMocks();
 
         // Mock Stores
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useReaderStore as any).mockImplementation((selector: any) => {
              // Mock state selector
              const state = { currentChapterTitle: 'Test Chapter' };
              return selector(state);
         });
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useTTSStore as any).mockReturnValue({
             loadVoices: vi.fn(),
             prerollEnabled: false,
@@ -60,11 +63,13 @@ describe('useTTS - No Text Behavior', () => {
 
     it('should populate queue with a random "no text" message when extraction returns empty', async () => {
         // Mock extraction to return empty array
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (ttsLib.extractSentences as any).mockReturnValue([]);
 
         renderHook(() => useTTS(mockRendition));
 
         // Trigger the effect (simulate 'rendered' event)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const renderCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
         renderCallback();
 
@@ -83,11 +88,13 @@ describe('useTTS - No Text Behavior', () => {
     it('should NOT populate queue with "no text" message when extraction returns sentences', async () => {
          // Mock extraction to return valid sentences
          const mockSentences = [{ text: 'Hello world', cfi: 'cfi:/1/2' }];
+         // eslint-disable-next-line @typescript-eslint/no-explicit-any
          (ttsLib.extractSentences as any).mockReturnValue(mockSentences);
 
          renderHook(() => useTTS(mockRendition));
 
          // Trigger
+         // eslint-disable-next-line @typescript-eslint/no-explicit-any
          const renderCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
          renderCallback();
 

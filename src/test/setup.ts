@@ -30,12 +30,13 @@ class MockSpeechSynthesisUtterance {
   rate: number = 1;
   onstart: (() => void) | null = null;
   onend: (() => void) | null = null;
-  onerror: ((event: any) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
 
   constructor(text: string) {
     this.text = text;
   }
 }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (global as any).SpeechSynthesisUtterance = MockSpeechSynthesisUtterance;
 
 // Mock URL.createObjectURL/revokeObjectURL
@@ -64,12 +65,10 @@ global.ResizeObserver = class {
 };
 
 // Mock Pointer Capture methods for JSDOM environment
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 if (!Element.prototype.setPointerCapture) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (Element.prototype as any).setPointerCapture = vi.fn();
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 if (!Element.prototype.releasePointerCapture) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (Element.prototype as any).releasePointerCapture = vi.fn();

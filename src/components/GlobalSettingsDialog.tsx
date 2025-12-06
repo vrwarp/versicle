@@ -10,6 +10,7 @@ import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
+import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 
 export const GlobalSettingsDialog = () => {
     const { isGlobalSettingsOpen, setGlobalSettingsOpen } = useUIStore();
@@ -90,6 +91,19 @@ export const GlobalSettingsDialog = () => {
 
     const handleRestoreClick = () => {
         fileInputRef.current?.click();
+    };
+
+    const handleExportDebug = () => {
+        const debugState = AudioPlayerService.getInstance().getDebugState();
+        const blob = new Blob([JSON.stringify(debugState, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `versicle-debug-${new Date().toISOString()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -257,6 +271,9 @@ export const GlobalSettingsDialog = () => {
                                 <div className="flex flex-col gap-2">
                                     <Button onClick={handleRepairDB} variant="outline">
                                         Check & Repair Database
+                                    </Button>
+                                    <Button onClick={handleExportDebug} variant="outline">
+                                        Export Debug Info
                                     </Button>
                                     {orphanScanResult && (
                                         <p className="text-sm text-muted-foreground">{orphanScanResult}</p>

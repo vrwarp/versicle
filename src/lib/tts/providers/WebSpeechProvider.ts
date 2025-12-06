@@ -15,6 +15,10 @@ export class WebSpeechProvider implements ITTSProvider {
   private voicesLoaded = false;
   private silentAudio: HTMLAudioElement;
 
+  // Watchdog
+  private watchdogTimer: number | null = null;
+  private readonly WATCHDOG_TIMEOUT = 5000; // 5 seconds
+
   constructor() {
     this.synth = window.speechSynthesis;
     // Initialize silent audio loop to keep MediaSession active
@@ -159,18 +163,26 @@ export class WebSpeechProvider implements ITTSProvider {
     if (voice) utterance.voice = voice;
     utterance.rate = speed;
 
-    utterance.onstart = () => this.emit('start');
+    utterance.onstart = () => {
+        this.startWatchdog();
+        this.emit('start');
+    };
     utterance.onend = () => {
+        this.stopWatchdog();
         // We do NOT pause silent audio here, because the service might play the next sentence immediately.
         // The Service is responsible for calling stop() if playback is truly finished.
         this.emit('end');
     };
     utterance.onerror = (e) => {
+        this.stopWatchdog();
         // We pause silent audio on error, as it might stop playback
         this.pauseSilentAudio();
         this.emit('error', { error: e });
     };
-    utterance.onboundary = (e) => this.emit('boundary', { charIndex: e.charIndex });
+    utterance.onboundary = (e) => {
+        this.resetWatchdog();
+        this.emit('boundary', { charIndex: e.charIndex });
+    };
 
     this.synth.speak(utterance);
 
@@ -181,6 +193,7 @@ export class WebSpeechProvider implements ITTSProvider {
    * Stops playback.
    */
   stop(): void {
+    this.stopWatchdog();
     this.cancel();
     this.pauseSilentAudio();
   }
@@ -189,6 +202,7 @@ export class WebSpeechProvider implements ITTSProvider {
    * Pauses playback.
    */
   pause(): void {
+    this.stopWatchdog();
     if (this.synth.speaking) {
       this.synth.pause();
     }
@@ -211,6 +225,7 @@ export class WebSpeechProvider implements ITTSProvider {
    * Cancels the current utterance.
    */
   private cancel() {
+    this.stopWatchdog();
     this.synth.cancel();
     // note: we don't automatically pause silent audio here because synthesize() calls cancel() before starting new one
   }
@@ -218,6 +233,41 @@ export class WebSpeechProvider implements ITTSProvider {
   private pauseSilentAudio() {
       this.silentAudio.pause();
       this.silentAudio.currentTime = 0;
+  }
+
+  // --- Watchdog Logic ---
+
+  private startWatchdog() {
+      this.stopWatchdog();
+      this.watchdogTimer = window.setTimeout(() => {
+          this.handleWatchdogTimeout();
+      }, this.WATCHDOG_TIMEOUT);
+  }
+
+  private resetWatchdog() {
+      if (this.watchdogTimer) {
+          clearTimeout(this.watchdogTimer);
+          this.watchdogTimer = window.setTimeout(() => {
+              this.handleWatchdogTimeout();
+          }, this.WATCHDOG_TIMEOUT);
+      }
+  }
+
+  private stopWatchdog() {
+      if (this.watchdogTimer) {
+          clearTimeout(this.watchdogTimer);
+          this.watchdogTimer = null;
+      }
+  }
+
+  private handleWatchdogTimeout() {
+      console.warn("WebSpeechProvider: Watchdog timeout (hanging playback detected).");
+      this.stopWatchdog(); // Avoid loop
+      this.synth.cancel(); // Kill hung process
+
+      // Notify service. Service should decide whether to retry or stop.
+      // We send a specific error code.
+      this.emit('error', { error: 'watchdog_timeout' });
   }
 
   /**

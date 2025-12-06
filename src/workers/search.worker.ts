@@ -16,7 +16,7 @@ export type SearchRequest =
  */
 export type SearchResponse =
   | { id: string; type: 'ACK' }
-  | { id: string; type: 'SEARCH_RESULTS'; results: any[] }
+  | { id: string; type: 'SEARCH_RESULTS'; results: unknown[] }
   | { id: string; type: 'ERROR'; error: string };
 
 const engine = new SearchEngine();
