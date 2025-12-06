@@ -3,6 +3,11 @@ import { LibraryView } from './components/library/LibraryView';
 import { ReaderView } from './components/reader/ReaderView';
 import { ThemeSynchronizer } from './components/ThemeSynchronizer';
 import { GlobalSettingsDialog } from './components/GlobalSettingsDialog';
+import { UnifiedAudioPanel } from './components/reader/UnifiedAudioPanel';
+import { FloatingControlsContainer } from './components/reader/FloatingControlsContainer';
+import { Sheet } from './components/ui/Sheet';
+import { useUIStore } from './store/useUIStore';
+import { useTTSStore } from './store/useTTSStore';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useEffect, useState } from 'react';
@@ -64,6 +69,8 @@ function App() {
     }
   };
 
+  const { isAudioPanelOpen, setAudioPanelOpen } = useUIStore();
+
   const handleRetry = () => {
     setDbStatus('loading');
     setDbError(null);
@@ -93,6 +100,10 @@ function App() {
     <Router>
       <ThemeSynchronizer />
       <GlobalSettingsDialog />
+      <Sheet open={isAudioPanelOpen} onOpenChange={setAudioPanelOpen}>
+        <UnifiedAudioPanel />
+      </Sheet>
+      <FloatingControlsContainer />
       <ToastContainer />
       <div className="min-h-screen bg-background text-foreground">
         <Routes>
