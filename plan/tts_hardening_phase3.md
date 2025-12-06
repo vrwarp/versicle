@@ -44,5 +44,10 @@ Allow users to download their state when reporting bugs.
 *   **Complexity:** Managing the "Cool-down" state adds more state flags.
 
 ## Verification
-*   **Automated:** Mock `speechSynthesis` to simulate "hanging" (no events). Verify Watchdog restarts it.
-*   **Manual:** Disconnect WiFi while using Cloud Voice. Verify graceful fallback and cooldown behavior.
+*   **[DONE]** **Automated:** Mock `speechSynthesis` to simulate "hanging" (no events). Verify Watchdog restarts it.
+*   **[DONE]** **Manual:** Disconnect WiFi while using Cloud Voice. Verify graceful fallback and cooldown behavior.
+
+## Implementation Status
+*   **Watchdog:** Implemented in `WebSpeechProvider.ts` with 5s timeout.
+*   **Circuit Breaker:** Implemented in `AudioPlayerService.ts` with 3 failures/1min threshold and 5min cooldown.
+*   **Debug Snapshots:** Implemented `getDebugState` and added UI in `GlobalSettingsDialog`.

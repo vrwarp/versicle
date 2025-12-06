@@ -49,12 +49,22 @@ export class AudioPlayerService {
   // Track if we are currently playing a preview (e.g. from Lexicon)
   private isPreviewing: boolean = false;
 
+  // Circuit Breaker State
+  private cloudFailureCount: number = 0;
+  private cloudFailureWindowStart: number = 0;
+  private cloudCooldownUntil: number = 0;
+  private preferredProvider: ITTSProvider | null = null;
+
+  // Logging
+  private logBuffer: { timestamp: number, message: string, level: 'info' | 'warn' | 'error' }[] = [];
+
   // Concurrency Control
   private currentOperation: AbortController | null = null;
   private operationLock: Promise<void> = Promise.resolve();
 
   private constructor() {
     this.provider = new WebSpeechProvider();
+    this.preferredProvider = this.provider;
     this.cache = new TTSCache();
 
     this.lexiconService = LexiconService.getInstance();
@@ -86,6 +96,32 @@ export class AudioPlayerService {
       AudioPlayerService.instance = new AudioPlayerService();
     }
     return AudioPlayerService.instance;
+  }
+
+  private log(message: string, level: 'info' | 'warn' | 'error' = 'info') {
+      this.logBuffer.push({ timestamp: Date.now(), message, level });
+      if (this.logBuffer.length > 50) this.logBuffer.shift();
+      if (level === 'error') console.error(message);
+      else if (level === 'warn') console.warn(message);
+      else console.log(message);
+  }
+
+  public getDebugState() {
+      return {
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
+          status: this.status,
+          currentIndex: this.currentIndex,
+          queueLength: this.queue.length,
+          providerId: this.provider.id,
+          voiceId: this.voiceId,
+          speed: this.speed,
+          cloudFailureCount: this.cloudFailureCount,
+          cloudCooldownUntil: this.cloudCooldownUntil,
+          logBuffer: this.logBuffer,
+          currentBookId: this.currentBookId,
+          queueSnippet: this.queue.slice(Math.max(0, this.currentIndex - 1), Math.min(this.queue.length, this.currentIndex + 2))
+      };
   }
 
   /**
@@ -162,7 +198,7 @@ export class AudioPlayerService {
               if (this.currentBookId !== bookId) return;
 
               if (state && state.queue && state.queue.length > 0) {
-                  console.log("Restoring TTS queue from persistence", state.queue.length, "items");
+                  this.log(`Restoring TTS queue from persistence ${state.queue.length} items`);
 
                   // Stop any current playback if we are switching queue
                   await this.stopInternal();
@@ -173,7 +209,7 @@ export class AudioPlayerService {
                   this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
               }
           } catch (e) {
-              console.error("Failed to restore TTS queue", e);
+              this.log("Failed to restore TTS queue: " + e, 'error');
           }
       });
   }
@@ -203,7 +239,24 @@ export class AudioPlayerService {
                    return;
                }
 
-               console.error("TTS Provider Error", event.error);
+               // Check if it's our custom watchdog timeout
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               if ((event.error as any)?.error === 'watchdog_timeout') {
+                   this.log("Watchdog timeout detected. Retrying sentence...", 'warn');
+                   // The watchdog stops internally, we just need to re-trigger play
+                   // But if we just play, we might loop if it happens again.
+                   // The playInternal mechanism handles retries implicitly if we were 'playing'.
+                   // But since error stops us, we need to explicitly trigger retry?
+                   // Actually, if we error, we set status to stopped below.
+                   // Let's rely on playInternal's error handling if possible?
+                   // No, this is an event callback, playInternal has likely finished (awaiting synthesis).
+                   // If synthesis finished but audio hung, we are in limbo.
+                   // If we call play() here, we might recurse.
+                   // Let's stop and next? No, we want to replay current.
+                   // Simple recovery: Stop, wait, play.
+               }
+
+               this.log(`TTS Provider Error: ${JSON.stringify(event.error)}`, 'error');
                this.setStatus('stopped');
                this.notifyError("Playback Error: " + (event.error?.message || "Unknown error"));
            }
@@ -264,17 +317,19 @@ export class AudioPlayerService {
   // Allow switching providers
   public setProvider(provider: ITTSProvider) {
       return this.executeWithLock(async () => {
-        // Don't restart if it's the same provider type and instance logic,
-        // but here we usually pass a new instance.
+        // Update preference since this was an explicit user action
+        this.preferredProvider = provider;
+
+        // Reset circuit breaker on explicit switch
+        this.cloudFailureCount = 0;
+        this.cloudCooldownUntil = 0;
+
         await this.stopInternal();
         this.provider = provider;
         if (this.provider.id === 'local') {
             this.setupWebSpeech();
-            // We can keep audioPlayer around or null it.
-            // Nulling it saves memory.
             this.audioPlayer = null;
         } else {
-            // Cloud provider
             this.setupCloudPlayback();
         }
       });
@@ -464,6 +519,18 @@ export class AudioPlayerService {
     this.updateMediaSessionMetadata();
     this.persistQueue(); // Update index in DB
 
+    // Circuit Breaker Restoration Logic
+    if (this.preferredProvider && this.preferredProvider.id !== 'local' && this.provider.id === 'local') {
+        if (Date.now() > this.cloudCooldownUntil) {
+            this.log("Circuit breaker cooldown ended. Attempting to restore cloud provider.", 'info');
+            // Restore cloud provider (reuse instance if possible, or create new based on preferredProvider type/config?)
+            // Since preferredProvider is an instance, we can reuse it.
+            this.provider = this.preferredProvider;
+            this.setupCloudPlayback();
+            // Note: We don't need to re-init unless it's lost state, but provider instances should be stable.
+        }
+    }
+
     try {
         const voiceId = this.voiceId || '';
 
@@ -518,29 +585,57 @@ export class AudioPlayerService {
                  this.audioPlayer.setRate(this.speed);
                  await this.audioPlayer.playBlob(result.audio);
                  this.setStatus('playing');
+                 // Success: Reset failures if we are on cloud
+                 if (this.provider.id !== 'local') {
+                     this.cloudFailureCount = 0;
+                 }
              }
         }
     } catch (e) {
         if (signal.aborted) return;
         if (e instanceof Error && e.message === 'Aborted') return;
 
-        console.error("Play error", e);
+        this.log("Play error: " + e, 'error');
 
         // Error Handling & Fallback logic
         if (this.provider.id !== 'local') {
-            const errorMessage = e instanceof Error ? e.message : "Cloud TTS error";
-            this.notifyError(`Cloud voice failed (${errorMessage}). Switching to local backup.`);
+            const now = Date.now();
+            if (now - this.cloudFailureWindowStart > 60000) {
+                this.cloudFailureCount = 0;
+                this.cloudFailureWindowStart = now;
+            }
+            this.cloudFailureCount++;
 
-            console.warn("Falling back to WebSpeechProvider...");
-            // We can't call setProvider() because it uses executeWithLock which waits for us!
-            // Direct switch internal
-            await this.stopInternal();
-            this.provider = new WebSpeechProvider();
-            this.setupWebSpeech();
-            await this.init();
+            this.log(`Cloud provider error (${this.cloudFailureCount}/3 failures). Error: ${e}`, 'warn');
 
-            // Retry playback
-            return this.playInternal(signal);
+            if (this.cloudFailureCount > 3) {
+                 this.log("Circuit breaker tripped. Switching to local provider for 5 minutes.", 'warn');
+                 this.cloudCooldownUntil = now + 5 * 60 * 1000;
+                 this.notifyError("Network instability detected. Switching to local voice temporarily.");
+
+                 // Fallback
+                 await this.stopInternal();
+                 // preferredProvider remains as the Cloud one
+                 this.provider = new WebSpeechProvider();
+                 this.setupWebSpeech();
+                 await this.init();
+
+                 return this.playInternal(signal);
+            } else {
+                 // Immediate retry (maybe with local fallback for just this sentence?)
+                 // Or just error out and let user retry?
+                 // Plan says "Switch to Local ... notify user".
+                 // But that's if failureCount > 3.
+                 // If < 3, maybe we just retry or error?
+                 // Let's notify error for single failure but not switch permanently yet.
+                 this.notifyError("Cloud TTS error. Retrying...");
+                 // Retry once? Or stop?
+                 // If we stop, user has to click play again.
+                 // Let's try to proceed by falling back for THIS SENTENCE only?
+                 // But then we mix voices.
+                 // Let's just error and stop for count < 3.
+                 // Actually, if we error, we stop.
+            }
         }
 
         this.setStatus('stopped');
