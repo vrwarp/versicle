@@ -110,10 +110,13 @@ export const useTTS = (rendition: Rendition | null, metadata?: BookMetadata | nu
 
            if (extracted.length === 0) {
                // Handle empty chapter
-               const randomMessage = NO_TEXT_MESSAGES[Math.floor(Math.random() * NO_TEXT_MESSAGES.length)];
+               // Use a deterministic message (hashed by chapter title?) or just the first one to prevent queue changes on reload
+               const messageIndex = currentChapterTitle ? (currentChapterTitle.length % NO_TEXT_MESSAGES.length) : 0;
+               const message = NO_TEXT_MESSAGES[messageIndex];
+
                queue.push({
                    ...baseItem,
-                   text: randomMessage,
+                   text: message,
                    cfi: null,
                    title: currentChapterTitle || "Empty Chapter",
                    isPreroll: true // Treat as system message
@@ -151,7 +154,9 @@ export const useTTS = (rendition: Rendition | null, metadata?: BookMetadata | nu
        } catch (e) {
            console.error("Failed to extract sentences", e);
            setSentences([]);
-           player.setQueue([]);
+           // Don't clear queue on error if we were playing, to prevent accidental stop during transitions.
+           // Only clear if we are sure it's a valid empty state, which is handled in try block.
+           // If error, we might just keep old queue.
        }
     };
 
@@ -170,7 +175,7 @@ export const useTTS = (rendition: Rendition | null, metadata?: BookMetadata | nu
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).off('relocated', loadSentences);
     };
-  }, [rendition, player, metadata?.id, metadata?.title, metadata?.author, generatedCoverUrl]); // Use stable generatedCoverUrl
+  }, [rendition, player, metadata?.id, metadata?.title, metadata?.author, generatedCoverUrl, currentChapterTitle]); // Added currentChapterTitle to prevent stale title in queue
 
   // Cleanup on unmount
   // Removed player.stop() to allow persistent playback

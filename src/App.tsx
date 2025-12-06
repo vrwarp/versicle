@@ -97,7 +97,8 @@ function App() {
       <GlobalSettingsDialog />
       <ToastContainer />
       <AudioPanelWrapper />
-      <div className="min-h-screen bg-background text-foreground pb-[70px]"> {/* Add padding for mini player */}
+      {/* Container with dynamic padding can be handled via MiniPlayer presence logic if needed, but simplified here: */}
+      <div className="min-h-screen bg-background text-foreground">
         <Routes>
           <Route path="/" element={
             <ErrorBoundary>
@@ -105,9 +106,11 @@ function App() {
             </ErrorBoundary>
           } />
           <Route path="/read/:id" element={
-            <ErrorBoundary>
-              <ReaderView />
-            </ErrorBoundary>
+            <div className="h-full pb-[80px]"> {/* Padding for MiniPlayer in ReaderView */}
+              <ErrorBoundary>
+                <ReaderView />
+              </ErrorBoundary>
+            </div>
           } />
         </Routes>
       </div>

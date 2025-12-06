@@ -232,8 +232,15 @@ export class AudioPlayerService {
   // Allow switching providers
   public setProvider(provider: ITTSProvider) {
       return this.executeWithLock(async () => {
-        // Don't restart if it's the same provider type and instance logic,
-        // but here we usually pass a new instance.
+        // Check if provider is effectively the same (same ID) to avoid unnecessary stop
+        if (this.provider && this.provider.id === provider.id) {
+            // If it's the same ID ('local', 'google', 'openai'), we assume it's a reload/refresh.
+            // We only switch if it's actually different.
+            // However, if API keys changed, we might need to update.
+            // But basic navigation shouldn't trigger a hard stop if provider is 'local'.
+            return;
+        }
+
         await this.stopInternal();
         this.provider = provider;
         if (this.provider.id === 'local') {
@@ -257,12 +264,26 @@ export class AudioPlayerService {
   }
 
   private isQueueEqual(newItems: TTSQueueItem[]): boolean {
-      if (this.queue.length !== newItems.length) return false;
+      if (this.queue.length !== newItems.length) {
+          console.warn(`[AudioPlayerService] Queue length mismatch: ${this.queue.length} vs ${newItems.length}`);
+          return false;
+      }
       for (let i = 0; i < this.queue.length; i++) {
-          if (this.queue[i].text !== newItems[i].text) return false;
-          if (this.queue[i].cfi !== newItems[i].cfi) return false;
-          // Check title for preroll or other metadata changes that might be relevant
-          if (this.queue[i].title !== newItems[i].title) return false;
+          // Compare essential content.
+          // Note: We intentionally ignore coverUrl and bookId here because reloading
+          // might generate new blob URLs for the same content, and we don't want to stop playback.
+          if (this.queue[i].text !== newItems[i].text) {
+              console.warn(`[AudioPlayerService] Queue text mismatch at index ${i}`);
+              return false;
+          }
+          if (this.queue[i].cfi !== newItems[i].cfi) {
+              console.warn(`[AudioPlayerService] Queue cfi mismatch at index ${i}: ${this.queue[i].cfi} vs ${newItems[i].cfi}`);
+              return false;
+          }
+          if (this.queue[i].title !== newItems[i].title) {
+              console.warn(`[AudioPlayerService] Queue title mismatch at index ${i}: "${this.queue[i].title}" vs "${newItems[i].title}"`);
+              return false;
+          }
       }
       return true;
   }
@@ -272,10 +293,12 @@ export class AudioPlayerService {
         // If the queue is effectively the same, we should update it (to catch metadata changes)
         // but NOT stop playback or reset the index, allowing for seamless continuation.
         if (this.isQueueEqual(items)) {
+            console.log("[AudioPlayerService] Queue identical, updating reference without stopping.");
             this.queue = items;
             return;
         }
 
+        console.log("[AudioPlayerService] Queue changed, stopping playback.");
         await this.stopInternal();
         this.queue = items;
         this.currentIndex = startIndex;
