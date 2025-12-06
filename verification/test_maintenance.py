@@ -64,8 +64,8 @@ def test_orphan_repair(page: Page):
     print("Waiting for completion...")
     # Increase timeout for mobile environments where dialog interactions might be slower
     result_loc = page.get_by_text("Repair complete. Orphans removed.")
-    result_loc.scroll_into_view_if_needed(timeout=5000)
-    expect(result_loc).to_be_visible(timeout=5000)
+    result_loc.scroll_into_view_if_needed(timeout=10000)
+    expect(result_loc).to_be_visible(timeout=10000)
 
     # Verify orphans are gone via IDB check
     print("Verifying cleanup...")
