@@ -227,9 +227,7 @@ export const ReaderView: React.FC = () => {
   const [lexiconOpen, setLexiconOpen] = useState(false);
   const [lexiconText, setLexiconText] = useState('');
 
-  const { setGlobalSettingsOpen } = useUIStore();
-
-  const [audioPanelOpen, setAudioPanelOpen] = useState(false);
+  const { setGlobalSettingsOpen, isAudioPanelOpen, setAudioPanelOpen } = useUIStore();
 
   // Search State
   const [showSearch, setShowSearch] = useState(false);
@@ -357,8 +355,10 @@ export const ReaderView: React.FC = () => {
                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                    const item = b.spine.get(currentLoc.start.href) as any;
                    const title = item ? (item.label || 'Chapter') : 'Unknown';
+                   const index = item ? item.index : 0;
 
                    updateLocation(cfi, pct, title);
+                   useTTSStore.getState().setChapterInfo(title, index, pct);
                    dbService.saveProgress(id, cfi, pct);
                }
           };
@@ -467,10 +467,13 @@ export const ReaderView: React.FC = () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const item = book.spine.get(location.start.href) as any;
             const title = item ? (item.label || 'Chapter') : 'Unknown';
+            const index = item ? item.index : 0;
+
             // Actually getting title from spine is tricky without matching TOC.
             // We'll leave title as is or implement proper TOC lookup later.
 
             updateLocation(cfi, percentage, title);
+            useTTSStore.getState().setChapterInfo(title, index, percentage);
 
             // Persist to DB (debounced via DBService)
             dbService.saveProgress(id, cfi, percentage);
@@ -856,14 +859,14 @@ export const ReaderView: React.FC = () => {
                 {currentChapterTitle || 'Reading'}
             </h1>
             <div className="flex items-center gap-2">
-            <Sheet open={audioPanelOpen} onOpenChange={setAudioPanelOpen}>
-                <SheetTrigger asChild>
-                    <button data-testid="reader-audio-button" aria-label="Open Audio Deck" className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-muted-foreground'}`}>
-                        <Headphones className="w-5 h-5" />
-                    </button>
-                </SheetTrigger>
-                <UnifiedAudioPanel />
-            </Sheet>
+            <button
+                data-testid="reader-audio-button"
+                aria-label="Open Audio Deck"
+                onClick={() => setAudioPanelOpen(true)}
+                className={`p-2 rounded-full hover:bg-border ${isPlaying || isAudioPanelOpen ? 'text-primary' : 'text-muted-foreground'}`}
+            >
+                <Headphones className="w-5 h-5" />
+            </button>
             <button data-testid="reader-immersive-enter-button" aria-label="Enter Immersive Mode" onClick={() => setImmersiveMode(true)} className="p-2 rounded-full hover:bg-border">
                 <Maximize className="w-5 h-5 text-muted-foreground" />
             </button>
