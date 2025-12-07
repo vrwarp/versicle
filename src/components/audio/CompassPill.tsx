@@ -13,8 +13,6 @@ export const CompassPill: React.FC = () => {
   if (!queue || queue.length === 0) return null;
 
   // Derived Values
-  const currentItem = queue[currentIndex];
-
   // Use currentChapterTitle from ReaderStore as primary title source if available,
   // falling back to a generic name or extracting from queue if we had metadata there.
   // The design spec says: "Utilized to derive the nominal identifier (e.g., 'Advice from a Caterpillar')"

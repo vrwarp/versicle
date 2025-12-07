@@ -283,7 +283,7 @@ export const useTTSStore = create<TTSState>()(
             currentIndex: state.currentIndex,
         }),
         onRehydrateStorage: () => {
-            return (state, error) => {
+            return (state, _error) => {
                 if (state && state.queue && state.queue.length > 0) {
                     // Sync player with hydrated state
                     player.setQueue(state.queue, state.currentIndex);
