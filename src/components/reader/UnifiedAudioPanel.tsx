@@ -34,7 +34,11 @@ export const UnifiedAudioPanel = () => {
     sanitizationEnabled,
     setSanitizationEnabled,
     prerollEnabled,
-    setPrerollEnabled
+    setPrerollEnabled,
+    silentAudioMode,
+    setSilentAudioMode,
+    silentAudioVolume,
+    setSilentAudioVolume
   } = useTTSStore();
 
   const { gestureMode, setGestureMode } = useReaderStore();
@@ -156,6 +160,37 @@ export const UnifiedAudioPanel = () => {
                     </Select>
                  </div>
               </section>
+
+              {providerId === 'local' && (
+                  <section className="space-y-4">
+                      <h3 className="text-sm font-medium text-muted-foreground">Local TTS Settings</h3>
+                      <div className="space-y-2">
+                          <label className="text-sm font-medium">Background Audio</label>
+                          <Select value={silentAudioMode} onValueChange={(val: 'silent' | 'white_noise') => setSilentAudioMode(val)}>
+                              <SelectTrigger><SelectValue placeholder="Select Mode" /></SelectTrigger>
+                              <SelectContent>
+                                  <SelectItem value="silent">Silence (Default)</SelectItem>
+                                  <SelectItem value="white_noise">White Noise</SelectItem>
+                              </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                              Use White Noise if playback stops unexpectedly on mobile.
+                          </p>
+                      </div>
+                      {silentAudioMode === 'white_noise' && (
+                          <div className="space-y-2">
+                              <label className="text-sm font-medium">Noise Volume ({Math.round(silentAudioVolume * 100)}%)</label>
+                              <Slider
+                                  value={[silentAudioVolume]}
+                                  min={0.0}
+                                  max={1.0}
+                                  step={0.05}
+                                  onValueChange={(val) => setSilentAudioVolume(val[0])}
+                              />
+                          </div>
+                      )}
+                  </section>
+              )}
 
               <section className="space-y-4">
                  <h3 className="text-sm font-medium text-muted-foreground">Flow Control</h3>

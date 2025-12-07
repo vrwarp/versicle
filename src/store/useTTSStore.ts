@@ -40,6 +40,10 @@ interface TTSState {
       openai: string;
   };
 
+  /** Local Provider settings */
+  silentAudioMode: 'silent' | 'white_noise';
+  silentAudioVolume: number;
+
   /** Custom abbreviations for sentence segmentation */
   customAbbreviations: string[];
   /** Words that should always trigger a merge (e.g. "Mr.") */
@@ -65,6 +69,8 @@ interface TTSState {
   setVoice: (voice: TTSVoice | null) => void;
   setProviderId: (id: 'local' | 'google' | 'openai') => void;
   setApiKey: (provider: 'google' | 'openai', key: string) => void;
+  setSilentAudioMode: (mode: 'silent' | 'white_noise') => void;
+  setSilentAudioVolume: (volume: number) => void;
   setCustomAbbreviations: (abbrevs: string[]) => void;
   setAlwaysMerge: (words: string[]) => void;
   setSentenceStarters: (words: string[]) => void;
@@ -117,6 +123,16 @@ export const useTTSStore = create<TTSState>()(
             // But 'lastError' is enough for now.
         });
 
+        // Helper to configure local provider if active
+        const configureLocalProvider = (mode: 'silent' | 'white_noise', volume: number) => {
+            const provider = player.getProvider();
+            // Since we can't easily check 'instanceof WebSpeechProvider' due to potential multiple instances/mocks or just cleaner code:
+            // we check if it has the method (duck typing) or if providerId is local.
+            if (provider && 'configureSilentAudio' in provider) {
+                (provider as WebSpeechProvider).configureSilentAudio(mode, volume);
+            }
+        };
+
         return {
             isPlaying: false,
             status: 'stopped',
@@ -133,6 +149,9 @@ export const useTTSStore = create<TTSState>()(
                 google: '',
                 openai: ''
             },
+            silentAudioMode: 'silent',
+            silentAudioVolume: 0.2,
+
             enableCostWarning: true,
             prerollEnabled: false,
             sanitizationEnabled: true,
@@ -168,7 +187,7 @@ export const useTTSStore = create<TTSState>()(
             setProviderId: (id) => {
                 set({ providerId: id });
                 // Re-init player provider
-                const { apiKeys } = get();
+                const { apiKeys, silentAudioMode, silentAudioVolume } = get();
                 let newProvider;
                 if (id === 'google') {
                     newProvider = new GoogleTTSProvider(apiKeys.google);
@@ -176,6 +195,7 @@ export const useTTSStore = create<TTSState>()(
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
                     newProvider = new WebSpeechProvider();
+                    newProvider.configureSilentAudio(silentAudioMode, silentAudioVolume);
                 }
 
                 player.setProvider(newProvider);
@@ -192,6 +212,14 @@ export const useTTSStore = create<TTSState>()(
                      // Force re-init of provider
                      get().setProviderId(providerId);
                 }
+            },
+            setSilentAudioMode: (mode) => {
+                set({ silentAudioMode: mode });
+                configureLocalProvider(mode, get().silentAudioVolume);
+            },
+            setSilentAudioVolume: (volume) => {
+                set({ silentAudioVolume: volume });
+                configureLocalProvider(get().silentAudioMode, volume);
             },
             setCustomAbbreviations: (abbrevs) => {
                 set({ customAbbreviations: abbrevs });
@@ -213,7 +241,7 @@ export const useTTSStore = create<TTSState>()(
             },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
-                const { providerId, apiKeys } = get();
+                const { providerId, apiKeys, silentAudioMode, silentAudioVolume } = get();
                 // We might need to check if player already has correct provider type
                 // But simplified: just set it.
                  let newProvider;
@@ -223,6 +251,7 @@ export const useTTSStore = create<TTSState>()(
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
                     newProvider = new WebSpeechProvider();
+                    newProvider.configureSilentAudio(silentAudioMode, silentAudioVolume);
                 }
                 player.setProvider(newProvider);
 
@@ -272,6 +301,8 @@ export const useTTSStore = create<TTSState>()(
             voice: state.voice,
             providerId: state.providerId,
             apiKeys: state.apiKeys,
+            silentAudioMode: state.silentAudioMode,
+            silentAudioVolume: state.silentAudioVolume,
             customAbbreviations: state.customAbbreviations,
             alwaysMerge: state.alwaysMerge,
             sentenceStarters: state.sentenceStarters,
