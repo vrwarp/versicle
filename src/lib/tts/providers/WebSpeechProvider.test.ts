@@ -74,6 +74,107 @@ describe('WebSpeechProvider', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  describe('Watchdog', () => {
+      beforeEach(() => {
+          vi.useFakeTimers();
+      });
+
+      it('should trigger error if no event received within timeout', async () => {
+          const rawVoices = [{ name: 'Voice 1', lang: 'en-US' }];
+          mockSynth.getVoices.mockReturnValue(rawVoices);
+          await provider.init();
+
+          const callback = vi.fn();
+          provider.on(callback);
+
+          await provider.synthesize('test text', 'Voice 1', 1.0);
+
+          // Simulate start event to start watchdog
+          if (mockUtterance.onstart) mockUtterance.onstart();
+
+          // Clear calls to ignore 'start'
+          callback.mockClear();
+
+          // Advance time past watchdog timeout (5000ms)
+          vi.advanceTimersByTime(5001);
+
+          // Expect error emitted
+          // The error object might be wrapped differently or just match object equality
+          const errorCall = callback.mock.calls.find(args => args[0].type === 'error');
+          expect(errorCall).toBeDefined();
+          // The emit payload is { type: 'error', error: { error: 'watchdog_timeout' } }
+          // Or is it? Let's check the code: emit('error', { error: 'watchdog_timeout' })
+          // The code does: this.emit('error', { error: 'watchdog_timeout' });
+          // The emit method: callback({ type, ...data });
+          // So it becomes { type: 'error', error: 'watchdog_timeout' }.
+          // NOT { type: 'error', error: { error: 'watchdog_timeout' } }.
+          expect(errorCall![0].error).toBe('watchdog_timeout');
+
+          // Expect synthesis to be cancelled
+          expect(mockSynth.cancel).toHaveBeenCalled();
+      });
+
+      it('should reset watchdog on boundary event', async () => {
+          const rawVoices = [{ name: 'Voice 1', lang: 'en-US' }];
+          mockSynth.getVoices.mockReturnValue(rawVoices);
+          await provider.init();
+
+          const callback = vi.fn();
+          provider.on(callback);
+
+          await provider.synthesize('test text', 'Voice 1', 1.0);
+
+          if (mockUtterance.onstart) mockUtterance.onstart();
+
+          // Advance time partially
+          vi.advanceTimersByTime(4000);
+
+          // Trigger boundary
+          if (mockUtterance.onboundary) mockUtterance.onboundary({ charIndex: 5 });
+
+          // Advance time again, but total from start > 5000, but < 5000 from boundary
+          vi.advanceTimersByTime(2000);
+
+          // Expect no error yet
+          const errorCalls = callback.mock.calls.filter(args => args[0].type === 'error');
+          expect(errorCalls.length).toBe(0);
+
+          // Clear previous calls (start, boundary) to make assertion cleaner or just check specific call
+          callback.mockClear();
+
+          // Advance past new timeout
+          vi.advanceTimersByTime(3001);
+
+          const errorCall2 = callback.mock.calls.find(args => args[0].type === 'error');
+          expect(errorCall2).toBeDefined();
+          expect(errorCall2![0].error).toBe('watchdog_timeout');
+      });
+
+      it('should stop watchdog on end event', async () => {
+          const rawVoices = [{ name: 'Voice 1', lang: 'en-US' }];
+          mockSynth.getVoices.mockReturnValue(rawVoices);
+          await provider.init();
+
+          const callback = vi.fn();
+          provider.on(callback);
+
+          await provider.synthesize('test text', 'Voice 1', 1.0);
+
+          if (mockUtterance.onstart) mockUtterance.onstart();
+
+          // Trigger end
+          if (mockUtterance.onend) mockUtterance.onend();
+
+          // Advance time well past timeout
+          vi.advanceTimersByTime(10000);
+
+          // Expect no error
+          const errorCalls = callback.mock.calls.filter(args => args[0].type === 'error');
+          expect(errorCalls.length).toBe(0);
+      });
   });
 
   describe('init', () => {
