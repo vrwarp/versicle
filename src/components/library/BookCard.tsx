@@ -12,6 +12,18 @@ interface BookCardProps {
   book: BookMetadata;
 }
 
+const formatDuration = (chars?: number): string => {
+    if (!chars) return '';
+    const minutes = Math.ceil(chars / (180 * 5));
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+
+    if (hours > 0) {
+        return `${hours}h ${remainingMinutes}m`;
+    }
+    return `${minutes}m`;
+}
+
 /**
  * Displays a summary card for a book, including its cover, title, and author.
  * navigating to the reader view when clicked.
@@ -96,6 +108,8 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
         e.target.value = '';
     }
   };
+
+  const durationString = book.totalChars ? formatDuration(book.totalChars) : null;
 
   return (
     <div
@@ -182,6 +196,13 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
         <p className="text-sm text-muted-foreground line-clamp-1" title={book.author}>
           {book.author || 'Unknown Author'}
         </p>
+
+        {durationString && (
+            <p className="text-xs text-muted-foreground mt-1">
+                {durationString}
+            </p>
+        )}
+
         {book.progress !== undefined && book.progress > 0 && (
           <div className="w-full h-1.5 bg-secondary rounded-full mt-3 overflow-hidden" data-testid="progress-container">
             <div

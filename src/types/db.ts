@@ -44,6 +44,24 @@ export interface BookMetadata {
   fileSize?: number;
   /** Synthetic Table of Contents generated during ingestion. */
   syntheticToc?: NavigationItem[];
+  /** Total number of characters in the book, used for duration estimation. */
+  totalChars?: number;
+}
+
+/**
+ * Metadata for a section (chapter) of a book.
+ */
+export interface SectionMetadata {
+  /** Composite key or unique ID (e.g., bookId + sectionId). */
+  id: string;
+  /** The ID of the book this section belongs to. */
+  bookId: string;
+  /** The href/id of the section as defined in the EPUB. */
+  sectionId: string;
+  /** The number of characters in this section. */
+  characterCount: number;
+  /** The order of the section in the book. */
+  playOrder: number;
 }
 
 /**

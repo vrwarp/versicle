@@ -11,7 +11,7 @@ export interface EpubReaderOptions {
   fontSize: number;
   lineHeight: number;
   shouldForceFont: boolean;
-  onLocationChange?: (location: Location, percentage: number, chapterTitle: string) => void;
+  onLocationChange?: (location: Location, percentage: number, chapterTitle: string, sectionId: string) => void;
   onTocLoaded?: (toc: NavigationItem[]) => void;
   onSelection?: (cfiRange: string, range: Range, contents: any) => void;
   onBookLoaded?: (book: Book) => void;
@@ -147,9 +147,10 @@ export function useEpubReader(
                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                  const item = newBook.spine.get(currentLocation.start.href) as any;
                  const title = item ? (item.label || 'Chapter') : 'Unknown';
+                 const sectionId = item ? item.href : '';
 
                  if (optionsRef.current.onLocationChange) {
-                     optionsRef.current.onLocationChange(currentLocation, percentage, title);
+                     optionsRef.current.onLocationChange(currentLocation, percentage, title, sectionId);
                  }
              }
         };
@@ -181,9 +182,10 @@ export function useEpubReader(
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
              const item = newBook.spine.get(location.start.href) as any;
              const title = item ? (item.label || 'Chapter') : 'Unknown';
+             const sectionId = item ? item.href : '';
 
              if (optionsRef.current.onLocationChange) {
-                 optionsRef.current.onLocationChange(location, percentage, title);
+                 optionsRef.current.onLocationChange(location, percentage, title, sectionId);
              }
         });
 

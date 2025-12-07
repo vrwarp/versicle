@@ -84,11 +84,11 @@ export const ReaderView: React.FC = () => {
     fontSize,
     lineHeight,
     shouldForceFont,
-    onLocationChange: (location, percentage, title) => {
+    onLocationChange: (location, percentage, title, sectionId) => {
          // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
          if (location.start.cfi === useReaderStore.getState().currentCfi) return;
 
-         updateLocation(location.start.cfi, percentage, title);
+         updateLocation(location.start.cfi, percentage, title, sectionId);
          if (id) {
              dbService.saveProgress(id, location.start.cfi, percentage);
          }
