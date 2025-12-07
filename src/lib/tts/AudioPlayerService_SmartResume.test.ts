@@ -84,6 +84,7 @@ vi.mock('./providers/WebSpeechProvider', () => {
             resume = mockResume;
             pause = mockPause;
             stop = mockStop;
+            setConfig = vi.fn();
             on = vi.fn();
             getVoices = mockGetVoices;
         }

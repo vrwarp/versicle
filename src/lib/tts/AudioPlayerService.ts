@@ -1,5 +1,5 @@
 import type { ITTSProvider, TTSVoice, SpeechSegment } from './providers/types';
-import { WebSpeechProvider } from './providers/WebSpeechProvider';
+import { WebSpeechProvider, type WebSpeechConfig } from './providers/WebSpeechProvider';
 import { AudioElementPlayer } from './AudioElementPlayer';
 import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { TTSCache } from './TTSCache';
@@ -53,8 +53,10 @@ export class AudioPlayerService {
   private currentOperation: AbortController | null = null;
   private operationLock: Promise<void> = Promise.resolve();
 
+  private localProviderConfig: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 };
+
   private constructor() {
-    this.provider = new WebSpeechProvider();
+    this.provider = new WebSpeechProvider(this.localProviderConfig);
     this.cache = new TTSCache();
 
     this.lexiconService = LexiconService.getInstance();
@@ -258,6 +260,13 @@ export class AudioPlayerService {
               album: item.bookTitle || '',
               artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
           });
+      }
+  }
+
+  public setLocalProviderConfig(config: WebSpeechConfig) {
+      this.localProviderConfig = config;
+      if (this.provider instanceof WebSpeechProvider) {
+          this.provider.setConfig(config);
       }
   }
 
@@ -535,7 +544,7 @@ export class AudioPlayerService {
             // We can't call setProvider() because it uses executeWithLock which waits for us!
             // Direct switch internal
             await this.stopInternal();
-            this.provider = new WebSpeechProvider();
+            this.provider = new WebSpeechProvider(this.localProviderConfig);
             this.setupWebSpeech();
             await this.init();
 

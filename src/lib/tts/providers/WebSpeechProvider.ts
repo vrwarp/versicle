@@ -1,4 +1,11 @@
 import type { ITTSProvider, SpeechSegment, TTSVoice } from './types';
+import silenceUrl from '../../../assets/silence.ogg';
+import whiteNoiseUrl from '../../../assets/white-noise.ogg';
+
+export interface WebSpeechConfig {
+    silentAudioType: 'silence' | 'white-noise';
+    whiteNoiseVolume: number;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TTSCallback = (event: { type: 'start' | 'end' | 'boundary' | 'error', charIndex?: number, error?: any }) => void;
@@ -14,13 +21,45 @@ export class WebSpeechProvider implements ITTSProvider {
   private callback: TTSCallback | null = null;
   private voicesLoaded = false;
   private silentAudio: HTMLAudioElement;
+  private config: WebSpeechConfig;
 
-  constructor() {
+  constructor(config: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 }) {
+    this.config = config;
     this.synth = window.speechSynthesis;
     // Initialize silent audio loop to keep MediaSession active
-    // 1 second of silence
-    this.silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+    this.silentAudio = new Audio();
     this.silentAudio.loop = true;
+    this.updateSilentAudio();
+  }
+
+  setConfig(config: WebSpeechConfig) {
+      this.config = config;
+      this.updateSilentAudio();
+  }
+
+  private updateSilentAudio() {
+      // Logic to set src and volume
+      const src = this.config.silentAudioType === 'white-noise' ? whiteNoiseUrl : silenceUrl;
+
+      // Check if src changed to avoid reloading if not necessary
+      const currentSrc = this.silentAudio.getAttribute('src');
+      if (currentSrc !== src) {
+          const wasPlaying = !this.silentAudio.paused;
+          // Only pause if we are changing source
+          if (wasPlaying) this.silentAudio.pause();
+
+          this.silentAudio.src = src;
+
+          if (wasPlaying) {
+              this.silentAudio.play().catch(e => console.warn("Silent audio switch failed", e));
+          }
+      }
+
+      if (this.config.silentAudioType === 'white-noise') {
+          this.silentAudio.volume = Math.min(Math.max(this.config.whiteNoiseVolume, 0), 1);
+      } else {
+          this.silentAudio.volume = 1.0;
+      }
   }
 
   /**

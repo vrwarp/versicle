@@ -64,7 +64,13 @@ describe('WebSpeechProvider', () => {
         pause: vi.fn(),
         currentTime: 0,
         loop: false,
-        paused: true
+        paused: true,
+        volume: 1,
+        src: '',
+        getAttribute: vi.fn((attr) => {
+             if (attr === 'src') return mockAudio.src;
+             return null;
+        })
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     global.Audio = vi.fn(function() { return mockAudio; }) as any;
@@ -181,6 +187,19 @@ describe('WebSpeechProvider', () => {
           provider.resume();
           expect(mockSynth.resume).toHaveBeenCalled();
           expect(mockAudio.play).toHaveBeenCalled();
+      });
+  });
+
+  describe('config', () => {
+      it('should update audio settings when setConfig is called', () => {
+          provider.setConfig({ silentAudioType: 'white-noise', whiteNoiseVolume: 0.5 });
+
+          expect(mockAudio.volume).toBe(0.5);
+          expect(mockAudio.src).toContain('white-noise');
+
+          provider.setConfig({ silentAudioType: 'silence', whiteNoiseVolume: 0.5 });
+          expect(mockAudio.volume).toBe(1.0);
+          expect(mockAudio.src).toContain('silence');
       });
   });
 });
