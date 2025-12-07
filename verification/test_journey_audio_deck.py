@@ -25,7 +25,13 @@ def test_audio_deck_journey(page: Page):
 
     # Verify Stage
     # Using aria-labels defined in UnifiedAudioPanel
-    expect(page.get_by_label("Play")).to_be_visible()
+    # Since we introduced a global FAB with "Play" label, we need to be more specific or check visibility of either.
+    # The Audio Deck (Sheet) contains a Play button inside.
+    # We can target by test-id if available, or restrict to the dialog.
+
+    dialog = page.get_by_role("dialog")
+    expect(dialog.get_by_label("Play")).to_be_visible()
+
     # Updated to support "Previous Sentence" for local TTS
     expect(page.get_by_test_id("tts-rewind-button")).to_be_visible()
     expect(page.get_by_test_id("tts-forward-button")).to_be_visible()

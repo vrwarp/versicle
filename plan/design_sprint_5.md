@@ -132,3 +132,9 @@ The following diagram illustrates the spatial relationship between the content l
 3. **Phase 3: The Satellite FAB:** Implementation of SatellitePlayButton.tsx with absolute positioning logic. Integration of the Play/Pause/Stop state machine.  
 4. **Phase 4: Logic Integration:** Wiring of the useTTSStore actions (prevChapter, nextChapter, seek) to the component triggers. Implementation of the GestureResponder for the scrubbing functionality.  
 5. **Phase 5: Validation:** Verification of the layout using the standard test fixture (*Alice's Adventures in Wonderland*) to ensure "Chapter 5: Advice from a Caterpillar" renders correctly without text overflow.
+
+## **7. Implementation Notes (Sprint 5 Delivery)**
+
+*   **HUD Persistence:** The `AudioReaderHUD` is mounted in `App.tsx` to ensure it persists across route changes (e.g., from Reader to Library).
+*   **State Hydration:** `useTTSStore` was updated to persist `queue` and `currentIndex` to `localStorage`. A critical fix was applied to `onRehydrateStorage` to push the hydrated state back into the `AudioPlayerService` singleton, ensuring the player is aware of the restored session immediately upon app reload. This resolves the "headless" navigation deficit by maintaining context.
+*   **Verification:** A dedicated Playwright script `verification/verify_chapter_compass.py` was created to verify the HUD's appearance and state restoration by injecting a mock state into `localStorage`. The implementation was verified with screenshots.

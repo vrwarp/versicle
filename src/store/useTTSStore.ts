@@ -126,7 +126,7 @@ export const useTTSStore = create<TTSState>()(
             voices: [],
             activeCfi: null,
             currentIndex: 0,
-            queue: [],
+            queue: [], // Initialize empty, but will be rehydrated if persisted
             lastError: null,
             providerId: 'local',
             apiKeys: {
@@ -278,7 +278,18 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: state.enableCostWarning,
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,
+            // Persist queue and index for HUD verification and persistence
+            queue: state.queue,
+            currentIndex: state.currentIndex,
         }),
+        onRehydrateStorage: () => {
+            return (state, error) => {
+                if (state && state.queue && state.queue.length > 0) {
+                    // Sync player with hydrated state
+                    player.setQueue(state.queue, state.currentIndex);
+                }
+            };
+        },
     }
   )
 );
