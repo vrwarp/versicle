@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata } from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -69,6 +69,16 @@ export interface EpubLibraryDB extends DBSchema {
       by_original: string;
     };
   };
+  /**
+   * Store for section metadata (character counts).
+   */
+  sections: {
+    key: string; // id
+    value: SectionMetadata;
+    indexes: {
+      by_bookId: string;
+    };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
@@ -81,7 +91,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 5, { // Upgrading to v5
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 6, { // Upgrading to v6
       upgrade(db) {
         // Books store
         if (!db.objectStoreNames.contains('books')) {
@@ -123,6 +133,12 @@ export const initDB = () => {
           const lexiconStore = db.createObjectStore('lexicon', { keyPath: 'id' });
           lexiconStore.createIndex('by_bookId', 'bookId', { unique: false });
           lexiconStore.createIndex('by_original', 'original', { unique: false });
+        }
+
+        // Sections store (New in v6)
+        if (!db.objectStoreNames.contains('sections')) {
+          const sectionsStore = db.createObjectStore('sections', { keyPath: 'id' });
+          sectionsStore.createIndex('by_bookId', 'bookId', { unique: false });
         }
       },
     });

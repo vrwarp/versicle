@@ -27,6 +27,18 @@ const formatFileSize = (bytes?: number): string => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
+const formatDuration = (chars?: number): string => {
+    if (!chars) return '';
+    const minutes = Math.ceil(chars / (180 * 5));
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+
+    if (hours > 0) {
+        return `${hours}h ${remainingMinutes}m`;
+    }
+    return `${minutes}m`;
+}
+
 export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
     const navigate = useNavigate();
     const { removeBook, offloadBook, restoreBook } = useLibraryStore();
@@ -79,6 +91,8 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
     };
 
     const progressPercent = book.progress ? Math.round(book.progress * 100) : 0;
+    const durationString = book.totalChars ? formatDuration(book.totalChars) : null;
+    const sizeString = formatFileSize(book.fileSize);
 
     return (
         <div style={style} className="px-4 py-2" data-testid={`book-list-item-${book.id}`}>
@@ -118,12 +132,21 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
                         <span className="truncate max-w-[150px]">{book.author}</span>
                         <span>•</span>
                         <span>{progressPercent}%</span>
-                        {book.fileSize !== undefined && (
+
+                        {durationString ? (
                             <>
                                 <span>•</span>
-                                <span>{formatFileSize(book.fileSize)}</span>
+                                <span>{durationString}</span>
                             </>
+                        ) : (
+                            book.fileSize !== undefined && (
+                                <>
+                                    <span>•</span>
+                                    <span>{sizeString}</span>
+                                </>
+                            )
                         )}
+
                          {book.isOffloaded && (
                             <span className="text-amber-500 font-medium ml-1">(Offloaded)</span>
                         )}

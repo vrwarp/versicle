@@ -24,6 +24,8 @@ interface ReaderState {
   currentCfi: string | null;
   /** Title of the current chapter being read. */
   currentChapterTitle: string | null;
+  /** ID (href) of the current chapter being read. */
+  currentSectionId: string | null;
   /** Reading progress percentage (0-100). */
   progress: number;
   /** Table of Contents for the current book. */
@@ -54,8 +56,9 @@ interface ReaderState {
    * @param cfi - The new CFI location.
    * @param progress - The new progress percentage.
    * @param chapterTitle - Optional title of the new chapter.
+   * @param sectionId - Optional ID (href) of the new chapter.
    */
-  updateLocation: (cfi: string, progress: number, chapterTitle?: string) => void;
+  updateLocation: (cfi: string, progress: number, chapterTitle?: string, sectionId?: string) => void;
   /** Sets the Table of Contents. */
   setToc: (toc: NavigationItem[]) => void;
   /** Sets the viewing mode. */
@@ -84,6 +87,7 @@ export const useReaderStore = create<ReaderState>()(
       fontSize: 100,
       currentCfi: null,
       currentChapterTitle: null,
+      currentSectionId: null,
       progress: 0,
       toc: [],
       viewMode: 'paginated',
@@ -97,11 +101,12 @@ export const useReaderStore = create<ReaderState>()(
       setFontFamily: (fontFamily) => set({ fontFamily }),
       setLineHeight: (lineHeight) => set({ lineHeight }),
       setFontSize: (size) => set({ fontSize: size }),
-      updateLocation: (cfi, progress, chapterTitle) =>
+      updateLocation: (cfi, progress, chapterTitle, sectionId) =>
         set((state) => ({
           currentCfi: cfi,
           progress,
-          currentChapterTitle: chapterTitle ?? state.currentChapterTitle
+          currentChapterTitle: chapterTitle ?? state.currentChapterTitle,
+          currentSectionId: sectionId ?? state.currentSectionId
         })),
       setToc: (toc) => set({ toc }),
       setViewMode: (mode) => set({ viewMode: mode }),
@@ -112,6 +117,7 @@ export const useReaderStore = create<ReaderState>()(
         currentBookId: null,
         currentCfi: null,
         currentChapterTitle: null,
+        currentSectionId: null,
         progress: 0,
         toc: []
       })

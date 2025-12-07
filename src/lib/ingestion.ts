@@ -1,7 +1,7 @@
 import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
-import type { BookMetadata } from '../types/db';
+import type { BookMetadata, SectionMetadata } from '../types/db';
 import CryptoJS from 'crypto-js';
 
 // Chunk size for hashing (e.g., 2MB)
@@ -81,9 +81,13 @@ export async function processEpub(file: File): Promise<string> {
   await book.ready;
 
   const metadata = await book.loaded.metadata;
+  const bookId = uuidv4();
 
-  // Generate Synthetic TOC
+  // Generate Synthetic TOC and Calculate Durations
   const syntheticToc: NavigationItem[] = [];
+  const sections: SectionMetadata[] = [];
+  let totalChars = 0;
+
   try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const spine = (book.spine as any);
@@ -98,6 +102,7 @@ export async function processEpub(file: File): Promise<string> {
 
       for (let i = 0; i < items.length; i++) {
            const item = items[i];
+           let characterCount = 0;
            try {
                let title = '';
                // In ingestion context (file input), book.archive is available.
@@ -123,6 +128,12 @@ export async function processEpub(file: File): Promise<string> {
                             title = doc.body.textContent || '';
                         }
 
+                        // Calculate character count from text content
+                        const contentText = doc.body.textContent || '';
+                        characterCount = contentText.length;
+                        totalChars += characterCount;
+
+
                         // Clean up
                         title = title.replace(/\s+/g, ' ').trim();
                         if (title.length > 60) {
@@ -138,8 +149,18 @@ export async function processEpub(file: File): Promise<string> {
                    href: item.href,
                    label: title
                });
+
+               // Store section metadata
+               sections.push({
+                 id: `${bookId}-${item.href}`, // Composite key
+                 bookId: bookId,
+                 sectionId: item.href, // This corresponds to currentSectionId
+                 characterCount: characterCount,
+                 playOrder: i
+               });
+
            } catch (e) {
-                console.error("Error generating TOC item", e);
+                console.error("Error generating TOC item or calculating duration", e);
                 syntheticToc.push({ id: item.id || `syn-toc-${i}`, href: item.href, label: `Chapter ${i+1}` });
            }
       }
@@ -162,8 +183,6 @@ export async function processEpub(file: File): Promise<string> {
   // Calculate SHA-256 hash incrementally
   const fileHash = await computeFileHash(file);
 
-  const bookId = uuidv4();
-
   const newBook: BookMetadata = {
     id: bookId,
     title: metadata.title || 'Untitled',
@@ -175,15 +194,21 @@ export async function processEpub(file: File): Promise<string> {
     isOffloaded: false,
     fileSize: file.size,
     syntheticToc,
+    totalChars, // Store the calculated total characters
   };
 
   const db = await getDB();
 
-  const tx = db.transaction(['books', 'files'], 'readwrite');
+  const tx = db.transaction(['books', 'files', 'sections'], 'readwrite');
   await tx.objectStore('books').add(newBook);
-
-  // Store the File (Blob) directly instead of ArrayBuffer
   await tx.objectStore('files').add(file, bookId);
+
+  // Store section metadata
+  const sectionsStore = tx.objectStore('sections');
+  for (const section of sections) {
+    await sectionsStore.add(section);
+  }
+
   await tx.done;
 
   return bookId;
