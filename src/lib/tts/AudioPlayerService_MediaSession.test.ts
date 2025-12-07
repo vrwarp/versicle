@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-// Import the mocked class so we can use it for instanceof checks
-import { WebSpeechProvider } from './providers/WebSpeechProvider';
 
 // Mock WebSpeechProvider
 vi.mock('./providers/WebSpeechProvider', () => {

@@ -51,6 +51,7 @@ def configure_page(page: Page):
     """
     Configures default timeouts for the Page object and assertions.
     Ensures tests fail fast if elements are missing (2000ms).
+    Injects the Mock TTS polyfill.
 
     Args:
         page: The Playwright Page object.
@@ -60,6 +61,10 @@ def configure_page(page: Page):
     page.set_default_navigation_timeout(2000)
     # Set default timeout for assertions
     expect.set_options(timeout=2000)
+
+    # Inject Mock TTS Polyfill
+    page.add_init_script(path="verification/tts-polyfill.js")
+
     yield
 
 @pytest.fixture(autouse=True)

@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
+
+# 1. Setup Environment
+WORKDIR /app
+ENV PATH="/app/node_modules/.bin:${PATH}"
+
+# Install Node.js 20 (matching recommended version in plan)
+# The base image might have an older version or none.
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    node --version && \
+    npm --version
+
+# 2. Install Dependencies (Layer Caching)
+# Copy package files first to cache npm ci
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Install Python dependencies
+# We pin playwright to 1.48.0 to match the base image's browser binaries.
+RUN pip install pytest pytest-playwright playwright==1.48.0
+
+# 3. Copy Source Code
+COPY . .
+
+# 4. Build the App
+RUN npm run build
+
+# 5. Set Entrypoint
+COPY verification/docker_entrypoint.sh /app/verification/docker_entrypoint.sh
+RUN chmod +x /app/verification/docker_entrypoint.sh
+
+ENTRYPOINT ["/app/verification/docker_entrypoint.sh"]

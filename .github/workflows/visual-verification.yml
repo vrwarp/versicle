@@ -11,43 +11,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Setup Environment
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
+      # 1. Build the Docker Image (includes deps, build, etc.)
+      - name: Build Test Container
+        run: docker build -t versicle-verify -f Dockerfile.verification .
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      # 2. Install Dependencies
-      - name: Install Frontend Deps
-        run: npm ci
-
-      - name: Install Python Deps
+      # 2. Run Verification (Mounts volume to get artifacts)
+      - name: Run Verification Suite
         run: |
-          pip install pytest playwright pytest-playwright
-          playwright install --with-deps chromium
+          mkdir -p verification/screenshots
+          docker run --rm -v ${{ github.workspace }}/verification/screenshots:/app/verification/screenshots versicle-verify
 
-      # 3. Start the App in the Background
-      # We use 'preview' instead of 'dev' for a more production-like build in CI
-      - name: Build and Start App
-        run: |
-          npm run build
-          npm run preview -- --port 5173 &
-          npx wait-on http://localhost:5173
-
-      # 4. Run Verification (Generates Screenshots)
-      - name: Run Visual Tests
-        run: python verification/run_all.py
-
-      # 5. Upload Screenshots as Artifacts
-      # This makes them available for download in the "Summary" tab of the Action run
+      # 3. Upload Screenshots as Artifacts
       - name: Upload Screenshots
-        if: always() # Upload even if tests fail so you can see why
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: verification-screenshots

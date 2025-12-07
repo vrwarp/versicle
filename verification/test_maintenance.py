@@ -22,7 +22,7 @@ def test_orphan_repair(page: Page):
     print("Injecting orphans...")
     # Using window.indexedDB directly because window.idb might not be exposed globally in the bundle
     page.evaluate("""async () => {
-        const req = window.indexedDB.open('EpubLibraryDB', 4);
+        const req = window.indexedDB.open('EpubLibraryDB', 5);
         req.onsuccess = (e) => {
             const db = e.target.result;
             const tx = db.transaction(['files', 'annotations'], 'readwrite');
@@ -42,7 +42,7 @@ def test_orphan_repair(page: Page):
             });
         };
         // Wait a bit for async ops to finish (simplistic)
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 1000));
     }""")
 
     # Open Settings
@@ -53,29 +53,40 @@ def test_orphan_repair(page: Page):
     # Note: Tabs are buttons in the sidebar
     page.get_by_role("button", name="Data Management").click()
 
+    # Set dialog handler BEFORE clicking
+    page.on("dialog", lambda dialog: dialog.accept())
+
     # Click "Check & Repair Database"
     print("Running Repair...")
     page.get_by_role("button", name="Check & Repair Database").click()
 
-    # Expect confirmation dialog
-    # Since we use window.confirm, we need to handle the dialog
-    # But Playwright handles dialogs automatically by dismissing them by default.
-    # We need to accept it.
-
-    page.on("dialog", lambda dialog: dialog.accept())
-
     # Wait for result text
     print("Waiting for completion...")
-    # Increase timeout for mobile environments where dialog interactions might be slower
-    result_loc = page.get_by_text("Repair complete. Orphans removed.")
-    result_loc.scroll_into_view_if_needed(timeout=5000)
-    expect(result_loc).to_be_visible(timeout=5000)
+
+    # Wait for either success or failure/healthy message
+    try:
+        success_msg = page.get_by_text("Repair complete. Orphans removed.")
+        healthy_msg = page.get_by_text("Database is healthy")
+
+        # Wait for either to appear
+        expect(success_msg.or_(healthy_msg)).to_be_visible(timeout=15000)
+
+        if healthy_msg.is_visible():
+            pytest.fail("Database reported healthy, but orphans were injected. Injection likely failed.")
+
+        success_msg.scroll_into_view_if_needed()
+        expect(success_msg).to_be_visible()
+
+    except Exception as e:
+        # Capture screenshot on failure
+        page.screenshot(path="verification/screenshots/maintenance_fail.png")
+        raise e
 
     # Verify orphans are gone via IDB check
     print("Verifying cleanup...")
     orphans_exist = page.evaluate("""async () => {
         return new Promise((resolve, reject) => {
-            const req = window.indexedDB.open('EpubLibraryDB', 4);
+            const req = window.indexedDB.open('EpubLibraryDB', 5);
             req.onsuccess = (e) => {
                 const db = e.target.result;
                 const tx = db.transaction(['files', 'annotations'], 'readonly');

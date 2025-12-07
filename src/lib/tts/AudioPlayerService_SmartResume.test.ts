@@ -10,21 +10,29 @@ vi.mock('../../db/DBService', () => ({
     getBook: vi.fn(),
     getBookMetadata: vi.fn(),
     updatePlaybackState: vi.fn(),
+    saveTTSState: vi.fn(),
+    getTTSState: vi.fn(),
   }
 }));
 
 // Define hoisted mocks first to avoid reference errors
-const { mockDB, mockBook } = vi.hoisted(() => {
+const { mockDB, mockBook, mockTTSState } = vi.hoisted(() => {
     const mockBook = {
         id: 'test-book-id',
         lastPauseTime: undefined as number | undefined | null,
         lastPlayedCfi: undefined as string | undefined | null,
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mockTTSState: any = {};
+
     const mockDB = {
         get: vi.fn().mockImplementation((store, key) => {
             if (store === 'books' && key === 'test-book-id') {
                 return Promise.resolve(mockBook);
+            }
+            if (store === 'tts_queue' && key === 'test-book-id') {
+                return Promise.resolve(mockTTSState['test-book-id']);
             }
             return Promise.resolve(undefined);
         }),
@@ -34,6 +42,9 @@ const { mockDB, mockBook } = vi.hoisted(() => {
                      if (val.lastPauseTime !== undefined) mockBook.lastPauseTime = val.lastPauseTime;
                      if (val.lastPlayedCfi !== undefined) mockBook.lastPlayedCfi = val.lastPlayedCfi;
                  }
+            }
+            if (store === 'tts_queue') {
+                mockTTSState[val.bookId] = val;
             }
             return Promise.resolve();
         }),
@@ -50,7 +61,7 @@ const { mockDB, mockBook } = vi.hoisted(() => {
         }),
     };
 
-    return { mockDB, mockBook };
+    return { mockDB, mockBook, mockTTSState };
 });
 
 vi.mock('../../db/db', () => ({
@@ -124,6 +135,8 @@ describe('AudioPlayerService - Smart Resume', () => {
         // Reset mockBook state
         mockBook.lastPauseTime = undefined;
         mockBook.lastPlayedCfi = undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (mockTTSState as any)['test-book-id'] = undefined;
 
         // Reset singleton logic
         // @ts-expect-error Resetting singleton
@@ -139,6 +152,9 @@ describe('AudioPlayerService - Smart Resume', () => {
         (dbService.getBookMetadata as any).mockResolvedValue({ lastPauseTime: null });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getBook as any).mockResolvedValue({ metadata: { lastPlayedCfi: null } });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (dbService.getTTSState as any).mockResolvedValue(undefined);
+
 
         // IMPORTANT: Set Book ID to enable DB logic
         service.setBookId('test-book-id');

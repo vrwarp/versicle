@@ -49,9 +49,9 @@ We will address these issues in three distinct phases.
 
 ### Phase 2: Session Snapshots & Persistence
 **Goal:** Enable "Instant Resume" and crash recovery.
-*   **Queue Snapshotting:** Persist the current `queue` (text + CFIs) to IndexedDB whenever it changes.
-*   **Context Restoration:** On load, hydrate the `AudioPlayerService` from IDB immediately, allowing playback to start *before* `epub.js` finishes rendering.
-*   **Decoupling:** Reduce `useTTS` dependency on live DOM nodes for playback; use DOM only for *generation* of the queue.
+*   **[COMPLETED]** **Queue Snapshotting:** Persist the current `queue` (text + CFIs) to IndexedDB whenever it changes.
+*   **[COMPLETED]** **Context Restoration:** On load, hydrate the `AudioPlayerService` from IDB immediately, allowing playback to start *before* `epub.js` finishes rendering.
+*   **[COMPLETED]** **Decoupling:** Reduce `useTTS` dependency on live DOM nodes for playback; use DOM only for *generation* of the queue.
 
 ### Phase 3: Resilience & Observability
 **Goal:** Handle external failures gracefully.

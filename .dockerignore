@@ -4,6 +4,5 @@ dist
 .github
 .vscode
 coverage
-verification
 plan
 *.md

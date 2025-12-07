@@ -1,4 +1,4 @@
-# Phase 2: Data Persistence & Session Snapshots
+# Phase 2: Data Persistence & Session Snapshots (COMPLETED)
 
 ## Objective
 Decouple playback from the `epub.js` rendering lifecycle to enable "Instant Resume" and protect against data loss on page reloads.
@@ -6,59 +6,49 @@ Decouple playback from the `epub.js` rendering lifecycle to enable "Instant Resu
 ## Implementation Details
 
 ### 1. Persistent Queue Store
-Currently, `queue` is memory-only. We will move it to IndexedDB.
-*   **Action:** Add a `tts_queue` object store (or use existing `books` metadata if size permits).
+*   **Action:** Added `tts_queue` object store to IndexedDB.
 *   **Schema:**
     *   `bookId` (Key)
-    *   `items`: `TTSQueueItem[]`
+    *   `queue`: `TTSQueueItem[]`
     *   `currentIndex`: number
     *   `updatedAt`: timestamp
 *   **Logic:**
-    *   Whenever `setQueue` or `next/prev` updates the index, write to IDB (debounced).
+    *   `AudioPlayerService.persistQueue()` writes to IDB (debounced via `DBService.saveTTSState`) whenever `setQueue` or `currentIndex` changes.
 
 ### 2. Hydration Strategy
-*   **Action:** Modify `AudioPlayerService.play()` (restoration logic).
-*   **Current Flow:** Check `lastPlayedCfi` -> Wait for `useTTS` to extract -> Find CFI in new Queue -> Play.
-*   **New Flow:**
-    1.  `AudioPlayerService.init()` loads persisted queue for `currentBookId`.
-    2.  If persisted queue exists, populate memory immediately.
-    3.  `useTTS` hook connects. It generates sentences.
-    4.  **Reconciliation:** Compare generated sentences with persisted queue.
-        *   If match: Do nothing (keep playing).
-        *   If mismatch (content changed): Update queue and notify user/handle gracefully.
+*   **Action:** Updated `AudioPlayerService.setBookId()`.
+*   **Flow:**
+    1.  `AudioPlayerService.setBookId(id)` triggers `restoreQueue(id)`.
+    2.  `restoreQueue` loads persisted queue from IDB and populates `this.queue` immediately.
+    3.  `useTTS` hook connects later when `epub.js` renders. It generates sentences.
+    4.  **Reconciliation:** `AudioPlayerService.setQueue()` checks `isQueueEqual()`.
+        *   If match (text & CFI): Ignores update, preserving `currentIndex` and playback state.
+        *   If mismatch: Overwrites queue and resets index.
 
 ### 3. "Snapshot" Recovery
-This allows us to save the *exact* state of the engine.
 *   **Structure:**
-    ```json
-    {
-      "bookId": "uuid",
-      "queue": [...],
-      "index": 42,
-      "audioState": { "currentTime": 12.5, "rate": 1.5 },
-      "timestamp": 123456789
+    ```typescript
+    interface TTSState {
+      bookId: string;
+      queue: TTSQueueItem[];
+      currentIndex: number;
+      updatedAt: number;
     }
     ```
 *   **Usage:**
-    *   On app launch, check for a "Hot Snapshot".
-    *   If found (and recent < 15 mins), restore completely without waiting for user action.
+    *   On app launch, `ReaderView` calls `setBookId` which triggers restoration.
+    *   Playback can resume instantly even before `useTTS` extracts text.
 
-### 4. Implementation Plan
-1.  **DB Schema Update:** Add `queue` field to `BookMetadata` or a separate store.
-2.  **Service Update:**
-    *   `saveState()`: Writes queue + index to DB.
-    *   `restoreState(bookId)`: Loads queue + index.
-3.  **Hook Update (`useTTS`):**
-    *   On mount, check if `player.hasQueue(bookId)`. If yes, don't overwrite empty queue immediately.
-    *   Only overwrite if `extractedSentences` differ significantly or user navigates to a new chapter.
+### 4. Implementation Notes
+*   **Concurrency:** All persistence operations (`restoreQueue`, `persistQueue`) are protected by `executeWithLock` or internal logic to prevent race conditions.
+*   **Verification:**
+    *   `src/lib/tts/AudioPlayerService_SmartResume.test.ts` validates Smart Resume logic.
+    *   `verification/test_journey_tts_persistence.py` confirms end-to-end persistence across page reloads.
 
-## Risks
-*   **Stale Data:** If the book content changes (e.g., editing/re-importing), the persisted queue is invalid. We need a hash check (content checksum) to invalidate the queue.
-*   **Storage Size:** Large chapters could bloat IDB. We might limit queue to "Current Chapter +/- 1".
+## Risks & Mitigations
+*   **Stale Data:** If content changes, `isQueueEqual` will return false, causing a fresh queue load.
+*   **Race Conditions:** `executeWithLock` ensures sequential execution of queue updates and restoration.
 
-## Verification
-*   **Automated:** Test `restoreState` populates queue correctly.
-*   **Manual:**
-    1.  Start playing a book.
-    2.  Hard refresh the page.
-    3.  Verify playback is ready *immediately* (before book renders).
+## Status
+*   **Completed:** Yes.
+*   **Verified:** Yes.

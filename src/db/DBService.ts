@@ -1,9 +1,10 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
 import { Logger } from '../lib/logger';
+import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 
 class DBService {
   private async getDB() {
@@ -87,12 +88,13 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon'], 'readwrite');
+      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue'], 'readwrite');
 
       await Promise.all([
           tx.objectStore('books').delete(id),
           tx.objectStore('files').delete(id),
           tx.objectStore('locations').delete(id),
+          tx.objectStore('tts_queue').delete(id),
       ]);
 
       // Delete annotations
@@ -237,6 +239,53 @@ class DBService {
               await store.put(book);
           }
           await tx.done;
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  // --- TTS State Operations ---
+
+  private saveTTSStateTimeout: NodeJS.Timeout | null = null;
+  private pendingTTSState: { [bookId: string]: TTSState } = {};
+
+  /**
+   * Saves TTS Queue and Index. Debounced.
+   */
+  saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number): void {
+      this.pendingTTSState[bookId] = {
+          bookId,
+          queue,
+          currentIndex,
+          updatedAt: Date.now()
+      };
+
+      if (this.saveTTSStateTimeout) return;
+
+      this.saveTTSStateTimeout = setTimeout(async () => {
+          this.saveTTSStateTimeout = null;
+          const pending = { ...this.pendingTTSState };
+          this.pendingTTSState = {};
+
+          try {
+              const db = await this.getDB();
+              const tx = db.transaction('tts_queue', 'readwrite');
+              const store = tx.objectStore('tts_queue');
+
+              for (const state of Object.values(pending)) {
+                  await store.put(state);
+              }
+              await tx.done;
+          } catch (error) {
+              Logger.error('DBService', 'Failed to save TTS state', error);
+          }
+      }, 1000); // 1s debounce
+  }
+
+  async getTTSState(bookId: string): Promise<TTSState | undefined> {
+      try {
+          const db = await this.getDB();
+          return await db.get('tts_queue', bookId);
       } catch (error) {
           this.handleError(error);
       }

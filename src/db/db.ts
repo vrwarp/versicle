@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState } from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -52,6 +52,13 @@ export interface EpubLibraryDB extends DBSchema {
     };
   };
   /**
+   * Store for TTS queue persistence.
+   */
+  tts_queue: {
+    key: string; // bookId
+    value: TTSState;
+  };
+  /**
    * Store for user pronunciation rules.
    */
   lexicon: {
@@ -74,7 +81,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 4, {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 5, { // Upgrading to v5
       upgrade(db) {
         // Books store
         if (!db.objectStoreNames.contains('books')) {
@@ -104,6 +111,11 @@ export const initDB = () => {
         if (!db.objectStoreNames.contains('tts_cache')) {
           const cacheStore = db.createObjectStore('tts_cache', { keyPath: 'key' });
           cacheStore.createIndex('by_lastAccessed', 'lastAccessed', { unique: false });
+        }
+
+        // TTS Queue store (New in v5)
+        if (!db.objectStoreNames.contains('tts_queue')) {
+          db.createObjectStore('tts_queue', { keyPath: 'bookId' });
         }
 
         // Lexicon store (New in v3)

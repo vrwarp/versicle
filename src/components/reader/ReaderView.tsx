@@ -414,7 +414,7 @@ export const ReaderView: React.FC = () => {
   }, [gestureMode]);
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground relative">
+    <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
       {/* Gesture Overlay */}
       <GestureOverlay
           onNextChapter={handleNext}

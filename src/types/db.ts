@@ -1,5 +1,6 @@
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { NavigationItem } from 'epubjs';
+import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 
 /**
  * Metadata for a book stored in the library.
@@ -39,6 +40,8 @@ export interface BookMetadata {
   fileHash?: string;
   /** Whether the binary file content has been deleted to save space. */
   isOffloaded?: boolean;
+  /** The size of the file in bytes. */
+  fileSize?: number;
   /** Synthetic Table of Contents generated during ingestion. */
   syntheticToc?: NavigationItem[];
 }
@@ -89,6 +92,20 @@ export interface CachedSegment {
   createdAt: number;
   /** Timestamp when the cache entry was last accessed (for LRU eviction). */
   lastAccessed: number;
+}
+
+/**
+ * Persisted TTS state for session restoration.
+ */
+export interface TTSState {
+  /** The book ID this state belongs to. */
+  bookId: string;
+  /** The current playback queue. */
+  queue: TTSQueueItem[];
+  /** The current index in the queue. */
+  currentIndex: number;
+  /** Timestamp of last update. */
+  updatedAt: number;
 }
 
 /**

@@ -1,0 +1,449 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.1, pluggy-1.6.0
+rootdir: /app
+plugins: playwright-0.7.2, base-url-2.1.0
+collected 2 items
+
+verification/test_journey_tts_persistence.py FF                          [100%]
+
+=================================== FAILURES ===================================
+________________ test_journey_tts_persistence[desktop-chromium] ________________
+
+page = <Page url='http://localhost:5173/read/bb93ad31-3adf-4295-ac7e-973ee1f061bc'>
+
+    def test_journey_tts_persistence(page: Page):
+        """
+        Verifies TTS queue persistence:
+        1. Open book, go to chapter 3.
+        2. Start TTS, verify queue fills and plays.
+        3. Pause playback.
+        4. Refresh page.
+        5. Open TTS panel.
+        6. Verify queue is restored.
+        """
+        reset_app(page)
+        ensure_library_with_book(page)
+
+        # 1. Open the book
+        page.locator("[data-testid^='book-card-']").first.click()
+        expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=10000)
+
+        # 2. Go to the 3rd chapter (Chapter II: The Pool of Tears)
+        page.get_by_test_id("reader-toc-button").click()
+        # Wait for TOC to open
+        expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
+
+        # Use exact match or more specific selector to avoid matching Chapter III (II inside III)
+        # The text is likely "CHAPTER II. The Pool of Tears"
+        page.get_by_role("button", name="Chapter II.").first.click()
+
+        # Wait for navigation to complete (and TOC to close on mobile, or just wait)
+        # Checking for text presence in reader iframe is hard, so we wait.
+        page.wait_for_timeout(3000)
+
+        # 4. Open tts panel
+        page.get_by_test_id("reader-audio-button").click()
+        expect(page.get_by_test_id("tts-queue")).to_be_visible()
+
+        # 5. Press play
+        # Assuming initial state is paused, play button is visible
+        page.get_by_test_id("tts-play-pause-button").click()
+
+        # 6. Wait for a few sentences
+        # We wait for the active sentence to not be the first one, or just wait some time.
+        # It takes time to load voices and synthesize.
+        page.wait_for_timeout(3000)
+
+        # Verify playback started (button changes to pause)
+        # The button itself doesn't change ID, but icon and label do.
+        # We can check the label "Pause" is present.
+        expect(page.get_by_role("button", name="Pause")).to_be_visible()
+
+        # 7. Press pause
+        page.get_by_test_id("tts-play-pause-button").click()
+>       expect(page.get_by_role("button", name="Play")).to_be_visible()
+
+verification/test_journey_tts_persistence.py:56:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_locator.py:726: in _expect
+    return await self._frame._expect(self._selector, expression, options, title)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_frame.py:189: in _expect
+    result = await self._channel.send_return_as_dict(
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_connection.py:83: in send_return_as_dict
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x7f687bf275f0>
+cb = <function Channel.send_return_as_dict.<locals>.<lambda> at 0x7f687ba316c0>
+is_internal = False, title = 'Expect "to_be_visible"'
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        st: List[inspect.FrameInfo] = getattr(
+            task, "__pw_stack__", None
+        ) or inspect.stack(0)
+
+        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.Error: LocatorAssertions.to_be_visible: Error: strict mode violation: get_by_role("button", name="Play") resolved to 2 elements:
+E               1) <button aria-label="Play" data-testid="tts-play-pause-button" class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-12 w-12 rounded-full">…</button> aka get_by_test_id("tts-play-pause-button")
+E               2) <button data-testid="tts-queue-item-56" class="text-left text-sm p-2 rounded transition-all duration-200 w-full text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted/10">…</button> aka get_by_test_id("tts-queue-item-56")
+E
+E           Call log:
+E             - Expect "to_be_visible" with timeout 2000ms
+E             - waiting for get_by_role("button", name="Play")
+
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_connection.py:558: Error
+----------------------------- Captured stdout call -----------------------------
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: [vite] connecting...
+PAGE LOG: [vite] connected.
+PAGE LOG: %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold
+PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
+PAGE LOG: ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+PAGE LOG: ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: Book indexed for search
+PAGE LOG: Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] speak called: CHAPTER II.
+PAGE LOG: 🗣️ [MockTTS] sending SPEAK to Worker
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received SPEAK {"text":"CHAPTER II.","rate":1,"id":"vj8fnq"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received SPEAK {"text":"CHAPTER II.","rate":1,"id":"vj8fnq"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] handleSpeak "CHAPTER II."}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] handleSpeak "CHAPTER II."
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Processing item "vj8fnq"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Processing item "vj8fnq"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient start {"id":"vj8fnq"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient start {"id":"vj8fnq"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: start {type: start, id: vj8fnq}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"vj8fnq"…:0,"charLength":7,"name":"word","text":"CHAPTER"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"vj8fnq","charIndex":0,"charLength":7,"name":"word","text":"CHAPTER"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: vj8fnq, charIndex: 0, charLength: 7, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"vj8fnq"…dex":8,"charLength":3,"name":"word","text":"II."}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"vj8fnq","charIndex":8,"charLength":3,"name":"word","text":"II."}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: vj8fnq, charIndex: 8, charLength: 3, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Finished item "vj8fnq"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Finished item "vj8fnq"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient end {"id":"vj8fnq"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient end {"id":"vj8fnq"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: end {type: end, id: vj8fnq}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Queue empty, going IDLE}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Queue empty, going IDLE
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] speak called: The Pool of Tears
+PAGE LOG: 🗣️ [MockTTS] sending SPEAK to Worker
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received SPEAK {"text":"The Pool of Tears","rate":1,"id":"k6ejc7"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received SPEAK {"text":"The Pool of Tears","rate":1,"id":"k6ejc7"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] handleSpeak "The Pool of Tears"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] handleSpeak "The Pool of Tears"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Processing item "k6ejc7"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Processing item "k6ejc7"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient start {"id":"k6ejc7"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient start {"id":"k6ejc7"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: start {type: start, id: k6ejc7}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"k6ejc7"…dex":0,"charLength":3,"name":"word","text":"The"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"k6ejc7","charIndex":0,"charLength":3,"name":"word","text":"The"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: k6ejc7, charIndex: 0, charLength: 3, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"k6ejc7"…ex":4,"charLength":4,"name":"word","text":"Pool"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"k6ejc7","charIndex":4,"charLength":4,"name":"word","text":"Pool"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: k6ejc7, charIndex: 4, charLength: 4, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"k6ejc7"…ndex":9,"charLength":2,"name":"word","text":"of"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"k6ejc7","charIndex":9,"charLength":2,"name":"word","text":"of"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: k6ejc7, charIndex: 9, charLength: 2, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"k6ejc7"…":12,"charLength":5,"name":"word","text":"Tears"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"k6ejc7","charIndex":12,"charLength":5,"name":"word","text":"Tears"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: k6ejc7, charIndex: 12, charLength: 5, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Finished item "k6ejc7"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Finished item "k6ejc7"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient end {"id":"k6ejc7"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient end {"id":"k6ejc7"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: end {type: end, id: k6ejc7}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Queue empty, going IDLE}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Queue empty, going IDLE
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] speak called: “Curiouser and curiouser!”
+PAGE LOG: 🗣️ [MockTTS] sending SPEAK to Worker
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received SPEAK {"text":"“Curiouser and curiouser!”","rate":1,"id":"x5sd3"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received SPEAK {"text":"“Curiouser and curiouser!”","rate":1,"id":"x5sd3"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] handleSpeak "“Curiouser and curio"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] handleSpeak "“Curiouser and curio"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Processing item "x5sd3"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Processing item "x5sd3"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient start {"id":"x5sd3"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient start {"id":"x5sd3"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: start {type: start, id: x5sd3}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"x5sd3",…charLength":10,"name":"word","text":"“Curiouser"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"x5sd3","charIndex":0,"charLength":10,"name":"word","text":"“Curiouser"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: x5sd3, charIndex: 0, charLength: 10, name: word}
+PAGE LOG: 🗣️ [MockTTS] pause called
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received PAUSE}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received PAUSE
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] handlePause}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] handlePause
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Paused}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Paused
+________________ test_journey_tts_persistence[mobile-chromium] _________________
+
+page = <Page url='http://localhost:5173/read/4c231b94-ceb3-4dc0-aa8c-3494ffdee923'>
+
+    def test_journey_tts_persistence(page: Page):
+        """
+        Verifies TTS queue persistence:
+        1. Open book, go to chapter 3.
+        2. Start TTS, verify queue fills and plays.
+        3. Pause playback.
+        4. Refresh page.
+        5. Open TTS panel.
+        6. Verify queue is restored.
+        """
+        reset_app(page)
+        ensure_library_with_book(page)
+
+        # 1. Open the book
+        page.locator("[data-testid^='book-card-']").first.click()
+        expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=10000)
+
+        # 2. Go to the 3rd chapter (Chapter II: The Pool of Tears)
+        page.get_by_test_id("reader-toc-button").click()
+        # Wait for TOC to open
+        expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
+
+        # Use exact match or more specific selector to avoid matching Chapter III (II inside III)
+        # The text is likely "CHAPTER II. The Pool of Tears"
+        page.get_by_role("button", name="Chapter II.").first.click()
+
+        # Wait for navigation to complete (and TOC to close on mobile, or just wait)
+        # Checking for text presence in reader iframe is hard, so we wait.
+        page.wait_for_timeout(3000)
+
+        # 4. Open tts panel
+        page.get_by_test_id("reader-audio-button").click()
+        expect(page.get_by_test_id("tts-queue")).to_be_visible()
+
+        # 5. Press play
+        # Assuming initial state is paused, play button is visible
+        page.get_by_test_id("tts-play-pause-button").click()
+
+        # 6. Wait for a few sentences
+        # We wait for the active sentence to not be the first one, or just wait some time.
+        # It takes time to load voices and synthesize.
+        page.wait_for_timeout(3000)
+
+        # Verify playback started (button changes to pause)
+        # The button itself doesn't change ID, but icon and label do.
+        # We can check the label "Pause" is present.
+        expect(page.get_by_role("button", name="Pause")).to_be_visible()
+
+        # 7. Press pause
+        page.get_by_test_id("tts-play-pause-button").click()
+>       expect(page.get_by_role("button", name="Play")).to_be_visible()
+
+verification/test_journey_tts_persistence.py:56:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_locator.py:726: in _expect
+    return await self._frame._expect(self._selector, expression, options, title)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_frame.py:189: in _expect
+    result = await self._channel.send_return_as_dict(
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_connection.py:83: in send_return_as_dict
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x7f687bf275f0>
+cb = <function Channel.send_return_as_dict.<locals>.<lambda> at 0x7f687b985f80>
+is_internal = False, title = 'Expect "to_be_visible"'
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        st: List[inspect.FrameInfo] = getattr(
+            task, "__pw_stack__", None
+        ) or inspect.stack(0)
+
+        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.Error: LocatorAssertions.to_be_visible: Error: strict mode violation: get_by_role("button", name="Play") resolved to 2 elements:
+E               1) <button aria-label="Play" data-testid="tts-play-pause-button" class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-12 w-12 rounded-full">…</button> aka get_by_test_id("tts-play-pause-button")
+E               2) <button data-testid="tts-queue-item-56" class="text-left text-sm p-2 rounded transition-all duration-200 w-full text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted/10">…</button> aka get_by_test_id("tts-queue-item-56")
+E
+E           Call log:
+E             - Expect "to_be_visible" with timeout 2000ms
+E             - waiting for get_by_role("button", name="Play")
+
+/home/jules/.pyenv/versions/3.12.12/lib/python3.12/site-packages/playwright/_impl/_connection.py:558: Error
+----------------------------- Captured stdout call -----------------------------
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: [vite] connecting...
+PAGE LOG: [vite] connected.
+PAGE LOG: %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold
+PAGE LOG: ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+PAGE LOG: ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: Book indexed for search
+PAGE LOG: Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set.
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] speak called: CHAPTER II.
+PAGE LOG: 🗣️ [MockTTS] sending SPEAK to Worker
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received SPEAK {"text":"CHAPTER II.","rate":1,"id":"p0ztbh"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received SPEAK {"text":"CHAPTER II.","rate":1,"id":"p0ztbh"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] handleSpeak "CHAPTER II."}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] handleSpeak "CHAPTER II."
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Processing item "p0ztbh"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Processing item "p0ztbh"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient start {"id":"p0ztbh"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient start {"id":"p0ztbh"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: start {type: start, id: p0ztbh}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"p0ztbh"…:0,"charLength":7,"name":"word","text":"CHAPTER"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"p0ztbh","charIndex":0,"charLength":7,"name":"word","text":"CHAPTER"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: p0ztbh, charIndex: 0, charLength: 7, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"p0ztbh"…dex":8,"charLength":3,"name":"word","text":"II."}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"p0ztbh","charIndex":8,"charLength":3,"name":"word","text":"II."}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: p0ztbh, charIndex: 8, charLength: 3, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Finished item "p0ztbh"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Finished item "p0ztbh"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient end {"id":"p0ztbh"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient end {"id":"p0ztbh"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: end {type: end, id: p0ztbh}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Queue empty, going IDLE}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Queue empty, going IDLE
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] speak called: The Pool of Tears
+PAGE LOG: 🗣️ [MockTTS] sending SPEAK to Worker
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received SPEAK {"text":"The Pool of Tears","rate":1,"id":"pdl64n"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received SPEAK {"text":"The Pool of Tears","rate":1,"id":"pdl64n"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] handleSpeak "The Pool of Tears"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] handleSpeak "The Pool of Tears"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Processing item "pdl64n"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Processing item "pdl64n"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient start {"id":"pdl64n"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient start {"id":"pdl64n"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: start {type: start, id: pdl64n}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"pdl64n"…dex":0,"charLength":3,"name":"word","text":"The"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"pdl64n","charIndex":0,"charLength":3,"name":"word","text":"The"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: pdl64n, charIndex: 0, charLength: 3, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"pdl64n"…ex":4,"charLength":4,"name":"word","text":"Pool"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"pdl64n","charIndex":4,"charLength":4,"name":"word","text":"Pool"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: pdl64n, charIndex: 4, charLength: 4, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"pdl64n"…ndex":9,"charLength":2,"name":"word","text":"of"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"pdl64n","charIndex":9,"charLength":2,"name":"word","text":"of"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: pdl64n, charIndex: 9, charLength: 2, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"pdl64n"…":12,"charLength":5,"name":"word","text":"Tears"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"pdl64n","charIndex":12,"charLength":5,"name":"word","text":"Tears"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: pdl64n, charIndex: 12, charLength: 5, name: word}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Finished item "pdl64n"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Finished item "pdl64n"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient end {"id":"pdl64n"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient end {"id":"pdl64n"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: end {type: end, id: pdl64n}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Queue empty, going IDLE}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Queue empty, going IDLE
+PAGE LOG: 🗣️ [MockTTS] cancel called
+PAGE LOG: 🗣️ [MockTTS] speak called: “Curiouser and curiouser!”
+PAGE LOG: 🗣️ [MockTTS] sending SPEAK to Worker
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received CANCEL}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received CANCEL
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Canceling}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Canceling
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received SPEAK {"text":"“Curiouser and curiouser!”","rate":1,"id":"chkoy"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received SPEAK {"text":"“Curiouser and curiouser!”","rate":1,"id":"chkoy"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] handleSpeak "“Curiouser and curio"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] handleSpeak "“Curiouser and curio"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Processing item "chkoy"}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Processing item "chkoy"
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient start {"id":"chkoy"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient start {"id":"chkoy"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: start {type: start, id: chkoy}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] notifyClient boundary {"id":"chkoy",…charLength":10,"name":"word","text":"“Curiouser"}}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] notifyClient boundary {"id":"chkoy","charIndex":0,"charLength":10,"name":"word","text":"“Curiouser"}
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: boundary {type: boundary, id: chkoy, charIndex: 0, charLength: 10, name: word}
+PAGE LOG: 🗣️ [MockTTS] pause called
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Received PAUSE}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Received PAUSE
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] handlePause}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] handlePause
+PAGE LOG: 🗣️ [MockTTS] _handleMessage received: LOG {type: LOG, payload: 🗣️ [MockTTS] Paused}
+PAGE LOG: 🗣️ [MockTTS-Worker] 🗣️ [MockTTS] Paused
+=========================== short test summary info ============================
+FAILED verification/test_journey_tts_persistence.py::test_journey_tts_persistence[desktop-chromium]
+FAILED verification/test_journey_tts_persistence.py::test_journey_tts_persistence[mobile-chromium]
+============================== 2 failed in 16.06s ==============================
