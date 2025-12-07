@@ -9,7 +9,11 @@ def reset_app(page: Page):
     Args:
         page: The Playwright Page object.
     """
+    # Clear persistence to ensure clean state
     page.goto("http://localhost:5173", timeout=5000)
+    page.evaluate("localStorage.clear()")
+    page.reload()
+
     # Check if empty library is shown or verify app loaded
     # page.wait_for_selector...
 
