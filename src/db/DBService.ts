@@ -272,7 +272,7 @@ class DBService {
               const tx = db.transaction('tts_queue', 'readwrite');
               const store = tx.objectStore('tts_queue');
 
-              for (const [_id, state] of Object.entries(pending)) {
+              for (const state of Object.values(pending)) {
                   await store.put(state);
               }
               await tx.done;

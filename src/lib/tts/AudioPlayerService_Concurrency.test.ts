@@ -45,7 +45,7 @@ describe('AudioPlayerService Concurrency', () => {
 
   beforeEach(async () => {
     // Reset singleton
-    // @ts-ignore
+    // @ts-expect-error Resetting singleton for testing
     AudioPlayerService.instance = undefined;
 
     service = AudioPlayerService.getInstance();
@@ -122,7 +122,7 @@ describe('AudioPlayerService Concurrency', () => {
       const slowPromise = new Promise<void>(resolve => { releaseLock = resolve; });
 
       // Inject a fake lock
-      // @ts-ignore
+      // @ts-expect-error Accessing private property for testing
       service['operationLock'] = slowPromise;
 
       // 2. Call play() - this should queue up behind the lock
@@ -132,7 +132,7 @@ describe('AudioPlayerService Concurrency', () => {
       service.stop();
 
       // 4. Release the lock
-      // @ts-ignore
+      // @ts-expect-error Function is assigned inside Promise executor
       releaseLock();
 
       await playPromise;

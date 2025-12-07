@@ -33,11 +33,6 @@ interface TTSState {
   /** The last error message, if any */
   lastError: string | null;
 
-  /** Current Chapter Information (Persisted for Headless Navigation) */
-  currentChapterTitle: string | null;
-  currentChapterIndex: number;
-  chapterProgress: number; // 0.0 to 1.0
-
   /** Provider configuration */
   providerId: 'local' | 'google' | 'openai';
   apiKeys: {
@@ -80,7 +75,6 @@ interface TTSState {
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
   clearError: () => void;
-  setChapterInfo: (title: string | null, index: number, progress: number) => void;
 
   /**
    * Internal sync method called by AudioPlayerService
@@ -134,9 +128,6 @@ export const useTTSStore = create<TTSState>()(
             currentIndex: 0,
             queue: [],
             lastError: null,
-            currentChapterTitle: null,
-            currentChapterIndex: 0,
-            chapterProgress: 0,
             providerId: 'local',
             apiKeys: {
                 google: '',
@@ -261,13 +252,6 @@ export const useTTSStore = create<TTSState>()(
             clearError: () => {
                 set({ lastError: null });
             },
-            setChapterInfo: (title, index, progress) => {
-                set({
-                    currentChapterTitle: title,
-                    currentChapterIndex: index,
-                    chapterProgress: progress
-                });
-            },
 
             syncState: (status, activeCfi, currentIndex, queue, error) => set({
                 status,
@@ -294,9 +278,6 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: state.enableCostWarning,
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,
-            currentChapterTitle: state.currentChapterTitle,
-            currentChapterIndex: state.currentChapterIndex,
-            chapterProgress: state.chapterProgress,
         }),
     }
   )

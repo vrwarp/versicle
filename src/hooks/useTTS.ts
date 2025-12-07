@@ -131,13 +131,12 @@ export const useTTS = (rendition: Rendition | null) => {
     };
   }, [rendition, player]); // Removed currentCfi dependency
 
-  // Cleanup on unmount - REMOVED to support Headless Navigation (Chapter Compass)
-  // Audio should continue playing when navigating away from ReaderView.
-  // useEffect(() => {
-  //     return () => {
-  //         player.stop();
-  //     };
-  // }, [player]);
+  // Cleanup on unmount
+  useEffect(() => {
+      return () => {
+          player.stop();
+      };
+  }, [player]);
 
   return {
      sentences
