@@ -11,6 +11,7 @@ import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
+import { AudioReaderHUD } from './components/audio/AudioReaderHUD';
 
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -94,6 +95,10 @@ function App() {
       <ThemeSynchronizer />
       <GlobalSettingsDialog />
       <ToastContainer />
+
+      {/* Audio Reader HUD - Global Overlay */}
+      <AudioReaderHUD />
+
       <div className="min-h-screen bg-background text-foreground">
         <Routes>
           <Route path="/" element={
