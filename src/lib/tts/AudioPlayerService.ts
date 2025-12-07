@@ -288,6 +288,13 @@ export class AudioPlayerService {
     return this.provider.getVoices();
   }
 
+  /**
+   * Returns the current provider instance.
+   */
+  getProvider(): ITTSProvider {
+      return this.provider;
+  }
+
   public getQueue(): TTSQueueItem[] {
       return this.queue;
   }

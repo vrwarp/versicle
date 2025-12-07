@@ -56,6 +56,10 @@ interface TTSState {
   /** Whether to enable text sanitization (remove URLs, page numbers, etc.) */
   sanitizationEnabled: boolean;
 
+  /** Local TTS Silent Audio Configuration */
+  silentAudioMode: 'silent' | 'white_noise';
+  silentAudioVolume: number;
+
   /** Actions */
   play: () => void;
   pause: () => void;
@@ -71,6 +75,8 @@ interface TTSState {
   setEnableCostWarning: (enable: boolean) => void;
   setPrerollEnabled: (enable: boolean) => void;
   setSanitizationEnabled: (enable: boolean) => void;
+  setSilentAudioMode: (mode: 'silent' | 'white_noise') => void;
+  setSilentAudioVolume: (volume: number) => void;
   loadVoices: () => Promise<void>;
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
@@ -136,6 +142,8 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: true,
             prerollEnabled: false,
             sanitizationEnabled: true,
+            silentAudioMode: 'silent',
+            silentAudioVolume: 0.1,
             customAbbreviations: [
                 'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
                 'e.g.', 'i.e.'
@@ -168,7 +176,7 @@ export const useTTSStore = create<TTSState>()(
             setProviderId: (id) => {
                 set({ providerId: id });
                 // Re-init player provider
-                const { apiKeys } = get();
+                const { apiKeys, silentAudioMode, silentAudioVolume } = get();
                 let newProvider;
                 if (id === 'google') {
                     newProvider = new GoogleTTSProvider(apiKeys.google);
@@ -176,6 +184,7 @@ export const useTTSStore = create<TTSState>()(
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
                     newProvider = new WebSpeechProvider();
+                    newProvider.configureSilentAudio(silentAudioMode, silentAudioVolume);
                 }
 
                 player.setProvider(newProvider);
@@ -211,9 +220,25 @@ export const useTTSStore = create<TTSState>()(
             setSanitizationEnabled: (enable) => {
                 set({ sanitizationEnabled: enable });
             },
+            setSilentAudioMode: (mode) => {
+                set({ silentAudioMode: mode });
+                // Update active provider if local
+                const provider = player.getProvider();
+                if (provider.id === 'local') {
+                    (provider as WebSpeechProvider).configureSilentAudio(mode, get().silentAudioVolume);
+                }
+            },
+            setSilentAudioVolume: (volume) => {
+                set({ silentAudioVolume: volume });
+                // Update active provider if local
+                const provider = player.getProvider();
+                if (provider.id === 'local') {
+                    (provider as WebSpeechProvider).configureSilentAudio(get().silentAudioMode, volume);
+                }
+            },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
-                const { providerId, apiKeys } = get();
+                const { providerId, apiKeys, silentAudioMode, silentAudioVolume } = get();
                 // We might need to check if player already has correct provider type
                 // But simplified: just set it.
                  let newProvider;
@@ -223,6 +248,7 @@ export const useTTSStore = create<TTSState>()(
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
                     newProvider = new WebSpeechProvider();
+                    newProvider.configureSilentAudio(silentAudioMode, silentAudioVolume);
                 }
                 player.setProvider(newProvider);
 
@@ -278,6 +304,8 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: state.enableCostWarning,
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,
+            silentAudioMode: state.silentAudioMode,
+            silentAudioVolume: state.silentAudioVolume,
         }),
     }
   )

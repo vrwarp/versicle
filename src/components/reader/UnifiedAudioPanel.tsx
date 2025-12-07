@@ -34,7 +34,11 @@ export const UnifiedAudioPanel = () => {
     sanitizationEnabled,
     setSanitizationEnabled,
     prerollEnabled,
-    setPrerollEnabled
+    setPrerollEnabled,
+    silentAudioMode,
+    setSilentAudioMode,
+    silentAudioVolume,
+    setSilentAudioVolume
   } = useTTSStore();
 
   const { gestureMode, setGestureMode } = useReaderStore();
@@ -171,6 +175,38 @@ export const UnifiedAudioPanel = () => {
                     <label className="text-sm">Gesture Mode</label>
                     <Switch checked={gestureMode} onCheckedChange={handleGestureToggle} />
                  </div>
+                 {providerId === 'local' && (
+                     <div className="space-y-3 pt-2 border-t border-dashed">
+                        <div className="flex items-center justify-between">
+                           <div className="flex flex-col">
+                               <label className="text-sm font-medium">Background Noise</label>
+                               <span className="text-xs text-muted-foreground">Keeps audio active (Android fix)</span>
+                           </div>
+                           <Select value={silentAudioMode} onValueChange={(v) => setSilentAudioMode(v as 'silent' | 'white_noise')}>
+                               <SelectTrigger className="w-[140px] h-8 text-xs">
+                                   <SelectValue />
+                               </SelectTrigger>
+                               <SelectContent>
+                                   <SelectItem value="silent">Silent Loop</SelectItem>
+                                   <SelectItem value="white_noise">White Noise</SelectItem>
+                               </SelectContent>
+                           </Select>
+                        </div>
+
+                        {silentAudioMode === 'white_noise' && (
+                             <div className="space-y-1">
+                                <label className="text-xs text-muted-foreground">Noise Volume ({Math.round(silentAudioVolume * 100)}%)</label>
+                                <Slider
+                                    value={[silentAudioVolume]}
+                                    min={0.01}
+                                    max={0.5}
+                                    step={0.01}
+                                    onValueChange={(val) => setSilentAudioVolume(val[0])}
+                                />
+                             </div>
+                        )}
+                     </div>
+                 )}
               </section>
 
               <section className="pt-4 border-t">
