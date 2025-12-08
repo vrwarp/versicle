@@ -267,6 +267,9 @@ export class WebSpeechProvider implements ITTSProvider {
 
       // Notify service. Service should decide whether to retry or stop.
       // We send a specific error code.
+      // The emit() method wraps data in { type: ... }, so listener gets { type: 'error', error: 'watchdog_timeout' }
+      // This matches what AudioPlayerService expects: (event.error as any)?.error will be undefined,
+      // but event.error will be 'watchdog_timeout'.
       this.emit('error', { error: 'watchdog_timeout' });
   }
 

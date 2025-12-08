@@ -167,4 +167,37 @@ describe('AudioPlayerService', () => {
         expect(errorCalls.length).toBeGreaterThan(0);
         // expect(errorCalls[0][4]).toContain("API Quota Exceeded"); // Logic might send generic message
     });
+
+    it('should retry playback on watchdog timeout', async () => {
+        // Use WebSpeechProvider mock
+        const { WebSpeechProvider } = await import('./providers/WebSpeechProvider');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mockInstance = new WebSpeechProvider() as any;
+
+        await service.setProvider(mockInstance);
+
+        // Capture listener
+        const onCall = mockInstance.on.mock.calls[0];
+        const listener = onCall[0];
+
+        // Setup queue
+        await service.setQueue([{ text: "Watchdog Test", cfi: "1" }]);
+
+        // Start playback
+        await service.play();
+
+        // Spy on play to verify retry
+        const playSpy = vi.spyOn(service, 'play');
+
+        // Simulate Watchdog timeout event
+        // The event structure must match what WebSpeechProvider emits and what Service expects
+        // Service expects: event.error === 'watchdog_timeout'
+        listener({ type: 'error', error: 'watchdog_timeout' });
+
+        // Wait for async
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Expect play() to be called again
+        expect(playSpy).toHaveBeenCalled();
+    });
 });

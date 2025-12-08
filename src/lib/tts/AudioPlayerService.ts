@@ -240,20 +240,15 @@ export class AudioPlayerService {
                }
 
                // Check if it's our custom watchdog timeout
-               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-               if ((event.error as any)?.error === 'watchdog_timeout') {
+               // The event payload from WebSpeechProvider is { type: 'error', error: 'watchdog_timeout' }
+               // So event.error is the string 'watchdog_timeout'.
+               if (event.error === 'watchdog_timeout') {
                    this.log("Watchdog timeout detected. Retrying sentence...", 'warn');
-                   // The watchdog stops internally, we just need to re-trigger play
-                   // But if we just play, we might loop if it happens again.
-                   // The playInternal mechanism handles retries implicitly if we were 'playing'.
-                   // But since error stops us, we need to explicitly trigger retry?
-                   // Actually, if we error, we set status to stopped below.
-                   // Let's rely on playInternal's error handling if possible?
-                   // No, this is an event callback, playInternal has likely finished (awaiting synthesis).
-                   // If synthesis finished but audio hung, we are in limbo.
-                   // If we call play() here, we might recurse.
-                   // Let's stop and next? No, we want to replay current.
-                   // Simple recovery: Stop, wait, play.
+                   // Trigger retry
+                   // We must call play() to restart the current sentence.
+                   // Since we are in a callback, we should be careful about locks, but play() handles locks.
+                   this.play();
+                   return;
                }
 
                this.log(`TTS Provider Error: ${JSON.stringify(event.error)}`, 'error');
@@ -622,19 +617,9 @@ export class AudioPlayerService {
 
                  return this.playInternal(signal);
             } else {
-                 // Immediate retry (maybe with local fallback for just this sentence?)
-                 // Or just error out and let user retry?
-                 // Plan says "Switch to Local ... notify user".
-                 // But that's if failureCount > 3.
-                 // If < 3, maybe we just retry or error?
-                 // Let's notify error for single failure but not switch permanently yet.
+                 // Transient failure (count <= 3). Retry.
                  this.notifyError("Cloud TTS error. Retrying...");
-                 // Retry once? Or stop?
-                 // If we stop, user has to click play again.
-                 // Let's try to proceed by falling back for THIS SENTENCE only?
-                 // But then we mix voices.
-                 // Let's just error and stop for count < 3.
-                 // Actually, if we error, we stop.
+                 return this.playInternal(signal);
             }
         }
 

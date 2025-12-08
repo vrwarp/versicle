@@ -69,3 +69,8 @@ All phases of the Hardening Plan are now complete.
 *   **Server-Side Logging:** If privacy policy permits, send anonymized logs to a backend for aggregation.
 *   **Advanced Sync:** Implement word-level alignment for Cloud TTS using `AlignmentData`.
 *   **Voice Tuning:** Allow per-character voice assignments in the future.
+
+### Verification Status
+*   **Unit Tests:** All unit tests, including new Watchdog tests, passed.
+*   **Playwright Journey:** `test_journey_resilience.py` verified Debug Export UI.
+*   **Regression:** Full `verification/` suite (68 tests) passed.
