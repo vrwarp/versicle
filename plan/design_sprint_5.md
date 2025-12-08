@@ -60,6 +60,15 @@ The internal architecture of the Compass Pill is arranged to facilitate bidirect
   * **Iconography:** ChevronsRight (Double arrow) or SkipForward.  
   * **Interaction Logic:** A single tap executes an immediate jump to the subsequent structural unit.
 
+### **2.4 Contextual Adaptability (The Library State)**
+
+The system must exhibit context-aware behavior based on the active view to respect the user's focus.
+
+*   **Reader Context (Active):** The full "Compass Rose" interface is presented as defined above, enabling navigation and transport control.
+*   **Library Context (Passive):**
+    *   **Compass Pill:** Transforms into a "Summary Status" mode. The lateral navigation zones (Chevrons) are suppressed. The central display expands to show: Book Title, Chapter Title, and Progress/Time Remaining.
+    *   **Satellite FAB:** The Play/Pause button is suppressed (hidden). The system should not continue playback when navigating to the library; the interface reflects a "Monitoring" rather than "Driving" state.
+
 ## **3\. Interaction Design Protocols and Gestural Mechanics**
 
 ### **3.1 Primary Discrete Interactions (Touch Targets)**
@@ -104,6 +113,11 @@ To ensure visibility without occlusion of critical modals, the following Z-index
 
 * **Boundary Conditions:** If the user is situated in "Chapter 1" (Index 0), the Left Chevron must be rendered in a disabled state (reduced opacity, interaction suppression) to indicate the absence of anterior content. Similarly, the Right Chevron must be disabled at the final chapter.  
 * **Metadata Sanity:** In instances where currentChapterTitle is undefined or null (e.g., poorly formatted EPUBs), the interface shall elegantly fallback to displaying "Section \[Index\]" or solely the chapter number.
+
+### **4.4 Layout Hygiene & Legacy Retirement**
+
+*   **Footer Removal:** The legacy footer within `ReaderView` (containing page navigation and progress bars) is deprecated and shall be removed. The Compass Interface supersedes this functionality.
+*   **Safe Area Padding:** The text rendering container in `ReaderView` must implement sufficient bottom padding (e.g., `pb-32`) to ensure that the final lines of text are not obscured by the floating Compass Pill.
 
 ## **5\. Schematic Visualization**
 
