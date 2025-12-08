@@ -44,7 +44,7 @@ def ensure_library_with_book(page: Page):
                 load_btn.click()
                 page.wait_for_selector("[data-testid^='book-card-']", timeout=5000)
 
-def capture_screenshot(page: Page, name: str):
+def capture_screenshot(page: Page, name: str, hide_tts_status: bool = False):
     """
     Captures a screenshot of the current page state.
     Saves it to 'verification/screenshots/'.
@@ -53,12 +53,34 @@ def capture_screenshot(page: Page, name: str):
     Args:
         page: The Playwright Page object.
         name: The filename (without extension) for the screenshot.
+        hide_tts_status: If True, hides the TTS debug overlay before capturing.
     """
     os.makedirs('verification/screenshots', exist_ok=True)
+
+    if hide_tts_status:
+        # Hide the element and wait for the style to be applied
+        page.evaluate("""
+            const el = document.getElementById('tts-debug');
+            if (el) {
+                el.style.visibility = 'hidden';
+                // Force a reflow/repaint check if possible, or just rely on the synchronous evaluation
+            }
+        """)
+        # Explicitly wait for the element to be hidden from the playwright perspective
+        # This ensures the rendering engine has caught up before we take the screenshot
+        try:
+            page.locator("#tts-debug").wait_for(state="hidden", timeout=1000)
+        except:
+            # Proceed even if timeout (maybe element doesn't exist)
+            pass
+
     viewport = page.viewport_size
     width = viewport['width'] if viewport else 1280
     suffix = "mobile" if width < 600 else "desktop"
     page.screenshot(path=f"verification/screenshots/{name}_{suffix}.png")
+
+    if hide_tts_status:
+        page.evaluate("const el = document.getElementById('tts-debug'); if (el) el.style.visibility = 'visible';")
 
 def get_reader_frame(page: Page) -> Frame | None:
     """

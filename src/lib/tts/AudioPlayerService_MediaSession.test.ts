@@ -13,6 +13,7 @@ vi.mock('./providers/WebSpeechProvider', () => {
       on = vi.fn();
       pause = vi.fn();
       resume = vi.fn();
+      setConfig = vi.fn();
     }
   };
 });

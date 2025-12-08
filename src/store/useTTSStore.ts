@@ -56,7 +56,13 @@ interface TTSState {
   /** Whether to enable text sanitization (remove URLs, page numbers, etc.) */
   sanitizationEnabled: boolean;
 
+  /** Local Provider Settings */
+  silentAudioType: 'silence' | 'white-noise';
+  whiteNoiseVolume: number;
+
   /** Actions */
+  setSilentAudioType: (type: 'silence' | 'white-noise') => void;
+  setWhiteNoiseVolume: (volume: number) => void;
   play: () => void;
   pause: () => void;
   stop: () => void;
@@ -136,6 +142,8 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: true,
             prerollEnabled: false,
             sanitizationEnabled: true,
+            silentAudioType: 'silence',
+            whiteNoiseVolume: 0.1,
             customAbbreviations: [
                 'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
                 'e.g.', 'i.e.'
@@ -175,7 +183,8 @@ export const useTTSStore = create<TTSState>()(
                 } else if (id === 'openai') {
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
-                    newProvider = new WebSpeechProvider();
+                    const { silentAudioType, whiteNoiseVolume } = get();
+                    newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
                 }
 
                 player.setProvider(newProvider);
@@ -211,9 +220,19 @@ export const useTTSStore = create<TTSState>()(
             setSanitizationEnabled: (enable) => {
                 set({ sanitizationEnabled: enable });
             },
+            setSilentAudioType: (type) => {
+                set({ silentAudioType: type });
+                const { whiteNoiseVolume } = get();
+                player.setLocalProviderConfig({ silentAudioType: type, whiteNoiseVolume });
+            },
+            setWhiteNoiseVolume: (volume) => {
+                set({ whiteNoiseVolume: volume });
+                const { silentAudioType } = get();
+                player.setLocalProviderConfig({ silentAudioType, whiteNoiseVolume: volume });
+            },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
-                const { providerId, apiKeys } = get();
+                const { providerId, apiKeys, silentAudioType, whiteNoiseVolume } = get();
                 // We might need to check if player already has correct provider type
                 // But simplified: just set it.
                  let newProvider;
@@ -222,7 +241,7 @@ export const useTTSStore = create<TTSState>()(
                 } else if (providerId === 'openai') {
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
-                    newProvider = new WebSpeechProvider();
+                    newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
                 }
                 player.setProvider(newProvider);
 
@@ -278,7 +297,17 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: state.enableCostWarning,
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,
+            silentAudioType: state.silentAudioType,
+            whiteNoiseVolume: state.whiteNoiseVolume,
         }),
+        onRehydrateStorage: () => (state) => {
+            if (state) {
+                player.setLocalProviderConfig({
+                    silentAudioType: state.silentAudioType,
+                    whiteNoiseVolume: state.whiteNoiseVolume
+                });
+            }
+        },
     }
   )
 );

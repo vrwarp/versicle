@@ -16,8 +16,17 @@ vi.mock('epubjs', () => {
       },
       coverUrl: vi.fn(() => Promise.resolve('blob:cover')),
       archive: {
-        getBlob: vi.fn(() => Promise.resolve(new Blob(['cover'], { type: 'image/jpeg' }))),
+        getBlob: vi.fn(() => Promise.resolve(new Blob(['<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Chapter Content</p></body></html>'], { type: 'application/xhtml+xml' }))),
       },
+      spine: {
+        each: (cb: any) => {
+            const items = [
+                { id: 'chap1', href: 'chapter1.html' },
+                { id: 'chap2', href: 'chapter2.html' }
+            ];
+            items.forEach(cb);
+        }
+      }
     })),
   };
 });
@@ -37,9 +46,10 @@ vi.mock('uuid', () => ({
 describe('ingestion', () => {
   beforeEach(async () => {
     const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'annotations'], 'readwrite');
+    const tx = db.transaction(['books', 'files', 'sections', 'annotations'], 'readwrite');
     await tx.objectStore('books').clear();
     await tx.objectStore('files').clear();
+    await tx.objectStore('sections').clear();
     await tx.done;
   });
 
@@ -49,12 +59,6 @@ describe('ingestion', () => {
 
   it('should process an epub file correctly', async () => {
     const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
-
-    // In JSDOM/Node environment, File/Blob might need arrayBuffer patch if missing or if we want to spy.
-    // However, for cloning issue, we must NOT attach it as own property if we want structured clone to work.
-    // Instead we patch the prototype or use Object.defineProperty on the instance with enumerable: false.
-    // Or simpler: just ensure the env has it. Node 20's Blob has arrayBuffer.
-    // If we need to mock it to return specific buffer for hashing:
 
     Object.defineProperty(mockFile, 'arrayBuffer', {
         value: async () => new TextEncoder().encode('dummy content').buffer,
@@ -77,23 +81,23 @@ describe('ingestion', () => {
     expect(book?.id).toBe('mock-uuid');
     expect(book?.coverBlob).toBeDefined();
 
+    // Check durations
+    // Each chapter has "<p>Chapter Content</p>" -> textContent is "Chapter Content" (15 chars)
+    // 2 chapters -> 30 chars
+    expect(book?.totalChars).toBe(30);
+
     const storedFile = await db.get('files', bookId);
     expect(storedFile).toBeDefined();
-    // In JSDOM with fake-indexeddb, the constructor might be lost or it might just be a Blob.
-    // We check that it's an object with the expected size.
-    console.log('Stored File:', storedFile);
 
-    // If storedFile is just a plain object (cloning failure fallback), we assert that at least something was stored.
-    // Ideally we want strict check, but fake-indexeddb environment is limited.
     if (storedFile instanceof Blob || storedFile instanceof File) {
          expect(storedFile).toHaveProperty('size', mockFile.size);
          expect(storedFile).toHaveProperty('type', mockFile.type);
-    } else {
-         // Fallback expectation if fake-indexeddb flattens it
-         // expect(storedFile).toEqual(expect.anything());
-         // Actually, if it fails to clone properly, it might be an empty object.
-         // Let's rely on the console log to see what's happening.
     }
+
+    const sections = await db.getAllFromIndex('sections', 'by_bookId', bookId);
+    expect(sections).toHaveLength(2);
+    expect(sections[0].characterCount).toBe(15);
+    expect(sections[1].characterCount).toBe(15);
   });
 
   it('should handle missing cover gracefully', async () => {
@@ -110,6 +114,8 @@ describe('ingestion', () => {
         }),
       },
       coverUrl: vi.fn(() => Promise.resolve(null)), // No cover
+      spine: { each: vi.fn() },
+      archive: { getBlob: vi.fn() }
     }));
 
     const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
@@ -142,6 +148,8 @@ describe('ingestion', () => {
         }),
       },
       coverUrl: vi.fn(() => Promise.resolve(null)),
+      spine: { each: vi.fn() },
+      archive: { getBlob: vi.fn() }
     }));
 
     const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });

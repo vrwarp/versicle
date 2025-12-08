@@ -11,6 +11,7 @@ vi.mock('./providers/WebSpeechProvider', () => {
       synthesize = vi.fn();
       stop = vi.fn();
       on = vi.fn();
+      setConfig = vi.fn();
     }
   };
 });
