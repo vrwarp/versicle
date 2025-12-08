@@ -5,24 +5,12 @@ import { getDB } from '../db/db';
 
 const CHARS_PER_MINUTE_BASE = 180 * 5; // 180 words/min * 5 chars/word
 
-/**
- * Interface for estimated reading/listening durations.
- */
 interface DurationEstimates {
-  /** Estimated time remaining in the current chapter (minutes). */
-  chapterRemaining: number | null;
-  /** Estimated time remaining in the entire book (minutes). */
-  bookRemaining: number | null;
-  /** Estimated total duration of the book (minutes). */
-  totalBookDuration: number | null;
+  chapterRemaining: number | null; // in minutes
+  bookRemaining: number | null;    // in minutes
+  totalBookDuration: number | null; // in minutes
 }
 
-/**
- * Hook to calculate reading duration estimates based on current position and TTS rate.
- * Uses character counts stored in the database and current TTS queue for precision.
- *
- * @returns An object containing duration estimates.
- */
 export const useChapterDuration = (): DurationEstimates => {
   const { queue, currentIndex, rate } = useTTSStore();
   const { currentBookId, currentSectionId } = useReaderStore();

@@ -44,45 +44,58 @@ We rely on `useTTSStore` for playback state and `useReaderStore` for book contex
 | **Playback Status** | `useTTSStore.status` | 'playing' \| 'loading' -> Pause Icon; 'paused' \| 'stopped' -> Play Icon. |
 | **Progress Bar** | `currentIndex` / `queue.length` | `(currentIndex / (queue.length || 1)) * 100`. |
 | **Time Remaining** | Derived | `(RemainingChars / (BaseWPM * Rate))`. BaseWPM ≈ 180 (English). |
-| **Nav Actions** | `useTTSStore.jumpTo` | Playing: Seek/Skip Sentence. Paused: Prev/Next Chapter. Library: None. |
+| **Nav Actions** | `useTTSStore.jumpTo` | Prev/Next Chevrons jump +/- 1 index (or sentence). |
 
 ## 3. Component Specifications
 
 ### 3.1 AudioReaderHUD (Container)
 *   **Role:** Positioning context and visibility manager.
 *   **Logic:**
-    *   Subscribes to `useTTSStore` (queue, status).
+    *   Subscribes to `useTTSStore` (queue, status) and `useLocation` (router).
+    *   **Route Detection:**
+        *   If `location.pathname === '/'` (Library): Mode = `summary`.
+        *   Else: Mode = `active`.
+    *   **Library Mode Enforcement:** If entering Library, call `pause()` if playing to stop audio.
     *   Conditional Rendering: `if (queue.length === 0) return null;`
     *   Layout: Fixed position, bottom-centered (mobile) or responsive placement.
 *   **Z-Index:** Must be high but below overlays like `GlobalSettingsDialog`.
     *   Spec: `z-40` (Pill), `z-50` (FAB).
 
 ### 3.2 Compass Pill
+*   **Props:** `variant: 'active' | 'summary'`
 *   **Visuals:**
     *   Glassmorphism: `backdrop-blur-md`, `bg-background/80`, `border-white/10`.
-    *   Shape: `rounded-full`.
+    *   Shape: `rounded-full` (active) or `rounded-xl` (summary).
     *   Shadow: `shadow-lg`.
 *   **Layout (Grid/Flex):**
-    *   **Left:**
-        *   *Playing:* `Rewind` Icon. Action: `rewind()`.
-        *   *Paused:* `ChevronLeft` Icon. Action: `prevChapter()`.
-        *   *Library:* Hidden.
-    *   **Center:** Vertical Stack.
-        *   Row 1: Chapter Title (Reader) / Book Title (Library) (`text-xs font-medium truncate`).
-        *   Row 2: Time Remaining (Reader) / "Chapter X - Y%" (Library).
-    *   **Right:**
-        *   *Playing:* `FastForward` Icon. Action: `fastForward()`.
-        *   *Paused:* `ChevronRight` Icon. Action: `nextChapter()`.
-        *   *Library:* Hidden.
+    *   **Active Mode:**
+        *   **Dynamic Left Button:**
+            *   If `playing`: `SkipBack` icon (Prev Sentence).
+            *   If `idle`: `ChevronsLeft` icon (Prev Chapter).
+        *   **Center:** Vertical Stack (Chapter Title + Time Remaining).
+        *   **Dynamic Right Button:**
+            *   If `playing`: `SkipForward` icon (Next Sentence).
+            *   If `idle`: `ChevronsRight` icon (Next Chapter).
+    *   **Summary Mode (Library):**
+        *   **Left/Right:** Hidden (No Chevrons).
+        *   **Center:** Vertical Stack (3 Rows).
+            *   Row 1: Book Title (`text-xs font-bold truncate`).
+            *   Row 2: Chapter Title (`text-xs font-medium truncate`).
+            *   Row 3: Progress % (`text-[10px] text-muted-foreground`).
 *   **Interactions:**
-    *   Tap Body: Open `UnifiedAudioPanel` (Sheet).
+    *   **Active:**
+        *   `Skip`: Jump +/- 1 index (sentence).
+        *   `Chevron`: Call `prevChapter()` / `nextChapter()`.
+    *   **Summary:** Read-only info. No navigation.
 
 ### 3.3 Satellite FAB
 *   **Visuals:**
     *   Circular, Primary Color (`bg-primary text-primary-foreground`).
     *   Floating independently of the Pill (visual "Satellite").
 *   **Position:** Bottom-Right or anchored near Pill.
-    *   *Spec:* "Floating to the right" (or overlapping edge).
+*   **Visibility:**
+    *   **Reader View:** Visible.
+    *   **Library View:** Hidden (`display: none` or null).
 *   **Interactions:**
     *   Tap: Toggle Play/Pause (`useTTSStore.play()` / `pause()`).
 
@@ -116,13 +129,21 @@ Create the files in `src/components/audio/`.
 
 ### Step 4: Integration
 *   Mount in `App.tsx`.
-*   **Remove Footer:** Delete the `<footer>` element from `ReaderView.tsx`.
-*   **Layout Adjustments:**
-    *   Ensure `ReaderView` has sufficient bottom padding so text isn't obscured by the floating Compass.
-    *   In Paginated mode, ensure the text container height accounts for the Compass.
-*   **Verification Updates:**
-    *   Update `verification/test_journey_audio_deck.py` to check for Compass Pill presence and mode switching (icons change on play/pause).
-    *   Update `test_journey_reading.py` to ensure footer is gone and text is visible.
+*   Verify behavior with `verification/test_journey_audio_deck.py` (needs update to check for new elements).
+
+### Step 5: Reader Cleanup
+*   **Remove Legacy Footer:**
+    *   Locate `src/components/reader/ReaderView.tsx`.
+    *   Remove the `<footer>...</footer>` block containing Prev/Next Page buttons and progress bar.
+*   **Safe Area Padding:**
+    *   Add `pb-32` (or similar) to the `ReaderView` content container to prevent text occlusion by the floating Compass Pill.
+
+### Step 6: Verification Updates
+*   **Update `verification/test_journey_reading.py`:**
+    *   The test relies on data-testids `#reader-prev-page` and `#reader-next-page` which are being removed with the footer.
+    *   **Action:** Update the test to use Keyboard Navigation (`page.keyboard.press("ArrowRight")`) or verify against the new Gesture Overlay zones if explicitly testing touch.
+    *   **Validation:** Ensure the test still passes the "Reading Journey" by navigating pages via alternate inputs.
+    *   **Compass Check:** Add an assertion to verify the Compass Pill is visible (`expect(page.get_by_test_id("compass-pill")).to_be_visible()`) instead of checking for the footer progress bar.
 
 ## 5. Technical Constraints & Decisions
 *   **Mobile First:** The design is optimized for mobile (thumbs). On Desktop, it can center-float or align bottom-right.

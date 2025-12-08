@@ -12,11 +12,6 @@ import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 
-/**
- * Main Application component.
- * Sets up routing, global providers, error handling, and initial database connection.
- * Handles "Safe Mode" if the database fails to initialize.
- */
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [dbError, setDbError] = useState<unknown>(null);
@@ -29,7 +24,7 @@ function App() {
       if (event.reason instanceof StorageFullError) {
         useToastStore.getState().showToast(event.reason.message, 'error', 5000);
       } else if (event.reason?.name === 'QuotaExceededError' ||
-                 (typeof event.reason === 'object' && event.reason !== null && 'name' in event.reason && (event.reason as { name: unknown }).name === 'QuotaExceededError')) {
+                 (typeof event.reason === 'object' && event.reason !== null && 'name' in event.reason && (event.reason as any).name === 'QuotaExceededError')) {
         // Sometimes it might come as a raw QuotaExceededError if not wrapped
         useToastStore.getState().showToast('Storage limit exceeded. Please free up space.', 'error', 5000);
       }

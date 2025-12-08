@@ -94,7 +94,6 @@ export const ReaderView: React.FC = () => {
          }
     },
     onTocLoaded: (newToc) => setToc(newToc),
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onSelection: (cfiRange, range, _contents) => {
          const rect = range.getBoundingClientRect();
          const iframe = viewerRef.current?.querySelector('iframe');

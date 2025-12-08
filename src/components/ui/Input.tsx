@@ -3,9 +3,6 @@ import { cn } from "../../lib/utils"
 
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>
 
-/**
- * Input component wrapper around standard HTML input.
- */
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => {
     return (

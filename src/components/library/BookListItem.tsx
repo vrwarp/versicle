@@ -13,13 +13,8 @@ import {
 import { cn } from '../../lib/utils';
 import { useReaderStore } from '../../store/useReaderStore';
 
-/**
- * Props for the BookListItem component.
- */
 interface BookListItemProps {
-    /** The metadata of the book to display. */
     book: BookMetadata;
-    /** Inline styles for positioning (used by react-window). */
     style: React.CSSProperties;
 }
 
@@ -44,13 +39,6 @@ const formatDuration = (chars?: number): string => {
     return `${minutes}m`;
 }
 
-/**
- * Displays a book item in a list view format.
- * Includes thumbnail, title, author, progress, and action menu.
- *
- * @param props - Component props.
- * @returns The rendered list item.
- */
 export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
     const navigate = useNavigate();
     const { removeBook, offloadBook, restoreBook } = useLibraryStore();

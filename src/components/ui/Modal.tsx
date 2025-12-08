@@ -3,7 +3,6 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 import { cn } from "../../lib/utils"
 
-/** Root Modal component (alias for Radix Dialog.Root). */
 const Modal = DialogPrimitive.Root
 const ModalTrigger = DialogPrimitive.Trigger
 const ModalPortal = DialogPrimitive.Portal

@@ -1,7 +1,3 @@
-"""
-Playwright test for the Reading Journey.
-Verifies book opening, page navigation (buttons and keyboard), and TOC interaction.
-"""
 import re
 import pytest
 from playwright.sync_api import Page, expect

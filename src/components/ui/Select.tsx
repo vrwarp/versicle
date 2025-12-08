@@ -4,7 +4,6 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "../../lib/utils"
 
-/** Root Select component (alias for Radix Select.Root). */
 const Select = SelectPrimitive.Root
 
 const SelectGroup = SelectPrimitive.Group
