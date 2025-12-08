@@ -4,20 +4,36 @@ import { dbService } from '../db/DBService';
 import type { BookMetadata, Annotation, LexiconRule, BookLocations } from '../types/db';
 import { getDB } from '../db/db';
 
+/**
+ * Represents the structure of a backup manifest file.
+ */
 export interface BackupManifest {
+  /** The version of the backup schema. */
   version: number;
+  /** ISO timestamp of when the backup was created. */
   timestamp: string;
+  /** List of book metadata records. */
   books: BookMetadata[];
+  /** List of user annotations. */
   annotations: Annotation[];
+  /** List of custom pronunciation rules. */
   lexicon: LexiconRule[];
+  /** List of reading positions/locations. */
   locations: BookLocations[];
 }
 
+/**
+ * Service responsible for creating and restoring backups of the application data.
+ * Supports both "Light" backups (metadata only) and "Full" backups (including EPUB files).
+ */
 export class BackupService {
   private readonly BACKUP_VERSION = 1;
 
   /**
    * Generates a Light Backup (JSON) containing only metadata, annotations, lexicon, and locations.
+   * The backup is downloaded as a .json file.
+   *
+   * @returns A Promise that resolves when the download has been initiated.
    */
   async createLightBackup(): Promise<void> {
     const manifest = await this.generateManifest();
@@ -29,6 +45,9 @@ export class BackupService {
   /**
    * Generates a Full Backup (ZIP) containing metadata and all EPUB files.
    * Also includes a progress callback for UI feedback.
+   *
+   * @param onProgress - Optional callback function to report progress.
+   * @returns A Promise that resolves when the download has been initiated.
    */
   async createFullBackup(onProgress?: (percent: number, message: string) => void): Promise<void> {
     onProgress?.(0, 'Preparing manifest...');
@@ -80,6 +99,10 @@ export class BackupService {
 
   /**
    * Restores a backup from a File (JSON or ZIP).
+   *
+   * @param file - The backup file to restore.
+   * @param onProgress - Optional callback function to report progress.
+   * @returns A Promise that resolves when the restoration is complete.
    */
   async restoreBackup(file: File, onProgress?: (percent: number, message: string) => void): Promise<void> {
     onProgress?.(0, 'Analyzing file...');
@@ -140,6 +163,13 @@ export class BackupService {
     await this.processManifest(manifest, zip, onProgress);
   }
 
+  /**
+   * Processes the manifest and restores data to the database.
+   *
+   * @param manifest - The backup manifest object.
+   * @param zip - Optional JSZip object if restoring from a full backup.
+   * @param onProgress - Optional callback for progress updates.
+   */
   private async processManifest(
     manifest: BackupManifest,
     zip?: JSZip,

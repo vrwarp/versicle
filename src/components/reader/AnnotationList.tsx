@@ -4,9 +4,17 @@ import { Trash2, StickyNote, PenLine } from 'lucide-react';
 import type { Annotation } from '../../types/db';
 
 interface Props {
+  /** Callback to navigate to the annotation's location. */
   onNavigate: (cfi: string) => void;
 }
 
+/**
+ * Component to display a list of annotations (highlights and notes).
+ * Allows editing notes and deleting annotations.
+ *
+ * @param props - Component props.
+ * @returns A React component rendering the annotation list.
+ */
 export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
   const { annotations, deleteAnnotation, updateAnnotation } = useAnnotationStore();
 

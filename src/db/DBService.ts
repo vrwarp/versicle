@@ -29,6 +29,11 @@ class DBService {
 
   // --- Book Operations ---
 
+  /**
+   * Retrieves all books in the library.
+   *
+   * @returns A Promise resolving to an array of valid BookMetadata objects.
+   */
   async getLibrary(): Promise<BookMetadata[]> {
     try {
       const db = await this.getDB();
@@ -48,6 +53,12 @@ class DBService {
     }
   }
 
+  /**
+   * Retrieves a specific book and its file content.
+   *
+   * @param id - The unique identifier of the book.
+   * @returns A Promise resolving to an object containing metadata and file content.
+   */
   async getBook(id: string): Promise<{ metadata: BookMetadata | undefined; file: Blob | ArrayBuffer | undefined }> {
     try {
       const db = await this.getDB();
@@ -59,6 +70,12 @@ class DBService {
     }
   }
 
+  /**
+   * Retrieves only the metadata for a specific book.
+   *
+   * @param id - The unique identifier of the book.
+   * @returns A Promise resolving to the BookMetadata or undefined if not found.
+   */
   async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
       try {
           const db = await this.getDB();
@@ -68,6 +85,12 @@ class DBService {
       }
   }
 
+  /**
+   * Retrieves the file content for a specific book.
+   *
+   * @param id - The unique identifier of the book.
+   * @returns A Promise resolving to the file content (Blob or ArrayBuffer) or undefined.
+   */
   async getBookFile(id: string): Promise<Blob | ArrayBuffer | undefined> {
       try {
           const db = await this.getDB();
@@ -77,6 +100,12 @@ class DBService {
       }
   }
 
+  /**
+   * Adds a new book to the library.
+   *
+   * @param file - The EPUB file to add.
+   * @returns A Promise that resolves when the book is added.
+   */
   async addBook(file: File): Promise<void> {
     try {
       await processEpub(file);
@@ -85,6 +114,12 @@ class DBService {
     }
   }
 
+  /**
+   * Deletes a book and all associated data (files, annotations, etc.) from the library.
+   *
+   * @param id - The unique identifier of the book to delete.
+   * @returns A Promise that resolves when the book is deleted.
+   */
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
@@ -121,6 +156,12 @@ class DBService {
     }
   }
 
+  /**
+   * Offloads a book's file content to save space, keeping metadata and user data.
+   *
+   * @param id - The unique identifier of the book to offload.
+   * @returns A Promise that resolves when the book is offloaded.
+   */
   async offloadBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
@@ -157,6 +198,14 @@ class DBService {
     }
   }
 
+  /**
+   * Restores an offloaded book using a provided file.
+   * Verifies the file hash against the stored hash.
+   *
+   * @param id - The unique identifier of the book to restore.
+   * @param file - The EPUB file to restore from.
+   * @returns A Promise that resolves when the book is restored.
+   */
   async restoreBook(id: string, file: File): Promise<void> {
     try {
       const db = await this.getDB();
@@ -193,6 +242,10 @@ class DBService {
 
   /**
    * Saves reading progress. Debounced to prevent frequent DB writes.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @param cfi - The Canonical Fragment Identifier (CFI) representing the current location.
+   * @param progress - The progress percentage (0.0 to 1.0).
    */
   saveProgress(bookId: string, cfi: string, progress: number): void {
       this.pendingProgress[bookId] = { cfi, progress };
@@ -227,6 +280,14 @@ class DBService {
       }, 1000); // 1 second debounce
   }
 
+  /**
+   * Updates the last playback state for a book.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @param lastPlayedCfi - Optional CFI of the last played segment.
+   * @param lastPauseTime - Optional timestamp of when playback was paused.
+   * @returns A Promise that resolves when the state is updated.
+   */
   async updatePlaybackState(bookId: string, lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
       try {
           const db = await this.getDB();
@@ -251,6 +312,10 @@ class DBService {
 
   /**
    * Saves TTS Queue and Index. Debounced.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @param queue - The current TTS queue.
+   * @param currentIndex - The index of the currently playing item.
    */
   saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number): void {
       this.pendingTTSState[bookId] = {
@@ -282,6 +347,12 @@ class DBService {
       }, 1000); // 1s debounce
   }
 
+  /**
+   * Retrieves the saved TTS state for a book.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @returns A Promise resolving to the TTSState or undefined.
+   */
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
       try {
           const db = await this.getDB();
@@ -293,6 +364,12 @@ class DBService {
 
   // --- Annotation Operations ---
 
+  /**
+   * Adds a new annotation to the database.
+   *
+   * @param annotation - The annotation object to add.
+   * @returns A Promise that resolves when the annotation is saved.
+   */
   async addAnnotation(annotation: Annotation): Promise<void> {
     try {
       const db = await this.getDB();
@@ -302,6 +379,12 @@ class DBService {
     }
   }
 
+  /**
+   * Retrieves all annotations for a specific book.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @returns A Promise resolving to an array of Annotation objects.
+   */
   async getAnnotations(bookId: string): Promise<Annotation[]> {
     try {
       const db = await this.getDB();
@@ -311,6 +394,12 @@ class DBService {
     }
   }
 
+  /**
+   * Deletes an annotation by its ID.
+   *
+   * @param id - The unique identifier of the annotation.
+   * @returns A Promise that resolves when the annotation is deleted.
+   */
   async deleteAnnotation(id: string): Promise<void> {
       try {
           const db = await this.getDB();
@@ -322,6 +411,12 @@ class DBService {
 
   // --- TTS Cache Operations ---
 
+  /**
+   * Retrieves a cached TTS segment.
+   *
+   * @param key - The cache key.
+   * @returns A Promise resolving to the CachedSegment or undefined.
+   */
   async getCachedSegment(key: string): Promise<CachedSegment | undefined> {
       try {
           const db = await this.getDB();
@@ -338,6 +433,14 @@ class DBService {
       }
   }
 
+  /**
+   * Caches a TTS segment.
+   *
+   * @param key - The cache key.
+   * @param audio - The audio data.
+   * @param alignment - Optional alignment data.
+   * @returns A Promise that resolves when the segment is cached.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async cacheSegment(key: string, audio: ArrayBuffer, alignment?: any[]): Promise<void> {
       try {
@@ -357,6 +460,12 @@ class DBService {
 
   // --- Locations ---
 
+  /**
+   * Retrieves stored locations for a book.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @returns A Promise resolving to the BookLocations object or undefined.
+   */
   async getLocations(bookId: string): Promise<BookLocations | undefined> {
       try {
           const db = await this.getDB();
@@ -366,6 +475,13 @@ class DBService {
       }
   }
 
+  /**
+   * Saves generated locations for a book.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @param locations - The locations string (JSON).
+   * @returns A Promise that resolves when the locations are saved.
+   */
   async saveLocations(bookId: string, locations: string): Promise<void> {
       try {
           const db = await this.getDB();

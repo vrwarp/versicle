@@ -10,11 +10,21 @@ const COLORS = [
 ];
 
 interface Props {
+  /** The ID of the current book. */
   bookId: string;
+  /** Callback when the popover is closed (e.g. to clear selection). */
   onClose: () => void;
+  /** Optional callback to initiate pronunciation fix for selected text. */
   onFixPronunciation?: (text: string) => void;
 }
 
+/**
+ * Floating menu that appears when text is selected in the reader.
+ * Allows highlighting (colors), adding notes, copying text, or fixing pronunciation.
+ *
+ * @param props - Component props.
+ * @returns The rendered popover or null if hidden.
+ */
 export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronunciation }) => {
   const { popover, addAnnotation, hidePopover } = useAnnotationStore();
   const [isEditingNote, setIsEditingNote] = React.useState(false);

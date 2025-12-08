@@ -6,7 +6,8 @@ import { getDB } from '../db/db';
 export class MaintenanceService {
   /**
    * Scans the database for orphaned records (files, annotations, etc. without a parent book).
-   * @returns A summary of found orphans.
+   *
+   * @returns A Promise resolving to an object containing the counts of orphaned records found.
    */
   async scanForOrphans(): Promise<{
     files: number;
@@ -47,6 +48,8 @@ export class MaintenanceService {
 
   /**
    * Deletes all identified orphaned records.
+   *
+   * @returns A Promise that resolves when the pruning process is complete.
    */
   async pruneOrphans(): Promise<void> {
     const db = await getDB();

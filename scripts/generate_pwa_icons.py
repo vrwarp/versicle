@@ -1,3 +1,8 @@
+"""
+PWA Icon Generator script.
+Generates 'pwa-192x192.png' and 'pwa-512x512.png' in the 'public/' directory.
+Requires: Pillow (pip install Pillow)
+"""
 from PIL import Image, ImageDraw
 
 def generate_icon(size):

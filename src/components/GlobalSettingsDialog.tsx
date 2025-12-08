@@ -12,6 +12,16 @@ import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
 
+/**
+ * Global application settings dialog.
+ * Covers:
+ * - General settings
+ * - TTS Engine configuration (Providers, API keys)
+ * - Pronunciation Dictionary & Segmentation rules
+ * - Data Management (Backup, Restore, Maintenance, Reset)
+ *
+ * @returns The Settings dialog component.
+ */
 export const GlobalSettingsDialog = () => {
     const { isGlobalSettingsOpen, setGlobalSettingsOpen } = useUIStore();
     const [activeTab, setActiveTab] = useState('general');

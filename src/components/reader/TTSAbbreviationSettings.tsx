@@ -5,16 +5,27 @@ import { X, Plus, RotateCcw, Download, Upload } from 'lucide-react';
 import { SimpleListCSV } from '../../lib/tts/CsvUtils';
 
 interface StringListManagerProps {
+    /** Title of the list section. */
     title: string;
+    /** Description/Help text. */
     description: string;
+    /** The list of string items. */
     items: string[];
+    /** Callback to update the list. */
     onItemsChange: (items: string[]) => void;
+    /** Default list for reset. */
     defaults: string[];
+    /** Placeholder for the input field. */
     placeholder: string;
+    /** Header used for CSV import/export. */
     importHeader: string;
+    /** Filename for export. */
     exportFilename: string;
 }
 
+/**
+ * A generic component to manage a list of strings (add, remove, reset, import/export).
+ */
 const StringListManager: React.FC<StringListManagerProps> = ({
     title, description, items, onItemsChange, defaults, placeholder, importHeader, exportFilename
 }) => {
@@ -174,6 +185,10 @@ const StringListManager: React.FC<StringListManagerProps> = ({
     );
 };
 
+/**
+ * Settings component for configuring TTS text segmentation rules.
+ * Manages abbreviations, merge rules, and sentence starters.
+ */
 export const TTSAbbreviationSettings: React.FC = () => {
     const {
         customAbbreviations, setCustomAbbreviations,

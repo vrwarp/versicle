@@ -1,14 +1,30 @@
+/**
+ * Defines the available logging levels.
+ */
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
+/**
+ * Represents a single log entry.
+ */
 export interface LogEntry {
+  /** ISO timestamp of the log entry. */
   timestamp: string;
+  /** The severity level of the log. */
   level: LogLevel;
+  /** The context or component source of the log. */
   context: string;
+  /** The log message. */
   message: string;
+  /** Optional associated data. */
   data?: unknown;
+  /** Optional associated error object. */
   error?: unknown;
 }
 
+/**
+ * Service for handling application logging with context and severity levels.
+ * Currently writes to the console.
+ */
 class LoggerService {
   private formatMessage(context: string, message: string): string {
     return `[${context}] ${message}`;

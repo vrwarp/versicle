@@ -10,11 +10,21 @@ import { LEXICON_SAMPLE_CSV } from '../../lib/tts/lexiconSample';
 import { LexiconCSV } from '../../lib/tts/CsvUtils';
 
 interface LexiconManagerProps {
+  /** Whether the dialog is open. */
   open: boolean;
+  /** Callback to change the open state. */
   onOpenChange: (open: boolean) => void;
+  /** Initial term to populate the form (e.g. from context menu). */
   initialTerm?: string;
 }
 
+/**
+ * Dialog for managing pronunciation lexicon rules.
+ * Supports adding, editing, deleting, importing/exporting rules, and testing pronunciation.
+ *
+ * @param props - Component props.
+ * @returns The LexiconManager dialog component.
+ */
 export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManagerProps) {
   const [rules, setRules] = useState<LexiconRule[]>([]);
   const [editingRule, setEditingRule] = useState<Partial<LexiconRule> | null>(null);
