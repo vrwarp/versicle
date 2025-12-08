@@ -44,7 +44,7 @@ def ensure_library_with_book(page: Page):
                 load_btn.click()
                 page.wait_for_selector("[data-testid^='book-card-']", timeout=5000)
 
-def capture_screenshot(page: Page, name: str):
+def capture_screenshot(page: Page, name: str, hide_tts_subtitle: bool = False):
     """
     Captures a screenshot of the current page state.
     Saves it to 'verification/screenshots/'.
@@ -53,12 +53,24 @@ def capture_screenshot(page: Page, name: str):
     Args:
         page: The Playwright Page object.
         name: The filename (without extension) for the screenshot.
+        hide_tts_subtitle: Whether to hide the mock TTS subtitle before capturing.
+                           Defaults to False.
     """
     os.makedirs('verification/screenshots', exist_ok=True)
-    viewport = page.viewport_size
-    width = viewport['width'] if viewport else 1280
-    suffix = "mobile" if width < 600 else "desktop"
-    page.screenshot(path=f"verification/screenshots/{name}_{suffix}.png")
+
+    # Hide mock TTS subtitle if requested
+    if hide_tts_subtitle:
+        page.evaluate("const el = document.getElementById('tts-debug'); if (el) el.style.display = 'none';")
+
+    try:
+        viewport = page.viewport_size
+        width = viewport['width'] if viewport else 1280
+        suffix = "mobile" if width < 600 else "desktop"
+        page.screenshot(path=f"verification/screenshots/{name}_{suffix}.png")
+    finally:
+        # Restore mock TTS subtitle if it was hidden
+        if hide_tts_subtitle:
+             page.evaluate("const el = document.getElementById('tts-debug'); if (el) el.style.display = '';")
 
 def get_reader_frame(page: Page) -> Frame | None:
     """
