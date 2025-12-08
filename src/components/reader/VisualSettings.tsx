@@ -28,6 +28,12 @@ const ThemeSwatch = ({ mode, active, onClick }: ThemeSwatchProps) => {
   )
 }
 
+/**
+ * Visual settings popover content.
+ * Controls theme, font size, font family, line height, view mode (paginated/scrolled), and forced styling.
+ *
+ * @returns The VisualSettings component.
+ */
 export const VisualSettings = () => {
   const {
     currentTheme, setTheme,

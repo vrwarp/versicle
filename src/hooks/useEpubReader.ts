@@ -3,32 +3,67 @@ import ePub, { type Book, type Rendition, type Location, type NavigationItem } f
 import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
 
+/**
+ * Configuration options for the EpubReader hook.
+ */
 export interface EpubReaderOptions {
+  /** 'paginated' or 'scrolled' view mode. */
   viewMode: 'paginated' | 'scrolled';
+  /** Current theme identifier. */
   currentTheme: string;
+  /** Custom theme colors. */
   customTheme: { bg: string; fg: string };
+  /** Font family to use. */
   fontFamily: string;
+  /** Font size percentage. */
   fontSize: number;
+  /** Line height. */
   lineHeight: number;
+  /** Whether to force font settings and override book styles. */
   shouldForceFont: boolean;
+  /** Callback when location changes. */
   onLocationChange?: (location: Location, percentage: number, chapterTitle: string, sectionId: string) => void;
+  /** Callback when TOC is loaded. */
   onTocLoaded?: (toc: NavigationItem[]) => void;
-  onSelection?: (cfiRange: string, range: Range, contents: any) => void;
+  /** Callback when text is selected. */
+  onSelection?: (cfiRange: string, range: Range, contents: unknown) => void;
+  /** Callback when book instance is ready. */
   onBookLoaded?: (book: Book) => void;
+  /** Callback when the reader view is clicked. */
   onClick?: () => void;
+  /** Callback when an error occurs. */
   onError?: (error: string) => void;
 }
 
+/**
+ * Result returned by the EpubReader hook.
+ */
 export interface EpubReaderResult {
+  /** The epub.js Book instance. */
   book: Book | null;
+  /** The epub.js Rendition instance. */
   rendition: Rendition | null;
+  /** Whether the book is fully ready for interaction. */
   isReady: boolean;
+  /** Whether the book is currently loading. */
   isLoading: boolean;
+  /** Metadata of the loaded book. */
   metadata: BookMetadata | null;
+  /** Table of Contents. */
   toc: NavigationItem[];
+  /** Error message if loading failed. */
   error: string | null;
 }
 
+/**
+ * Custom hook to manage the lifecycle of an epub.js reader instance.
+ * Handles loading, rendering, resizing, theming, and interaction events.
+ *
+ * @param bookId - The ID of the book to load.
+ * @param viewerRef - Ref to the container element.
+ * @param options - Configuration options.
+ * @returns The reader state and instances.
+ */
 export function useEpubReader(
   bookId: string | undefined,
   viewerRef: React.RefObject<HTMLElement>,
@@ -189,7 +224,7 @@ export function useEpubReader(
              }
         });
 
-        newRendition.on('selected', (cfiRange: string, contents: any) => {
+        newRendition.on('selected', (cfiRange: string, contents: unknown) => {
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
              const range = (newRendition as any).getRange(cfiRange);
              if (optionsRef.current.onSelection && range) {

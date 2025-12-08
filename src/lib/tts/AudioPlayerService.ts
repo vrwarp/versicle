@@ -8,20 +8,38 @@ import { LexiconService } from './LexiconService';
 import { MediaSessionManager } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
 
+/**
+ * Defines the possible states of the TTS playback.
+ */
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
+/**
+ * Represents a single item in the TTS playback queue.
+ */
 export interface TTSQueueItem {
+    /** The text content to be spoken. */
     text: string;
+    /** The Canonical Fragment Identifier (CFI) for the location in the book. */
     cfi: string | null;
+    /** Optional chapter title. */
     title?: string;
+    /** Optional author name. */
     author?: string;
+    /** Optional book title. */
     bookTitle?: string;
+    /** Optional cover image URL. */
     coverUrl?: string;
+    /** Indicates if this item is a pre-roll announcement. */
     isPreroll?: boolean;
 }
 
 type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
 
+/**
+ * Singleton service that manages Text-to-Speech playback.
+ * Handles queue management, provider switching (Local/Cloud), synchronization,
+ * media session integration, and state persistence.
+ */
 export class AudioPlayerService {
   private static instance: AudioPlayerService;
   private provider: ITTSProvider;
@@ -83,6 +101,11 @@ export class AudioPlayerService {
     this.setupWebSpeech();
   }
 
+  /**
+   * Retrieves the singleton instance of the AudioPlayerService.
+   *
+   * @returns The singleton instance.
+   */
   static getInstance(): AudioPlayerService {
     if (!AudioPlayerService.instance) {
       AudioPlayerService.instance = new AudioPlayerService();
@@ -139,6 +162,8 @@ export class AudioPlayerService {
 
   /**
    * Sets the current book ID to allow loading book-specific lexicon rules and restoring queue.
+   *
+   * @param bookId - The unique identifier of the book, or null to clear.
    */
   setBookId(bookId: string | null) {
       if (this.currentBookId !== bookId) {
@@ -263,6 +288,11 @@ export class AudioPlayerService {
       }
   }
 
+  /**
+   * Updates the configuration for the local WebSpeech provider.
+   *
+   * @param config - The new configuration settings.
+   */
   public setLocalProviderConfig(config: WebSpeechConfig) {
       this.localProviderConfig = config;
       if (this.provider instanceof WebSpeechProvider) {
@@ -270,7 +300,12 @@ export class AudioPlayerService {
       }
   }
 
-  // Allow switching providers
+  /**
+   * Switches the active TTS provider.
+   *
+   * @param provider - The new TTS provider instance.
+   * @returns A Promise that resolves when the provider switch is complete.
+   */
   public setProvider(provider: ITTSProvider) {
       return this.executeWithLock(async () => {
         // Don't restart if it's the same provider type and instance logic,
@@ -289,14 +324,29 @@ export class AudioPlayerService {
       });
   }
 
+  /**
+   * Initializes the current provider.
+   *
+   * @returns A Promise that resolves when initialization is complete.
+   */
   async init() {
     await this.provider.init();
   }
 
+  /**
+   * Retrieves the list of available voices from the current provider.
+   *
+   * @returns A Promise resolving to an array of available voices.
+   */
   async getVoices(): Promise<TTSVoice[]> {
     return this.provider.getVoices();
   }
 
+  /**
+   * Gets the current playback queue.
+   *
+   * @returns An array of queue items.
+   */
   public getQueue(): TTSQueueItem[] {
       return this.queue;
   }
@@ -313,6 +363,13 @@ export class AudioPlayerService {
       return true;
   }
 
+  /**
+   * Sets the playback queue and optionally starts from a specific index.
+   *
+   * @param items - The new list of items to play.
+   * @param startIndex - The index to start playing from (default: 0).
+   * @returns A Promise that resolves when the queue is updated.
+   */
   setQueue(items: TTSQueueItem[], startIndex: number = 0) {
     return this.executeWithLock(async () => {
         // If the queue is effectively the same, we should update it (to catch metadata changes)
@@ -354,6 +411,11 @@ export class AudioPlayerService {
 
   /**
    * Generates a pre-roll announcement text.
+   *
+   * @param chapterTitle - The title of the chapter.
+   * @param wordCount - The word count of the chapter.
+   * @param speed - The current playback speed factor.
+   * @returns A string containing the estimated reading time announcement.
    */
   public generatePreroll(chapterTitle: string, wordCount: number, speed: number = 1.0): string {
       const WORDS_PER_MINUTE = 180; // Average reading speed
@@ -364,6 +426,12 @@ export class AudioPlayerService {
       return `${chapterTitle}. Estimated reading time: ${minutes} minute${minutes === 1 ? '' : 's'}.`;
   }
 
+  /**
+   * Jumps to a specific item in the queue by index.
+   *
+   * @param index - The index of the item to jump to.
+   * @returns A Promise that resolves when playback starts at the new index.
+   */
   jumpTo(index: number) {
       return this.executeWithLock(async (signal) => {
           if (index >= 0 && index < this.queue.length) {
@@ -420,6 +488,11 @@ export class AudioPlayerService {
       });
   }
 
+  /**
+   * Starts or resumes playback.
+   *
+   * @returns A Promise that resolves when playback begins.
+   */
   async play(): Promise<void> {
     return this.executeWithLock((signal) => this.playInternal(signal));
   }
@@ -557,6 +630,11 @@ export class AudioPlayerService {
     }
   }
 
+  /**
+   * Resumes playback from a paused state.
+   *
+   * @returns A Promise that resolves when playback resumes.
+   */
   async resume(): Promise<void> {
      return this.executeWithLock((signal) => this.resumeInternal(signal));
   }
@@ -640,6 +718,11 @@ export class AudioPlayerService {
       }
   }
 
+  /**
+   * Pauses playback.
+   *
+   * @returns A Promise that resolves when playback is paused.
+   */
   pause() {
     return this.executeWithLock(async () => {
         if (this.provider.id === 'local' && this.provider.pause) {
@@ -653,6 +736,11 @@ export class AudioPlayerService {
     });
   }
 
+  /**
+   * Stops playback and resets the state.
+   *
+   * @returns A Promise that resolves when playback is stopped.
+   */
   stop() {
       return this.executeWithLock(async () => {
           await this.stopInternal();
@@ -672,6 +760,11 @@ export class AudioPlayerService {
     }
   }
 
+  /**
+   * Skips to the next item in the queue.
+   *
+   * @returns A Promise that resolves when the next item starts playing.
+   */
   next() {
       return this.executeWithLock(async (signal) => {
         if (this.currentIndex < this.queue.length - 1) {
@@ -684,6 +777,11 @@ export class AudioPlayerService {
       });
   }
 
+  /**
+   * Skips to the previous item in the queue.
+   *
+   * @returns A Promise that resolves when the previous item starts playing.
+   */
   prev() {
       return this.executeWithLock(async (signal) => {
         if (this.currentIndex > 0) {
@@ -694,6 +792,12 @@ export class AudioPlayerService {
       });
   }
 
+  /**
+   * Sets the playback speed.
+   *
+   * @param speed - The speed factor (e.g., 1.0 for normal speed).
+   * @returns A Promise that resolves when the speed is updated.
+   */
   setSpeed(speed: number) {
       this.speed = speed;
       return this.executeWithLock(async (signal) => {
@@ -707,6 +811,12 @@ export class AudioPlayerService {
       });
   }
 
+  /**
+   * Seeks forward or backward by a given offset in seconds (or items for local TTS).
+   *
+   * @param offset - The offset in seconds (positive or negative).
+   * @returns A Promise that resolves when the seek operation is complete.
+   */
   seek(offset: number) {
       return this.executeWithLock(async (signal) => {
           if (this.audioPlayer && this.status !== 'stopped') {
@@ -730,6 +840,12 @@ export class AudioPlayerService {
       });
   }
 
+  /**
+   * Sets the voice to use for synthesis.
+   *
+   * @param voiceId - The ID of the voice.
+   * @returns A Promise that resolves when the voice is updated.
+   */
   setVoice(voiceId: string) {
       this.voiceId = voiceId;
       return this.executeWithLock(async (signal) => {
@@ -794,6 +910,12 @@ export class AudioPlayerService {
       this.notifyListeners(currentCfi);
   }
 
+  /**
+   * Subscribes to playback state changes.
+   *
+   * @param listener - The callback function to receive updates.
+   * @returns A function to unsubscribe the listener.
+   */
   subscribe(listener: PlaybackListener) {
     this.listeners.push(listener);
     const currentCfi = this.queue[this.currentIndex]?.cfi || null;

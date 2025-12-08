@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@testing-library/jest-dom';
 import 'fake-indexeddb/auto';
 import { cleanup } from '@testing-library/react';

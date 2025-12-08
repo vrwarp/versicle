@@ -39,6 +39,10 @@ export interface ButtonProps
   asChild?: boolean
 }
 
+/**
+ * Button component with support for multiple variants and sizes.
+ * Can act as a slot for child elements.
+ */
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button"

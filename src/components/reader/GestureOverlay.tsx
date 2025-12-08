@@ -9,11 +9,21 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 
 interface GestureOverlayProps {
+  /** Callback for swipe left gesture (Next Chapter). */
   onNextChapter?: () => void;
+  /** Callback for swipe right gesture (Prev Chapter). */
   onPrevChapter?: () => void;
+  /** Callback to close the overlay. */
   onClose?: () => void;
 }
 
+/**
+ * Full-screen overlay that captures touch gestures for audio control without looking at the screen.
+ * Supports taps (rewind/play/forward) and swipes (chapter navigation, speed control).
+ *
+ * @param props - Component props.
+ * @returns The gesture overlay component or null if not active.
+ */
 export const GestureOverlay: React.FC<GestureOverlayProps> = ({
   onNextChapter,
   onPrevChapter,

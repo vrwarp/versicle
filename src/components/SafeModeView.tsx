@@ -2,11 +2,21 @@ import React from 'react';
 import { Button } from './ui/Button';
 
 interface SafeModeViewProps {
+  /** The error that caused safe mode. */
   error: unknown;
+  /** Callback to reset the database (destructive). */
   onReset: () => void;
+  /** Callback to retry initialization. */
   onRetry: () => void;
 }
 
+/**
+ * A fallback view displayed when critical initialization fails (e.g. Database error).
+ * Offers options to retry or perform a destructive reset.
+ *
+ * @param props - Component props.
+ * @returns The Safe Mode UI.
+ */
 export const SafeModeView: React.FC<SafeModeViewProps> = ({ error, onReset, onRetry }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground p-6 text-center">
