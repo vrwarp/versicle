@@ -56,6 +56,10 @@ interface TTSState {
   /** Whether to enable text sanitization (remove URLs, page numbers, etc.) */
   sanitizationEnabled: boolean;
 
+  /** Silent track configuration for local TTS */
+  silentTrack: 'silence' | 'white-noise';
+  whiteNoiseVolume: number;
+
   /** Actions */
   play: () => void;
   pause: () => void;
@@ -63,6 +67,8 @@ interface TTSState {
   setRate: (rate: number) => void;
   setPitch: (pitch: number) => void;
   setVoice: (voice: TTSVoice | null) => void;
+  setSilentTrack: (track: 'silence' | 'white-noise') => void;
+  setWhiteNoiseVolume: (volume: number) => void;
   setProviderId: (id: 'local' | 'google' | 'openai') => void;
   setApiKey: (provider: 'google' | 'openai', key: string) => void;
   setCustomAbbreviations: (abbrevs: string[]) => void;
@@ -133,6 +139,8 @@ export const useTTSStore = create<TTSState>()(
                 google: '',
                 openai: ''
             },
+            silentTrack: 'silence',
+            whiteNoiseVolume: 0.1,
             enableCostWarning: true,
             prerollEnabled: false,
             sanitizationEnabled: true,
@@ -165,17 +173,27 @@ export const useTTSStore = create<TTSState>()(
                 }
                 set({ voice });
             },
+            setSilentTrack: (track) => {
+                set({ silentTrack: track });
+                const { whiteNoiseVolume } = get();
+                player.setWebSpeechSettings({ silentTrack: track, volume: whiteNoiseVolume });
+            },
+            setWhiteNoiseVolume: (volume) => {
+                set({ whiteNoiseVolume: volume });
+                const { silentTrack } = get();
+                player.setWebSpeechSettings({ silentTrack, volume });
+            },
             setProviderId: (id) => {
                 set({ providerId: id });
                 // Re-init player provider
-                const { apiKeys } = get();
+                const { apiKeys, silentTrack, whiteNoiseVolume } = get();
                 let newProvider;
                 if (id === 'google') {
                     newProvider = new GoogleTTSProvider(apiKeys.google);
                 } else if (id === 'openai') {
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
-                    newProvider = new WebSpeechProvider();
+                    newProvider = new WebSpeechProvider({ silentTrack, volume: whiteNoiseVolume });
                 }
 
                 player.setProvider(newProvider);
@@ -213,7 +231,7 @@ export const useTTSStore = create<TTSState>()(
             },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
-                const { providerId, apiKeys } = get();
+                const { providerId, apiKeys, silentTrack, whiteNoiseVolume } = get();
                 // We might need to check if player already has correct provider type
                 // But simplified: just set it.
                  let newProvider;
@@ -222,7 +240,7 @@ export const useTTSStore = create<TTSState>()(
                 } else if (providerId === 'openai') {
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
-                    newProvider = new WebSpeechProvider();
+                    newProvider = new WebSpeechProvider({ silentTrack, volume: whiteNoiseVolume });
                 }
                 player.setProvider(newProvider);
 
@@ -278,6 +296,8 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: state.enableCostWarning,
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,
+            silentTrack: state.silentTrack,
+            whiteNoiseVolume: state.whiteNoiseVolume,
         }),
     }
   )

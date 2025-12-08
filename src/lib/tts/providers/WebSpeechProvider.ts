@@ -1,7 +1,14 @@
 import type { ITTSProvider, SpeechSegment, TTSVoice } from './types';
+import silenceUrl from '../../../assets/silence.ogg';
+import whiteNoiseUrl from '../../../assets/white-noise.ogg';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TTSCallback = (event: { type: 'start' | 'end' | 'boundary' | 'error', charIndex?: number, error?: any }) => void;
+
+export interface WebSpeechOptions {
+    silentTrack?: 'silence' | 'white-noise';
+    volume?: number;
+}
 
 /**
  * TTS Provider implementation using the browser's native Web Speech API.
@@ -14,13 +21,52 @@ export class WebSpeechProvider implements ITTSProvider {
   private callback: TTSCallback | null = null;
   private voicesLoaded = false;
   private silentAudio: HTMLAudioElement;
+  private options: WebSpeechOptions;
 
-  constructor() {
+  constructor(options: WebSpeechOptions = {}) {
     this.synth = window.speechSynthesis;
+    this.options = options;
     // Initialize silent audio loop to keep MediaSession active
-    // 1 second of silence
-    this.silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
-    this.silentAudio.loop = true;
+    // We defer actual initialization to updateOptions to handle logic there,
+    // but we need silentAudio to be set for TS.
+    this.silentAudio = new Audio();
+    this.updateOptions(options);
+  }
+
+  updateOptions(options: WebSpeechOptions) {
+      this.options = { ...this.options, ...options };
+      const track = this.options.silentTrack || 'silence';
+      const volume = this.options.volume ?? 0.1;
+
+      const url = track === 'white-noise' ? whiteNoiseUrl : silenceUrl;
+
+      // Check if we need to replace the audio element or src
+      // If it's the first time (src is empty) or url changed
+      // Note: silenceUrl and whiteNoiseUrl are resolved strings.
+      if (this.silentAudio.src !== window.location.origin + url && this.silentAudio.src !== url) {
+           // We check against full URL because .src property returns absolute URL
+           // But checking includes or endsWith is safer.
+           // Actually, let's just use endsWith or check if we need to reload.
+
+           const currentSrc = this.silentAudio.src;
+           const shouldUpdate = !currentSrc || !currentSrc.endsWith(url.split('/').pop() || url);
+
+           if (shouldUpdate) {
+               const wasPlaying = !this.silentAudio.paused;
+               this.silentAudio.pause();
+               this.silentAudio.src = url;
+               this.silentAudio.loop = true;
+
+               if (wasPlaying) {
+                   this.silentAudio.play().catch(e => console.warn("Silent audio update/play failed", e));
+               }
+           }
+      }
+
+      if (track === 'white-noise') {
+          this.silentAudio.volume = volume;
+      }
+      // If silence, we don't strictly enforce volume, but leaving it as is or default is fine.
   }
 
   /**

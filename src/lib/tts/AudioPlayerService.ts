@@ -1,5 +1,5 @@
 import type { ITTSProvider, TTSVoice, SpeechSegment } from './providers/types';
-import { WebSpeechProvider } from './providers/WebSpeechProvider';
+import { WebSpeechProvider, type WebSpeechOptions } from './providers/WebSpeechProvider';
 import { AudioElementPlayer } from './AudioElementPlayer';
 import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { TTSCache } from './TTSCache';
@@ -52,6 +52,9 @@ export class AudioPlayerService {
   // Concurrency Control
   private currentOperation: AbortController | null = null;
   private operationLock: Promise<void> = Promise.resolve();
+
+  // Local Provider Options
+  private webSpeechOptions: WebSpeechOptions = {};
 
   private constructor() {
     this.provider = new WebSpeechProvider();
@@ -180,6 +183,11 @@ export class AudioPlayerService {
 
   private setupWebSpeech() {
     if (this.provider.id === 'local') {
+       // Ensure options are up to date
+       if (this.provider instanceof WebSpeechProvider) {
+           this.provider.updateOptions(this.webSpeechOptions);
+       }
+
        // @ts-expect-error - WebSpeechProvider specific method
        this.provider.on((event) => {
            if (event.type === 'start') {
@@ -535,7 +543,7 @@ export class AudioPlayerService {
             // We can't call setProvider() because it uses executeWithLock which waits for us!
             // Direct switch internal
             await this.stopInternal();
-            this.provider = new WebSpeechProvider();
+            this.provider = new WebSpeechProvider(this.webSpeechOptions);
             this.setupWebSpeech();
             await this.init();
 
@@ -803,5 +811,12 @@ export class AudioPlayerService {
 
   private notifyError(message: string) {
       this.listeners.forEach(l => l(this.status, this.queue[this.currentIndex]?.cfi || null, this.currentIndex, this.queue, message));
+  }
+
+  setWebSpeechSettings(options: WebSpeechOptions) {
+      this.webSpeechOptions = { ...this.webSpeechOptions, ...options };
+      if (this.provider instanceof WebSpeechProvider) {
+          this.provider.updateOptions(this.webSpeechOptions);
+      }
   }
 }

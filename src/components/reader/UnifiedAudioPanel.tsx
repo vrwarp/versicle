@@ -34,7 +34,11 @@ export const UnifiedAudioPanel = () => {
     sanitizationEnabled,
     setSanitizationEnabled,
     prerollEnabled,
-    setPrerollEnabled
+    setPrerollEnabled,
+    silentTrack,
+    setSilentTrack,
+    whiteNoiseVolume,
+    setWhiteNoiseVolume
   } = useTTSStore();
 
   const { gestureMode, setGestureMode } = useReaderStore();
@@ -156,6 +160,37 @@ export const UnifiedAudioPanel = () => {
                     </Select>
                  </div>
               </section>
+
+              {providerId === 'local' && (
+                  <section className="space-y-4">
+                     <h3 className="text-sm font-medium text-muted-foreground">Android Workaround</h3>
+                     <div className="space-y-2">
+                        <label className="text-sm font-medium">Background Track</label>
+                        <Select value={silentTrack} onValueChange={(val: 'silence' | 'white-noise') => setSilentTrack(val)}>
+                           <SelectTrigger><SelectValue /></SelectTrigger>
+                           <SelectContent>
+                              <SelectItem value="silence">Silence (Default)</SelectItem>
+                              <SelectItem value="white-noise">White Noise</SelectItem>
+                           </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            Use "White Noise" if playback stops unexpectedly on Android.
+                        </p>
+                     </div>
+                     {silentTrack === 'white-noise' && (
+                         <div className="space-y-2">
+                            <label className="text-sm font-medium">Noise Volume ({Math.round(whiteNoiseVolume * 100)}%)</label>
+                            <Slider
+                               value={[whiteNoiseVolume]}
+                               min={0}
+                               max={1}
+                               step={0.05}
+                               onValueChange={(val) => setWhiteNoiseVolume(val[0])}
+                            />
+                         </div>
+                     )}
+                  </section>
+              )}
 
               <section className="space-y-4">
                  <h3 className="text-sm font-medium text-muted-foreground">Flow Control</h3>

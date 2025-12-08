@@ -64,7 +64,9 @@ describe('WebSpeechProvider', () => {
         pause: vi.fn(),
         currentTime: 0,
         loop: false,
-        paused: true
+        paused: true,
+        volume: 1,
+        src: ''
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     global.Audio = vi.fn(function() { return mockAudio; }) as any;
@@ -181,6 +183,36 @@ describe('WebSpeechProvider', () => {
           provider.resume();
           expect(mockSynth.resume).toHaveBeenCalled();
           expect(mockAudio.play).toHaveBeenCalled();
+      });
+  });
+
+  describe('options', () => {
+      it('should default to silence', () => {
+          // Default provider created in beforeEach
+          expect(mockAudio.src).toContain('silence.ogg');
+      });
+
+      it('should initialize with white noise and volume', () => {
+          provider = new WebSpeechProvider({ silentTrack: 'white-noise', volume: 0.5 });
+          expect(mockAudio.src).toContain('white-noise.ogg');
+          expect(mockAudio.volume).toBe(0.5);
+      });
+
+      it('should update options dynamically', () => {
+          // Start with silence (default)
+          expect(mockAudio.src).toContain('silence.ogg');
+
+          provider.updateOptions({ silentTrack: 'white-noise', volume: 0.3 });
+          expect(mockAudio.src).toContain('white-noise.ogg');
+          expect(mockAudio.volume).toBe(0.3);
+      });
+
+      it('should play new audio if was playing during update', () => {
+          mockAudio.paused = false; // Simulate playing
+          provider.updateOptions({ silentTrack: 'white-noise' });
+          expect(mockAudio.pause).toHaveBeenCalled();
+          expect(mockAudio.play).toHaveBeenCalled();
+          expect(mockAudio.src).toContain('white-noise.ogg');
       });
   });
 });
