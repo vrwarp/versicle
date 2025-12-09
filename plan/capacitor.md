@@ -115,23 +115,27 @@ To satisfy Android 14's rigorous media policies, we cannot rely on generic backg
 # 1. Process Shield: @capawesome-team/capacitor-android-foreground-service
 # This plugin manages the notification channels and the specific 'startForeground'
 # calls required to promote the app process to a "perceptible" state.
-npm install @capawesome-team/capacitor-android-foreground-service
+# Note: Version 6 is required for Capacitor 6 compatibility.
+npm install @capawesome-team/capacitor-android-foreground-service@6
 
 # 2. Compliance Token: @jofr/capacitor-media-session
 # This plugin bridges the gap between the WebView and the Android MediaSession API.
 # It creates the Lock Screen controls (Play/Pause/Next) and, critically,
 # provides the OS with the "active media session" token required to keep the service alive.
-npm install @jofr/capacitor-media-session
+# Note: Version 4 is recommended for stability with recent Android versions.
+npm install @jofr/capacitor-media-session@4
 
 # 3. Native Audio Engine: @capacitor-community/text-to-speech
 # A wrapper around the android.speech.tts API. This provides zero-latency, offline,
 # battery-efficient speech synthesis using the device's installed voices (Samsung/Google).
-npm install @capacitor-community/text-to-speech
+# Note: Version 5 is required for Capacitor 6 compatibility.
+npm install @capacitor-community/text-to-speech@5
 
 # 4. Samsung Mitigation: @capawesome-team/capacitor-android-battery-optimization
 # Samsung and Xiaomi devices have "Phantom Process Killers" that ignore standard Android rules.
 # This plugin allows us to request the user to whitelist Versicle from these aggressive optimizations.
-npm install @capawesome-team/capacitor-android-battery-optimization
+# Note: Version 6 is required for Capacitor 6 compatibility.
+npm install @capawesome-team/capacitor-android-battery-optimization@6
 
 # Apply these plugins to the Android project
 npx cap sync
