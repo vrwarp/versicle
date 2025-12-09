@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package com.vrwarp.versicle;
 
 import static org.junit.Assert.*;
 

@@ -1,0 +1,47 @@
+name: Android Tests
+
+on:
+  push:
+    branches: [ "main", "capacitor" ]
+    paths:
+      - 'android/**'
+  pull_request:
+    branches: [ "main", "capacitor" ]
+    paths:
+      - 'android/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18
+        cache: 'npm'
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Build Web Assets
+      run: npm run build
+
+    - name: Sync Capacitor
+      run: npx cap sync android
+
+    - name: set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x android/gradlew
+
+    - name: Run Unit Tests
+      working-directory: android
+      run: ./gradlew test
