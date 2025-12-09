@@ -317,7 +317,7 @@ epub.js provides a robust annotation API based on **Canonical Fragment Identifie
   - [x] Add Notification Icon (`ic_stat_versicle.png`).
 
 - [ ] **Phase 4: Code Implementation (The Hybrid Bridge)**
-  - [ ] Implement `CapacitorTTSProvider`.
+  - [x] Implement `CapacitorTTSProvider`.
   - [ ] Implement `MediaSessionManager`.
   - [ ] Update `AudioPlayerService` for atomic start sequence.
   - [ ] Update App Initialization.
