@@ -1,5 +1,9 @@
 import type { ITTSProvider, TTSVoice, SpeechSegment } from './providers/types';
 import { WebSpeechProvider, type WebSpeechConfig } from './providers/WebSpeechProvider';
+import { Capacitor } from '@capacitor/core';
+import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
+import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
+import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { AudioElementPlayer } from './AudioElementPlayer';
 import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { TTSCache } from './TTSCache';
@@ -74,7 +78,14 @@ export class AudioPlayerService {
   private localProviderConfig: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 };
 
   private constructor() {
-    this.provider = new WebSpeechProvider(this.localProviderConfig);
+    // 1. Platform Detection
+    // Automatically switch providers based on the environment.
+    if (Capacitor.isNativePlatform()) {
+        this.provider = new CapacitorTTSProvider();
+    } else {
+        this.provider = new WebSpeechProvider(this.localProviderConfig);
+    }
+
     this.cache = new TTSCache();
 
     this.lexiconService = LexiconService.getInstance();
@@ -176,6 +187,56 @@ export class AudioPlayerService {
               this.currentIndex = 0;
               this.setStatus('stopped');
           }
+      }
+  }
+
+  /**
+   * ATOMIC START SEQUENCE
+   * Raises the "Shield" preventing process death.
+   */
+  private async engageBackgroundMode(item: TTSQueueItem) {
+      // Only run this logic on Android devices.
+      if (Capacitor.getPlatform() !== 'android') return;
+
+      try {
+          // Ensure channel exists (idempotent)
+          await ForegroundService.createNotificationChannel({
+              id: 'versicle_tts_channel',
+              name: 'Versicle Playback',
+              description: 'Controls for background reading',
+              importance: 3
+          });
+
+          // Step A: Start Foreground Service (The Shield)
+          // This MUST happen first. It promotes the app process priority.
+          await ForegroundService.startForegroundService({
+              id: 1001, // Arbitrary but unique ID
+              title: 'Versicle',
+              body: `Reading: ${item.title || 'Chapter'}`,
+              smallIcon: 'ic_stat_versicle', // This MUST match the drawable resource name
+              notificationChannelId: 'versicle_tts_channel',
+              buttons: [
+                  { id: 101, title: 'Pause' } // We will listen for this ID in App.tsx
+              ]
+          });
+
+          // Step B: Register Media Session (The Proof)
+          // Immediately satisfy the 'mediaPlayback' requirement by registering session data.
+          await this.mediaSessionManager.setMetadata({
+              title: item.title || 'Chapter Text',
+              artist: 'Versicle',
+              album: item.bookTitle || '',
+              artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
+          });
+
+          // Signal "Playing" to the OS.
+          await this.mediaSessionManager.setPlaybackState({
+              playbackState: 'playing',
+              playbackSpeed: this.speed
+          });
+
+      } catch (e) {
+          console.error('Background engagement failed', e);
       }
   }
 
@@ -539,12 +600,22 @@ export class AudioPlayerService {
     const item = this.queue[this.currentIndex];
 
     if (this.status !== 'playing') {
+        // 2. Engage Shield if transitioning from a Stopped state.
+        // If we are already playing (e.g., just moving to the next sentence),
+        // the shield is already up, so we skip this to avoid notification flicker.
+        await this.engageBackgroundMode(item);
         this.setStatus('loading');
     }
 
     this.notifyListeners(item.cfi);
     this.updateMediaSessionMetadata();
     this.persistQueue(); // Update index in DB
+
+    // IMPORTANT:
+    // Because the Shield (Foreground Service) is now active,
+    // the WebView is not restricted by Doze mode.
+    // This means calls to fetch() for Cloud TTS will succeed
+    // even if the screen is off and the phone is in the user's pocket.
 
     try {
         const voiceId = this.voiceId || '';
@@ -750,6 +821,17 @@ export class AudioPlayerService {
   private async stopInternal() {
     await this.savePlaybackState();
 
+    // 3. Disengage Shield
+    // Crucial cleanup. If we don't stop the service, the notification
+    // will become "stuck" and un-dismissible, annoying the user.
+    if (Capacitor.isNativePlatform()) {
+        try {
+            await ForegroundService.stopForegroundService();
+            // Tell the OS we are done with media.
+            await this.mediaSessionManager.setPlaybackState({ playbackState: 'none' });
+        } catch (e) { console.warn(e); }
+    }
+
     this.setStatus('stopped');
     this.notifyListeners(null);
 
@@ -934,5 +1016,19 @@ export class AudioPlayerService {
 
   private notifyError(message: string) {
       this.listeners.forEach(l => l(this.status, this.queue[this.currentIndex]?.cfi || null, this.currentIndex, this.queue, message));
+  }
+
+  /**
+   * OPTIONAL: Samsung Mitigation
+   * Checks if the app is restricted and prompts the user.
+   */
+  public async checkBatteryOptimization() {
+      if (Capacitor.getPlatform() === 'android') {
+          const isEnabled = await BatteryOptimization.isBatteryOptimizationEnabled();
+          if (isEnabled.enabled) {
+              // Logic to show a UI prompt to the user explaining why they should disable it.
+              // Then call BatteryOptimization.openBatteryOptimizationSettings();
+          }
+      }
   }
 }

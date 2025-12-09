@@ -423,7 +423,9 @@ This serves as the central brain. We must modify it to execute the "Atomic Start
 
 **File:** `src/lib/tts/AudioPlayerService.ts`
 
-```
+*(Step 4.3 Completed: Implemented orchestrator logic with Foreground Service and Media Session Manager)*
+
+```typescript
 import { Capacitor } from '@capacitor/core';
 import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
@@ -452,9 +454,18 @@ export class AudioPlayerService {
      */
     private async engageBackgroundMode(item: TTSQueueItem) {
         // Only run this logic on Android devices.
-        if (!Capacitor.isNativePlatform()) return;
+        if (Capacitor.getPlatform() !== 'android') return;
 
         try {
+            // Ensure channel exists (idempotent)
+            await ForegroundService.createNotificationChannel({
+                id: 'versicle_tts_channel',
+                name: 'Versicle Playback',
+                description: 'Controls for background reading',
+                importance: 3,
+                visibility: 1
+            });
+
             // Step A: Start Foreground Service (The Shield)
             // This MUST happen first. It promotes the app process priority.
             await ForegroundService.startForegroundService({
@@ -473,7 +484,7 @@ export class AudioPlayerService {
             await this.mediaSessionManager.setMetadata({
                 title: item.title || 'Chapter Text',
                 artist: 'Versicle',
-                album: item.bookTitle,
+                album: item.bookTitle || '',
                 artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
             });
 
