@@ -296,3 +296,33 @@ epub.js provides a robust annotation API based on **Canonical Fragment Identifie
   - [ ] Use `Intl.Segmenter` for better text splitting.
   - [ ] Implement playback queue UI.
   - [ ] Add buffering/prefetching logic.
+
+## **Capacitor Transition Plan**
+
+- [x] **Phase 1: Capacitor Transition (Project Setup)**
+  - [x] Install Capacitor Core & CLI.
+  - [x] Initialize Capacitor Config.
+  - [x] Add Android Platform.
+
+- [x] **Phase 2: The Android Compliance Triad (Dependencies)**
+  - [x] Install `capacitor-android-foreground-service`
+  - [x] Install `capacitor-media-session`
+  - [x] Install `text-to-speech`
+  - [x] Install `capacitor-android-battery-optimization`
+  - [x] Sync Native Project (`npx cap sync`)
+
+- [x] **Phase 3: Android Manifest Configuration**
+  - [x] Update `AndroidManifest.xml` with permissions.
+  - [x] Add Foreground Service & Receiver to Manifest.
+  - [x] Add Notification Icon (`ic_stat_versicle.png`).
+
+- [ ] **Phase 4: Code Implementation (The Hybrid Bridge)**
+  - [ ] Implement `CapacitorTTSProvider`.
+  - [ ] Implement `MediaSessionManager`.
+  - [ ] Update `AudioPlayerService` for atomic start sequence.
+  - [ ] Update App Initialization.
+
+- [ ] **Phase 5: Verification**
+  - [ ] Build & Sync.
+  - [ ] Run on Android Device/Emulator.
+  - [ ] Verify Background Playback & Compliance.

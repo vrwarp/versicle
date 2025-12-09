@@ -111,6 +111,12 @@ npx cap add android
 
 To satisfy Android 14's rigorous media policies, we cannot rely on generic background plugins. We must install a specific suite of native plugins that work in concert.
 
+**Note on Versions (Capacitor 6):**
+*   `@capawesome-team/capacitor-android-foreground-service`: Use `^6.0.0`
+*   `@jofr/capacitor-media-session`: Use `^4.0.0`
+*   `@capacitor-community/text-to-speech`: Use `^5.1.0` (Version 6+ requires Capacitor 7)
+*   `@capawesome-team/capacitor-android-battery-optimization`: Use `^6.0.0`
+
 ```
 # 1. Process Shield: @capawesome-team/capacitor-android-foreground-service
 # This plugin manages the notification channels and the specific 'startForeground'
