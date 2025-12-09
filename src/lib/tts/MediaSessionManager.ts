@@ -100,7 +100,8 @@ export class MediaSessionManager {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async setNativeActionHandler(action: string, handler?: (...args: any[]) => void) {
       if (handler) {
-          // @ts-ignore - The types for MediaSessionAction might not perfectly align with string but it works at runtime or needs explicit casting
+          // The types for MediaSessionAction might not perfectly align with string but it works at runtime or needs explicit casting
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await MediaSession.setActionHandler({ action: action as any }, handler);
       }
   }

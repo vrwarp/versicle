@@ -318,9 +318,9 @@ epub.js provides a robust annotation API based on **Canonical Fragment Identifie
 
 - [ ] **Phase 4: Code Implementation (The Hybrid Bridge)**
   - [x] Implement `CapacitorTTSProvider`.
-  - [ ] Implement `MediaSessionManager`.
-  - [ ] Update `AudioPlayerService` for atomic start sequence.
-  - [ ] Update App Initialization.
+  - [x] Implement `MediaSessionManager`.
+  - [x] Update `AudioPlayerService` for atomic start sequence.
+  - [x] Update App Initialization.
 
 - [ ] **Phase 5: Verification**
   - [ ] Build & Sync.
