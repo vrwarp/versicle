@@ -3,7 +3,10 @@
 > vite
 
 
-  VITE v5.4.21  ready in 443 ms
+  VITE v5.4.21  ready in 299 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
+7:13:19 AM [vite] ✨ new dependencies optimized: flexsearch
+7:13:19 AM [vite] ✨ optimized dependencies changed. reloading
+7:16:35 AM [vite] hmr update /src/index.css, /src/components/reader/ReaderView.tsx

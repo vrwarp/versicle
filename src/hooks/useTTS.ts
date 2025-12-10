@@ -53,9 +53,14 @@ export const useTTS = (rendition: Rendition | null) => {
        console.log("[TTS-DEBUG] loadSentences triggered");
        try {
            // Check if chapter has changed
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           const currentLocation = (rendition as any).currentLocation();
-           const currentHref = currentLocation?.start?.href;
+           let currentHref: string | undefined;
+           try {
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               const currentLocation = (rendition as any).currentLocation();
+               currentHref = currentLocation?.start?.href;
+           } catch (err) {
+               console.warn("[TTS] Could not get current location", err);
+           }
 
            console.log(`[TTS-DEBUG] currentHref: ${currentHref}, lastLoadedHref: ${lastLoadedHref.current}`);
 
@@ -126,8 +131,21 @@ export const useTTS = (rendition: Rendition | null) => {
     // Also try immediately if already rendered
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contents = (rendition as any).getContents();
+    let initTimeout: ReturnType<typeof setTimeout>;
+
     if (contents.length > 0 && contents[0].document && contents[0].document.body) {
         loadSentences();
+    } else {
+        // Retry after a small delay in case we missed the event but contents are appearing (common in Capacitor/Android)
+        initTimeout = setTimeout(() => {
+             if (rendition) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 const c = (rendition as any).getContents();
+                 if (c.length > 0 && c[0].document && c[0].document.body) {
+                     loadSentences();
+                 }
+             }
+        }, 1000);
     }
 
     return () => {
@@ -135,6 +153,8 @@ export const useTTS = (rendition: Rendition | null) => {
         (rendition as any).off('rendered', loadSentences);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).off('relocated', loadSentences);
+
+        if (initTimeout) clearTimeout(initTimeout);
     };
   }, [rendition, player]); // Removed currentCfi dependency
 
