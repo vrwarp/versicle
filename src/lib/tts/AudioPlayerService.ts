@@ -645,7 +645,21 @@ export class AudioPlayerService {
 
         if (this.provider.id === 'local') {
              this.currentSpeechSpeed = this.speed;
-             await this.provider.synthesize(processedText, voiceId, this.speed, signal);
+
+             // Ensure we unblock the provider if this operation is aborted
+             // (e.g. by seek, stop, or pause).
+             const onAbort = () => {
+                if (this.provider.id === 'local' && this.provider.stop) {
+                    this.provider.stop();
+                }
+             };
+             signal.addEventListener('abort', onAbort);
+
+             try {
+                await this.provider.synthesize(processedText, voiceId, this.speed, signal);
+             } finally {
+                signal.removeEventListener('abort', onAbort);
+             }
         } else {
              // Cloud provider flow with Caching
              const cacheKey = await this.cache.generateKey(item.text, voiceId, this.speed, 1.0, lexiconHash);

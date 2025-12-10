@@ -11,6 +11,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
   id = 'local';
   private voiceMap = new Map<string, TTSVoice>();
   private callback: TTSCallback | null = null;
+  private isSpeaking = false;
 
   async init(): Promise<void> {
     // Native plugins generally initialize lazily, but we could check
@@ -55,6 +56,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
        console.warn(`Voice ${voiceId} not found in cache, using default lang ${lang}`);
     }
 
+    this.isSpeaking = true;
     this.emit('start');
 
     try {
@@ -67,11 +69,16 @@ export class CapacitorTTSProvider implements ITTSProvider {
         category: 'playback', // Important iOS hint, good practice for Android
         queueStrategy: 0 // 0 = Flush (interrupt). Necessary for responsive controls (Next/Prev/Seek).
       });
-      this.emit('end');
+
+      if (this.isSpeaking) {
+        this.emit('end');
+      }
     } catch (e) {
       this.emit('error', { error: e });
       // We consume the error to prevent double-reporting if the caller handles promise rejection.
       // AudioPlayerService logic assumes events drive the state when using 'local' provider.
+    } finally {
+      this.isSpeaking = false;
     }
 
     // We return a marker indicating native playback occurred.
@@ -80,12 +87,14 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   async stop(): Promise<void> {
+    this.isSpeaking = false;
     await TextToSpeech.stop();
   }
 
   async pause(): Promise<void> {
     // Native TTS pause support varies wildly by Android version and Engine.
     // A hard stop is the safest way to ensure silence.
+    this.isSpeaking = false;
     await TextToSpeech.stop();
   }
 
