@@ -1,11 +1,16 @@
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import type { ITTSProvider, SpeechSegment, TTSVoice } from './types';
 
+// Callback type matching WebSpeechProvider's expected signature
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TTSCallback = (event: { type: 'start' | 'end' | 'boundary' | 'error', charIndex?: number, error?: any }) => void;
+
 export class CapacitorTTSProvider implements ITTSProvider {
   // We use the ID 'local' so this provider naturally replaces the WebSpeechProvider
   // in the selection logic when running on a device.
   id = 'local';
   private voiceMap = new Map<string, TTSVoice>();
+  private callback: TTSCallback | null = null;
 
   async init(): Promise<void> {
     // Native plugins generally initialize lazily, but we could check
@@ -49,15 +54,24 @@ export class CapacitorTTSProvider implements ITTSProvider {
        console.warn(`Voice ${voiceId} not found in cache, using default lang ${lang}`);
     }
 
-    // The plugin handles the audio output directly.
-    // This Promise resolves only when the speech finishes (onEnd event).
-    await TextToSpeech.speak({
-      text,
-      lang,
-      rate: speed,
-      category: 'playback', // Important iOS hint, good practice for Android
-      queueStrategy: 1 // 1 = Add to queue (smoother), 0 = Flush (interrupt)
-    });
+    this.emit('start');
+
+    try {
+      // The plugin handles the audio output directly.
+      // This Promise resolves only when the speech finishes (onEnd event).
+      await TextToSpeech.speak({
+        text,
+        lang,
+        rate: speed,
+        category: 'playback', // Important iOS hint, good practice for Android
+        queueStrategy: 1 // 1 = Add to queue (smoother), 0 = Flush (interrupt)
+      });
+      this.emit('end');
+    } catch (e) {
+      this.emit('error', { error: e });
+      // We consume the error to prevent double-reporting if the caller handles promise rejection.
+      // AudioPlayerService logic assumes events drive the state when using 'local' provider.
+    }
 
     // We return a marker indicating native playback occurred.
     // This tells the Service NOT to try and play an audio blob.
@@ -76,5 +90,16 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
   async resume(): Promise<void> {
     // Not reliably supported by the native bridge.
+  }
+
+  on(callback: TTSCallback) {
+    this.callback = callback;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private emit(type: 'start' | 'end' | 'boundary' | 'error', data: any = {}) {
+    if (this.callback) {
+      this.callback({ type, ...data });
+    }
   }
 }
