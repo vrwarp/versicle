@@ -50,6 +50,10 @@ describe('useTTS', () => {
         // Reset mocks
         vi.clearAllMocks();
 
+        // Default mock return value for extractSentences
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (ttsLib.extractSentences as any).mockReturnValue([]);
+
         // Setup Store mock
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useTTSStore as any).mockReturnValue({
@@ -80,12 +84,12 @@ describe('useTTS', () => {
     });
 
     it('should load voices on mount', () => {
-        renderHook(() => useTTS(mockRendition));
+        renderHook(() => useTTS(mockRendition, true));
         expect(mockLoadVoices).toHaveBeenCalled();
     });
 
     it('should subscribe to rendered event', () => {
-        renderHook(() => useTTS(mockRendition));
+        renderHook(() => useTTS(mockRendition, true));
         expect(mockRendition.on).toHaveBeenCalledWith('rendered', expect.any(Function));
     });
 
@@ -94,7 +98,7 @@ describe('useTTS', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (ttsLib.extractSentences as any).mockReturnValue(mockSentences);
 
-        const { result } = renderHook(() => useTTS(mockRendition));
+        const { result } = renderHook(() => useTTS(mockRendition, true));
 
         // Simulate rendered callback
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -124,7 +128,7 @@ describe('useTTS', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (ttsLib.extractSentences as any).mockReturnValue(mockSentences);
 
-        renderHook(() => useTTS(mockRendition));
+        renderHook(() => useTTS(mockRendition, true));
 
         // Simulate rendered callback
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -147,7 +151,7 @@ describe('useTTS', () => {
     });
 
     it('should stop player on unmount', () => {
-        const { unmount } = renderHook(() => useTTS(mockRendition));
+        const { unmount } = renderHook(() => useTTS(mockRendition, true));
         unmount();
         expect(mockPlayerInstance.stop).toHaveBeenCalled();
     });

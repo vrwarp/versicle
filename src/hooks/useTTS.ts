@@ -25,7 +25,7 @@ const NO_TEXT_MESSAGES = [
  * @param rendition - The current epubjs Rendition object, used to extract text content.
  * @returns An object containing the extracted sentences for the current view.
  */
-export const useTTS = (rendition: Rendition | null) => {
+export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
   const {
     loadVoices,
     prerollEnabled,
@@ -128,12 +128,12 @@ export const useTTS = (rendition: Rendition | null) => {
     rendition.on('rendered', loadSentences);
     rendition.on('relocated', loadSentences);
 
-    // Also try immediately if already rendered
+    // Also try immediately if already rendered or if the book is ready
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contents = (rendition as any).getContents();
     let initTimeout: ReturnType<typeof setTimeout>;
 
-    if (contents.length > 0 && contents[0].document && contents[0].document.body) {
+    if (isReady || (contents.length > 0 && contents[0].document && contents[0].document.body)) {
         loadSentences();
     } else {
         // Retry after a small delay in case we missed the event but contents are appearing
@@ -156,7 +156,7 @@ export const useTTS = (rendition: Rendition | null) => {
 
         if (initTimeout) clearTimeout(initTimeout);
     };
-  }, [rendition, player]); // Removed currentCfi dependency
+  }, [rendition, player, isReady]); // Removed currentCfi dependency
 
   // Cleanup on unmount
   useEffect(() => {
