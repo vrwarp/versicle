@@ -177,16 +177,21 @@ export class AudioPlayerService {
    * @param bookId - The unique identifier of the book, or null to clear.
    */
   setBookId(bookId: string | null) {
+      console.log(`[TTS-DEBUG] setBookId: ${bookId} (was ${this.currentBookId})`);
       if (this.currentBookId !== bookId) {
           this.currentBookId = bookId;
           this.sessionRestored = false; // Reset restoration flag for new book
           if (bookId) {
+              console.log(`[TTS-DEBUG] Triggering restoreQueue for ${bookId}`);
               this.restoreQueue(bookId);
           } else {
+              console.log(`[TTS-DEBUG] Clearing queue (bookId is null)`);
               this.queue = [];
               this.currentIndex = 0;
               this.setStatus('stopped');
           }
+      } else {
+          console.log(`[TTS-DEBUG] setBookId ignored (same ID)`);
       }
   }
 
@@ -241,16 +246,23 @@ export class AudioPlayerService {
   }
 
   private async restoreQueue(bookId: string) {
+      console.log(`[TTS-DEBUG] restoreQueue started for ${bookId}`);
       // Execute with lock to prevent race conditions with setQueue from useTTS
       this.executeWithLock(async (signal) => {
           try {
               const state = await dbService.getTTSState(bookId);
-              if (signal.aborted) return;
+              if (signal.aborted) {
+                  console.log(`[TTS-DEBUG] restoreQueue aborted for ${bookId}`);
+                  return;
+              }
               // Check if bookId still matches (async race)
-              if (this.currentBookId !== bookId) return;
+              if (this.currentBookId !== bookId) {
+                  console.log(`[TTS-DEBUG] restoreQueue skipped (bookId mismatch: current=${this.currentBookId})`);
+                  return;
+              }
 
               if (state && state.queue && state.queue.length > 0) {
-                  console.log("Restoring TTS queue from persistence", state.queue.length, "items");
+                  console.log(`[TTS-DEBUG] Restoring TTS queue from persistence: ${state.queue.length} items, index ${state.currentIndex}`);
 
                   // Stop any current playback if we are switching queue
                   await this.stopInternal();
@@ -259,9 +271,11 @@ export class AudioPlayerService {
                   this.currentIndex = state.currentIndex || 0;
                   this.updateMediaSessionMetadata();
                   this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+              } else {
+                  console.log(`[TTS-DEBUG] No TTS state found for ${bookId} or queue empty`);
               }
           } catch (e) {
-              console.error("Failed to restore TTS queue", e);
+              console.error("[TTS-DEBUG] Failed to restore TTS queue", e);
           }
       });
   }
@@ -432,10 +446,12 @@ export class AudioPlayerService {
    * @returns A Promise that resolves when the queue is updated.
    */
   setQueue(items: TTSQueueItem[], startIndex: number = 0) {
+    console.log(`[TTS-DEBUG] setQueue called with ${items.length} items, start=${startIndex}`);
     return this.executeWithLock(async () => {
         // If the queue is effectively the same, we should update it (to catch metadata changes)
         // but NOT stop playback or reset the index, allowing for seamless continuation.
         if (this.isQueueEqual(items)) {
+            console.log(`[TTS-DEBUG] setQueue: Queue is equal, preserving index ${this.currentIndex}`);
             // Queue text matches.
             // But maybe metadata (title) changed?
             // We update the queue object but KEEP currentIndex.
@@ -446,6 +462,7 @@ export class AudioPlayerService {
             return;
         }
 
+        console.log(`[TTS-DEBUG] setQueue: Queue changed (or new). Replacing queue.`);
         await this.stopInternal();
         this.queue = items;
         this.currentIndex = startIndex;

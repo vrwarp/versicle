@@ -50,15 +50,19 @@ export const useTTS = (rendition: Rendition | null) => {
     if (!rendition) return;
 
     const loadSentences = () => {
+       console.log("[TTS-DEBUG] loadSentences triggered");
        try {
            // Check if chapter has changed
            // eslint-disable-next-line @typescript-eslint/no-explicit-any
            const currentLocation = (rendition as any).currentLocation();
            const currentHref = currentLocation?.start?.href;
 
+           console.log(`[TTS-DEBUG] currentHref: ${currentHref}, lastLoadedHref: ${lastLoadedHref.current}`);
+
            // If we have loaded this chapter already, don't reload queue
            // This prevents queue reset on page turns in paginated mode
            if (currentHref && currentHref === lastLoadedHref.current) {
+               console.log("[TTS-DEBUG] Skipping loadSentences (same href)");
                return;
            }
 
@@ -67,6 +71,7 @@ export const useTTS = (rendition: Rendition | null) => {
            }
 
            const extracted = extractSentences(rendition);
+           console.log(`[TTS-DEBUG] extractSentences returned ${extracted.length} items`);
            setSentences(extracted);
 
            let queue: TTSQueueItem[] = [];
@@ -105,10 +110,11 @@ export const useTTS = (rendition: Rendition | null) => {
                queue.unshift(prerollItem);
            }
 
+           console.log(`[TTS-DEBUG] calling player.setQueue with ${queue.length} items`);
            player.setQueue(queue);
 
        } catch (e) {
-           console.error("Failed to extract sentences", e);
+           console.error("[TTS-DEBUG] Failed to extract sentences", e);
            setSentences([]);
            player.setQueue([]);
        }
