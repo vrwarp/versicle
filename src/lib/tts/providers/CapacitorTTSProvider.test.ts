@@ -7,7 +7,7 @@ vi.mock('@capacitor-community/text-to-speech', () => ({
   TextToSpeech: {
     getSupportedVoices: vi.fn(),
     speak: vi.fn(),
-    stop: vi.fn(),
+    stop: vi.fn().mockResolvedValue(undefined),
   }
 }));
 
@@ -100,6 +100,50 @@ describe('CapacitorTTSProvider', () => {
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({
         type: 'error',
         error: error
+    }));
+  });
+
+  it('should abort synthesis when signal is aborted', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+
+    // Mock speak to take some time
+    let finishSpeak: () => void;
+    const speakPromise = new Promise<void>((resolve) => {
+        finishSpeak = resolve;
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockImplementation(() => speakPromise);
+
+    await provider.init();
+
+    const callback = vi.fn();
+    provider.on(callback);
+
+    const controller = new AbortController();
+    const synthesizePromise = provider.synthesize('hello', 'voice1', 1.0, controller.signal);
+
+    // Verify start emitted
+    expect(callback).toHaveBeenCalledWith({ type: 'start' });
+
+    // Abort
+    controller.abort();
+
+    // Expect stop to be called
+    expect(TextToSpeech.stop).toHaveBeenCalled();
+
+    // Finish the speak promise (simulate native end)
+    finishSpeak!();
+
+    await synthesizePromise;
+
+    // Expect 'interrupted' error, NOT 'end'
+    expect(callback).not.toHaveBeenCalledWith({ type: 'end' });
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'error',
+        error: 'interrupted'
     }));
   });
 });

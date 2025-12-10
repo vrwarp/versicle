@@ -55,6 +55,15 @@ export class CapacitorTTSProvider implements ITTSProvider {
        console.warn(`Voice ${voiceId} not found in cache, using default lang ${lang}`);
     }
 
+    // Abort handling
+    const onAbort = () => {
+        TextToSpeech.stop().catch(e => console.warn('Failed to stop TTS on abort', e));
+    };
+
+    if (signal) {
+        signal.addEventListener('abort', onAbort);
+    }
+
     this.emit('start');
 
     try {
@@ -67,11 +76,24 @@ export class CapacitorTTSProvider implements ITTSProvider {
         category: 'playback', // Important iOS hint, good practice for Android
         queueStrategy: 0 // 0 = Flush (interrupt). Necessary for responsive controls (Next/Prev/Seek).
       });
-      this.emit('end');
+
+      if (signal?.aborted) {
+          this.emit('error', { error: 'interrupted' });
+      } else {
+          this.emit('end');
+      }
     } catch (e) {
-      this.emit('error', { error: e });
-      // We consume the error to prevent double-reporting if the caller handles promise rejection.
-      // AudioPlayerService logic assumes events drive the state when using 'local' provider.
+      if (signal?.aborted) {
+          this.emit('error', { error: 'interrupted' });
+      } else {
+          this.emit('error', { error: e });
+          // We consume the error to prevent double-reporting if the caller handles promise rejection.
+          // AudioPlayerService logic assumes events drive the state when using 'local' provider.
+      }
+    } finally {
+        if (signal) {
+            signal.removeEventListener('abort', onAbort);
+        }
     }
 
     // We return a marker indicating native playback occurred.
