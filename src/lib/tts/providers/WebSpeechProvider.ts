@@ -22,10 +22,20 @@ export class WebSpeechProvider implements ITTSProvider {
   private voicesLoaded = false;
   private silentAudio: HTMLAudioElement;
   private config: WebSpeechConfig;
+  private isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
   constructor(config: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 }) {
     this.config = config;
     this.synth = window.speechSynthesis;
+
+    // Android specific workarounds
+    if (this.isAndroid) {
+        // Remove resume capability on Android to force AudioPlayerService to re-synthesize
+        // instead of relying on the broken native resume().
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (this as any).resume = undefined;
+    }
+
     // Initialize silent audio loop to keep MediaSession active
     this.silentAudio = new Audio();
     this.silentAudio.loop = true;
@@ -169,6 +179,12 @@ export class WebSpeechProvider implements ITTSProvider {
   async synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
     this.cancel(); // specific method to stop previous
 
+    if (this.isAndroid) {
+        // Small delay to allow the cancellation to propagate and prevent race conditions
+        // where the new utterance is immediately cancelled or fails to start.
+        await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
     if (signal?.aborted) {
       throw new Error('Aborted');
     }
@@ -228,7 +244,12 @@ export class WebSpeechProvider implements ITTSProvider {
    * Pauses playback.
    */
   pause(): void {
-    if (this.synth.speaking) {
+    if (this.isAndroid) {
+        // On Android, pause() is often broken or behaves like cancel().
+        // Explicitly cancel to stop audio, relying on AudioPlayerService to
+        // re-synthesize from the current position on resume (since we removed resume()).
+        this.synth.cancel();
+    } else if (this.synth.speaking) {
       this.synth.pause();
     }
     this.pauseSilentAudio();

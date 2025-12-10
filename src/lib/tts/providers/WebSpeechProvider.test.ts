@@ -202,4 +202,50 @@ describe('WebSpeechProvider', () => {
           expect(mockAudio.src).toContain('silence');
       });
   });
+
+  describe('Android behavior', () => {
+      let originalUserAgent: string;
+
+      beforeEach(() => {
+          originalUserAgent = navigator.userAgent;
+          Object.defineProperty(navigator, 'userAgent', {
+              get: () => 'Mozilla/5.0 (Linux; Android 10; SM-G960U) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.181 Mobile Safari/537.36',
+              configurable: true
+          });
+          provider = new WebSpeechProvider();
+      });
+
+      afterEach(() => {
+          Object.defineProperty(navigator, 'userAgent', {
+              value: originalUserAgent,
+              configurable: true
+          });
+          vi.useRealTimers();
+      });
+
+      it('should disable resume method on Android', () => {
+          expect(provider.resume).toBeUndefined();
+      });
+
+      it('should cancel instead of pause on Android', () => {
+          provider.pause();
+          expect(mockSynth.cancel).toHaveBeenCalled();
+          expect(mockSynth.pause).not.toHaveBeenCalled();
+      });
+
+      it('should wait after cancel in synthesize', async () => {
+          vi.useFakeTimers();
+          mockSynth.getVoices.mockReturnValue([{ name: 'Voice 1', lang: 'en-US' }]);
+
+          const p = provider.synthesize('test', 'Voice 1', 1.0);
+
+          expect(mockSynth.cancel).toHaveBeenCalled();
+          expect(mockSynth.speak).not.toHaveBeenCalled(); // Should be waiting
+
+          await vi.advanceTimersByTimeAsync(60);
+
+          await p;
+          expect(mockSynth.speak).toHaveBeenCalled();
+      });
+  });
 });
