@@ -131,21 +131,9 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
     // Also try immediately if already rendered or if the book is ready
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contents = (rendition as any).getContents();
-    let initTimeout: ReturnType<typeof setTimeout>;
 
     if (isReady || (contents.length > 0 && contents[0].document && contents[0].document.body)) {
         loadSentences();
-    } else {
-        // Retry after a small delay in case we missed the event but contents are appearing
-        initTimeout = setTimeout(() => {
-             if (rendition) {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                 const c = (rendition as any).getContents();
-                 if (c.length > 0 && c[0].document && c[0].document.body) {
-                     loadSentences();
-                 }
-             }
-        }, 1000);
     }
 
     return () => {
@@ -153,8 +141,6 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
         (rendition as any).off('rendered', loadSentences);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).off('relocated', loadSentences);
-
-        if (initTimeout) clearTimeout(initTimeout);
     };
   }, [rendition, player, isReady]); // Removed currentCfi dependency
 
