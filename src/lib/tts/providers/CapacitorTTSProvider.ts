@@ -23,7 +23,8 @@ export class CapacitorTTSProvider implements ITTSProvider {
     try {
       const { voices } = await TextToSpeech.getSupportedVoices();
       // Map the native voice objects to our internal TTSVoice interface
-      const mappedVoices: TTSVoice[] = voices.map(v => ({
+      const voiceList = voices || [];
+      const mappedVoices: TTSVoice[] = voiceList.map(v => ({
         id: v.voiceURI, // Native URI is robust for ID
         name: v.name,
         lang: v.lang,
