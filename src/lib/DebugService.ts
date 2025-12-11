@@ -1,6 +1,5 @@
 import { AudioPlayerService } from './tts/AudioPlayerService';
 import { useTTSStore } from '../store/useTTSStore';
-import { dbService } from '../db/DBService';
 import { Capacitor } from '@capacitor/core';
 
 export interface DebugSnapshot {
