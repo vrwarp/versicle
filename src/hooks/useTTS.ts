@@ -25,7 +25,7 @@ const NO_TEXT_MESSAGES = [
  * @param rendition - The current epubjs Rendition object, used to extract text content.
  * @returns An object containing the extracted sentences for the current view.
  */
-export const useTTS = (rendition: Rendition | null) => {
+export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
   const {
     loadVoices,
     prerollEnabled,
@@ -53,9 +53,14 @@ export const useTTS = (rendition: Rendition | null) => {
        console.log("[TTS-DEBUG] loadSentences triggered");
        try {
            // Check if chapter has changed
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           const currentLocation = (rendition as any).currentLocation();
-           const currentHref = currentLocation?.start?.href;
+           let currentHref: string | undefined;
+           try {
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               const currentLocation = (rendition as any).currentLocation();
+               currentHref = currentLocation?.start?.href;
+           } catch (err) {
+               console.warn("[TTS] Could not get current location", err);
+           }
 
            console.log(`[TTS-DEBUG] currentHref: ${currentHref}, lastLoadedHref: ${lastLoadedHref.current}`);
 
@@ -123,10 +128,11 @@ export const useTTS = (rendition: Rendition | null) => {
     rendition.on('rendered', loadSentences);
     rendition.on('relocated', loadSentences);
 
-    // Also try immediately if already rendered
+    // Also try immediately if already rendered or if the book is ready
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contents = (rendition as any).getContents();
-    if (contents.length > 0 && contents[0].document && contents[0].document.body) {
+
+    if (isReady || (contents.length > 0 && contents[0].document && contents[0].document.body)) {
         loadSentences();
     }
 
@@ -136,7 +142,7 @@ export const useTTS = (rendition: Rendition | null) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).off('relocated', loadSentences);
     };
-  }, [rendition, player]); // Removed currentCfi dependency
+  }, [rendition, player, isReady]); // Removed currentCfi dependency
 
   // Cleanup on unmount
   useEffect(() => {

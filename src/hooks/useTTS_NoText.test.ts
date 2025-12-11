@@ -63,7 +63,7 @@ describe('useTTS - No Text Behavior', () => {
         // Mock extraction to return empty array
         (ttsLib.extractSentences as any).mockReturnValue([]);
 
-        renderHook(() => useTTS(mockRendition));
+        renderHook(() => useTTS(mockRendition, true));
 
         // Trigger the effect (simulate 'rendered' event)
         const renderCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
@@ -86,7 +86,7 @@ describe('useTTS - No Text Behavior', () => {
          const mockSentences = [{ text: 'Hello world', cfi: 'cfi:/1/2' }];
          (ttsLib.extractSentences as any).mockReturnValue(mockSentences);
 
-         renderHook(() => useTTS(mockRendition));
+         renderHook(() => useTTS(mockRendition, true));
 
          // Trigger
          const renderCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
