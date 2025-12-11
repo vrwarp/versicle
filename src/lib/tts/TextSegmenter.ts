@@ -116,7 +116,10 @@ export class TextSegmenter {
                 } else {
                     // Optimized: Get last word without splitting the whole string
                     const match = /\S+$/.exec(lastTextTrimmed);
-                    lastWord = match ? match[0] : lastTextTrimmed;
+                    const rawLastWord = match ? match[0] : lastTextTrimmed;
+
+                    // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
+                    lastWord = rawLastWord.replace(/^['"([<{]+/, '');
 
                     if (this.abbreviations.has(lastWord)) {
                         isAbbreviation = true;
