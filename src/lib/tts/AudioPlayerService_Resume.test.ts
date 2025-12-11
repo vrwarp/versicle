@@ -104,20 +104,9 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
         await service.resume();
 
         // 5. Verify behavior
-        // BUG: Currently it calls resumeSpy() and NOT synthesizeSpy()
-        // EXPECTED FIX: It should call synthesizeSpy() with speed 2.0
-
-        if (synthesizeSpy.mock.calls.length > 1) {
-            // It called synthesize again
-            const lastCall = synthesizeSpy.mock.calls[synthesizeSpy.mock.calls.length - 1];
-            expect(lastCall[2]).toBe(2.0);
-            console.log("Passed: Synthesize called with new speed.");
-        } else {
-            console.log("Failed: Synthesize NOT called. Called resumeSpy instead.");
-            expect(resumeSpy).toHaveBeenCalled();
-        }
-
+        // It should call synthesizeSpy() with speed 2.0 because speed changed
         expect(synthesizeSpy).toHaveBeenCalledTimes(2);
         expect(synthesizeSpy.mock.calls[1][2]).toBe(2.0);
+        expect(resumeSpy).not.toHaveBeenCalled();
     });
 });
