@@ -11,6 +11,7 @@ The `play()` method involved asynchronous operations that left the service in a 
 *   **Implementation:**
     *   Added `executeWithLock(operation)` helper method in `AudioPlayerService`.
     *   This method aborts the previous operation (via `AbortController`), waits for it to clean up (via a Promise-based lock), and then executes the new operation.
+    *   **Update:** Modified `executeWithLock` to support "Critical Operations". Methods `setQueue`, `setSpeed`, `setVoice`, and `setProvider` are marked as critical and will **not** be aborted by subsequent operations. They will run to completion, forcing subsequent operations to wait.
     *   All public state-modifying methods (`play`, `pause`, `stop`, `next`, `prev`, `setQueue`, `jumpTo`, `setSpeed`, `setVoice`, `setProvider`) are wrapped in `executeWithLock`.
     *   Updated `ITTSProvider` interface to accept `signal: AbortSignal` in `synthesize`.
     *   Updated `WebSpeechProvider`, `GoogleTTSProvider`, and `OpenAIProvider` to respect the abort signal.
@@ -30,6 +31,9 @@ We defined valid transitions to prevent invalid states.
         *   Rapid `jumpTo`/`play` calls result in only the last one executing (Last Writer Wins).
         *   `stop()` immediately following `play()` correctly results in `stopped` state.
         *   Operations waiting for lock are aborted if a new operation comes in.
+    *   `src/lib/tts/AudioPlayerService_Critical.test.ts` verifies:
+        *   Critical operations (`setQueue`) are not aborted by subsequent operations (`play`).
+        *   Sequential critical operations execute serially.
     *   Existing `AudioPlayerService.test.ts` updated and passing.
 *   **Manual Verification:**
     *   Verified "Spam click" behavior in `test_journey_reading.py` (indirectly) and manual testing scenarios.

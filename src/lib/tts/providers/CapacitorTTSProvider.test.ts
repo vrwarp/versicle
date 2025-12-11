@@ -69,6 +69,7 @@ describe('CapacitorTTSProvider', () => {
 
     // Setup speak to resolve later
     let resolveSpeak: ((value: void | PromiseLike<void>) => void) | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (TextToSpeech.speak as any).mockReturnValue(new Promise<void>(resolve => {
         resolveSpeak = resolve;
     }));

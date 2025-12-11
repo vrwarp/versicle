@@ -12,6 +12,11 @@ import { LexiconService } from './LexiconService';
 import { MediaSessionManager } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
 
+interface OperationState {
+    controller: AbortController;
+    isCritical: boolean;
+}
+
 /**
  * Defines the possible states of the TTS playback.
  */
@@ -72,7 +77,7 @@ export class AudioPlayerService {
   private isPreviewing: boolean = false;
 
   // Concurrency Control
-  private currentOperation: AbortController | null = null;
+  private currentOperation: OperationState | null = null;
   private operationLock: Promise<void> = Promise.resolve();
 
   private localProviderConfig: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 };
@@ -130,17 +135,22 @@ export class AudioPlayerService {
    * 1. Aborts the current running operation.
    * 2. Waits for previous operations to clean up (lock).
    * 3. Starts the new operation with a fresh AbortSignal.
+   *
+   * @param operation The operation to execute.
+   * @param isCritical If true, this operation will NOT be aborted by subsequent operations.
    */
-  private async executeWithLock(operation: (signal: AbortSignal) => Promise<void>) {
-      // 1. Abort current operation
+  private async executeWithLock(operation: (signal: AbortSignal) => Promise<void>, isCritical: boolean = false) {
+      // 1. Abort current operation (if not critical)
       if (this.currentOperation) {
-          this.currentOperation.abort();
+          if (!this.currentOperation.isCritical) {
+              this.currentOperation.controller.abort();
+          }
           this.currentOperation = null;
       }
 
       // 2. Create new controller
       const controller = new AbortController();
-      this.currentOperation = controller;
+      this.currentOperation = { controller, isCritical };
       const signal = controller.signal;
 
       // 3. Acquire lock (wait for previous to finish/cleanup)
@@ -165,7 +175,7 @@ export class AudioPlayerService {
           // Release lock
           resolveLock!();
           // Clear currentOperation if it's still us
-          if (this.currentOperation === controller) {
+          if (this.currentOperation?.controller === controller) {
               this.currentOperation = null;
           }
       }
@@ -396,7 +406,7 @@ export class AudioPlayerService {
             // Cloud provider
             this.setupCloudPlayback();
         }
-      });
+      }, true);
   }
 
   /**
@@ -470,7 +480,7 @@ export class AudioPlayerService {
         this.updateMediaSessionMetadata();
         this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
         this.persistQueue();
-    });
+    }, true);
   }
 
   /**
@@ -913,7 +923,7 @@ export class AudioPlayerService {
                 await this.playInternal(signal);
             }
         }
-      });
+      }, true);
   }
 
   /**
@@ -957,7 +967,7 @@ export class AudioPlayerService {
         if (this.status === 'playing') {
             await this.playInternal(signal);
         }
-      });
+      }, true);
   }
 
   private playNext() {
