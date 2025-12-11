@@ -57,8 +57,9 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
     this.emit('start');
 
+    let abortPromise: Promise<void> | null = null;
     const onAbort = () => {
-      TextToSpeech.stop().catch(e => console.warn('Failed to stop TTS on abort', e));
+      abortPromise = TextToSpeech.stop().catch(e => console.warn('Failed to stop TTS on abort', e));
     };
 
     if (signal) {
@@ -88,6 +89,11 @@ export class CapacitorTTSProvider implements ITTSProvider {
     } finally {
       if (signal) {
         signal.removeEventListener('abort', onAbort);
+      }
+      // Ensure we wait for the stop operation to complete before returning.
+      // This prevents race conditions where a new 'speak' call starts before the 'stop' finishes.
+      if (abortPromise) {
+        await abortPromise;
       }
     }
 
