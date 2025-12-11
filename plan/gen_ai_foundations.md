@@ -6,32 +6,34 @@ The goal of this document is to outline the architecture and implementation plan
 2.  **Structural Annotation:** Analyzing chapters to identify structure (Title, Body, Footnotes) for better rendering and navigation.
 3.  **Pronunciation Guide:** Generating phonetic rules for unusual words using the existing Lexicon system.
 
-This design emphasizes a **modular approach**, ensuring that AI features are enhancements that do not disrupt the core "Local-First" and offline capabilities of the application.
+This design emphasizes a **modular approach** and utilizes **Structured Outputs** (JSON Schema) to ensure reliability and type safety.
 
 ## 2. Architecture
 
 ### 2.1 GenAI Service (`src/lib/genai/`)
-A new singleton service, `GenAIService`, will encapsulate all interactions with the LLM provider.
+A new singleton service, `GenAIService`, will encapsulate all interactions with the LLM provider. It will leverage the Gemini API's native support for `responseSchema` to guarantee valid JSON output.
 
 *   **Responsibilities:**
     *   Managing API keys and model configuration.
-    *   Constructing prompts (likely using structured prompting for JSON output).
     *   Handling rate limiting and error states.
-    *   Abstracting the specific provider (Google Generative AI) to allow future extensibility.
+    *   Abstracting the provider to allow future extensibility.
+    *   **Enforcing JSON Schemas** for all structured data requests.
 
 ```typescript
 // Proposed Interface
 interface GenAIProvider {
   generateContent(prompt: string): Promise<string>;
-  generateJSON<T>(prompt: string, schema?: any): Promise<T>;
+  generateStructured<T>(prompt: string, schema: any): Promise<T>;
 }
 
 class GenAIService {
   // ... singleton logic
   configure(apiKey: string, model: string): void;
-  generateTOC(chapterText: string): Promise<string>;
-  analyzeChapterStructure(text: string): Promise<ChapterStructure>;
-  generatePronunciationRules(text: string): Promise<LexiconRule[]>;
+
+  // Feature-specific methods that use generateStructured internally
+  generateTOC(chapterText: string): Promise<{ title: string }>;
+  analyzeChapterStructure(text: string): Promise<ChapterStructureResponse>;
+  generatePronunciationRules(text: string): Promise<LexiconRuleResponse[]>;
 }
 ```
 
@@ -63,9 +65,8 @@ interface ContentAnalysis {
   bookId: string;
   sectionId: string;
   structure: {
-    titleRange: { start: number, end: number }; // Index in raw text
-    bodyRange: { start: number, end: number };
-    footnotes: Array<{ id: string, start: number, end: number, text: string }>;
+    title?: string;
+    footnoteMatches: string[]; // Text snippets to find
   };
   summary?: string;
   lastAnalyzed: number;
@@ -85,62 +86,89 @@ interface BookMetadata {
 ## 4. Feature Specifications
 
 ### 4.1 Smarter Synthetic TOC
-*   **Current State:** `processEpub` uses naive DOM parsing to find `<h1>` tags or the first few lines of text. This often results in "Chapter 1", "Chapter 2", etc., or noisy titles.
+*   **Problem:** Current TOC is based on naive DOM parsing.
 *   **AI Implementation:**
-    1.  **Trigger:** User clicks "Enhance TOC" in the TOC sidebar or Library view.
-    2.  **Process:**
-        *   Iterate through `BookMetadata.syntheticToc`.
-        *   For each item, fetch the first ~500-1000 characters of the referenced section using `epub.js` or direct DB access.
-        *   **Prompt:** "Given the following opening text of a book chapter, generate a concise and descriptive title (max 6 words). Return JSON."
-        *   Update `syntheticToc` in the database.
-    3.  **UI:** Show a loading indicator during processing.
+    *   **Prompt:** "Generate a concise chapter title (max 6 words) based on the text."
+    *   **Schema:**
+        ```json
+        {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" }
+          },
+          "required": ["title"]
+        }
+        ```
+    *   **Action:** Update `syntheticToc` in DB with the returned `title`.
 
 ### 4.2 Structural Annotation (Header, Body, Footer)
-*   **Goal:** Identify the semantic parts of a chapter.
+*   **Problem:** LLMs are poor at returning exact character indices.
 *   **AI Implementation:**
-    1.  **Trigger:** "Analyze Chapter" action in Reader or "Analyze Book" in Library.
-    2.  **Process:**
-        *   Extract the full text of the section.
-        *   **Prompt:** "Analyze the following chapter text. Identify the character ranges (start, end) for the Chapter Title, the Main Body, and any Footnotes/Endnotes. Return JSON."
-        *   Validate ranges against the original text length.
-        *   Save to `ContentAnalysis` store.
-    3.  **UI:** The `ReaderView` can query this store to:
-        *   Hide/Style the title differently.
-        *   Make footnotes interactive (popups) instead of jumps.
+    *   **Strategy:** Ask the LLM to identify the *text content* of the title and footnotes. The application then fuzzy-matches these strings in the original text to create robust DOM Ranges/CFIs.
+    *   **Schema:**
+        ```json
+        {
+          "type": "object",
+          "properties": {
+            "titleText": { "type": "string", "description": "The exact text of the chapter title/header" },
+            "hasTitle": { "type": "boolean" },
+            "footnotes": {
+              "type": "array",
+              "items": { "type": "string", "description": "The text content of distinct footnotes" }
+            }
+          },
+          "required": ["hasTitle", "footnotes"]
+        }
+        ```
+    *   **Action:**
+        1.  Receive JSON.
+        2.  Search `chapterText` for `titleText`. Create Range.
+        3.  Search `chapterText` for each `footnote`. Create Ranges.
+        4.  Save ranges to `ContentAnalysis` store.
 
 ### 4.3 Pronunciation Guide
-*   **Goal:** Improve TTS quality for fantasy/sci-fi or foreign names.
+*   **Goal:** Improve TTS quality.
 *   **AI Implementation:**
-    1.  **Trigger:** "Generate Pronunciation Guide" in the Lexicon Manager.
-    2.  **Process:**
-        *   Scan the book text (or a sample of likely proper nouns using a regex for capitalized words).
-        *   **Prompt:** "Identify unusual proper nouns, fictional names, or foreign words in this list. For each, provide a phonetic respelling or IPA for an English Text-to-Speech engine. Return JSON: `[{ original: '...', replacement: '...' }]`".
-        *   Convert the result into `LexiconRule` objects.
-        *   Save using `LexiconService.saveRule`.
-    3.  **UI:** The user sees the new rules in the Lexicon Manager and can edit/delete them.
+    *   **Prompt:** "Identify unusual proper nouns or foreign words and provide phonetic replacements."
+    *   **Schema:**
+        ```json
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "original": { "type": "string" },
+              "replacement": { "type": "string", "description": "Phonetic spelling" },
+              "ipa": { "type": "string", "description": "International Phonetic Alphabet representation" }
+            },
+            "required": ["original", "replacement"]
+          }
+        }
+        ```
+    *   **Action:** Convert results to `LexiconRule` objects and save via `LexiconService`.
 
 ## 5. Implementation Roadmap
 
 ### Phase 1: Foundation
 1.  Add `@google/generative-ai` dependency.
 2.  Create `src/store/useGenAIStore.ts`.
-3.  Implement `src/lib/genai/GenAIService.ts` with basic text generation.
-4.  Update `GlobalSettingsDialog` to allow inputting API key.
+3.  Implement `src/lib/genai/GenAIService.ts` using `responseSchema`.
+4.  Update `GlobalSettingsDialog`.
 
 ### Phase 2: Data & Ingestion
-1.  Update `src/types/db.ts` and `src/db/DBService.ts` to support `ContentAnalysis`.
-2.  Implement helper functions to extract raw text from `epub.js` items efficiently.
+1.  Update `src/types/db.ts` and `src/db/DBService.ts`.
+2.  Implement text matching utilities (for structural annotation).
 
 ### Phase 3: Feature Implementation
-1.  **Smart TOC:** Implement the "Enhance TOC" workflow. Connect it to the TOC UI.
-2.  **Pronunciation:** Implement the "Generate Guide" workflow. Connect it to `LexiconService`.
-3.  **Structure:** Implement the analysis logic and update `ReaderView` to utilize the data (experimental).
+1.  **Smart TOC:** Implement "Enhance TOC" workflow.
+2.  **Pronunciation:** Implement "Generate Guide" workflow.
+3.  **Structure:** Implement analysis and Reader integration.
 
 ### Phase 4: Verification & Polish
-1.  Add error handling (invalid API key, quota exceeded).
-2.  Add progress indicators for long-running AI tasks.
-3.  Write tests for prompt construction and JSON parsing.
+1.  Add error handling.
+2.  Add progress indicators.
+3.  **Prompt Testing:** Verify schemas against various book styles.
 
 ## 6. Security & Privacy
-*   **User Keys:** API keys are stored in `localStorage` (via Zustand) and only used for direct requests to the AI provider. They are never sent to a Versicle server (Versicle is local-first).
-*   **Data Usage:** Content sent to the LLM is subject to the provider's data policy. We must add a disclaimer that "Using AI features sends book content to Google/Provider".
+*   **User Keys:** Stored locally.
+*   **Data Usage:** Content sent to Google/Provider. Requires user consent/disclaimer.
