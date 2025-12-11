@@ -102,4 +102,47 @@ describe('CapacitorTTSProvider', () => {
         error: error
     }));
   });
+
+  it('should handle AbortSignal by calling stop and NOT emitting end', async () => {
+    // Mock speak to hang until stopped
+    let resolveSpeak: (() => void) | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockImplementation(() => {
+        return new Promise<void>(resolve => {
+            resolveSpeak = resolve;
+        });
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.stop as any).mockImplementation(async () => {
+        if (resolveSpeak) resolveSpeak();
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+
+    await provider.init();
+
+    const callback = vi.fn();
+    provider.on(callback);
+
+    const controller = new AbortController();
+    const synthesizePromise = provider.synthesize('hello', 'voice1', 1.0, controller.signal);
+
+    // Wait a bit to ensure speak is called
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(TextToSpeech.speak).toHaveBeenCalled();
+
+    // Abort
+    controller.abort();
+
+    // Wait for synthesize to return
+    await synthesizePromise;
+
+    expect(TextToSpeech.stop).toHaveBeenCalled();
+    expect(callback).toHaveBeenCalledWith({ type: 'start' });
+    expect(callback).not.toHaveBeenCalledWith({ type: 'end' });
+  });
 });
