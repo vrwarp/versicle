@@ -1,5 +1,16 @@
 import os
-from playwright.sync_api import Page, Frame
+from playwright.sync_api import Page, Frame, expect
+
+def navigate_to_chapter_v(page: Page):
+    """
+    Navigates to Chapter V (Advice from a Caterpillar) to ensure text is visible.
+    Assumes the book is already open in the reader.
+    """
+    print("Navigating to Chapter 5...")
+    page.get_by_test_id("reader-toc-button").click()
+    expect(page.get_by_test_id("toc-item-7")).to_be_visible() # toc-item-7 is Chapter V
+    page.get_by_test_id("toc-item-7").click()
+    page.wait_for_timeout(2000)
 
 def reset_app(page: Page):
     """

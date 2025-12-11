@@ -13,6 +13,9 @@ def test_immersive_mode(page: Page):
     expect(page).to_have_url(re.compile(r".*/read/.*"))
     page.wait_for_timeout(2000)
 
+    # Navigate to Chapter 5 to have text
+    utils.navigate_to_chapter_v(page)
+
     # Verify Header and Footer are initially visible
     header = page.locator("header")
     footer = page.locator("footer")

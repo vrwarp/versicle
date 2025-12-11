@@ -18,9 +18,8 @@ def test_journey_annotations(page: Page):
     # 1. Create Highlight
     print("Creating Highlight...")
 
-    # Navigate to a page with text (Next Page)
-    page.get_by_test_id("reader-next-page").click()
-    page.wait_for_timeout(2000)
+    # Navigate to a page with text (Chapter 5)
+    utils.navigate_to_chapter_v(page)
 
     # Inject script to select text and trigger highlight popover
     selection_success = frame.locator("body").evaluate("""
