@@ -27,6 +27,8 @@ graph TD
         TTSStore[useTTSStore]
         LibStore[useLibraryStore]
         AnnotStore[useAnnotationStore]
+        UIStore[useUIStore]
+        ToastStore[useToastStore]
     end
 
     subgraph Core [Core Services]
@@ -35,6 +37,7 @@ graph TD
         SearchClient[SearchClient]
         Backup[BackupService]
         Maint[MaintenanceService]
+        Logger[LoggerService]
     end
 
     subgraph TTS [TTS Engine]
@@ -42,6 +45,8 @@ graph TD
         Lexicon[LexiconService]
         TTSCache[TTSCache]
         Sync[SyncEngine]
+        Cost[CostEstimator]
+        MediaSession[MediaSessionManager]
         Providers[ITTSProvider]
     end
 
@@ -69,6 +74,7 @@ graph TD
     APS --> Lexicon
     APS --> TTSCache
     APS --> Sync
+    APS --> MediaSession
 
     Library --> LibStore
     LibStore --> DBService
@@ -90,7 +96,7 @@ graph TD
 
 *   **`src/components/`**: React UI components, organized by feature (library, reader, ui).
 *   **`src/db/`**: Database configuration and abstraction layer.
-*   **`src/hooks/`**: Custom React hooks, notably `useEpubReader`.
+*   **`src/hooks/`**: Custom React hooks.
 *   **`src/lib/`**: Core business logic and singleton services.
     *   **`tts/`**: The complete Text-to-Speech subsystem.
 *   **`src/store/`**: Global state management using Zustand.
@@ -247,6 +253,14 @@ The main database abstraction layer. Handles all read/write operations, transact
     *   **Params**: `bookId: string`, `locations: string`.
     *   **Returns**: `Promise<void>`
 
+#### `src/db/validators.ts`
+Utilities for data validation.
+
+*   **`validateBookMetadata(data)`**
+    *   **Purpose**: Checks if an object adheres to the `BookMetadata` interface. Logs warnings for missing fields.
+    *   **Params**: `data: any` - The object to validate.
+    *   **Returns**: `boolean` - True if valid.
+
 ---
 
 ### 2. Core Logic & Services (`src/lib/`)
@@ -263,8 +277,8 @@ Handles the parsing and import of EPUB files.
     *   **Params**: `file: File`.
     *   **Returns**: `Promise<string>` (New Book ID).
 
-#### Search (`src/lib/search.ts`)
-Client-side interface for the Search Worker.
+#### Search (`src/lib/search.ts`, `src/lib/search-engine.ts`)
+Client-side interface and Worker implementation for FlexSearch.
 
 **Class: `SearchClient`**
 *   **`indexBook(book, bookId, onProgress?)`**
@@ -277,6 +291,11 @@ Client-side interface for the Search Worker.
     *   **Returns**: `Promise<SearchResult[]>`
 *   **`terminate()`**
     *   **Purpose**: Kills the worker.
+
+**Class: `SearchEngine` (Worker Internal)**
+*   **`initIndex(bookId)`**: Initializes an empty FlexSearch index.
+*   **`addDocuments(bookId, sections)`**: Adds text sections to the index.
+*   **`search(bookId, query)`**: Executes search and returns results with excerpts.
 
 #### Backup (`src/lib/BackupService.ts`)
 Handles data export and import.
@@ -304,6 +323,16 @@ Database integrity tools.
 *   **`pruneOrphans()`**
     *   **Purpose**: Deletes orphaned records.
     *   **Returns**: `Promise<void>`
+
+#### Logging (`src/lib/logger.ts`)
+**Class: `LoggerService`**
+*   **`info(context, message, data?)`**: Logs info level messages.
+*   **`warn(context, message, data?)`**: Logs warning level messages.
+*   **`error(context, message, error?)`**: Logs error level messages.
+*   **`debug(context, message, data?)`**: Logs debug level messages.
+
+#### Utilities (`src/lib/utils.ts`)
+*   **`cn(...inputs)`**: Merges Tailwind CSS classes using `clsx` and `tailwind-merge`.
 
 ---
 
@@ -395,6 +424,33 @@ Maps audio time to text characters.
 *   **`get(key)`**: Retrieves cached segment.
 *   **`put(key, audio, alignment)`**: Saves segment.
 
+#### `src/lib/tts/CostEstimator.ts`
+Tracks and estimates cloud TTS costs.
+
+**Class: `CostEstimator`**
+*   **`getInstance()`**: Singleton access.
+*   **`track(text)`**: Adds character usage count to session.
+*   **`getSessionUsage()`**: Returns total characters used in session.
+*   **`estimateCost(text, provider)`**: Calculates estimated cost in USD based on provider pricing.
+
+#### `src/lib/tts/CsvUtils.ts`
+Helpers for CSV import/export.
+
+**Object: `LexiconCSV`**
+*   **`parse(text)`**: Parses CSV string into `LexiconRule` partials.
+*   **`generate(rules)`**: Generates CSV string from rules.
+
+**Object: `SimpleListCSV`**
+*   **`parse(text, header?)`**: Parses simple newline-separated lists.
+*   **`generate(items, header)`**: Generates string list.
+
+#### `src/lib/tts/MediaSessionManager.ts`
+Handles integration with OS media controls (Android/Web).
+
+**Class: `MediaSessionManager`**
+*   **`setMetadata(metadata)`**: Updates title, artist, and artwork.
+*   **`setPlaybackState(state)`**: Updates playing/paused status and position/duration.
+
 ---
 
 ### 4. State Management (`src/store/`)
@@ -429,22 +485,41 @@ Manages annotations.
 *   **State**: `annotations`, `popover` state.
 *   **Actions**: `loadAnnotations()`, `addAnnotation()`, `deleteAnnotation()`.
 
+#### `src/store/useUIStore.ts`
+Manages global UI overlays.
+
+*   **State**: `isGlobalSettingsOpen`.
+*   **Actions**: `setGlobalSettingsOpen(open)`.
+
+#### `src/store/useToastStore.ts`
+Manages global toast notifications.
+
+*   **State**: `isVisible`, `message`, `type`, `duration`.
+*   **Actions**: `showToast(message, type, duration)`, `hideToast()`.
+
 ---
 
 ### 5. UI Layer (`src/components/`, `src/hooks/`)
 
-#### `src/hooks/useEpubReader.ts`
-The bridge between React and `epub.js`.
+#### Key Components
+*   **`ReaderView`**: The main reading interface. Handles routing, layout, and orchestrates sub-components (TOC, Annotations, AudioPanel).
+*   **`LibraryView`**: Displays the bookshelf grid/list and handles file import.
+*   **`FileUploader`**: Drag-and-drop zone for EPUB files.
+*   **`UnifiedAudioPanel`**: Controls for TTS playback, settings, and voice selection.
+*   **`GlobalSettingsDialog`**: Configuration for API keys, backups, and data management.
 
-**Function: `useEpubReader(bookId, viewerRef, options)`**
-*   **Purpose**: Manages the `Book` and `Rendition` lifecycle.
-*   **Features**:
-    *   Loads book from DB.
-    *   Handles rendering and resizing (`ResizeObserver`).
-    *   Manages "Paginated" vs "Scrolled" flow.
-    *   Applies themes and forced font overrides (injecting `<style>` tags).
-    *   Listens for interactions (Click, Selection, Relocation).
-*   **Returns**: `{ book, rendition, isReady, isLoading, metadata, toc, error }`.
+#### Custom Hooks
+*   **`useEpubReader(bookId, viewerRef, options)`**:
+    *   **Purpose**: Manages `epub.js` instantiation, rendering, and event binding.
+    *   **Returns**: Book instance, rendition object, loading state, table of contents.
+*   **`useTTS(rendition, isReady)`**:
+    *   **Purpose**: Extracts text from the current chapter and synchronizes with `AudioPlayerService`.
+    *   **Returns**: Sentence nodes for the current view.
+*   **`useChapterDuration()`**:
+    *   **Purpose**: Estimates remaining time in chapter/book based on reading speed.
+    *   **Returns**: Duration estimates.
+*   **`useLocalStorage(key, initialValue)`**:
+    *   **Purpose**: React state hook that persists values to `localStorage`.
 
 ---
 
@@ -463,3 +538,15 @@ Handles full-text indexing and searching using `FlexSearch` to prevent blocking 
     *   `ACK`: Operation successful.
     *   `SEARCH_RESULTS`: `{ results: SearchResult[] }`
     *   `ERROR`: `{ error: string }`
+
+### 7. Types (`src/types/`)
+
+#### `src/types/search.ts`
+*   **`SearchResult`**: `{ href, excerpt, cfi? }`
+*   **`SearchRequest`**: Discriminated union of worker commands.
+*   **`SearchResponse`**: Discriminated union of worker responses.
+
+#### `src/types/errors.ts`
+*   **`AppError`**: Base error class.
+*   **`DatabaseError`**: Wraps DB failures.
+*   **`StorageFullError`**: Specific error for quota exceeded.

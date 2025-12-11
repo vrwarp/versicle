@@ -111,17 +111,21 @@ Versicle can be built as a native Android application using Capacitor.
     npx cap run android
     ```
 
-## Verification & Testing
+## Development Workflow
 
+### Architecture
+For a deep dive into the code structure, module relationships, and data models, please refer to [architecture.md](architecture.md). It is essential reading for understanding the Core Services (TTS, Search, Database) and State Management.
+
+### Testing Strategy
 This project uses a rigorous testing strategy combining unit tests and visual verification tests.
 
-### Unit Tests
-Run standard unit tests (logic, components, stores):
+#### 1. Unit Tests
+Run standard unit tests (logic, components, stores) using Vitest:
 ```bash
 npm test
 ```
 
-### Visual Verification (Playwright)
+#### 2. Visual Verification (Playwright)
 We use Python-based Playwright scripts to verify user journeys and prevent visual regressions.
 
 **Running with Docker (Recommended):**
@@ -152,8 +156,15 @@ docker run --rm -v $(pwd)/verification/screenshots:/app/verification/screenshots
 **Updating Goldens:**
 If you make UI changes, run the tests, verify the new screenshots in `verification/screenshots/` are correct, and then copy them to `verification/goldens/`.
 
+### Linting & Formatting
+Ensure your code follows the project's style guidelines before submitting:
+
+```bash
+npm run lint
+```
+
 ## Contributing
 
 1.  **Read `AGENTS.md`**: Specific instructions for AI agents and developers regarding testing and build hygiene.
 2.  **Build Hygiene**: Ensure `npm run build` and `npm run lint` pass before submitting changes.
-3.  **Architecture**: Refer to [architecture.md](architecture.md) for a detailed deep-dive into the codebase, module references, and diagrams.
+3.  **Update Documentation**: If you modify the architecture or add new features, update `architecture.md` and this README.
