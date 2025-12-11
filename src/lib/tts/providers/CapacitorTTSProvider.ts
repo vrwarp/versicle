@@ -12,11 +12,23 @@ export class CapacitorTTSProvider implements ITTSProvider {
   private voiceMap = new Map<string, TTSVoice>();
   private callback: TTSCallback | null = null;
 
+  // State for tracking active utterance to handle async callbacks safely
+  private activeUtteranceId = 0;
+
   async init(): Promise<void> {
     // Native plugins generally initialize lazily, but we could check
     // for specific engine availability here if needed.
     // We can pre-fetch voices here to populate the map early
     await this.getVoices();
+
+    // Register global listener for onRangeStart (Android only mostly)
+    try {
+        await TextToSpeech.addListener('onRangeStart', (info) => {
+             this.emit('boundary', { charIndex: info.start });
+        });
+    } catch (e) {
+        console.warn('Failed to add listener for TTS', e);
+    }
   }
 
   async getVoices(): Promise<TTSVoice[]> {
@@ -47,6 +59,8 @@ export class CapacitorTTSProvider implements ITTSProvider {
     // but we can check before we start.
     if (signal?.aborted) throw new Error('Aborted');
 
+    const myId = ++this.activeUtteranceId;
+
     let lang = 'en-US';
     const voice = this.voiceMap.get(voiceId);
     if (voice) {
@@ -58,38 +72,37 @@ export class CapacitorTTSProvider implements ITTSProvider {
     this.emit('start');
 
     const onAbort = () => {
-      TextToSpeech.stop().catch(e => console.warn('Failed to stop TTS on abort', e));
+       if (this.activeUtteranceId === myId) {
+           this.activeUtteranceId++; // Invalidate current
+           TextToSpeech.stop().catch(e => console.warn('Failed to stop TTS on abort', e));
+       }
     };
 
     if (signal) {
       signal.addEventListener('abort', onAbort);
     }
 
-    try {
-      // The plugin handles the audio output directly.
-      // This Promise resolves only when the speech finishes (onEnd event).
-      await TextToSpeech.speak({
+    // Call speak but DO NOT await it.
+    // The Promise resolves when speech finishes (on platforms where it works correctly).
+    TextToSpeech.speak({
         text,
         lang,
         rate: speed,
         category: 'playback', // Important iOS hint, good practice for Android
         queueStrategy: 0 // 0 = Flush (interrupt). Necessary for responsive controls (Next/Prev/Seek).
-      });
-
-      if (!signal?.aborted) {
-        this.emit('end');
-      }
-    } catch (e) {
-      if (!signal?.aborted) {
-        this.emit('error', { error: e });
-      }
-      // We consume the error to prevent double-reporting if the caller handles promise rejection.
-      // AudioPlayerService logic assumes events drive the state when using 'local' provider.
-    } finally {
-      if (signal) {
-        signal.removeEventListener('abort', onAbort);
-      }
-    }
+    }).then(() => {
+        if (this.activeUtteranceId === myId && !signal?.aborted) {
+            this.emit('end');
+        }
+    }).catch((e) => {
+        if (this.activeUtteranceId === myId && !signal?.aborted) {
+            this.emit('error', { error: e });
+        }
+    }).finally(() => {
+        if (signal) {
+            signal.removeEventListener('abort', onAbort);
+        }
+    });
 
     // We return a marker indicating native playback occurred.
     // This tells the Service NOT to try and play an audio blob.
@@ -97,12 +110,14 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   async stop(): Promise<void> {
+    this.activeUtteranceId++; // Cancel active callbacks
     await TextToSpeech.stop();
   }
 
   async pause(): Promise<void> {
     // Native TTS pause support varies wildly by Android version and Engine.
     // A hard stop is the safest way to ensure silence.
+    this.activeUtteranceId++;
     await TextToSpeech.stop();
   }
 
