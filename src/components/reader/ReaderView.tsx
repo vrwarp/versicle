@@ -485,7 +485,7 @@ export const ReaderView: React.FC = () => {
       <div className="flex-1 relative overflow-hidden flex justify-center">
          {/* TOC Sidebar */}
          {showToc && (
-             <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static">
+             <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static">
                  <div className="p-4">
                      <h2 className="text-lg font-bold mb-4 text-foreground">Contents</h2>
 
@@ -523,7 +523,7 @@ export const ReaderView: React.FC = () => {
 
          {/* Annotations Sidebar */}
          {showAnnotations && (
-             <div data-testid="reader-annotations-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
+             <div data-testid="reader-annotations-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
                  <div className="p-4 border-b border-border">
                      <h2 className="text-lg font-bold text-foreground">Annotations</h2>
                  </div>
@@ -536,7 +536,7 @@ export const ReaderView: React.FC = () => {
 
          {/* Search Sidebar */}
          {showSearch && (
-             <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-20 absolute inset-y-0 left-0 md:static flex flex-col">
+             <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
                  <div className="p-4 border-b border-border">
                      <h2 className="text-lg font-bold mb-2 text-foreground">Search</h2>
                      <div className="flex gap-2">
