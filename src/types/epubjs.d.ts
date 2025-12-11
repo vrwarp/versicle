@@ -93,6 +93,13 @@ declare module 'epubjs' {
         load(locations: string): void;
     }
 
+    export interface Section {
+      id: string;
+      href: string;
+      url: string;
+      [key: string]: unknown;
+    }
+
     export interface Book {
       ready: Promise<void>;
       loaded: {
@@ -109,8 +116,10 @@ declare module 'epubjs' {
       destroy(): void;
       locations: Locations;
       navigation: Navigation;
+      load(url: string): Promise<Document>;
       spine: {
-        get(target: string | number): unknown;
+        get(target: string | number): Section;
+        items: Section[];
       }
     }
 

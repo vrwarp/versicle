@@ -1,14 +1,5 @@
 import FlexSearch from 'flexsearch';
-
-/**
- * Represents a search result containing a link and a text excerpt.
- */
-export interface SearchResult {
-    /** The reference (href) to the location in the book. */
-    href: string;
-    /** A snippet of text containing the search term. */
-    excerpt: string;
-}
+import type { SearchResult, SearchSection } from '../types/search';
 
 /**
  * Provides search functionality for book content using FlexSearch.
@@ -38,7 +29,7 @@ export class SearchEngine {
      * @param bookId - The unique identifier of the book.
      * @param sections - An array of sections to add.
      */
-    addDocuments(bookId: string, sections: { id: string; href: string; text: string }[]) {
+    addDocuments(bookId: string, sections: SearchSection[]) {
         let index = this.indexes.get(bookId);
         if (!index) {
              index = new FlexSearch.Document({
@@ -72,7 +63,7 @@ export class SearchEngine {
      * @param bookId - The unique identifier of the book.
      * @param sections - An array of sections containing text and location data to be indexed.
      */
-    indexBook(bookId: string, sections: { id: string; href: string; text: string }[]) {
+    indexBook(bookId: string, sections: SearchSection[]) {
         this.initIndex(bookId);
         this.addDocuments(bookId, sections);
     }

@@ -1,17 +1,8 @@
 import type { Book } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
+import type { SearchResult, SearchResponse, SearchRequestType, SearchSection } from '../types/search';
 
-/**
- * Represents the result of a search query within a book.
- */
-export interface SearchResult {
-    /** The reference (href) to the location in the book. */
-    href: string;
-    /** A snippet of text containing the search term. */
-    excerpt: string;
-    /** Optional Canonical Fragment Identifier (CFI) for the location. */
-    cfi?: string;
-}
+export type { SearchResult };
 
 /**
  * Client-side handler for interacting with the search worker.
@@ -34,19 +25,19 @@ class SearchClient {
                 type: 'module'
             });
 
-            this.worker.onmessage = (e) => {
-                const { id, type, results, error } = e.data;
-                const pending = this.pendingRequests.get(id);
+            this.worker.onmessage = (e: MessageEvent<SearchResponse>) => {
+                const response = e.data;
+                const pending = this.pendingRequests.get(response.id);
 
                 if (pending) {
-                    if (type === 'ERROR') {
-                        pending.reject(new Error(error));
-                    } else if (type === 'SEARCH_RESULTS') {
-                        pending.resolve(results);
-                    } else if (type === 'ACK') {
+                    if (response.type === 'ERROR') {
+                        pending.reject(new Error(response.error));
+                    } else if (response.type === 'SEARCH_RESULTS') {
+                        pending.resolve(response.results);
+                    } else if (response.type === 'ACK') {
                         pending.resolve(null);
                     }
-                    this.pendingRequests.delete(id);
+                    this.pendingRequests.delete(response.id);
                 }
             };
 
@@ -70,7 +61,7 @@ class SearchClient {
      * @returns A Promise resolving to the response data (or null for ACK).
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private send(type: string, payload: any): Promise<any> {
+    private send(type: SearchRequestType, payload: any): Promise<any> {
         return new Promise((resolve, reject) => {
             const id = uuidv4();
             this.pendingRequests.set(id, { resolve, reject });
@@ -91,31 +82,27 @@ class SearchClient {
         // Init/Clear index
         await this.send('INIT_INDEX', { bookId });
 
-        const spineItems = (book.spine as unknown as { items: unknown[] }).items;
+        const spineItems = book.spine.items;
         const total = spineItems.length;
         const BATCH_SIZE = 5;
 
         for (let i = 0; i < total; i += BATCH_SIZE) {
             const batch = spineItems.slice(i, i + BATCH_SIZE);
-            const sections: { id: string; href: string; text: string }[] = [];
+            const sections: SearchSection[] = [];
 
             for (const item of batch) {
                 try {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const doc = await (book as any).load((item as any).href);
+                    const doc = await book.load(item.href);
                     if (doc) {
                         const text = doc.body.innerText;
                         sections.push({
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            id: (item as any).id,
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            href: (item as any).href,
+                            id: item.id,
+                            href: item.href,
                             text: text
                         });
                     }
                 } catch (e) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    console.warn(`Failed to index section ${(item as any).href}`, e);
+                    console.warn(`Failed to index section ${item.href}`, e);
                 }
             }
 

@@ -1,23 +1,5 @@
 import { SearchEngine } from '../lib/search-engine';
-
-/**
- * Defines the structure of messages sent to the search worker.
- * Each message must include a unique 'id' to correlate with the response.
- */
-export type SearchRequest =
-  | { id: string; type: 'INDEX_BOOK'; payload: { bookId: string; sections: { id: string; href: string; text: string }[] } }
-  | { id: string; type: 'INIT_INDEX'; payload: { bookId: string } }
-  | { id: string; type: 'ADD_TO_INDEX'; payload: { bookId: string; sections: { id: string; href: string; text: string }[] } }
-  | { id: string; type: 'FINISH_INDEXING'; payload: { bookId: string } }
-  | { id: string; type: 'SEARCH'; payload: { query: string; bookId: string } };
-
-/**
- * Defines the structure of responses sent back to the main thread.
- */
-export type SearchResponse =
-  | { id: string; type: 'ACK' }
-  | { id: string; type: 'SEARCH_RESULTS'; results: unknown[] }
-  | { id: string; type: 'ERROR'; error: string };
+import type { SearchRequest } from '../types/search';
 
 const engine = new SearchEngine();
 
@@ -29,34 +11,35 @@ const engine = new SearchEngine();
  * @param e - The MessageEvent containing the command and payload.
  */
 self.onmessage = async (e: MessageEvent<SearchRequest>) => {
-  const { id, type, payload } = e.data;
+  const request = e.data;
+  const { id } = request;
 
   try {
-    if (type === 'INDEX_BOOK') {
-      const { bookId, sections } = payload;
+    if (request.type === 'INDEX_BOOK') {
+      const { bookId, sections } = request.payload;
       engine.indexBook(bookId, sections);
       self.postMessage({ id, type: 'ACK' });
     }
 
-    else if (type === 'INIT_INDEX') {
-      const { bookId } = payload;
+    else if (request.type === 'INIT_INDEX') {
+      const { bookId } = request.payload;
       engine.initIndex(bookId);
       self.postMessage({ id, type: 'ACK' });
     }
 
-    else if (type === 'ADD_TO_INDEX') {
-      const { bookId, sections } = payload;
+    else if (request.type === 'ADD_TO_INDEX') {
+      const { bookId, sections } = request.payload;
       engine.addDocuments(bookId, sections);
       self.postMessage({ id, type: 'ACK' });
     }
 
-    else if (type === 'FINISH_INDEXING') {
+    else if (request.type === 'FINISH_INDEXING') {
       // Potentially optimize index here if needed in future
       self.postMessage({ id, type: 'ACK' });
     }
 
-    else if (type === 'SEARCH') {
-      const { query, bookId } = payload;
+    else if (request.type === 'SEARCH') {
+      const { query, bookId } = request.payload;
       const results = engine.search(bookId, query);
       self.postMessage({ id, type: 'SEARCH_RESULTS', results });
     }
