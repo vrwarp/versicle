@@ -31,7 +31,7 @@ const formatDuration = (chars?: number): string => {
  * @param props - Component props containing the book metadata.
  * @returns A React component rendering the book card.
  */
-export const BookCard: React.FC<BookCardProps> = ({ book }) => {
+export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
   const navigate = useNavigate();
   const { removeBook, offloadBook, restoreBook } = useLibraryStore();
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
@@ -215,4 +215,4 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
       </div>
     </div>
   );
-};
+});

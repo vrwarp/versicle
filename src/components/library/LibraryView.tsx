@@ -102,6 +102,9 @@ export const LibraryView: React.FC = () => {
   // Or simply:
   const gridColumnWidth = Math.floor(dimensions.width / columnCount);
 
+  // Memoize cellProps to prevent unnecessary re-renders of the grid
+  const cellProps = React.useMemo(() => ({ books, columnCount }), [books, columnCount]);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const GridAny = Grid as any;
 
@@ -180,7 +183,7 @@ export const LibraryView: React.FC = () => {
                 rowHeight={viewMode === 'list' ? LIST_ITEM_HEIGHT : CARD_HEIGHT + GAP}
                 width={dimensions.width}
                 cellComponent={viewMode === 'list' ? ListCell : GridCell}
-                cellProps={{ books, columnCount }}
+                cellProps={cellProps}
              />
           )}
         </section>
