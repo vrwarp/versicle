@@ -111,14 +111,18 @@ export class SearchEngine {
      * @returns A string snippet surrounding the matched term.
      */
     private getExcerpt(text: string, query: string): string {
-        const lowerText = text.toLowerCase();
-        const lowerQuery = query.toLowerCase();
-        const index = lowerText.indexOf(lowerQuery);
+        // Escape regex special characters to safely use the query in a RegExp
+        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Use a case-insensitive regex to find the match without copying the entire string
+        const regex = new RegExp(escapedQuery, 'i');
+        const match = regex.exec(text);
 
-        if (index === -1) return text.substring(0, 100) + '...';
+        if (!match) return text.substring(0, 100) + '...';
 
+        const index = match.index;
+        const matchLength = match[0].length;
         const start = Math.max(0, index - 40);
-        const end = Math.min(text.length, index + query.length + 40);
+        const end = Math.min(text.length, index + matchLength + 40);
 
         return (start > 0 ? '...' : '') + text.substring(start, end) + (end < text.length ? '...' : '');
     }
