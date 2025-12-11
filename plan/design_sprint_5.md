@@ -47,18 +47,31 @@ To mitigate the risk of accidental input errors (Mode Errors) and to clarify the
 
 ### **2.3 The "Compass Rose" Internal Layout (The Pill)**
 
-The internal architecture of the Compass Pill is arranged to facilitate bidirectional navigation.
+The internal architecture of the Compass Pill is arranged to facilitate bidirectional navigation. It employs **Dynamic Navigation Modes** based on the audio state.
 
-* **Left Anchor: The "Previous" Zone**  
-  * **Iconography:** ChevronsLeft (Double arrow) or SkipBack.  
-  * **Interaction Logic:** A single tap acts as a "Restart Chapter" command. A double-tap acts as a "Previous Chapter" command.  
-* **Center: The "Narrative Box"**  
-  * **Primary Text (Top Line):** "CHAPTER 5" (Rendered in Small Caps, Bold weight, with wide tracking for legibility).  
-  * **Secondary Text (Bottom Line):** "-12:45 remaining" (Rendered in Monospaced numerals to prevent character width jitter during countdown).  
-  * **Ambient Progress Visualization:** A subtle, translucent progress fill (opacity 10-15%) advances horizontally across the background of this container, providing an ambient analog indicator of completion status.  
-* **Right Anchor: The "Next" Zone**  
-  * **Iconography:** ChevronsRight (Double arrow) or SkipForward.  
-  * **Interaction Logic:** A single tap executes an immediate jump to the subsequent structural unit.
+*   **Mode A: Audio Navigation (Active)**
+    *   **Trigger Condition:** `isPlaying == true`
+    *   **Left Anchor:** `SkipBack` icon. Triggers "Previous Sentence/Time Skip".
+    *   **Right Anchor:** `SkipForward` icon. Triggers "Next Sentence/Time Skip".
+
+*   **Mode B: Structural Navigation (Idle)**
+    *   **Trigger Condition:** `isPlaying == false`
+    *   **Left Anchor:** `ChevronsLeft` icon. Triggers "Restart/Previous Chapter".
+    *   **Right Anchor:** `ChevronsRight` icon. Triggers "Next Chapter".
+
+* **Center: The "Narrative Box"**
+  * **Primary Text (Top Line):** "CHAPTER 5" (Rendered in Small Caps, Bold weight, with wide tracking for legibility).
+  * **Secondary Text (Bottom Line):** "-12:45 remaining" (Rendered in Monospaced numerals to prevent character width jitter during countdown).
+  * **Ambient Progress Visualization:** A subtle, translucent progress fill (opacity 10-15%) advances horizontally across the background of this container, providing an ambient analog indicator of completion status.
+
+### **2.4 Contextual Adaptability (The Library State)**
+
+The system must exhibit context-aware behavior based on the active view to respect the user's focus.
+
+*   **Reader Context (Active):** The full "Compass Rose" interface is presented as defined above, enabling navigation and transport control.
+*   **Library Context (Passive):**
+    *   **Compass Pill:** Transforms into a "Summary Status" mode. The lateral navigation zones (Chevrons) are suppressed. The central display expands to show: Book Title, Chapter Title, and Progress/Time Remaining.
+    *   **Satellite FAB:** The Play/Pause button is suppressed (hidden). The system should not continue playback when navigating to the library; the interface reflects a "Monitoring" rather than "Driving" state.
 
 ## **3\. Interaction Design Protocols and Gestural Mechanics**
 
@@ -94,9 +107,9 @@ The component requires precise subscription to the global useTTSStore to derive 
 
 To ensure visibility without occlusion of critical modals, the following Z-index hierarchy is mandated:
 
-1. **Content Layer (Library/Settings):** z-0  
-2. **Navigation Chrome (Bottom Nav):** z-30  
-3. **Compass Pill:** z-40 (Must float above content but below full-screen overlays).  
+1. **Content Layer (Library/Settings):** z-0
+2. **Navigation Chrome (Bottom Nav):** z-30
+3. **Compass Pill:** z-40 (Must float above content but below full-screen overlays).
 4. **Satellite FAB:** z-50 (Must float above the Pill and all other standard UI elements).  
 5. **System Modals/Dialogs:** z-100 (Must obscure the player controls to prevent interaction during critical alerts).
 
@@ -104,6 +117,11 @@ To ensure visibility without occlusion of critical modals, the following Z-index
 
 * **Boundary Conditions:** If the user is situated in "Chapter 1" (Index 0), the Left Chevron must be rendered in a disabled state (reduced opacity, interaction suppression) to indicate the absence of anterior content. Similarly, the Right Chevron must be disabled at the final chapter.  
 * **Metadata Sanity:** In instances where currentChapterTitle is undefined or null (e.g., poorly formatted EPUBs), the interface shall elegantly fallback to displaying "Section \[Index\]" or solely the chapter number.
+
+### **4.4 Layout Hygiene & Legacy Retirement**
+
+*   **Footer Removal:** The legacy footer within `ReaderView` (containing page navigation and progress bars) is deprecated and shall be removed. The Compass Interface supersedes this functionality.
+*   **Safe Area Padding:** The text rendering container in `ReaderView` must implement sufficient bottom padding (e.g., `pb-32`) to ensure that the final lines of text are not obscured by the floating Compass Pill.
 
 ## **5\. Schematic Visualization**
 
