@@ -34,6 +34,14 @@ def test_journey_list_view(page: Page):
     # Check for metadata text (Author is usually visible in List Item)
     expect(book_list_item).to_contain_text("Lewis Carroll")
 
+    # Verify cover image is present
+    cover_image = book_list_item.locator("img")
+    expect(cover_image).to_be_visible()
+    expect(cover_image).to_have_attribute("alt", "Cover for Alice's Adventures in Wonderland")
+
+    from verification.utils import capture_screenshot
+    capture_screenshot(page, "list_view_with_cover")
+
     # 4. Persistence
     # Reload page
     page.reload()

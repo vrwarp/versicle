@@ -57,6 +57,25 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
     const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderStore(state => state.setCurrentBookId);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const [coverUrl, setCoverUrl] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        let url: string | null = null;
+        if (book.coverBlob) {
+            url = URL.createObjectURL(book.coverBlob);
+            setCoverUrl(url);
+        } else {
+            setCoverUrl(null);
+        }
+
+        return () => {
+            if (url) {
+                URL.revokeObjectURL(url);
+            }
+        };
+    }, [book.coverBlob]);
+
+    const displayUrl = coverUrl || book.coverUrl;
 
     const handleOpen = () => {
         if (book.isOffloaded) {
@@ -117,9 +136,9 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
             >
                 {/* Thumbnail */}
                 <div className="flex-none w-10 h-14 bg-muted rounded overflow-hidden shadow-sm relative">
-                    {book.coverUrl ? (
+                    {displayUrl ? (
                         <img
-                            src={book.coverUrl}
+                            src={displayUrl}
                             alt={`Cover for ${book.title}`}
                             className="w-full h-full object-cover"
                         />
