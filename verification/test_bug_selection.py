@@ -24,7 +24,7 @@ def test_selection_popover_reappearance(page: Page):
     frame.locator("body").wait_for(timeout=5000)
 
     # Navigate to next page to ensure text content
-    page.get_by_test_id("reader-next-page").click()
+    page.keyboard.press("ArrowRight")
     page.wait_for_timeout(2000)
 
     # 1. First Selection & Highlight

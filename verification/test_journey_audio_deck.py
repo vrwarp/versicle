@@ -25,7 +25,8 @@ def test_audio_deck_journey(page: Page):
 
     # Verify Stage
     # Using aria-labels defined in UnifiedAudioPanel
-    expect(page.get_by_label("Play")).to_be_visible()
+    # Scope to dialog to avoid conflict with Satellite FAB
+    expect(page.get_by_role("dialog").get_by_label("Play")).to_be_visible()
     # Updated to support "Previous Sentence" for local TTS
     expect(page.get_by_test_id("tts-rewind-button")).to_be_visible()
     expect(page.get_by_test_id("tts-forward-button")).to_be_visible()

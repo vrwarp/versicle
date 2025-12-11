@@ -24,7 +24,7 @@ export const AudioReaderHUD: React.FC = () => {
     }
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-[100] flex flex-col items-center justify-end pb-6">
+        <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-[40] flex flex-col items-center justify-end pb-6">
              <div className="relative w-full max-w-md mx-auto pointer-events-auto">
                  {/* FAB Container - Absolute positioned relative to the wrapper */}
                  {!isLibrary && (

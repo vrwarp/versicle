@@ -13,20 +13,17 @@ def test_immersive_mode(page: Page):
     expect(page).to_have_url(re.compile(r".*/read/.*"))
     page.wait_for_timeout(2000)
 
-    # Verify Header and Footer are initially visible
+    # Verify Header is initially visible (Footer is removed in Sprint 5)
     header = page.locator("header")
-    footer = page.locator("footer")
     expect(header).to_be_visible()
-    expect(footer).to_be_visible()
 
     # Enter Immersive Mode
     print("Entering Immersive Mode...")
     immersive_enter_btn = page.get_by_test_id("reader-immersive-enter-button")
     immersive_enter_btn.click()
 
-    # Verify Header and Footer are hidden
+    # Verify Header is hidden
     expect(header).not_to_be_visible()
-    expect(footer).not_to_be_visible()
 
     # Verify Exit Button is visible
     exit_btn = page.get_by_test_id("reader-immersive-exit-button")
@@ -38,9 +35,8 @@ def test_immersive_mode(page: Page):
     print("Exiting Immersive Mode...")
     exit_btn.click()
 
-    # Verify Header and Footer are back
+    # Verify Header is back
     expect(header).to_be_visible()
-    expect(footer).to_be_visible()
 
     # Verify Exit Button is hidden
     expect(exit_btn).not_to_be_visible()
