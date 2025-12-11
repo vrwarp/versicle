@@ -11,6 +11,7 @@ import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
+import { debugService } from '../lib/DebugService';
 
 /**
  * Global application settings dialog.
@@ -320,6 +321,16 @@ export const GlobalSettingsDialog = () => {
                                 <h3 className="text-lg font-medium text-destructive">Danger Zone</h3>
                                 <Button variant="destructive" onClick={handleClearAllData}>
                                     Clear All Data
+                                </Button>
+                            </div>
+
+                            <div className="border-t pt-4 space-y-4">
+                                <h3 className="text-lg font-medium">Diagnostics</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Export logs and state for support.
+                                </p>
+                                <Button variant="outline" onClick={() => debugService.exportSnapshot()}>
+                                    Export Debug Info
                                 </Button>
                             </div>
                         </div>

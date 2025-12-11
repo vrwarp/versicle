@@ -82,6 +82,14 @@ export class AudioPlayerService {
 
   private localProviderConfig: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 };
 
+  // Circuit Breaker State
+  private cloudFailureCount: number = 0;
+  private lastCloudFailureTime: number = 0;
+  private cloudCooldownUntil: number = 0;
+  private readonly FAILURE_THRESHOLD = 3;
+  private readonly FAILURE_WINDOW = 60 * 1000; // 1 minute
+  private readonly COOLDOWN_DURATION = 5 * 60 * 1000; // 5 minutes
+
   private constructor() {
     // 1. Platform Detection
     // Automatically switch providers based on the environment.
@@ -425,6 +433,15 @@ export class AudioPlayerService {
       return this.queue;
   }
 
+  /**
+   * Gets the current playback index.
+   *
+   * @returns The current index.
+   */
+  public getCurrentIndex(): number {
+      return this.currentIndex;
+  }
+
   private isQueueEqual(newItems: TTSQueueItem[]): boolean {
       if (this.queue.length !== newItems.length) return false;
       for (let i = 0; i < this.queue.length; i++) {
@@ -633,6 +650,16 @@ export class AudioPlayerService {
     try {
         const voiceId = this.voiceId || '';
 
+        // Circuit Breaker Check
+        if (this.provider.id !== 'local' && Date.now() < this.cloudCooldownUntil) {
+             console.warn("Cloud TTS in cooldown. Switching to local temporary.");
+             // Note: We don't persist this switch in the DB, so next time it might try Cloud again
+             // unless we explicitly change the user setting. For now, we behave as a transient fallback.
+             // We can't easily switch provider "just for this call" without side effects.
+             // So we actually switch the provider for the session.
+             await this.fallbackToLocal();
+        }
+
         const rules = await this.lexiconService.getRules(this.currentBookId || undefined);
         if (signal.aborted) return;
 
@@ -669,6 +696,9 @@ export class AudioPlayerService {
                          result.alignment
                      );
                  }
+
+                 // Successful cloud call -> reset failure count
+                 this.cloudFailureCount = 0;
              }
 
              if (result && result.audio && this.audioPlayer) {
@@ -694,22 +724,12 @@ export class AudioPlayerService {
 
         // Error Handling & Fallback logic
         if (this.provider.id !== 'local') {
+            this.handleCloudFailure();
             const errorMessage = e instanceof Error ? e.message : "Cloud TTS error";
             this.notifyError(`Cloud voice failed (${errorMessage}). Switching to local backup.`);
 
             console.warn("Falling back to local provider...");
-            // We can't call setProvider() because it uses executeWithLock which waits for us!
-            // Direct switch internal
-            await this.stopInternal();
-
-            if (Capacitor.isNativePlatform()) {
-                this.provider = new CapacitorTTSProvider();
-            } else {
-                this.provider = new WebSpeechProvider(this.localProviderConfig);
-            }
-
-            this.setupWebSpeech();
-            await this.init();
+            await this.fallbackToLocal();
 
             // Retry playback
             return this.playInternal(signal);
@@ -718,6 +738,36 @@ export class AudioPlayerService {
         this.setStatus('stopped');
         this.notifyError(e instanceof Error ? e.message : "Playback error");
     }
+  }
+
+  private handleCloudFailure() {
+      const now = Date.now();
+      if (now - this.lastCloudFailureTime > this.FAILURE_WINDOW) {
+          this.cloudFailureCount = 1;
+      } else {
+          this.cloudFailureCount++;
+      }
+      this.lastCloudFailureTime = now;
+
+      if (this.cloudFailureCount >= this.FAILURE_THRESHOLD) {
+          this.cloudCooldownUntil = now + this.COOLDOWN_DURATION;
+          this.notifyError(`Network instability detected. Switching to local voice for ${this.COOLDOWN_DURATION / 60000} minutes.`);
+      }
+  }
+
+  private async fallbackToLocal() {
+        // We can't call setProvider() because it uses executeWithLock which waits for us!
+        // Direct switch internal
+        await this.stopInternal();
+
+        if (Capacitor.isNativePlatform()) {
+            this.provider = new CapacitorTTSProvider();
+        } else {
+            this.provider = new WebSpeechProvider(this.localProviderConfig);
+        }
+
+        this.setupWebSpeech();
+        await this.init();
   }
 
   /**

@@ -35,9 +35,9 @@ Allow users to download their state when reporting bugs.
 *   **UI:** Add "Export Debug Info" button in Global Settings -> Data Management.
 
 ### 4. Implementation Plan
-1.  **Watchdog:** Add `WatchdogTimer` class to `WebSpeechProvider`.
-2.  **Circuit Breaker:** Add logic to `AudioPlayerService` error handler.
-3.  **Diagnostics:** Create `DebugService` or utility in `AudioPlayerService` to gather data.
+1.  **[COMPLETED] Watchdog:** Added `watchdogTimer` and recovery logic to `WebSpeechProvider`.
+2.  **[COMPLETED] Circuit Breaker:** Added logic to `AudioPlayerService` to track cloud failures and fallback to local with a cooldown.
+3.  **[COMPLETED] Diagnostics:** Created `DebugService` to gather data and added an export button to `GlobalSettingsDialog`.
 
 ## Risks
 *   **False Positives:** Watchdog might kill valid long pauses (though rare in TTS).
@@ -46,3 +46,4 @@ Allow users to download their state when reporting bugs.
 ## Verification
 *   **Automated:** Mock `speechSynthesis` to simulate "hanging" (no events). Verify Watchdog restarts it.
 *   **Manual:** Disconnect WiFi while using Cloud Voice. Verify graceful fallback and cooldown behavior.
+*   **Visual:** Verified "Export Debug Info" button visibility and placement.
