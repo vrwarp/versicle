@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CapacitorTTSProvider } from './CapacitorTTSProvider';
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 
@@ -8,6 +8,7 @@ vi.mock('@capacitor-community/text-to-speech', () => ({
     getSupportedVoices: vi.fn(),
     speak: vi.fn(),
     stop: vi.fn(),
+    addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
   }
 }));
 
@@ -15,8 +16,12 @@ describe('CapacitorTTSProvider', () => {
   let provider: CapacitorTTSProvider;
 
   beforeEach(() => {
-    provider = new CapacitorTTSProvider();
     vi.clearAllMocks();
+    provider = new CapacitorTTSProvider();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('should have id "local"', () => {
@@ -55,7 +60,8 @@ describe('CapacitorTTSProvider', () => {
     expect(provider.resume).toBeUndefined();
   });
 
-  it('should emit start and end events during synthesis', async () => {
+  it('should emit start and end events via monitor if speak returns immediately', async () => {
+    vi.useFakeTimers();
     // Setup voices
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
@@ -70,11 +76,18 @@ describe('CapacitorTTSProvider', () => {
     const callback = vi.fn();
     provider.on(callback);
 
+    // Call synthesize - it will start monitor
     await provider.synthesize('hello', 'voice1', 1.0);
 
-    expect(callback).toHaveBeenCalledTimes(2);
-    expect(callback).toHaveBeenNthCalledWith(1, { type: 'start' });
-    expect(callback).toHaveBeenNthCalledWith(2, { type: 'end' });
+    expect(callback).toHaveBeenCalledWith({ type: 'start' });
+    // Should NOT emit end immediately
+    expect(callback).not.toHaveBeenCalledWith({ type: 'end' });
+
+    // Advance time to trigger monitor timeout
+    // Estimated for 'hello' (5 chars) is 1000ms. Max duration ~3.5s.
+    await vi.advanceTimersByTimeAsync(4000);
+
+    expect(callback).toHaveBeenCalledWith({ type: 'end' });
   });
 
   it('should emit error event if speak fails', async () => {
