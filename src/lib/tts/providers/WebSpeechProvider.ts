@@ -26,6 +26,9 @@ export class WebSpeechProvider implements ITTSProvider {
   constructor(config: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 }) {
     this.config = config;
     this.synth = window.speechSynthesis;
+    if (!this.synth) {
+      console.warn("WebSpeechProvider: window.speechSynthesis is not available");
+    }
     // Initialize silent audio loop to keep MediaSession active
     this.silentAudio = new Audio();
     this.silentAudio.loop = true;
@@ -67,6 +70,11 @@ export class WebSpeechProvider implements ITTSProvider {
    * Handles the asynchronous nature of `speechSynthesis.getVoices()`.
    */
   async init(): Promise<void> {
+    if (!this.synth) {
+      console.warn("WebSpeechProvider: init skipped, synthesis not available");
+      return;
+    }
+
     // If we have voices, we are good.
     if (this.voicesLoaded && this.voices.length > 0) return;
 
@@ -127,6 +135,8 @@ export class WebSpeechProvider implements ITTSProvider {
    * @returns A promise resolving to the list of voices.
    */
   async getVoices(): Promise<TTSVoice[]> {
+    if (!this.synth) return [];
+
     // If we don't have voices, try init again.
     // Also, even if voicesLoaded is false, we might have voices now available in the browser
     // that were loaded after the timeout.
@@ -167,6 +177,10 @@ export class WebSpeechProvider implements ITTSProvider {
    * @returns A Promise resolving to a SpeechSegment (with isNative: true).
    */
   async synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
+    if (!this.synth) {
+      throw new Error("SpeechSynthesis API not available");
+    }
+
     this.cancel(); // specific method to stop previous
 
     if (signal?.aborted) {
@@ -228,7 +242,7 @@ export class WebSpeechProvider implements ITTSProvider {
    * Pauses playback.
    */
   pause(): void {
-    if (this.synth.speaking) {
+    if (this.synth && this.synth.speaking) {
       this.synth.pause();
     }
     this.pauseSilentAudio();
@@ -238,7 +252,7 @@ export class WebSpeechProvider implements ITTSProvider {
    * Resumes playback.
    */
   resume(): void {
-    if (this.synth.paused) {
+    if (this.synth && this.synth.paused) {
       this.synth.resume();
       if (this.silentAudio.paused) {
           this.silentAudio.play().catch(e => console.warn("Silent audio resume failed", e));
@@ -250,7 +264,9 @@ export class WebSpeechProvider implements ITTSProvider {
    * Cancels the current utterance.
    */
   private cancel() {
-    this.synth.cancel();
+    if (this.synth) {
+      this.synth.cancel();
+    }
     // note: we don't automatically pause silent audio here because synthesize() calls cancel() before starting new one
   }
 

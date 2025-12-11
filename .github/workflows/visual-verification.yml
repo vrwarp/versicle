@@ -2,7 +2,7 @@ name: Visual Verification
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, capacitor ]
 
 jobs:
   verify-screenshots:

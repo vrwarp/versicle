@@ -11,6 +11,9 @@ import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
+import { Capacitor } from '@capacitor/core';
+import { ForegroundService, Importance } from '@capawesome-team/capacitor-android-foreground-service';
+import { AudioPlayerService } from './lib/tts/AudioPlayerService';
 
 /**
  * Main Application component.
@@ -54,6 +57,36 @@ function App() {
       }
     };
     init();
+  }, []);
+
+  useEffect(() => {
+    const initAndroid = async () => {
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          // 1. Setup Notification Channel
+          // This defines how the notification behaves (sound, vibration, visibility).
+          // 'importance: 3' means it shows up but doesn't make a noise (good for media).
+          await ForegroundService.createNotificationChannel({
+              id: 'versicle_tts_channel',
+              name: 'Versicle Playback',
+              description: 'Controls for background reading',
+              importance: Importance.Default
+          });
+
+          // 2. Listen for "Pause" button clicks on the notification itself
+          await ForegroundService.addListener('buttonClicked', async (event) => {
+              if (event.buttonId === 101) {
+                  // Map the notification button to our Service logic
+                  AudioPlayerService.getInstance().pause();
+              }
+          });
+        } catch (error) {
+           console.error('Failed to initialize Android services:', error);
+        }
+      }
+    };
+
+    initAndroid();
   }, []);
 
   const handleReset = async () => {

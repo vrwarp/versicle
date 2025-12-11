@@ -26,3 +26,7 @@ coverage/
 __pycache__/
 
 verification/screenshots/
+
+# Android SDK
+android-sdk/
+cmdline-tools.zip

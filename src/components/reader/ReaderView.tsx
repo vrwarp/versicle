@@ -176,7 +176,7 @@ export const ReaderView: React.FC = () => {
 
 
   // Use TTS Hook
-  useTTS(rendition);
+  useTTS(rendition, isRenditionReady);
 
   // Highlight Active TTS Sentence
   useEffect(() => {

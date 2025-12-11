@@ -58,6 +58,35 @@
     ```
     The application will be available at `http://localhost:5173`.
 
+## Mobile App (Android)
+
+Versicle can be built as a native Android application using Capacitor.
+
+**Prerequisites:**
+*   **Android Studio**: Required for building and running the Android app.
+*   **Java/JDK**: Compatible version (JDK 17 recommended).
+
+**Setup & Run:**
+
+1.  **Sync Web Assets:**
+    Build the web app and copy assets to the Android project:
+    ```bash
+    npm run build
+    npx cap sync
+    ```
+
+2.  **Open in Android Studio:**
+    ```bash
+    npx cap open android
+    ```
+    From Android Studio, you can run the app on an emulator or physical device.
+
+3.  **Run directly (CLI):**
+    To run on a connected device or emulator via command line:
+    ```bash
+    npx cap run android
+    ```
+
 ## Usage Guide
 
 ### Library Management

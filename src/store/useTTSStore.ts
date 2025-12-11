@@ -6,7 +6,9 @@ import type { TTSStatus, TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import { GoogleTTSProvider } from '../lib/tts/providers/GoogleTTSProvider';
 import { OpenAIProvider } from '../lib/tts/providers/OpenAIProvider';
 import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
+import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
+import { Capacitor } from '@capacitor/core';
 
 /**
  * State interface for the Text-to-Speech (TTS) store.
@@ -183,8 +185,12 @@ export const useTTSStore = create<TTSState>()(
                 } else if (id === 'openai') {
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
-                    const { silentAudioType, whiteNoiseVolume } = get();
-                    newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
+                    if (Capacitor.isNativePlatform()) {
+                        newProvider = new CapacitorTTSProvider();
+                    } else {
+                        const { silentAudioType, whiteNoiseVolume } = get();
+                        newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
+                    }
                 }
 
                 player.setProvider(newProvider);
@@ -241,7 +247,11 @@ export const useTTSStore = create<TTSState>()(
                 } else if (providerId === 'openai') {
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else {
-                    newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
+                    if (Capacitor.isNativePlatform()) {
+                        newProvider = new CapacitorTTSProvider();
+                    } else {
+                        newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
+                    }
                 }
                 player.setProvider(newProvider);
 
