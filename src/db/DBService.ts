@@ -355,13 +355,9 @@ class DBService {
    */
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
       try {
-          console.log(`[TTS-DEBUG] DBService.getTTSState for ${bookId}`);
           const db = await this.getDB();
-          const result = await db.get('tts_queue', bookId);
-          console.log(`[TTS-DEBUG] DBService.getTTSState result: ${result ? result.queue.length + ' items' : 'undefined'}`);
-          return result;
+          return await db.get('tts_queue', bookId);
       } catch (error) {
-          console.error(`[TTS-DEBUG] DBService.getTTSState error`, error);
           this.handleError(error);
       }
   }
