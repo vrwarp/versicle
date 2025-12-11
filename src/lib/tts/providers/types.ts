@@ -8,8 +8,8 @@ export interface TTSVoice {
   name: string;
   /** Language code (e.g., 'en-US'). */
   lang: string;
-  /** The provider that owns this voice ('local', 'google', 'openai'). */
-  provider: 'local' | 'google' | 'openai';
+  /** The provider that owns this voice ('local', 'google', 'openai', 'lemonfox'). */
+  provider: 'local' | 'google' | 'openai' | 'lemonfox';
   /** Optional reference to the original SpeechSynthesisVoice object (for local provider). */
   originalVoice?: SpeechSynthesisVoice;
 }

@@ -177,6 +177,7 @@ export const GlobalSettingsDialog = () => {
                                                 <SelectItem value="local">Web Speech (Local)</SelectItem>
                                                 <SelectItem value="google">Google Cloud TTS</SelectItem>
                                                 <SelectItem value="openai">OpenAI</SelectItem>
+                                                <SelectItem value="lemonfox">LemonFox.ai</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </div>
@@ -237,6 +238,16 @@ export const GlobalSettingsDialog = () => {
                                                 type="password"
                                                 value={apiKeys.openai}
                                                 onChange={(e) => setApiKey('openai', e.target.value)}
+                                            />
+                                        </div>
+                                    )}
+                                    {providerId === 'lemonfox' && (
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium">LemonFox API Key</label>
+                                            <Input
+                                                type="password"
+                                                value={apiKeys.lemonfox}
+                                                onChange={(e) => setApiKey('lemonfox', e.target.value)}
                                             />
                                         </div>
                                     )}

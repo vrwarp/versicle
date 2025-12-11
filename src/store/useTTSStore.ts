@@ -5,6 +5,7 @@ import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 import type { TTSStatus, TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import { GoogleTTSProvider } from '../lib/tts/providers/GoogleTTSProvider';
 import { OpenAIProvider } from '../lib/tts/providers/OpenAIProvider';
+import { LemonFoxProvider } from '../lib/tts/providers/LemonFoxProvider';
 import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
@@ -36,10 +37,11 @@ interface TTSState {
   lastError: string | null;
 
   /** Provider configuration */
-  providerId: 'local' | 'google' | 'openai';
+  providerId: 'local' | 'google' | 'openai' | 'lemonfox';
   apiKeys: {
       google: string;
       openai: string;
+      lemonfox: string;
   };
 
   /** Custom abbreviations for sentence segmentation */
@@ -71,8 +73,8 @@ interface TTSState {
   setRate: (rate: number) => void;
   setPitch: (pitch: number) => void;
   setVoice: (voice: TTSVoice | null) => void;
-  setProviderId: (id: 'local' | 'google' | 'openai') => void;
-  setApiKey: (provider: 'google' | 'openai', key: string) => void;
+  setProviderId: (id: 'local' | 'google' | 'openai' | 'lemonfox') => void;
+  setApiKey: (provider: 'google' | 'openai' | 'lemonfox', key: string) => void;
   setCustomAbbreviations: (abbrevs: string[]) => void;
   setAlwaysMerge: (words: string[]) => void;
   setSentenceStarters: (words: string[]) => void;
@@ -139,7 +141,8 @@ export const useTTSStore = create<TTSState>()(
             providerId: 'local',
             apiKeys: {
                 google: '',
-                openai: ''
+                openai: '',
+                lemonfox: ''
             },
             enableCostWarning: true,
             prerollEnabled: false,
@@ -184,6 +187,8 @@ export const useTTSStore = create<TTSState>()(
                     newProvider = new GoogleTTSProvider(apiKeys.google);
                 } else if (id === 'openai') {
                     newProvider = new OpenAIProvider(apiKeys.openai);
+                } else if (id === 'lemonfox') {
+                    newProvider = new LemonFoxProvider(apiKeys.lemonfox);
                 } else {
                     if (Capacitor.isNativePlatform()) {
                         newProvider = new CapacitorTTSProvider();
@@ -246,6 +251,8 @@ export const useTTSStore = create<TTSState>()(
                     newProvider = new GoogleTTSProvider(apiKeys.google);
                 } else if (providerId === 'openai') {
                     newProvider = new OpenAIProvider(apiKeys.openai);
+                } else if (providerId === 'lemonfox') {
+                    newProvider = new LemonFoxProvider(apiKeys.lemonfox);
                 } else {
                     if (Capacitor.isNativePlatform()) {
                         newProvider = new CapacitorTTSProvider();
