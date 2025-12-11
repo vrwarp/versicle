@@ -78,4 +78,15 @@ describe('BookCard', () => {
     renderWithRouter(<BookCard book={bookWithUndefinedProgress} />);
     expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
   });
+
+  it('should have accessibility attributes', () => {
+    renderWithRouter(<BookCard book={mockBook} />);
+
+    const card = screen.getByTestId(`book-card-${mockBook.id}`);
+    expect(card).toHaveAttribute('role', 'button');
+    expect(card).toHaveAttribute('tabIndex', '0');
+
+    const menuButton = screen.getByLabelText('Book actions');
+    expect(menuButton).toBeInTheDocument();
+  });
 });

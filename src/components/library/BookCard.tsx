@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
 import { MoreVertical, Trash2, CloudOff, Cloud, RefreshCw } from 'lucide-react';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/DropdownMenu';
+import { cn } from '../../lib/utils';
 
 /**
  * Props for the BookCard component.
@@ -35,8 +42,6 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
   const navigate = useNavigate();
   const { removeBook, offloadBook, restoreBook } = useLibraryStore();
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
-  const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -53,21 +58,6 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
     };
   }, [book.coverBlob]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showMenu]);
-
   const handleCardClick = () => {
     if (book.isOffloaded) {
       // Trigger restore
@@ -77,9 +67,11 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
     }
   };
 
-  const handleMenuClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowMenu(!showMenu);
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleCardClick();
+    }
   };
 
   const handleDelete = async (e: React.MouseEvent) => {
@@ -87,13 +79,16 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
     if (confirm('Are you sure you want to delete this book completely? This cannot be undone.')) {
       await removeBook(book.id);
     }
-    setShowMenu(false);
   };
 
   const handleOffload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     await offloadBook(book.id);
-    setShowMenu(false);
+  };
+
+  const handleRestoreClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fileInputRef.current?.click();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -114,8 +109,11 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
   return (
     <div
       onClick={handleCardClick}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
       data-testid={`book-card-${book.id}`}
-      className="group flex flex-col bg-card text-card-foreground rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-border h-full cursor-pointer relative"
+      className="group flex flex-col bg-card text-card-foreground rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-border h-full cursor-pointer relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <input
         type="file"
@@ -131,7 +129,10 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
           <img
             src={coverUrl}
             alt={`Cover of ${book.title}`}
-            className={`w-full h-full object-cover transition-transform group-hover:scale-105 ${book.isOffloaded ? 'opacity-50 grayscale' : ''}`}
+            className={cn(
+                "w-full h-full object-cover transition-transform group-hover:scale-105",
+                book.isOffloaded && 'opacity-50 grayscale'
+            )}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted-foreground/50">
@@ -145,48 +146,39 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
            </div>
         )}
 
-        <div className="absolute top-2 right-2">
-           <button
-             onClick={handleMenuClick}
-             className="p-1 rounded-full bg-black/50 text-white hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity"
-             data-testid="book-menu-trigger"
-           >
-              <MoreVertical className="w-4 h-4" />
-           </button>
-           {showMenu && (
-             <div
-               ref={menuRef}
-               className="absolute right-0 top-full mt-1 w-48 bg-popover text-popover-foreground rounded-md shadow-lg border border-border z-10 overflow-hidden"
-             >
+        <div
+          className="absolute top-2 right-2"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+           <DropdownMenu>
+             <DropdownMenuTrigger asChild>
+               <button
+                 className="p-1 rounded-full bg-black/50 text-white hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus-visible:opacity-100"
+                 data-testid="book-menu-trigger"
+                 aria-label="Book actions"
+               >
+                  <MoreVertical className="w-4 h-4" />
+               </button>
+             </DropdownMenuTrigger>
+             <DropdownMenuContent align="end" className="w-48">
                 {!book.isOffloaded ? (
-                    <button
-                        onClick={handleOffload}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
-                        data-testid="menu-offload"
-                    >
-                        <CloudOff className="w-4 h-4" />
+                    <DropdownMenuItem onClick={handleOffload} data-testid="menu-offload" className="cursor-pointer">
+                        <CloudOff className="w-4 h-4 mr-2" />
                         Offload File
-                    </button>
+                    </DropdownMenuItem>
                 ) : (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); setShowMenu(false); }}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
-                        data-testid="menu-restore"
-                    >
-                        <RefreshCw className="w-4 h-4" />
+                    <DropdownMenuItem onClick={handleRestoreClick} data-testid="menu-restore" className="cursor-pointer">
+                        <RefreshCw className="w-4 h-4 mr-2" />
                         Restore File
-                    </button>
+                    </DropdownMenuItem>
                 )}
-                <button
-                    onClick={handleDelete}
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-destructive/10 text-destructive hover:text-destructive flex items-center gap-2 border-t border-border"
-                    data-testid="menu-delete"
-                >
-                    <Trash2 className="w-4 h-4" />
+                <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive cursor-pointer" data-testid="menu-delete">
+                    <Trash2 className="w-4 h-4 mr-2" />
                     Delete Book
-                </button>
-             </div>
-           )}
+                </DropdownMenuItem>
+             </DropdownMenuContent>
+           </DropdownMenu>
         </div>
       </div>
       <div className="p-3 flex flex-col flex-1">
