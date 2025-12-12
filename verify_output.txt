@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: playwright-0.7.2, base-url-2.1.0
+collected 76 items
+
+verification/test_abbrev_settings.py .                                   [  1%]
+verification/test_bug_selection.py .                                     [  2%]
+verification/test_journey_annotations.py .                               [  3%]
+verification/test_journey_audio_deck.py .                                [  5%]
+verification/test_journey_audio_hud.py .                                 [  6%]
+verification/test_journey_backup.py ..                                   [  9%]
+verification/test_journey_demo_book.py .                                 [ 10%]
+verification/test_journey_engine_room.py .                               [ 11%]
+verification/test_journey_gesture_mode.py .                              [ 13%]
+verification/test_journey_immersive_mode.py .                            [ 14%]
+verification/test_journey_import_error.py .                              [ 15%]
+verification/test_journey_lexicon.py .                                   [ 17%]
+verification/test_journey_lexicon_csv.py .                               [ 18%]
+verification/test_journey_library.py .                                   [ 19%]
+verification/test_journey_list_view.py .                                 [ 21%]
+verification/test_journey_preroll.py .                                   [ 22%]
+verification/test_journey_progress_bar.py .                              [ 23%]
+verification/test_journey_reading.py .                                   [ 25%]
+verification/test_journey_search.py .                                    [ 26%]
+verification/test_journey_search_position.py .                           [ 27%]
+verification/test_journey_settings_persistence.py
