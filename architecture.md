@@ -18,6 +18,7 @@ graph TD
         App[App.tsx]
         Library[LibraryView]
         Reader[ReaderView]
+        TTSController[ReaderTTSController]
         AudioPanel[UnifiedAudioPanel]
         useEpub[useEpubReader Hook]
     end
@@ -63,6 +64,7 @@ graph TD
     App --> Library
     App --> Reader
     Reader --> ReaderStore
+    Reader --> TTSController
     Reader --> AudioPanel
     Reader --> useEpub
 
@@ -503,6 +505,7 @@ Manages global toast notifications.
 
 #### Key Components
 *   **`ReaderView`**: The main reading interface. Handles routing, layout, and orchestrates sub-components (TOC, Annotations, AudioPanel).
+*   **`ReaderTTSController`**: Headless component that handles high-frequency TTS updates (highlighting, navigation) to prevent `ReaderView` re-renders.
 *   **`LibraryView`**: Displays the bookshelf grid/list and handles file import.
 *   **`FileUploader`**: Drag-and-drop zone for EPUB files.
 *   **`UnifiedAudioPanel`**: Controls for TTS playback, settings, and voice selection.
