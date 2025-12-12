@@ -121,14 +121,14 @@ interface BookMetadata {
 ## 5. Implementation Roadmap
 
 ### Phase 1: Foundation
-1.  Add `@google/generative-ai` dependency.
-2.  Create `src/store/useGenAIStore.ts`.
-3.  Implement `src/lib/genai/GenAIService.ts` using `responseSchema`.
-4.  Update `GlobalSettingsDialog`.
+1. [x] Add `@google/generative-ai` dependency.
+2. [x] Create `src/store/useGenAIStore.ts`.
+3. [x] Implement `src/lib/genai/GenAIService.ts` using `responseSchema`.
+4. [x] Update `GlobalSettingsDialog`.
 
 ### Phase 2: Data & Ingestion
-1.  Update `src/types/db.ts` and `src/db/DBService.ts`.
-2.  Implement text matching utilities (for structural annotation).
+1. [x] Update `src/types/db.ts` and `src/db/DBService.ts`.
+2. [x] Implement text matching utilities (for structural annotation).
 
 ### Phase 3: Feature Implementation
 1.  **Smart TOC:** Implement "Enhance TOC" workflow in `ReaderView.tsx`.

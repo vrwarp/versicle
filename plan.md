@@ -326,3 +326,15 @@ epub.js provides a robust annotation API based on **Canonical Fragment Identifie
   - [ ] Build & Sync.
   - [ ] Run on Android Device/Emulator.
   - [ ] Verify Background Playback & Compliance.
+
+## **GenAI Foundation Plan**
+
+- [x] **Phase 1: Foundation** (`plan/gen_ai_foundations.md`)
+  - [x] Add `@google/generative-ai` dependency.
+  - [x] Create `src/store/useGenAIStore.ts`.
+  - [x] Implement `src/lib/genai/GenAIService.ts`.
+  - [x] Update `GlobalSettingsDialog`.
+
+- [x] **Phase 2: Data & Ingestion**
+  - [x] Update `src/types/db.ts` and `src/db/DBService.ts`.
+  - [x] Implement text matching utilities.
