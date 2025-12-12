@@ -53,7 +53,11 @@ export class GoogleTTSProvider extends BaseCloudProvider {
   private async fetchVoices() {
       if (!this.apiKey) return;
 
-      const response = await fetch(`https://texttospeech.googleapis.com/v1/voices?key=${this.apiKey}`);
+      const response = await fetch(`https://texttospeech.googleapis.com/v1/voices`, {
+          headers: {
+              'X-Goog-Api-Key': this.apiKey
+          }
+      });
       if (!response.ok) {
           throw new Error(`Google TTS List Voices Error: ${response.statusText}`);
       }
@@ -74,7 +78,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
       throw new Error('Google Cloud API Key is missing');
     }
 
-    const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${this.apiKey}`;
+    const url = `https://texttospeech.googleapis.com/v1/text:synthesize`;
 
     const requestBody = {
       input: { text },
@@ -88,7 +92,10 @@ export class GoogleTTSProvider extends BaseCloudProvider {
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': this.apiKey
+      },
       body: JSON.stringify(requestBody)
     });
 
