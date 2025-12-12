@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { NavigationItem } from 'epubjs';
 import { useReaderStore } from '../../store/useReaderStore';
@@ -22,6 +22,7 @@ import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
+import { ReaderTTSController } from './ReaderTTSController';
 
 /**
  * The main reader interface component.
@@ -54,17 +55,13 @@ export const ReaderView: React.FC = () => {
     setGestureMode
   } = useReaderStore();
 
-  const {
-      isPlaying,
-      status,
-      play,
-      activeCfi,
-      lastError,
-      clearError,
-      queue,
-      jumpTo,
-      currentIndex
-  } = useTTSStore();
+  // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
+  const isPlaying = useTTSStore(state => state.isPlaying);
+  const status = useTTSStore(state => state.status);
+  const play = useTTSStore(state => state.play);
+  const queue = useTTSStore(state => state.queue);
+  const lastError = useTTSStore(state => state.lastError);
+  const clearError = useTTSStore(state => state.clearError);
 
   const {
     annotations,
@@ -177,28 +174,8 @@ export const ReaderView: React.FC = () => {
   // Use TTS Hook
   useTTS(rendition, isRenditionReady);
 
-  // Highlight Active TTS Sentence
-  useEffect(() => {
-      if (!rendition || !activeCfi) return;
-
-      // Auto-turn page in paginated mode
-      if (viewMode === 'paginated') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition as any).display(activeCfi);
-      }
-
-      // Add highlight
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
-          // Click handler for TTS highlight
-      }, 'tts-highlight');
-
-      // Remove highlight when activeCfi changes
-      return () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition as any).annotations.remove(activeCfi, 'highlight');
-      };
-  }, [activeCfi, viewMode, rendition]);
+  // Note: TTS Highlighting and Keyboard navigation logic moved to ReaderTTSController
+  // to prevent unnecessary re-renders of the main ReaderView.
 
   // Load Annotations from DB
   useEffect(() => {
@@ -290,20 +267,23 @@ export const ReaderView: React.FC = () => {
       }
   };
 
-  const handlePrev = () => {
+  const [autoPlayNext, setAutoPlayNext] = useState(false);
+
+  const handlePrev = useCallback(() => {
       console.log("Navigating to previous page");
       if (status === 'playing' || status === 'loading') {
           setAutoPlayNext(true);
       }
       rendition?.prev();
-  };
-  const handleNext = () => {
+  }, [status, rendition]);
+
+  const handleNext = useCallback(() => {
       console.log("Navigating to next page");
       if (status === 'playing' || status === 'loading') {
           setAutoPlayNext(true);
       }
       rendition?.next();
-  };
+  }, [status, rendition]);
 
   const scrollToText = (text: string) => {
       const iframe = viewerRef.current?.querySelector('iframe');
@@ -364,15 +344,13 @@ export const ReaderView: React.FC = () => {
       }
   };
 
-  const [autoPlayNext, setAutoPlayNext] = useState(false);
-
   // Auto-advance chapter when TTS completes
   useEffect(() => {
       if (status === 'completed') {
           setAutoPlayNext(true);
           handleNext();
       }
-  }, [status]);
+  }, [status, handleNext]);
 
   // Trigger auto-play when new chapter loads (queue changes)
   useEffect(() => {
@@ -384,28 +362,6 @@ export const ReaderView: React.FC = () => {
       }
   }, [status, autoPlayNext, play, queue]);
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        if (status === 'playing' || status === 'paused') {
-          if (currentIndex > 0) jumpTo(currentIndex - 1);
-        } else {
-          handlePrev();
-        }
-      }
-      if (e.key === 'ArrowRight') {
-        if (status === 'playing' || status === 'paused') {
-          if (currentIndex < queue.length - 1) jumpTo(currentIndex + 1);
-        } else {
-          handleNext();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [status, currentIndex, queue, jumpTo, rendition]); // Updated deps
-
   // Close Audio Panel when Gesture Mode is enabled
   useEffect(() => {
       if (gestureMode) {
@@ -415,6 +371,13 @@ export const ReaderView: React.FC = () => {
 
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
+      <ReaderTTSController
+         rendition={rendition}
+         viewMode={viewMode}
+         onPrev={handlePrev}
+         onNext={handleNext}
+      />
+
       {/* Gesture Overlay */}
       <GestureOverlay
           onNextChapter={handleNext}
