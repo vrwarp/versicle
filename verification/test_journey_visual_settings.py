@@ -29,9 +29,9 @@ def test_visual_settings(page: Page):
     # Close popover by clicking outside
     page.locator('body').click(position={'x': 10, 'y': 10})
 
-    page.get_by_test_id("reader-next-page").click()
+    page.keyboard.press("ArrowRight")
     page.wait_for_timeout(1000)
-    page.get_by_test_id("reader-next-page").click()
+    page.keyboard.press("ArrowRight")
     page.wait_for_timeout(1000)
 
     # Re-open visual settings

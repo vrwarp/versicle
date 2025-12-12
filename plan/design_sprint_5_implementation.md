@@ -149,3 +149,11 @@ Create the files in `src/components/audio/`.
 *   **Mobile First:** The design is optimized for mobile (thumbs). On Desktop, it can center-float or align bottom-right.
 *   **Progress Granularity:** `queue` items are sentences. Progress bar will step per sentence. This is acceptable performance-wise compared to char-level updates.
 *   **Touch Targets:** Ensure Chevrons and FAB have `min-h-[44px]` touch areas even if icons are small.
+
+## 6. Implementation Status
+- [x] Step 1: Utility Hooks (`useChapterDuration`)
+- [x] Step 2: Component Skeleton (`CompassPill`, `SatelliteFAB`)
+- [x] Step 3: Styling & Theming
+- [x] Step 4: Integration (`AudioReaderHUD`, `App.tsx`)
+- [x] Step 5: Reader Cleanup (Removed footer, added padding)
+- [x] Step 6: Verification Updates (`test_journey_reading.py` updated, `test_journey_audio_hud.py` created)

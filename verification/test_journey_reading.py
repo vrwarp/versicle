@@ -40,8 +40,10 @@ def test_reading_journey(page: Page):
 
     # 1. Navigation (Next Page 1)
     print("Testing Next Page (1)...")
-    next_btn = page.get_by_test_id("reader-next-page")
-    next_btn.click()
+    # Verify Compass Pill is visible (Audio HUD)
+    expect(page.get_by_test_id("compass-pill-active")).to_be_visible(timeout=10000)
+
+    page.keyboard.press("ArrowRight")
     page.wait_for_timeout(2000)
     text_1 = get_frame_text()
     print(f"Page 1 Text: {text_1}")
@@ -52,7 +54,7 @@ def test_reading_journey(page: Page):
 
     # Next Page 2
     print("Testing Next Page (2)...")
-    next_btn.click()
+    page.keyboard.press("ArrowRight")
     page.wait_for_timeout(2000)
     text_2 = get_frame_text()
     print(f"Page 2 Text: {text_2}")
@@ -63,7 +65,7 @@ def test_reading_journey(page: Page):
 
     # Next Page 3
     print("Testing Next Page (3)...")
-    next_btn.click()
+    page.keyboard.press("ArrowRight")
     page.wait_for_timeout(2000)
     text_3 = get_frame_text()
     print(f"Page 3 Text: {text_3}")
@@ -75,8 +77,7 @@ def test_reading_journey(page: Page):
 
     # Prev Page
     print("Testing Prev Page...")
-    prev_btn = page.get_by_test_id("reader-prev-page")
-    prev_btn.click()
+    page.keyboard.press("ArrowLeft")
     page.wait_for_timeout(2000)
     text_prev = get_frame_text()
     print(f"Prev Page Text: {text_prev}")
