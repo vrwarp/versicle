@@ -1,15 +1,16 @@
-import type { ITTSProvider, TTSVoice, SpeechSegment, Timepoint } from './types';
+import { BaseCloudProvider } from './BaseCloudProvider';
+import type { TTSOptions, SpeechSegment, Timepoint } from './types';
 
 /**
  * TTS Provider for Google Cloud Text-to-Speech API.
  * Requires a valid API Key.
  */
-export class GoogleTTSProvider implements ITTSProvider {
+export class GoogleTTSProvider extends BaseCloudProvider {
   id = 'google';
   private apiKey: string | null = null;
-  private voices: TTSVoice[] = [];
 
   constructor(apiKey?: string) {
+    super();
     if (apiKey) {
       this.apiKey = apiKey;
     }
@@ -39,7 +40,7 @@ export class GoogleTTSProvider implements ITTSProvider {
   /**
    * Returns the list of available Google TTS voices.
    */
-  async getVoices(): Promise<TTSVoice[]> {
+  async getVoices() {
     if (this.voices.length === 0 && this.apiKey) {
       await this.fetchVoices();
     }
@@ -68,16 +69,7 @@ export class GoogleTTSProvider implements ITTSProvider {
       }));
   }
 
-  /**
-   * Synthesizes text using Google Cloud TTS.
-   * Returns an MP3 blob and optional alignment data.
-   *
-   * @param text - The text to synthesize.
-   * @param voiceId - The voice name.
-   * @param speed - Speaking rate.
-   * @param signal - Optional AbortSignal.
-   */
-  async synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
+  protected async fetchAudioData(text: string, options: TTSOptions): Promise<SpeechSegment> {
     if (!this.apiKey) {
       throw new Error('Google Cloud API Key is missing');
     }
@@ -86,10 +78,10 @@ export class GoogleTTSProvider implements ITTSProvider {
 
     const requestBody = {
       input: { text },
-      voice: { name: voiceId, languageCode: voiceId.split('-').slice(0, 2).join('-') },
+      voice: { name: options.voiceId, languageCode: options.voiceId.split('-').slice(0, 2).join('-') },
       audioConfig: {
         audioEncoding: 'MP3',
-        speakingRate: speed,
+        speakingRate: options.speed,
       },
       enableTimepointing: ["SSML_MARK"]
     };
@@ -97,8 +89,7 @@ export class GoogleTTSProvider implements ITTSProvider {
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      signal
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {

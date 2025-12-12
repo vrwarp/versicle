@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider';
+import type { TTSOptions } from './types';
+
+vi.mock('../AudioElementPlayer');
+vi.mock('../TTSCache');
+vi.mock('../CostEstimator');
 
 describe('OpenAIProvider', () => {
   let provider: OpenAIProvider;
@@ -51,12 +56,15 @@ describe('OpenAIProvider', () => {
     });
   });
 
-  describe('synthesize', () => {
+  describe('fetchAudioData', () => {
+    const options: TTSOptions = { voiceId: 'alloy', speed: 1.0 };
+
     it('should throw if api key is missing', async () => {
       provider.setApiKey('');
       // @ts-expect-error - forcing null for test
       provider.apiKey = null;
-      await expect(provider.synthesize('text', 'alloy', 1)).rejects.toThrow('OpenAI API Key missing');
+      // @ts-expect-error - protected
+      await expect(provider.fetchAudioData('text', options)).rejects.toThrow('OpenAI API Key missing');
     });
 
     it('should call openai api and return audio', async () => {
@@ -66,14 +74,15 @@ describe('OpenAIProvider', () => {
         blob: () => Promise.resolve(mockBlob),
       });
 
-      const result = await provider.synthesize('Hello world', 'alloy', 1.0);
+      // @ts-expect-error - protected
+      const result = await provider.fetchAudioData('Hello world', options);
 
       expect(global.fetch).toHaveBeenCalledWith('https://api.openai.com/v1/audio/speech', expect.objectContaining({
         method: 'POST',
-        headers: {
+        headers: expect.objectContaining({
           'Authorization': 'Bearer test-api-key',
           'Content-Type': 'application/json'
-        },
+        }),
         body: JSON.stringify({
           model: 'tts-1',
           input: 'Hello world',
@@ -94,10 +103,11 @@ describe('OpenAIProvider', () => {
       (global.fetch as Mock).mockResolvedValue({
         ok: false,
         status: 401,
-        text: () => Promise.resolve('Unauthorized'),
+        statusText: 'Unauthorized',
       });
 
-      await expect(provider.synthesize('text', 'alloy', 1)).rejects.toThrow('OpenAI TTS Error: 401 Unauthorized');
+      // @ts-expect-error - protected
+      await expect(provider.fetchAudioData('text', options)).rejects.toThrow('TTS API Error: 401 Unauthorized');
     });
   });
 });

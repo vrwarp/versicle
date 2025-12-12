@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { LemonFoxProvider } from './LemonFoxProvider';
+import type { TTSOptions } from './types';
+
+vi.mock('../AudioElementPlayer');
+vi.mock('../TTSCache');
+vi.mock('../CostEstimator');
 
 describe('LemonFoxProvider', () => {
   let provider: LemonFoxProvider;
@@ -51,12 +56,15 @@ describe('LemonFoxProvider', () => {
     });
   });
 
-  describe('synthesize', () => {
+  describe('fetchAudioData', () => {
+    const options: TTSOptions = { voiceId: 'heart', speed: 1.0 };
+
     it('should throw if api key is missing', async () => {
       provider.setApiKey('');
       // @ts-expect-error - forcing null for test
       provider.apiKey = null;
-      await expect(provider.synthesize('text', 'heart', 1)).rejects.toThrow('LemonFox API Key missing');
+      // @ts-expect-error - protected
+      await expect(provider.fetchAudioData('text', options)).rejects.toThrow('LemonFox API Key missing');
     });
 
     it('should call lemonfox api and return audio', async () => {
@@ -66,14 +74,15 @@ describe('LemonFoxProvider', () => {
         blob: () => Promise.resolve(mockBlob),
       });
 
-      const result = await provider.synthesize('Hello world', 'heart', 1.0);
+      // @ts-expect-error - protected
+      const result = await provider.fetchAudioData('Hello world', options);
 
       expect(global.fetch).toHaveBeenCalledWith('https://api.lemonfox.ai/v1/audio/speech', expect.objectContaining({
         method: 'POST',
-        headers: {
+        headers: expect.objectContaining({
           'Authorization': 'Bearer test-api-key',
           'Content-Type': 'application/json'
-        },
+        }),
         body: JSON.stringify({
           input: 'Hello world',
           voice: 'heart',
@@ -95,8 +104,8 @@ describe('LemonFoxProvider', () => {
         status: 401,
         statusText: 'Unauthorized'
       });
-      // BaseCloudProvider throws: `TTS API Error: ${response.status} ${response.statusText}`
-      await expect(provider.synthesize('text', 'heart', 1)).rejects.toThrow('TTS API Error: 401 Unauthorized');
+      // @ts-expect-error - protected
+      await expect(provider.fetchAudioData('text', options)).rejects.toThrow('TTS API Error: 401 Unauthorized');
     });
   });
 });

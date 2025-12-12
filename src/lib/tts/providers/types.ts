@@ -16,6 +16,7 @@ export interface TTSVoice {
 
 /**
  * Represents the result of a synthesis operation.
+ * @deprecated Used internally by cloud providers for fetchAudioData return.
  */
 export interface SpeechSegment {
   /** The generated audio data (for cloud providers). */
@@ -37,6 +38,21 @@ export interface Timepoint {
   /** The type of timepoint ('word', 'sentence', or 'mark'). */
   type?: string;
 }
+
+export interface TTSOptions {
+  voiceId: string;
+  speed: number;
+  volume?: number;
+}
+
+export type TTSEvent =
+  | { type: 'start' }
+  | { type: 'end' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | { type: 'error'; error: any }
+  | { type: 'timeupdate'; currentTime: number; duration: number }
+  | { type: 'boundary'; charIndex: number }
+  | { type: 'meta'; alignment: Timepoint[] };
 
 /**
  * Interface that all TTS providers must implement.
@@ -61,28 +77,28 @@ export interface ITTSProvider {
   getVoices(): Promise<TTSVoice[]>;
 
   /**
-   * Synthesizes text into speech.
+   * Requests the provider to speak the given text.
    *
-   * @param text - The text to synthesize.
-   * @param voiceId - The ID of the voice to use.
-   * @param speed - The playback speed (rate).
-   * @param signal - Optional AbortSignal to cancel the operation.
-   * @returns A Promise resolving to a SpeechSegment.
+   * **Behavior:**
+   * - **Cloud:** Checks cache, downloads if needed, then plays the audio blob.
+   * - **Local:** Immediately triggers the native TTS engine.
+   *
+   * **Blocking:**
+   * - Returns a Promise that resolves when playback *starts*.
+   *
+   * @param text The text to speak.
+   * @param options Playback options (speed, voice).
    */
-  synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment>;
+  play(text: string, options: TTSOptions): Promise<void>;
 
   /**
-   * Optional: Cancels current synthesis or playback if handled natively.
+   * Hints to the provider that this text will be needed soon.
    */
-  stop?(): void;
+  preload(text: string, options: TTSOptions): Promise<void>;
 
-  /**
-   * Optional: Pauses playback if handled natively.
-   */
-  pause?(): void;
+  pause(): void;
+  resume(): void;
+  stop(): void;
 
-  /**
-   * Optional: Resumes playback if handled natively.
-   */
-  resume?(): void;
+  on(callback: (event: TTSEvent) => void): void;
 }
