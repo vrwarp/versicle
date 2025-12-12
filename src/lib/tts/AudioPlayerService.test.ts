@@ -8,53 +8,55 @@ vi.mock('./providers/WebSpeechProvider', () => {
       id = 'local';
       init = vi.fn().mockResolvedValue(undefined);
       getVoices = vi.fn().mockResolvedValue([]);
-      synthesize = vi.fn();
+      play = vi.fn().mockResolvedValue(undefined);
+      preload = vi.fn();
       stop = vi.fn();
       on = vi.fn();
       setConfig = vi.fn();
+      pause = vi.fn();
+      resume = vi.fn();
     }
   };
 });
 
-// Mock TTSCache class
-vi.mock('./TTSCache', () => {
-  return {
-    TTSCache: class {
-      generateKey = vi.fn().mockResolvedValue('key');
-      get = vi.fn().mockResolvedValue(null);
-      put = vi.fn().mockResolvedValue(undefined);
-    }
-  };
-});
-
-// Mock CostEstimator
-vi.mock('./CostEstimator', () => {
+// Mock CapacitorTTSProvider class
+vi.mock('./providers/CapacitorTTSProvider', () => {
     return {
-        CostEstimator: {
-            getInstance: vi.fn(() => ({
-                track: vi.fn()
-            }))
+        CapacitorTTSProvider: class {
+            id = 'local';
+            init = vi.fn().mockResolvedValue(undefined);
+            getVoices = vi.fn().mockResolvedValue([]);
+            play = vi.fn().mockResolvedValue(undefined);
+            preload = vi.fn();
+            stop = vi.fn();
+            on = vi.fn();
+            pause = vi.fn();
+            resume = vi.fn();
         }
     }
 });
 
-// Mock useTTSStore
-vi.mock('../../store/useTTSStore', () => ({
-    useTTSStore: {
-        getState: vi.fn(() => ({
-            lastPauseTime: null,
-            setLastPauseTime: vi.fn(),
+// Mock Dependencies
+vi.mock('./SyncEngine');
+vi.mock('./LexiconService', () => ({
+    LexiconService: {
+        getInstance: vi.fn(() => ({
+            getRules: vi.fn().mockResolvedValue([]),
+            applyLexicon: vi.fn((text) => text),
+            getRulesHash: vi.fn().mockResolvedValue('hash')
         }))
     }
 }));
-
-// Mock DBService
+vi.mock('./MediaSessionManager');
 vi.mock('../../db/DBService', () => ({
   dbService: {
     getBookMetadata: vi.fn().mockResolvedValue({}),
     updatePlaybackState: vi.fn().mockResolvedValue(undefined),
+    getTTSState: vi.fn().mockResolvedValue(null),
+    saveTTSState: vi.fn()
   }
 }));
+vi.mock('./CostEstimator');
 
 describe('AudioPlayerService', () => {
     let service: AudioPlayerService;
@@ -89,7 +91,7 @@ describe('AudioPlayerService', () => {
 
         await service.setProvider(mockInstance);
 
-        // Ensure setupWebSpeech() was called and listener registered
+        // Ensure listeners registered
         expect(mockInstance.on).toHaveBeenCalled();
 
         const onCall = mockInstance.on.mock.calls[0];
@@ -99,8 +101,10 @@ describe('AudioPlayerService', () => {
         await service.setQueue([{ text: "1", cfi: "1" }]);
 
         // Call play() to set status to 'loading'/'playing'
-        // (playNext check requires status !== 'stopped')
-        await service.play();
+        const playPromise = service.play();
+
+        // Wait for play to finish calling provider.play
+        await new Promise(resolve => setTimeout(resolve, 0));
 
         // Spy on notifyListeners to verify outcome
         // @ts-expect-error Access private method
@@ -109,7 +113,7 @@ describe('AudioPlayerService', () => {
         // Trigger 'end' event on the provider listener
         listener({ type: 'end' });
 
-        // Wait for playNext logic (also locked)
+        // Wait for playNext logic
         await new Promise(resolve => setTimeout(resolve, 0));
 
         // Check status transition
@@ -124,7 +128,12 @@ describe('AudioPlayerService', () => {
             id: 'cloud',
             init: vi.fn().mockResolvedValue(undefined),
             getVoices: vi.fn().mockResolvedValue([]),
-            synthesize: vi.fn().mockRejectedValue(new Error("API Quota Exceeded")),
+            play: vi.fn().mockRejectedValue(new Error("API Quota Exceeded")),
+            preload: vi.fn(),
+            on: vi.fn(),
+            stop: vi.fn(),
+            pause: vi.fn(),
+            resume: vi.fn(),
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any;
 
@@ -140,7 +149,6 @@ describe('AudioPlayerService', () => {
 
         // Spy on play to verify retry (recursive call)
         vi.spyOn(service, 'play');
-        // Use real console.warn to avoid clutter but let's spy it to ensure it logs
         const consoleSpy = vi.spyOn(console, 'warn');
 
         await service.play();
@@ -150,14 +158,7 @@ describe('AudioPlayerService', () => {
 
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Falling back"));
 
-        // Verify listener got error
-        // The listener is called multiple times:
-        // 1. Initial subscribe (stopped, null)
-        // 2. play start (loading, null)
-        // 3. fallback error (loading, "Cloud voice failed...")
-        // 4. retry play (loading, null) or whatever next state
-
-        // Just check if any call had the error message
+        // Verify listener got error notification
         const errorCalls = listener.mock.calls.filter(args => args[4] && args[4].includes("Cloud voice failed"));
         expect(errorCalls.length).toBeGreaterThan(0);
         expect(errorCalls[0][4]).toContain("API Quota Exceeded");

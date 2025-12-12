@@ -27,6 +27,19 @@ def test_visual_settings(page: Page):
     expect(page.get_by_text("Layout")).to_be_visible()
     utils.capture_screenshot(page, "visual_settings_01_open")
 
+    # Navigate to text page first
+    print("Navigating to text page...")
+    # Close popover by clicking outside
+    page.locator('body').click(position={'x': 10, 'y': 10})
+
+    page.keyboard.press("ArrowRight")
+    page.wait_for_timeout(1000)
+    page.keyboard.press("ArrowRight")
+    page.wait_for_timeout(1000)
+
+    # Re-open visual settings
+    visual_btn.click()
+
     # 1. Test Theme Switching
     print("Testing Theme Switching (Sepia)...")
     sepia_btn = page.locator('button[aria-label="Select sepia theme"]')

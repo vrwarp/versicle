@@ -74,8 +74,7 @@ def test_reading_journey(page: Page):
 
     # Prev Page
     print("Testing Prev Page...")
-    prev_btn = page.get_by_test_id("reader-prev-page")
-    prev_btn.click()
+    page.keyboard.press("ArrowLeft")
     page.wait_for_timeout(2000)
     text_prev = get_frame_text()
     print(f"Prev Page Text: {text_prev}")

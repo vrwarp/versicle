@@ -1,5 +1,5 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
-import type { SpeechSegment } from './types';
+import type { TTSOptions, SpeechSegment } from './types';
 
 /**
  * TTS Provider for LemonFox.ai API.
@@ -65,13 +65,8 @@ export class LemonFoxProvider extends BaseCloudProvider {
 
   /**
    * Synthesizes text using LemonFox API.
-   *
-   * @param text - The text to synthesize.
-   * @param voiceId - The voice model name (e.g., 'heart').
-   * @param speed - Speaking speed.
-   * @param signal - Optional AbortSignal.
    */
-  async synthesize(text: string, voiceId: string, speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
+  protected async fetchAudioData(text: string, options: TTSOptions): Promise<SpeechSegment> {
     if (!this.apiKey) {
       throw new Error("LemonFox API Key missing");
     }
@@ -79,14 +74,14 @@ export class LemonFoxProvider extends BaseCloudProvider {
     const url = 'https://api.lemonfox.ai/v1/audio/speech';
     const body = {
       input: text,
-      voice: voiceId,
-      speed: speed,
+      voice: options.voiceId,
+      speed: options.speed,
       response_format: 'mp3'
     };
 
     const blob = await this.fetchAudio(url, body, {
       'Authorization': `Bearer ${this.apiKey}`
-    }, signal);
+    });
 
     return {
       audio: blob,

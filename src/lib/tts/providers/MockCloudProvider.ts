@@ -1,5 +1,5 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
-import type { SpeechSegment } from './types';
+import type { TTSOptions, SpeechSegment } from './types';
 
 /**
  * A mock cloud provider for testing purposes.
@@ -23,35 +23,16 @@ export class MockCloudProvider extends BaseCloudProvider {
   /**
    * Simulates synthesis by returning a dummy WAV blob and sentence alignment.
    */
-  async synthesize(_text: string, _voiceId: string, _speed: number, signal?: AbortSignal): Promise<SpeechSegment> {
-    if (signal?.aborted) {
-      throw new Error('Aborted');
-    }
-
-    // Create a dummy audio blob (1 second of silence or just valid header)
-    // For testing without actual audio files, we can try to fetch a known small file
-    // or construct a minimal WAV.
-    // Constructing a minimal WAV blob:
+  protected async fetchAudioData(_text: string, _options: TTSOptions): Promise<SpeechSegment> {
+    // Dummy WAV blob
     const wavHeader = new Uint8Array([
-      0x52, 0x49, 0x46, 0x46, // RIFF
-      0x24, 0x00, 0x00, 0x00, // ChunkSize
-      0x57, 0x41, 0x56, 0x45, // WAVE
-      0x66, 0x6d, 0x74, 0x20, // fmt
-      0x10, 0x00, 0x00, 0x00, // Subchunk1Size (16)
-      0x01, 0x00,             // AudioFormat (1 = PCM)
-      0x01, 0x00,             // NumChannels (1)
-      0x44, 0xac, 0x00, 0x00, // SampleRate (44100)
-      0x88, 0x58, 0x01, 0x00, // ByteRate
-      0x02, 0x00,             // BlockAlign
-      0x10, 0x00,             // BitsPerSample (16)
-      0x64, 0x61, 0x74, 0x61, // data
-      0x00, 0x00, 0x00, 0x00  // Subchunk2Size (0 data)
+      0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
+      0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
+      0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+      0x44, 0xac, 0x00, 0x00, 0x88, 0x58, 0x01, 0x00,
+      0x02, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61,
+      0x00, 0x00, 0x00, 0x00
     ]);
-
-    // In a real mock we might want some duration.
-    // But this is enough to verify the pipeline doesn't crash on "play".
-    // Actually, browsers might reject 0-length audio.
-    // Let's rely on a fetch to a dummy public file if possible, or just this.
 
     return {
       isNative: false,

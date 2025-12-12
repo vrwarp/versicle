@@ -32,7 +32,7 @@ describe('CapacitorTTSProvider', () => {
     expect(typeof provider.on).toBe('function');
   });
 
-  it('should use queueStrategy 0 (Flush) for synthesize', async () => {
+  it('should use queueStrategy 0 (Flush) for play', async () => {
     // Setup voices
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
@@ -44,7 +44,7 @@ describe('CapacitorTTSProvider', () => {
 
     await provider.init();
 
-    await provider.synthesize('hello', 'voice1', 1.0);
+    await provider.play('hello', { voiceId: 'voice1', speed: 1.0 });
 
     expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
       text: 'hello',
@@ -54,10 +54,26 @@ describe('CapacitorTTSProvider', () => {
     }));
   });
 
-  it('should not support resume method', () => {
-    // Resume is removed to force AudioPlayerService to restart playback
-    // @ts-expect-error - Accessing property that should not exist
-    expect(provider.resume).toBeUndefined();
+  it('should support resume method (by restarting)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockResolvedValue(undefined);
+
+    await provider.init();
+    await provider.play('hello', { voiceId: 'voice1', speed: 1.0 });
+
+    // Clear speak mock
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockClear();
+
+    provider.resume();
+
+    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
+        text: 'hello'
+    }));
   });
 
   it('should emit end event asynchronously when speak promise resolves', async () => {
@@ -79,10 +95,11 @@ describe('CapacitorTTSProvider', () => {
     const callback = vi.fn();
     provider.on(callback);
 
-    // Call synthesize - returns immediately
-    const result = await provider.synthesize('hello', 'voice1', 1.0);
+    // Call play - returns immediately (resolves on start)
+    const playPromise = provider.play('hello', { voiceId: 'voice1', speed: 1.0 });
 
-    expect(result.isNative).toBe(true);
+    await playPromise;
+
     expect(TextToSpeech.speak).toHaveBeenCalled();
 
     expect(callback).toHaveBeenCalledWith({ type: 'start' });
@@ -111,7 +128,7 @@ describe('CapacitorTTSProvider', () => {
     const callback = vi.fn();
     provider.on(callback);
 
-    await provider.synthesize('hello', 'voice1', 1.0);
+    await provider.play('hello', { voiceId: 'voice1', speed: 1.0 });
 
     // Wait for promise chain
     await new Promise(r => setTimeout(r, 0));
@@ -126,7 +143,7 @@ describe('CapacitorTTSProvider', () => {
     }));
   });
 
-  it('should handle AbortSignal by calling stop and NOT emitting end', async () => {
+  it('should ignore callback if stopped before speak finishes', async () => {
     // Mock speak to hang until stopped
     let resolveSpeak: (() => void) | null = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -148,15 +165,12 @@ describe('CapacitorTTSProvider', () => {
     const callback = vi.fn();
     provider.on(callback);
 
-    const controller = new AbortController();
-    const synthesizePromise = provider.synthesize('hello', 'voice1', 1.0, controller.signal);
+    await provider.play('hello', { voiceId: 'voice1', speed: 1.0 });
 
-    // synthesizePromise resolves immediately now
-    await synthesizePromise;
     expect(TextToSpeech.speak).toHaveBeenCalled();
 
-    // Abort
-    controller.abort();
+    // Stop
+    provider.stop();
 
     expect(TextToSpeech.stop).toHaveBeenCalled();
 

@@ -120,7 +120,7 @@ describe('WebSpeechProvider', () => {
       });
   });
 
-  describe('synthesize', () => {
+  describe('play', () => {
       it('should speak and emit events', async () => {
           const rawVoices = [{ name: 'Voice 1', lang: 'en-US' }];
           mockSynth.getVoices.mockReturnValue(rawVoices);
@@ -129,22 +129,23 @@ describe('WebSpeechProvider', () => {
           const callback = vi.fn();
           provider.on(callback);
 
-          const result = await provider.synthesize('test text', 'Voice 1', 1.5);
+          const playPromise = provider.play('test text', { voiceId: 'Voice 1', speed: 1.5 });
 
+          // Verify setup before resolution
           expect(mockSynth.cancel).toHaveBeenCalled();
           expect(global.SpeechSynthesisUtterance).toHaveBeenCalledWith('test text');
           expect(mockUtterance.voice).toBe(rawVoices[0]);
           expect(mockUtterance.rate).toBe(1.5);
           expect(mockSynth.speak).toHaveBeenCalledWith(mockUtterance);
-          expect(result).toEqual({ isNative: true });
-
-          // Check silent audio
           expect(mockAudio.play).toHaveBeenCalled();
 
-          // Test events
+          // Trigger onstart to resolve promise
           if (mockUtterance.onstart) mockUtterance.onstart();
+
+          await expect(playPromise).resolves.toBeUndefined();
           expect(callback).toHaveBeenCalledWith({ type: 'start' });
 
+          // Test events
           if (mockUtterance.onend) mockUtterance.onend();
           expect(callback).toHaveBeenCalledWith({ type: 'end' });
       });
@@ -157,11 +158,13 @@ describe('WebSpeechProvider', () => {
           const callback = vi.fn();
           provider.on(callback);
 
-          await provider.synthesize('text', 'Voice 1', 1.0);
+          const playPromise = provider.play('text', { voiceId: 'Voice 1', speed: 1.0 });
 
           const errorEvent = { error: 'some error' };
           if (mockUtterance.onerror) mockUtterance.onerror(errorEvent);
 
+          // Expect promise rejection
+          await expect(playPromise).rejects.toEqual(errorEvent);
           expect(callback).toHaveBeenCalledWith({ type: 'error', error: errorEvent });
           expect(mockAudio.pause).toHaveBeenCalled();
       });
