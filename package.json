@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "test": "vitest",
     "tests": "vitest",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepare-piper": "mkdir -p public/piper && cp node_modules/piper-wasm/build/piper_phonemize.js public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.wasm public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.data public/piper/ && cp node_modules/piper-wasm/build/worker/piper_worker.js public/piper/"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^5.1.0",

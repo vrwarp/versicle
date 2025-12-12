@@ -15,6 +15,7 @@ describe('GoogleTTSProvider', () => {
     global.fetch = vi.fn();
     // mock window.atob if needed, but JSDOM usually has it.
     // If running in node without JSDOM, we might need polyfill.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (!global.window) global.window = {} as any;
     if (!global.window.atob) {
         global.window.atob = (str: string) => Buffer.from(str, 'base64').toString('binary');
@@ -60,7 +61,14 @@ describe('GoogleTTSProvider', () => {
 
       await provider.init();
 
-      expect(global.fetch).toHaveBeenCalledWith('https://texttospeech.googleapis.com/v1/voices?key=test-api-key');
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://texttospeech.googleapis.com/v1/voices',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Goog-Api-Key': 'test-api-key'
+          })
+        })
+      );
       const voices = await provider.getVoices();
       expect(voices).toHaveLength(1);
       expect(voices[0].id).toBe('en-US-Standard-A');
@@ -123,9 +131,12 @@ describe('GoogleTTSProvider', () => {
       const result = await provider.fetchAudioData('Hello', options);
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://texttospeech.googleapis.com/v1/text:synthesize?key=test-api-key',
+        'https://texttospeech.googleapis.com/v1/text:synthesize',
         expect.objectContaining({
           method: 'POST',
+          headers: expect.objectContaining({
+            'X-Goog-Api-Key': 'test-api-key'
+          }),
           body: JSON.stringify({
             input: { text: 'Hello' },
             voice: { name: 'en-US-Standard-A', languageCode: 'en-US' },

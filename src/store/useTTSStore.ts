@@ -6,6 +6,7 @@ import type { TTSStatus, TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import { GoogleTTSProvider } from '../lib/tts/providers/GoogleTTSProvider';
 import { OpenAIProvider } from '../lib/tts/providers/OpenAIProvider';
 import { LemonFoxProvider } from '../lib/tts/providers/LemonFoxProvider';
+import { PiperProvider } from '../lib/tts/providers/PiperProvider';
 import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
@@ -37,7 +38,7 @@ interface TTSState {
   lastError: string | null;
 
   /** Provider configuration */
-  providerId: 'local' | 'google' | 'openai' | 'lemonfox';
+  providerId: 'local' | 'google' | 'openai' | 'lemonfox' | 'piper';
   apiKeys: {
       google: string;
       openai: string;
@@ -73,7 +74,7 @@ interface TTSState {
   setRate: (rate: number) => void;
   setPitch: (pitch: number) => void;
   setVoice: (voice: TTSVoice | null) => void;
-  setProviderId: (id: 'local' | 'google' | 'openai' | 'lemonfox') => void;
+  setProviderId: (id: 'local' | 'google' | 'openai' | 'lemonfox' | 'piper') => void;
   setApiKey: (provider: 'google' | 'openai' | 'lemonfox', key: string) => void;
   setCustomAbbreviations: (abbrevs: string[]) => void;
   setAlwaysMerge: (words: string[]) => void;
@@ -189,6 +190,8 @@ export const useTTSStore = create<TTSState>()(
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else if (id === 'lemonfox') {
                     newProvider = new LemonFoxProvider(apiKeys.lemonfox);
+                } else if (id === 'piper') {
+                    newProvider = new PiperProvider();
                 } else {
                     if (Capacitor.isNativePlatform()) {
                         newProvider = new CapacitorTTSProvider();
@@ -253,6 +256,8 @@ export const useTTSStore = create<TTSState>()(
                     newProvider = new OpenAIProvider(apiKeys.openai);
                 } else if (providerId === 'lemonfox') {
                     newProvider = new LemonFoxProvider(apiKeys.lemonfox);
+                } else if (providerId === 'piper') {
+                    newProvider = new PiperProvider();
                 } else {
                     if (Capacitor.isNativePlatform()) {
                         newProvider = new CapacitorTTSProvider();

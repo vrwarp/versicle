@@ -175,6 +175,7 @@ export const GlobalSettingsDialog = () => {
                                             <SelectTrigger><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="local">Web Speech (Local)</SelectItem>
+                                                <SelectItem value="piper">Piper (High Quality Local)</SelectItem>
                                                 <SelectItem value="google">Google Cloud TTS</SelectItem>
                                                 <SelectItem value="openai">OpenAI</SelectItem>
                                                 <SelectItem value="lemonfox">LemonFox.ai</SelectItem>

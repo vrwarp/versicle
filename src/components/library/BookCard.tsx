@@ -196,7 +196,15 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
         )}
 
         {book.progress !== undefined && book.progress > 0 && (
-          <div className="w-full h-1.5 bg-secondary rounded-full mt-3 overflow-hidden" data-testid="progress-container">
+          <div
+            className="w-full h-1.5 bg-secondary rounded-full mt-3 overflow-hidden"
+            data-testid="progress-container"
+            role="progressbar"
+            aria-valuenow={Math.round(book.progress * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Reading progress: ${Math.round(book.progress * 100)}%`}
+          >
             <div
               className="h-full bg-primary transition-all duration-300 ease-out"
               style={{ width: `${Math.min(100, Math.max(0, book.progress * 100))}%` }}
