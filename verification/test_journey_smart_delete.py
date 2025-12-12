@@ -1,7 +1,7 @@
 import pytest
 import os
 from playwright.sync_api import Page, expect
-from verification.utils import reset_app, capture_screenshot
+from verification.utils import reset_app, capture_screenshot, navigate_to_chapter_v
 
 @pytest.fixture
 def demo_epub_path():
@@ -78,6 +78,9 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
     # It contains "reader-back-button", "reader-toc-button", etc.
     # We can check for one of those.
     expect(page.locator("data-testid=reader-back-button")).to_be_visible(timeout=5000)
+
+    # Navigate to Chapter 5 to ensure text is visible
+    navigate_to_chapter_v(page)
 
     capture_screenshot(page, "reader_smart_delete_success")
 

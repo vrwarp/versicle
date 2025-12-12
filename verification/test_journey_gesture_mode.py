@@ -17,6 +17,10 @@ def test_journey_gesture_mode(page: Page):
     page.click("text=Alice's Adventures in Wonderland")
     expect(page.locator("div[data-testid='reader-iframe-container']")).to_be_visible(timeout=5000)
 
+    # Navigate to Chapter 5
+    from verification import utils
+    utils.navigate_to_chapter_v(page)
+
     # 3. Open Audio Panel (UnifiedAudioPanel)
     page.click("button[data-testid='reader-audio-button']")
     expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=5000)

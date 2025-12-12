@@ -13,6 +13,9 @@ def test_visual_settings(page: Page):
     expect(page).to_have_url(re.compile(r".*/read/.*"))
     page.wait_for_timeout(2000)
 
+    # Navigate to text page first (Chapter 5)
+    utils.navigate_to_chapter_v(page)
+
     # Open Visual Settings Popover
     print("Opening Visual Settings...")
     visual_btn = page.get_by_test_id("reader-visual-settings-button")

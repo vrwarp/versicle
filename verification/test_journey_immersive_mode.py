@@ -13,7 +13,10 @@ def test_immersive_mode(page: Page):
     expect(page).to_have_url(re.compile(r".*/read/.*"))
     page.wait_for_timeout(2000)
 
-    # Verify Header is initially visible (Footer is removed in Sprint 5)
+    # Navigate to Chapter 5 to have text
+    utils.navigate_to_chapter_v(page)
+
+    # Verify Header and Footer are initially visible
     header = page.locator("header")
     expect(header).to_be_visible()
 
