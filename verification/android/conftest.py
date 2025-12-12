@@ -9,7 +9,12 @@ def android_device():
     Scope is session to avoid reconnecting for every test.
     """
     with sync_playwright() as p:
-        devices = p.android.devices()
+        try:
+            devices = p.android.devices()
+        except Exception as e:
+            pytest.skip(f"Android support not available (ADB missing?): {e}")
+            return
+
         if not devices:
             pytest.skip("No android devices found. Ensure emulator is running or device is connected.")
         device = devices[0]
