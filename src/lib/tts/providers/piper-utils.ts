@@ -59,10 +59,6 @@ export const piperGenerate = async (
         }
         case "stderr": {
           console.error(data.message);
-          // Don't reject immediately on stderr as it might be warnings?
-          // But usually it's error.
-          // reject(data.message);
-          // Let's log it.
           break;
         }
         case "fetch": {

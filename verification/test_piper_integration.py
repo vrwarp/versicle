@@ -37,7 +37,6 @@ def test_piper_provider_selection(page: Page):
 
     # Open settings
     page.get_by_role("button", name="Settings").click()
-    # expect(page.get_by_text("Settings", exact=True)).to_be_visible() # Header is hidden on mobile
 
     # Go to TTS tab (wait for it to appear which confirms dialog is open)
     page.get_by_role("button", name="TTS Engine").click()
