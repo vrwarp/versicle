@@ -21,6 +21,24 @@ RUN npm ci
 # We pin playwright to 1.48.0 to match the base image's browser binaries.
 RUN pip install pytest pytest-playwright playwright==1.48.0
 
+# Install Android SDK & Utilities
+# We need OpenJDK 17 for Gradle, and Android SDK for building the APK.
+RUN apt-get update && \
+    apt-get install -y openjdk-17-jdk android-tools-adb unzip wget
+
+ENV ANDROID_HOME /opt/android-sdk
+ENV PATH ${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools
+
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip && \
+    unzip -q /tmp/cmdline-tools.zip -d ${ANDROID_HOME}/cmdline-tools && \
+    mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest && \
+    rm /tmp/cmdline-tools.zip
+
+# Accept licenses and install components
+RUN yes | sdkmanager --licenses && \
+    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
 # 3. Copy Source Code
 COPY . .
 
@@ -30,5 +48,10 @@ RUN npm run build
 # 5. Set Entrypoint
 COPY verification/docker_entrypoint.sh /app/verification/docker_entrypoint.sh
 RUN chmod +x /app/verification/docker_entrypoint.sh
+# Also ensure android_entrypoint is executable (if present in source, but we can't guarantee it yet if COPY happens before I create it in next step? No, I am creating files in the repo, so COPY . . will pick them up)
+# But strictly speaking, COPY copies from the build context. The file I'm about to create will be in the build context when I run `docker build`.
+# I'll add an explicit chmod for it just in case, or I can rely on `chmod +x` in the repo (git).
+# Dockerfile `COPY` preserves permissions if valid, but sometimes it's better to be explicit.
+RUN chmod +x /app/verification/android_entrypoint.sh || true
 
 ENTRYPOINT ["/app/verification/docker_entrypoint.sh"]

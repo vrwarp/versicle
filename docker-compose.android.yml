@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # The Android Device
+  emulator:
+    image: budtmo/docker-android:emulator_11.0
+    container_name: versicle-emulator
+    privileged: true
+    devices:
+      - "/dev/kvm:/dev/kvm"
+    ports:
+      - "6080:6080" # Web VNC for visual inspection
+      - "5555:5555" # ADB
+    environment:
+      - EMULATOR_DEVICE="Samsung Galaxy S10"
+      - WEB_VNC=true
+    healthcheck:
+      test: ["CMD-SHELL", "adb shell getprop sys.boot_completed | grep 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  # The Test Runner
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.verification
+    entrypoint: ["/app/verification/android_entrypoint.sh"]
+    volumes:
+      - ./verification/screenshots:/app/verification/screenshots
+      - ./verification/goldens:/app/verification/goldens
+      - ./android:/app/android
+    depends_on:
+      emulator:
+        condition: service_healthy
+    environment:
+      - ANDROID_EMULATOR_HOST=emulator
+      - ANDROID_EMULATOR_PORT=5555
