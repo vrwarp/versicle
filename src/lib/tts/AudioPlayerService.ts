@@ -335,16 +335,6 @@ export class AudioPlayerService {
         try {
             const voiceId = this.voiceId || '';
 
-            // Preview uses CostEstimator tracking inside provider (if cloud).
-            // But we might want to track it explicitly if needed?
-            // BaseCloudProvider tracks on miss.
-            // But for preview we might not want to cache?
-            // The previous logic did NOT cache previews for cloud.
-            // "Cloud provider flow (without caching for previews)"
-            // The new `play` logic ALWAYS caches in BaseCloudProvider.
-            // If we want to avoid caching preview, we might need a flag in TTSOptions?
-            // Or just let it cache. It's fine.
-
             await this.provider.play(text, {
                 voiceId,
                 speed: this.speed
