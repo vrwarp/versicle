@@ -10,7 +10,9 @@ def main():
     print("🚀 Running verification tests with pytest...")
 
     # Base command
-    cmd = [sys.executable, "-m", "pytest", "verification/"]
+    # We ignore 'verification/android' by default because it requires an Android device/emulator
+    # which is not available in the standard Docker environment.
+    cmd = [sys.executable, "-m", "pytest", "verification/", "--ignore=verification/android"]
 
     # Append any arguments passed to this script (e.g. --update-snapshots)
     # sys.argv[0] is the script name, so we take everything after it.
