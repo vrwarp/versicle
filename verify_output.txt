@@ -24,4 +24,115 @@ verification/test_journey_progress_bar.py .                              [ 23%]
 verification/test_journey_reading.py .                                   [ 25%]
 verification/test_journey_search.py .                                    [ 26%]
 verification/test_journey_search_position.py .                           [ 27%]
-verification/test_journey_settings_persistence.py
+verification/test_journey_settings_persistence.py .                      [ 28%]
+verification/test_journey_smart_delete.py ..                             [ 31%]
+verification/test_journey_theme_persistence.py .                         [ 32%]
+verification/test_journey_tts_persistence.py .                           [ 34%]
+verification/test_journey_visual_settings.py .                           [ 35%]
+verification/test_lemonfox_settings.py .                                 [ 36%]
+verification/test_maintenance.py .                                       [ 38%]
+verification/test_mock_tts.py ..F                                        [ 42%]
+verification/test_piper_integration.py .                                 [ 43%]
+verification/test_safe_mode.py .                                         [ 44%]
+verification/test_screenshot_utility.py ..                               [ 47%]
+verification/test_theme.py .                                             [ 48%]
+verification/test_tts_queue.py .                                         [ 50%]
+verification/test_abbrev_settings.py .                                   [ 51%]
+verification/test_bug_selection.py .                                     [ 52%]
+verification/test_journey_annotations.py .                               [ 53%]
+verification/test_journey_audio_deck.py .                                [ 55%]
+verification/test_journey_audio_hud.py .                                 [ 56%]
+verification/test_journey_backup.py ..                                   [ 59%]
+verification/test_journey_demo_book.py .                                 [ 60%]
+verification/test_journey_engine_room.py .                               [ 61%]
+verification/test_journey_gesture_mode.py .                              [ 63%]
+verification/test_journey_immersive_mode.py .                            [ 64%]
+verification/test_journey_import_error.py .                              [ 65%]
+verification/test_journey_lexicon.py .                                   [ 67%]
+verification/test_journey_lexicon_csv.py .                               [ 68%]
+verification/test_journey_library.py .                                   [ 69%]
+verification/test_journey_list_view.py .                                 [ 71%]
+verification/test_journey_preroll.py .                                   [ 72%]
+verification/test_journey_progress_bar.py .                              [ 73%]
+verification/test_journey_reading.py .                                   [ 75%]
+verification/test_journey_search.py .                                    [ 76%]
+verification/test_journey_search_position.py .                           [ 77%]
+verification/test_journey_settings_persistence.py .                      [ 78%]
+verification/test_journey_smart_delete.py ..                             [ 81%]
+verification/test_journey_theme_persistence.py .                         [ 82%]
+verification/test_journey_tts_persistence.py .                           [ 84%]
+verification/test_journey_visual_settings.py .                           [ 85%]
+verification/test_lemonfox_settings.py .                                 [ 86%]
+verification/test_maintenance.py .                                       [ 88%]
+verification/test_mock_tts.py ...                                        [ 92%]
+verification/test_piper_integration.py .                                 [ 93%]
+verification/test_safe_mode.py .                                         [ 94%]
+verification/test_screenshot_utility.py ..                               [ 97%]
+verification/test_theme.py .                                             [ 98%]
+verification/test_tts_queue.py .                                         [100%]
+
+=================================== FAILURES ===================================
+____________________ test_mock_tts_cancel[desktop-chromium] ____________________
+
+page = <Page url='http://localhost:5173/'>
+
+    def test_mock_tts_cancel(page: Page):
+        """Verifies cancel functionality."""
+>       setup_mock_tts(page)
+
+verification/test_mock_tts.py:86:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+verification/test_mock_tts.py:6: in setup_mock_tts
+    page.goto("/")
+venv/lib/python3.12/site-packages/playwright/sync_api/_generated.py:9050: in goto
+    self._sync(
+venv/lib/python3.12/site-packages/playwright/_impl/_page.py:552: in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/playwright/_impl/_frame.py:153: in goto
+    await self._channel.send(
+venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x7f634c198aa0>
+cb = <function Channel.send.<locals>.<lambda> at 0x7f634aff1620>
+is_internal = False, title = None
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        st: List[inspect.FrameInfo] = getattr(
+            task, "__pw_stack__", None
+        ) or inspect.stack(0)
+
+        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.TimeoutError: Page.goto: Timeout 2000ms exceeded.
+E           Call log:
+E             - navigating to "http://localhost:5173/", waiting until "load"
+
+venv/lib/python3.12/site-packages/playwright/_impl/_connection.py:559: TimeoutError
+----------------------------- Captured stdout call -----------------------------
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: [vite] connecting...
+PAGE LOG: [vite] connected.
+PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
+--------------------------- Captured stdout teardown ---------------------------
+PAGE LOG: %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold
+PAGE LOG: ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+PAGE LOG: ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+=========================== short test summary info ============================
+FAILED verification/test_mock_tts.py::test_mock_tts_cancel[desktop-chromium]
+=================== 1 failed, 75 passed in 322.29s (0:05:22) ===================
+🚀 Running verification tests with pytest...
+Executing: /app/venv/bin/python -m pytest verification/
