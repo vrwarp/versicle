@@ -89,7 +89,7 @@ export class AudioPlayerService {
         onNext: () => this.next(),
         onSeekBackward: () => this.seek(-10),
         onSeekForward: () => this.seek(10),
-        onSeekTo: (_details) => {
+        onSeekTo: () => {
              // Not supporting seekTo for now to keep consistency
              console.warn("SeekTo not supported");
         },
@@ -594,18 +594,7 @@ export class AudioPlayerService {
   }
 
   private setStatus(status: TTSStatus) {
-      if (this.status === 'stopped' && status === 'playing') {}
-      else if (this.status === 'stopped' && status === 'loading') {}
-      else if (this.status === 'loading' && status === 'playing') {}
-      else if (this.status === 'loading' && status === 'stopped') {}
-      else if (this.status === 'playing' && status === 'paused') {}
-      else if (this.status === 'paused' && status === 'playing') {}
-      else if (this.status === 'paused' && status === 'loading') {}
-      else if (this.status === 'playing' && status === 'stopped') {}
-      else if (this.status === 'paused' && status === 'stopped') {}
-      else if (status === 'completed') {}
-      else if (this.status === status) {}
-
+      // Transitions validation could go here
       this.status = status;
       this.mediaSessionManager.setPlaybackState(
           status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
@@ -645,6 +634,7 @@ export class AudioPlayerService {
       if (Capacitor.getPlatform() === 'android') {
           const isEnabled = await BatteryOptimization.isBatteryOptimizationEnabled();
           if (isEnabled.enabled) {
+              // TODO: Prompt user to disable battery optimization
           }
       }
   }
