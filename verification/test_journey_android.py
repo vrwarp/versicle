@@ -25,8 +25,6 @@ def test_android_journey():
 
         # Get context and page
         context = browser.contexts[0]
-        # In Android WebView, the main page might take a moment to appear in the context list
-        # or we might need to find the right one.
         page = None
         for _ in range(5):
             if context.pages:
