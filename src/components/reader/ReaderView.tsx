@@ -23,6 +23,7 @@ import { searchClient, type SearchResult } from '../../lib/search';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import { ReaderTTSController } from './ReaderTTSController';
+import { flattenToc, findNearestChapter } from '../../lib/epub-navigation';
 
 /**
  * The main reader interface component.
@@ -375,18 +376,7 @@ export const ReaderView: React.FC = () => {
   // Handle Navigation Trigger from Audio HUD
   useEffect(() => {
     if (navigationTrigger && rendition) {
-        // Helper to flatten TOC
-        const flatten = (items: NavigationItem[]): NavigationItem[] => {
-            return items.reduce((acc, item) => {
-                acc.push(item);
-                if (item.subitems && item.subitems.length > 0) {
-                    acc.push(...flatten(item.subitems));
-                }
-                return acc;
-            }, [] as NavigationItem[]);
-        };
-
-        const flatToc = flatten(toc);
+        const flatToc = flattenToc(toc);
         const currentIndex = flatToc.findIndex(item => currentSectionId && item.href.includes(currentSectionId));
 
         if (currentIndex !== -1) {
@@ -407,54 +397,13 @@ export const ReaderView: React.FC = () => {
                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                  const book = (rendition as any).book;
                  if (book) {
-                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                     const currentSpineItem = book.spine.get(currentSectionId) as any;
+                     const target = findNearestChapter(book, toc, currentSectionId, navigationTrigger.direction);
 
-                     if (currentSpineItem) {
-                         const currentSpineIndex = currentSpineItem.index;
-                         let target: NavigationItem | null = null;
-
-                         if (navigationTrigger.direction === 'next') {
-                             for (const item of flatToc) {
-                                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                 const itemSpine = book.spine.get(item.href) as any;
-                                 if (itemSpine && itemSpine.index > currentSpineIndex) {
-                                     target = item;
-                                     break;
-                                 }
-                             }
-                             // If no next chapter found, but we have items, and we are not in the last one?
-                             // If we are at the start (e.g. cover) and finding next:
-                             if (!target && flatToc.length > 0 && typeof currentSpineIndex === 'number') {
-                                 // Check if first TOC item is AFTER current
-                                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                  const firstItemSpine = book.spine.get(flatToc[0].href) as any;
-                                  if (firstItemSpine && firstItemSpine.index > currentSpineIndex) {
-                                      target = flatToc[0];
-                                  } else if (flatToc.length > 0 && currentSpineIndex === undefined) {
-                                      // If current has no index (?), go to first
-                                      target = flatToc[0];
-                                  }
-                             }
-                         } else {
-                             // Prev
-                             for (let i = flatToc.length - 1; i >= 0; i--) {
-                                 const item = flatToc[i];
-                                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                 const itemSpine = book.spine.get(item.href) as any;
-                                 if (itemSpine && itemSpine.index < currentSpineIndex) {
-                                     target = item;
-                                     break;
-                                 }
-                             }
-                         }
-
-                         if (target) {
-                             rendition.display(target.href);
-                         } else if (navigationTrigger.direction === 'next' && flatToc.length > 0) {
-                              // Ultimate fallback
-                              rendition.display(flatToc[0].href);
-                         }
+                     if (target) {
+                         rendition.display(target.href);
+                     } else if (navigationTrigger.direction === 'next' && flatToc.length > 0) {
+                          // Ultimate fallback
+                          rendition.display(flatToc[0].href);
                      }
                  }
              }
