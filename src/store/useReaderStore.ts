@@ -3,6 +3,14 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { NavigationItem } from 'epubjs';
 
 /**
+ * Trigger object for navigation events.
+ */
+export interface NavigationTrigger {
+  type: 'chapter';
+  direction: 'prev' | 'next';
+}
+
+/**
  * State interface for the Reader store.
  */
 interface ReaderState {
@@ -37,6 +45,9 @@ interface ReaderState {
   /** Whether to force the theme font and ignore book styles. */
   shouldForceFont: boolean;
 
+  /** Trigger for navigation events. */
+  navigationTrigger: NavigationTrigger | null;
+
   /** Sets the loading state. */
   setIsLoading: (isLoading: boolean) => void;
   /** Sets the ID of the current book. */
@@ -67,6 +78,8 @@ interface ReaderState {
   setGestureMode: (enabled: boolean) => void;
   /** Sets whether to force the theme font. */
   setShouldForceFont: (force: boolean) => void;
+  /** Sets the navigation trigger. */
+  setNavigationTrigger: (trigger: NavigationTrigger | null) => void;
   /** Resets the reader state to default values. */
   reset: () => void;
 }
@@ -93,6 +106,7 @@ export const useReaderStore = create<ReaderState>()(
       viewMode: 'paginated',
       gestureMode: false,
       shouldForceFont: false,
+      navigationTrigger: null,
 
       setIsLoading: (isLoading) => set({ isLoading }),
       setCurrentBookId: (id) => set({ currentBookId: id }),
@@ -112,6 +126,7 @@ export const useReaderStore = create<ReaderState>()(
       setViewMode: (mode) => set({ viewMode: mode }),
       setGestureMode: (enabled) => set({ gestureMode: enabled }),
       setShouldForceFont: (force) => set({ shouldForceFont: force }),
+      setNavigationTrigger: (trigger) => set({ navigationTrigger: trigger }),
       reset: () => set({
         isLoading: false,
         currentBookId: null,

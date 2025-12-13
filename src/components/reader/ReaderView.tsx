@@ -23,6 +23,7 @@ import { searchClient, type SearchResult } from '../../lib/search';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import { ReaderTTSController } from './ReaderTTSController';
+import { flattenToc, findNearestChapter } from '../../lib/epub-navigation';
 
 /**
  * The main reader interface component.
@@ -52,7 +53,10 @@ export const ReaderView: React.FC = () => {
     viewMode,
     shouldForceFont,
     gestureMode,
-    setGestureMode
+    setGestureMode,
+    navigationTrigger,
+    setNavigationTrigger,
+    currentSectionId
   } = useReaderStore();
 
   // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
@@ -368,6 +372,45 @@ export const ReaderView: React.FC = () => {
           setAudioPanelOpen(false);
       }
   }, [gestureMode]);
+
+  // Handle Navigation Trigger from Audio HUD
+  useEffect(() => {
+    if (navigationTrigger && rendition) {
+        const flatToc = flattenToc(toc);
+        const currentIndex = flatToc.findIndex(item => currentSectionId && item.href.includes(currentSectionId));
+
+        if (currentIndex !== -1) {
+            let targetIndex = currentIndex;
+            if (navigationTrigger.direction === 'next') {
+                targetIndex = Math.min(flatToc.length - 1, currentIndex + 1);
+            } else {
+                targetIndex = Math.max(0, currentIndex - 1);
+            }
+
+            if (targetIndex !== currentIndex) {
+                 const target = flatToc[targetIndex];
+                 rendition.display(target.href);
+            }
+        } else {
+             // Fallback: Try to find nearest chapter based on spine index
+             if (currentSectionId) {
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 const book = (rendition as any).book;
+                 if (book) {
+                     const target = findNearestChapter(book, toc, currentSectionId, navigationTrigger.direction);
+
+                     if (target) {
+                         rendition.display(target.href);
+                     } else if (navigationTrigger.direction === 'next' && flatToc.length > 0) {
+                          // Ultimate fallback
+                          rendition.display(flatToc[0].href);
+                     }
+                 }
+             }
+        }
+        setNavigationTrigger(null);
+    }
+  }, [navigationTrigger, rendition, toc, currentSectionId, setNavigationTrigger]);
 
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
