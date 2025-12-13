@@ -19,6 +19,7 @@ vi.mock('./providers/WebSpeechProvider', () => {
       pause = pauseSpy;
       resume = resumeSpy;
       on = vi.fn();
+      preload = vi.fn();
     }
   };
 });
@@ -76,7 +77,7 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
 
         // Clear spies
         resumeSpy.mockClear();
-        synthesizeSpy.mockClear();
+        playSpy.mockClear();
         pauseSpy.mockClear();
         stopSpy.mockClear();
     });
@@ -86,7 +87,7 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
         await service.setQueue([{ text: "Sentence 1", cfi: "cfi1" }]);
 
         await service.play();
-        expect(synthesizeSpy).toHaveBeenCalledTimes(1);
+        expect(playSpy).toHaveBeenCalledTimes(1);
         // Default speed is 1.0
         expect(synthesizeSpy).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ speed: 1.0 }));
 

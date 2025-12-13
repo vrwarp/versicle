@@ -9,6 +9,8 @@ export class WebSpeechProvider implements ITTSProvider {
   private voices: SpeechSynthesisVoice[] = [];
   private eventListeners: ((event: TTSEvent) => void)[] = [];
   private voicesLoaded = false;
+  private lastText: string | null = null;
+  private lastOptions: TTSOptions | null = null;
 
   constructor() {
     this.synth = window.speechSynthesis;
@@ -84,6 +86,9 @@ export class WebSpeechProvider implements ITTSProvider {
   async play(text: string, options: TTSOptions): Promise<void> {
     if (!this.synth) throw new Error("SpeechSynthesis API not available");
 
+    this.lastText = text;
+    this.lastOptions = options;
+
     this.cancel();
 
     if (this.voices.length === 0) await this.init();
@@ -126,8 +131,8 @@ export class WebSpeechProvider implements ITTSProvider {
   }
 
   resume(): void {
-    if (this.synth && this.synth.paused) {
-      this.synth.resume();
+    if (this.lastText && this.lastOptions) {
+        this.play(this.lastText, this.lastOptions);
     }
   }
 

@@ -557,6 +557,7 @@ export class AudioPlayerService {
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this.persistQueue();
+            if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal(signal);
         } else {
             await this.stopInternal();
@@ -569,6 +570,7 @@ export class AudioPlayerService {
         if (this.currentIndex > 0) {
             this.currentIndex--;
             this.persistQueue();
+            if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal(signal);
         }
       });
@@ -581,6 +583,7 @@ export class AudioPlayerService {
             await this.stopInternal();
             await this.playInternal(signal);
         } else if (this.status === 'paused') {
+            this.setStatus('stopped');
             await this.stopInternal();
         }
       }, true);
@@ -610,6 +613,8 @@ export class AudioPlayerService {
         if (this.status === 'playing') {
             await this.stopInternal();
             await this.playInternal(signal);
+        } else if (this.status === 'paused') {
+            this.setStatus('stopped');
         }
       }, true);
   }
