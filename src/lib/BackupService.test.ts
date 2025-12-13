@@ -99,7 +99,7 @@ describe('BackupService', () => {
       const manifest = {
         version: 1,
         timestamp: '2023-01-01',
-        books: [{ id: 'b1', title: 'Restored Book', lastRead: 100 }],
+        books: [{ id: 'b1', title: 'Restored Book', author: 'Author', addedAt: 1234567890, lastRead: 100 }],
         annotations: [],
         lexicon: [],
         locations: []
@@ -126,7 +126,7 @@ describe('BackupService', () => {
         const manifest = {
           version: 1,
           timestamp: '2023-01-01',
-          books: [{ id: 'b1', title: 'New Title', lastRead: 200, progress: 0.5 }],
+          books: [{ id: 'b1', title: 'New Title', author: 'Author', addedAt: 1234567890, lastRead: 200, progress: 0.5 }],
           annotations: [],
           lexicon: [],
           locations: []
@@ -153,5 +153,62 @@ describe('BackupService', () => {
             progress: 0.5
         }));
       });
+
+    it('should reject backup with invalid book metadata (missing id)', async () => {
+      const manifest = {
+        version: 1,
+        timestamp: '2023-01-01',
+        books: [{ title: 'No ID', author: 'Author' }], // Missing id
+        annotations: [],
+        lexicon: [],
+        locations: []
+      };
+
+      const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
+
+      const mockTx = {
+        objectStore: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue(undefined),
+          put: vi.fn().mockResolvedValue(undefined),
+        }),
+        done: Promise.resolve(),
+      };
+      mockDB.transaction.mockReturnValue(mockTx);
+
+      await service.restoreBackup(file);
+
+      expect(mockTx.objectStore('books').put).not.toHaveBeenCalled();
+    });
+
+    it('should sanitize and restore book with missing title', async () => {
+      const manifest = {
+        version: 1,
+        timestamp: '2023-01-01',
+        // Missing title, addedAt. Should be defaulted.
+        books: [{ id: 'b1', author: 'Author' }],
+        annotations: [],
+        lexicon: [],
+        locations: []
+      };
+
+      const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
+
+      const mockTx = {
+        objectStore: vi.fn().mockReturnValue({
+          get: vi.fn().mockResolvedValue(undefined),
+          put: vi.fn().mockResolvedValue(undefined),
+        }),
+        done: Promise.resolve(),
+      };
+      mockDB.transaction.mockReturnValue(mockTx);
+
+      await service.restoreBackup(file);
+
+      expect(mockTx.objectStore('books').put).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'b1',
+        title: 'Untitled',
+        author: 'Author'
+      }));
+    });
   });
 });

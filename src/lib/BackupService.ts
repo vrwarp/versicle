@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { dbService } from '../db/DBService';
 import type { BookMetadata, Annotation, LexiconRule, BookLocations } from '../types/db';
+import { validateBookMetadata } from '../db/validators';
 import { getDB } from '../db/db';
 
 /**
@@ -196,7 +197,21 @@ export class BackupService {
     const tx = db.transaction(['books', 'annotations', 'locations', 'lexicon'], 'readwrite');
 
     // 1.1 Restore Books Metadata
-    for (const book of manifest.books) {
+    const books = Array.isArray(manifest.books) ? manifest.books : [];
+    for (const book of books) {
+      if (!book || typeof book !== 'object') continue;
+
+      // Sanitization / Defaulting
+      if (typeof book.title !== 'string' || !book.title.trim()) book.title = 'Untitled';
+      if (typeof book.author !== 'string') book.author = 'Unknown Author';
+      if (typeof book.addedAt !== 'number') book.addedAt = Date.now();
+
+      if (!validateBookMetadata(book)) {
+        console.warn('Skipping invalid book record in backup', book);
+        updateProgress('Skipping invalid record...');
+        continue;
+      }
+
       const existingBook = await tx.objectStore('books').get(book.id);
 
       if (existingBook) {
@@ -218,19 +233,22 @@ export class BackupService {
     }
 
     // 1.2 Restore Annotations
-    for (const ann of manifest.annotations) {
+    const annotations = Array.isArray(manifest.annotations) ? manifest.annotations : [];
+    for (const ann of annotations) {
         await tx.objectStore('annotations').put(ann);
         updateProgress('Restoring annotations...');
     }
 
     // 1.3 Restore Lexicon
-    for (const rule of manifest.lexicon) {
+    const lexicon = Array.isArray(manifest.lexicon) ? manifest.lexicon : [];
+    for (const rule of lexicon) {
         await tx.objectStore('lexicon').put(rule);
         updateProgress('Restoring dictionary...');
     }
 
     // 1.4 Restore Locations
-    for (const loc of manifest.locations) {
+    const locations = Array.isArray(manifest.locations) ? manifest.locations : [];
+    for (const loc of locations) {
         await tx.objectStore('locations').put(loc);
         updateProgress('Restoring map...');
     }
@@ -240,7 +258,11 @@ export class BackupService {
     // Step 2: Restore Files (if ZIP)
     // We do this OUTSIDE the metadata transaction to avoid TransactionInactiveError during async unzip
     if (zip) {
-        for (const book of manifest.books) {
+        const books = Array.isArray(manifest.books) ? manifest.books : [];
+        for (const book of books) {
+            // Validation again, although we skipped invalid ones in step 1, we need to skip here too
+            if (!book || !validateBookMetadata(book)) continue;
+
             const zipFile = zip.file(`files/${book.id}.epub`);
             if (zipFile) {
                 // Async decompression
