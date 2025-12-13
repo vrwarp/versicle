@@ -18,14 +18,15 @@ export const CompassPill: React.FC<CompassPillProps> = ({ variant }) => {
 
   const {
     currentChapterTitle: readerChapterTitle,
+    setNavigationTrigger
   } = useReaderStore();
 
   const { timeRemaining, progress } = useChapterDuration();
 
   // Helper for chapter navigation
   const handleChapterNav = (direction: 'prev' | 'next') => {
-    // TODO: Implement chapter navigation using useReaderStore or similar
     console.log(`Navigate chapter: ${direction}`);
+    setNavigationTrigger({ type: 'chapter', direction });
   };
 
   const handleSkip = (direction: 'prev' | 'next') => {
@@ -80,6 +81,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({ variant }) => {
 
         {/* Left Button */}
         <button
+            data-testid="compass-nav-prev"
             className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
             onClick={() => isPlaying ? handleSkip('prev') : handleChapterNav('prev')}
         >
@@ -98,6 +100,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({ variant }) => {
 
         {/* Right Button */}
         <button
+            data-testid="compass-nav-next"
             className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
             onClick={() => isPlaying ? handleSkip('next') : handleChapterNav('next')}
         >
