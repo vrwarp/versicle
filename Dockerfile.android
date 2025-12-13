@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1
+FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
+
+# 1. Setup Environment
+WORKDIR /app
+ENV PATH="/app/node_modules/.bin:${PATH}"
+
+# Install Node.js 20 (matching recommended version in plan)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    node --version && \
+    npm --version
+
+# 2. Install Dependencies (Layer Caching)
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Install Python dependencies
+RUN pip install pytest pytest-playwright playwright==1.48.0
+
+# Install Android SDK & Utilities
+RUN apt-get update && \
+    apt-get install -y openjdk-17-jdk android-tools-adb unzip wget
+
+ENV ANDROID_HOME=/opt/android-sdk
+ENV PATH=${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools
+
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip && \
+    unzip -q /tmp/cmdline-tools.zip -d ${ANDROID_HOME}/cmdline-tools && \
+    mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest && \
+    rm /tmp/cmdline-tools.zip
+
+# Accept licenses and install components
+RUN yes | sdkmanager --licenses && \
+    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+# 3. Copy Source Code
+COPY . .
+
+# 4. Build the App
+RUN npm run build
+# Sync Capacitor assets to Android project
+RUN npx cap sync android
+
+# 5. Set Entrypoint
+COPY verification/docker_entrypoint.sh /app/verification/docker_entrypoint.sh
+RUN chmod +x /app/verification/docker_entrypoint.sh
+RUN chmod +x /app/verification/android_entrypoint.sh || true
+
+ENTRYPOINT ["/app/verification/docker_entrypoint.sh"]
