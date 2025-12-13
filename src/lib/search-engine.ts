@@ -84,12 +84,17 @@ export class SearchEngine {
             limit: 50
         });
 
+        // Escape regex special characters to safely use the query in a RegExp
+        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Use a case-insensitive regex to find the match without copying the entire string
+        const regex = new RegExp(escapedQuery, 'i');
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return results.flatMap((entry: any) =>
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             entry.result.map((match: any) => ({
                 href: match.doc.href,
-                excerpt: this.getExcerpt(match.doc.text, query)
+                excerpt: this.getExcerpt(match.doc.text, regex)
             }))
         );
     }
@@ -98,14 +103,10 @@ export class SearchEngine {
      * Generates a context excerpt for the found query in the text.
      *
      * @param text - The full text where the match was found.
-     * @param query - The search query term.
+     * @param regex - The compiled RegExp for the search query.
      * @returns A string snippet surrounding the matched term.
      */
-    private getExcerpt(text: string, query: string): string {
-        // Escape regex special characters to safely use the query in a RegExp
-        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Use a case-insensitive regex to find the match without copying the entire string
-        const regex = new RegExp(escapedQuery, 'i');
+    private getExcerpt(text: string, regex: RegExp): string {
         const match = regex.exec(text);
 
         if (!match) return text.substring(0, 100) + '...';
