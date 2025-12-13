@@ -77,6 +77,7 @@ export const VisualSettings = () => {
               step={10}
               onValueChange={(val) => setFontSize(val[0])}
               className="flex-1"
+              aria-label="Font size percentage"
            />
            <Button variant="ghost" size="sm" onClick={() => setFontSize(Math.min(200, fontSize + 10))} aria-label="Increase font size">
              <span className="text-lg">A</span>
@@ -115,9 +116,9 @@ export const VisualSettings = () => {
          <div className="mt-4 flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Line Height</span>
             <div className="flex items-center gap-2">
-               <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setLineHeight(Math.max(1, parseFloat((lineHeight - 0.1).toFixed(1))))}>-</Button>
+               <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setLineHeight(Math.max(1, parseFloat((lineHeight - 0.1).toFixed(1))))} aria-label="Decrease line height">-</Button>
                <span className="w-8 text-center text-sm">{lineHeight.toFixed(1)}</span>
-               <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setLineHeight(Math.min(3, parseFloat((lineHeight + 0.1).toFixed(1))))}>+</Button>
+               <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setLineHeight(Math.min(3, parseFloat((lineHeight + 0.1).toFixed(1))))} aria-label="Increase line height">+</Button>
             </div>
          </div>
       </div>

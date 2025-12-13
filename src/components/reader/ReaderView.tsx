@@ -505,6 +505,7 @@ export const ReaderView: React.FC = () => {
                      <div className="flex gap-2">
                          <input
                             data-testid="search-input"
+                            aria-label="Search query"
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -523,6 +524,7 @@ export const ReaderView: React.FC = () => {
                          />
                          <button
                             data-testid="search-close-button"
+                            aria-label="Close search"
                             onClick={() => setShowSearch(false)}
                             className="p-2 hover:bg-border rounded"
                          >

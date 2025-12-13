@@ -128,6 +128,7 @@ export const UnifiedAudioPanel = () => {
                        max={3.0}
                        step={0.1}
                        onValueChange={(val) => setRate(val[0])}
+                       aria-label="Playback speed"
                     />
                  </div>
                  <div className="space-y-2">
