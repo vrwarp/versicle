@@ -18,6 +18,8 @@ export class WebSpeechProvider implements ITTSProvider {
   private voicesLoaded = false;
   private silentAudio: HTMLAudioElement;
   private config: WebSpeechConfig;
+  private lastText: string | null = null;
+  private lastOptions: TTSOptions | null = null;
 
   constructor(config: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 }) {
     this.config = config;
@@ -120,6 +122,9 @@ export class WebSpeechProvider implements ITTSProvider {
   async play(text: string, options: TTSOptions): Promise<void> {
     if (!this.synth) throw new Error("SpeechSynthesis API not available");
 
+    this.lastText = text;
+    this.lastOptions = options;
+
     this.cancel();
 
     if (this.voices.length === 0) await this.init();
@@ -169,11 +174,8 @@ export class WebSpeechProvider implements ITTSProvider {
   }
 
   resume(): void {
-    if (this.synth && this.synth.paused) {
-      this.synth.resume();
-      if (this.silentAudio.paused) {
-          this.silentAudio.play().catch(e => console.warn("Silent audio resume failed", e));
-      }
+    if (this.lastText && this.lastOptions) {
+        this.play(this.lastText, this.lastOptions);
     }
   }
 

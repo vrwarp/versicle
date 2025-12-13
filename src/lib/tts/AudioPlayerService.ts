@@ -510,13 +510,6 @@ export class AudioPlayerService {
      this.sessionRestored = true;
 
      if (this.status === 'paused') {
-         // Fix: For local provider, we prefer restarting the sentence to avoid resume bugs
-         // and to handle next/prev correctly when paused.
-         if (this.provider.id === 'local') {
-             this.setStatus('playing');
-             return this.playInternal(signal);
-         }
-
          this.provider.resume();
          this.setStatus('playing');
      } else {
@@ -569,6 +562,7 @@ export class AudioPlayerService {
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this.persistQueue();
+            if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal(signal);
         } else {
             await this.stopInternal();
@@ -581,6 +575,7 @@ export class AudioPlayerService {
         if (this.currentIndex > 0) {
             this.currentIndex--;
             this.persistQueue();
+            if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal(signal);
         }
       });
@@ -592,6 +587,8 @@ export class AudioPlayerService {
         if (this.status === 'playing') {
             await this.stopInternal();
             await this.playInternal(signal);
+        } else if (this.status === 'paused') {
+            this.setStatus('stopped');
         }
       }, true);
   }
@@ -620,6 +617,8 @@ export class AudioPlayerService {
         if (this.status === 'playing') {
             await this.stopInternal();
             await this.playInternal(signal);
+        } else if (this.status === 'paused') {
+            this.setStatus('stopped');
         }
       }, true);
   }
