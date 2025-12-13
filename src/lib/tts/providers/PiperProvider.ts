@@ -1,6 +1,6 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, TTSVoice, SpeechSegment } from './types';
-import { piperGenerate, isModelCached } from './piper-utils';
+import { piperGenerate, isModelCached, deleteCachedModel } from './piper-utils';
 
 const HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/";
 const PIPER_ASSETS_BASE = "/piper/";
@@ -88,6 +88,17 @@ export class PiperProvider extends BaseCloudProvider {
     if (!voiceInfo) return false;
     const modelUrl = HF_BASE + voiceInfo.modelPath;
     return isModelCached(modelUrl);
+  }
+
+  async deleteVoice(voiceId: string): Promise<void> {
+    const voiceInfo = this.voiceMap.get(voiceId);
+    if (!voiceInfo) return;
+
+    const modelUrl = HF_BASE + voiceInfo.modelPath;
+    const modelConfigUrl = HF_BASE + voiceInfo.configPath;
+
+    deleteCachedModel(modelUrl, modelConfigUrl);
+    this.emit({ type: 'download-progress', percent: 0, status: 'Not Downloaded', voiceId });
   }
 
   async downloadVoice(voiceId: string): Promise<void> {

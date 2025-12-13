@@ -13,6 +13,7 @@ import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
+import { Trash2 } from 'lucide-react';
 
 /**
  * Global application settings dialog.
@@ -38,7 +39,7 @@ export const GlobalSettingsDialog = () => {
         silentAudioType, setSilentAudioType,
         whiteNoiseVolume, setWhiteNoiseVolume,
         voice, voices, setVoice,
-        downloadVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded
+        downloadVoice, deleteVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded
     } = useTTSStore();
 
     const [isVoiceReady, setIsVoiceReady] = useState(false);
@@ -287,15 +288,33 @@ export const GlobalSettingsDialog = () => {
                                                                 </div>
                                                             </div>
                                                         ) : (
-                                                            <Button
-                                                                onClick={() => downloadVoice(voice.id)}
-                                                                variant={isVoiceReady ? "outline" : "default"}
-                                                                disabled={isVoiceReady}
-                                                                size="sm"
-                                                                className="w-full"
-                                                            >
-                                                                {isVoiceReady ? "Ready to Use" : "Download Voice Data"}
-                                                            </Button>
+                                                            <div className="flex gap-2">
+                                                                <Button
+                                                                    onClick={() => downloadVoice(voice.id)}
+                                                                    variant={isVoiceReady ? "outline" : "default"}
+                                                                    disabled={isVoiceReady}
+                                                                    size="sm"
+                                                                    className="flex-1"
+                                                                >
+                                                                    {isVoiceReady ? "Ready to Use" : "Download Voice Data"}
+                                                                </Button>
+                                                                {isVoiceReady && (
+                                                                    <Button
+                                                                        onClick={() => {
+                                                                            if (confirm('Delete downloaded voice data?')) {
+                                                                                deleteVoice(voice.id).then(() => {
+                                                                                    setIsVoiceReady(false);
+                                                                                });
+                                                                            }
+                                                                        }}
+                                                                        variant="destructive"
+                                                                        size="icon"
+                                                                        title="Delete Voice Data"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                )}
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </div>

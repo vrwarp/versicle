@@ -21,6 +21,16 @@ export const isModelCached = async (modelUrl: string): Promise<boolean> => {
   });
 };
 
+export const deleteCachedModel = (modelUrl: string, modelConfigUrl: string) => {
+  if (blobs[modelUrl]) delete blobs[modelUrl];
+  if (blobs[modelConfigUrl]) delete blobs[modelConfigUrl];
+
+  if (worker) {
+    worker.terminate();
+    worker = undefined;
+  }
+};
+
 export const piperGenerate = async (
   piperPhonemizeJsUrl: string,
   piperPhonemizeWasmUrl: string,

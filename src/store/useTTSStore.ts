@@ -90,6 +90,7 @@ interface TTSState {
   setSanitizationEnabled: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
   downloadVoice: (voiceId: string) => Promise<void>;
+  deleteVoice: (voiceId: string) => Promise<void>;
   checkVoiceDownloaded: (voiceId: string) => Promise<boolean>;
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
@@ -310,6 +311,10 @@ export const useTTSStore = create<TTSState>()(
                 } catch (e) {
                     set({ isDownloading: false, downloadStatus: 'Failed', lastError: e instanceof Error ? e.message : 'Download failed' });
                 }
+            },
+            deleteVoice: async (voiceId) => {
+                await player.deleteVoice(voiceId);
+                set({ isDownloading: false, downloadProgress: 0, downloadStatus: 'Not Downloaded', downloadingVoiceId: null });
             },
             checkVoiceDownloaded: async (voiceId) => {
                  return await player.isVoiceDownloaded(voiceId);

@@ -305,6 +305,16 @@ export class AudioPlayerService {
       }
   }
 
+  async deleteVoice(voiceId: string): Promise<void> {
+      if (this.provider.id === 'piper') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const piper = this.provider as any;
+          if (typeof piper.deleteVoice === 'function') {
+              await piper.deleteVoice(voiceId);
+          }
+      }
+  }
+
   async isVoiceDownloaded(voiceId: string): Promise<boolean> {
        if (this.provider.id === 'piper') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
