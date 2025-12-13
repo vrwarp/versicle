@@ -24,7 +24,7 @@ services:
   test-runner:
     build:
       context: .
-      dockerfile: Dockerfile.verification
+      dockerfile: Dockerfile.android
     entrypoint: ["/app/verification/android_entrypoint.sh"]
     volumes:
       - ./verification/screenshots:/app/verification/screenshots
