@@ -510,6 +510,13 @@ export class AudioPlayerService {
      this.sessionRestored = true;
 
      if (this.status === 'paused') {
+         // Fix: For local provider, we prefer restarting the sentence to avoid resume bugs
+         // and to handle next/prev correctly when paused.
+         if (this.provider.id === 'local') {
+             this.setStatus('playing');
+             return this.playInternal(signal);
+         }
+
          this.provider.resume();
          this.setStatus('playing');
      } else {

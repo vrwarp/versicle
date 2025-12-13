@@ -4,7 +4,7 @@ import { AudioPlayerService } from './AudioPlayerService';
 // --- Mocks ---
 
 const resumeSpy = vi.fn();
-const synthesizeSpy = vi.fn().mockResolvedValue({ isNative: true });
+const playSpy = vi.fn().mockResolvedValue({ isNative: true });
 const pauseSpy = vi.fn();
 const stopSpy = vi.fn();
 
@@ -14,12 +14,13 @@ vi.mock('./providers/WebSpeechProvider', () => {
       id = 'local';
       init = vi.fn().mockResolvedValue(undefined);
       getVoices = vi.fn().mockResolvedValue([]);
-      synthesize = synthesizeSpy;
+      play = playSpy;
       stop = stopSpy;
       pause = pauseSpy;
       resume = resumeSpy;
       setConfig = vi.fn();
       on = vi.fn();
+      preload = vi.fn();
     }
   };
 });
@@ -77,7 +78,7 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
 
         // Clear spies
         resumeSpy.mockClear();
-        synthesizeSpy.mockClear();
+        playSpy.mockClear();
         pauseSpy.mockClear();
         stopSpy.mockClear();
     });
@@ -87,9 +88,9 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
         await service.setQueue([{ text: "Sentence 1", cfi: "cfi1" }]);
 
         await service.play();
-        expect(synthesizeSpy).toHaveBeenCalledTimes(1);
+        expect(playSpy).toHaveBeenCalledTimes(1);
         // Default speed is 1.0
-        expect(synthesizeSpy).toHaveBeenCalledWith(expect.any(String), expect.any(String), 1.0, expect.anything());
+        expect(playSpy).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ speed: 1.0 }));
 
         // 2. Pause
         await service.pause();
@@ -104,9 +105,9 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
         await service.resume();
 
         // 5. Verify behavior
-        // It should call synthesizeSpy() with speed 2.0 because speed changed
-        expect(synthesizeSpy).toHaveBeenCalledTimes(2);
-        expect(synthesizeSpy.mock.calls[1][2]).toBe(2.0);
+        // It should call playSpy() with speed 2.0 because speed changed
+        expect(playSpy).toHaveBeenCalledTimes(2);
+        expect(playSpy.mock.calls[1][1].speed).toBe(2.0);
         expect(resumeSpy).not.toHaveBeenCalled();
     });
 });
