@@ -29,14 +29,34 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronu
   const { popover, addAnnotation, hidePopover } = useAnnotationStore();
   const [isEditingNote, setIsEditingNote] = React.useState(false);
   const [noteText, setNoteText] = React.useState('');
+  const popoverRef = React.useRef<HTMLDivElement>(null);
+  const [adjustedX, setAdjustedX] = React.useState(popover.x);
+
+  React.useLayoutEffect(() => {
+    if (popoverRef.current) {
+      const { width } = popoverRef.current.getBoundingClientRect();
+      const windowWidth = window.innerWidth;
+      let newX = popover.x;
+
+      // Check right edge
+      if (newX + width > windowWidth - 10) {
+        newX = windowWidth - width - 10;
+      }
+      // Check left edge
+      if (newX < 10) {
+        newX = 10;
+      }
+      setAdjustedX(newX);
+    } else {
+      setAdjustedX(popover.x);
+    }
+  }, [popover.x, popover.visible, isEditingNote]);
 
   if (!popover.visible) return null;
 
-  // Calculate position to keep it within viewport (simplified)
-  // We might need useLayoutEffect to measure dimensions
   const style: React.CSSProperties = {
     position: 'absolute',
-    left: popover.x,
+    left: adjustedX,
     top: popover.y - 50, // Display above selection
     zIndex: 50,
   };
@@ -74,7 +94,7 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronu
 
   if (isEditingNote) {
       return (
-          <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-2 flex gap-2 items-center border border-gray-200 dark:border-gray-700" style={style}>
+          <div ref={popoverRef} className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-2 flex gap-2 items-center border border-gray-200 dark:border-gray-700" style={style}>
               <input
                   data-testid="popover-note-input"
                   type="text"
@@ -105,7 +125,7 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronu
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-2 flex gap-2 items-center border border-gray-200 dark:border-gray-700" style={style}>
+    <div ref={popoverRef} className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-2 flex gap-2 items-center border border-gray-200 dark:border-gray-700" style={style}>
       {COLORS.map((c) => (
         <button
           key={c.name}
