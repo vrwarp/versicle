@@ -23,6 +23,7 @@ export class MockCloudProvider extends BaseCloudProvider {
   /**
    * Simulates synthesis by returning a dummy WAV blob and sentence alignment.
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected async fetchAudioData(_text: string, _options: TTSOptions): Promise<SpeechSegment> {
     // Dummy WAV blob
     const wavHeader = new Uint8Array([

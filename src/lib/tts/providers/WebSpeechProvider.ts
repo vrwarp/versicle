@@ -150,6 +150,7 @@ export class WebSpeechProvider implements ITTSProvider {
     });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async preload(_text: string, _options: TTSOptions): Promise<void> {
       // No-op
   }

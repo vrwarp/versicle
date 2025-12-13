@@ -101,7 +101,7 @@ describe('AudioPlayerService', () => {
         await service.setQueue([{ text: "1", cfi: "1" }]);
 
         // Call play() to set status to 'loading'/'playing'
-        const playPromise = service.play();
+        void service.play();
 
         // Wait for play to finish calling provider.play
         await new Promise(resolve => setTimeout(resolve, 0));
