@@ -277,9 +277,9 @@ export function useEpubReader(
                 style.id = paddingStyleId;
                 doc.head.appendChild(style);
                 if (optionsRef.current.viewMode === 'scrolled') {
-                    style.textContent = 'body { padding-bottom: 128px !important; }';
+                    style.textContent = 'body::after { content: ""; display: block; height: 50vh; }';
                 } else {
-                    style.textContent = 'body { padding-bottom: 0px !important; }';
+                    style.textContent = 'body::after { display: none; }';
                 }
             }
         });
@@ -458,9 +458,9 @@ export function useEpubReader(
           }
 
           if (options.viewMode === 'scrolled') {
-              style.textContent = 'body { padding-bottom: 128px !important; }';
+              style.textContent = 'body::after { content: ""; display: block; height: 50vh; }';
           } else {
-              style.textContent = 'body { padding-bottom: 0px !important; }';
+              style.textContent = 'body::after { display: none; }';
           }
       });
 
