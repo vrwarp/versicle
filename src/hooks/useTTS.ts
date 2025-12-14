@@ -32,9 +32,7 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
     rate
   } = useTTSStore();
 
-  const { currentChapterTitle } = useReaderStore(state => ({
-      currentChapterTitle: state.currentChapterTitle
-  }));
+  const currentChapterTitle = useReaderStore(state => state.currentChapterTitle);
 
   const [sentences, setSentences] = useState<SentenceNode[]>([]);
   const player = AudioPlayerService.getInstance();
