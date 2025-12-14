@@ -23,8 +23,8 @@ export const flattenToc = (items: NavigationItem[]): NavigationItem[] => {
  * @param currentSectionId The href/id of the current section
  * @param direction Direction to search ('prev' or 'next')
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const findNearestChapter = (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     book: any,
     toc: NavigationItem[],
     currentSectionId: string,
