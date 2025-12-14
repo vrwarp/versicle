@@ -70,7 +70,7 @@ export const Toast: React.FC<ToastProps> = ({
       <button
         onClick={onClose}
         className="shrink-0 p-1 hover:bg-black/10 rounded-full transition-colors"
-        aria-label="Close"
+        aria-label="Dismiss notification"
       >
         <X className="w-4 h-4" />
       </button>
