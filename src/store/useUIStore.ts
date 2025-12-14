@@ -8,6 +8,11 @@ interface UIState {
     isGlobalSettingsOpen: boolean;
     /** Sets the visibility of the global settings dialog. */
     setGlobalSettingsOpen: (open: boolean) => void;
+
+    /** Safe area bottom inset (e.g. for floating player). */
+    bottomInset: number;
+    /** Sets the bottom inset value. */
+    setBottomInset: (inset: number) => void;
 }
 
 /**
@@ -16,4 +21,6 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
     isGlobalSettingsOpen: false,
     setGlobalSettingsOpen: (open) => set({ isGlobalSettingsOpen: open }),
+    bottomInset: 0,
+    setBottomInset: (inset) => set({ bottomInset: inset }),
 }));

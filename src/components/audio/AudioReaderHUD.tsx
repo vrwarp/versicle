@@ -3,13 +3,17 @@ import { useLocation } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
 import { CompassPill } from './CompassPill';
 import { SatelliteFAB } from './SatelliteFAB';
+import { useUIStore } from '../../store/useUIStore';
 
 export const AudioReaderHUD: React.FC = () => {
     const { queue, isPlaying, pause } = useTTSStore();
+    const { setBottomInset } = useUIStore();
     const location = useLocation();
 
     // Check if we are in Library (root path)
     const isLibrary = location.pathname === '/';
+
+    const hasQueue = queue && queue.length > 0;
 
     // Auto-pause when entering library (as per spec)
     useEffect(() => {
@@ -18,8 +22,19 @@ export const AudioReaderHUD: React.FC = () => {
         }
     }, [isLibrary, isPlaying, pause]);
 
+    // Update bottom inset based on visibility
+    useEffect(() => {
+        if (hasQueue) {
+            // Reserve space for the pill (approx 160px for summary mode/clearance)
+            setBottomInset(160);
+        } else {
+            setBottomInset(0);
+        }
+        return () => setBottomInset(0);
+    }, [hasQueue, setBottomInset]);
+
     // Don't render if nothing in queue
-    if (!queue || queue.length === 0) {
+    if (!hasQueue) {
         return null;
     }
 

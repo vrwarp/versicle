@@ -7,7 +7,6 @@ import { EmptyLibrary } from './EmptyLibrary';
 import { Grid } from 'react-window';
 import { Upload, Settings, LayoutGrid, List as ListIcon } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
-import { useTTSStore } from '../../store/useTTSStore';
 
 // Grid Configuration
 const CARD_WIDTH = 200; // Minimal width
@@ -44,17 +43,14 @@ const ListCell = ({ rowIndex, style, books }: any) => {
 }
 
 const PaddedInnerElement = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ style, ...rest }, ref) => {
-    const { queue } = useTTSStore();
-    const hasQueue = queue && queue.length > 0;
-    // Add 160px padding if queue exists to clear the CompassPill/AudioReaderHUD
-    const extraHeight = hasQueue ? 160 : 0;
+    const { bottomInset } = useUIStore();
 
     return (
         <div
             ref={ref}
             style={{
                 ...style,
-                height: `${parseFloat(style?.height as string || '0') + extraHeight}px`
+                height: `${parseFloat(style?.height as string || '0') + bottomInset}px`
             }}
             {...rest}
         />
