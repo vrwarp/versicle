@@ -15,12 +15,12 @@ def test_journey_annotations(page: Page):
     frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
     frame.locator("body").wait_for(timeout=5000)
 
+    # Navigate to Chapter 5 via TOC to ensure we have content for highlighting
+    print("Navigating to Chapter 5...")
+    utils.navigate_to_chapter(page)
+
     # 1. Create Highlight
     print("Creating Highlight...")
-
-    # Navigate to a page with text (Next Page)
-    page.keyboard.press("ArrowRight")
-    page.wait_for_timeout(2000)
 
     # Inject script to select text and trigger highlight popover
     selection_success = frame.locator("body").evaluate("""
