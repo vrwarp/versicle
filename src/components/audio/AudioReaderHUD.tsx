@@ -3,11 +3,9 @@ import { useLocation } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
 import { CompassPill } from './CompassPill';
 import { SatelliteFAB } from './SatelliteFAB';
-import { useUIStore } from '../../store/useUIStore';
 
 export const AudioReaderHUD: React.FC = () => {
-    const { queue, isPlaying, pause } = useTTSStore();
-    const { setBottomInset } = useUIStore();
+    const { isPlaying, pause } = useTTSStore();
     const location = useLocation();
 
     // Check if we are in Library (root path)
@@ -19,12 +17,6 @@ export const AudioReaderHUD: React.FC = () => {
             pause();
         }
     }, [isLibrary, isPlaying, pause]);
-
-    // Always reserve space for the pill (approx 160px for summary mode/clearance)
-    useEffect(() => {
-        setBottomInset(160);
-        return () => setBottomInset(0);
-    }, [setBottomInset]);
 
     return (
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-[40] flex flex-col items-center justify-end pb-6">

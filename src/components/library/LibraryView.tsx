@@ -10,6 +10,7 @@ import { useUIStore } from '../../store/useUIStore';
 
 // Grid Configuration
 const CARD_WIDTH = 200; // Minimal width
+const BOTTOM_INSET = 160; // Padding for AudioReaderHUD
 const CARD_HEIGHT = 320;
 const GAP = 24;
 const LIST_ITEM_HEIGHT = 88;
@@ -43,14 +44,12 @@ const ListCell = ({ rowIndex, style, books }: any) => {
 }
 
 const PaddedInnerElement = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ style, ...rest }, ref) => {
-    const { bottomInset } = useUIStore();
-
     return (
         <div
             ref={ref}
             style={{
                 ...style,
-                height: `${parseFloat(style?.height as string || '0') + bottomInset}px`
+                height: `${parseFloat(style?.height as string || '0') + BOTTOM_INSET}px`
             }}
             {...rest}
         />
