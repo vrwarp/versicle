@@ -10,6 +10,7 @@ import { useReadingHistory } from '../../hooks/useReadingHistory';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
+import { ReadingHistoryPanel } from './ReadingHistoryPanel';
 import { LexiconManager } from './LexiconManager';
 import { VisualSettings } from './VisualSettings';
 import { GestureOverlay } from './GestureOverlay';
@@ -21,7 +22,7 @@ import { Label } from '../ui/Label';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
+import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Clock } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import { ReaderTTSController } from './ReaderTTSController';
 
@@ -290,6 +291,7 @@ export const ReaderView: React.FC = () => {
   const [useSyntheticToc, setUseSyntheticToc] = useState(false);
   const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
   const [showAnnotations, setShowAnnotations] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [immersiveMode, setImmersiveMode] = useState(false);
 
   const [lexiconOpen, setLexiconOpen] = useState(false);
@@ -458,11 +460,14 @@ export const ReaderView: React.FC = () => {
             <button data-testid="reader-back-button" aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-border">
                 <ArrowLeft className="w-5 h-5 text-muted-foreground" />
             </button>
-            <button data-testid="reader-toc-button" aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
+            <button data-testid="reader-toc-button" aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); setShowHistory(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
                 <List className="w-5 h-5 text-muted-foreground" />
             </button>
-            <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
+            <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); setShowHistory(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
                 <Highlighter className="w-5 h-5 text-muted-foreground" />
+            </button>
+            <button data-testid="reader-history-button" aria-label="History" onClick={() => { setShowHistory(!showHistory); setShowToc(false); setShowAnnotations(false); }} className={`p-2 rounded-full hover:bg-border ${showHistory ? 'bg-border' : ''}`}>
+                <Clock className="w-5 h-5 text-muted-foreground" />
             </button>
             <button data-testid="reader-search-button" aria-label="Search" onClick={() => setShowSearch(!showSearch)} className="p-2 rounded-full hover:bg-border">
                     <Search className="w-5 h-5 text-muted-foreground" />
@@ -548,6 +553,20 @@ export const ReaderView: React.FC = () => {
                      rendition?.display(cfi);
                      if (window.innerWidth < 768) setShowAnnotations(false);
                  }} />
+             </div>
+         )}
+
+         {/* History Sidebar */}
+         {showHistory && (
+             <div data-testid="reader-history-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
+                 <ReadingHistoryPanel
+                     history={history}
+                     onNavigate={(cfi) => {
+                         rendition?.display(cfi);
+                         if (window.innerWidth < 768) setShowHistory(false);
+                     }}
+                     onClose={() => setShowHistory(false)}
+                 />
              </div>
          )}
 

@@ -4,16 +4,20 @@
 1.  **Reading**: The user opens a book and begins reading or listening via TTS.
 2.  **Tracking**: As the user progresses, the application automatically tracks the specific portions of the text that have been displayed (in the viewport) or spoken (by TTS).
 3.  **Jumping Around**: The user skips to a different chapter, reads a bit, then goes back. The system records these disjointed segments.
-4.  **Visualization**: The user can see which parts of the book they have covered. This could be visualized as:
-    *   **Progress indicators** in the Table of Contents (e.g., "Chapter 1: 100% read", "Chapter 2: 0% read").
-    *   **Visual highlights** or styling in the text view for read sections (optional/toggleable).
+4.  **Visualization**: The user can see a list of reading sessions/segments in a dedicated panel.
+    *   **History Panel**: A sidebar or popup listing reading history segments sorted by time.
+    *   **Navigation**: Clicking an entry allows the user to jump to the **end point** of that segment (to resume reading).
+    *   **Visual highlights** in the text view are also maintained as a secondary cue.
 
 ## UX Design
 *   **Passive Tracking**: The feature works in the background without user intervention.
-*   **Granularity**: Tracking is done at the CFI range level, allowing for precision even if the user reads partial chapters.
-*   **Feedback**:
-    *   **TOC**: Add a visual indicator (e.g., a small progress bar or percentage) next to each chapter in the Table of Contents.
-    *   **Debug/Inspector**: Initially, we might just want to ensure the data is being collected correctly.
+*   **History Panel**:
+    *   Accessible via a clock/history icon in the reader header.
+    *   Lists entries with:
+        *   Relative time (e.g., "Just now", "2 hours ago").
+        *   Context (e.g., Chapter title or text snippet, if available).
+        *   "Resume" action (jump to the end of the range).
+*   **Granularity**: Tracking is done at the CFI range level.
 
 ## Technical Design
 

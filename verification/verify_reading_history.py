@@ -43,13 +43,8 @@ async def verify_reading_history():
         print("Waiting for reader...")
         await page.wait_for_selector("[data-testid='reader-view']", timeout=10000)
 
-        # Wait a bit for initial render and history save
+        # Wait a bit for initial render
         await asyncio.sleep(5)
-
-        # Get book ID from URL
-        url = page.url
-        book_id = url.split('/')[-1]
-        print(f"Book ID: {book_id}")
 
         print("Navigating to next page...")
         await page.keyboard.press("ArrowRight")
@@ -59,23 +54,29 @@ async def verify_reading_history():
         await page.keyboard.press("ArrowRight")
         await asyncio.sleep(2)
 
-        # Check history count via exposed dbService
-        print("Checking history entries via dbService...")
-        history_count = await page.evaluate(f"""async () => {{
-            if (window.dbService) {{
-                const history = await window.dbService.getReadingHistory('{book_id}');
-                console.log('History entries:', history);
-                return history.length;
-            }}
-            return -1;
-        }}""")
+        # Open History Panel
+        print("Opening History Panel...")
+        history_btn = page.locator("[data-testid='reader-history-button']")
+        if await history_btn.count() > 0:
+            await history_btn.click()
+            print("Clicked History Button")
 
-        print(f"History Count: {history_count}")
+            # Wait for sidebar
+            sidebar = page.locator("[data-testid='reader-history-sidebar']")
+            await sidebar.wait_for()
 
-        if history_count > 0:
-            print("SUCCESS: Reading history verified!")
+            # Check for entries
+            entries = sidebar.locator("button:has-text('Resume from end')")
+            count = await entries.count()
+            print(f"Found {count} history entries in panel.")
+
+            if count > 0:
+                print("SUCCESS: History panel shows entries.")
+            else:
+                print("FAILURE: History panel is empty.")
+
         else:
-            print("FAILURE: No reading history found.")
+            print("FAILURE: History button not found!")
 
         # Check visual indications (screenshots might be needed)
         await page.screenshot(path="verification/verification.png")
