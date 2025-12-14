@@ -13,8 +13,6 @@ export const AudioReaderHUD: React.FC = () => {
     // Check if we are in Library (root path)
     const isLibrary = location.pathname === '/';
 
-    const hasQueue = queue && queue.length > 0;
-
     // Auto-pause when entering library (as per spec)
     useEffect(() => {
         if (isLibrary && isPlaying) {
@@ -22,21 +20,11 @@ export const AudioReaderHUD: React.FC = () => {
         }
     }, [isLibrary, isPlaying, pause]);
 
-    // Update bottom inset based on visibility
+    // Always reserve space for the pill (approx 160px for summary mode/clearance)
     useEffect(() => {
-        if (hasQueue) {
-            // Reserve space for the pill (approx 160px for summary mode/clearance)
-            setBottomInset(160);
-        } else {
-            setBottomInset(0);
-        }
+        setBottomInset(160);
         return () => setBottomInset(0);
-    }, [hasQueue, setBottomInset]);
-
-    // Don't render if nothing in queue
-    if (!hasQueue) {
-        return null;
-    }
+    }, [setBottomInset]);
 
     return (
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-[40] flex flex-col items-center justify-end pb-6">
