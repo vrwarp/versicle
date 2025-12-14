@@ -166,3 +166,19 @@ export interface LexiconRule {
   /** Timestamp when the rule was created. */
   created: number;
 }
+
+/**
+ * Represents a segment of text that the user has read.
+ */
+export interface ReadingHistoryEntry {
+    /** Unique ID for the history entry. */
+    id: string;
+    /** The ID of the book. */
+    bookId: string;
+    /** The CFI range of the read segment. */
+    cfi_range: string;
+    /** Timestamp when this segment was recorded. */
+    timestamp: number;
+    /** Duration spent reading this segment (optional, for future use). */
+    duration?: number;
+}

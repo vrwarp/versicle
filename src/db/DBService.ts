@@ -1,10 +1,11 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingHistoryEntry } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
+import { v4 as uuidv4 } from 'uuid';
 
 class DBService {
   private async getDB() {
@@ -123,7 +124,7 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'content_analysis'], 'readwrite');
+      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'content_analysis', 'reading_history'], 'readwrite');
 
       await Promise.all([
           tx.objectStore('books').delete(id),
@@ -157,6 +158,15 @@ class DBService {
       while (analysisCursor) {
         await analysisCursor.delete();
         analysisCursor = await analysisCursor.continue();
+      }
+
+      // Delete reading history
+      const historyStore = tx.objectStore('reading_history');
+      const historyIndex = historyStore.index('by_bookId');
+      let historyCursor = await historyIndex.openCursor(IDBKeyRange.only(id));
+      while (historyCursor) {
+        await historyCursor.delete();
+        historyCursor = await historyCursor.continue();
       }
 
       await tx.done;
@@ -543,6 +553,47 @@ class DBService {
       try {
           const db = await this.getDB();
           return await db.getAllFromIndex('content_analysis', 'by_bookId', bookId);
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  // --- Reading History ---
+
+  /**
+   * Records a read segment.
+   *
+   * @param bookId - The book ID.
+   * @param cfiRange - The CFI range read.
+   * @param duration - Optional duration.
+   * @returns A Promise that resolves when the history is saved.
+   */
+  async addReadRange(bookId: string, cfiRange: string, duration?: number): Promise<void> {
+      try {
+          const db = await this.getDB();
+          const entry: ReadingHistoryEntry = {
+              id: uuidv4(),
+              bookId,
+              cfi_range: cfiRange,
+              timestamp: Date.now(),
+              duration
+          };
+          await db.put('reading_history', entry);
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  /**
+   * Retrieves reading history for a book.
+   *
+   * @param bookId - The book ID.
+   * @returns A Promise resolving to an array of ReadingHistoryEntry objects.
+   */
+  async getReadingHistory(bookId: string): Promise<ReadingHistoryEntry[]> {
+      try {
+          const db = await this.getDB();
+          return await db.getAllFromIndex('reading_history', 'by_bookId', bookId);
       } catch (error) {
           this.handleError(error);
       }
