@@ -9,12 +9,11 @@ vi.mock('./providers/WebSpeechProvider', () => {
       id = 'local'; // Added id='local'
       init = vi.fn().mockResolvedValue(undefined);
       getVoices = vi.fn().mockResolvedValue([]);
-      synthesize = vi.fn().mockResolvedValue({ audio: null, alignment: [] });
+      play = vi.fn().mockResolvedValue(undefined);
       stop = vi.fn();
       on = vi.fn();
       pause = vi.fn();
       resume = vi.fn();
-      setConfig = vi.fn();
     }
   };
 });
@@ -107,6 +106,10 @@ class MockAudio {
         this.src = src || '';
         mockAudioInstances.push(this);
     }
+    getAttribute = vi.fn((attr) => {
+        if (attr === 'src') return this.src;
+        return null;
+    });
 }
 vi.stubGlobal('Audio', MockAudio);
 

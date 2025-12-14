@@ -455,6 +455,46 @@ export const ReaderView: React.FC = () => {
       return 'Segment read';
   }, [rendition, toc]);
 
+  const handlePlayFromSelection = useCallback((cfiRange: string) => {
+      const queue = AudioPlayerService.getInstance().getQueue();
+      if (!queue || queue.length === 0 || !rendition) return;
+
+      try {
+          // Get range for selection
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const selectionRange = (rendition as any).getRange(cfiRange);
+          if (!selectionRange) return;
+
+          let bestIndex = -1;
+          for (let i = 0; i < queue.length; i++) {
+              const item = queue[i];
+              if (!item.cfi) continue;
+
+              // Get range for item
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const itemRange = (rendition as any).getRange(item.cfi);
+              if (!itemRange) continue;
+
+              // Compare start points
+              const comparison = itemRange.compareBoundaryPoints(Range.START_TO_START, selectionRange);
+
+              if (comparison <= 0) {
+                  bestIndex = i;
+              } else {
+                  // Found an item that starts after the selection.
+                  // The previous item (bestIndex) is the one we want.
+                  break;
+              }
+          }
+
+          if (bestIndex !== -1) {
+              AudioPlayerService.getInstance().jumpTo(bestIndex);
+          }
+      } catch (e) {
+          console.error("Error matching CFI for playback", e);
+      }
+  }, [rendition]);
+
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
       <ReaderTTSController
@@ -682,6 +722,7 @@ export const ReaderView: React.FC = () => {
                     setLexiconText(text);
                     setLexiconOpen(true);
                 }}
+                onPlayFromSelection={handlePlayFromSelection}
              />
              <LexiconManager open={lexiconOpen} onOpenChange={setLexiconOpen} initialTerm={lexiconText} />
          </div>

@@ -34,8 +34,8 @@ def verify_piper_ui():
             # However, logic in store might need to update 'voice' state.
 
             # Open voice dropdown
-            page.wait_for_selector("text=Select a voice")
-            page.click("text=Select a voice")
+            page.wait_for_selector("text=Select Voice")
+            page.click("text=Select Voice")
 
             # Select the mocked voice
             page.click("text=Lessac - medium")

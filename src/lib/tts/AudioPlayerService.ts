@@ -1,5 +1,6 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
-import { WebSpeechProvider, type WebSpeechConfig } from './providers/WebSpeechProvider';
+import { WebSpeechProvider } from './providers/WebSpeechProvider';
+import { BackgroundAudio, type BackgroundAudioConfig } from './BackgroundAudio';
 import { Capacitor } from '@capacitor/core';
 import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
@@ -73,15 +74,16 @@ export class AudioPlayerService {
   private currentOperation: OperationState | null = null;
   private operationLock: Promise<void> = Promise.resolve();
 
-  private localProviderConfig: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 };
+  private backgroundAudio: BackgroundAudio;
 
   private constructor() {
+    this.backgroundAudio = new BackgroundAudio();
     this.syncEngine = new SyncEngine();
 
     if (Capacitor.isNativePlatform()) {
         this.provider = new CapacitorTTSProvider();
     } else {
-        this.provider = new WebSpeechProvider(this.localProviderConfig);
+        this.provider = new WebSpeechProvider();
     }
 
     this.setupProviderListeners();
@@ -268,21 +270,14 @@ export class AudioPlayerService {
       }
   }
 
-  public setLocalProviderConfig(config: WebSpeechConfig) {
-      this.localProviderConfig = config;
-      if (this.provider instanceof WebSpeechProvider) {
-          this.provider.setConfig(config);
-      }
+  public setBackgroundAudioConfig(config: BackgroundAudioConfig) {
+      this.backgroundAudio.setConfig(config);
   }
 
   public setProvider(provider: ITTSProvider) {
       return this.executeWithLock(async () => {
         await this.stopInternal();
         this.provider = provider;
-        // If web speech, set config
-        if (this.provider instanceof WebSpeechProvider) {
-             this.provider.setConfig(this.localProviderConfig);
-        }
         this.setupProviderListeners();
       }, true);
   }
@@ -490,7 +485,7 @@ export class AudioPlayerService {
             if (Capacitor.isNativePlatform()) {
                 this.provider = new CapacitorTTSProvider();
             } else {
-                this.provider = new WebSpeechProvider(this.localProviderConfig);
+                this.provider = new WebSpeechProvider();
             }
             this.setupProviderListeners();
             await this.init();
@@ -562,6 +557,7 @@ export class AudioPlayerService {
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this.persistQueue();
+            if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal(signal);
         } else {
             await this.stopInternal();
@@ -574,6 +570,7 @@ export class AudioPlayerService {
         if (this.currentIndex > 0) {
             this.currentIndex--;
             this.persistQueue();
+            if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal(signal);
         }
       });
@@ -585,6 +582,9 @@ export class AudioPlayerService {
         if (this.status === 'playing') {
             await this.stopInternal();
             await this.playInternal(signal);
+        } else if (this.status === 'paused') {
+            this.setStatus('stopped');
+            await this.stopInternal();
         }
       }, true);
   }
@@ -613,6 +613,8 @@ export class AudioPlayerService {
         if (this.status === 'playing') {
             await this.stopInternal();
             await this.playInternal(signal);
+        } else if (this.status === 'paused') {
+            this.setStatus('stopped');
         }
       }, true);
   }
@@ -650,6 +652,14 @@ export class AudioPlayerService {
       this.mediaSessionManager.setPlaybackState(
           status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
       );
+
+      if (status === 'playing' || status === 'loading') {
+          this.backgroundAudio.play();
+      } else if (status === 'paused') {
+          this.backgroundAudio.pause();
+      } else {
+          this.backgroundAudio.stop();
+      }
 
       const currentCfi = (this.queue[this.currentIndex] && (status === 'playing' || status === 'loading' || status === 'paused'))
         ? this.queue[this.currentIndex].cfi

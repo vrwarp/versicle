@@ -105,4 +105,35 @@ describe('SearchClient', () => {
         expect(results).toHaveLength(1);
         expect(results[0].href).toBe('chap1.html');
     });
+
+    it('should wait for book.ready before indexing', async () => {
+        // Create a mock book that is not ready immediately
+        const delayedBook = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            spine: undefined as any,
+            ready: new Promise<void>((resolve) => {
+                setTimeout(() => {
+                    delayedBook.spine = {
+                        items: [
+                            { href: 'chap1.html', id: 'chap1' }
+                        ]
+                    };
+                    resolve();
+                }, 20);
+            }),
+            load: vi.fn().mockResolvedValue({
+                body: { innerText: 'Content' }
+            })
+        };
+
+        const postMessageSpy = vi.spyOn(MockWorker.prototype, 'postMessage');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await searchClient.indexBook(delayedBook as any, 'book-2');
+
+        expect(delayedBook.spine).toBeDefined();
+        expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
+            type: 'INIT_INDEX',
+            payload: { bookId: 'book-2' }
+        }));
+    });
 });

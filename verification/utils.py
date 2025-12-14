@@ -1,5 +1,27 @@
 import os
-from playwright.sync_api import Page, Frame
+from playwright.sync_api import Page, Frame, expect
+
+def navigate_to_chapter(page: Page, chapter_id: str = "toc-item-6"):
+    """
+    Navigates to a specific chapter via the Table of Contents.
+
+    Args:
+        page: The Playwright Page object.
+        chapter_id: The test ID of the chapter to select (default: toc-item-6 for Chapter 5).
+    """
+    print(f"Navigating to chapter: {chapter_id}...")
+    page.get_by_test_id("reader-toc-button").click()
+    page.get_by_test_id(chapter_id).click()
+
+    # Wait for TOC to close
+    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
+
+    # Ensure TOC overlay is gone and focus is returned
+    page.locator("body").click(position={"x": 100, "y": 100})
+
+    # Wait for content to render (check for compass pill)
+    expect(page.get_by_test_id("compass-pill-active")).to_be_visible()
+    page.wait_for_timeout(1000)
 
 def reset_app(page: Page):
     """
