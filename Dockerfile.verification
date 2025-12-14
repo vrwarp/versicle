@@ -15,7 +15,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
 # 2. Install Dependencies (Layer Caching)
 # Copy package files first to cache npm ci
 COPY package.json package-lock.json ./
-COPY scripts ./scripts
 RUN npm ci
 
 # Install Python dependencies

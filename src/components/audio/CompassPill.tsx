@@ -24,9 +24,8 @@ export const CompassPill: React.FC<CompassPillProps> = ({ variant }) => {
 
   // Helper for chapter navigation
   const handleChapterNav = (direction: 'prev' | 'next') => {
-    // Simulate keyboard event for ReaderTTSController to pick up
-    const key = direction === 'next' ? 'ArrowRight' : 'ArrowLeft';
-    window.dispatchEvent(new KeyboardEvent('keydown', { key }));
+    // TODO: Implement chapter navigation using useReaderStore or similar
+    console.log(`Navigate chapter: ${direction}`);
   };
 
   const handleSkip = (direction: 'prev' | 'next') => {

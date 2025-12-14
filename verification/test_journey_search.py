@@ -11,10 +11,6 @@ def test_search_journey(page: Page):
     page.locator("[data-testid^='book-card-']").first.click()
     expect(page.get_by_test_id("reader-back-button")).to_be_visible()
 
-    # Navigate to Chapter 5 via TOC
-    print("Navigating to Chapter 5...")
-    utils.navigate_to_chapter(page)
-
     # Open Search
     print("Opening Search...")
     page.get_by_test_id("reader-search-button").click()

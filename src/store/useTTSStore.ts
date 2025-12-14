@@ -200,7 +200,28 @@ export const useTTSStore = create<TTSState>()(
             },
             setProviderId: (id) => {
                 set({ providerId: id });
-                // Reload voices for new provider (this will re-init the provider)
+                // Re-init player provider
+                const { apiKeys } = get();
+                let newProvider;
+                if (id === 'google') {
+                    newProvider = new GoogleTTSProvider(apiKeys.google);
+                } else if (id === 'openai') {
+                    newProvider = new OpenAIProvider(apiKeys.openai);
+                } else if (id === 'lemonfox') {
+                    newProvider = new LemonFoxProvider(apiKeys.lemonfox);
+                } else if (id === 'piper') {
+                    newProvider = new PiperProvider();
+                } else {
+                    if (Capacitor.isNativePlatform()) {
+                        newProvider = new CapacitorTTSProvider();
+                    } else {
+                        const { silentAudioType, whiteNoiseVolume } = get();
+                        newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
+                    }
+                }
+
+                player.setProvider(newProvider);
+                // Reload voices for new provider
                 get().loadVoices();
             },
             setApiKey: (provider, key) => {
@@ -235,16 +256,16 @@ export const useTTSStore = create<TTSState>()(
             setSilentAudioType: (type) => {
                 set({ silentAudioType: type });
                 const { whiteNoiseVolume } = get();
-                player.setBackgroundAudioConfig({ silentAudioType: type, whiteNoiseVolume });
+                player.setLocalProviderConfig({ silentAudioType: type, whiteNoiseVolume });
             },
             setWhiteNoiseVolume: (volume) => {
                 set({ whiteNoiseVolume: volume });
                 const { silentAudioType } = get();
-                player.setBackgroundAudioConfig({ silentAudioType, whiteNoiseVolume: volume });
+                player.setLocalProviderConfig({ silentAudioType, whiteNoiseVolume: volume });
             },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
-                const { providerId, apiKeys } = get();
+                const { providerId, apiKeys, silentAudioType, whiteNoiseVolume } = get();
                 // We might need to check if player already has correct provider type
                 // But simplified: just set it.
                  let newProvider;
@@ -260,10 +281,10 @@ export const useTTSStore = create<TTSState>()(
                     if (Capacitor.isNativePlatform()) {
                         newProvider = new CapacitorTTSProvider();
                     } else {
-                        newProvider = new WebSpeechProvider();
+                        newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
                     }
                 }
-                await player.setProvider(newProvider);
+                player.setProvider(newProvider);
 
                 await player.init();
                 const voices = await player.getVoices();
@@ -338,7 +359,7 @@ export const useTTSStore = create<TTSState>()(
         }),
         onRehydrateStorage: () => (state) => {
             if (state) {
-                player.setBackgroundAudioConfig({
+                player.setLocalProviderConfig({
                     silentAudioType: state.silentAudioType,
                     whiteNoiseVolume: state.whiteNoiseVolume
                 });

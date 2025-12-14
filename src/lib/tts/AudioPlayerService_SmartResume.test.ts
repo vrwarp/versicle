@@ -80,10 +80,11 @@ vi.mock('./providers/WebSpeechProvider', () => {
         WebSpeechProvider: class {
             id = 'local'; // Added id='local'
             init = vi.fn().mockResolvedValue(undefined);
-            play = mockSynthesize.mockResolvedValue(undefined);
+            synthesize = mockSynthesize;
             resume = mockResume;
             pause = mockPause;
             stop = mockStop;
+            setConfig = vi.fn();
             on = vi.fn();
             getVoices = mockGetVoices;
         }
@@ -206,7 +207,7 @@ describe('AudioPlayerService - Smart Resume', () => {
             await service.setProvider(new WebSpeechProvider());
         });
 
-        it.skip('should NOT rewind if paused for < 5 minutes', async () => {
+        it('should NOT rewind if paused for < 5 minutes', async () => {
             vi.useFakeTimers();
             const now = 1000000;
             vi.setSystemTime(now);
@@ -232,7 +233,7 @@ describe('AudioPlayerService - Smart Resume', () => {
             expect(mockBook.lastPauseTime).toBeUndefined();
         });
 
-        it.skip('should rewind 2 sentences if paused for > 5 minutes', async () => {
+        it('should rewind 2 sentences if paused for > 5 minutes', async () => {
             vi.useFakeTimers();
             const now = 1000000;
             vi.setSystemTime(now);
@@ -256,7 +257,7 @@ describe('AudioPlayerService - Smart Resume', () => {
             expect(mockSynthesize).toHaveBeenCalled();
         });
 
-        it.skip('should rewind 5 sentences if paused for > 24 hours', async () => {
+        it('should rewind 5 sentences if paused for > 24 hours', async () => {
             vi.useFakeTimers();
             const now = 1000000 + (25 * 60 * 60 * 1000); // 25 hours later
             vi.setSystemTime(now);
@@ -283,12 +284,8 @@ describe('AudioPlayerService - Smart Resume', () => {
             const mockCloudProvider = {
                 id: 'cloud', // Already correct here, but for completeness
                 init: vi.fn(),
-                play: vi.fn(),
+                synthesize: vi.fn(),
                 getVoices: vi.fn(),
-                on: vi.fn(),
-                stop: vi.fn(),
-                pause: vi.fn(),
-                resume: vi.fn(),
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any;
             await service.setProvider(mockCloudProvider);
@@ -296,7 +293,7 @@ describe('AudioPlayerService - Smart Resume', () => {
             service['audioPlayer'] = new AudioElementPlayer();
         });
 
-        it.skip('should NOT rewind if paused for < 5 minutes', async () => {
+        it('should NOT rewind if paused for < 5 minutes', async () => {
             vi.useFakeTimers();
             const now = 1000000;
             vi.setSystemTime(now);
@@ -316,7 +313,7 @@ describe('AudioPlayerService - Smart Resume', () => {
             expect(mockPlayerResume).toHaveBeenCalled();
         });
 
-        it.skip('should rewind 10 seconds if paused for > 5 minutes', async () => {
+        it('should rewind 10 seconds if paused for > 5 minutes', async () => {
             vi.useFakeTimers();
             const now = 1000000;
             vi.setSystemTime(now);
@@ -336,7 +333,7 @@ describe('AudioPlayerService - Smart Resume', () => {
             expect(mockPlayerResume).toHaveBeenCalled();
         });
 
-        it.skip('should rewind 60 seconds if paused for > 24 hours', async () => {
+        it('should rewind 60 seconds if paused for > 24 hours', async () => {
             vi.useFakeTimers();
             const now = 1000000 + (25 * 60 * 60 * 1000);
             vi.setSystemTime(now);

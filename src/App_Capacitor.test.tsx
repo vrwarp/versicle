@@ -49,7 +49,6 @@ vi.mock('./lib/tts/AudioPlayerService', () => ({
   AudioPlayerService: {
     getInstance: vi.fn().mockReturnValue({
       pause: vi.fn(),
-      subscribe: vi.fn(),
     }),
   },
 }));

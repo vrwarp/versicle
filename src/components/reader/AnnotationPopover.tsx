@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { Copy, StickyNote, X, Mic, Play } from 'lucide-react';
+import { Copy, StickyNote, X, Mic } from 'lucide-react';
 
 const COLORS = [
   { name: 'Yellow', value: '#ffff00', class: 'highlight-yellow' },
@@ -16,8 +16,6 @@ interface Props {
   onClose: () => void;
   /** Optional callback to initiate pronunciation fix for selected text. */
   onFixPronunciation?: (text: string) => void;
-  /** Optional callback to start playing from the selection. */
-  onPlayFromSelection?: (cfiRange: string) => void;
 }
 
 /**
@@ -27,38 +25,18 @@ interface Props {
  * @param props - Component props.
  * @returns The rendered popover or null if hidden.
  */
-export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronunciation, onPlayFromSelection }) => {
+export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronunciation }) => {
   const { popover, addAnnotation, hidePopover } = useAnnotationStore();
   const [isEditingNote, setIsEditingNote] = React.useState(false);
   const [noteText, setNoteText] = React.useState('');
-  const popoverRef = React.useRef<HTMLDivElement>(null);
-  const [adjustedX, setAdjustedX] = React.useState(popover.x);
-
-  React.useLayoutEffect(() => {
-    if (popoverRef.current) {
-      const { width } = popoverRef.current.getBoundingClientRect();
-      const windowWidth = window.innerWidth;
-      let newX = popover.x;
-
-      // Check right edge
-      if (newX + width > windowWidth - 10) {
-        newX = windowWidth - width - 10;
-      }
-      // Check left edge
-      if (newX < 10) {
-        newX = 10;
-      }
-      setAdjustedX(newX);
-    } else {
-      setAdjustedX(popover.x);
-    }
-  }, [popover.x, popover.visible, isEditingNote]);
 
   if (!popover.visible) return null;
 
+  // Calculate position to keep it within viewport (simplified)
+  // We might need useLayoutEffect to measure dimensions
   const style: React.CSSProperties = {
     position: 'absolute',
-    left: adjustedX,
+    left: popover.x,
     top: popover.y - 50, // Display above selection
     zIndex: 50,
   };
@@ -96,7 +74,7 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronu
 
   if (isEditingNote) {
       return (
-          <div ref={popoverRef} className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-2 flex gap-2 items-center border border-gray-200 dark:border-gray-700" style={style}>
+          <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-2 flex gap-2 items-center border border-gray-200 dark:border-gray-700" style={style}>
               <input
                   data-testid="popover-note-input"
                   type="text"
@@ -127,7 +105,7 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronu
   };
 
   return (
-    <div ref={popoverRef} className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-2 flex gap-2 items-center border border-gray-200 dark:border-gray-700" style={style}>
+    <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg p-2 flex gap-2 items-center border border-gray-200 dark:border-gray-700" style={style}>
       {COLORS.map((c) => (
         <button
           key={c.name}
@@ -142,11 +120,6 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronu
       <button data-testid="popover-add-note-button" onClick={handleNoteClick} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Add Note">
         <StickyNote className="w-4 h-4" />
       </button>
-      {onPlayFromSelection && (
-          <button data-testid="popover-play-button" onClick={() => { onPlayFromSelection(popover.cfiRange); hidePopover(); onClose(); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Start Playing">
-            <Play className="w-4 h-4" />
-          </button>
-      )}
       {onFixPronunciation && (
           <button data-testid="popover-fix-pronunciation-button" onClick={() => { onFixPronunciation(popover.text); hidePopover(); onClose(); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-600 dark:text-gray-300" title="Fix Pronunciation">
             <Mic className="w-4 h-4" />
