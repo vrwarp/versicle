@@ -144,7 +144,7 @@ The main database abstraction layer. Handles all read/write operations, transact
     *   **Params**: `file: File` - The EPUB file to import.
     *   **Returns**: `Promise<void>`
 *   **`deleteBook(id)`**
-    *   **Purpose**: Deletes a book and all cascading data (files, annotations, locations, queue, lexicon).
+    *   **Purpose**: Deletes a book and all cascading data (files, annotations, locations, queue, lexicon, content analysis).
     *   **Params**: `id: string`.
     *   **Returns**: `Promise<void>`
 *   **`offloadBook(id)`**
@@ -199,6 +199,18 @@ The main database abstraction layer. Handles all read/write operations, transact
     *   **Purpose**: Stores `epub.js` locations.
     *   **Params**: `bookId: string`, `locations: string` (JSON string).
     *   **Returns**: `Promise<void>`
+*   **`saveContentAnalysis(analysis)`**
+    *   **Purpose**: Saves AI content analysis results.
+    *   **Params**: `analysis: ContentAnalysis`.
+    *   **Returns**: `Promise<void>`
+*   **`getContentAnalysis(bookId, sectionId)`**
+    *   **Purpose**: Retrieves content analysis for a specific section.
+    *   **Params**: `bookId: string`, `sectionId: string`.
+    *   **Returns**: `Promise<ContentAnalysis | undefined>`
+*   **`getBookAnalysis(bookId)`**
+    *   **Purpose**: Retrieves all content analysis entries for a book.
+    *   **Params**: `bookId: string`.
+    *   **Returns**: `Promise<ContentAnalysis[]>`
 
 #### Key Data Models (`src/types/db.ts`)
 
@@ -206,6 +218,9 @@ The main database abstraction layer. Handles all read/write operations, transact
 *   **`Annotation`**: `{ id, bookId, cfiRange, text, color, type, note, created }`
 *   **`TTSState`**: `{ bookId, queue, currentIndex, updatedAt }`
 *   **`CachedSegment`**: `{ key, audio, alignment, createdAt, lastAccessed }`
+*   **`LexiconRule`**: `{ id, original, replacement, isRegex, bookId, created }`
+*   **`SectionMetadata`**: `{ id, bookId, sectionId, characterCount, playOrder }`
+*   **`ContentAnalysis`**: `{ id, bookId, sectionId, structure, summary, lastAnalyzed }`
 
 ---
 
@@ -331,6 +346,10 @@ The singleton controller for TTS.
     *   **Purpose**: Adds a state change listener.
     *   **Params**: `listener: PlaybackListener`.
     *   **Returns**: Unsubscribe function.
+*   **`generatePreroll(chapterTitle, wordCount, speed)`**
+    *   **Purpose**: Generates a spoken introduction string for a chapter.
+    *   **Params**: `chapterTitle: string`, `wordCount: number`, `speed: number`.
+    *   **Returns**: `string`.
 
 #### `src/lib/tts/TextSegmenter.ts`
 Robust sentence splitting logic.

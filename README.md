@@ -60,17 +60,16 @@ The system is designed for privacy and performance, featuring advanced Text-to-S
     ```
     The application will be available at `http://localhost:5173`.
 
+## Architecture Overview
+
+Versicle follows a strict **Local-First** architecture.
+*   **Data Layer**: `src/db/DBService.ts` manages all interactions with IndexedDB.
+*   **Core Services**: `src/lib/` contains business logic like `AudioPlayerService` (TTS), `SearchClient`, and `BackupService`.
+*   **UI Layer**: React components in `src/components/` consume data via Zustand stores (`src/store/`) and Custom Hooks (`src/hooks/`).
+
+For a deep dive into the code structure, module relationships, and API documentation, please refer to [architecture.md](architecture.md). It is **essential reading** for understanding the Core Services (TTS, Search, Database) and State Management.
+
 ## Development Workflow
-
-### Project Structure
-*   `src/components/`: React UI components (Reader, Library, Audio Panel).
-*   `src/db/`: Database layer (IndexedDB wrapper).
-*   `src/lib/`: Core logic (Ingestion, Search, TTS Engine).
-*   `src/store/`: State management (Zustand).
-*   `src/workers/`: Web Workers for background tasks.
-*   `verification/`: Playwright visual regression tests.
-
-For a deep dive into the code structure, module relationships, and data models, please refer to [architecture.md](architecture.md). It is essential reading for understanding the Core Services (TTS, Search, Database) and State Management.
 
 ### Scripts
 *   `npm run dev`: Start local dev server.
