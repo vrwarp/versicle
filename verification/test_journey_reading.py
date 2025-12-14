@@ -25,20 +25,7 @@ def test_reading_journey(page: Page):
 
     # Navigate to a middle chapter immediately to ensure we have text
     print("Navigating to middle chapter via TOC...")
-    toc_btn = page.get_by_test_id("reader-toc-button")
-    toc_btn.click()
-    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
-
-    # Click Chapter 1 (Down the Rabbit-Hole) - index 2 usually (0=cover, 1=title/copyright)
-    # Using a known chapter that has content and length.
-    toc_item = page.get_by_test_id("toc-item-2")
-    toc_text_clicked = toc_item.inner_text()
-    print(f"Clicking TOC item: {toc_text_clicked}")
-    toc_item.click()
-
-    # Wait for TOC to close and page to update
-    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
-    page.wait_for_timeout(3000)
+    utils.navigate_to_chapter(page)
 
     # Regain focus on the reader content so keyboard events work
     print("Clicking reader to ensure focus...")

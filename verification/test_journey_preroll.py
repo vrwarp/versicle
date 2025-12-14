@@ -14,18 +14,9 @@ def test_preroll_journey(page: Page):
     page.locator("[data-testid^='book-card-']").first.click()
     expect(page.get_by_test_id("reader-audio-button")).to_be_visible(timeout=5000)
 
-    # Open TOC
-    print("Opening Table of Contents...")
-    page.get_by_test_id("reader-toc-button").click()
-    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
-
-    # Click Chapter 1 (toc-item-2 usually)
-    print("Navigating to Chapter 1...")
-    page.get_by_test_id("toc-item-2").click()
-    # Wait for navigation (reader should be visible again and TOC closed automatically or overlayed)
-    # Just clicking item usually closes TOC on mobile, but on desktop it might stay open or drawer might hide.
-    # We click the reader area to ensure focus and that TOC is dismissed if it's an overlay.
-    page.mouse.click(100, 100)
+    # Navigate to Chapter 5
+    print("Navigating to Chapter 5...")
+    utils.navigate_to_chapter(page)
 
     # Open TTS Panel
     print("Opening TTS panel...")
@@ -73,12 +64,8 @@ def test_preroll_journey(page: Page):
     expect(page.get_by_role("dialog")).not_to_be_visible()
 
     print("Attempting to verify queue population...")
-    # Navigate via TOC
-    page.get_by_test_id("reader-toc-button").click()
-    page.get_by_test_id("toc-item-1").click()
-
-    # Wait
-    page.wait_for_timeout(3000)
+    # Navigate via TOC to another chapter (e.g. toc-item-4)
+    utils.navigate_to_chapter(page, "toc-item-4")
 
     # Check queue
     if page.get_by_test_id("queue-item-0").is_visible():

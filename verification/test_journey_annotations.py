@@ -15,20 +15,9 @@ def test_journey_annotations(page: Page):
     frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
     frame.locator("body").wait_for(timeout=5000)
 
-    # Navigate to Chapter 1 via TOC to ensure we have content for highlighting
-    print("Navigating to Chapter 1...")
-    page.get_by_test_id("reader-toc-button").click()
-    page.get_by_test_id("toc-item-2").click()
-
-    # Wait for TOC to close
-    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
-
-    # Ensure TOC overlay is gone and focus is returned
-    page.locator("body").click(position={"x": 100, "y": 100})
-
-    # Wait for content to render (check for iframe content or compass pill)
-    expect(page.get_by_test_id("compass-pill-active")).to_be_visible()
-    page.wait_for_timeout(1000)
+    # Navigate to Chapter 5 via TOC to ensure we have content for highlighting
+    print("Navigating to Chapter 5...")
+    utils.navigate_to_chapter(page)
 
     # 1. Create Highlight
     print("Creating Highlight...")

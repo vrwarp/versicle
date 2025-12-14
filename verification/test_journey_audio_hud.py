@@ -12,16 +12,9 @@ def test_audio_hud_interaction(page: Page):
     # Wait for Reader
     expect(page.get_by_test_id("reader-back-button")).to_be_visible()
 
-    # Navigate to Chapter 1 via TOC to ensure we have content for audio
-    print("Navigating to Chapter 1...")
-    page.get_by_test_id("reader-toc-button").click()
-    page.get_by_test_id("toc-item-2").click()
-
-    # Wait for TOC to close
-    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
-
-    # Ensure TOC overlay is gone and focus is returned
-    page.locator("body").click(position={"x": 100, "y": 100})
+    # Navigate to Chapter 5 via TOC to ensure we have content for audio
+    print("Navigating to Chapter 5...")
+    utils.navigate_to_chapter(page)
 
     # Wait for HUD
     # It might take a moment for TTS queue to populate

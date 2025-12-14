@@ -13,14 +13,9 @@ def test_visual_settings(page: Page):
     expect(page).to_have_url(re.compile(r".*/read/.*"))
     page.wait_for_timeout(2000)
 
-    # Navigate to text page first (Chapter 1)
+    # Navigate to text page first (Chapter 5)
     print("Navigating to text page via TOC...")
-    page.get_by_test_id("reader-toc-button").click()
-    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
-    page.get_by_test_id("toc-item-2").click()
-    # Wait for navigation
-    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
-    page.wait_for_timeout(2000)
+    utils.navigate_to_chapter(page)
     # Ensure focus
     page.locator('[data-testid="reader-iframe-container"]').click()
 
