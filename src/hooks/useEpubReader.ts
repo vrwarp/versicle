@@ -269,6 +269,19 @@ export function useEpubReader(
                 doc.head.appendChild(style);
                 applyStylesRef.current();
             }
+
+            // Apply padding fix on load
+            const paddingStyleId = 'scrolled-padding-fix';
+            if (!doc.getElementById(paddingStyleId)) {
+                const style = doc.createElement('style');
+                style.id = paddingStyleId;
+                doc.head.appendChild(style);
+                if (optionsRef.current.viewMode === 'scrolled') {
+                    style.textContent = 'body { padding-bottom: 128px !important; }';
+                } else {
+                    style.textContent = 'body { padding-bottom: 0px !important; }';
+                }
+            }
         });
 
       } catch (err) {
@@ -432,6 +445,24 @@ export function useEpubReader(
 
       applyStylesRef.current = applyStyles;
       applyStyles();
+
+      // Update Body Padding for Scrolled Mode
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (r as any).getContents().forEach((content: any) => {
+          const doc = content.document;
+          let style = doc.getElementById('scrolled-padding-fix');
+          if (!style) {
+              style = doc.createElement('style');
+              style.id = 'scrolled-padding-fix';
+              doc.head.appendChild(style);
+          }
+
+          if (options.viewMode === 'scrolled') {
+              style.textContent = 'body { padding-bottom: 128px !important; }';
+          } else {
+              style.textContent = 'body { padding-bottom: 0px !important; }';
+          }
+      });
 
   }, [
       isReady,
