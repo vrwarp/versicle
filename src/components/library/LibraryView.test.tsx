@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { useToastStore } from '../../store/useToastStore';
 
 // Mock react-window
 vi.mock('react-window', () => ({
@@ -31,25 +32,24 @@ vi.mock('./EmptyLibrary', () => ({
     EmptyLibrary: () => <div data-testid="empty-library">Empty Library</div>
 }));
 
-// Mock IDB via fake-indexeddb is usually handled globally or we mock getDB
-// But since we are testing View, we can mock the store action fetchBooks to avoid DB calls.
-// The store uses `getDB` which is async.
+// Mock useToastStore
+vi.mock('../../store/useToastStore', () => ({
+  useToastStore: vi.fn(),
+}));
 
 describe('LibraryView', () => {
+    const mockShowToast = vi.fn();
+
     beforeEach(() => {
         vi.clearAllMocks();
 
-        // Mock fetchBooks to avoid real DB and async state issues in test
-        // We override the fetchBooks method in the store for tests
-        // But zustand store is a singleton.
+        // Mock useToastStore
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (useToastStore as any).mockImplementation((selector: any) => {
+            if (selector) return selector({ showToast: mockShowToast });
+            return { showToast: mockShowToast };
+        });
 
-        // Better: Mock `useLibraryStore` partially?
-        // Or just mock `fetchBooks` to be a no-op or controlled.
-
-        // Since `useLibraryStore` is imported, we can mock the module,
-        // but it's harder with zustand.
-
-        // Let's rely on setState, but overwrite fetchBooks in the state temporarily?
         useLibraryStore.setState({
             books: [],
             isLoading: false,
@@ -71,15 +71,11 @@ describe('LibraryView', () => {
         useLibraryStore.setState({ isLoading: true });
         render(<LibraryView />);
         expect(screen.queryByTestId('virtual-grid')).not.toBeInTheDocument();
-        // Spinner
         expect(document.querySelector('.animate-spin')).toBeInTheDocument();
     });
 
     it('renders empty state', async () => {
         render(<LibraryView />);
-        // It calls fetchBooks on mount, which is mocked.
-        // Should show empty state immediately.
-
         expect(screen.getByTestId('empty-library')).toBeInTheDocument();
     });
 
@@ -95,7 +91,6 @@ describe('LibraryView', () => {
 
         render(<LibraryView />);
 
-        // Ensure useLayoutEffect runs and sets dimensions
         act(() => {
             window.dispatchEvent(new Event('resize'));
         });
@@ -105,5 +100,53 @@ describe('LibraryView', () => {
         });
 
         expect(screen.getAllByTestId('book-card')).toHaveLength(2);
+    });
+
+    it('handles drag and drop import', async () => {
+        const mockAddBook = vi.fn().mockResolvedValue(undefined);
+        useLibraryStore.setState({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            addBook: mockAddBook as any
+        });
+
+        render(<LibraryView />);
+        const dropZone = screen.getByTestId('library-view');
+
+        const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
+
+        fireEvent.drop(dropZone, {
+            dataTransfer: {
+                files: [file],
+            },
+        });
+
+        await waitFor(() => {
+            expect(mockAddBook).toHaveBeenCalledWith(file);
+            expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('imported successfully'), 'success');
+        });
+    });
+
+    it('handles drag and drop invalid file', async () => {
+        const mockAddBook = vi.fn();
+        useLibraryStore.setState({
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            addBook: mockAddBook as any
+        });
+
+        render(<LibraryView />);
+        const dropZone = screen.getByTestId('library-view');
+
+        const file = new File(['dummy'], 'test.pdf', { type: 'application/pdf' });
+
+        fireEvent.drop(dropZone, {
+            dataTransfer: {
+                files: [file],
+            },
+        });
+
+        await waitFor(() => {
+            expect(mockAddBook).not.toHaveBeenCalled();
+            expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Only .epub files'), 'error');
+        });
     });
 });

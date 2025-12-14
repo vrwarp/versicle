@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
+import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
 import { Grid } from 'react-window';
-import { Upload, Settings, LayoutGrid, List as ListIcon } from 'lucide-react';
+import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 
 // Grid Configuration
@@ -57,6 +57,7 @@ export const LibraryView: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
     fetchBooks();
@@ -90,16 +91,51 @@ export const LibraryView: React.FC = () => {
     }
   };
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragActive) setDragActive(true);
+  }, [dragActive]);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDragActive(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+       const file = e.dataTransfer.files[0];
+       if (!file.name.toLowerCase().endsWith('.epub')) {
+           showToast("Only .epub files are supported", "error");
+           return;
+       }
+
+       addBook(file).then(() => {
+        showToast("Book imported successfully", "success");
+      }).catch((err) => {
+        showToast(`Import failed: ${err.message}`, "error");
+      });
+    }
+  }, [addBook, showToast]);
+
   const triggerFileUpload = () => {
     fileInputRef.current?.click();
   };
 
   const columnCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
   const rowCount = Math.ceil(books.length / columnCount);
-  // Re-calculating proper FixedSizeGrid usage with gaps:
-  // Usually we make the cell size include the gap, and then render a smaller inner div.
-  // Let's rely on flexible card width in BookCard if possible?
-  // Or simply:
   const gridColumnWidth = Math.floor(dimensions.width / columnCount);
 
   // Memoize cellProps to prevent unnecessary re-renders of the grid
@@ -109,7 +145,14 @@ export const LibraryView: React.FC = () => {
   const GridAny = Grid as any;
 
   return (
-    <div data-testid="library-view" className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col bg-background text-foreground">
+    <div
+      data-testid="library-view"
+      className="container mx-auto px-4 py-8 max-w-7xl h-screen flex flex-col bg-background text-foreground relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <input
         type="file"
         ref={fileInputRef}
@@ -118,6 +161,16 @@ export const LibraryView: React.FC = () => {
         className="hidden"
         data-testid="hidden-file-input"
       />
+
+      {/* Drag Overlay */}
+      {dragActive && (
+        <div className="absolute inset-4 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center border-4 border-primary border-dashed rounded-xl transition-all duration-200 pointer-events-none">
+            <div className="flex flex-col items-center gap-4 text-primary animate-in zoom-in-95 duration-200">
+                <FilePlus className="w-20 h-20" />
+                <p className="text-3xl font-bold">Drop EPUB to import</p>
+            </div>
+        </div>
+      )}
 
       <header className="mb-8 flex-none flex justify-between items-start">
         <div>
