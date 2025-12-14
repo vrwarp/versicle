@@ -109,6 +109,7 @@ describe('SearchClient', () => {
     it('should wait for book.ready before indexing', async () => {
         // Create a mock book that is not ready immediately
         const delayedBook = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             spine: undefined as any,
             ready: new Promise<void>((resolve) => {
                 setTimeout(() => {

@@ -10,7 +10,8 @@
     "test": "vitest",
     "tests": "vitest",
     "preview": "vite preview",
-    "prepare-piper": "mkdir -p public/piper && cp node_modules/piper-wasm/build/piper_phonemize.js public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.wasm public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.data public/piper/ && cp node_modules/piper-wasm/build/worker/piper_worker.js public/piper/"
+    "prepare-piper": "mkdir -p public/piper && cp node_modules/piper-wasm/build/piper_phonemize.js public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.wasm public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.data public/piper/ && cp node_modules/piper-wasm/build/worker/piper_worker.js public/piper/",
+    "postinstall": "npm run prepare-piper"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^5.1.0",
@@ -41,6 +42,7 @@
     "idb": "^8.0.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.555.0",
+    "piper-wasm": "^0.1.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.30.2",
