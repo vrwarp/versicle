@@ -49,7 +49,8 @@ const PaddedInnerElement = React.forwardRef<HTMLDivElement, React.HTMLAttributes
             ref={ref}
             style={{
                 ...style,
-                height: `${parseFloat(style?.height as string || '0') + BOTTOM_INSET}px`
+                boxSizing: 'content-box',
+                paddingBottom: BOTTOM_INSET
             }}
             {...rest}
         />
