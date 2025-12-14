@@ -79,6 +79,7 @@ class SearchClient {
      * @returns A Promise that resolves when the indexing command is sent to the worker.
      */
     async indexBook(book: Book, bookId: string, onProgress?: (percent: number) => void) {
+        await book.ready;
         // Init/Clear index
         await this.send('INIT_INDEX', { bookId });
 
