@@ -14,6 +14,19 @@ def test_preroll_journey(page: Page):
     page.locator("[data-testid^='book-card-']").first.click()
     expect(page.get_by_test_id("reader-audio-button")).to_be_visible(timeout=5000)
 
+    # Open TOC
+    print("Opening Table of Contents...")
+    page.get_by_test_id("reader-toc-button").click()
+    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
+
+    # Click Chapter 1 (toc-item-2 usually)
+    print("Navigating to Chapter 1...")
+    page.get_by_test_id("toc-item-2").click()
+    # Wait for navigation (reader should be visible again and TOC closed automatically or overlayed)
+    # Just clicking item usually closes TOC on mobile, but on desktop it might stay open or drawer might hide.
+    # We click the reader area to ensure focus and that TOC is dismissed if it's an overlay.
+    page.mouse.click(100, 100)
+
     # Open TTS Panel
     print("Opening TTS panel...")
     page.get_by_test_id("reader-audio-button").click()

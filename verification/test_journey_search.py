@@ -11,6 +11,26 @@ def test_search_journey(page: Page):
     page.locator("[data-testid^='book-card-']").first.click()
     expect(page.get_by_test_id("reader-back-button")).to_be_visible()
 
+    # Navigate to Chapter 1 via TOC
+    print("Navigating to Chapter 1...")
+    page.get_by_test_id("reader-toc-button").click()
+    # Click Chapter 1 (Down the Rabbit-Hole) - index 2 usually (0=cover, 1=title/copyright)
+    page.get_by_test_id("toc-item-2").click()
+
+    # Wait for TOC to close and page to update
+    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
+    # Click canvas to close TOC/Focus (try multiple selectors)
+    try:
+        page.get_by_test_id("reader-canvas").click(timeout=1000)
+    except:
+        print("Canvas click failed, trying force click on body center...")
+        # Fallback for when overlay prevents normal click
+        page.mouse.click(100, 100)
+
+    # Wait for content to render (check for iframe content or compass pill)
+    expect(page.get_by_test_id("compass-pill-active")).to_be_visible()
+    page.wait_for_timeout(1000)
+
     # Open Search
     print("Opening Search...")
     page.get_by_test_id("reader-search-button").click()

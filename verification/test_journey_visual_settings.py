@@ -13,6 +13,17 @@ def test_visual_settings(page: Page):
     expect(page).to_have_url(re.compile(r".*/read/.*"))
     page.wait_for_timeout(2000)
 
+    # Navigate to text page first (Chapter 1)
+    print("Navigating to text page via TOC...")
+    page.get_by_test_id("reader-toc-button").click()
+    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
+    page.get_by_test_id("toc-item-2").click()
+    # Wait for navigation
+    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
+    page.wait_for_timeout(2000)
+    # Ensure focus
+    page.locator('[data-testid="reader-iframe-container"]').click()
+
     # Open Visual Settings Popover
     print("Opening Visual Settings...")
     visual_btn = page.get_by_test_id("reader-visual-settings-button")
@@ -23,19 +34,6 @@ def test_visual_settings(page: Page):
     expect(page.get_by_text("Legibility")).to_be_visible()
     expect(page.get_by_text("Layout")).to_be_visible()
     utils.capture_screenshot(page, "visual_settings_01_open")
-
-    # Navigate to text page first
-    print("Navigating to text page...")
-    # Close popover by clicking outside
-    page.locator('body').click(position={'x': 10, 'y': 10})
-
-    page.keyboard.press("ArrowRight")
-    page.wait_for_timeout(1000)
-    page.keyboard.press("ArrowRight")
-    page.wait_for_timeout(1000)
-
-    # Re-open visual settings
-    visual_btn.click()
 
     # 1. Test Theme Switching
     print("Testing Theme Switching (Sepia)...")
