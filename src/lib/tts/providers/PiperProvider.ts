@@ -34,47 +34,32 @@ export class PiperProvider extends BaseCloudProvider {
       const voices: TTSVoice[] = [];
 
       for (const [key, info] of Object.entries(data)) {
+        // Filter for high quality en_US voices (single speaker preferred)
+        // This avoids listing hundreds of voices and focuses on the best ones like Ryan.
+        if (!key.startsWith('en_US')) continue;
+        if (info.num_speakers > 1) continue;
+
         const fileKeys = Object.keys(info.files);
         const onnxFile = fileKeys.find(f => f.endsWith('.onnx'));
         const jsonFile = fileKeys.find(f => f.endsWith('.onnx.json'));
 
         if (!onnxFile || !jsonFile) continue;
 
-        if (info.num_speakers > 1) {
-          for (const [speakerName, speakerId] of Object.entries(info.speaker_id_map)) {
-             const voiceId = `piper:${key}:${speakerId}`;
-             const name = `${info.name} (${speakerName}) - ${info.quality}`;
+        const voiceId = `piper:${key}`;
+        const name = `${info.name} - ${info.quality}`;
 
-             this.voiceMap.set(voiceId, {
-               modelPath: onnxFile,
-               configPath: jsonFile,
-               speakerId: speakerId
-             });
+        this.voiceMap.set(voiceId, {
+          modelPath: onnxFile,
+          configPath: jsonFile,
+          speakerId: 0
+        });
 
-             voices.push({
-               id: voiceId,
-               name: name,
-               lang: info.language.code,
-               provider: 'piper'
-             });
-          }
-        } else {
-           const voiceId = `piper:${key}`;
-           const name = `${info.name} - ${info.quality}`;
-
-           this.voiceMap.set(voiceId, {
-             modelPath: onnxFile,
-             configPath: jsonFile,
-             speakerId: 0
-           });
-
-           voices.push({
-             id: voiceId,
-             name: name,
-             lang: info.language.code,
-             provider: 'piper'
-           });
-        }
+        voices.push({
+          id: voiceId,
+          name: name,
+          lang: info.language.code,
+          provider: 'piper'
+        });
       }
 
       this.voices = voices;
