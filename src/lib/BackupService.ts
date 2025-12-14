@@ -2,7 +2,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { dbService } from '../db/DBService';
 import type { BookMetadata, Annotation, LexiconRule, BookLocations } from '../types/db';
-import { validateBookMetadata } from '../db/validators';
+import { validateBookMetadata, sanitizeBookMetadata } from '../db/validators';
 import { getDB } from '../db/db';
 
 /**
@@ -198,16 +198,21 @@ export class BackupService {
 
     // 1.1 Restore Books Metadata
     const books = Array.isArray(manifest.books) ? manifest.books : [];
-    for (const book of books) {
-      if (!book || typeof book !== 'object') continue;
+    for (const rawBook of books) {
+      if (!rawBook || typeof rawBook !== 'object') continue;
 
-      // Sanitization / Defaulting
-      if (typeof book.title !== 'string' || !book.title.trim()) book.title = 'Untitled';
-      if (typeof book.author !== 'string') book.author = 'Unknown Author';
-      if (typeof book.addedAt !== 'number') book.addedAt = Date.now();
+      // Sanitization / Defaulting (Pre-validation fixup)
+      // We cast to any to allow modification before type check
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const candidate: any = rawBook;
+      if (typeof candidate.title !== 'string' || !candidate.title.trim()) candidate.title = 'Untitled';
+      if (typeof candidate.author !== 'string') candidate.author = 'Unknown Author';
+      if (typeof candidate.addedAt !== 'number') candidate.addedAt = Date.now();
 
-      if (!validateBookMetadata(book)) {
-        console.warn('Skipping invalid book record in backup', book);
+      const book = sanitizeBookMetadata(candidate);
+
+      if (!book) {
+        console.warn('Skipping invalid book record in backup', rawBook);
         updateProgress('Skipping invalid record...');
         continue;
       }

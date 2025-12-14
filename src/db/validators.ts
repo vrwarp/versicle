@@ -37,3 +37,32 @@ export function validateBookMetadata(data: any): data is BookMetadata {
 
   return true;
 }
+
+/**
+ * Sanitizes a string by trimming and enforcing a maximum length.
+ * @param input - The string to sanitize.
+ * @param maxLength - The maximum allowed length (default: 255).
+ * @returns The sanitized string.
+ */
+export function sanitizeString(input: string, maxLength: number = 255): string {
+    if (typeof input !== 'string') return '';
+    return input.trim().slice(0, maxLength);
+}
+
+/**
+ * Sanitizes book metadata.
+ * Returns null if invalid, or a new object with sanitized strings.
+ * @param data - The raw data to sanitize.
+ * @returns Sanitized BookMetadata or null.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function sanitizeBookMetadata(data: any): BookMetadata | null {
+    if (!validateBookMetadata(data)) return null;
+
+    return {
+        ...data,
+        title: sanitizeString(data.title, 500),
+        author: sanitizeString(data.author, 255),
+        description: data.description ? sanitizeString(data.description, 2000) : undefined,
+    };
+}

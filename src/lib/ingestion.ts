@@ -2,6 +2,7 @@ import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
 import type { BookMetadata, SectionMetadata } from '../types/db';
+import { sanitizeString } from '../db/validators';
 import CryptoJS from 'crypto-js';
 
 // Chunk size for hashing (e.g., 2MB)
@@ -185,9 +186,9 @@ export async function processEpub(file: File): Promise<string> {
 
   const newBook: BookMetadata = {
     id: bookId,
-    title: metadata.title || 'Untitled',
-    author: metadata.creator || 'Unknown Author',
-    description: metadata.description || '',
+    title: sanitizeString(metadata.title || 'Untitled', 500),
+    author: sanitizeString(metadata.creator || 'Unknown Author', 255),
+    description: sanitizeString(metadata.description || '', 2000),
     addedAt: Date.now(),
     coverBlob: coverBlob,
     fileHash,
