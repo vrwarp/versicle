@@ -450,7 +450,7 @@ export const ReaderView: React.FC = () => {
               if (label) return label.trim();
           }
       } catch (e) {
-          // ignore parsing errors
+          console.error("Error getting chapter title:", e);
       }
       return 'Segment read';
   }, [rendition, toc]);
