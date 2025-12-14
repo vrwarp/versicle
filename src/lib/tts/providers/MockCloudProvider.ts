@@ -24,6 +24,8 @@ export class MockCloudProvider extends BaseCloudProvider {
    * Simulates synthesis by returning a dummy WAV blob and sentence alignment.
    */
   protected async fetchAudioData(_text: string, _options: TTSOptions): Promise<SpeechSegment> {
+    void _text;
+    void _options;
     // Dummy WAV blob
     const wavHeader = new Uint8Array([
       0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,

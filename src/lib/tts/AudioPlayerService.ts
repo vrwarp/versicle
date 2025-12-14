@@ -1,5 +1,6 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
-import { WebSpeechProvider, type WebSpeechConfig } from './providers/WebSpeechProvider';
+import { WebSpeechProvider } from './providers/WebSpeechProvider';
+import { BackgroundAudio, type BackgroundAudioConfig } from './BackgroundAudio';
 import { Capacitor } from '@capacitor/core';
 import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
@@ -39,7 +40,13 @@ export interface TTSQueueItem {
     isPreroll?: boolean;
 }
 
-type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
+export interface DownloadInfo {
+    voiceId: string;
+    percent: number;
+    status: string;
+}
+
+type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null, downloadInfo?: DownloadInfo) => void;
 
 /**
  * Singleton service that manages Text-to-Speech playback.
@@ -67,15 +74,16 @@ export class AudioPlayerService {
   private currentOperation: OperationState | null = null;
   private operationLock: Promise<void> = Promise.resolve();
 
-  private localProviderConfig: WebSpeechConfig = { silentAudioType: 'silence', whiteNoiseVolume: 0.1 };
+  private backgroundAudio: BackgroundAudio;
 
   private constructor() {
+    this.backgroundAudio = new BackgroundAudio();
     this.syncEngine = new SyncEngine();
 
     if (Capacitor.isNativePlatform()) {
         this.provider = new CapacitorTTSProvider();
     } else {
-        this.provider = new WebSpeechProvider(this.localProviderConfig);
+        this.provider = new WebSpeechProvider();
     }
 
     this.setupProviderListeners();
@@ -89,7 +97,7 @@ export class AudioPlayerService {
         onNext: () => this.next(),
         onSeekBackward: () => this.seek(-10),
         onSeekForward: () => this.seek(10),
-        onSeekTo: (_details) => {
+        onSeekTo: () => {
              // Not supporting seekTo for now to keep consistency
              console.warn("SeekTo not supported");
         },
@@ -244,6 +252,8 @@ export class AudioPlayerService {
                    }));
                    this.syncEngine.loadAlignment(alignmentData);
               }
+          } else if (event.type === 'download-progress') {
+              this.notifyDownloadProgress(event.voiceId, event.percent, event.status);
           }
       });
   }
@@ -260,21 +270,14 @@ export class AudioPlayerService {
       }
   }
 
-  public setLocalProviderConfig(config: WebSpeechConfig) {
-      this.localProviderConfig = config;
-      if (this.provider instanceof WebSpeechProvider) {
-          this.provider.setConfig(config);
-      }
+  public setBackgroundAudioConfig(config: BackgroundAudioConfig) {
+      this.backgroundAudio.setConfig(config);
   }
 
   public setProvider(provider: ITTSProvider) {
       return this.executeWithLock(async () => {
         await this.stopInternal();
         this.provider = provider;
-        // If web speech, set config
-        if (this.provider instanceof WebSpeechProvider) {
-             this.provider.setConfig(this.localProviderConfig);
-        }
         this.setupProviderListeners();
       }, true);
   }
@@ -285,6 +288,37 @@ export class AudioPlayerService {
 
   async getVoices(): Promise<TTSVoice[]> {
     return this.provider.getVoices();
+  }
+
+  async downloadVoice(voiceId: string): Promise<void> {
+      if (this.provider.id === 'piper') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const piper = this.provider as any;
+          if (typeof piper.downloadVoice === 'function') {
+              await piper.downloadVoice(voiceId);
+          }
+      }
+  }
+
+  async deleteVoice(voiceId: string): Promise<void> {
+      if (this.provider.id === 'piper') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const piper = this.provider as any;
+          if (typeof piper.deleteVoice === 'function') {
+              await piper.deleteVoice(voiceId);
+          }
+      }
+  }
+
+  async isVoiceDownloaded(voiceId: string): Promise<boolean> {
+       if (this.provider.id === 'piper') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const piper = this.provider as any;
+           if (typeof piper.isVoiceDownloaded === 'function') {
+              return await piper.isVoiceDownloaded(voiceId);
+          }
+       }
+       return true;
   }
 
   public getQueue(): TTSQueueItem[] {
@@ -451,7 +485,7 @@ export class AudioPlayerService {
             if (Capacitor.isNativePlatform()) {
                 this.provider = new CapacitorTTSProvider();
             } else {
-                this.provider = new WebSpeechProvider(this.localProviderConfig);
+                this.provider = new WebSpeechProvider();
             }
             this.setupProviderListeners();
             await this.init();
@@ -523,6 +557,7 @@ export class AudioPlayerService {
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this.persistQueue();
+            if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal(signal);
         } else {
             await this.stopInternal();
@@ -535,6 +570,7 @@ export class AudioPlayerService {
         if (this.currentIndex > 0) {
             this.currentIndex--;
             this.persistQueue();
+            if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal(signal);
         }
       });
@@ -546,6 +582,9 @@ export class AudioPlayerService {
         if (this.status === 'playing') {
             await this.stopInternal();
             await this.playInternal(signal);
+        } else if (this.status === 'paused') {
+            this.setStatus('stopped');
+            await this.stopInternal();
         }
       }, true);
   }
@@ -574,6 +613,8 @@ export class AudioPlayerService {
         if (this.status === 'playing') {
             await this.stopInternal();
             await this.playInternal(signal);
+        } else if (this.status === 'paused') {
+            this.setStatus('stopped');
         }
       }, true);
   }
@@ -594,22 +635,31 @@ export class AudioPlayerService {
   }
 
   private setStatus(status: TTSStatus) {
-      if (this.status === 'stopped' && status === 'playing') {}
-      else if (this.status === 'stopped' && status === 'loading') {}
-      else if (this.status === 'loading' && status === 'playing') {}
-      else if (this.status === 'loading' && status === 'stopped') {}
-      else if (this.status === 'playing' && status === 'paused') {}
-      else if (this.status === 'paused' && status === 'playing') {}
-      else if (this.status === 'paused' && status === 'loading') {}
-      else if (this.status === 'playing' && status === 'stopped') {}
-      else if (this.status === 'paused' && status === 'stopped') {}
-      else if (status === 'completed') {}
-      else if (this.status === status) {}
+      // State transition validation (placeholder logic for now)
+      if (this.status === 'stopped' && status === 'playing') { /* valid */ }
+      else if (this.status === 'stopped' && status === 'loading') { /* valid */ }
+      else if (this.status === 'loading' && status === 'playing') { /* valid */ }
+      else if (this.status === 'loading' && status === 'stopped') { /* valid */ }
+      else if (this.status === 'playing' && status === 'paused') { /* valid */ }
+      else if (this.status === 'paused' && status === 'playing') { /* valid */ }
+      else if (this.status === 'paused' && status === 'loading') { /* valid */ }
+      else if (this.status === 'playing' && status === 'stopped') { /* valid */ }
+      else if (this.status === 'paused' && status === 'stopped') { /* valid */ }
+      else if (status === 'completed') { /* valid */ }
+      else if (this.status === status) { /* valid */ }
 
       this.status = status;
       this.mediaSessionManager.setPlaybackState(
           status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
       );
+
+      if (status === 'playing' || status === 'loading') {
+          this.backgroundAudio.play();
+      } else if (status === 'paused') {
+          this.backgroundAudio.pause();
+      } else {
+          this.backgroundAudio.stop();
+      }
 
       const currentCfi = (this.queue[this.currentIndex] && (status === 'playing' || status === 'loading' || status === 'paused'))
         ? this.queue[this.currentIndex].cfi
@@ -637,6 +687,10 @@ export class AudioPlayerService {
       this.listeners.forEach(l => l(this.status, this.queue[this.currentIndex]?.cfi || null, this.currentIndex, this.queue, message));
   }
 
+  private notifyDownloadProgress(voiceId: string, percent: number, status: string) {
+      this.listeners.forEach(l => l(this.status, this.queue[this.currentIndex]?.cfi || null, this.currentIndex, this.queue, null, { voiceId, percent, status }));
+  }
+
   /**
    * OPTIONAL: Samsung Mitigation
    * Checks if the app is restricted and prompts the user.
@@ -645,6 +699,7 @@ export class AudioPlayerService {
       if (Capacitor.getPlatform() === 'android') {
           const isEnabled = await BatteryOptimization.isBatteryOptimizationEnabled();
           if (isEnabled.enabled) {
+              // TODO: Prompt user to disable optimization
           }
       }
   }

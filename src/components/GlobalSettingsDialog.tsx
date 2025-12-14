@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { useTTSStore } from '../store/useTTSStore';
 import { Modal, ModalContent } from './ui/Modal';
@@ -13,6 +13,7 @@ import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
+import { Trash2 } from 'lucide-react';
 
 /**
  * Global application settings dialog.
@@ -36,8 +37,20 @@ export const GlobalSettingsDialog = () => {
         providerId, setProviderId,
         apiKeys, setApiKey,
         silentAudioType, setSilentAudioType,
-        whiteNoiseVolume, setWhiteNoiseVolume
+        whiteNoiseVolume, setWhiteNoiseVolume,
+        voice, voices, setVoice,
+        downloadVoice, deleteVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded
     } = useTTSStore();
+
+    const [isVoiceReady, setIsVoiceReady] = useState(false);
+
+    useEffect(() => {
+        if (providerId === 'piper' && voice) {
+            checkVoiceDownloaded(voice.id).then(setIsVoiceReady);
+        } else {
+            setIsVoiceReady(false);
+        }
+    }, [providerId, voice, checkVoiceDownloaded, isDownloading]);
 
     const {
         apiKey: genAIApiKey,
@@ -231,6 +244,79 @@ export const GlobalSettingsDialog = () => {
                                                         step={0.01}
                                                         onValueChange={(vals) => setWhiteNoiseVolume(vals[0])}
                                                     />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {providerId === 'piper' && (
+                                        <div className="space-y-4 pt-4 border-t">
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium">Select Voice</label>
+                                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                                <Select value={voice?.id} onValueChange={(val: any) => {
+                                                    const v = voices.find(v => v.id === val);
+                                                    setVoice(v || null);
+                                                }}>
+                                                    <SelectTrigger><SelectValue placeholder="Select a voice" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {voices.map(v => (
+                                                            <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {voice && (
+                                                <div className="space-y-3 p-3 bg-muted/50 rounded-md">
+                                                    <div className="flex flex-col gap-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-sm font-medium">Voice Data</span>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {isVoiceReady ? "Downloaded" : "Not Downloaded"}
+                                                            </span>
+                                                        </div>
+
+                                                        {isDownloading ? (
+                                                            <div className="space-y-2">
+                                                                <div className="flex justify-between text-xs">
+                                                                     <span>{downloadStatus}</span>
+                                                                     <span>{Math.round(downloadProgress)}%</span>
+                                                                </div>
+                                                                <div className="h-2 bg-secondary rounded overflow-hidden">
+                                                                    <div className="h-full bg-primary transition-all duration-300" style={{ width: `${downloadProgress}%` }} />
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex gap-2">
+                                                                <Button
+                                                                    onClick={() => downloadVoice(voice.id)}
+                                                                    variant={isVoiceReady ? "outline" : "default"}
+                                                                    disabled={isVoiceReady}
+                                                                    size="sm"
+                                                                    className="flex-1"
+                                                                >
+                                                                    {isVoiceReady ? "Ready to Use" : "Download Voice Data"}
+                                                                </Button>
+                                                                {isVoiceReady && (
+                                                                    <Button
+                                                                        onClick={() => {
+                                                                            if (confirm('Delete downloaded voice data?')) {
+                                                                                deleteVoice(voice.id).then(() => {
+                                                                                    setIsVoiceReady(false);
+                                                                                });
+                                                                            }
+                                                                        }}
+                                                                        variant="destructive"
+                                                                        size="icon"
+                                                                        title="Delete Voice Data"
+                                                                    >
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

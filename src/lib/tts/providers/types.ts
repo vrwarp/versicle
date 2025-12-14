@@ -52,7 +52,8 @@ export type TTSEvent =
   | { type: 'error'; error: any }
   | { type: 'timeupdate'; currentTime: number; duration: number }
   | { type: 'boundary'; charIndex: number }
-  | { type: 'meta'; alignment: Timepoint[] };
+  | { type: 'meta'; alignment: Timepoint[] }
+  | { type: 'download-progress'; percent: number; status: string; voiceId: string };
 
 /**
  * Interface that all TTS providers must implement.

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
+import type { TTSEvent } from './providers/types';
 
 // Mock WebSpeechProvider
 vi.mock('./providers/WebSpeechProvider', () => {
@@ -8,12 +9,11 @@ vi.mock('./providers/WebSpeechProvider', () => {
       id = 'local'; // Added id='local'
       init = vi.fn().mockResolvedValue(undefined);
       getVoices = vi.fn().mockResolvedValue([]);
-      synthesize = vi.fn().mockResolvedValue({ audio: null, alignment: [] });
+      play = vi.fn().mockResolvedValue(undefined);
       stop = vi.fn();
       on = vi.fn();
       pause = vi.fn();
       resume = vi.fn();
-      setConfig = vi.fn();
     }
   };
 });
@@ -106,6 +106,10 @@ class MockAudio {
         this.src = src || '';
         mockAudioInstances.push(this);
     }
+    getAttribute = vi.fn((attr) => {
+        if (attr === 'src') return this.src;
+        return null;
+    });
 }
 vi.stubGlobal('Audio', MockAudio);
 
@@ -169,18 +173,19 @@ describe('AudioPlayerService MediaSession Integration', () => {
     });
 
     it('should update position state during cloud playback', async () => {
-        // Polyfill Blob.arrayBuffer for JSDOM
-        const blob = new Blob([]);
-        blob.arrayBuffer = vi.fn().mockResolvedValue(new ArrayBuffer(0));
-
         // Setup cloud provider
+        let providerListener: ((e: TTSEvent) => void) | undefined;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mockCloudProvider = {
             id: 'cloud',
             init: vi.fn().mockResolvedValue(undefined),
             getVoices: vi.fn().mockResolvedValue([]),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            synthesize: vi.fn().mockResolvedValue({ audio: blob, alignment: [] } as any),
+            play: vi.fn().mockResolvedValue(undefined),
+            stop: vi.fn(),
+            pause: vi.fn(),
+            resume: vi.fn(),
+            preload: vi.fn(),
+            on: vi.fn((cb) => { providerListener = cb; }),
         } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
         await service.setProvider(mockCloudProvider);
@@ -189,12 +194,9 @@ describe('AudioPlayerService MediaSession Integration', () => {
         await service.setQueue([{ text: "Text", cfi: "cfi" }]);
         await service.play();
 
-        // Verify setOnTimeUpdate called
-        expect(sharedSpies.setOnTimeUpdate).toHaveBeenCalled();
-
-        // Trigger callback
-        const onTimeUpdate = sharedSpies.setOnTimeUpdate.mock.calls[0][0];
-        onTimeUpdate(10);
+        // Trigger timeupdate via listener directly
+        expect(providerListener).toBeDefined();
+        providerListener!({ type: 'timeupdate', currentTime: 10, duration: 120 });
 
         // Verify setPositionState called
         expect(mediaSessionMock.setPositionState).toHaveBeenCalledWith({

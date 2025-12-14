@@ -52,13 +52,10 @@ describe('AudioPlayerService Concurrency', () => {
     mockProvider = new MockCloudProvider();
 
     // Slow down synthesis to simulate network latency and allow overlap
-    vi.spyOn(mockProvider, 'synthesize').mockImplementation(async (text, voice, speed, signal) => {
+    // @ts-expect-error Accessing protected method
+    vi.spyOn(mockProvider, 'fetchAudioData').mockImplementation(async () => {
         // Wait 50ms
         await new Promise(resolve => setTimeout(resolve, 50));
-
-        if (signal?.aborted) {
-            throw new Error('Aborted');
-        }
 
         // Return dummy result
         return {
@@ -79,7 +76,8 @@ describe('AudioPlayerService Concurrency', () => {
   });
 
   it('should handle rapid play calls by executing only the last one', async () => {
-    const playSpy = vi.spyOn(mockProvider, 'synthesize');
+    // @ts-expect-error Accessing protected method
+    const playSpy = vi.spyOn(mockProvider, 'fetchAudioData');
 
     // Call play multiple times rapidly
     // These return promises now, but we intentionally don't await them to simulate concurrency

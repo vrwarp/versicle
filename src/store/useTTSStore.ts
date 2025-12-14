@@ -37,6 +37,12 @@ interface TTSState {
   /** The last error message, if any */
   lastError: string | null;
 
+  /** Download State (for Piper) */
+  downloadProgress: number;
+  downloadStatus: string | null;
+  downloadingVoiceId: string | null;
+  isDownloading: boolean;
+
   /** Provider configuration */
   providerId: 'local' | 'google' | 'openai' | 'lemonfox' | 'piper';
   apiKeys: {
@@ -83,6 +89,9 @@ interface TTSState {
   setPrerollEnabled: (enable: boolean) => void;
   setSanitizationEnabled: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
+  downloadVoice: (voiceId: string) => Promise<void>;
+  deleteVoice: (voiceId: string) => Promise<void>;
+  checkVoiceDownloaded: (voiceId: string) => Promise<boolean>;
   jumpTo: (index: number) => void;
   seek: (seconds: number) => void;
   clearError: () => void;
@@ -108,8 +117,8 @@ export const useTTSStore = create<TTSState>()(
         // For now, lazy init in loadVoices or actions is okay.
 
         // Subscribe to player updates
-        player.subscribe((status, activeCfi, currentIndex, queue, error) => {
-            set({
+        player.subscribe((status, activeCfi, currentIndex, queue, error, downloadInfo) => {
+            set(() => ({
                 status,
                 // Treat 'loading' as playing to prevent UI flicker (play/pause button)
                 // during transitions between sentences or while buffering.
@@ -117,8 +126,14 @@ export const useTTSStore = create<TTSState>()(
                 activeCfi,
                 currentIndex,
                 queue,
-                lastError: error
-            });
+                lastError: error,
+                ...(downloadInfo ? {
+                    downloadProgress: downloadInfo.percent,
+                    downloadStatus: downloadInfo.status,
+                    downloadingVoiceId: downloadInfo.voiceId,
+                    isDownloading: downloadInfo.percent < 100
+                } : {})
+            }));
 
             // If fallback happened (provider mismatch), we should update our providerId state
             // But checking provider type from here is hard without exposing it on player.
@@ -139,6 +154,10 @@ export const useTTSStore = create<TTSState>()(
             currentIndex: 0,
             queue: [],
             lastError: null,
+            downloadProgress: 0,
+            downloadStatus: null,
+            downloadingVoiceId: null,
+            isDownloading: false,
             providerId: 'local',
             apiKeys: {
                 google: '',
@@ -181,28 +200,7 @@ export const useTTSStore = create<TTSState>()(
             },
             setProviderId: (id) => {
                 set({ providerId: id });
-                // Re-init player provider
-                const { apiKeys } = get();
-                let newProvider;
-                if (id === 'google') {
-                    newProvider = new GoogleTTSProvider(apiKeys.google);
-                } else if (id === 'openai') {
-                    newProvider = new OpenAIProvider(apiKeys.openai);
-                } else if (id === 'lemonfox') {
-                    newProvider = new LemonFoxProvider(apiKeys.lemonfox);
-                } else if (id === 'piper') {
-                    newProvider = new PiperProvider();
-                } else {
-                    if (Capacitor.isNativePlatform()) {
-                        newProvider = new CapacitorTTSProvider();
-                    } else {
-                        const { silentAudioType, whiteNoiseVolume } = get();
-                        newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
-                    }
-                }
-
-                player.setProvider(newProvider);
-                // Reload voices for new provider
+                // Reload voices for new provider (this will re-init the provider)
                 get().loadVoices();
             },
             setApiKey: (provider, key) => {
@@ -237,16 +235,16 @@ export const useTTSStore = create<TTSState>()(
             setSilentAudioType: (type) => {
                 set({ silentAudioType: type });
                 const { whiteNoiseVolume } = get();
-                player.setLocalProviderConfig({ silentAudioType: type, whiteNoiseVolume });
+                player.setBackgroundAudioConfig({ silentAudioType: type, whiteNoiseVolume });
             },
             setWhiteNoiseVolume: (volume) => {
                 set({ whiteNoiseVolume: volume });
                 const { silentAudioType } = get();
-                player.setLocalProviderConfig({ silentAudioType, whiteNoiseVolume: volume });
+                player.setBackgroundAudioConfig({ silentAudioType, whiteNoiseVolume: volume });
             },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
-                const { providerId, apiKeys, silentAudioType, whiteNoiseVolume } = get();
+                const { providerId, apiKeys } = get();
                 // We might need to check if player already has correct provider type
                 // But simplified: just set it.
                  let newProvider;
@@ -262,10 +260,10 @@ export const useTTSStore = create<TTSState>()(
                     if (Capacitor.isNativePlatform()) {
                         newProvider = new CapacitorTTSProvider();
                     } else {
-                        newProvider = new WebSpeechProvider({ silentAudioType, whiteNoiseVolume });
+                        newProvider = new WebSpeechProvider();
                     }
                 }
-                player.setProvider(newProvider);
+                await player.setProvider(newProvider);
 
                 await player.init();
                 const voices = await player.getVoices();
@@ -283,6 +281,22 @@ export const useTTSStore = create<TTSState>()(
                     // Re-set voice to ensure player knows about it
                     player.setVoice(currentVoice.id);
                 }
+            },
+            downloadVoice: async (voiceId) => {
+                try {
+                    set({ isDownloading: true, downloadingVoiceId: voiceId, downloadStatus: 'Starting...' });
+                    await player.downloadVoice(voiceId);
+                    set({ isDownloading: false, downloadStatus: 'Ready', downloadProgress: 100 });
+                } catch (e) {
+                    set({ isDownloading: false, downloadStatus: 'Failed', lastError: e instanceof Error ? e.message : 'Download failed' });
+                }
+            },
+            deleteVoice: async (voiceId) => {
+                await player.deleteVoice(voiceId);
+                set({ isDownloading: false, downloadProgress: 0, downloadStatus: 'Not Downloaded', downloadingVoiceId: null });
+            },
+            checkVoiceDownloaded: async (voiceId) => {
+                 return await player.isVoiceDownloaded(voiceId);
             },
             jumpTo: (index) => {
                 player.jumpTo(index);
@@ -324,7 +338,7 @@ export const useTTSStore = create<TTSState>()(
         }),
         onRehydrateStorage: () => (state) => {
             if (state) {
-                player.setLocalProviderConfig({
+                player.setBackgroundAudioConfig({
                     silentAudioType: state.silentAudioType,
                     whiteNoiseVolume: state.whiteNoiseVolume
                 });

@@ -7,8 +7,6 @@ describe('WebSpeechProvider', () => {
   let mockSynth: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockUtterance: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockAudio: any;
 
   beforeEach(() => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
@@ -57,23 +55,6 @@ describe('WebSpeechProvider', () => {
         return mockUtterance;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }) as any;
-
-    // Mock Audio
-    mockAudio = {
-        play: vi.fn().mockResolvedValue(undefined),
-        pause: vi.fn(),
-        currentTime: 0,
-        loop: false,
-        paused: true,
-        volume: 1,
-        src: '',
-        getAttribute: vi.fn((attr) => {
-             if (attr === 'src') return mockAudio.src;
-             return null;
-        })
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    global.Audio = vi.fn(function() { return mockAudio; }) as any;
 
     provider = new WebSpeechProvider();
   });
@@ -137,7 +118,6 @@ describe('WebSpeechProvider', () => {
           expect(mockUtterance.voice).toBe(rawVoices[0]);
           expect(mockUtterance.rate).toBe(1.5);
           expect(mockSynth.speak).toHaveBeenCalledWith(mockUtterance);
-          expect(mockAudio.play).toHaveBeenCalled();
 
           // Trigger onstart to resolve promise
           if (mockUtterance.onstart) mockUtterance.onstart();
@@ -166,43 +146,25 @@ describe('WebSpeechProvider', () => {
           // Expect promise rejection
           await expect(playPromise).rejects.toEqual(errorEvent);
           expect(callback).toHaveBeenCalledWith({ type: 'error', error: errorEvent });
-          expect(mockAudio.pause).toHaveBeenCalled();
       });
   });
 
   describe('playback controls', () => {
-      it('stop should cancel synthesis and pause silent audio', () => {
+      it('stop should cancel synthesis', () => {
           provider.stop();
           expect(mockSynth.cancel).toHaveBeenCalled();
-          expect(mockAudio.pause).toHaveBeenCalled();
       });
 
-      it('pause should pause synthesis and silent audio if speaking', () => {
+      it('pause should pause synthesis if speaking', () => {
           mockSynth.speaking = true;
           provider.pause();
           expect(mockSynth.pause).toHaveBeenCalled();
-          expect(mockAudio.pause).toHaveBeenCalled();
       });
 
-      it('resume should resume synthesis and silent audio if paused', () => {
+      it('resume should resume synthesis if paused', () => {
           mockSynth.paused = true;
-          mockAudio.paused = true;
           provider.resume();
           expect(mockSynth.resume).toHaveBeenCalled();
-          expect(mockAudio.play).toHaveBeenCalled();
-      });
-  });
-
-  describe('config', () => {
-      it('should update audio settings when setConfig is called', () => {
-          provider.setConfig({ silentAudioType: 'white-noise', whiteNoiseVolume: 0.5 });
-
-          expect(mockAudio.volume).toBe(0.5);
-          expect(mockAudio.src).toContain('white-noise');
-
-          provider.setConfig({ silentAudioType: 'silence', whiteNoiseVolume: 0.5 });
-          expect(mockAudio.volume).toBe(1.0);
-          expect(mockAudio.src).toContain('silence');
       });
   });
 });

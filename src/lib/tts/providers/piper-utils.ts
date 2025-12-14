@@ -2,6 +2,35 @@
 const blobs: Record<string, Blob> = {};
 let worker: Worker | undefined;
 
+export const isModelCached = async (modelUrl: string): Promise<boolean> => {
+  if (!worker) return false;
+
+  return new Promise<boolean>((resolve) => {
+    const aliveChecker = (event: MessageEvent) => {
+      if (event.data.kind === "isAlive") {
+        const { isAlive } = event.data;
+        worker?.removeEventListener("message", aliveChecker);
+        resolve(isAlive);
+      }
+    };
+    worker?.addEventListener("message", aliveChecker);
+    worker?.postMessage({
+      kind: "isAlive",
+      modelUrl,
+    });
+  });
+};
+
+export const deleteCachedModel = (modelUrl: string, modelConfigUrl: string) => {
+  if (blobs[modelUrl]) delete blobs[modelUrl];
+  if (blobs[modelConfigUrl]) delete blobs[modelConfigUrl];
+
+  if (worker) {
+    worker.terminate();
+    worker = undefined;
+  }
+};
+
 export const piperGenerate = async (
   piperPhonemizeJsUrl: string,
   piperPhonemizeWasmUrl: string,
@@ -28,7 +57,7 @@ export const piperGenerate = async (
         if (isAlive) {
           resolve(true);
         } else {
-          // If not alive, reset the worker to ensure clean state
+          // If not alive (or different model), reset the worker to ensure clean state
           worker?.terminate();
           worker = new Worker(workerUrl);
           resolve(false);
@@ -36,11 +65,11 @@ export const piperGenerate = async (
       }
     };
     worker?.addEventListener("message", aliveChecker);
-  });
 
-  worker.postMessage({
-    kind: "isAlive",
-    modelUrl,
+    worker?.postMessage({
+      kind: "isAlive",
+      modelUrl,
+    });
   });
 
   await alivePromise;

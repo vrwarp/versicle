@@ -240,6 +240,13 @@ export function useEpubReader(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newRendition.hooks.content as any).register((contents: any) => {
             const doc = contents.document;
+
+            // Prevent default context menu (especially for Android)
+            doc.addEventListener('contextmenu', (e: Event) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
             doc.addEventListener('mouseup', () => {
                 const selection = contents.window.getSelection();
                 if (!selection || selection.isCollapsed) return;
@@ -395,6 +402,7 @@ export function useEpubReader(
               color: ${fg} !important;
               background-color: transparent !important;
               text-align: left !important;
+              -webkit-touch-callout: none !important;
             }
             html, body {
               background: ${bg} !important;

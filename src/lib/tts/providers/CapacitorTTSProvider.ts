@@ -77,6 +77,8 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   async preload(_text: string, _options: TTSOptions): Promise<void> {
+      void _text;
+      void _options;
       // No-op
   }
 
