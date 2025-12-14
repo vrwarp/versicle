@@ -33,12 +33,41 @@ export class PiperProvider extends BaseCloudProvider {
 
       const voices: TTSVoice[] = [];
 
-      for (const [key, info] of Object.entries(data)) {
+      // Sort voices to prioritize English and high quality
+      const sortedKeys = Object.keys(data).sort((a, b) => {
+        const infoA = data[a];
+        const infoB = data[b];
+
+        // Prioritize en-US and en-GB
+        const langA = infoA.language.code;
+        const langB = infoB.language.code;
+        const isEnA = langA === 'en_US' || langA === 'en_GB';
+        const isEnB = langB === 'en_US' || langB === 'en_GB';
+
+        if (isEnA && !isEnB) return -1;
+        if (!isEnA && isEnB) return 1;
+
+        // Prioritize High quality
+        const qA = infoA.quality === 'high' ? 2 : (infoA.quality === 'medium' ? 1 : 0);
+        const qB = infoB.quality === 'high' ? 2 : (infoB.quality === 'medium' ? 1 : 0);
+
+        if (qA > qB) return -1;
+        if (qA < qB) return 1;
+
+        return a.localeCompare(b);
+      });
+
+      for (const key of sortedKeys) {
+        const info = data[key];
         const fileKeys = Object.keys(info.files);
         const onnxFile = fileKeys.find(f => f.endsWith('.onnx'));
         const jsonFile = fileKeys.find(f => f.endsWith('.onnx.json'));
 
         if (!onnxFile || !jsonFile) continue;
+
+        // Filter out low quality and massive datasets to keep the list clean
+        if (info.quality === 'low' || info.quality === 'x_low') continue;
+        if (info.num_speakers > 10) continue;
 
         if (info.num_speakers > 1) {
           for (const [speakerName, speakerId] of Object.entries(info.speaker_id_map)) {
