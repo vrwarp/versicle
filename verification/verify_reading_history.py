@@ -65,9 +65,15 @@ async def verify_reading_history():
             sidebar = page.locator("[data-testid='reader-history-sidebar']")
             await sidebar.wait_for()
 
-            # Check for entries
-            entries = sidebar.locator("button:has-text('Resume from end')")
+            # Check for entries (new design: the item itself is a button)
+            # We look for buttons that contain the timestamp or title
+            entries = sidebar.locator("button:has-text('Segment read')") # Default title if lookup fails or mocked
             count = await entries.count()
+            if count == 0:
+                 # Try finding buttons by structure (child of sidebar list)
+                 entries = sidebar.locator("button.w-full.text-left")
+                 count = await entries.count()
+
             print(f"Found {count} history entries in panel.")
 
             if count > 0:

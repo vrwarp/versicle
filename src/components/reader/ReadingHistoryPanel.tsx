@@ -6,9 +6,10 @@ interface ReadingHistoryPanelProps {
     history: ReadingHistoryEntry[];
     onNavigate: (cfi: string) => void;
     onClose: () => void;
+    getChapterTitle?: (cfi: string) => string;
 }
 
-export const ReadingHistoryPanel: React.FC<ReadingHistoryPanelProps> = ({ history, onNavigate }) => {
+export const ReadingHistoryPanel: React.FC<ReadingHistoryPanelProps> = ({ history, onNavigate, getChapterTitle }) => {
 
     const getEndCfi = (rangeCfi: string): string | null => {
         try {
@@ -51,28 +52,24 @@ export const ReadingHistoryPanel: React.FC<ReadingHistoryPanelProps> = ({ histor
                 {sortedHistory.map((entry) => {
                     const date = new Date(entry.timestamp);
                     const endCfi = getEndCfi(entry.cfi_range);
+                    const title = getChapterTitle ? getChapterTitle(entry.cfi_range) : 'Segment read';
 
                     return (
-                        <div key={entry.id} className="border border-border rounded-lg p-3 hover:bg-background/50 transition-colors">
+                        <button
+                            key={entry.id}
+                            onClick={() => endCfi && onNavigate(endCfi)}
+                            className="w-full text-left border border-border rounded-lg p-3 hover:bg-accent/50 transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
                             <div className="flex justify-between items-start mb-2">
                                 <span className="text-xs text-muted-foreground">
                                     {date.toLocaleDateString()} {date.toLocaleTimeString()}
                                 </span>
+                                <ArrowRight className="w-3 h-3 text-muted-foreground" />
                             </div>
-                            <div className="text-sm text-foreground mb-3 truncate">
-                                {/* Ideally we would show chapter title here, but we'd need to look it up */}
-                                Segment read
+                            <div className="text-sm text-foreground truncate font-medium">
+                                {title}
                             </div>
-                            {endCfi && (
-                                <button
-                                    onClick={() => onNavigate(endCfi)}
-                                    className="w-full flex items-center justify-center gap-2 text-xs bg-primary/10 hover:bg-primary/20 text-primary py-2 rounded font-medium transition-colors"
-                                >
-                                    <span>Resume from end</span>
-                                    <ArrowRight className="w-3 h-3" />
-                                </button>
-                            )}
-                        </div>
+                        </button>
                     );
                 })}
             </div>

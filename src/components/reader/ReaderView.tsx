@@ -425,6 +425,36 @@ export const ReaderView: React.FC = () => {
       }
   }, [gestureMode]);
 
+  const getChapterTitle = useCallback((rangeCfi: string) => {
+      if (!rendition) return 'Segment read';
+      try {
+          // Wrap in epubcfi() if missing
+          const cfi = rangeCfi.startsWith('epubcfi(') ? rangeCfi : `epubcfi(${rangeCfi})`;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const item = (rendition.book.spine as any).get(cfi);
+
+          if (item && item.href) {
+              // Helper to find title in TOC
+              const findInToc = (items: NavigationItem[]): string | undefined => {
+                  for (const t of items) {
+                      // Loose match on href
+                      if (t.href.includes(item.href) || item.href.includes(t.href)) return t.label;
+                      if (t.subitems && t.subitems.length > 0) {
+                          const found = findInToc(t.subitems);
+                          if (found) return found;
+                      }
+                  }
+              };
+
+              const label = findInToc(toc);
+              if (label) return label.trim();
+          }
+      } catch (e) {
+          // ignore parsing errors
+      }
+      return 'Segment read';
+  }, [rendition, toc]);
+
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
       <ReaderTTSController
