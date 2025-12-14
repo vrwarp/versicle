@@ -6,6 +6,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useUIStore } from '../../store/useUIStore';
 import { useTTS } from '../../hooks/useTTS';
 import { useEpubReader, type EpubReaderOptions } from '../../hooks/useEpubReader';
+import { useReadingHistory } from '../../hooks/useReadingHistory';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
@@ -35,6 +36,7 @@ export const ReaderView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const viewerRef = useRef<HTMLDivElement>(null);
+  const prevLocationRef = useRef<string | null>(null);
 
   const {
     currentTheme,
@@ -70,6 +72,8 @@ export const ReaderView: React.FC = () => {
     hidePopover
   } = useAnnotationStore();
 
+  const { history, refreshHistory } = useReadingHistory(id);
+
   // --- Setup useEpubReader Hook ---
 
   const readerOptions = useMemo<EpubReaderOptions>(() => ({
@@ -81,12 +85,41 @@ export const ReaderView: React.FC = () => {
     lineHeight,
     shouldForceFont,
     onLocationChange: (location, percentage, title, sectionId) => {
-         // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
+         // Prevent infinite loop if CFI hasn't changed
          if (location.start.cfi === useReaderStore.getState().currentCfi) return;
 
          updateLocation(location.start.cfi, percentage, title, sectionId);
+
          if (id) {
              dbService.saveProgress(id, location.start.cfi, percentage);
+
+             // Reading History: Save previous range
+             if (prevLocationRef.current) {
+                 dbService.addReadRange(id, prevLocationRef.current)
+                     .then(() => refreshHistory())
+                     .catch(err => console.error("Failed to save history:", err));
+             }
+
+             // Construct current range for next time
+             try {
+                 const s = location.start.cfi;
+                 const e = location.end ? location.end.cfi : location.start.cfi;
+
+                 const sParts = s.split('!');
+                 const eParts = e.split('!');
+
+                 if (sParts[0] === eParts[0] && sParts.length === 2 && eParts.length === 2) {
+                     const parent = sParts[0];
+                     const startPath = sParts[1].slice(0, -1);
+                     const endPath = eParts[1].slice(0, -1);
+                     prevLocationRef.current = `${parent}!${startPath},${endPath})`;
+                 } else {
+                     prevLocationRef.current = null;
+                 }
+             } catch (err) {
+                 console.error("Failed to construct history range", err);
+                 prevLocationRef.current = null;
+             }
          }
     },
     onTocLoaded: (newToc) => setToc(newToc),
@@ -128,7 +161,8 @@ export const ReaderView: React.FC = () => {
     updateLocation,
     setToc,
     showPopover,
-    hidePopover
+    hidePopover,
+    refreshHistory
   ]);
 
   const {
@@ -174,9 +208,6 @@ export const ReaderView: React.FC = () => {
   // Use TTS Hook
   useTTS(rendition, isRenditionReady);
 
-  // Note: TTS Highlighting and Keyboard navigation logic moved to ReaderTTSController
-  // to prevent unnecessary re-renders of the main ReaderView.
-
   // Load Annotations from DB
   useEffect(() => {
     if (id) {
@@ -220,6 +251,29 @@ export const ReaderView: React.FC = () => {
       (window as any).__reader_added_annotations_count = addedAnnotations.current.size;
     }
   }, [annotations, isRenditionReady, rendition]);
+
+  // Visualize Reading History
+  const addedHistoryRanges = useRef<Set<string>>(new Set());
+  useEffect(() => {
+      if (rendition && isRenditionReady && history.length > 0) {
+          history.forEach(entry => {
+               if (entry.cfi_range && !addedHistoryRanges.current.has(entry.cfi_range)) {
+                   try {
+                       // We use a different style for history
+                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                       (rendition as any).annotations.add('highlight', entry.cfi_range, {}, null, 'history-highlight', {
+                           fill: 'red',
+                           'fill-opacity': '0.1',
+                           'mix-blend-mode': 'multiply'
+                       });
+                       addedHistoryRanges.current.add(entry.cfi_range);
+                   } catch (e) {
+                       console.warn("[ReadingHistory] Failed to highlight range:", entry.cfi_range, e);
+                   }
+               }
+          });
+      }
+  }, [history, isRenditionReady, rendition]);
 
   // Handle TTS Errors
   const showToast = useToastStore(state => state.showToast);
