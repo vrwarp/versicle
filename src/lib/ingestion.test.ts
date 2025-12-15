@@ -46,7 +46,6 @@ vi.mock('uuid', () => ({
 
 describe('ingestion', () => {
   beforeEach(async () => {
-    // confirm mock is no longer needed but we can keep it strictly for cleaning up
     vi.spyOn(window, 'confirm').mockImplementation(() => true);
     const db = await getDB();
     const tx = db.transaction(['books', 'files', 'sections', 'annotations'], 'readwrite');
@@ -65,7 +64,7 @@ describe('ingestion', () => {
       const content = new Uint8Array([...header, 0x01, 0x02]); // some dummy content
       const file = new File([content], 'test.epub', { type: 'application/epub+zip' });
 
-      // Mock arrayBuffer explicitly as JSDOM/Node File implementation might vary or be slow
+      // Mock arrayBuffer explicitly
       Object.defineProperty(file, 'arrayBuffer', {
           value: async () => content.buffer,
           writable: true,
@@ -165,8 +164,7 @@ describe('ingestion', () => {
     expect(book?.author).toBe('Unknown Author');
   });
 
-  it('should enforce metadata sanitization', async () => {
-      // Create a long title
+  it('should sanitize metadata if user confirms', async () => {
       const longTitle = 'A'.repeat(600);
 
       vi.resetModules();
@@ -185,15 +183,50 @@ describe('ingestion', () => {
        archive: { getBlob: vi.fn() }
      }));
 
+     // User confirms sanitization
+     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
      const mockFile = createMockFile(true);
      const bookId = await processEpub(mockFile);
 
      const db = await getDB();
      const book = await db.get('books', bookId);
 
-     expect(book).toBeDefined();
-     // Sanitization limit is 500
+     expect(confirmSpy).toHaveBeenCalled();
      expect(book?.title.length).toBe(500);
      expect(book?.title).not.toBe(longTitle);
+   });
+
+   it('should NOT sanitize metadata if user cancels', async () => {
+      const longTitle = 'A'.repeat(600);
+
+      vi.resetModules();
+      const epubjs = await import('epubjs');
+      (epubjs.default as any).mockImplementation(() => ({
+       ready: Promise.resolve(),
+       loaded: {
+         metadata: Promise.resolve({
+           title: longTitle,
+           creator: 'Author',
+           description: 'Desc',
+         }),
+       },
+       coverUrl: vi.fn(() => Promise.resolve(null)),
+       spine: { each: vi.fn() },
+       archive: { getBlob: vi.fn() }
+     }));
+
+     // User cancels sanitization (imports as-is)
+     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+     const mockFile = createMockFile(true);
+     const bookId = await processEpub(mockFile);
+
+     const db = await getDB();
+     const book = await db.get('books', bookId);
+
+     expect(confirmSpy).toHaveBeenCalled();
+     expect(book?.title.length).toBe(600);
+     expect(book?.title).toBe(longTitle);
    });
 });

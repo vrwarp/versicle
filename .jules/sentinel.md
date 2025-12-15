@@ -13,7 +13,7 @@
 **Learning:** Frontend applications processing local files often neglect input limits, assuming local data is safe. However, files can be crafted maliciously.
 **Prevention:** Enforce strict character limits on all user-supplied content during ingestion, even for "harmless" fields like titles or descriptions.
 
-## 2025-05-25 - Bypassable Security Controls
-**Vulnerability:** The ingestion process identified potentially dangerous metadata (excessive length) but allowed the user to override the sanitization via a confirmation dialog.
-**Learning:** Security controls that rely on user judgment ("Click OK to sanitize") are flawed because users often click through warnings or can be socially engineered to bypass them.
-**Prevention:** Security controls (sanitization, validation) should be enforced by default and should not be bypassable by the user unless there is a critical business justification and explicit "break-glass" procedure.
+## 2025-05-25 - Rejected: Enforced Metadata Sanitization
+**Constraint:** A proposal to automatically enforce metadata limits (removing user bypass) was rejected to preserve user control over "Import As-Is".
+**Learning:** Security controls that impact user experience or legacy use-cases ("I want my long title") may be rejected even if they close a vulnerability.
+**Prevention:** When a security control must be bypassable, ensure the risk is documented and the user is explicitly warned (e.g., "Not Recommended"). In this case, the vulnerability (DoS via massive metadata) persists if the user chooses to ignore the warning.
