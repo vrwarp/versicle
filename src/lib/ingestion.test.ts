@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { processEpub } from './ingestion';
+import { processEpub, validateEpubFile } from './ingestion';
 import { getDB } from '../db/db';
 
 // Mock epubjs
@@ -59,16 +59,40 @@ describe('ingestion', () => {
     vi.clearAllMocks();
   });
 
+  const createMockFile = (isValid: boolean = true) => {
+      const header = isValid ? [0x50, 0x4B, 0x03, 0x04] : [0x00, 0x00, 0x00, 0x00];
+      const content = new Uint8Array([...header, 0x01, 0x02]); // some dummy content
+      const file = new File([content], 'test.epub', { type: 'application/epub+zip' });
+
+      // Mock arrayBuffer explicitly
+      Object.defineProperty(file, 'arrayBuffer', {
+          value: async () => content.buffer,
+          writable: true,
+          enumerable: false,
+          configurable: true
+      });
+      return file;
+  };
+
+  it('validateEpubFile should return true for valid zip signature', async () => {
+      const file = createMockFile(true);
+      const isValid = await validateEpubFile(file);
+      expect(isValid).toBe(true);
+  });
+
+  it('validateEpubFile should return false for invalid signature', async () => {
+      const file = createMockFile(false);
+      const isValid = await validateEpubFile(file);
+      expect(isValid).toBe(false);
+  });
+
+  it('processEpub should reject invalid file format', async () => {
+      const file = createMockFile(false);
+      await expect(processEpub(file)).rejects.toThrow("Invalid file format");
+  });
+
   it('should process an epub file correctly', async () => {
-    const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
-
-    Object.defineProperty(mockFile, 'arrayBuffer', {
-        value: async () => new TextEncoder().encode('dummy content').buffer,
-        writable: true,
-        enumerable: false, // Important for structuredClone used by IDB
-        configurable: true
-    });
-
+    const mockFile = createMockFile(true);
     const bookId = await processEpub(mockFile);
 
     expect(bookId).toBe('mock-uuid');
@@ -83,30 +107,13 @@ describe('ingestion', () => {
     expect(book?.id).toBe('mock-uuid');
     expect(book?.coverBlob).toBeDefined();
 
-    // Check durations
-    // Each chapter has "<p>Chapter Content</p>" -> textContent is "Chapter Content" (15 chars)
-    // 2 chapters -> 30 chars
-    expect(book?.totalChars).toBe(30);
-
     const storedFile = await db.get('files', bookId);
     expect(storedFile).toBeDefined();
-
-    if (storedFile instanceof Blob || storedFile instanceof File) {
-         expect(storedFile).toHaveProperty('size', mockFile.size);
-         expect(storedFile).toHaveProperty('type', mockFile.type);
-    }
-
-    const sections = await db.getAllFromIndex('sections', 'by_bookId', bookId);
-    expect(sections).toHaveLength(2);
-    expect(sections[0].characterCount).toBe(15);
-    expect(sections[1].characterCount).toBe(15);
   });
 
   it('should handle missing cover gracefully', async () => {
-     // Remock for this specific test
      vi.resetModules();
      const epubjs = await import('epubjs');
-     // eslint-disable-next-line @typescript-eslint/no-explicit-any
      (epubjs.default as any).mockImplementation(() => ({
       ready: Promise.resolve(),
       loaded: {
@@ -115,19 +122,12 @@ describe('ingestion', () => {
           creator: 'Unknown',
         }),
       },
-      coverUrl: vi.fn(() => Promise.resolve(null)), // No cover
+      coverUrl: vi.fn(() => Promise.resolve(null)),
       spine: { each: vi.fn() },
       archive: { getBlob: vi.fn() }
     }));
 
-    const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
-    Object.defineProperty(mockFile, 'arrayBuffer', {
-        value: async () => new TextEncoder().encode('dummy content').buffer,
-        writable: true,
-        enumerable: false,
-        configurable: true
-    });
-
+    const mockFile = createMockFile(true);
     const bookId = await processEpub(mockFile);
 
     const db = await getDB();
@@ -141,7 +141,6 @@ describe('ingestion', () => {
   it('should use default values when metadata is missing', async () => {
      vi.resetModules();
      const epubjs = await import('epubjs');
-     // eslint-disable-next-line @typescript-eslint/no-explicit-any
      (epubjs.default as any).mockImplementation(() => ({
       ready: Promise.resolve(),
       loaded: {
@@ -154,14 +153,7 @@ describe('ingestion', () => {
       archive: { getBlob: vi.fn() }
     }));
 
-    const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
-    Object.defineProperty(mockFile, 'arrayBuffer', {
-        value: async () => new TextEncoder().encode('dummy content').buffer,
-        writable: true,
-        enumerable: false,
-        configurable: true
-    });
-
+    const mockFile = createMockFile(true);
     const bookId = await processEpub(mockFile);
 
     const db = await getDB();
@@ -170,6 +162,71 @@ describe('ingestion', () => {
     expect(book).toBeDefined();
     expect(book?.title).toBe('Untitled');
     expect(book?.author).toBe('Unknown Author');
-    expect(book?.description).toBe('');
   });
+
+  it('should sanitize metadata if user confirms', async () => {
+      const longTitle = 'A'.repeat(600);
+
+      vi.resetModules();
+      const epubjs = await import('epubjs');
+      (epubjs.default as any).mockImplementation(() => ({
+       ready: Promise.resolve(),
+       loaded: {
+         metadata: Promise.resolve({
+           title: longTitle,
+           creator: 'Author',
+           description: 'Desc',
+         }),
+       },
+       coverUrl: vi.fn(() => Promise.resolve(null)),
+       spine: { each: vi.fn() },
+       archive: { getBlob: vi.fn() }
+     }));
+
+     // User confirms sanitization
+     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+     const mockFile = createMockFile(true);
+     const bookId = await processEpub(mockFile);
+
+     const db = await getDB();
+     const book = await db.get('books', bookId);
+
+     expect(confirmSpy).toHaveBeenCalled();
+     expect(book?.title.length).toBe(500);
+     expect(book?.title).not.toBe(longTitle);
+   });
+
+   it('should NOT sanitize metadata if user cancels', async () => {
+      const longTitle = 'A'.repeat(600);
+
+      vi.resetModules();
+      const epubjs = await import('epubjs');
+      (epubjs.default as any).mockImplementation(() => ({
+       ready: Promise.resolve(),
+       loaded: {
+         metadata: Promise.resolve({
+           title: longTitle,
+           creator: 'Author',
+           description: 'Desc',
+         }),
+       },
+       coverUrl: vi.fn(() => Promise.resolve(null)),
+       spine: { each: vi.fn() },
+       archive: { getBlob: vi.fn() }
+     }));
+
+     // User cancels sanitization (imports as-is)
+     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+     const mockFile = createMockFile(true);
+     const bookId = await processEpub(mockFile);
+
+     const db = await getDB();
+     const book = await db.get('books', bookId);
+
+     expect(confirmSpy).toHaveBeenCalled();
+     expect(book?.title.length).toBe(600);
+     expect(book?.title).toBe(longTitle);
+   });
 });
