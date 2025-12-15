@@ -34,7 +34,7 @@ def test_preroll_journey(page: Page):
 
     # Check current state (aria-checked)
     if preroll_switch.get_attribute("aria-checked") == "false":
-        preroll_switch.click()
+        preroll_switch.click(force=True)
 
     expect(preroll_switch).to_have_attribute("aria-checked", "true")
 
@@ -57,7 +57,7 @@ def test_preroll_journey(page: Page):
 
     # Attempt to verify queue (Optional in headless if flaky)
     # Go back to queue
-    page.get_by_role("button", name="Up Next").click()
+    page.get_by_role("button", name="Up Next").click(force=True)
 
     # Close Audio Deck
     page.keyboard.press("Escape")

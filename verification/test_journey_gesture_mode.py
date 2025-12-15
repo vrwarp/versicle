@@ -47,7 +47,13 @@ def test_journey_gesture_mode(page: Page):
     # We might miss it if play/pause is fast.
     # Let's try to verify just that the click happens, or check screenshot.
     # But if we want to assert, we should be fast.
-    page.mouse.click(500, 300)
+
+    # Calculate center of viewport to ensure click is valid on mobile
+    viewport = page.viewport_size
+    if viewport:
+        page.mouse.click(viewport['width'] / 2, viewport['height'] / 2)
+    else:
+        page.mouse.click(500, 300)
 
     # Try to catch the feedback
     try:

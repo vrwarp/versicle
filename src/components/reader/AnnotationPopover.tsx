@@ -35,22 +35,36 @@ export const AnnotationPopover: React.FC<Props> = ({ bookId, onClose, onFixPronu
   const [adjustedX, setAdjustedX] = React.useState(popover.x);
 
   React.useLayoutEffect(() => {
-    if (popoverRef.current) {
-      const { width } = popoverRef.current.getBoundingClientRect();
-      const windowWidth = window.innerWidth;
-      let newX = popover.x;
+    const updatePosition = () => {
+      if (popoverRef.current) {
+        const { width } = popoverRef.current.getBoundingClientRect();
+        const windowWidth = window.innerWidth;
+        let newX = popover.x;
 
-      // Check right edge
-      if (newX + width > windowWidth - 10) {
-        newX = windowWidth - width - 10;
+        // Check right edge
+        if (newX + width > windowWidth - 10) {
+          newX = windowWidth - width - 10;
+        }
+        // Check left edge
+        if (newX < 10) {
+          newX = 10;
+        }
+        setAdjustedX(newX);
+      } else {
+        setAdjustedX(popover.x);
       }
-      // Check left edge
-      if (newX < 10) {
-        newX = 10;
-      }
-      setAdjustedX(newX);
-    } else {
-      setAdjustedX(popover.x);
+    };
+
+    updatePosition();
+
+    // Observe size changes (e.g. font loading)
+    const element = popoverRef.current;
+    if (element) {
+      const resizeObserver = new ResizeObserver(() => {
+        updatePosition();
+      });
+      resizeObserver.observe(element);
+      return () => resizeObserver.disconnect();
     }
   }, [popover.x, popover.visible, isEditingNote]);
 
