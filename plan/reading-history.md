@@ -81,7 +81,10 @@ export interface ReadingHistoryEntry {
 *   **Tracking**:
     *   `ReaderView`: Tracks visible range on navigation and unmount.
     *   `AudioPlayerService`: Tracks current item CFI on completion.
+*   **Visualization**:
+    *   **History Panel**: Implemented `ReadingHistoryPanel` component accessible via a clock icon in the Reader header. It lists the "read segments" (merged ranges) with percentage indicators.
+    *   **Visual Highlights**: Implemented logic in `ReaderView` to highlight read ranges in the text view with a subtle style (`reading-history-highlight`).
+*   **Verification**: Added `verification/test_journey_reading_history.py` to verify the feature.
 
 ## Deviations
-*   **Visualization UI**: The implementation focused on the tracking infrastructure and data model. The "History Panel" UI described in the User Journey was not implemented in this phase.
-*   **Session History vs Coverage**: The implemented data model merges overlapping ranges to track "coverage" (what content has been read) rather than a list of distinct reading sessions sorted by time. This deviation was necessary to follow the "Technical Design" which specified merging ranges. This means the "History Panel" as described (listing sessions like "2 hours ago") would require a different data model (storing unmerged sessions). The current implementation supports a "Percent Read" or "Mark as Read" feature better.
+*   **Session History vs Coverage**: The "User Journey" described a time-based history ("Just now", "2 hours ago"). However, the "Technical Design" specified a data model (`ReadingHistoryEntry`) and logic (`mergeCfiRanges`) that merges overlapping ranges to track "Read Coverage" (what parts of the book have been read) rather than distinct sessions. I followed the Technical Design. Consequently, the History Panel displays a list of *read segments* (e.g., "Segment at 10.5%") rather than *sessions*. This aligns with the "Percent Read" goal but differs from the "History Log" description.
