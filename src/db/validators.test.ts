@@ -68,7 +68,24 @@ describe('validators', () => {
           expect(result?.sanitized.description?.length).toBe(2000);
 
           expect(result?.modifications).toHaveLength(3);
-          expect(result?.modifications[0]).toContain('Title truncated');
+          // Check for new message format
+          expect(result?.modifications[0]).toContain('Title sanitized');
+      });
+
+      it('strips HTML tags but preserves math symbols', () => {
+          const input = {
+              ...validBook,
+              title: '<b>Title</b>',
+              author: 'A < B',
+              description: '<script>alert(1)</script>'
+          };
+          const result = getSanitizedBookMetadata(input);
+          expect(result?.wasModified).toBe(true);
+          expect(result?.sanitized.title).toBe('Title');
+          expect(result?.sanitized.author).toBe('A < B'); // Preserved
+          expect(result?.sanitized.description).toBe('alert(1)');
+
+          expect(result?.modifications[0]).toContain('Title sanitized');
       });
 
       it('returns null for invalid structure', () => {

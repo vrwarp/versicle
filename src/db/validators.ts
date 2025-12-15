@@ -39,14 +39,16 @@ export function validateBookMetadata(data: any): data is BookMetadata {
 }
 
 /**
- * Sanitizes a string by trimming and enforcing a maximum length.
+ * Sanitizes a string by stripping HTML, trimming, and enforcing a maximum length.
  * @param input - The string to sanitize.
  * @param maxLength - The maximum allowed length (default: 255).
  * @returns The sanitized string.
  */
 export function sanitizeString(input: string, maxLength: number = 255): string {
     if (typeof input !== 'string') return '';
-    return input.trim().slice(0, maxLength);
+    // Strip HTML tags to prevent XSS (allowing < for math if not followed by tag name)
+    const noHtml = input.replace(/<[a-zA-Z\/][^>]*>/gm, '');
+    return noHtml.trim().slice(0, maxLength);
 }
 
 export interface SanitizationResult {
@@ -69,19 +71,19 @@ export function getSanitizedBookMetadata(data: any): SanitizationResult | null {
 
     const titleSanitized = sanitizeString(data.title, 500);
     if (titleSanitized !== data.title) {
-        modifications.push(`Title truncated by ${data.title.length - titleSanitized.length} characters`);
+        modifications.push(`Title sanitized (HTML removed or truncated by ${data.title.length - titleSanitized.length} characters)`);
     }
 
     const authorSanitized = sanitizeString(data.author, 255);
     if (authorSanitized !== data.author) {
-        modifications.push(`Author truncated by ${data.author.length - authorSanitized.length} characters`);
+        modifications.push(`Author sanitized (HTML removed or truncated by ${data.author.length - authorSanitized.length} characters)`);
     }
 
     let descriptionSanitized = data.description;
     if (typeof data.description === 'string') {
         descriptionSanitized = sanitizeString(data.description, 2000);
         if (descriptionSanitized !== data.description) {
-            modifications.push(`Description truncated by ${data.description.length - descriptionSanitized.length} characters`);
+            modifications.push(`Description sanitized (HTML removed or truncated by ${data.description.length - descriptionSanitized.length} characters)`);
         }
     }
 
