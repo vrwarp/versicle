@@ -47,7 +47,7 @@ export function validateBookMetadata(data: any): data is BookMetadata {
 export function sanitizeString(input: string, maxLength: number = 255): string {
     if (typeof input !== 'string') return '';
     // Strip HTML tags to prevent XSS (allowing < for math if not followed by tag name)
-    const noHtml = input.replace(/<[a-zA-Z\/][^>]*>/gm, '');
+    const noHtml = input.replace(new RegExp('<[a-zA-Z/][^>]*>', 'gm'), '');
     return noHtml.trim().slice(0, maxLength);
 }
 

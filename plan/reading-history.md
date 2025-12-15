@@ -82,11 +82,11 @@ export interface ReadingHistoryEntry {
     *   `ReaderView`: Tracks visible range on navigation and unmount.
     *   `AudioPlayerService`: Tracks current item CFI on completion.
 *   **Visualization**: Implemented `ReadingHistoryPanel` (`src/components/reader/ReadingHistoryPanel.tsx`) to list read segments with percentage location.
-*   **UI Integration**: Added a history button (Clock icon) to the `ReaderView` header and a sidebar for the panel.
+*   **UI Integration**: Merged Reading History into the TOC Sidebar as a "History" tab. Removed the standalone history button to save header space and ensure mobile support.
 *   **Visual Highlights**: Implemented visual highlighting of read ranges in the text view using `rendition.annotations`.
 *   **Verification**: Added `verification/test_journey_history.py` which verifies the history journey (navigation, tracking, panel visibility) using Playwright.
 
 ## Deviations
 *   **Session History vs Coverage**: The implemented data model merges overlapping ranges to track "coverage" (what content has been read) rather than a list of distinct reading sessions sorted by time. This deviation was necessary to follow the "Technical Design" which specified merging ranges. Consequently, the "History Panel" lists read segments (coverage) rather than time-based sessions (e.g., "2 hours ago").
 *   **Visualization**: The History Panel displays segments with their percentage location in the book instead of purely time-based metadata, consistent with the coverage-based data model.
-*   **Mobile Support**: The History button is hidden on mobile devices to preserve header layout space.
+*   **Mobile Support**: The History feature is now fully supported on mobile by integrating it into the Table of Contents sidebar, addressing the previous deviation where the button was hidden.
