@@ -78,8 +78,15 @@ def test_reading_history_journey(page: Page):
         page.wait_for_timeout(500)
         utils.capture_screenshot(page, "history_02_after_jump")
 
-    # Close sidebar
-    page.get_by_test_id("reader-toc-button").click()
+    # Close sidebar if it's still open
+    # On mobile, selecting an item auto-closes the sidebar.
+    sidebar = page.get_by_test_id("reader-toc-sidebar")
+    if sidebar.is_visible():
+        print("Sidebar visible, closing manually...")
+        page.get_by_test_id("reader-toc-button").click()
+    else:
+        print("Sidebar already closed (mobile behavior).")
+
     expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
 
     print("Reading History Journey Passed!")
