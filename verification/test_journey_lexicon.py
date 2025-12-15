@@ -96,7 +96,14 @@ def test_journey_lexicon(page: Page):
 
     # Close Dialog
     print("Closing Lexicon...")
-    page.get_by_test_id("lexicon-close-btn").click(force=True)
+    # Attempt to click the footer Close button (usually the first "Close" button in DOM before the X icon)
+    # Falling back to generic selector if ID is missing in older builds or due to caching
+    close_btns = page.get_by_role("button", name="Close")
+    if close_btns.count() > 0:
+        close_btns.first.click(force=True)
+    else:
+        # Fallback to test ID if role search fails (unlikely)
+        page.get_by_test_id("lexicon-close-btn").click(force=True)
 
     expect(page.get_by_role("heading", name="Pronunciation Lexicon", exact=True)).not_to_be_visible()
 

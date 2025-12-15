@@ -162,7 +162,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         title="Pronunciation Lexicon"
         description="Define custom pronunciation rules for specific words or names."
         footer={
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
+            <Button data-testid="lexicon-close-btn" variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
         }
     >
         <div className="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-gray-700 pb-2 overflow-x-auto gap-4">
