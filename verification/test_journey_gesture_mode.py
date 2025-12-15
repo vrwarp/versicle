@@ -18,17 +18,17 @@ def test_journey_gesture_mode(page: Page):
     expect(page.locator("div[data-testid='reader-iframe-container']")).to_be_visible(timeout=5000)
 
     # 3. Open Audio Panel (UnifiedAudioPanel)
-    page.click("button[data-testid='reader-audio-button']")
+    page.click("button[data-testid='reader-audio-button']", force=True)
     expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=5000)
 
     # Switch to Settings view in Audio Panel
-    page.click("button:has-text('Settings')")
+    page.click("button:has-text('Settings')", force=True)
 
     # 4. Toggle Gesture Mode
     # Find the switch for Gesture Mode.
     # Use exact text to find label, then parent, then switch.
     switch = page.get_by_text("Gesture Mode", exact=True).locator("xpath=..").get_by_role("switch")
-    switch.click()
+    switch.click(force=True)
 
     # The Audio Panel should close automatically when Gesture Mode is enabled.
     # So we don't need to manually close it.

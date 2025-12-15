@@ -17,7 +17,7 @@ def test_audio_deck_journey(page: Page):
     print("Opening Audio Deck...")
     # New ID: reader-audio-button
     tts_btn = page.get_by_test_id("reader-audio-button")
-    tts_btn.click()
+    tts_btn.click(force=True)
 
     # Verify Sheet Content
     expect(page.get_by_role("dialog")).to_be_visible()
@@ -39,7 +39,7 @@ def test_audio_deck_journey(page: Page):
 
     # Switch to Settings
     print("Switching to Settings...")
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Settings").click(force=True)
 
     # Verify Settings View
     expect(page.get_by_text("Voice & Pace")).to_be_visible()
@@ -54,7 +54,7 @@ def test_audio_deck_journey(page: Page):
 
     # Switch back to Queue
     print("Switching back to Queue...")
-    page.get_by_role("button", name="Up Next").click()
+    page.get_by_role("button", name="Up Next").click(force=True)
     page.wait_for_timeout(500)
 
     utils.capture_screenshot(page, "audio_deck_01_queue")

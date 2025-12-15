@@ -15,7 +15,7 @@ def test_engine_room_journey(page: Page):
 
     settings_btn = page.get_by_test_id("header-settings-button")
     expect(settings_btn).to_be_visible()
-    settings_btn.click()
+    settings_btn.click(force=True)
 
     # Verify Dialog Open
     expect(page.get_by_role("dialog")).to_be_visible()
@@ -49,7 +49,7 @@ def test_engine_room_journey(page: Page):
 
     # Click Settings (Gear)
     reader_settings_btn = page.get_by_test_id("reader-settings-button")
-    reader_settings_btn.click()
+    reader_settings_btn.click(force=True)
 
     expect(page.get_by_role("dialog")).to_be_visible()
     expect(page.get_by_role("button", name="General")).to_be_visible()

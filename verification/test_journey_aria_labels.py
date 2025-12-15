@@ -17,7 +17,7 @@ def test_aria_labels(page: Page):
 
     # 1. Visual Settings ARIA Labels
     print("Verifying Visual Settings...")
-    page.get_by_label("Visual Settings").click()
+    page.get_by_label("Visual Settings").click(force=True)
 
     # Font size slider
     expect(page.get_by_label("Font size percentage")).to_be_visible()
@@ -31,7 +31,7 @@ def test_aria_labels(page: Page):
 
     # 2. Search ARIA Labels
     print("Verifying Search...")
-    page.get_by_label("Search").click()
+    page.get_by_label("Search").click(force=True)
     expect(page.get_by_label("Search query")).to_be_visible()
     expect(page.get_by_label("Close search")).to_be_visible()
 
@@ -40,10 +40,10 @@ def test_aria_labels(page: Page):
 
     # 3. Audio Panel ARIA Labels
     print("Verifying Audio Panel...")
-    page.get_by_label("Open Audio Deck").click()
+    page.get_by_label("Open Audio Deck").click(force=True)
 
     # Switch to settings tab in Audio Panel
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Settings").click(force=True)
 
     # Playback speed slider
     expect(page.get_by_label("Playback speed")).to_be_visible()

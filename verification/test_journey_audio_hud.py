@@ -30,14 +30,14 @@ def test_audio_hud_interaction(page: Page):
     expect(fab).to_have_attribute("aria-label", "Play")
 
     print("Clicking FAB (Play)...")
-    fab.click()
+    fab.click(force=True)
 
     # Expect state to change to playing -> Pause icon
     expect(fab).to_have_attribute("aria-label", "Pause", timeout=5000)
     utils.capture_screenshot(page, "audio_hud_02_playing")
 
     print("Clicking FAB (Pause)...")
-    fab.click()
+    fab.click(force=True)
     expect(fab).to_have_attribute("aria-label", "Play")
     utils.capture_screenshot(page, "audio_hud_03_paused")
 

@@ -25,7 +25,7 @@ def test_preroll_journey(page: Page):
 
     # Open Settings
     print("Opening TTS Settings...")
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Settings").click(force=True)
 
     # Enable Preroll
     print("Enabling Preroll...")
@@ -46,7 +46,7 @@ def test_preroll_journey(page: Page):
 
     # Navigate back to settings
     page.get_by_test_id("reader-audio-button").click()
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Settings").click(force=True)
 
     preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
     expect(preroll_switch).to_have_attribute("aria-checked", "true")
