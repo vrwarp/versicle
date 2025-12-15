@@ -97,9 +97,10 @@ def test_delete_book_completely(page: Page, demo_epub_path):
     page.locator("data-testid=book-menu-trigger").click()
 
     # Handle Dialog confirmation
-    page.on("dialog", lambda dialog: dialog.accept())
-
     page.locator("data-testid=menu-delete").click()
+
+    # Confirm in custom dialog
+    page.locator("data-testid=confirm-delete").click()
 
     # Verify removal
     expect(book_card).not_to_be_visible(timeout=5000)
