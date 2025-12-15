@@ -18,7 +18,7 @@ def test_settings_persistence(page: Page):
     page.get_by_test_id("reader-audio-button").click()
 
     # Switch to Settings
-    page.click("button:has-text('Settings')")
+    page.click("button:has-text('Settings')", force=True)
 
     # 2. Toggle Gesture Mode (Enable)
     print("Toggling Gesture Mode (Enable)...")
@@ -67,7 +67,7 @@ def test_settings_persistence(page: Page):
 
     # Verify switch is now off in settings
     page.get_by_test_id("reader-audio-button").click()
-    page.click("button:has-text('Settings')")
+    page.click("button:has-text('Settings')", force=True)
     gesture_switch = page.get_by_text("Gesture Mode", exact=True).locator("xpath=..").get_by_role("switch")
     expect(gesture_switch).to_have_attribute("aria-checked", "false")
 
