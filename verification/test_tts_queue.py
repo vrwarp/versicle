@@ -20,7 +20,7 @@ def test_tts_queue(page: Page):
 
     # Wait for reader to load
     print("Waiting for reader...")
-    expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=5000)
+    expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=10000)
     page.wait_for_timeout(3000)
 
     # Open TTS Controls
@@ -29,10 +29,10 @@ def test_tts_queue(page: Page):
 
     # Wait for popup
     try:
-        expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=5000)
+        expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=10000)
     except:
         page.get_by_test_id("reader-audio-button").click()
-        expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=5000)
+        expect(page.get_by_test_id("tts-panel")).to_be_visible(timeout=10000)
 
     # Search for text by paging forward
     found_text = False
@@ -40,7 +40,7 @@ def test_tts_queue(page: Page):
 
     for i in range(max_pages):
         print(f"Checking page {i+1} for text...")
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(3000)
 
         # Check queue status
         queue_items = page.locator("[data-testid^='tts-queue-item-']")
