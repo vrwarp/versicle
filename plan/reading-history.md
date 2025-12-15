@@ -89,3 +89,4 @@ export interface ReadingHistoryEntry {
 ## Deviations
 *   **Session History vs Coverage**: The implemented data model merges overlapping ranges to track "coverage" (what content has been read) rather than a list of distinct reading sessions sorted by time. This deviation was necessary to follow the "Technical Design" which specified merging ranges. Consequently, the "History Panel" lists read segments (coverage) rather than time-based sessions (e.g., "2 hours ago").
 *   **Visualization**: The History Panel displays segments with their percentage location in the book instead of purely time-based metadata, consistent with the coverage-based data model.
+*   **Mobile Support**: The History button is hidden on mobile devices to preserve header layout space.

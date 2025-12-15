@@ -524,7 +524,7 @@ export const ReaderView: React.FC = () => {
             <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); setShowHistory(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
                 <Highlighter className="w-5 h-5 text-muted-foreground" />
             </button>
-            <button data-testid="reader-history-button" aria-label="Reading History" onClick={() => { setShowHistory(!showHistory); setShowToc(false); setShowAnnotations(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showHistory ? 'bg-border' : ''}`}>
+            <button data-testid="reader-history-button" aria-label="Reading History" onClick={() => { setShowHistory(!showHistory); setShowToc(false); setShowAnnotations(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showHistory ? 'bg-border' : ''} hidden md:block`}>
                 <Clock className="w-5 h-5 text-muted-foreground" />
             </button>
             <button data-testid="reader-search-button" aria-label="Search" onClick={() => { setShowSearch(!showSearch); setShowToc(false); setShowAnnotations(false); setShowHistory(false); }} className="p-2 rounded-full hover:bg-border">
