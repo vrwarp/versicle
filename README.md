@@ -12,11 +12,10 @@ The system is designed for privacy and performance, featuring advanced Text-to-S
     *   **Modes**: Paginated and Scrolled view modes.
     *   **Touch Controls**: Swipe gestures for navigation and audio control.
 *   **Text-to-Speech (TTS)**:
-    *   **Hybrid Engine**: Supports both local Web Speech API (Free, Offline) and Cloud Neural voices (Google, OpenAI).
+    *   **Hybrid Engine**: Supports Local Web Speech, **Piper (WASM Neural TTS)**, and Cloud Neural voices (Google, OpenAI).
     *   **Sentence Highlighting**: Visual karaoke-style synchronization.
-    *   **Smart Resume**: Intelligently rewinds context (2 sentences or 10-60s) after pauses to reorient the listener.
+    *   **Smart Resume**: Intelligently rewinds context (2 sentences or 10-60s) after pauses.
     *   **Pronunciation Lexicon**: Custom replacement rules (Regex support) to fix mispronounced words.
-    *   **Caching**: Cloud-generated audio is cached locally to save costs and bandwidth.
     *   **Background Playback**: (Android) Native integration with Foreground Services and Media Session controls.
 *   **Full-Text Search**: Fast, off-main-thread search using Web Workers.
 *   **Data Management**:
@@ -32,6 +31,7 @@ The system is designed for privacy and performance, featuring advanced Text-to-S
 *   **Storage**: IndexedDB (via `idb`)
 *   **Rendering**: `epub.js`
 *   **Search**: `FlexSearch` (in Web Worker)
+*   **TTS**: Piper (WASM), Web Speech API, Google/OpenAI Cloud APIs
 *   **Testing**: Vitest (Unit), Playwright (Visual/Integration)
 
 ## Prerequisites
@@ -53,6 +53,7 @@ The system is designed for privacy and performance, featuring advanced Text-to-S
     ```bash
     npm install
     ```
+    *Note: This automatically runs `npm run prepare-piper` to copy necessary WASM files.*
 
 3.  **Start the development server:**
     ```bash
@@ -168,6 +169,7 @@ Versicle can be built as a native Android application using Capacitor.
 *   **Playback**: Click the Headphones icon to open the Audio Panel. Press Play to start reading from the top of the current page.
 *   **Providers**:
     *   **Local**: Uses your browser's built-in voices (Free).
+    *   **Piper**: Downloads high-quality neural voices locally (Offline, Free).
     *   **Cloud**: Configure Google Cloud or OpenAI API keys in Global Settings for high-quality neural voices.
 *   **Lexicon**: Fix mispronounced words by adding rules in Global Settings -> Dictionary, or via the "Fix Pronunciation" button in the selection menu.
 
