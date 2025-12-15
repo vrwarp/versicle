@@ -2,31 +2,31 @@
 
 **Versicle** is a sophisticated, local-first web-based EPUB reader designed for advanced reading capabilities, privacy, and performance. It runs entirely in the browser, utilizing IndexedDB for persistent storage, React for the UI, and `epub.js` for rendering.
 
-The system is designed for privacy and performance, featuring advanced Text-to-Speech (TTS) capabilities, full-text search, and annotation management without relying on external servers for core functionality.
+It is designed to be a "Forever Reader"—an app that you can rely on for decades, with no server dependencies that can shut down, and full control over your data.
 
 ## Features
 
 *   **Local-First Library**: Books, annotations, and reading progress are stored persistently in IndexedDB. No server upload required.
 *   **Advanced Reader**:
     *   **Customizable**: Light/Dark/Sepia themes, custom fonts, line height, and font size.
-    *   **Modes**: Paginated and Scrolled view modes.
-    *   **Touch Controls**: Swipe gestures for navigation and audio control.
-*   **Text-to-Speech (TTS)**:
-    *   **Hybrid Engine**: Supports Local Web Speech, **Piper (WASM Neural TTS)**, and Cloud Neural voices (Google, OpenAI).
-    *   **Sentence Highlighting**: Visual karaoke-style synchronization.
-    *   **Smart Resume**: Intelligently rewinds context (2 sentences or 10-60s) after pauses.
-    *   **Pronunciation Lexicon**: Custom replacement rules (Regex support) to fix mispronounced words.
-    *   **Background Playback**: (Android) Native integration with Foreground Services and Media Session controls.
-*   **Full-Text Search**: Fast, off-main-thread search using Web Workers.
+    *   **Modes**: Paginated (Book-like) and Scrolled (Web-like) view modes.
+    *   **Force Font**: Option to override publisher styling for consistent readability.
+*   **Text-to-Speech (TTS) Powerhouse**:
+    *   **Hybrid Engine**: Seamlessly switch between **Local** (Web Speech, Piper WASM) and **Cloud** (Google, OpenAI) providers.
+    *   **Smart Resume**: Intelligently rewinds context (2 sentences) after pauses.
+    *   **Visual Sync**: Karaoke-style sentence and word highlighting.
+    *   **Pronunciation Lexicon**: Fix mispronounced words using Regex-based replacement rules.
+    *   **Background Playback**: (Android) Continue listening when the screen is off.
+*   **Full-Text Search**: Fast, off-main-thread search using Web Workers and FlexSearch.
 *   **Data Management**:
-    *   **Backup/Restore**: Export library to JSON (metadata) or ZIP (full archive).
-    *   **Offloading**: Remove book files to save space while keeping metadata and notes.
-*   **PWA Support**: Installable as a standalone app on desktop and mobile.
+    *   **Backup/Restore**: Export your entire library to ZIP (Full Backup) or just metadata/notes to JSON (Light Backup).
+    *   **Offloading**: Remove large book files to save space on mobile devices while keeping your notes and place.
+*   **PWA & Mobile**: Installable as a standalone app on desktop and mobile. Native Android build via Capacitor.
 
 ## Tech Stack
 
 *   **Frontend**: React, Vite, TypeScript
-*   **Styling**: Tailwind CSS
+*   **Styling**: Tailwind CSS, Shadcn UI
 *   **State Management**: Zustand (with persistence)
 *   **Storage**: IndexedDB (via `idb`)
 *   **Rendering**: `epub.js`

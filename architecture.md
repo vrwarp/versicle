@@ -2,27 +2,29 @@
 
 ## 1. High-Level Overview
 
-Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook player that runs entirely in the browser (or as a Hybrid Mobile App).
+Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook player that runs entirely in the browser (or as a Hybrid Mobile App via Capacitor).
 
 ### Core Design Principles
 
 1.  **Local-First & Offline-Capable**:
-    *   **Why**: To provide zero-latency access, total privacy (no reading analytics sent to a server), and true ownership of data.
-    *   **How**: All data—books, annotations, progress, and settings—is stored in **IndexedDB** via the `idb` wrapper. The app is a PWA that functions without an internet connection.
-    *   **Trade-off**: Data is bound to the device. Syncing across devices requires manual backup/restore (JSON/ZIP export), as there is no central sync server.
+    *   **Why**: To provide zero-latency access, total privacy (no reading analytics sent to a server), and true ownership of data. Users should be able to read their books without an internet connection or fear of service shutdown.
+    *   **How**: All data—books, annotations, progress, and settings—is stored in **IndexedDB** via the `idb` wrapper. The app is a PWA that functions completely offline.
+    *   **Trade-off**: Data is bound to the device. Syncing across devices requires manual backup/restore (JSON/ZIP export), as there is no central sync server. Storage is limited by the browser's quota (though usually generous).
 
 2.  **Heavy Client-Side Logic**:
     *   **Why**: To avoid server costs and maintain privacy. Features typically done on a backend (Text-to-Speech segmentation, Full-Text Indexing, File Parsing) are moved to the client.
     *   **How**:
         *   **Search**: Uses a **Web Worker** running `FlexSearch` to build an in-memory index of the book on demand.
         *   **TTS**: Uses client-side logic (`TextSegmenter`) to split text into sentences and caches audio segments locally (`TTSCache`).
-    *   **Trade-off**: Higher memory and CPU usage on the client device. Large books may take seconds to index for search.
+        *   **Ingestion**: Parses EPUB files directly in the browser using `epub.js` and `JSZip`.
+    *   **Trade-off**: Higher memory and CPU usage on the client device. Large books may take seconds to index for search or parse for ingestion.
 
 3.  **Hybrid Text-to-Speech (TTS)**:
     *   **Why**: To balance quality, cost, and offline availability.
     *   **How**:
-        *   **Local**: Uses the Web Speech API or local WASM models (Piper) for free, offline reading.
-        *   **Cloud**: Integrates with Google/OpenAI for high-quality neural voices, but caches generated audio to minimize API costs.
+        *   **Local**: Uses the Web Speech API (OS native) or local WASM models (Piper) for free, offline reading.
+        *   **Cloud**: Integrates with Google/OpenAI for high-quality neural voices, but caches generated audio to minimize API costs and latency on replay.
+    *   **Stability**: The system implements a robust fallback mechanism. If a cloud provider fails, it automatically switches to a local provider.
 
 ## 2. System Architecture Diagram
 
@@ -48,9 +50,10 @@ graph TD
         APS[AudioPlayerService]
         Ingestion[ingestion.ts]
         SearchClient[SearchClient]
+        Backup[BackupService]
     end
 
-    subgraph TTS [TTS Engine]
+    subgraph TTS [TTS Subsystem]
         Segmenter[TextSegmenter]
         Lexicon[LexiconService]
         TTSCache[TTSCache]
@@ -89,6 +92,7 @@ graph TD
     Library --> LibStore
     LibStore --> DBService
     LibStore --> Ingestion
+    LibStore --> Backup
 
     Reader --> SearchClient
     SearchClient --> SearchWorker
@@ -104,118 +108,110 @@ graph TD
 
 ### Data Layer (`src/db/`)
 
-The data layer is built on **IndexedDB** using the `idb` library. It is accessed primarily through the `DBService` singleton.
+The data layer is built on **IndexedDB** using the `idb` library. It is accessed primarily through the `DBService` singleton, which provides a high-level API for all storage operations.
 
 #### `src/db/DBService.ts`
-The main database abstraction layer. Handles all read/write operations, transactions, and error handling.
+The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors), transaction management, and debouncing for frequent writes.
 
-**Class: `DBService`**
+**Key Functions:**
 
-*   **`getLibrary()`**
-    *   **Purpose**: Retrieves all books in the library.
-    *   **Returns**: `Promise<BookMetadata[]>` - List of validated book metadata sorted by import date.
-*   **`getBook(id)`**
-    *   **Purpose**: Retrieves metadata and binary file for a book.
-    *   **Params**: `id: string` - Unique identifier.
-    *   **Returns**: `Promise<{ metadata: BookMetadata; file: Blob | ArrayBuffer }>`
-*   **`addBook(file)`**
-    *   **Purpose**: Imports a new book (delegates to `processEpub`).
-    *   **Params**: `file: File`.
-    *   **Returns**: `Promise<void>`
-*   **`saveProgress(bookId, cfi, progress)`**
-    *   **Purpose**: Saves reading progress (Debounced 1s).
-    *   **Params**: `bookId: string`, `cfi: string`, `progress: number`.
-    *   **Returns**: `void`
-*   **`saveTTSState(bookId, queue, currentIndex)`**
-    *   **Purpose**: Persists the TTS playback queue to allow session resumption.
-    *   **Params**: `bookId: string`, `queue: TTSQueueItem[]`, `currentIndex: number`.
-    *   **Returns**: `void`
-*   **`updateReadingHistory(bookId, newRange)`**
-    *   **Purpose**: Updates the "read" coverage of a book.
-    *   **Params**: `bookId: string`, `newRange: string` (CFI Range).
-    *   **Returns**: `Promise<void>`
-*   **`cacheSegment(key, audio, alignment?)`**
-    *   **Purpose**: Stores a generated audio segment in the `tts_cache` store.
-    *   **Params**: `key: string` (Hash), `audio: ArrayBuffer`.
-    *   **Returns**: `Promise<void>`
-*   **`offloadBook(id)`**
-    *   **Purpose**: Removes the binary file to save space but preserves metadata.
-    *   **Params**: `id: string`.
-    *   **Returns**: `Promise<void>`
-
----
+*   **`getLibrary()`**: Retrieves all books. Validates metadata integrity and sorts by import date.
+    *   *Returns*: `Promise<BookMetadata[]>`
+*   **`getBook(id)`**: Retrieves both metadata and the binary EPUB file.
+    *   *Returns*: `Promise<{ metadata: BookMetadata; file: Blob | ArrayBuffer }>`
+*   **`addBook(file)`**: Imports a new book. Delegates parsing to `ingestion.ts`.
+*   **`saveProgress(bookId, cfi, progress)`**: Saves reading progress.
+    *   *Implementation*: Debounced (1s) to prevent thrashing IndexedDB during scrolling/reading.
+*   **`saveTTSState(bookId, queue, currentIndex)`**: Persists the current TTS playlist and position.
+    *   *Why*: Allows the user to close the app and resume the audiobook exactly where they left off.
+*   **`offloadBook(id)`**: Deletes the large binary EPUB file to save space but keeps metadata, annotations, and reading progress.
+    *   *Trade-off*: User must re-import the *exact same file* (verified via hash) to read again.
+*   **`getCachedSegment(key)` / `cacheSegment(key, audio)`**: Manages the TTS audio cache.
+    *   *Why*: To avoid paying for the same API call twice and to enable offline replay of cloud-generated audio.
 
 ### Core Logic & Services (`src/lib/`)
 
 #### Ingestion (`src/lib/ingestion.ts`)
-Handles the parsing and import of EPUB files.
+Handles the complex task of importing an EPUB file.
 
-*   **`processEpub(file)`**
-    *   **Purpose**: Parses EPUB using `epub.js`, extracts metadata, generates a **Synthetic TOC**, and calculates character counts for every section.
-    *   **Params**: `file: File`.
-    *   **Returns**: `Promise<string>` (New Book ID).
-    *   **Note**: Synthetic TOC generation involves loading every chapter to ensure accurate progress bars and TTS duration estimates.
+*   **`processEpub(file)`**:
+    1.  Parses the EPUB using `epub.js`.
+    2.  Extracts metadata and cover image.
+    3.  **Synthetic TOC**: Iterates through the spine to generate a table of contents and calculate character counts for duration estimation.
+    4.  **Hashing**: Computes a SHA-256 hash of the file incrementally (to avoid memory spikes) for integrity checks during restore.
+    *   *Returns*: `Promise<string>` (New Book ID).
 
-#### Search (`src/lib/search.ts`)
-Client-side interface for the Search Worker.
+#### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
+Implements full-text search off the main thread to prevent UI freezing.
 
-**Class: `SearchClient`**
-*   **`indexBook(book, bookId)`**
-    *   **Purpose**: Extracts text from the book spine and sends it to the worker for indexing.
-    *   **Params**: `book: Book` (epub.js instance), `bookId: string`.
-    *   **Returns**: `Promise<void>`
-    *   **Note**: The index is **transient** (in-memory within the worker) and is rebuilt every time the book is loaded.
-*   **`search(query, bookId)`**
-    *   **Purpose**: Queries the worker.
-    *   **Params**: `query: string`, `bookId: string`.
-    *   **Returns**: `Promise<SearchResult[]>`
+*   **`SearchClient`**: The main-thread interface. Manages the Worker lifecycle and request/response correlation using UUIDs.
+*   **`SearchEngine`**: Runs inside the Worker. Uses `FlexSearch` to build an inverted index.
+*   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book and initiates a search. This avoids storing massive indices in IndexedDB but adds a delay before search is ready.
+
+#### Backup (`src/lib/BackupService.ts`)
+Manages data portability.
+
+*   **`createLightBackup()`**: Exports JSON containing metadata, annotations, lexicon, and reading stats.
+*   **`createFullBackup()`**: Exports a ZIP file containing the "Light" JSON manifest plus all EPUB files.
+*   **`restoreBackup(file)`**: Smartly merges data. If a book already exists, it updates progress only if the backup is newer.
 
 ---
 
-### Text-to-Speech Subsystem (`src/lib/tts/`)
+### TTS Subsystem (`src/lib/tts/`)
+
+This is the most complex subsystem, handling audio generation, synchronization, and playback control.
 
 #### `src/lib/tts/AudioPlayerService.ts`
-The singleton controller for TTS.
+The singleton controller for TTS. It acts as the "brain" of the audio experience.
 
-**Class: `AudioPlayerService`**
-*   **`play()` / `pause()` / `resume()`**
-    *   **Purpose**: Controls playback state. Uses `executeWithLock` to prevent race conditions.
-*   **`setQueue(items, startIndex)`**
-    *   **Purpose**: Updates the playlist and persists it to DB.
-    *   **Params**: `items: TTSQueueItem[]`, `startIndex: number`.
-*   **`setProvider(provider)`**
-    *   **Purpose**: Hot-swaps the TTS provider (e.g., from Google to Piper).
-    *   **Params**: `provider: ITTSProvider`.
+**Key Responsibilities:**
+*   **Queue Management**: Maintains a list of `TTSQueueItem`s (sentences).
+*   **Provider Management**: Hot-swaps between `GoogleTTSProvider`, `OpenAIProvider`, `PiperProvider`, and `WebSpeechProvider`.
+*   **Background Audio**: Integration with Android `ForegroundService` and `MediaSession` API to allow playback when the screen is off.
+*   **Concurrency**: Uses `executeWithLock` pattern to prevent race conditions when the user taps multiple controls rapidly (e.g., Play/Pause/Next).
+*   **Error Handling**: Implements automatic fallback from Cloud to Local providers if an API call fails.
 
-#### `src/lib/tts/providers/PiperProvider.ts`
-**Class: `PiperProvider`**
-*   **Purpose**: Implements local Neural TTS using WebAssembly.
-*   **`downloadVoice(voiceId)`**
-    *   **Purpose**: Downloads ONNX model and config from Hugging Face.
-    *   **Params**: `voiceId: string`.
-    *   **Returns**: `Promise<void>`
-*   **`fetchAudioData(text, options)`**
-    *   **Purpose**: Generates audio using the WASM worker.
-    *   **Returns**: `Promise<SpeechSegment>`
+#### `src/lib/tts/TextSegmenter.ts`
+Splits raw text into natural-sounding sentences.
+
+*   **Why**: TTS engines perform better on sentences than paragraphs. It allows for granular highlighting.
+*   **Logic**: Uses `Intl.Segmenter` (browser native) where available, with a custom post-processing step to handle abbreviations (e.g., "Mr.", "Dr.", "i.e.") that often trick standard splitters.
+
+#### `src/lib/tts/TTSCache.ts`
+*   **Purpose**: Caches generated audio buffers in IndexedDB.
+*   **Key Generation**: Hash of `text + voiceId + speed + pitch + lexiconHash`. If any parameter changes, a new segment is generated.
+
+#### `src/lib/tts/SyncEngine.ts`
+*   **Purpose**: Manages the visual karaoke-style highlighting.
+*   **Logic**: Uses alignment data (timepoints) returned by the TTS provider to calculate which word is currently being spoken.
 
 ---
 
 ### State Management (`src/store/`)
 
-#### `src/store/useReaderStore.ts`
-*   **State**: `currentTheme`, `fontSize`, `viewMode`, `gestureMode`.
-*   **Persistence**: Uses `localStorage` for user preferences. Reading location is loaded from `DBService`.
+State is managed using **Zustand** with persistence to `localStorage` for preferences.
 
-#### `src/store/useTTSStore.ts`
-*   **State**: `voice`, `rate`, `apiKeys`.
-*   **Behavior**: Subscribes to `AudioPlayerService` to sync playback status (`isPlaying`, `currentIndex`) to the UI.
+*   **`useReaderStore`**: Manages the visual reader state.
+    *   *Persisted*: Theme, Font Size, Font Family, View Mode (Scroll/Paginated).
+    *   *Transient*: Current Book ID, Loading State, TOC.
+*   **`useTTSStore`**: Manages TTS configuration and playback status.
+    *   *Persisted*: Voice selection, Speed, API Keys, Provider preference.
+    *   *Transient*: Current Queue, Playback Status (Playing/Paused), Download Progress (for Piper).
+    *   *Interaction*: Subscribes to `AudioPlayerService` events to update the UI.
 
 ---
 
-### UI Hooks (`src/hooks/`)
+### UI Layer (`src/hooks/`)
 
 #### `src/hooks/useEpubReader.ts`
-*   **Purpose**: Manages `epub.js` lifecycle, rendering, and resizing.
-*   **Params**: `bookId`, `viewerRef`, `options`.
-*   **Returns**: `rendition`, `book`, `isReady`.
-*   **Key Logic**: Injects custom CSS (`shouldForceFont`) to override publisher styles for consistent theming.
+The critical bridge between React and the imperative `epub.js` library.
+
+**Responsibilities:**
+*   **Lifecycle**: Initializes and destroys the `Book` and `Rendition` instances.
+*   **Rendering**: Mounts the book into a DOM node.
+*   **Resizing**: Uses `ResizeObserver` and `requestAnimationFrame` to handle window resizing without layout thrashing.
+*   **Theming**: Injects custom CSS to override publisher styles (crucial for "Force Font" feature).
+*   **Interaction**: capturing text selection (for highlighting) and page turns.
+
+**Key Trade-off**:
+`epub.js` is an older library and can be quirky. This hook encapsulates a lot of "defensive programming" to handle edge cases like missing CFIs, weird pagination behavior, and style conflicts.
