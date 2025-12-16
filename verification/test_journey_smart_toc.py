@@ -11,13 +11,10 @@ def test_journey_smart_toc(page):
     ensure_library_with_book(page)
 
     # 2. Inject Mock Data for GenAI
-    # We need to inject this into the browser context's localStorage
-    # Note: 'ensure_library_with_book' might navigate, so we inject after page load
-
+    # We use real IDs from Alice in Wonderland (np-4 is Chapter 1)
     mock_response = [
-        {"id": "navId-1", "title": "Mocked Chapter 1"},
-        {"id": "navId-2", "title": "Mocked Chapter 2"},
-        {"id": "navId-3", "title": "Mocked Chapter 3"}
+        {"id": "np-4", "title": "AI Generated: The Rabbit Hole"},
+        {"id": "np-5", "title": "AI Generated: Pool of Tears"}
     ]
 
     page.evaluate(f"""() => {{
@@ -25,7 +22,7 @@ def test_journey_smart_toc(page):
         localStorage.setItem('mockGenAIResponse', '{json.dumps(mock_response)}');
     }}""")
 
-    # Reload to pick up store changes if needed, but Zustand persists to localstorage so it should be fine if we just reload or navigate
+    # Reload to pick up store changes
     page.reload()
 
     # 3. Open Reader
@@ -37,6 +34,9 @@ def test_journey_smart_toc(page):
     expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
 
     # 5. Enable Generated Titles
+    # Before enabling, check original title exists
+    expect(page.get_by_text("CHAPTER I. Down the Rabbit-Hole")).to_be_visible()
+
     page.get_by_label("Generated Titles").click()
 
     # 6. Click Enhance
@@ -48,14 +48,14 @@ def test_journey_smart_toc(page):
     expect(page.get_by_text("Table of Contents enhanced successfully!")).to_be_visible(timeout=10000)
 
     # 8. Verify Titles Updated
-    # We can't guarantee exact ID matching in the mock without knowing the book structure,
-    # but the mock service will return the provided array.
-    # The hook 'reconstructToc' maps by ID.
-    # If the demo book IDs don't match our mock, nothing will change.
-    # NOTE: The demo book (Alice) typically has IDs like 'item1', 'item2' or nav points.
-    # We should probably capture the real TOC first or just verify the process completes.
-    # For a robust test, we assume the process completing and toast showing is sufficient for "journey" verification
-    # of the UI flow, even if the titles don't visually change because IDs didn't match.
+    # Check that the new titles are visible
+    expect(page.get_by_text("AI Generated: The Rabbit Hole")).to_be_visible()
+    expect(page.get_by_text("AI Generated: Pool of Tears")).to_be_visible()
+
+    # Verify original title is GONE (or at least replaced in the list view)
+    # Note: text content match might still find it if it's in the DOM but hidden?
+    # But in the list, it should be replaced.
+    expect(page.get_by_text("CHAPTER I. Down the Rabbit-Hole")).not_to_be_visible()
 
     os.makedirs("verification/screenshots", exist_ok=True)
     page.screenshot(path="verification/screenshots/smart_toc_success.png")
@@ -70,5 +70,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error: {e}")
             page.screenshot(path="verification/error_smart_toc_success.png")
+            raise # Ensure CI fails if test fails
         finally:
             browser.close()
