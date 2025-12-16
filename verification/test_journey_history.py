@@ -1,6 +1,6 @@
 """
 Playwright test for the Reading History Journey.
-Verifies reading history tracking, history panel, and jumping.
+Verifies reading history tracking, history panel (in TOC sidebar), and jumping.
 """
 import re
 import pytest
@@ -20,14 +20,6 @@ def test_reading_history_journey(page: Page):
     # Wait for content to render
     page.wait_for_timeout(2000)
 
-    # Check History Button exists
-    history_btn = page.get_by_test_id("reader-history-button")
-    if not history_btn.is_visible():
-        print("History button not visible (likely mobile). Skipping history test.")
-        return
-
-    expect(history_btn).to_be_visible()
-
     # Navigate a bit to generate history
     # Note: History updates on location change (previous location is saved).
     # So we need to move at least once to save the "start" location.
@@ -37,10 +29,19 @@ def test_reading_history_journey(page: Page):
     page.keyboard.press("ArrowRight")
     page.wait_for_timeout(1000)
 
-    # Open History Panel
-    print("Opening History Panel...")
-    page.get_by_test_id("reader-history-button").click()
-    expect(page.get_by_test_id("reader-history-sidebar")).to_be_visible()
+    # Open TOC Panel (which now houses History)
+    print("Opening TOC/History Panel...")
+    toc_btn = page.get_by_test_id("reader-toc-button")
+    expect(toc_btn).to_be_visible()
+    toc_btn.click()
+
+    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
+
+    # Switch to History Tab
+    print("Switching to History Tab...")
+    history_tab = page.get_by_test_id("tab-history")
+    expect(history_tab).to_be_visible()
+    history_tab.click()
 
     # Give it a moment to load from DB
     page.wait_for_timeout(1000)
@@ -48,10 +49,18 @@ def test_reading_history_journey(page: Page):
     utils.capture_screenshot(page, "history_01_panel_open")
 
     # Check for history items
-    # They are li elements inside the sidebar
-    items = page.locator("[data-testid='reader-history-sidebar'] li")
+    # They are li elements inside the sidebar, but we want to make sure we are not seeing chapters
+    # The History tab content should be visible.
+    # We can look for the "Reading History" header text inside the panel if we kept it.
+    expect(page.get_by_text("Reading History", exact=True)).to_be_visible()
+
+    # Find items in the active content
+    # Since we are in the sidebar, and chapters are hidden (inactive tab), searching for li should be fine
+    # assuming inactive tabs are hidden with display:none or unmounted.
+    # Radix UI Tabs usually unmount or hide.
+    items = page.locator("[data-testid='reader-toc-sidebar'] li")
     count = items.count()
-    print(f"Found {count} history items")
+    print(f"Found {count} items in sidebar (should be history items)")
 
     # We expect at least one item
     if count == 0:
@@ -69,8 +78,15 @@ def test_reading_history_journey(page: Page):
         page.wait_for_timeout(500)
         utils.capture_screenshot(page, "history_02_after_jump")
 
-    # Close history
-    page.get_by_test_id("reader-history-button").click()
-    expect(page.get_by_test_id("reader-history-sidebar")).not_to_be_visible()
+    # Close sidebar if it's still open
+    # On mobile, selecting an item auto-closes the sidebar.
+    sidebar = page.get_by_test_id("reader-toc-sidebar")
+    if sidebar.is_visible():
+        print("Sidebar visible, closing manually...")
+        page.get_by_test_id("reader-toc-button").click()
+    else:
+        print("Sidebar already closed (mobile behavior).")
+
+    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
 
     print("Reading History Journey Passed!")

@@ -45,7 +45,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                         // Use start of range for percentage
                         // Check if locations are available
                         if (book.locations && book.locations.length() > 0) {
-                             percentage = book.locations.percentageFromCfi(parsed.start);
+                             percentage = book.locations.percentageFromCfi(parsed.fullStart);
                         }
                     }
 

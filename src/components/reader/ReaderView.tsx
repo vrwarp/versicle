@@ -21,11 +21,12 @@ import { Label } from '../ui/Label';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Clock } from 'lucide-react';
+import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import { ReaderTTSController } from './ReaderTTSController';
 import { generateCfiRange } from '../../lib/cfi-utils';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
 
 /**
  * The main reader interface component.
@@ -309,7 +310,6 @@ export const ReaderView: React.FC = () => {
   const [useSyntheticToc, setUseSyntheticToc] = useState(false);
   const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
   const [showAnnotations, setShowAnnotations] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const [immersiveMode, setImmersiveMode] = useState(false);
 
   const [lexiconOpen, setLexiconOpen] = useState(false);
@@ -518,16 +518,13 @@ export const ReaderView: React.FC = () => {
             <button data-testid="reader-back-button" aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-border">
                 <ArrowLeft className="w-5 h-5 text-muted-foreground" />
             </button>
-            <button data-testid="reader-toc-button" aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); setShowHistory(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
+            <button data-testid="reader-toc-button" aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
                 <List className="w-5 h-5 text-muted-foreground" />
             </button>
-            <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); setShowHistory(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
+            <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
                 <Highlighter className="w-5 h-5 text-muted-foreground" />
             </button>
-            <button data-testid="reader-history-button" aria-label="Reading History" onClick={() => { setShowHistory(!showHistory); setShowToc(false); setShowAnnotations(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showHistory ? 'bg-border' : ''} hidden md:block`}>
-                <Clock className="w-5 h-5 text-muted-foreground" />
-            </button>
-            <button data-testid="reader-search-button" aria-label="Search" onClick={() => { setShowSearch(!showSearch); setShowToc(false); setShowAnnotations(false); setShowHistory(false); }} className="p-2 rounded-full hover:bg-border">
+            <button data-testid="reader-search-button" aria-label="Search" onClick={() => { setShowSearch(!showSearch); setShowToc(false); setShowAnnotations(false); }} className="p-2 rounded-full hover:bg-border">
                     <Search className="w-5 h-5 text-muted-foreground" />
             </button>
             </div>
@@ -563,41 +560,61 @@ export const ReaderView: React.FC = () => {
 
       {/* Main Content */}
       <div className="flex-1 relative overflow-hidden flex justify-center">
-         {/* TOC Sidebar */}
+         {/* TOC Sidebar (now includes History) */}
          {showToc && (
-             <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static">
-                 <div className="p-4">
-                     <h2 className="text-lg font-bold mb-4 text-foreground">Contents</h2>
-
-                     <div className="flex items-center space-x-2 mb-4">
-                        <Switch
-                            id="synthetic-toc-mode"
-                            checked={useSyntheticToc}
-                            onCheckedChange={setUseSyntheticToc}
-                        />
-                        <Label htmlFor="synthetic-toc-mode" className="text-sm font-medium">Generated Titles</Label>
+             <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border z-50 absolute inset-y-0 left-0 md:static flex flex-col">
+                 <Tabs defaultValue="chapters" className="w-full h-full flex flex-col">
+                     <div className="p-4 pb-0">
+                         <TabsList className="grid w-full grid-cols-2">
+                             <TabsTrigger value="chapters" data-testid="tab-chapters">Chapters</TabsTrigger>
+                             <TabsTrigger value="history" data-testid="tab-history">History</TabsTrigger>
+                         </TabsList>
                      </div>
 
-                     <ul className="space-y-2">
-                         {(useSyntheticToc ? syntheticToc : toc).map((item, index) => (
-                             <li key={item.id}>
-                                 <button
-                                    data-testid={`toc-item-${index}`}
-                                    className="text-left w-full text-sm text-muted-foreground hover:text-primary"
-                                    onClick={() => {
-                                        rendition?.display(item.href);
-                                        setShowToc(false);
-                                    }}
-                                 >
-                                     {item.label}
-                                 </button>
-                             </li>
-                         ))}
-                         {useSyntheticToc && syntheticToc.length === 0 && (
-                             <li className="text-sm text-muted-foreground">No generated titles available.</li>
-                         )}
-                     </ul>
-                 </div>
+                     <TabsContent value="chapters" className="flex-1 overflow-y-auto mt-2 min-h-0">
+                         <div className="p-4 pt-0">
+                             <div className="flex items-center space-x-2 mb-4 mt-2">
+                                <Switch
+                                    id="synthetic-toc-mode"
+                                    checked={useSyntheticToc}
+                                    onCheckedChange={setUseSyntheticToc}
+                                />
+                                <Label htmlFor="synthetic-toc-mode" className="text-sm font-medium">Generated Titles</Label>
+                             </div>
+
+                             <ul className="space-y-2">
+                                 {(useSyntheticToc ? syntheticToc : toc).map((item, index) => (
+                                     <li key={item.id}>
+                                         <button
+                                            data-testid={`toc-item-${index}`}
+                                            className="text-left w-full text-sm text-muted-foreground hover:text-primary"
+                                            onClick={() => {
+                                                rendition?.display(item.href);
+                                                setShowToc(false);
+                                            }}
+                                         >
+                                             {item.label}
+                                         </button>
+                                     </li>
+                                 ))}
+                                 {useSyntheticToc && syntheticToc.length === 0 && (
+                                     <li className="text-sm text-muted-foreground">No generated titles available.</li>
+                                 )}
+                             </ul>
+                         </div>
+                     </TabsContent>
+
+                     <TabsContent value="history" className="flex-1 overflow-y-auto mt-0 min-h-0 flex flex-col">
+                         <ReadingHistoryPanel
+                            bookId={id || ''}
+                            rendition={rendition}
+                            onNavigate={(cfi) => {
+                                rendition?.display(cfi);
+                                if (window.innerWidth < 768) setShowToc(false);
+                            }}
+                         />
+                     </TabsContent>
+                 </Tabs>
              </div>
          )}
 
@@ -611,20 +628,6 @@ export const ReaderView: React.FC = () => {
                      rendition?.display(cfi);
                      if (window.innerWidth < 768) setShowAnnotations(false);
                  }} />
-             </div>
-         )}
-
-         {/* History Sidebar */}
-         {showHistory && (
-             <div data-testid="reader-history-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
-                 <ReadingHistoryPanel
-                    bookId={id || ''}
-                    rendition={rendition}
-                    onNavigate={(cfi) => {
-                        rendition?.display(cfi);
-                        if (window.innerWidth < 768) setShowHistory(false);
-                    }}
-                 />
              </div>
          )}
 

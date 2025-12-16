@@ -99,7 +99,7 @@ def capture_screenshot(page: Page, name: str, hide_tts_status: bool = False):
     viewport = page.viewport_size
     width = viewport['width'] if viewport else 1280
     suffix = "mobile" if width < 600 else "desktop"
-    page.screenshot(path=f"verification/screenshots/{name}_{suffix}.png")
+    page.screenshot(path=f"verification/screenshots/{name}_{suffix}.png", timeout=10000)
 
     if hide_tts_status:
         page.evaluate("const el = document.getElementById('tts-debug'); if (el) el.style.visibility = 'visible';")
