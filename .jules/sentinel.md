@@ -22,3 +22,8 @@
 **Vulnerability:** Stored XSS potential in book metadata fields (Title, Author, Description) if rendered unsafely.
 **Learning:** While React escapes content by default, sanitizing input at ingestion provides defense-in-depth and protects against future unsafe usage (e.g. `dangerouslySetInnerHTML`).
 **Prevention:** Implemented HTML tag stripping in `sanitizeString`. Use regex `/<[a-zA-Z\/][^>]*>/gm` to avoid stripping math symbols (`A < B`).
+
+## 2025-05-27 - [Input Sanitization Bypass in EPUB Ingestion]
+**Vulnerability:** The `processEpub` function previously allowed users to opt-out of metadata sanitization via a `confirm` dialog. This created a Stored XSS vector where malicious HTML could be injected into the database if the user clicked "Cancel" (Import As-Is).
+**Learning:** The previous decision (2025-05-25) to allow "Import As-Is" prioritized user control over security, failing to account for the XSS risk. Users are not qualified to evaluate if an EPUB file contains malicious scripts.
+**Prevention:** Replaced the optional confirmation with mandatory sanitization and a warning log. Security controls protecting against Code Injection (XSS) must not be bypassable by end-users.
