@@ -51,8 +51,8 @@ export function sanitizeString(input: string, maxLength: number = 255): string {
     return noHtml.trim().slice(0, maxLength);
 }
 
-export interface SanitizationResult {
-    sanitized: BookMetadata;
+export interface SanitizationResult<T = BookMetadata> {
+    sanitized: T;
     wasModified: boolean;
     modifications: string[];
 }
@@ -64,7 +64,7 @@ export interface SanitizationResult {
  * @returns SanitizationResult or null.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getSanitizedBookMetadata(data: any): SanitizationResult | null {
+export function getSanitizedBookMetadata(data: any): SanitizationResult<BookMetadata> | null {
     if (!validateBookMetadata(data)) return null;
 
     const modifications: string[] = [];
@@ -125,7 +125,7 @@ export function validateLexiconRule(data: any): data is LexiconRule {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getSanitizedAnnotation(data: any): SanitizationResult | null {
+export function getSanitizedAnnotation(data: any): SanitizationResult<Annotation> | null {
     if (!validateAnnotation(data)) return null;
 
     const modifications: string[] = [];
@@ -158,7 +158,7 @@ export function getSanitizedAnnotation(data: any): SanitizationResult | null {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getSanitizedLexiconRule(data: any): SanitizationResult | null {
+export function getSanitizedLexiconRule(data: any): SanitizationResult<LexiconRule> | null {
     if (!validateLexiconRule(data)) return null;
 
     const modifications: string[] = [];
