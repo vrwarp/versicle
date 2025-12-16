@@ -18,7 +18,8 @@ const LIST_ITEM_HEIGHT = 88;
  * Renders a single cell within the virtualized grid of books.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => {
+const GridCell = ({ columnIndex, rowIndex, style, data }: any) => {
+    const { books, columnCount } = data;
     const index = rowIndex * columnCount + columnIndex;
     if (index >= books.length) return <div style={style} />;
     const book = books[index];
@@ -35,7 +36,8 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ListCell = ({ rowIndex, style, books }: any) => {
+const ListCell = ({ rowIndex, style, data }: any) => {
+    const { books } = data;
     const index = rowIndex;
     if (index >= books.length) return <div style={style} />;
     const book = books[index];
@@ -138,8 +140,10 @@ export const LibraryView: React.FC = () => {
   const rowCount = Math.ceil(books.length / columnCount);
   const gridColumnWidth = Math.floor(dimensions.width / columnCount);
 
-  // Memoize cellProps to prevent unnecessary re-renders of the grid
-  const cellProps = React.useMemo(() => ({ books, columnCount }), [books, columnCount]);
+  // Memoize itemData to prevent unnecessary re-renders of the grid cells.
+  // react-window passes this data to the child component and does a shallow comparison
+  // to determine if cells need to re-render.
+  const itemData = React.useMemo(() => ({ books, columnCount }), [books, columnCount]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const GridAny = Grid as any;
@@ -235,9 +239,10 @@ export const LibraryView: React.FC = () => {
                 rowCount={viewMode === 'list' ? books.length : rowCount}
                 rowHeight={viewMode === 'list' ? LIST_ITEM_HEIGHT : CARD_HEIGHT + GAP}
                 width={dimensions.width}
-                cellComponent={viewMode === 'list' ? ListCell : GridCell}
-                cellProps={cellProps}
-             />
+                itemData={itemData}
+             >
+                {viewMode === 'list' ? ListCell : GridCell}
+             </GridAny>
           )}
         </section>
       )}
