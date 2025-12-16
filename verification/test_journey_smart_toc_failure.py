@@ -2,7 +2,8 @@
 import os
 import time
 from playwright.sync_api import sync_playwright, expect
-from utils import ensure_library_with_book, reset_app
+from verification.utils import ensure_library_with_book, reset_app
+from verification.utils import capture_screenshot
 
 def test_journey_smart_toc_failure(page):
     page.on("console", lambda msg: print(f"Browser Console: {msg.text}"))

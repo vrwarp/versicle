@@ -3,7 +3,7 @@ import os
 import time
 import json
 from playwright.sync_api import sync_playwright, expect
-from utils import ensure_library_with_book, reset_app
+from verification.utils import ensure_library_with_book, reset_app, capture_screenshot
 
 def test_journey_smart_toc(page):
     # 1. Reset and Load
