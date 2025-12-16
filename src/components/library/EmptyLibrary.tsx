@@ -2,6 +2,7 @@ import React from 'react';
 import { BookOpen } from 'lucide-react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
+import { Button } from '../ui/Button';
 
 /**
  * Props for EmptyLibrary component.
@@ -38,30 +39,32 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
 
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-      <div className="bg-blue-50 p-6 rounded-full mb-6">
-        <BookOpen className="w-12 h-12 text-blue-500" />
+      <div className="bg-primary/10 p-6 rounded-full mb-6">
+        <BookOpen className="w-12 h-12 text-primary" />
       </div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">Your library is empty</h2>
-      <p className="text-gray-500 mb-8 max-w-md">
+      <h2 className="text-2xl font-bold text-foreground mb-2">Your library is empty</h2>
+      <p className="text-muted-foreground mb-8 max-w-md">
         Import an EPUB file to start reading, or load our demo book to explore the features.
       </p>
 
       <div className="flex flex-col items-center gap-4">
-        <button
+        <Button
           onClick={onImport}
           disabled={isImporting}
-          className="bg-blue-600 text-white hover:bg-blue-700 px-8 py-3 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          size="lg"
+          className="shadow-sm font-medium"
         >
           Import EPUB
-        </button>
+        </Button>
 
-        <button
+        <Button
+          variant="link"
           onClick={handleLoadDemo}
           disabled={isImporting}
-          className="text-blue-600 hover:underline text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          className="text-primary font-medium"
         >
           {isImporting ? 'Loading...' : 'Load Demo Book (Alice in Wonderland)'}
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { EmptyLibrary } from './EmptyLibrary';
 import { Grid } from 'react-window';
 import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
+import { Button } from '../ui/Button';
 
 // Grid Configuration
 const CARD_WIDTH = 200; // Minimal width
@@ -178,26 +179,30 @@ export const LibraryView: React.FC = () => {
           <p className="text-muted-foreground">Manage and read your EPUB collection</p>
         </div>
         <div className="flex gap-2">
-            <button
+            <Button
+                variant="secondary"
+                size="icon"
                 onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="flex items-center justify-center p-2 rounded-md bg-secondary text-secondary-foreground hover:opacity-90 transition-colors shadow-sm"
+                className="shadow-sm"
                 aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
                 data-testid="view-toggle-button"
             >
                 {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
+              size="icon"
               onClick={() => setGlobalSettingsOpen(true)}
-              className="flex items-center justify-center p-2 rounded-md bg-secondary text-secondary-foreground hover:opacity-90 transition-colors shadow-sm"
+              className="shadow-sm"
               aria-label="Settings"
               data-testid="header-settings-button"
             >
               <Settings className="w-4 h-4" />
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={triggerFileUpload}
               disabled={isImporting}
-              className="flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm disabled:opacity-50"
+              className="gap-2 shadow-sm"
               aria-label="Import book"
               data-testid="header-add-button"
             >
@@ -207,7 +212,7 @@ export const LibraryView: React.FC = () => {
                 <Upload className="w-4 h-4" />
               )}
               <span className="font-medium">Import Book</span>
-            </button>
+            </Button>
         </div>
       </header>
 
