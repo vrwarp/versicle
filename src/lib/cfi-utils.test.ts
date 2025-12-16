@@ -41,6 +41,13 @@ describe('cfi-utils', () => {
             const range = generateCfiRange(start, end);
             expect(range).toBe('epubcfi(/6/2!/4[id],/1:0,/2:10)');
         });
+
+        it('should generate range from full CFIs with epubcfi() wrapper', () => {
+            const start = 'epubcfi(/6/2!/4/1:0)';
+            const end = 'epubcfi(/6/2!/4/1:100)';
+            const range = generateCfiRange(start, end);
+            expect(range).toBe('epubcfi(/6/2!/4/1,:0,:100)');
+        });
     });
 
     describe('mergeCfiRanges', () => {

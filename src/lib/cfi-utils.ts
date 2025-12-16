@@ -47,6 +47,14 @@ export function parseCfiRange(range: string): CfiRangeData | null {
 }
 
 export function generateCfiRange(start: string, end: string): string {
+    // Strip epubcfi( and ) if present
+    if (start.startsWith('epubcfi(') && start.endsWith(')')) {
+        start = start.slice(8, -1);
+    }
+    if (end.startsWith('epubcfi(') && end.endsWith(')')) {
+        end = end.slice(8, -1);
+    }
+
     let i = 0;
     while (i < start.length && i < end.length && start[i] === end[i]) {
         i++;
