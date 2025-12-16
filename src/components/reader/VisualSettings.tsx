@@ -7,7 +7,8 @@ import { Tabs, TabsList, TabsTrigger } from "../ui/Tabs"
 import { Label } from "../ui/Label"
 import { Switch } from "../ui/Switch"
 import { cn } from "../../lib/utils"
-import { X } from "lucide-react"
+import { X, Sparkles } from "lucide-react"
+import { useGenAIStore } from "../../store/useGenAIStore"
 
 interface ThemeSwatchProps {
   mode: 'light' | 'dark' | 'sepia'
@@ -28,24 +29,31 @@ const ThemeSwatch = ({ mode, active, onClick }: ThemeSwatchProps) => {
   )
 }
 
+interface VisualSettingsProps {
+  onAnalyze?: () => void;
+}
+
 /**
  * Visual settings popover content.
  * Controls theme, font size, font family, line height, view mode (paginated/scrolled), and forced styling.
  *
  * @returns The VisualSettings component.
  */
-export const VisualSettings = () => {
+export const VisualSettings = ({ onAnalyze }: VisualSettingsProps) => {
   const {
     currentTheme, setTheme,
     fontSize, setFontSize,
     fontFamily, setFontFamily,
     viewMode, setViewMode,
     lineHeight, setLineHeight,
-    shouldForceFont, setShouldForceFont
+    shouldForceFont, setShouldForceFont,
+    isDistractionFree, setDistractionFree
   } = useReaderStore();
 
+  const { isEnabled: isGenAIEnabled } = useGenAIStore();
+
   return (
-    <PopoverContent className="w-80 p-4 relative">
+    <PopoverContent className="w-80 p-4 relative h-[80vh] overflow-y-auto">
       <PopoverClose className="absolute right-2 top-2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground" asChild>
         <Button variant="ghost" size="icon" className="h-6 w-6">
           <X className="h-4 w-4" />
@@ -104,7 +112,7 @@ export const VisualSettings = () => {
       </div>
 
       {/* 3. The "Format" Row (Layout) */}
-      <div className="section-layout">
+      <div className="section-layout mb-6">
          <Label className="mb-2 block">Layout</Label>
          <Tabs value={viewMode} onValueChange={(val) => setViewMode(val as 'paginated' | 'scrolled')} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
@@ -120,6 +128,36 @@ export const VisualSettings = () => {
                <span className="w-8 text-center text-sm">{lineHeight.toFixed(1)}</span>
                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setLineHeight(Math.min(3, parseFloat((lineHeight + 0.1).toFixed(1))))} aria-label="Increase line height">+</Button>
             </div>
+         </div>
+      </div>
+
+      {/* 4. Structure (GenAI) */}
+      <div className="section-structure">
+         <Label className="mb-2 block">Structure</Label>
+         <div className="space-y-3">
+             <div className="flex items-center justify-between">
+               <div className="space-y-0.5">
+                   <Label htmlFor="distraction-free-switch" className="text-sm">Distraction Free</Label>
+                   <p className="text-xs text-muted-foreground">Hide AI-detected titles & headers</p>
+               </div>
+               <Switch
+                 id="distraction-free-switch"
+                 checked={isDistractionFree}
+                 onCheckedChange={setDistractionFree}
+               />
+             </div>
+
+             {isGenAIEnabled && onAnalyze && (
+                 <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    onClick={onAnalyze}
+                 >
+                     <Sparkles className="w-4 h-4 mr-2" />
+                     Analyze Page Layout
+                 </Button>
+             )}
          </div>
       </div>
     </PopoverContent>

@@ -57,7 +57,8 @@ export const ReaderView: React.FC = () => {
     viewMode,
     shouldForceFont,
     gestureMode,
-    setGestureMode
+    setGestureMode,
+    isDistractionFree
   } = useReaderStore(useShallow(state => ({
     currentTheme: state.currentTheme,
     customTheme: state.customTheme,
@@ -74,7 +75,8 @@ export const ReaderView: React.FC = () => {
     viewMode: state.viewMode,
     shouldForceFont: state.shouldForceFont,
     gestureMode: state.gestureMode,
-    setGestureMode: state.setGestureMode
+    setGestureMode: state.setGestureMode,
+    isDistractionFree: state.isDistractionFree
   })));
 
   // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
@@ -102,6 +104,7 @@ export const ReaderView: React.FC = () => {
     fontSize,
     lineHeight,
     shouldForceFont,
+    isDistractionFree,
     onLocationChange: (location, percentage, title, sectionId) => {
          // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
          if (location.start.cfi === useReaderStore.getState().currentCfi) return;
@@ -157,6 +160,7 @@ export const ReaderView: React.FC = () => {
     fontSize,
     lineHeight,
     shouldForceFont,
+    isDistractionFree,
     id,
     updateLocation,
     setToc,
@@ -169,7 +173,8 @@ export const ReaderView: React.FC = () => {
       isReady: isRenditionReady,
       isLoading: hookLoading,
       metadata,
-      error: hookError
+      error: hookError,
+      analyzeStructure
   } = useEpubReader(id, viewerRef, readerOptions);
 
   // Sync loading state
@@ -483,6 +488,21 @@ export const ReaderView: React.FC = () => {
       }
   }, [rendition]);
 
+  // Handler for Analyze Button
+  const handleAnalyzeStructure = useCallback(async () => {
+      if (analyzeStructure) {
+          const toast = useToastStore.getState().showToast;
+          toast('Analyzing page structure...', 'info');
+          try {
+              await analyzeStructure();
+              toast('Analysis complete. Structure updated.', 'success');
+          } catch (e) {
+              console.error(e);
+              toast('Analysis failed. Check console.', 'error');
+          }
+      }
+  }, [analyzeStructure]);
+
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
       <ReaderTTSController
@@ -549,7 +569,7 @@ export const ReaderView: React.FC = () => {
                         <Type className="w-5 h-5 text-muted-foreground" />
                     </button>
                 </PopoverTrigger>
-                <VisualSettings />
+                <VisualSettings onAnalyze={handleAnalyzeStructure} />
             </Popover>
             <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setGlobalSettingsOpen(true)} className="p-2 rounded-full hover:bg-border">
                 <Settings className="w-5 h-5 text-muted-foreground" />

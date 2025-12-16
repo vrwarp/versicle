@@ -36,6 +36,8 @@ interface ReaderState {
   gestureMode: boolean;
   /** Whether to force the theme font and ignore book styles. */
   shouldForceFont: boolean;
+  /** Whether to hide AI-identified structural elements (Distraction Free). */
+  isDistractionFree: boolean;
 
   /** Sets the loading state. */
   setIsLoading: (isLoading: boolean) => void;
@@ -67,6 +69,8 @@ interface ReaderState {
   setGestureMode: (enabled: boolean) => void;
   /** Sets whether to force the theme font. */
   setShouldForceFont: (force: boolean) => void;
+  /** Sets the distraction free mode. */
+  setDistractionFree: (enabled: boolean) => void;
   /** Resets the reader state to default values. */
   reset: () => void;
 }
@@ -93,6 +97,7 @@ export const useReaderStore = create<ReaderState>()(
       viewMode: 'paginated',
       gestureMode: false,
       shouldForceFont: false,
+      isDistractionFree: false,
 
       setIsLoading: (isLoading) => set({ isLoading }),
       setCurrentBookId: (id) => set({ currentBookId: id }),
@@ -112,6 +117,7 @@ export const useReaderStore = create<ReaderState>()(
       setViewMode: (mode) => set({ viewMode: mode }),
       setGestureMode: (enabled) => set({ gestureMode: enabled }),
       setShouldForceFont: (force) => set({ shouldForceFont: force }),
+      setDistractionFree: (enabled) => set({ isDistractionFree: enabled }),
       reset: () => set({
         isLoading: false,
         currentBookId: null,
@@ -134,6 +140,7 @@ export const useReaderStore = create<ReaderState>()(
         viewMode: state.viewMode,
         gestureMode: state.gestureMode,
         shouldForceFont: state.shouldForceFont,
+        isDistractionFree: state.isDistractionFree,
       }),
     }
   )

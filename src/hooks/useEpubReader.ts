@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
 import { dbService } from '../db/DBService';
+import { genAIService } from '../lib/genai/GenAIService';
+import { findApproximateMatch } from '../lib/genai/textMatching';
 import type { BookMetadata } from '../types/db';
 
 /**
@@ -21,6 +23,8 @@ export interface EpubReaderOptions {
   lineHeight: number;
   /** Whether to force font settings and override book styles. */
   shouldForceFont: boolean;
+  /** Whether to hide AI-identified structural elements. */
+  isDistractionFree?: boolean;
   /** Callback when location changes. */
   onLocationChange?: (location: Location, percentage: number, chapterTitle: string, sectionId: string) => void;
   /** Callback when TOC is loaded. */
@@ -53,6 +57,8 @@ export interface EpubReaderResult {
   toc: NavigationItem[];
   /** Error message if loading failed. */
   error: string | null;
+  /** Analyzes the current chapter structure using GenAI. */
+  analyzeStructure: () => Promise<void>;
 }
 
 /**
@@ -82,6 +88,8 @@ export function useEpubReader(
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeRaf = useRef<number | null>(null);
   const applyStylesRef = useRef<() => void>(() => {});
+  const applyStructureRef = useRef<() => void>(() => {});
+  const currentSectionIdRef = useRef<string | null>(null);
 
   // Use a ref for options to access latest values in event listeners without re-binding
   const optionsRef = useRef(options);
@@ -184,6 +192,8 @@ export function useEpubReader(
                  const title = item ? (item.label || 'Chapter') : 'Unknown';
                  const sectionId = item ? item.href : '';
 
+                 currentSectionIdRef.current = sectionId;
+
                  if (optionsRef.current.onLocationChange) {
                      optionsRef.current.onLocationChange(currentLocation, percentage, title, sectionId);
                  }
@@ -219,6 +229,8 @@ export function useEpubReader(
              const title = item ? (item.label || 'Chapter') : 'Unknown';
              const sectionId = item ? item.href : '';
 
+             currentSectionIdRef.current = sectionId;
+
              if (optionsRef.current.onLocationChange) {
                  optionsRef.current.onLocationChange(location, percentage, title, sectionId);
              }
@@ -236,7 +248,7 @@ export function useEpubReader(
             if (optionsRef.current.onClick) optionsRef.current.onClick();
         });
 
-        // Manual selection listener fallback
+        // Content hook for structure application and styles
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newRendition.hooks.content as any).register((contents: any) => {
             const doc = contents.document;
@@ -269,6 +281,51 @@ export function useEpubReader(
                 doc.head.appendChild(style);
                 applyStylesRef.current();
             }
+
+            // Apply Structure
+            const applyStructure = async () => {
+                if (!bookId || !currentSectionIdRef.current) return;
+
+                const analysis = await dbService.getContentAnalysis(bookId, currentSectionIdRef.current);
+                if (analysis && analysis.structure) {
+                    const text = doc.body.innerText;
+
+                    // Helper to wrap text
+                    const wrapText = (snippet: string, className: string) => {
+                        const match = findApproximateMatch(text, snippet);
+                        if (match) {
+                           // Use window.find to locate and wrap
+                           const selection = contents.window.getSelection();
+                           selection?.removeAllRanges();
+                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                           const found = (contents.window as any).find(snippet, false, false, true, false, false, false);
+                           if (found) {
+                               const range = selection?.getRangeAt(0);
+                               if (range) {
+                                   const span = doc.createElement('span');
+                                   span.className = className;
+                                   range.surroundContents(span);
+                               }
+                           }
+                           selection?.removeAllRanges();
+                        }
+                    };
+
+                    // Apply Title
+                    if (analysis.structure.title) {
+                        // Check if already applied
+                        if (!doc.querySelector('.ai-structure-title')) {
+                            wrapText(analysis.structure.title, 'ai-structure-title');
+                        }
+                    }
+
+                    // Apply Footnotes (Optional - for now focus on title as per plan "Distraction Free")
+                    // The plan implies identifying structure.
+                }
+            };
+
+            applyStructureRef.current = applyStructure;
+            applyStructure();
         });
 
       } catch (err) {
@@ -352,7 +409,11 @@ export function useEpubReader(
           '.highlight-yellow': { 'fill': 'yellow', 'background-color': 'rgba(255, 255, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
           '.highlight-green': { 'fill': 'green', 'background-color': 'rgba(0, 255, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
           '.highlight-blue': { 'fill': 'blue', 'background-color': 'rgba(0, 0, 255, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
-          '.highlight-red': { 'fill': 'red', 'background-color': 'rgba(255, 0, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' }
+          '.highlight-red': { 'fill': 'red', 'background-color': 'rgba(255, 0, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
+          // Structure classes
+          '.ai-structure-title': {
+              'display': options.isDistractionFree ? 'none !important' : 'block'
+          }
       });
 
       themes.select(options.currentTheme);
@@ -441,8 +502,46 @@ export function useEpubReader(
       options.fontFamily,
       options.lineHeight,
       options.viewMode,
-      options.shouldForceFont
+      options.shouldForceFont,
+      options.isDistractionFree // Dependency for distraction free
   ]);
 
-  return { book, rendition, isReady, isLoading, metadata, toc, error };
+  // Analyze Structure Function
+  const analyzeStructure = async () => {
+      if (!bookId || !currentSectionIdRef.current || !renditionRef.current) return;
+
+      const sectionId = currentSectionIdRef.current;
+
+      // Get text
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contents = (renditionRef.current as any).getContents();
+      if (!contents || contents.length === 0) return;
+
+      const text = contents[0].document.body.innerText;
+
+      try {
+          const result = await genAIService.analyzeChapterStructure(text);
+
+          if (result.hasTitle || (result.footnotes && result.footnotes.length > 0)) {
+              await dbService.saveContentAnalysis({
+                  id: `${bookId}-${sectionId}`,
+                  bookId,
+                  sectionId,
+                  structure: {
+                      title: result.titleText,
+                      footnoteMatches: result.footnotes
+                  },
+                  lastAnalyzed: Date.now()
+              });
+
+              // Trigger apply
+              applyStructureRef.current();
+          }
+      } catch (e) {
+          console.error("Analysis failed", e);
+          throw e;
+      }
+  };
+
+  return { book, rendition, isReady, isLoading, metadata, toc, error, analyzeStructure };
 }

@@ -1,4 +1,10 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+
+export interface ChapterStructureResponse {
+  titleText?: string;
+  hasTitle: boolean;
+  footnotes: string[];
+}
 
 class GenAIService {
   private static instance: GenAIService;
@@ -58,6 +64,45 @@ class GenAIService {
       console.error('Failed to parse GenAI response as JSON:', text);
       throw error;
     }
+  }
+
+  public async analyzeChapterStructure(text: string): Promise<ChapterStructureResponse> {
+    let promptText = '';
+
+    if (text.length <= 3000) {
+      promptText = text;
+    } else {
+      promptText = `
+        (First 2000 chars):
+        ${text.substring(0, 2000)}
+        ...
+        (Last 1000 chars):
+        ${text.substring(text.length - 1000)}
+      `;
+    }
+
+    const prompt = `Analyze the following chapter text and identify the structural elements.
+    1. If there is a chapter title or header at the beginning, extract its exact text content as "titleText" and set "hasTitle" to true.
+    2. Identify any footnote markers or footnote text at the end of the chapter. Return their text content as an array of strings in "footnotes".
+
+    Chapter Text:
+    ${promptText}
+    `;
+
+    const schema = {
+      type: SchemaType.OBJECT,
+      properties: {
+        titleText: { type: SchemaType.STRING, nullable: true },
+        hasTitle: { type: SchemaType.BOOLEAN },
+        footnotes: {
+          type: SchemaType.ARRAY,
+          items: { type: SchemaType.STRING }
+        }
+      },
+      required: ["hasTitle", "footnotes"]
+    };
+
+    return this.generateStructured<ChapterStructureResponse>(prompt, schema);
   }
 }
 
