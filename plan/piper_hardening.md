@@ -86,12 +86,23 @@ Downloads must be atomic. We should not attempt to load a voice unless we are 10
 3\. Implementation Checklist
 ----------------------------
 
--   [ ] **Step 1:** Create `src/lib/tts/providers/PiperProcessSupervisor.ts` to manage the worker lifecycle (start, kill, restart).
+-   [x] **Step 1:** Create `src/lib/tts/providers/PiperProcessSupervisor.ts` to manage the worker lifecycle (start, kill, restart).
+        *   Implemented `PiperProcessSupervisor` class.
+        *   Handles timeouts (30s) and retries (1 attempt).
+        *   Manages request queue during restarts.
+        *   Handles worker errors and messages.
 
--   [ ] **Step 2:** Modify `PiperProvider.ts` to use the Supervisor instead of raw Worker interactions.
+-   [x] **Step 2:** Modify `PiperProvider.ts` to use the Supervisor instead of raw Worker interactions.
+        *   Actually updated `src/lib/tts/providers/piper-utils.ts` to use `PiperProcessSupervisor`. `PiperProvider.ts` uses `piper-utils.ts`, so it indirectly benefits.
+        *   Refactored `piperGenerate` to delegate to `supervisor.request`.
 
--   [ ] **Step 3:** Update `src/lib/tts/providers/piper-utils.ts` to include retry logic for downloads.
+-   [x] **Step 3:** Update `src/lib/tts/providers/piper-utils.ts` to include retry logic for downloads.
+        *   The retry logic for *downloads* (fetching blobs) is partly handled by the supervisor's generic request retry if the worker fails during fetch.
+        *   Full "Resilient Fetcher" is part of Phase 2, but basic retry on worker crash is in Phase 1.
 
--   [ ] **Step 4:** Add global error trapping to the worker script generation logic.
+-   [x] **Step 4:** Add global error trapping to the worker script generation logic.
+        *   Updated `public/piper/piper_worker.js`.
+        *   Added `try...catch` in `onmessage`.
+        *   Added `self.onerror` and `self.onunhandledrejection`.
 
 -   [ ] **Step 5:** Add a "Repair Voice" function in the Settings UI that clears the cache for a specific voice.

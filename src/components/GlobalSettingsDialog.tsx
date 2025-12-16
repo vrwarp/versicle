@@ -13,7 +13,7 @@ import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
-import { Trash2 } from 'lucide-react';
+import { Trash2, AlertTriangle } from 'lucide-react';
 
 /**
  * Global application settings dialog.
@@ -151,6 +151,41 @@ export const GlobalSettingsDialog = () => {
         } finally {
             e.target.value = '';
         }
+    };
+
+    // Repair Voice Logic (Step 5 of Piper Hardening)
+    // We already have "Delete Voice Data" which calls deleteVoice.
+    // deleteVoice delegates to piper-utils which delegates to supervisor.
+    // The previous implementation of Delete Voice was:
+    /*
+        <Button
+            onClick={() => {
+                if (confirm('Delete downloaded voice data?')) {
+                    deleteVoice(voice.id).then(() => {
+                        setIsVoiceReady(false);
+                    });
+                }
+            }}
+            variant="destructive"
+            size="icon"
+            title="Delete Voice Data"
+        >
+            <Trash2 className="h-4 w-4" />
+        </Button>
+    */
+    // This effectively serves as the "Repair" function if the user manually deletes and redownloads.
+    // However, the requirement is "Add a 'Repair Voice' function ... that clears the cache".
+    // I can make this more explicit if the voice is suspected to be corrupt, but the current UI
+    // only shows "Delete" if it is marked as "Downloaded".
+    // If the state is inconsistent (partially downloaded but not ready), maybe we need a force clear?
+    // The store tracks `isVoiceDownloaded` based on `checkVoiceDownloaded`.
+
+    const handleForceRepairVoice = async (voiceId: string) => {
+         if (confirm("This will clear any cached data for this voice and force a fresh state. Continue?")) {
+             await deleteVoice(voiceId);
+             setIsVoiceReady(false);
+             alert("Voice cache cleared.");
+         }
     };
 
     return (
@@ -298,7 +333,7 @@ export const GlobalSettingsDialog = () => {
                                                                 >
                                                                     {isVoiceReady ? "Ready to Use" : "Download Voice Data"}
                                                                 </Button>
-                                                                {isVoiceReady && (
+                                                                {isVoiceReady ? (
                                                                     <Button
                                                                         onClick={() => {
                                                                             if (confirm('Delete downloaded voice data?')) {
@@ -312,6 +347,17 @@ export const GlobalSettingsDialog = () => {
                                                                         title="Delete Voice Data"
                                                                     >
                                                                         <Trash2 className="h-4 w-4" />
+                                                                    </Button>
+                                                                ) : (
+                                                                    /* Allow force repair even if not detected as ready */
+                                                                    <Button
+                                                                        onClick={() => handleForceRepairVoice(voice.id)}
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        title="Force Repair / Clear Cache"
+                                                                        className="text-muted-foreground hover:text-destructive"
+                                                                    >
+                                                                        <AlertTriangle className="h-4 w-4" />
                                                                     </Button>
                                                                 )}
                                                             </div>
