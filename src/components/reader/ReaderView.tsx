@@ -27,6 +27,9 @@ import { ReaderTTSController } from './ReaderTTSController';
 import { generateCfiRange } from '../../lib/cfi-utils';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
+import { Button } from '../ui/Button';
+import { useSmartTOC } from '../../hooks/useSmartTOC';
+import { Wand2 } from 'lucide-react';
 
 /**
  * The main reader interface component.
@@ -170,6 +173,7 @@ export const ReaderView: React.FC = () => {
 
   const {
       rendition,
+      book,
       isReady: isRenditionReady,
       isLoading: hookLoading,
       metadata,
@@ -314,6 +318,14 @@ export const ReaderView: React.FC = () => {
   const [useSyntheticToc, setUseSyntheticToc] = useState(false);
   const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
   const [showAnnotations, setShowAnnotations] = useState(false);
+
+  // Smart TOC Hook
+  const { enhanceTOC, isEnhancing, progress: tocProgress } = useSmartTOC(
+      book,
+      id,
+      toc,
+      setSyntheticToc
+  );
 
   const [lexiconOpen, setLexiconOpen] = useState(false);
   const [lexiconText, setLexiconText] = useState('');
@@ -576,13 +588,34 @@ export const ReaderView: React.FC = () => {
 
                      <TabsContent value="chapters" className="flex-1 overflow-y-auto mt-2 min-h-0">
                          <div className="p-4 pt-0">
-                             <div className="flex items-center space-x-2 mb-4 mt-2">
-                                <Switch
-                                    id="synthetic-toc-mode"
-                                    checked={useSyntheticToc}
-                                    onCheckedChange={setUseSyntheticToc}
-                                />
-                                <Label htmlFor="synthetic-toc-mode" className="text-sm font-medium">Generated Titles</Label>
+                             <div className="flex flex-col gap-3 mb-4 mt-2">
+                                <div className="flex items-center space-x-2">
+                                    <Switch
+                                        id="synthetic-toc-mode"
+                                        checked={useSyntheticToc}
+                                        onCheckedChange={setUseSyntheticToc}
+                                    />
+                                    <Label htmlFor="synthetic-toc-mode" className="text-sm font-medium">Generated Titles</Label>
+                                </div>
+
+                                {useSyntheticToc && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="w-full text-xs"
+                                        onClick={enhanceTOC}
+                                        disabled={isEnhancing}
+                                    >
+                                        {isEnhancing ? (
+                                           <span>Enhancing... {tocProgress ? `(${tocProgress.current}/${tocProgress.total})` : ''}</span>
+                                        ) : (
+                                           <>
+                                             <Wand2 className="w-3 h-3 mr-2" />
+                                             Enhance Titles with AI
+                                           </>
+                                        )}
+                                    </Button>
+                                )}
                              </div>
 
                              <ul className="space-y-2">

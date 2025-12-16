@@ -87,6 +87,28 @@ class DBService {
   }
 
   /**
+   * Updates only the metadata for a specific book.
+   *
+   * @param id - The unique identifier of the book.
+   * @param metadata - The partial metadata to update.
+   */
+  async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const tx = db.transaction('books', 'readwrite');
+      const store = tx.objectStore('books');
+      const existing = await store.get(id);
+
+      if (existing) {
+        await store.put({ ...existing, ...metadata });
+      }
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
    * Retrieves the file content for a specific book.
    *
    * @param id - The unique identifier of the book.
