@@ -37,22 +37,7 @@ def test_visual_settings(page: Page):
     page.wait_for_timeout(1000)
     utils.capture_screenshot(page, "visual_settings_02_sepia")
 
-    # Verify body background color in iframe (approximate check via JS)
-    # Note: content_frame returns a FrameLocator which doesn't have evaluate.
-    # We need to resolve it to a Frame or use locator().evaluate()
-    # But wait, FrameLocator maps to Frame. But playwright API is tricky.
-    # page.frame_locator(...) returns FrameLocator.
-    # To get Frame object we might need page.frames... but iframe name is dynamic.
-
-    # Easier way: evaluate on the element inside the frame
-    frame_loc = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
-
-    # Wait for body
-    frame_loc.locator("body").wait_for(timeout=2000)
-
     # Verify Outer UI Theme (ThemeSynchronizer)
-    # This checks if the main document HTML has the 'sepia' class or style
-    # The ThemeSynchronizer applies the class to document.documentElement
     main_html_class = page.locator("html").get_attribute("class")
     print(f"Main HTML Class: {main_html_class}")
 
@@ -87,14 +72,13 @@ def test_visual_settings(page: Page):
     page.wait_for_timeout(1000)
 
     # Check font size in iframe
-    # We check html element style or body style
-    # epub.js often sets font-size on html element for resizing
-    # But we set it via theme on register.
+    frame_loc = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
 
-    # Let's check computed style of a paragraph if possible, or body
+    # Wait for body
+    frame_loc.locator("body").wait_for(timeout=2000)
+
     font_size = frame_loc.locator("body").evaluate("element => getComputedStyle(element).fontSize")
     print(f"Font Size Style: {font_size}")
-    # If not on HTML, check store or visual check
 
     # 3. Test Layout (Scrolled)
     print("Testing Layout Switching (Scrolled)...")
@@ -104,15 +88,32 @@ def test_visual_settings(page: Page):
     page.wait_for_timeout(2000)
     utils.capture_screenshot(page, "visual_settings_04_scrolled")
 
-    # Verify scrollable
-    # In scrolled mode, the wrapper div has overflow auto
-    wrapper_overflow = page.evaluate("""() => {
-        const wrapper = document.querySelector('[data-testid="reader-iframe-container"] div.epub-view');
-        return wrapper ? getComputedStyle(wrapper).overflowY : 'unknown';
-    }""")
-    # Note: epub.js creates a wrapper div inside our container.
-    # Ideally we check if iframe height is large or if scroll exists.
+    # Close the popover to see the content clearly
+    # We can click outside, e.g. top left corner
+    page.mouse.click(10, 10)
+    page.wait_for_timeout(500)
 
-    # For now, just screenshot verification that it didn't crash.
+    # Verify Compass Pill is visible (Audio HUD)
+    # The compass pill should be visible in read mode
+    expect(page.get_by_test_id("compass-pill-active")).to_be_visible()
+
+    # Verify we can scroll to the bottom and text is not obscured by the pill
+    print("Scrolling to bottom to verify padding...")
+
+    # Scroll the iframe body to the bottom
+    # FrameLocator does not have evaluate, we need to access the element via locator
+    frame_loc.locator("html").evaluate("el => el.ownerDocument.defaultView.scrollTo(0, el.ownerDocument.body.scrollHeight)")
+    page.wait_for_timeout(1000)
+
+    # Verify that the iframe has padding applied (indirectly via screenshot, or directly via evaluation)
+    # The fix applied padding to the iframe element itself in the ReaderView
+    # Let's check the computed style of the iframe
+    iframe_padding_bottom = page.locator('[data-testid="reader-iframe-container"] iframe').evaluate("el => getComputedStyle(el).paddingBottom")
+    print(f"Iframe Padding Bottom: {iframe_padding_bottom}")
+
+    # It should be 150px
+    assert iframe_padding_bottom == "150px", f"Expected padding-bottom 150px, got {iframe_padding_bottom}"
+
+    utils.capture_screenshot(page, "visual_settings_05_scrolled_bottom")
 
     print("Visual Settings Journey Passed!")
