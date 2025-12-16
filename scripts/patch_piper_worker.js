@@ -13,9 +13,10 @@ if (!fs.existsSync(workerPath)) {
 }
 
 let content = fs.readFileSync(workerPath, 'utf8');
+let modified = false;
 
-// The code to replace
-const search = `    module.callMain([
+// Patch 1: Add config to phonemize call
+const searchConfig = `    module.callMain([
       "-l",
       modelConfig.espeak.voice,
       "--input",
@@ -24,7 +25,7 @@ const search = `    module.callMain([
       "/espeak-ng-data"
     ]);`;
 
-const replace = `    module.FS.createDataFile(
+const replaceConfig = `    module.FS.createDataFile(
       "/",
       "config.json",
       JSON.stringify(modelConfig),
@@ -44,16 +45,45 @@ const replace = `    module.FS.createDataFile(
     ]);`;
 
 if (content.includes('"--config",')) {
-    console.log('piper_worker.js already patched.');
+    console.log('Config patch already applied.');
 } else {
-    if (content.includes(search)) {
-        content = content.replace(search, replace);
-        fs.writeFileSync(workerPath, content, 'utf8');
-        console.log('piper_worker.js patched successfully.');
+    if (content.includes(searchConfig)) {
+        content = content.replace(searchConfig, replaceConfig);
+        modified = true;
+        console.log('Applied config patch.');
     } else {
-        console.error('Could not find code block to patch in piper_worker.js. Content might have changed.');
-        // Debugging output
-        // console.log('File content:', content);
-        process.exit(1);
+        console.warn('Could not find code block for config patch. It might have changed or already be patched differently.');
     }
+}
+
+// Patch 2: Sanitize phonemeIds
+const searchSanitize = `  const phonemeIds = providedPhonemeIds ?? await phonemize(data, onnxruntimeBase, modelConfig);`;
+const replaceSanitize = `  let phonemeIds = providedPhonemeIds ?? await phonemize(data, onnxruntimeBase, modelConfig);
+  if (modelConfig.num_symbols) {
+    const maxId = modelConfig.num_symbols - 1;
+    for (let i = 0; i < phonemeIds.length; i++) {
+      if (phonemeIds[i] > maxId) {
+        console.warn('Phoneme ID ' + phonemeIds[i] + ' out of bounds (max ' + maxId + '). Replacing with 0.');
+        phonemeIds[i] = 0;
+      }
+    }
+  }`;
+
+if (content.includes('if (modelConfig.num_symbols) {')) {
+    console.log('Sanitize patch already applied.');
+} else {
+    if (content.includes(searchSanitize)) {
+        content = content.replace(searchSanitize, replaceSanitize);
+        modified = true;
+        console.log('Applied sanitize patch.');
+    } else {
+        console.error('Could not find code block for sanitize patch. Content might have changed.');
+    }
+}
+
+if (modified) {
+    fs.writeFileSync(workerPath, content, 'utf8');
+    console.log('piper_worker.js updated.');
+} else {
+    console.log('No changes made to piper_worker.js.');
 }
