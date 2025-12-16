@@ -22,3 +22,8 @@
 **Vulnerability:** Stored XSS potential in book metadata fields (Title, Author, Description) if rendered unsafely.
 **Learning:** While React escapes content by default, sanitizing input at ingestion provides defense-in-depth and protects against future unsafe usage (e.g. `dangerouslySetInnerHTML`).
 **Prevention:** Implemented HTML tag stripping in `sanitizeString`. Use regex `/<[a-zA-Z\/][^>]*>/gm` to avoid stripping math symbols (`A < B`).
+
+## 2025-12-16 - [Fragile Regex Sanitization Revisited]
+**Vulnerability:** The previously implemented regex-based sanitization for book metadata (`<[a-zA-Z/][^>]*>`) was bypassed by nested tags (e.g., `<<script>script>`) and attribute values containing `>`.
+**Learning:** Security fixes based on "clever regex" often introduce new edge cases. Trying to preserve "math symbols" by guessing HTML syntax via regex is fragile.
+**Prevention:** Replaced regex with `DOMParser` to leverage the browser's native HTML parsing capability, which robustly handles entities, attributes, and nesting while still allowing plain text (like `A < B`).

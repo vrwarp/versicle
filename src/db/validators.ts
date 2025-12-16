@@ -40,15 +40,44 @@ export function validateBookMetadata(data: any): data is BookMetadata {
 
 /**
  * Sanitizes a string by stripping HTML, trimming, and enforcing a maximum length.
+ * Uses DOMParser to robustly handle HTML parsing and entity decoding.
+ * This runs primarily in the browser (client-side ingestion).
+ *
  * @param input - The string to sanitize.
  * @param maxLength - The maximum allowed length (default: 255).
  * @returns The sanitized string.
  */
 export function sanitizeString(input: string, maxLength: number = 255): string {
     if (typeof input !== 'string') return '';
-    // Strip HTML tags to prevent XSS (allowing < for math if not followed by tag name)
-    const noHtml = input.replace(new RegExp('<[a-zA-Z/][^>]*>', 'gm'), '');
-    return noHtml.trim().slice(0, maxLength);
+
+    // Primary Path: Use DOMParser (Browser/JSDOM)
+    if (typeof DOMParser !== 'undefined') {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(input, 'text/html');
+
+            // Remove script and style elements entirely to prevent their content from being included
+            const elementsToRemove = doc.querySelectorAll('script, style');
+            elementsToRemove.forEach(el => el.remove());
+
+            const text = doc.body.textContent || '';
+            return text.trim().slice(0, maxLength);
+        } catch (e) {
+            console.error('DOMParser sanitization failed', e);
+        }
+    }
+
+    // Fail-Safe Fallback: If DOMParser is missing or fails (e.g., obscure env),
+    // we escape HTML characters. This degrades UX (visible tags) but guarantees safety,
+    // unlike the previous regex which could be bypassed.
+    console.warn('Using fallback HTML escaping for sanitization.');
+    return input
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+        .trim().slice(0, maxLength);
 }
 
 export interface SanitizationResult {
