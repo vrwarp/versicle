@@ -117,7 +117,7 @@ async function collectChapterData(
 
                  if (content) {
                     const text = content.trim().substring(0, 500);
-                    if (text.length > 50) {
+                    if (text.length > 0) {
                         results.push({ id: item.id, text });
                     }
                  }
