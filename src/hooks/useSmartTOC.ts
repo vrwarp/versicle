@@ -33,20 +33,33 @@ export function useSmartTOC(
       return;
     }
 
-    // Flatten TOC to process all items (including sub-chapters if desired, but let's start with top-level or whatever is in toc)
-    // Note: epub.js 'toc' structure is nested. We need to traverse it.
-    // For simplicity in Phase 3, let's flatten it to a list of items to process,
-    // but we need to reconstruct the tree structure at the end.
-    // Actually, mapping the existing structure is safer.
-
     setIsEnhancing(true);
     const totalItems = countTocItems(originalToc);
+    // Phase 1: Scanning (0-50%), Phase 2: Generating (50-100%)
     setProgress({ current: 0, total: totalItems });
 
     try {
-      const newToc = await processTocItems(originalToc, book, (count) => {
-        setProgress((prev) => (prev ? { ...prev, current: prev.current + count } : null));
-      });
+      // 1. Collect all chapter texts
+      const chaptersToProcess: { id: string; text: string }[] = [];
+
+      await collectChapterData(originalToc, book, (count) => {
+         // Update progress for scanning phase
+         setProgress((prev) => prev ? { ...prev, current: prev.current + count } : null);
+      }, chaptersToProcess);
+
+      // 2. Batch Generate Titles
+      // Reset progress or update message - for now just keep counting but maybe jump?
+      // Since we batched, we can't easily show incremental progress for the API call itself.
+      // We could split into chunks of 10 if we have huge books, but for now single batch.
+
+      const generatedTitles = await genAIService.generateTOCForBatch(chaptersToProcess);
+
+      // Create a map for easy lookup
+      const titleMap = new Map<string, string>();
+      generatedTitles.forEach(item => titleMap.set(item.id, item.title));
+
+      // 3. Reconstruct TOC with new titles
+      const newToc = reconstructToc(originalToc, titleMap);
 
       // Update DB
       const metadata = await dbService.getBookMetadata(bookId);
@@ -54,7 +67,7 @@ export function useSmartTOC(
         await dbService.updateBookMetadata(bookId, {
           ...metadata,
           syntheticToc: newToc,
-          aiAnalysisStatus: 'complete' // Or 'partial' if we failed some
+          aiAnalysisStatus: 'complete'
         });
       }
 
@@ -74,7 +87,6 @@ export function useSmartTOC(
   return { enhanceTOC, isEnhancing, progress };
 }
 
-// Helper to count items recursively
 function countTocItems(items: NavigationItem[]): number {
   let count = 0;
   for (const item of items) {
@@ -86,65 +98,49 @@ function countTocItems(items: NavigationItem[]): number {
   return count;
 }
 
-// Helper to process items recursively
-async function processTocItems(
-  items: NavigationItem[],
-  book: Book,
-  onProgress: (count: number) => void
-): Promise<NavigationItem[]> {
-  const newItems: NavigationItem[] = [];
+async function collectChapterData(
+    items: NavigationItem[],
+    book: Book,
+    onProgress: (count: number) => void,
+    results: { id: string; text: string }[]
+): Promise<void> {
+    for (const item of items) {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const section = book.spine.get(item.href) as any;
+            if (section) {
+                const doc = await section.load(book.load.bind(book)) as Document;
+                if (doc && doc.body && doc.body.textContent) {
+                    const text = doc.body.textContent.trim().substring(0, 500); // 500 chars limit per request
+                    if (text.length > 50) {
+                        results.push({ id: item.id, text });
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn(`Failed to process TOC item: ${item.label}`, e);
+        }
 
-  for (const item of items) {
-    let newLabel = item.label;
+        onProgress(1);
 
-    try {
-      // Load chapter content
-      // We use book.load(href) which returns a Document
-      // But we need to be careful not to render it.
-      // book.load() fetches the resource.
-
-      // Optimization: Try to get text without full DOM parsing if possible,
-      // but epub.js abstracts the storage.
-      // We will use a temporary fetch if possible, but book.load is the standard way.
-      // Note: book.load might return a Document or an XMLDocument.
-
-      // NOTE: This might be slow for many chapters.
-      // We are limiting text to first 2000 chars.
-
-      // Use book.spine.get(href) to ensure we get the right section object, then load.
-      // Casting to 'any' because strict typing for spine items is incomplete in some versions.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const section = book.spine.get(item.href) as any;
-
-      // Use a bound load function to ensure correct context if needed
-      const doc = await section.load(book.load.bind(book)) as Document;
-
-      if (doc && doc.body && doc.body.textContent) {
-          const text = doc.body.textContent.trim().substring(0, 2000);
-          if (text.length > 50) { // Only process if there's enough text
-              const result = await genAIService.generateChapterTitle(text);
-              newLabel = result.title;
-          }
-      }
-
-    } catch (e) {
-      console.warn(`Failed to process TOC item: ${item.label}`, e);
-      // Keep original label on failure
+        if (item.subitems && item.subitems.length > 0) {
+            await collectChapterData(item.subitems, book, onProgress, results);
+        }
     }
+}
 
-    onProgress(1);
+function reconstructToc(items: NavigationItem[], titleMap: Map<string, string>): NavigationItem[] {
+    return items.map(item => {
+        const newTitle = titleMap.get(item.id);
+        const newItem: NavigationItem = {
+            ...item,
+            label: newTitle || item.label
+        };
 
-    const newItem: NavigationItem = {
-      ...item,
-      label: newLabel,
-    };
+        if (item.subitems && item.subitems.length > 0) {
+            newItem.subitems = reconstructToc(item.subitems, titleMap);
+        }
 
-    if (item.subitems && item.subitems.length > 0) {
-      newItem.subitems = await processTocItems(item.subitems, book, onProgress);
-    }
-
-    newItems.push(newItem);
-  }
-
-  return newItems;
+        return newItem;
+    });
 }
