@@ -2,7 +2,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { dbService } from '../db/DBService';
 import type { BookMetadata, Annotation, LexiconRule, BookLocations } from '../types/db';
-import { getSanitizedBookMetadata } from '../db/validators';
+import { getSanitizedBookMetadata, getSanitizedAnnotation, getSanitizedLexiconRule } from '../db/validators';
 import { getDB } from '../db/db';
 
 /**
@@ -259,14 +259,30 @@ export class BackupService {
     // 1.2 Restore Annotations
     const annotations = Array.isArray(manifest.annotations) ? manifest.annotations : [];
     for (const ann of annotations) {
-        await tx.objectStore('annotations').put(ann);
+        const check = getSanitizedAnnotation(ann);
+        if (check) {
+            if (check.wasModified) {
+                console.warn('Annotation sanitized:', check.modifications);
+            }
+            await tx.objectStore('annotations').put(check.sanitized);
+        } else {
+            console.warn('Skipping invalid annotation record in backup', ann);
+        }
         updateProgress('Restoring annotations...');
     }
 
     // 1.3 Restore Lexicon
     const lexicon = Array.isArray(manifest.lexicon) ? manifest.lexicon : [];
     for (const rule of lexicon) {
-        await tx.objectStore('lexicon').put(rule);
+        const check = getSanitizedLexiconRule(rule);
+        if (check) {
+            if (check.wasModified) {
+                console.warn('Lexicon rule sanitized:', check.modifications);
+            }
+            await tx.objectStore('lexicon').put(check.sanitized);
+        } else {
+            console.warn('Skipping invalid lexicon rule in backup', rule);
+        }
         updateProgress('Restoring dictionary...');
     }
 

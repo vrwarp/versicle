@@ -229,10 +229,12 @@ export async function processEpub(file: File): Promise<string> {
   const check = getSanitizedBookMetadata(candidateBook);
   let finalBook = candidateBook;
 
-  if (check) {
-    if (check.wasModified) {
-      console.warn(`Security Warning: Metadata for book "${candidateBook.title}" was sanitized:`, check.modifications);
+  if (check && check.wasModified) {
+    const msg = `Security Warning: Metadata for book "${candidateBook.title}" is too long.\n${check.modifications.join('\n')}\n\nClick OK to Sanitize (Recommended), or Cancel to Import As-Is (Not Recommended).`;
+    if (confirm(msg)) {
+      finalBook = check.sanitized;
     }
+  } else if (check) {
     finalBook = check.sanitized;
   }
 

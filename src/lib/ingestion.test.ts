@@ -164,7 +164,7 @@ describe('ingestion', () => {
     expect(book?.author).toBe('Unknown Author');
   });
 
-  it('should sanitize metadata automatically', async () => {
+  it('should sanitize metadata if user confirms', async () => {
       const longTitle = 'A'.repeat(600);
 
       vi.resetModules();
@@ -183,7 +183,8 @@ describe('ingestion', () => {
        archive: { getBlob: vi.fn() }
      }));
 
-     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+     // User confirms sanitization
+     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
      const mockFile = createMockFile(true);
      const bookId = await processEpub(mockFile);
@@ -191,11 +192,41 @@ describe('ingestion', () => {
      const db = await getDB();
      const book = await db.get('books', bookId);
 
-     expect(warnSpy).toHaveBeenCalledWith(
-       expect.stringContaining('Security Warning'),
-       expect.anything()
-     );
+     expect(confirmSpy).toHaveBeenCalled();
      expect(book?.title.length).toBe(500);
      expect(book?.title).not.toBe(longTitle);
+   });
+
+   it('should NOT sanitize metadata if user cancels', async () => {
+      const longTitle = 'A'.repeat(600);
+
+      vi.resetModules();
+      const epubjs = await import('epubjs');
+      (epubjs.default as any).mockImplementation(() => ({
+       ready: Promise.resolve(),
+       loaded: {
+         metadata: Promise.resolve({
+           title: longTitle,
+           creator: 'Author',
+           description: 'Desc',
+         }),
+       },
+       coverUrl: vi.fn(() => Promise.resolve(null)),
+       spine: { each: vi.fn() },
+       archive: { getBlob: vi.fn() }
+     }));
+
+     // User cancels sanitization (imports as-is)
+     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+     const mockFile = createMockFile(true);
+     const bookId = await processEpub(mockFile);
+
+     const db = await getDB();
+     const book = await db.get('books', bookId);
+
+     expect(confirmSpy).toHaveBeenCalled();
+     expect(book?.title.length).toBe(600);
+     expect(book?.title).toBe(longTitle);
    });
 });

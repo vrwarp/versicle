@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeString, getSanitizedBookMetadata } from './validators';
+import { sanitizeString, getSanitizedBookMetadata, getSanitizedAnnotation, getSanitizedLexiconRule } from './validators';
 import type { BookMetadata } from '../types/db';
 
 describe('validators', () => {
@@ -91,6 +91,50 @@ describe('validators', () => {
       it('returns null for invalid structure', () => {
           expect(getSanitizedBookMetadata(null)).toBeNull();
           expect(getSanitizedBookMetadata({})).toBeNull();
+      });
+  });
+
+  describe('getSanitizedAnnotation', () => {
+      const validAnnotation = {
+          id: '1', bookId: 'b1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123
+      };
+
+      it('sanitizes text and note', () => {
+          const input = { ...validAnnotation, text: 't'.repeat(6000), note: 'n'.repeat(2000) };
+          const result = getSanitizedAnnotation(input);
+          expect(result?.wasModified).toBe(true);
+          expect(result?.sanitized.text.length).toBe(5000);
+          expect(result?.sanitized.note?.length).toBe(1000);
+      });
+
+      it('returns null for invalid input', () => {
+          expect(getSanitizedAnnotation({})).toBeNull();
+      });
+  });
+
+  describe('getSanitizedLexiconRule', () => {
+      const validRule = {
+          id: '1', original: 'orig', replacement: 'repl', created: 123
+      };
+
+      it('truncates overly long rules', () => {
+          const input = { ...validRule, original: 'a'.repeat(2000), replacement: 'b'.repeat(2000) };
+          const result = getSanitizedLexiconRule(input);
+          expect(result?.wasModified).toBe(true);
+          expect(result?.sanitized.original.length).toBe(1000);
+          expect(result?.sanitized.replacement.length).toBe(1000);
+      });
+
+      it('rejects invalid regex', () => {
+          const input = { ...validRule, original: '[', isRegex: true };
+          expect(getSanitizedLexiconRule(input)).toBeNull();
+      });
+
+      it('accepts valid regex', () => {
+          const input = { ...validRule, original: 'test', isRegex: true };
+          const result = getSanitizedLexiconRule(input);
+          expect(result?.wasModified).toBe(false);
+          expect(result?.sanitized.original).toBe('test');
       });
   });
 });

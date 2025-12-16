@@ -1,4 +1,4 @@
-import type { BookMetadata } from '../types/db';
+import type { BookMetadata, Annotation, LexiconRule } from '../types/db';
 
 /**
  * Validates if an object conforms to the BookMetadata interface.
@@ -96,6 +96,114 @@ export function getSanitizedBookMetadata(data: any): SanitizationResult | null {
 
     return {
         sanitized,
+        wasModified: modifications.length > 0,
+        modifications
+    };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function validateAnnotation(data: any): data is Annotation {
+    if (!data || typeof data !== 'object') return false;
+    if (typeof data.id !== 'string') return false;
+    if (typeof data.bookId !== 'string') return false;
+    if (typeof data.cfiRange !== 'string') return false;
+    if (typeof data.text !== 'string') return false;
+    if (typeof data.color !== 'string') return false;
+    if (typeof data.type !== 'string') return false;
+    if (typeof data.created !== 'number') return false;
+    return true;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function validateLexiconRule(data: any): data is LexiconRule {
+    if (!data || typeof data !== 'object') return false;
+    if (typeof data.id !== 'string') return false;
+    if (typeof data.original !== 'string') return false;
+    if (typeof data.replacement !== 'string') return false;
+    if (typeof data.created !== 'number') return false;
+    return true;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getSanitizedAnnotation(data: any): SanitizationResult | null {
+    if (!validateAnnotation(data)) return null;
+
+    const modifications: string[] = [];
+
+    const textSanitized = sanitizeString(data.text, 5000);
+    if (textSanitized !== data.text) {
+        modifications.push('Annotation text sanitized/truncated');
+    }
+
+    let noteSanitized = data.note;
+    if (typeof data.note === 'string') {
+        noteSanitized = sanitizeString(data.note, 1000);
+        if (noteSanitized !== data.note) {
+            modifications.push('Annotation note sanitized/truncated');
+        }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sanitized: Annotation = {
+        ...data,
+        text: textSanitized,
+        note: noteSanitized
+    } as any;
+
+    return {
+        sanitized: sanitized as any,
+        wasModified: modifications.length > 0,
+        modifications
+    };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getSanitizedLexiconRule(data: any): SanitizationResult | null {
+    if (!validateLexiconRule(data)) return null;
+
+    const modifications: string[] = [];
+
+    // Check regex validity
+    if (data.isRegex) {
+        try {
+            new RegExp(data.original);
+        } catch {
+            return null; // Invalid regex
+        }
+    }
+
+    // Just strict truncation, no HTML stripping for regex rules
+    const maxLength = 1000;
+    let originalSanitized = data.original;
+    if (data.original.length > maxLength) {
+         originalSanitized = data.original.slice(0, maxLength);
+         modifications.push(`Rule original text truncated to ${maxLength}`);
+    }
+
+    let replacementSanitized = data.replacement;
+     if (data.replacement.length > maxLength) {
+         replacementSanitized = data.replacement.slice(0, maxLength);
+         modifications.push(`Rule replacement text truncated to ${maxLength}`);
+    }
+
+    // Re-validate regex if truncated
+    if (data.isRegex && modifications.length > 0) {
+        try {
+            new RegExp(originalSanitized);
+        } catch {
+             return null;
+        }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sanitized: LexiconRule = {
+        ...data,
+        original: originalSanitized,
+        replacement: replacementSanitized
+    } as any;
+
+    return {
+        sanitized: sanitized as any,
         wasModified: modifications.length > 0,
         modifications
     };
