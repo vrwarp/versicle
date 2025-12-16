@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { dbService } from '../../db/DBService';
-import { parseCfiRange } from '../../lib/cfi-utils';
+import { parseCfiRange, getSpinePosFromCfi } from '../../lib/cfi-utils';
 import type { Rendition } from 'epubjs';
 
 interface Props {
@@ -14,6 +14,7 @@ interface HistoryItem {
     range: string;
     label: string;
     percentage: number;
+    subLabel: string;
 }
 
 export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavigate }) => {
@@ -37,6 +38,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
             for (const range of ranges) {
                 let label = "Reading Segment";
                 let percentage = 0;
+                let subLabel = range;
 
                 if (book) {
                     // Try to get percentage
@@ -49,13 +51,43 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                         }
                     }
 
-                    label = `Segment at ${(percentage * 100).toFixed(1)}%`;
+                    // Try to get Chapter Title
+                    const spinePos = getSpinePosFromCfi(range);
+                    if (spinePos >= 0) {
+                        const section = book.spine.get(spinePos);
+                        if (section) {
+                             let title = "";
+                             // Try to find label in TOC
+                             if (section.href) {
+                                  // book.navigation.get() expects the href as it appears in the TOC
+                                  const navItem = book.navigation.get(section.href);
+                                  if (navItem && navItem.label) {
+                                      title = navItem.label.trim();
+                                  }
+                             }
+
+                             if (title) {
+                                 label = title;
+                             } else {
+                                 // Fallback to generic Chapter label
+                                 label = `Chapter ${spinePos + 1}`;
+                             }
+                             subLabel = `${(percentage * 100).toFixed(1)}% completed`;
+                        } else {
+                             label = `Segment at ${(percentage * 100).toFixed(1)}%`;
+                             subLabel = range;
+                        }
+                    } else {
+                        label = `Segment at ${(percentage * 100).toFixed(1)}%`;
+                        subLabel = range;
+                    }
                 }
 
                 loadedItems.push({
                     range,
                     label,
-                    percentage
+                    percentage,
+                    subLabel
                 });
             }
 
@@ -97,7 +129,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                             <span className="text-sm font-medium text-foreground">{item.label}</span>
                         </div>
                         <p className="text-xs text-muted-foreground truncate mt-1 font-mono opacity-70">
-                            {item.range}
+                            {item.subLabel}
                         </p>
                     </li>
                 ))}
