@@ -119,7 +119,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
       role="button"
       tabIndex={0}
       data-testid={`book-card-${book.id}`}
-      className="group flex flex-col bg-card text-card-foreground rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-border h-full cursor-pointer relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group flex flex-col bg-card text-card-foreground rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-border h-full cursor-pointer relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-w-[200px] mx-auto w-full"
     >
       <input
         type="file"
