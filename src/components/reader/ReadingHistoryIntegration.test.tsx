@@ -24,7 +24,6 @@ describe('ReadingHistory Integration', () => {
         const ranges = ['epubcfi(/6/14!/4/2/1:0)'];
         (dbService.getReadingHistory as any).mockResolvedValue(ranges);
 
-        // We mock rendition as null to trigger the "Segment at..." fallback
         render(
            <ReadingHistoryPanel
                bookId="book1"
@@ -39,16 +38,46 @@ describe('ReadingHistory Integration', () => {
             expect(screen.queryByText('Loading history...')).not.toBeInTheDocument();
         });
 
-        // With rendition=null, the "book" is null.
-        // The code:
-        // if (book) { ... }
-        // else {
-        //    // wait, if book is null, logic inside "if (book)" is skipped.
-        //    // label = "Reading Segment"; percentage = 0; subLabel = range;
-        // }
-        // So we expect "Reading Segment" and the range as sublabel.
-
         expect(screen.getByText('Reading Segment')).toBeInTheDocument();
         expect(screen.getByText('epubcfi(/6/14!/4/2/1:0)')).toBeInTheDocument();
+    });
+
+    it('refreshes history when trigger changes', async () => {
+        const initialRanges = ['epubcfi(/6/14!/4/2/1:0)'];
+        const updatedRanges = ['epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/1:10)'];
+
+        // First call returns initial
+        (dbService.getReadingHistory as any)
+            .mockResolvedValueOnce(initialRanges)
+            .mockResolvedValueOnce(updatedRanges);
+
+        const { rerender } = render(
+           <ReadingHistoryPanel
+               bookId="book1"
+               rendition={null}
+               onNavigate={vi.fn()}
+               trigger={0}
+           />
+        );
+
+        await waitFor(() => {
+             expect(screen.getByText('epubcfi(/6/14!/4/2/1:0)')).toBeInTheDocument();
+        });
+
+        // Update trigger
+        rerender(
+           <ReadingHistoryPanel
+               bookId="book1"
+               rendition={null}
+               onNavigate={vi.fn()}
+               trigger={1}
+           />
+        );
+
+        await waitFor(() => {
+             expect(screen.getByText('epubcfi(/6/14!/4/2/1:10)')).toBeInTheDocument();
+        });
+
+        expect(dbService.getReadingHistory).toHaveBeenCalledTimes(2);
     });
 });

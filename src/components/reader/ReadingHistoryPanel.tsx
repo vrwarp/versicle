@@ -8,6 +8,7 @@ interface Props {
   rendition: Rendition | null;
   onNavigate: (cfi: string) => void;
   onClose?: () => void;
+  trigger?: number;
 }
 
 interface HistoryItem {
@@ -17,14 +18,14 @@ interface HistoryItem {
     subLabel: string;
 }
 
-export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavigate }) => {
+export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavigate, trigger = 0 }) => {
     const [items, setItems] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         loadHistory();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [bookId]);
+    }, [bookId, trigger]);
 
     const loadHistory = async () => {
         setLoading(true);

@@ -99,6 +99,8 @@ export const ReaderView: React.FC = () => {
     hidePopover
   } = useAnnotationStore();
 
+  const [historyTick, setHistoryTick] = useState(0);
+
   // --- Setup useEpubReader Hook ---
 
   const readerOptions = useMemo<EpubReaderOptions>(() => ({
@@ -119,7 +121,9 @@ export const ReaderView: React.FC = () => {
              const prevEnd = previousLocation.current.end;
              if (prevStart && prevEnd) {
                  const range = generateCfiRange(prevStart, prevEnd);
-                 dbService.updateReadingHistory(id, range).catch((err) => console.error("History update failed", err));
+                 dbService.updateReadingHistory(id, range)
+                    .then(() => setHistoryTick(t => t + 1))
+                    .catch((err) => console.error("History update failed", err));
              }
          }
          previousLocation.current = { start: location.start.cfi, end: location.end.cfi };
@@ -644,6 +648,7 @@ export const ReaderView: React.FC = () => {
                          <ReadingHistoryPanel
                             bookId={id || ''}
                             rendition={rendition}
+                            trigger={historyTick}
                             onNavigate={(cfi) => {
                                 rendition?.display(cfi);
                                 if (window.innerWidth < 768) setShowToc(false);
