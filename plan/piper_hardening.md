@@ -86,12 +86,12 @@ Downloads must be atomic. We should not attempt to load a voice unless we are 10
 3\. Implementation Checklist
 ----------------------------
 
--   [ ] **Step 1:** Create `src/lib/tts/providers/PiperProcessSupervisor.ts` to manage the worker lifecycle (start, kill, restart).
+-   [x] **Step 1:** Create `src/lib/tts/providers/PiperProcessSupervisor.ts` to manage the worker lifecycle (start, kill, restart).
 
--   [ ] **Step 2:** Modify `PiperProvider.ts` to use the Supervisor instead of raw Worker interactions.
+-   [x] **Step 2:** Modify `PiperProvider.ts` (specifically `piper-utils.ts`) to use the Supervisor instead of raw Worker interactions.
 
 -   [ ] **Step 3:** Update `src/lib/tts/providers/piper-utils.ts` to include retry logic for downloads.
 
--   [ ] **Step 4:** Add global error trapping to the worker script generation logic.
+-   [x] **Step 4:** Add global error trapping to the worker script generation logic.
 
 -   [ ] **Step 5:** Add a "Repair Voice" function in the Settings UI that clears the cache for a specific voice.
