@@ -149,9 +149,10 @@ export function useEpubReader(
           a { color: #0000ee !important; }
         `);
         themes.register('dark', `
-          body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-          p, div, span, h1, h2, h3, h4, h5, h6 { color: inherit !important; background: transparent !important; }
-          a { color: #6ab0f3 !important; }
+          html, body { background-color: #1a1a1a !important; color: #f5f5f5 !important; }
+          html body * { color: #f5f5f5 !important; background-color: transparent !important; }
+          html body p, html body span, html body div, html body h1, html body h2, html body h3, html body h4, html body h5, html body h6 { color: #f5f5f5 !important; background-color: transparent !important; }
+          a, a * { color: #6ab0f3 !important; }
         `);
         themes.register('sepia', `
           body { background: #f4ecd8 !important; color: #5b4636 !important; }
@@ -389,7 +390,18 @@ export function useEpubReader(
 
       // Forced Styles
       const applyStyles = () => {
-          if (!options.shouldForceFont) return;
+          const shouldEnforceColors = options.currentTheme !== 'light';
+
+          if (!options.shouldForceFont && !shouldEnforceColors) {
+              // Remove forced styles if we are in default mode and not forcing font
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (r as any).getContents().forEach((content: any) => {
+                  const doc = content.document;
+                  const style = doc.getElementById('force-theme-style');
+                  if (style) style.remove();
+              });
+              return;
+          }
 
           let bg, fg, linkColor;
           switch (options.currentTheme) {
@@ -406,26 +418,49 @@ export function useEpubReader(
               bg = '#ffffff'; fg = '#000000'; linkColor = '#0000ee';
           }
 
-          const css = `
-            html body *, html body p, html body div, html body span, html body h1, html body h2, html body h3, html body h4, html body h5, html body h6 {
-              font-family: ${options.fontFamily} !important;
-              line-height: ${options.lineHeight} !important;
-              color: ${fg} !important;
-              background-color: transparent !important;
-              text-align: left !important;
-              -webkit-touch-callout: none !important;
-            }
+          let css = '';
+          const selectors = 'html body *, html body p, html body div, html body span, html body h1, html body h2, html body h3, html body h4, html body h5, html body h6';
+
+          if (options.shouldForceFont) {
+              css = `
+                ${selectors} {
+                  font-family: ${options.fontFamily} !important;
+                  line-height: ${options.lineHeight} !important;
+                  color: ${fg} !important;
+                  background-color: transparent !important;
+                  text-align: left !important;
+                  -webkit-touch-callout: none !important;
+                }
+              `;
+          } else {
+              // Enforce colors only
+              css = `
+                ${selectors} {
+                  color: ${fg} !important;
+                  background-color: transparent !important;
+                }
+              `;
+          }
+
+          // Global overrides
+          css += `
             html, body {
               background: ${bg} !important;
+              color: ${fg} !important;
             }
             a, a * {
               color: ${linkColor} !important;
               text-decoration: none !important;
             }
-            a:hover, a:hover * {
-              text-decoration: underline !important;
-            }
           `;
+
+          if (options.shouldForceFont) {
+             css += `
+                a:hover, a:hover * {
+                  text-decoration: underline !important;
+                }
+             `;
+          }
 
           // Apply to all active contents
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
