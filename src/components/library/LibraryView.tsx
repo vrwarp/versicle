@@ -65,17 +65,35 @@ export const LibraryView: React.FC = () => {
   }, [fetchBooks]);
 
   useLayoutEffect(() => {
-    function updateSize() {
-      if (containerRef.current) {
-        setDimensions({
-          width: containerRef.current.offsetWidth,
-          height: window.innerHeight - containerRef.current.getBoundingClientRect().top - 20 // Approx remaining height
+    if (!containerRef.current) return;
+
+    const observer = new ResizeObserver((entries) => {
+      // Debounce logic could be added here if needed, but ResizeObserver is already reasonably efficient.
+      // For immediate responsiveness, we'll update directly but wrapped in requestAnimationFrame to align with paint cycles.
+      window.requestAnimationFrame(() => {
+        if (!Array.isArray(entries) || !entries.length) return;
+        const entry = entries[0];
+
+        // Use contentRect for precise content box dimensions
+        const { width } = entry.contentRect;
+
+        // Calculate height based on window to keep the original full-screen behavior
+        // (Though using contentRect height would be more robust if the parent container is constrained)
+        const top = entry.target.getBoundingClientRect().top;
+        const height = window.innerHeight - top - 20;
+
+        setDimensions(prev => {
+            if (prev.width === width && prev.height === height) return prev;
+            return { width, height };
         });
-      }
-    }
-    window.addEventListener('resize', updateSize);
-    updateSize();
-    return () => window.removeEventListener('resize', updateSize);
+      });
+    });
+
+    observer.observe(containerRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,8 +157,9 @@ export const LibraryView: React.FC = () => {
   const rowCount = Math.ceil(books.length / columnCount);
   const gridColumnWidth = Math.floor(dimensions.width / columnCount);
 
-  // Memoize cellProps to prevent unnecessary re-renders of the grid
-  const cellProps = React.useMemo(() => ({ books, columnCount }), [books, columnCount]);
+  // Memoize itemData (cellProps) to prevent unnecessary re-renders of the grid cells.
+  // This version of react-window uses cellProps which are spread into the component props.
+  const itemData = React.useMemo(() => ({ books, columnCount }), [books, columnCount]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const GridAny = Grid as any;
@@ -241,7 +260,7 @@ export const LibraryView: React.FC = () => {
                 rowHeight={viewMode === 'list' ? LIST_ITEM_HEIGHT : CARD_HEIGHT + GAP}
                 width={dimensions.width}
                 cellComponent={viewMode === 'list' ? ListCell : GridCell}
-                cellProps={cellProps}
+                cellProps={itemData}
              />
           )}
         </section>
