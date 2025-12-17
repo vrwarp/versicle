@@ -19,11 +19,14 @@ vi.mock('../../store/useTTSStore', () => ({
     useTTSStore: vi.fn()
 }));
 
-// Mock useReaderStore
+// Mock useReaderStore with selector support
 vi.mock('../../store/useReaderStore', () => ({
-    useReaderStore: () => ({
-        currentChapterTitle: 'Test Chapter'
-    })
+    useReaderStore: (selector: any) => {
+        const state = {
+            currentChapterTitle: 'Test Chapter'
+        };
+        return selector ? selector(state) : state;
+    }
 }));
 
 // Mock useChapterDuration
