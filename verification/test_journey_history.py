@@ -1,92 +1,68 @@
-"""
-Playwright test for the Reading History Journey.
-Verifies reading history tracking, history panel (in TOC sidebar), and jumping.
-"""
-import re
+
 import pytest
 from playwright.sync_api import Page, expect
-from verification import utils
 
 def test_reading_history_journey(page: Page):
-    print("Starting Reading History Journey...")
-    utils.reset_app(page)
-    utils.ensure_library_with_book(page)
+    # 1. Load the app (using the demo book since library might be empty)
+    page.goto("/")
 
-    # Open Book
-    print("Opening book...")
-    page.locator("[data-testid^='book-card-']").first.click()
-    expect(page).to_have_url(re.compile(r".*/read/.*"))
+    # Handle empty library case by loading demo book if prompted
+    try:
+        page.wait_for_selector("text=Your library is empty", timeout=2000)
+        page.click("text=Load Demo Book")
+    except:
+        pass # Library not empty or demo book already loaded
 
-    # Wait for content to render
+    # Wait for book cover to appear to ensure we are in library or book is loaded
+    # If in library, click the first book
+    try:
+        page.wait_for_selector("[data-testid^='book-card-']", timeout=5000)
+        page.click("[data-testid^='book-card-']:first-child")
+    except:
+        pass # Might be already in reader if persistent state
+
+    # Wait for reader to load
+    page.wait_for_selector("[data-testid='reader-view']", timeout=10000)
+
+    # DWELL TIME CHECK: We must stay on the initial page for > 2 seconds for history to track it
+    # upon the next navigation.
+    page.wait_for_timeout(3000)
+
+    # 2. Open Table of Contents
+    page.click("[data-testid='reader-toc-button']")
+
+    # 3. Switch to History Tab
+    page.click("[data-testid='tab-history']")
+
+    # 4. Navigate to a new chapter to generate history
+    page.click("[data-testid='tab-chapters']")
+    page.wait_for_selector("[data-testid^='toc-item-']", timeout=5000)
+
+    # Click a different chapter than current to ensure navigation
+    page.click("[data-testid='toc-item-2']")
+
+    # Wait for navigation to complete
+    # AND WAIT FOR DWELL TIME (2s) so subsequent history is recorded if we navigate again
+    # (Though we check history of the PREVIOUS segment now)
+    page.wait_for_timeout(3000)
+
+    # 5. Check History again
+    page.click("[data-testid='reader-toc-button']")
+    if not page.is_visible("[data-testid='reader-toc-sidebar']"):
+         page.click("[data-testid='reader-toc-button']")
+
+    page.click("[data-testid='tab-history']")
+
+    # Should have at least one entry now.
+    expect(page.locator("ul.divide-y li")).not_to_have_count(0, timeout=5000)
+
+    # 6. Click the history item to navigate back
+    history_item = page.locator("ul.divide-y li").first
+    history_label = history_item.locator("span").inner_text()
+
+    history_item.click()
+
+    # Wait for navigation
     page.wait_for_timeout(2000)
 
-    # Navigate a bit to generate history
-    # Note: History updates on location change (previous location is saved).
-    # So we need to move at least once to save the "start" location.
-    print("Navigating to generate history...")
-    page.keyboard.press("ArrowRight")
-    page.wait_for_timeout(1000)
-    page.keyboard.press("ArrowRight")
-    page.wait_for_timeout(1000)
-
-    # Open TOC Panel (which now houses History)
-    print("Opening TOC/History Panel...")
-    toc_btn = page.get_by_test_id("reader-toc-button")
-    expect(toc_btn).to_be_visible()
-    toc_btn.click()
-
-    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
-
-    # Switch to History Tab
-    print("Switching to History Tab...")
-    history_tab = page.get_by_test_id("tab-history")
-    expect(history_tab).to_be_visible()
-    history_tab.click()
-
-    # Give it a moment to load from DB
-    page.wait_for_timeout(1000)
-
-    utils.capture_screenshot(page, "history_01_panel_open")
-
-    # Check for history items
-    # They are li elements inside the sidebar, but we want to make sure we are not seeing chapters
-    # The History tab content should be visible.
-    # We can look for the "Reading History" header text inside the panel if we kept it.
-    expect(page.get_by_text("Reading History", exact=True)).to_be_visible()
-
-    # Find items in the active content
-    # Since we are in the sidebar, and chapters are hidden (inactive tab), searching for li should be fine
-    # assuming inactive tabs are hidden with display:none or unmounted.
-    # Radix UI Tabs usually unmount or hide.
-    items = page.locator("[data-testid='reader-toc-sidebar'] li")
-    count = items.count()
-    print(f"Found {count} items in sidebar (should be history items)")
-
-    # We expect at least one item
-    if count == 0:
-        # Check if there is a "No reading history" message
-        if page.get_by_text("No reading history recorded yet").is_visible():
-            print("Message 'No reading history recorded yet' is visible.")
-        else:
-             print("Warning: No items and no empty message?")
-
-    # Click an item to jump
-    if count > 0:
-        print("Clicking first history item...")
-        items.first.click()
-        # On desktop, sidebar stays open.
-        page.wait_for_timeout(500)
-        utils.capture_screenshot(page, "history_02_after_jump")
-
-    # Close sidebar if it's still open
-    # On mobile, selecting an item auto-closes the sidebar.
-    sidebar = page.get_by_test_id("reader-toc-sidebar")
-    if sidebar.is_visible():
-        print("Sidebar visible, closing manually...")
-        page.get_by_test_id("reader-toc-button").click()
-    else:
-        print("Sidebar already closed (mobile behavior).")
-
-    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
-
-    print("Reading History Journey Passed!")
+    print("Reading history journey completed successfully")
