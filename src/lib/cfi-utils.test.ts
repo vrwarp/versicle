@@ -2,24 +2,32 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mergeCfiRanges, parseCfiRange, generateCfiRange } from './cfi-utils';
 
-// Mock epubjs
+// We need to be able to reset the mock to test the fallback behavior
+let mockEpubCFI: any;
+
 vi.mock('epubjs', () => {
   return {
     default: {
-      CFI: class MockCFI {
-        compare(a: string, b: string) {
-            if (a === b) return 0;
-            return a < b ? -1 : 1;
-        }
+      get CFI() {
+        return mockEpubCFI;
       }
     }
   };
 });
 
 describe('cfi-utils', () => {
+    beforeEach(() => {
+        // Default Mock Behavior: Simple Lexical Sort
+        mockEpubCFI = class MockCFI {
+            compare(a: string, b: string) {
+                if (a === b) return 0;
+                return a < b ? -1 : 1;
+            }
+        };
+    });
+
     describe('parseCfiRange', () => {
         it('parses a valid CFI range', () => {
-            // Correct CFI range format: epubcfi(parent,start,end)
             const range = 'epubcfi(/6/14!/4/2/1,:0,:10)';
             const parsed = parseCfiRange(range);
             expect(parsed).not.toBeNull();
@@ -32,8 +40,16 @@ describe('cfi-utils', () => {
 
         it('returns null for invalid CFI range', () => {
             expect(parseCfiRange('invalid')).toBeNull();
-            // Missing parts
             expect(parseCfiRange('epubcfi(/a,/b)')).toBeNull();
+            expect(parseCfiRange('')).toBeNull();
+            expect(parseCfiRange(null as any)).toBeNull();
+        });
+
+        it('handles offsets correctly', () => {
+            const range = 'epubcfi(/6/14!/4/2/1,:100,:200)';
+            const parsed = parseCfiRange(range);
+            expect(parsed?.start).toBe(':100');
+            expect(parsed?.end).toBe(':200');
         });
     });
 
@@ -42,79 +58,135 @@ describe('cfi-utils', () => {
             const start = 'epubcfi(/6/14!/4/2/1:0)';
             const end = 'epubcfi(/6/14!/4/2/1:10)';
             const range = generateCfiRange(start, end);
-
-            // Based on implementation behavior:
-            // Common: /6/14!/4/2/1
-            // StartRel: :0
-            // EndRel: :10
             expect(range).toBe('epubcfi(/6/14!/4/2/1,:0,:10)');
+        });
+
+        it('handles CFIs with step indirection', () => {
+            const start = 'epubcfi(/6/14!/4[id]/2/1:0)';
+            const end = 'epubcfi(/6/14!/4[id]/2/1:10)';
+            const range = generateCfiRange(start, end);
+            // Common: /6/14!/4[id]/2/1
+            expect(range).toBe('epubcfi(/6/14!/4[id]/2/1,:0,:10)');
         });
     });
 
     describe('mergeCfiRanges', () => {
-        it('merges overlapping ranges', () => {
-            // Using lexicographically sortable numbers for the mock string comparator
-            // 10 < 20 (lexicographically '1' < '2')
-            // Range 1: 10 to 30
-            // Range 2: 20 to 40
+        describe('Standard Behavior (with epubjs)', () => {
+             it('merges overlapping ranges', () => {
+                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:30)';
+                const range2 = 'epubcfi(/6/14!/4/2/1,:20,:40)';
+                const result = mergeCfiRanges([range1], range2);
+                expect(result).toHaveLength(1);
+                expect(result[0]).toBe('epubcfi(/6/14!/4/2/1,:10,:40)');
+            });
 
-            // fullStart 1: ...:10
-            // fullEnd 1:   ...:30
-            // fullStart 2: ...:20
-            // fullEnd 2:   ...:40
+            it('keeps disjoint ranges separate', () => {
+                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:20)';
+                const range2 = 'epubcfi(/6/14!/4/2/1,:30,:40)';
+                const result = mergeCfiRanges([range1], range2);
+                expect(result).toHaveLength(2);
+                expect(result[0]).toBe(range1);
+                expect(result[1]).toBe(range2);
+            });
 
-            // Check overlap: next.start (20) <= current.end (30). '2' < '3'. True.
+             it('merges adjacent ranges', () => {
+                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:20)';
+                const range2 = 'epubcfi(/6/14!/4/2/1,:20,:30)';
+                const result = mergeCfiRanges([range1], range2);
+                expect(result).toHaveLength(1);
+                expect(result[0]).toBe('epubcfi(/6/14!/4/2/1,:10,:30)');
+            });
 
-            const range1 = 'epubcfi(/6/14!/4/2/1,:10,:30)';
-            const range2 = 'epubcfi(/6/14!/4/2/1,:20,:40)';
+            it('merges contained ranges', () => {
+                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:40)';
+                const range2 = 'epubcfi(/6/14!/4/2/1,:20,:30)';
+                const result = mergeCfiRanges([range1], range2);
+                expect(result).toHaveLength(1);
+                expect(result[0]).toBe(range1);
+            });
 
-            const result = mergeCfiRanges([range1], range2);
+            it('handles multiple ranges and sorts them', () => {
+                const range1 = 'epubcfi(/6/14!/4/2/1,:30,:40)';
+                const range2 = 'epubcfi(/6/14!/4/2/1,:10,:20)';
+                const range3 = 'epubcfi(/6/14!/4/2/1,:50,:60)';
+                // Should sort to 2, 1, 3
+                const result = mergeCfiRanges([range1, range3], range2);
+                expect(result).toHaveLength(3);
+                expect(result[0]).toBe(range2);
+                expect(result[1]).toBe(range1);
+                expect(result[2]).toBe(range3);
+            });
 
-            expect(result).toHaveLength(1);
-            // Result should cover 10 to 40
-            expect(result[0]).toBe('epubcfi(/6/14!/4/2/1,:10,:40)');
+             it('handles multiple overlapping ranges causing a chain merge', () => {
+                // 10-20, 15-25, 24-30 -> should become 10-30
+                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:20)';
+                const range2 = 'epubcfi(/6/14!/4/2/1,:15,:25)';
+                const range3 = 'epubcfi(/6/14!/4/2/1,:24,:30)';
+
+                const result = mergeCfiRanges([range1, range2], range3);
+                expect(result).toHaveLength(1);
+                expect(result[0]).toBe('epubcfi(/6/14!/4/2/1,:10,:30)');
+            });
         });
 
-        it('keeps disjoint ranges separate', () => {
-            // Range 1: 10 to 20
-            // Range 2: 30 to 40
-            // Overlap check: 30 <= 20. '3' <= '2'. False.
+        describe('Fallback Behavior (without epubjs)', () => {
+            beforeEach(() => {
+                // Simulate epubjs missing
+                mockEpubCFI = undefined;
+            });
 
-            const range1 = 'epubcfi(/6/14!/4/2/1,:10,:20)';
-            const range2 = 'epubcfi(/6/14!/4/2/1,:30,:40)';
+            it('uses fallback comparator to sort and merge ranges', () => {
+                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:30)';
+                const range2 = 'epubcfi(/6/14!/4/2/1,:20,:40)';
 
-            const result = mergeCfiRanges([range1], range2);
+                // Warn spy
+                const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-            expect(result).toHaveLength(2);
-            expect(result[0]).toBe(range1);
-            expect(result[1]).toBe(range2);
+                const result = mergeCfiRanges([range1], range2);
+
+                expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("EpubCFI not found"));
+                expect(result).toHaveLength(1);
+                expect(result[0]).toBe('epubcfi(/6/14!/4/2/1,:10,:40)');
+
+                consoleSpy.mockRestore();
+            });
+
+            it('sorts based on integer parts in fallback mode', () => {
+                 // The fallback comparator splits by '/' and compares integers
+                 const range1 = 'epubcfi(/6/14!/4/2/1,:20,:30)';
+                 const range2 = 'epubcfi(/6/14!/4/2/1,:10,:15)';
+
+                 const result = mergeCfiRanges([range1], range2);
+                 // Should be sorted
+                 expect(result).toHaveLength(2);
+                 expect(result[0]).toBe(range2);
+                 expect(result[1]).toBe(range1);
+            });
+
+            it('handles invalid CFIs gracefully in fallback', () => {
+                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:30)';
+                const invalid = 'invalid-cfi';
+
+                const result = mergeCfiRanges([range1], invalid);
+                // Invalid won't be parsed, so it's ignored in parsedRanges loop
+                // "for (const r of allRanges) { const p = parseCfiRange(r); if (p) ... }"
+                // So invalid is dropped.
+                expect(result).toHaveLength(1);
+                expect(result[0]).toBe(range1);
+            });
         });
 
-         it('merges adjacent ranges', () => {
-             // Range 1: 10 to 20
-             // Range 2: 20 to 30
-             // Overlap check: 20 <= 20. True.
+        describe('Edge Cases', () => {
+             it('returns empty array for empty input', () => {
+                 expect(mergeCfiRanges([])).toEqual([]);
+             });
 
-            const range1 = 'epubcfi(/6/14!/4/2/1,:10,:20)';
-            const range2 = 'epubcfi(/6/14!/4/2/1,:20,:30)';
-
-            const result = mergeCfiRanges([range1], range2);
-            expect(result).toHaveLength(1);
-            expect(result[0]).toBe('epubcfi(/6/14!/4/2/1,:10,:30)');
-        });
-
-        it('merges contained ranges', () => {
-            // Range 1: 10 to 40
-            // Range 2: 20 to 30
-            // Overlap: 20 <= 40. True.
-            // Merge end: Max(40, 30) -> 40.
-
-            const range1 = 'epubcfi(/6/14!/4/2/1,:10,:40)';
-            const range2 = 'epubcfi(/6/14!/4/2/1,:20,:30)';
-
-            const result = mergeCfiRanges([range1], range2);
-            expect(result).toHaveLength(1);
-            expect(result[0]).toBe(range1);
+             it('handles single range input', () => {
+                 const range = 'epubcfi(/6/14!/4/2/1,:10,:20)';
+                 const result = mergeCfiRanges([range]);
+                 expect(result).toHaveLength(1);
+                 expect(result[0]).toBe(range);
+             });
         });
     });
 });
