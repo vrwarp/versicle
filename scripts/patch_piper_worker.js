@@ -15,7 +15,13 @@ if (!fs.existsSync(workerPath)) {
 let content = fs.readFileSync(workerPath, 'utf8');
 let modified = false;
 
+// ---------------------------------------------------------------------------
 // Patch 1: Add config to phonemize call
+// ---------------------------------------------------------------------------
+// Piper's phonemize function call signature requires passing the config path
+// explicitly when using WASM. This patch ensures that the 'config.json' file
+// is correctly created in the WASM filesystem and passed to the 'phonemize' call.
+
 const searchConfig = `    module.callMain([
       "-l",
       modelConfig.espeak.voice,
@@ -56,7 +62,13 @@ if (content.includes('"--config",')) {
     }
 }
 
+// ---------------------------------------------------------------------------
 // Patch 2: Sanitize phonemeIds
+// ---------------------------------------------------------------------------
+// Sometimes the phonemize step returns phoneme IDs that are out of bounds for the
+// model's vocabulary (num_symbols). This patch clamps or replaces invalid IDs
+// to prevent the WASM inference engine from crashing with an out-of-bounds memory access.
+
 const searchSanitize = `  const phonemeIds = providedPhonemeIds ?? await phonemize(data, onnxruntimeBase, modelConfig);`;
 const replaceSanitize = `  let phonemeIds = providedPhonemeIds ?? await phonemize(data, onnxruntimeBase, modelConfig);
   if (modelConfig.num_symbols) {
@@ -81,7 +93,13 @@ if (content.includes('if (modelConfig.num_symbols) {')) {
     }
 }
 
+// ---------------------------------------------------------------------------
 // Patch 3: Global Error Handlers (Hardening Phase 1)
+// ---------------------------------------------------------------------------
+// Web Workers can fail silently. This patch adds global error handlers (onerror,
+// onunhandledrejection) to catch any uncaught exceptions in the worker thread
+// and post an explicit 'error' message back to the main thread.
+
 const errorHandlers = `// Global error handlers
 self.onerror = function(message, source, lineno, colno, error) {
     self.postMessage({
@@ -118,7 +136,12 @@ if (content.includes('// Global error handlers')) {
     }
 }
 
+// ---------------------------------------------------------------------------
 // Patch 4: PCM2WAV Documentation (Hardening Phase 1)
+// ---------------------------------------------------------------------------
+// Adds detailed JSDoc comments to the PCM2WAV function to explain the WAV
+// header construction and magic numbers, improving maintainability.
+
 const searchPCM2WAV = `  function PCM2WAV(buffer, sampleRate2, numChannels2) {`;
 const replacePCM2WAV = `      /**
        * Converts PCM audio data to a WAV file format.
@@ -152,7 +175,12 @@ if (content.includes('WAV File Specification (RIFF):')) {
     }
 }
 
+// ---------------------------------------------------------------------------
 // Patch 5: Add Try-Catch to worker listeners (Hardening Phase 1)
+// ---------------------------------------------------------------------------
+// Wraps the main message listener in a try-catch block to handle any synchronous
+// errors during message processing.
+
 const searchListener = `self.addEventListener("message", (event) => {
   const data = event.data;
   if (data.kind === "init")
@@ -199,18 +227,12 @@ if (content.includes('try {')) {
     }
 }
 
+// ---------------------------------------------------------------------------
 // Patch 6: Wrap init in try-catch (Hardening Phase 1)
-// Original init doesn't have try-catch.
-// We can wrap the body of init.
-// Or just wrap the whole function body if we can match it.
-// The init function is long.
-// Let's try to match the start and end? Or just wrap the call in listener (done above).
-// But init is async, errors might happen after await.
-// The listener try/catch only catches synchronous errors in the handler start,
-// unless init is awaited?
-// The listener: `if (data.kind === "init") init(data);`
-// It does NOT await init. So async errors in init will NOT be caught by listener try/catch.
-// We MUST wrap init body.
+// ---------------------------------------------------------------------------
+// Wraps the `init` function body in a try-catch block. Since `init` is async,
+// this ensures that any asynchronous errors (rejections) during initialization
+// or synthesis are caught and reported back to the main thread.
 
 const searchInitStart = `async function init(data, phonemizeOnly = false) {`;
 const replaceInitStart = `async function init(data, phonemizeOnly = false) {
