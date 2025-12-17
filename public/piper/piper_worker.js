@@ -138,26 +138,54 @@ async function init(data, phonemizeOnly = false) {
       const {
         output: { data: pcm }
       } = await session.run(feeds);
+
+      /**
+       * Converts PCM audio data to a WAV file format.
+       *
+       * WAV File Specification (RIFF):
+       * - Chunk ID (4 bytes): "RIFF" (0x52494646)
+       * - Chunk Size (4 bytes): 36 + SubChunk2Size
+       * - Format (4 bytes): "WAVE" (0x57415645)
+       * - Subchunk1 ID (4 bytes): "fmt " (0x666d7420)
+       * - Subchunk1 Size (4 bytes): 16 (PCM)
+       * - AudioFormat (2 bytes): 1 (Linear PCM)
+       * - NumChannels (2 bytes): 1 or 2
+       * - SampleRate (4 bytes)
+       * - ByteRate (4 bytes): SampleRate * NumChannels * BitsPerSample/8
+       * - BlockAlign (2 bytes): NumChannels * BitsPerSample/8
+       * - BitsPerSample (2 bytes): 16
+       * - Subchunk2 ID (4 bytes): "data" (0x64617461)
+       * - Subchunk2 Size (4 bytes): NumSamples * NumChannels * BitsPerSample/8
+       */
       function PCM2WAV(buffer, sampleRate2, numChannels2) {
         const bufferLength = buffer.length;
         const headerLength = 44;
         const view = new DataView(new ArrayBuffer(bufferLength * numChannels2 * 2 + headerLength));
-        view.setUint32(0, 1179011410, true);
-        view.setUint32(4, view.buffer.byteLength - 8, true);
-        view.setUint32(8, 1163280727, true);
-        view.setUint32(12, 544501094, true);
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, numChannels2, true);
-        view.setUint32(24, sampleRate2, true);
-        view.setUint32(28, numChannels2 * 2 * sampleRate2, true);
-        view.setUint16(32, numChannels2 * 2, true);
-        view.setUint16(34, 16, true);
-        view.setUint32(36, 1635017060, true);
-        view.setUint32(40, 2 * bufferLength, true);
+
+        // RIFF chunk descriptor
+        view.setUint32(0, 1179011410, true); // "RIFF"
+        view.setUint32(4, view.buffer.byteLength - 8, true); // Chunk size
+        view.setUint32(8, 1163280727, true); // "WAVE"
+
+        // fmt sub-chunk
+        view.setUint32(12, 544501094, true); // "fmt "
+        view.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
+        view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+        view.setUint16(22, numChannels2, true); // NumChannels
+        view.setUint32(24, sampleRate2, true); // SampleRate
+        view.setUint32(28, numChannels2 * 2 * sampleRate2, true); // ByteRate
+        view.setUint16(32, numChannels2 * 2, true); // BlockAlign
+        view.setUint16(34, 16, true); // BitsPerSample (16 bits)
+
+        // data sub-chunk
+        view.setUint32(36, 1635017060, true); // "data"
+        view.setUint32(40, 2 * bufferLength, true); // Subchunk2Size
+
+        // Write PCM samples
         let p = headerLength;
-        for (let i = 0;i < bufferLength; i++) {
+        for (let i = 0; i < bufferLength; i++) {
           const v = buffer[i];
+          // Clamp to 16-bit range and convert float to int16
           if (v >= 1)
             view.setInt16(p, 32767, true);
           else if (v <= -1)
@@ -166,10 +194,12 @@ async function init(data, phonemizeOnly = false) {
             view.setInt16(p, v * 32768 | 0, true);
           p += 2;
         }
+
         const wavBuffer = view.buffer;
         const duration2 = bufferLength / (sampleRate2 * numChannels2);
         return { wavBuffer, duration: duration2 };
       }
+
       const result = PCM2WAV(pcm, sampleRate, numChannels);
       const file = new Blob([result.wavBuffer], { type: "audio/x-wav" });
       const duration = Math.floor(result.duration * 1000);

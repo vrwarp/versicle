@@ -1,4 +1,14 @@
 
+/**
+ * PiperProcessSupervisor
+ *
+ * Manages the lifecycle of the Piper TTS web worker.
+ * It handles task queueing, timeouts, auto-restarts on errors, and ensures
+ * that requests are processed sequentially.
+ *
+ * The supervisor acts as a "smart proxy" to the raw worker, adding robustness
+ * against crashes (e.g. WASM memory errors) and hangs.
+ */
 export class PiperProcessSupervisor {
   private worker: Worker | null = null;
   private workerUrl: string | null = null;
@@ -20,6 +30,10 @@ export class PiperProcessSupervisor {
 
   constructor() {}
 
+  /**
+   * Initializes the supervisor with the worker script URL.
+   * If the URL has changed, any existing worker is terminated.
+   */
   public init(workerUrl: string) {
     if (this.workerUrl !== workerUrl) {
       this.terminate();
@@ -27,17 +41,27 @@ export class PiperProcessSupervisor {
     }
   }
 
+  /**
+   * Terminates the underlying worker and resets processing state.
+   * Pending queue items are preserved.
+   */
   public terminate() {
     if (this.worker) {
       this.worker.terminate();
       this.worker = null;
     }
     this.isProcessing = false;
-    // We do not clear the queue, we might process it after restart?
-    // But if we terminate explicitly, maybe we should clear queue?
-    // For now, let's keep the queue.
   }
 
+  /**
+   * Enqueues a task to be sent to the worker.
+   *
+   * @param data - The message payload to post to the worker.
+   * @param onMessage - Callback for 'message' events from the worker during this task.
+   * @param onError - Callback for errors (timeout, worker error, etc.).
+   * @param timeoutMs - Max duration for the task before it is considered timed out.
+   * @param retries - Number of times to retry the task if it fails (crashes/timeouts).
+   */
   public send(
     data: unknown,
     onMessage: (event: MessageEvent) => void,
@@ -74,6 +98,8 @@ export class PiperProcessSupervisor {
 
     if (!this.worker) {
         try {
+            // Initialize worker if not active.
+            // Some consumers might pass workerUrl in data for legacy reasons, prefer stored one.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             this.worker = new Worker((this.currentTask.data as any).workerUrl || this.workerUrl!);
             this.setupWorkerListeners();
@@ -83,12 +109,12 @@ export class PiperProcessSupervisor {
         }
     }
 
-    // Set timeout
+    // Set a safety timeout for the entire task or initial response.
     this.currentTask.timeoutId = setTimeout(() => {
       this.handleError(new Error("Timeout: Worker did not respond in time"));
     }, (this.currentTask.data as { timeoutMs?: number }).timeoutMs || 30000);
 
-    // Send message
+    // Dispatch the message to the worker.
     this.worker.postMessage(this.currentTask.data);
   }
 
@@ -97,12 +123,9 @@ export class PiperProcessSupervisor {
 
     this.worker.onmessage = (event: MessageEvent) => {
       if (this.currentTask) {
-        // Reset timeout on activity? Or absolute timeout?
-        // Plan says "If a synthesis request takes longer than N seconds".
-        // This implies total time. But download progress keeps coming.
-        // Maybe we should reset timeout on every message?
-        // If we possess a massive download, 30s absolute might be too short.
-        // Let's reset timeout on every message to detect *hangs*.
+        // Reset the timeout whenever we receive a message from the worker.
+        // This prevents long-running tasks (like downloads) from timing out
+        // as long as they are reporting progress.
         if (this.currentTask.timeoutId) {
             clearTimeout(this.currentTask.timeoutId);
             this.currentTask.timeoutId = setTimeout(() => {
@@ -116,23 +139,13 @@ export class PiperProcessSupervisor {
             console.error("Error in onMessage handler:", e);
         }
 
-        // If the message indicates completion or fatal error that the handler handles,
-        // the handler should signal us?
-        // Wait, the handler provided by piperGenerate resolves the promise.
-        // How does the supervisor know the task is done?
-
-        // In piper-utils, 'output' means success, but we also wait for 'complete'?
-        // Actually `resolve` is called on `output`.
-        // `complete` comes after.
-
+        // Determine if the task is complete based on message type.
+        // 'complete': Standard Piper completion signal.
+        // 'isAlive' (false): Health check response indicating restart needed.
         if (event.data.kind === 'complete' || (event.data.kind === 'isAlive' && !event.data.isAlive)) {
-             // Task finished.
              this.completeTask();
-        } else if (event.data.kind === 'output') {
-             // Also might be considered done, but let's wait for complete if it exists.
-             // piper_worker sends 'output' then 'complete'.
         } else if (event.data.kind === 'isAlive') {
-             // isAlive check is a single response.
+             // Successful health check is a single response task.
              this.completeTask();
         }
       }
@@ -153,7 +166,7 @@ export class PiperProcessSupervisor {
     }
     this.currentTask = null;
     this.isProcessing = false;
-    // Process next
+    // Trigger processing of the next item in the queue.
     setTimeout(() => this.processQueue(), 0);
   }
 
@@ -173,10 +186,12 @@ export class PiperProcessSupervisor {
       } else {
         this.currentTask.onError(error);
         this.completeTask();
-        this.restartWorker(); // Ensure fresh worker for next task
+        // Always ensure a fresh worker state after a failure.
+        this.restartWorker();
       }
     } else {
-        // Error with no active task?
+        // Error occurred without an active task (e.g., stray async error).
+        // Restart worker to be safe.
         this.restartWorker();
     }
   }

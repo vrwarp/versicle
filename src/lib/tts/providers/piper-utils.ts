@@ -41,21 +41,18 @@ export const piperGenerate = async (
   // Initialize supervisor with worker URL
   supervisor.init(workerUrl);
 
-  // Check isAlive/cached state first to ensure clean worker if needed
-  // Note: PiperProcessSupervisor doesn't automatically restart if model changed.
-  // The original logic checked isAlive and restarted if false/not match.
-  // We should replicate that check.
-
+  // Validate worker state before starting generation.
+  // We check if the worker is alive and has the correct model loaded.
+  // If the check fails or returns false (different model loaded), we restart
+  // the worker to ensure a clean state for the new generation request.
   await new Promise<void>((resolve) => {
       supervisor.send(
           { kind: "isAlive", modelUrl },
           (event) => {
               if (event.data.kind === 'isAlive') {
                   if (!event.data.isAlive) {
-                      // Model not loaded, restart to be clean (as per original logic)
-                      // although simply init-ing might be enough if the worker supports it,
-                      // original logic was: if (!isAlive) { terminate; new Worker; }
-                      // We can simulate this by terminating.
+                      // Model not loaded or worker state mismatch.
+                      // Terminate and re-initialize to force a fresh load.
                       supervisor.terminate();
                       supervisor.init(workerUrl);
                   }
@@ -63,7 +60,8 @@ export const piperGenerate = async (
               }
           },
           () => {
-              // If check failed, assume restart needed
+              // If the health check times out or errors, assume the worker is
+              // unresponsive and restart it.
               supervisor.terminate();
               supervisor.init(workerUrl);
               resolve();
