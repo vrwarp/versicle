@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { dbService } from '../../db/DBService';
-import { parseCfiRange, getSpinePosFromCfi } from '../../lib/cfi-utils';
+import { parseCfiRange } from '../../lib/cfi-utils';
 import type { Rendition } from 'epubjs';
 
 interface Props {
@@ -52,31 +52,33 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                     }
 
                     // Try to get Chapter Title
-                    const spinePos = getSpinePosFromCfi(range);
-                    if (spinePos >= 0) {
-                        const section = book.spine.get(spinePos);
-                        if (section) {
-                             let title = "";
-                             // Try to find label in TOC
-                             if (section.href) {
-                                  // book.navigation.get() expects the href as it appears in the TOC
-                                  const navItem = book.navigation.get(section.href);
-                                  if (navItem && navItem.label) {
-                                      title = navItem.label.trim();
-                                  }
-                             }
+                    let section;
+                    try {
+                        section = book.spine.get(range);
+                    } catch (e) {
+                        console.warn("Failed to get section from CFI", e);
+                    }
 
-                             if (title) {
-                                 label = title;
-                             } else {
-                                 // Fallback to generic Chapter label
-                                 label = `Chapter ${spinePos + 1}`;
-                             }
-                             subLabel = `${(percentage * 100).toFixed(1)}% completed`;
-                        } else {
-                             label = `Segment at ${(percentage * 100).toFixed(1)}%`;
-                             subLabel = range;
-                        }
+                    if (section) {
+                         let title = "";
+                         // Try to find label in TOC
+                         if (section.href) {
+                              // book.navigation.get() expects the href as it appears in the TOC
+                              const navItem = book.navigation.get(section.href);
+                              if (navItem && navItem.label) {
+                                  title = navItem.label.trim();
+                              }
+                         }
+
+                         if (title) {
+                             label = title;
+                         } else {
+                             // Fallback to generic Chapter label
+                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                             const spinePos = (section as any).index ?? book.spine.items.indexOf(section);
+                             label = spinePos >= 0 ? `Chapter ${spinePos + 1}` : 'Unknown Chapter';
+                         }
+                         subLabel = `${(percentage * 100).toFixed(1)}% completed`;
                     } else {
                         label = `Segment at ${(percentage * 100).toFixed(1)}%`;
                         subLabel = range;
