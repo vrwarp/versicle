@@ -2,10 +2,10 @@ import React from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useChapterDuration } from '../../hooks/useChapterDuration';
-import { ChevronsLeft, ChevronsRight, SkipBack, SkipForward } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, SkipBack, SkipForward, Play, Pause } from 'lucide-react';
 
 interface CompassPillProps {
-  variant: 'active' | 'summary';
+  variant: 'active' | 'summary' | 'compact';
 }
 
 export const CompassPill: React.FC<CompassPillProps> = ({ variant }) => {
@@ -13,7 +13,9 @@ export const CompassPill: React.FC<CompassPillProps> = ({ variant }) => {
     isPlaying,
     queue,
     currentIndex,
-    jumpTo
+    jumpTo,
+    play,
+    pause
   } = useTTSStore();
 
   const {
@@ -34,6 +36,15 @@ export const CompassPill: React.FC<CompassPillProps> = ({ variant }) => {
           jumpTo(currentIndex + 1);
       } else {
           jumpTo(currentIndex - 1);
+      }
+  };
+
+  const handleTogglePlay = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (isPlaying) {
+          pause();
+      } else {
+          play();
       }
   };
 
@@ -66,6 +77,40 @@ export const CompassPill: React.FC<CompassPillProps> = ({ variant }) => {
                   className="absolute bottom-0 left-0 h-1 bg-primary/20 transition-all duration-300"
                   style={{ width: `${progress}%` }}
               />
+          </div>
+      );
+  }
+
+  // Compact Mode
+  if (variant === 'compact') {
+      return (
+          <div data-testid="compass-pill-compact" className="relative z-40 flex items-center justify-center gap-3 w-auto h-10 px-4 mx-auto transition-all border shadow-lg rounded-full bg-background/80 backdrop-blur-md border-white/10">
+                {/* Prev Button */}
+                <button
+                    className="p-1 text-primary hover:bg-primary/10 rounded-full transition-colors"
+                    onClick={() => isPlaying ? handleSkip('prev') : handleChapterNav('prev')}
+                    aria-label="Previous"
+                >
+                    {isPlaying ? <SkipBack size={16} /> : <ChevronsLeft size={18} />}
+                </button>
+
+                {/* Play/Pause Button */}
+                <button
+                    className="p-1 text-primary hover:bg-primary/10 rounded-full transition-colors"
+                    onClick={handleTogglePlay}
+                    aria-label={isPlaying ? "Pause" : "Play"}
+                >
+                    {isPlaying ? <Pause size={20} className="fill-current" /> : <Play size={20} className="fill-current ml-0.5" />}
+                </button>
+
+                {/* Next Button */}
+                <button
+                    className="p-1 text-primary hover:bg-primary/10 rounded-full transition-colors"
+                    onClick={() => isPlaying ? handleSkip('next') : handleChapterNav('next')}
+                    aria-label="Next"
+                >
+                     {isPlaying ? <SkipForward size={16} /> : <ChevronsRight size={18} />}
+                </button>
           </div>
       );
   }

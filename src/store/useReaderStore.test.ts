@@ -26,4 +26,14 @@ describe('useReaderStore', () => {
     useReaderStore.getState().setCurrentBookId(null);
     expect(useReaderStore.getState().currentBookId).toBeNull();
   });
+
+  it('should update immersive mode', () => {
+    expect(useReaderStore.getState().immersiveMode).toBe(false);
+
+    useReaderStore.getState().setImmersiveMode(true);
+    expect(useReaderStore.getState().immersiveMode).toBe(true);
+
+    useReaderStore.getState().setImmersiveMode(false);
+    expect(useReaderStore.getState().immersiveMode).toBe(false);
+  });
 });

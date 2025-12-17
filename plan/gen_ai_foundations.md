@@ -131,7 +131,7 @@ interface BookMetadata {
 2. [x] Implement text matching utilities (for structural annotation).
 
 ### Phase 3: Feature Implementation
-1.  **Smart TOC:** Implement "Enhance TOC" workflow in `ReaderView.tsx`.
+1.  [x] **Smart TOC:** Implement "Enhance TOC" workflow in `ReaderView.tsx`.
 2.  **Pronunciation:** Implement "Generate Guide" workflow in `LexiconManager.tsx`.
 3.  **Structure:** Implement analysis hook in `useEpubReader.ts` and DOM manipulation logic.
 

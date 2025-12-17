@@ -51,6 +51,7 @@ graph TD
         Ingestion[ingestion.ts]
         SearchClient[SearchClient]
         Backup[BackupService]
+        Maint[MaintenanceService]
     end
 
     subgraph TTS [TTS Subsystem]
@@ -93,6 +94,7 @@ graph TD
     LibStore --> DBService
     LibStore --> Ingestion
     LibStore --> Backup
+    LibStore --> Maint
 
     Reader --> SearchClient
     SearchClient --> SearchWorker
@@ -111,23 +113,24 @@ graph TD
 The data layer is built on **IndexedDB** using the `idb` library. It is accessed primarily through the `DBService` singleton, which provides a high-level API for all storage operations.
 
 #### `src/db/DBService.ts`
-The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors), transaction management, and debouncing for frequent writes.
+The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
 
 **Key Functions:**
 
-*   **`getLibrary()`**: Retrieves all books. Validates metadata integrity and sorts by import date.
+*   **`getLibrary()`**: Retrieves all books. Validates metadata integrity using `validators.ts` and sorts by import date.
     *   *Returns*: `Promise<BookMetadata[]>`
 *   **`getBook(id)`**: Retrieves both metadata and the binary EPUB file.
     *   *Returns*: `Promise<{ metadata: BookMetadata; file: Blob | ArrayBuffer }>`
 *   **`addBook(file)`**: Imports a new book. Delegates parsing to `ingestion.ts`.
 *   **`saveProgress(bookId, cfi, progress)`**: Saves reading progress.
     *   *Implementation*: Debounced (1s) to prevent thrashing IndexedDB during scrolling/reading.
+    *   *Trade-off*: A crash within 1 second of reading might lose the very last position update.
 *   **`saveTTSState(bookId, queue, currentIndex)`**: Persists the current TTS playlist and position.
     *   *Why*: Allows the user to close the app and resume the audiobook exactly where they left off.
-*   **`offloadBook(id)`**: Deletes the large binary EPUB file to save space but keeps metadata, annotations, and reading progress.
-    *   *Trade-off*: User must re-import the *exact same file* (verified via hash) to read again.
-*   **`getCachedSegment(key)` / `cacheSegment(key, audio)`**: Manages the TTS audio cache.
-    *   *Why*: To avoid paying for the same API call twice and to enable offline replay of cloud-generated audio.
+*   **`offloadBook(id)`**: Deletes the large binary EPUB file to save space but keeps metadata, annotations, and reading progress. Sets `isOffloaded: true`.
+    *   *Trade-off*: User must re-import the *exact same file* (verified via SHA-256 hash) to read again.
+*   **`restoreBook(id, file)`**: Restores an offloaded book. Verifies `fileHash` matches the original before accepting.
+*   **`updateReadingHistory(bookId, newRange)`**: Merges a new CFI range into the book's reading history to track "read" status.
 
 ### Core Logic & Services (`src/lib/`)
 
@@ -135,10 +138,11 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 Handles the complex task of importing an EPUB file.
 
 *   **`processEpub(file)`**:
-    1.  Parses the EPUB using `epub.js`.
-    2.  Extracts metadata and cover image.
-    3.  **Synthetic TOC**: Iterates through the spine to generate a table of contents and calculate character counts for duration estimation.
-    4.  **Hashing**: Computes a SHA-256 hash of the file incrementally (to avoid memory spikes) for integrity checks during restore.
+    1.  **Validation**: Checks ZIP headers (magic bytes) to ensure file validity.
+    2.  **Parsing**: Uses `epub.js` to parse the container.
+    3.  **Synthetic TOC**: Iterates through the spine to generate a table of contents and calculate character counts (for reading time estimation).
+    4.  **Hashing**: Computes a SHA-256 hash of the file incrementally (chunked) to avoid memory spikes. Used for integrity checks during restore.
+    5.  **Sanitization**: Checks metadata length. Prompts the user if metadata fields are excessively long (security/UI hardening).
     *   *Returns*: `Promise<string>` (New Book ID).
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
@@ -146,14 +150,22 @@ Implements full-text search off the main thread to prevent UI freezing.
 
 *   **`SearchClient`**: The main-thread interface. Manages the Worker lifecycle and request/response correlation using UUIDs.
 *   **`SearchEngine`**: Runs inside the Worker. Uses `FlexSearch` to build an inverted index.
-*   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book and initiates a search. This avoids storing massive indices in IndexedDB but adds a delay before search is ready.
+*   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book and initiates a search. This avoids storing massive indices in IndexedDB but adds a delay before search is ready for large books.
 
 #### Backup (`src/lib/BackupService.ts`)
 Manages data portability.
 
 *   **`createLightBackup()`**: Exports JSON containing metadata, annotations, lexicon, and reading stats.
-*   **`createFullBackup()`**: Exports a ZIP file containing the "Light" JSON manifest plus all EPUB files.
-*   **`restoreBackup(file)`**: Smartly merges data. If a book already exists, it updates progress only if the backup is newer.
+*   **`createFullBackup()`**: Exports a ZIP file containing the "Light" JSON manifest plus all EPUB files (fetched from IDB).
+*   **`restoreBackup(file)`**: Smartly merges data.
+    *   **Smart Merge**: If a book already exists, it updates progress only if the backup is newer.
+    *   **Sanitization**: Validates and sanitizes metadata from the backup before import.
+
+#### Maintenance (`src/lib/MaintenanceService.ts`)
+Handles database health.
+
+*   **`scanForOrphans()`**: Identifies files, annotations, or lexicon rules that reference non-existent books.
+*   **`pruneOrphans()`**: Deletes identified orphaned records to reclaim storage space.
 
 ---
 
@@ -165,25 +177,44 @@ This is the most complex subsystem, handling audio generation, synchronization, 
 The singleton controller for TTS. It acts as the "brain" of the audio experience.
 
 **Key Responsibilities:**
+*   **State Machine**: Manages states (`playing`, `paused`, `stopped`, `loading`, `completed`).
 *   **Queue Management**: Maintains a list of `TTSQueueItem`s (sentences).
-*   **Provider Management**: Hot-swaps between `GoogleTTSProvider`, `OpenAIProvider`, `PiperProvider`, and `WebSpeechProvider`.
-*   **Background Audio**: Integration with Android `ForegroundService` and `MediaSession` API to allow playback when the screen is off.
-*   **Concurrency**: Uses `executeWithLock` pattern to prevent race conditions when the user taps multiple controls rapidly (e.g., Play/Pause/Next).
+*   **Provider Management**: Hot-swaps between providers (Google, OpenAI, Piper, WebSpeech).
+*   **Concurrency**: Uses `executeWithLock` (Mutex pattern) to prevent race conditions when the user taps multiple controls rapidly.
+*   **Smart Resume**: Resumes playback from `lastPauseTime` if available, or falls back to `lastPlayedCfi`.
+*   **Background Audio**: Uses a silent audio track strategy (`BackgroundAudio.ts`) and Capacitor Foreground Service to keep the app alive on Android/iOS when the screen is off.
 *   **Error Handling**: Implements automatic fallback from Cloud to Local providers if an API call fails.
 
 #### `src/lib/tts/TextSegmenter.ts`
 Splits raw text into natural-sounding sentences.
 
-*   **Why**: TTS engines perform better on sentences than paragraphs. It allows for granular highlighting.
-*   **Logic**: Uses `Intl.Segmenter` (browser native) where available, with a custom post-processing step to handle abbreviations (e.g., "Mr.", "Dr.", "i.e.") that often trick standard splitters.
-
-#### `src/lib/tts/TTSCache.ts`
-*   **Purpose**: Caches generated audio buffers in IndexedDB.
-*   **Key Generation**: Hash of `text + voiceId + speed + pitch + lexiconHash`. If any parameter changes, a new segment is generated.
+*   **Logic**: Uses `Intl.Segmenter` (browser native) where available.
+*   **Hardening**: Implements a custom post-processing step to merge sentences split incorrectly by abbreviations (e.g., "Mr.", "Dr.", "i.e."). Uses a list of "Always Merge" abbreviations and "Sentence Starters" (pronouns) to make intelligent decisions.
 
 #### `src/lib/tts/SyncEngine.ts`
 *   **Purpose**: Manages the visual karaoke-style highlighting.
-*   **Logic**: Uses alignment data (timepoints) returned by the TTS provider to calculate which word is currently being spoken.
+*   **Logic**: Efficiently searches a sorted list of `AlignmentData` (timepoints) to find the active word/sentence based on current playback time.
+
+#### `src/lib/tts/TTSCache.ts`
+*   **Purpose**: Caches generated audio buffers in IndexedDB (`tts_cache` store).
+*   **Key Generation**: Hash of `text + voiceId + speed + pitch + lexiconHash`. If any parameter changes (including lexicon rules), a new segment is generated.
+
+---
+
+### Reader Subsystem (`src/hooks/`)
+
+#### `src/hooks/useEpubReader.ts`
+The critical bridge between React and the imperative `epub.js` library.
+
+**Responsibilities:**
+*   **Lifecycle**: Initializes/destroys `Book` and `Rendition`.
+*   **View Modes**: Handles `paginated` vs `scrolled-doc` flow.
+*   **Hardening**:
+    *   **ResizeObserver**: Uses debounced resize logic to prevent layout thrashing on window resize.
+    *   **Force Font**: Injects high-specificity CSS (`!important`) to override stubborn publisher styles when "Force Font" is enabled.
+    *   **Selection Fallback**: Implements a manual `mouseup` listener because `epub.js`'s native `selected` event can be unreliable after DOM manipulation.
+    *   **Context Menu**: Blocks the default context menu to improve the mobile long-press experience.
+*   **Location**: Generates and caches location data to allow accurate scrollbar progress.
 
 ---
 
@@ -191,27 +222,15 @@ Splits raw text into natural-sounding sentences.
 
 State is managed using **Zustand** with persistence to `localStorage` for preferences.
 
-*   **`useReaderStore`**: Manages the visual reader state.
-    *   *Persisted*: Theme, Font Size, Font Family, View Mode (Scroll/Paginated).
-    *   *Transient*: Current Book ID, Loading State, TOC.
-*   **`useTTSStore`**: Manages TTS configuration and playback status.
-    *   *Persisted*: Voice selection, Speed, API Keys, Provider preference.
-    *   *Transient*: Current Queue, Playback Status (Playing/Paused), Download Progress (for Piper).
+*   **`useReaderStore`**: Manages the visual reader preferences.
+    *   *Persisted*: `currentTheme`, `fontFamily`, `fontSize`, `lineHeight`, `viewMode`, `gestureMode`.
+    *   *Transient*: `currentBookId`, `currentCfi` (location is synced to IDB, transient copy here for UI), `toc`.
+*   **`useTTSStore`**: Manages TTS configuration and acts as the reactive bridge to `AudioPlayerService`.
+    *   *Persisted*: `voice`, `rate`, `pitch`, `apiKeys`, `providerId`, `customAbbreviations`.
+    *   *Transient*: `isPlaying`, `queue`, `currentIndex`, `activeCfi` (synced via subscription to `AudioPlayerService`).
     *   *Interaction*: Subscribes to `AudioPlayerService` events to update the UI.
 
----
-
-### UI Layer (`src/hooks/`)
-
-#### `src/hooks/useEpubReader.ts`
-The critical bridge between React and the imperative `epub.js` library.
-
-**Responsibilities:**
-*   **Lifecycle**: Initializes and destroys the `Book` and `Rendition` instances.
-*   **Rendering**: Mounts the book into a DOM node.
-*   **Resizing**: Uses `ResizeObserver` and `requestAnimationFrame` to handle window resizing without layout thrashing.
-*   **Theming**: Injects custom CSS to override publisher styles (crucial for "Force Font" feature).
-*   **Interaction**: capturing text selection (for highlighting) and page turns.
-
-**Key Trade-off**:
-`epub.js` is an older library and can be quirky. This hook encapsulates a lot of "defensive programming" to handle edge cases like missing CFIs, weird pagination behavior, and style conflicts.
+### Common Types (`src/types/db.ts`)
+*   **`BookMetadata`**: Includes `fileHash`, `isOffloaded`, `coverBlob`, and playback state (`lastPlayedCfi`).
+*   **`Annotation`**: Stores highlights (`cfiRange`, `color`) and notes.
+*   **`LexiconRule`**: Regex or string replacement rules for TTS pronunciation.

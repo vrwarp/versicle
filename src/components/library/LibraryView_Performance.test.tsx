@@ -8,6 +8,10 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 const renderLog = vi.fn();
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const MockGrid = React.memo((props: any) => {
+    // In real react-window, changes to itemData trigger re-render of Cells,
+    // but the Grid itself might re-render if its props change.
+    // However, react-window is smart.
+    // We log the prop we want to ensure is stable.
     renderLog(props.cellProps);
     return <div data-testid="mock-grid">Grid</div>;
 });

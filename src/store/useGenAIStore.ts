@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { genAIService } from '../lib/genai/GenAIService';
+import type { GenAILogEntry } from '../lib/genai/GenAIService';
 
 interface GenAIState {
   apiKey: string;
   model: string;
   isEnabled: boolean;
+  logs: GenAILogEntry[];
   usageStats: {
     totalTokens: number;
     estimatedCost: number;
@@ -14,6 +16,7 @@ interface GenAIState {
   setModel: (model: string) => void;
   setEnabled: (enabled: boolean) => void;
   incrementUsage: (tokens: number) => void;
+  addLog: (log: GenAILogEntry) => void;
   init: () => void;
 }
 
@@ -23,6 +26,7 @@ export const useGenAIStore = create<GenAIState>()(
       apiKey: '',
       model: 'gemini-2.5-flash-lite',
       isEnabled: false,
+      logs: [],
       usageStats: {
         totalTokens: 0,
         estimatedCost: 0,
@@ -43,9 +47,20 @@ export const useGenAIStore = create<GenAIState>()(
             estimatedCost: state.usageStats.estimatedCost,
           },
         })),
+      addLog: (log) =>
+        set((state) => {
+          const newLogs = [...state.logs, log];
+          if (newLogs.length > 10) {
+            newLogs.shift();
+          }
+          return { logs: newLogs };
+        }),
       init: () => {
           const { apiKey, model } = get();
           genAIService.configure(apiKey, model);
+          genAIService.setLogCallback((log) => {
+              get().addLog(log);
+          });
       }
     }),
     {

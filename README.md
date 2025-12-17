@@ -20,7 +20,8 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 *   **Full-Text Search**: Fast, off-main-thread search using Web Workers and FlexSearch.
 *   **Data Management**:
     *   **Backup/Restore**: Export your entire library to ZIP (Full Backup) or just metadata/notes to JSON (Light Backup).
-    *   **Offloading**: Remove large book files to save space on mobile devices while keeping your notes and place.
+    *   **Offloading**: Remove large book files to save space on mobile devices while keeping your notes, reading progress, and metadata intact.
+    *   **Orphan Pruning**: Clean up database fragments (unused files or annotations) to reclaim space.
 *   **PWA & Mobile**: Installable as a standalone app on desktop and mobile. Native Android build via Capacitor.
 
 ## Tech Stack
@@ -38,7 +39,7 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 
 *   **Node.js**: v18 or higher
 *   **npm**: v9 or higher
-*   **Python**: v3.10+ (Required for running Playwright verification scripts)
+*   **Python**: v3.10+ (Required for running Playwright verification scripts locally)
 *   **Docker**: (Optional but recommended) For running the verification suite in a consistent environment.
 
 ## Getting Started
@@ -65,7 +66,7 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 
 Versicle follows a strict **Local-First** architecture.
 *   **Data Layer**: `src/db/DBService.ts` manages all interactions with IndexedDB.
-*   **Core Services**: `src/lib/` contains business logic like `AudioPlayerService` (TTS), `SearchClient`, and `BackupService`.
+*   **Core Services**: `src/lib/` contains business logic like `AudioPlayerService` (TTS), `SearchClient`, `Ingestion`, and `BackupService`.
 *   **UI Layer**: React components in `src/components/` consume data via Zustand stores (`src/store/`) and Custom Hooks (`src/hooks/`).
 
 For a deep dive into the code structure, module relationships, and API documentation, please refer to [architecture.md](architecture.md). It is **essential reading** for understanding the Core Services (TTS, Search, Database) and State Management.
@@ -175,8 +176,8 @@ Versicle can be built as a native Android application using Capacitor.
 
 ### Configuration
 Access Global Settings via the gear icon in the Library header.
-*   **API Keys**: Enter keys for Google Cloud or OpenAI.
-*   **Data Management**: Create backups (Light/Full) or prune orphaned data.
+*   **API Keys**: Enter keys for Google Cloud, OpenAI, or LemonFox.
+*   **Data Management**: Create backups (Light/Full), prune orphaned data, or clear caches.
 
 ## Contributing
 

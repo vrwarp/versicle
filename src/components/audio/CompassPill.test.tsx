@@ -10,6 +10,8 @@ vi.mock('lucide-react', () => ({
     ChevronsRight: () => <span data-testid="icon-chevrons-right" />,
     SkipBack: () => <span data-testid="icon-skip-back" />,
     SkipForward: () => <span data-testid="icon-skip-forward" />,
+    Play: () => <span data-testid="icon-play" />,
+    Pause: () => <span data-testid="icon-pause" />,
 }));
 
 // Mock useTTSStore
@@ -34,6 +36,8 @@ vi.mock('../../hooks/useChapterDuration', () => ({
 
 describe('CompassPill', () => {
     const mockJumpTo = vi.fn();
+    const mockPlay = vi.fn();
+    const mockPause = vi.fn();
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -45,7 +49,9 @@ describe('CompassPill', () => {
              isPlaying: false,
              queue: [{ title: 'Item 1' }],
              currentIndex: 0,
-             jumpTo: mockJumpTo
+             jumpTo: mockJumpTo,
+             play: mockPlay,
+             pause: mockPause
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
 
@@ -68,7 +74,9 @@ describe('CompassPill', () => {
              isPlaying: false,
              queue: [{ title: 'Item 1' }],
              currentIndex: 0,
-             jumpTo: mockJumpTo
+             jumpTo: mockJumpTo,
+             play: mockPlay,
+             pause: mockPause
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
          } as any);
 
@@ -91,7 +99,9 @@ describe('CompassPill', () => {
              isPlaying: true,
              queue: [{ title: 'Item 1' }],
              currentIndex: 5,
-             jumpTo: mockJumpTo
+             jumpTo: mockJumpTo,
+             play: mockPlay,
+             pause: mockPause
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
          } as any);
 
@@ -102,4 +112,55 @@ describe('CompassPill', () => {
 
         expect(mockJumpTo).toHaveBeenCalledWith(6);
     });
+
+    it('renders compact mode correctly', () => {
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: false,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+
+        render(<CompassPill variant="compact" />);
+
+        expect(screen.getByTestId('compass-pill-compact')).toBeInTheDocument();
+        expect(screen.getByTestId('icon-play')).toBeInTheDocument();
+    });
+
+    it('toggles play/pause in compact mode', () => {
+         vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: false,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+
+        render(<CompassPill variant="compact" />);
+        const playButton = screen.getByTestId('icon-play').closest('button');
+        fireEvent.click(playButton!);
+        expect(mockPlay).toHaveBeenCalled();
+    });
+
+    it('pauses when playing in compact mode', () => {
+        vi.mocked(useTTSStore).mockReturnValue({
+           isPlaying: true,
+           queue: [{ title: 'Item 1' }],
+           currentIndex: 0,
+           jumpTo: mockJumpTo,
+           play: mockPlay,
+           pause: mockPause
+           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       } as any);
+
+       render(<CompassPill variant="compact" />);
+       const pauseButton = screen.getByTestId('icon-pause').closest('button');
+       fireEvent.click(pauseButton!);
+       expect(mockPause).toHaveBeenCalled();
+   });
 });

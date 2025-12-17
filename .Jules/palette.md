@@ -5,3 +5,7 @@
 ## 2025-12-12 - Destructive Action Confirmation
 **Learning:** Native `window.confirm` is jarring and non-customizable. Radix UI `Dialog` can be easily integrated into list items (like `BookCard`) to provide a consistent, accessible confirmation flow without disrupting the user's context.
 **Action:** Replace `window.confirm` with custom `Dialog` components for destructive actions, ensuring `stopPropagation` is handled correctly to prevent navigation.
+
+## 2025-12-16 - Standardizing Buttons for Theme Consistency
+**Learning:** Hardcoded utility classes (e.g., `bg-blue-600`) in empty states break theme support (Dark/Sepia modes). Using semantic components (like `<Button>`) and tokens (like `bg-primary`) ensures instant adaptation to all themes.
+**Action:** Refactor raw HTML elements to design system components whenever possible to inherit accessibility and theming for free.
