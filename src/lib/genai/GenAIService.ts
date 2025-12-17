@@ -1,9 +1,19 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 
+export interface GenAILogEntry {
+  id: string;
+  timestamp: number;
+  type: 'request' | 'response' | 'error';
+  method: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any;
+}
+
 class GenAIService {
   private static instance: GenAIService;
   private genAI: GoogleGenerativeAI | null = null;
   private modelId: string = 'gemini-2.5-flash-lite';
+  private logCallback: ((entry: GenAILogEntry) => void) | null = null;
 
   private constructor() {}
 
@@ -23,6 +33,23 @@ class GenAIService {
     }
   }
 
+  public setLogCallback(callback: (entry: GenAILogEntry) => void) {
+    this.logCallback = callback;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private log(type: 'request' | 'response' | 'error', method: string, payload: any) {
+    if (this.logCallback) {
+      this.logCallback({
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type,
+        method,
+        payload
+      });
+    }
+  }
+
   public isConfigured(): boolean {
     // Check for mock mode first
     if (typeof localStorage !== 'undefined' && (localStorage.getItem('mockGenAIResponse') || localStorage.getItem('mockGenAIError'))) {
@@ -32,23 +59,39 @@ class GenAIService {
   }
 
   public async generateContent(prompt: string): Promise<string> {
+    this.log('request', 'generateContent', { prompt, model: this.modelId });
+
     if (!this.genAI) {
-      throw new Error('GenAI Service not configured (missing API key).');
+      const error = new Error('GenAI Service not configured (missing API key).');
+      this.log('error', 'generateContent', { message: error.message });
+      throw error;
     }
 
-    const model = this.genAI.getGenerativeModel({ model: this.modelId });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    try {
+      const model = this.genAI.getGenerativeModel({ model: this.modelId });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      this.log('response', 'generateContent', { text });
+      return text;
+    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.log('error', 'generateContent', { message: (error as any).message, error });
+      throw error;
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public async generateStructured<T>(prompt: string, schema: any): Promise<T> {
+    this.log('request', 'generateStructured', { prompt, schema, model: this.modelId });
+
     // Check for E2E Test Mocks
     if (typeof localStorage !== 'undefined') {
         const mockError = localStorage.getItem('mockGenAIError');
         if (mockError) {
-             throw new Error('Simulated GenAI Error');
+             const error = new Error('Simulated GenAI Error');
+             this.log('error', 'generateStructured', { message: error.message, isMock: true });
+             throw error;
         }
 
         const mockResponse = localStorage.getItem('mockGenAIResponse');
@@ -57,33 +100,48 @@ class GenAIService {
             // Simulate network delay
             await new Promise(resolve => setTimeout(resolve, 500));
             try {
-                return JSON.parse(mockResponse) as T;
+                const parsed = JSON.parse(mockResponse) as T;
+                this.log('response', 'generateStructured', { parsed, isMock: true });
+                return parsed;
             } catch {
                 console.error("Invalid mock response JSON");
+                this.log('error', 'generateStructured', { message: "Invalid mock response JSON", isMock: true });
             }
         }
     }
 
     if (!this.genAI) {
-      throw new Error('GenAI Service not configured (missing API key).');
+      const error = new Error('GenAI Service not configured (missing API key).');
+      this.log('error', 'generateStructured', { message: error.message });
+      throw error;
     }
 
-    const model = this.genAI.getGenerativeModel({
-      model: this.modelId,
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: schema,
-      },
-    });
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
     try {
-      return JSON.parse(text) as T;
+      const model = this.genAI.getGenerativeModel({
+        model: this.modelId,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+        },
+      });
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+
+      try {
+        const parsed = JSON.parse(text) as T;
+        this.log('response', 'generateStructured', { text, parsed });
+        return parsed;
+      } catch (error) {
+        console.error('Failed to parse GenAI response as JSON:', text);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message });
+        throw error;
+      }
     } catch (error) {
-      console.error('Failed to parse GenAI response as JSON:', text);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.log('error', 'generateStructured', { message: (error as any).message, error });
       throw error;
     }
   }

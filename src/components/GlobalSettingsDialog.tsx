@@ -13,7 +13,7 @@ import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Download } from 'lucide-react';
 
 /**
  * Global application settings dialog.
@@ -58,7 +58,8 @@ export const GlobalSettingsDialog = () => {
         model: genAIModel,
         setModel: setGenAIModel,
         isEnabled: isGenAIEnabled,
-        setEnabled: setGenAIEnabled
+        setEnabled: setGenAIEnabled,
+        logs: genAILogs
     } = useGenAIStore();
 
     const handleClearAllData = async () => {
@@ -151,6 +152,24 @@ export const GlobalSettingsDialog = () => {
         } finally {
             e.target.value = '';
         }
+    };
+
+    const handleDownloadGenAILogs = () => {
+        const content = genAILogs.map(log =>
+            `[${new Date(log.timestamp).toISOString()}] ${log.type.toUpperCase()} (${log.method})\n` +
+            JSON.stringify(log.payload, null, 2) +
+            `\n${'-'.repeat(40)}\n`
+        ).join('\n');
+
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `genai_logs_${new Date().toISOString()}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     return (
@@ -406,6 +425,32 @@ export const GlobalSettingsDialog = () => {
                                                         <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
                                                     </SelectContent>
                                                 </Select>
+                                            </div>
+
+                                            <div className="pt-4 border-t space-y-4">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="text-sm font-medium">Debug Logs</h4>
+                                                    <Button variant="outline" size="sm" onClick={handleDownloadGenAILogs} disabled={genAILogs.length === 0}>
+                                                        <Download className="h-4 w-4 mr-2" />
+                                                        Download Logs
+                                                    </Button>
+                                                </div>
+                                                <div className="bg-muted p-2 rounded-md h-40 overflow-y-auto font-mono text-xs">
+                                                    {genAILogs.length === 0 ? (
+                                                        <span className="text-muted-foreground">No logs available.</span>
+                                                    ) : (
+                                                        genAILogs.slice().reverse().map(log => (
+                                                            <div key={log.id} className="mb-2 border-b last:border-0 pb-2">
+                                                                <div className="font-semibold text-primary">
+                                                                    [{new Date(log.timestamp).toLocaleTimeString()}] {log.type.toUpperCase()} - {log.method}
+                                                                </div>
+                                                                <div className="whitespace-pre-wrap truncate line-clamp-2">
+                                                                    {JSON.stringify(log.payload)}
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
                                             </div>
                                         </>
                                     )}
