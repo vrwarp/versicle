@@ -84,29 +84,29 @@
   --primary: #ea580c; /* Orange 600 */
   --primary-foreground: #ffffff;
 
-  --secondary: #fef3c7; /* Amber 100 */
+  --secondary: #fde68a; /* Amber 200 */
   --secondary-foreground: #78350f; /* Amber 900 */
 
   --background: #fffbeb; /* Amber 50 */
   --foreground: #78350f; /* Amber 900 */
 
   --surface: #fef3c7; /* Amber 100 */
-  --border: #fde68a; /* Amber 200 */
+  --border: #fcd34d; /* Amber 300 */
 
   --destructive: #b91c1c; /* Red 700 */
   --destructive-foreground: #ffffff;
 
-  --muted: #fef3c7; /* Amber 100 */
+  --muted: #fde68a; /* Amber 200 */
   --muted-foreground: #92400e; /* Amber 700 */
 
   /* Added for shadcn/ui components */
   --popover: #fffbeb;
   --popover-foreground: #78350f;
 
-  --accent: #fef3c7;
+  --accent: #fde68a; /* Amber 200 */
   --accent-foreground: #78350f;
 
-  --input: #fde68a;
+  --input: #fcd34d; /* Amber 300 */
   --ring: #ea580c; /* Match Primary */
 
   --card: #fffbeb;
