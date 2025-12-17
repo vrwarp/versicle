@@ -147,15 +147,3 @@ export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
     return merged.map(r => generateCfiRange(r.rawStart, r.rawEnd));
 }
 
-export function getSpinePosFromCfi(range: string): number {
-    const EpubCFI = getEpubCFI();
-    if (!EpubCFI) return -1;
-    try {
-        const cfi = new EpubCFI();
-        cfi.parse(range);
-        return cfi.spinePos;
-    } catch (e) {
-        console.warn("Error parsing CFI for spine pos", e);
-        return -1;
-    }
-}
