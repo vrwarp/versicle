@@ -1,5 +1,3 @@
-import { type SpeechSegment } from './types';
-
 interface PiperWorkerResponse {
   kind: 'output' | 'stderr' | 'fetch' | 'complete' | 'isAlive' | 'error';
   [key: string]: any;
