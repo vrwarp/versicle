@@ -139,7 +139,10 @@ export const ReaderView: React.FC = () => {
                  // console.log(`[History] Saving range: ${range}`);
                  dbService.updateReadingHistory(id, range)
                     .then(() => setHistoryTick(t => t + 1))
-                    .catch((err) => console.error("History update failed", err));
+                    .catch((err) => {
+                        console.error("History update failed", err);
+                        useToastStore.getState().showToast('Failed to save reading history', 'error');
+                    });
              }
          }
          previousLocation.current = {

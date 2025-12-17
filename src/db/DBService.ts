@@ -560,7 +560,15 @@ class DBService {
               readRanges = entry.readRanges;
           }
 
-          const updatedRanges = mergeCfiRanges(readRanges, newRange);
+          let updatedRanges = mergeCfiRanges(readRanges, newRange);
+
+          // Enforce limit on history size to prevent unbounded growth
+          // We keep the last 100 merged ranges.
+          // Since merging usually reduces count, this is a safety net against
+          // pathological cases where merging fails or users skip around excessively.
+          if (updatedRanges.length > 100) {
+              updatedRanges = updatedRanges.slice(updatedRanges.length - 100);
+          }
 
           await store.put({
               bookId,
