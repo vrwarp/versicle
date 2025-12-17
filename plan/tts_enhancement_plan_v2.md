@@ -11,7 +11,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 **Key Components:** `WebAudioEngine`, `AudioGraph`, `BufferScheduler`.
 
 ### 2. Media Session Integration
-**Plan:** [plan/tts_v2_plan02_media_session.md](./tts_v2_plan02_media_session.md)
+**Plan:** [plan/archive/tts_v2_plan02_media_session.md](./archive/tts_v2_plan02_media_session.md)
 **Status:** **Completed**
 **Goal:** Enable native OS lock screen controls (Play/Pause, Seek, Next/Prev) and display rich metadata (Title, Author, Cover Art).
 **Key Components:** `MediaSessionManager`.
@@ -19,13 +19,13 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 ## High Priority (Core Experience)
 
 ### 3. Text Sanitization Engine
-**Plan:** [plan/tts_v2_plan03_text_sanitization.md](./tts_v2_plan03_text_sanitization.md)
+**Plan:** [plan/archive/tts_v2_plan03_text_sanitization.md](./archive/tts_v2_plan03_text_sanitization.md)
 **Status:** **Completed**
 **Goal:** Automatically remove non-narrative artifacts (page numbers, URLs, citations) from the text stream before synthesis to improve immersion.
 **Key Components:** `Sanitizer`, `RegexPatterns`.
 
 ### 4. Smart Resume ("Recall" Buffer)
-**Plan:** [plan/tts_v2_plan04_smart_resume.md](./tts_v2_plan04_smart_resume.md)
+**Plan:** [plan/archive/tts_v2_plan04_smart_resume.md](./archive/tts_v2_plan04_smart_resume.md)
 **Status:** **Completed**
 **Goal:** Intelligently rewind playback (10s - 60s) upon resumption based on how long the user has been away to help regain context.
 **Key Components:** `useTTSStore` (lastPauseTime), `AudioPlayerService` logic.
@@ -51,7 +51,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 **Key Components:** `TextSegmenter` (dialogue detection), `AudioPlayerService`.
 
 ### 8. User Pronunciation Lexicon
-**Plan:** [plan/tts_v2_plan08_pronunciation_lexicon.md](./tts_v2_plan08_pronunciation_lexicon.md)
+**Plan:** [plan/archive/tts_v2_plan08_pronunciation_lexicon.md](./archive/tts_v2_plan08_pronunciation_lexicon.md)
 **Status:** **Completed**
 **Goal:** Allow users to define custom pronunciation rules (Find/Replace) to correct specific words or names.
 **Key Components:** `LexiconService`, `LexiconManager`.
@@ -83,7 +83,7 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 **Key Components:** `EarconManager`.
 
 ### 13. Gesture Pad Overlay
-**Plan:** [plan/tts_v2_plan13_gesture_pad.md](./tts_v2_plan13_gesture_pad.md)
+**Plan:** [plan/archive/tts_v2_plan13_gesture_pad.md](./archive/tts_v2_plan13_gesture_pad.md)
 **Status:** **Completed**
 **Goal:** A full-screen invisible overlay that accepts gestures (Tap, Swipe) for blind control.
 **Key Components:** `GestureOverlay`.
