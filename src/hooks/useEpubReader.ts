@@ -389,7 +389,8 @@ export function useEpubReader(
 
       // Forced Styles
       const applyStyles = () => {
-          if (!options.shouldForceFont) return;
+          const isDarkOrSepia = options.currentTheme === 'dark' || options.currentTheme === 'sepia' || options.currentTheme === 'custom';
+          if (!options.shouldForceFont && !isDarkOrSepia) return;
 
           let bg, fg, linkColor;
           switch (options.currentTheme) {
@@ -406,13 +407,17 @@ export function useEpubReader(
               bg = '#ffffff'; fg = '#000000'; linkColor = '#0000ee';
           }
 
-          const css = `
-            html body *, html body p, html body div, html body span, html body h1, html body h2, html body h3, html body h4, html body h5, html body h6 {
+          const fontCss = options.shouldForceFont ? `
               font-family: ${options.fontFamily} !important;
               line-height: ${options.lineHeight} !important;
+              text-align: left !important;
+          ` : '';
+
+          const css = `
+            html body *, html body p, html body div, html body span, html body h1, html body h2, html body h3, html body h4, html body h5, html body h6 {
+              ${fontCss}
               color: ${fg} !important;
               background-color: transparent !important;
-              text-align: left !important;
               -webkit-touch-callout: none !important;
             }
             html, body {
