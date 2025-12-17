@@ -269,6 +269,17 @@ export function useEpubReader(
                 doc.head.appendChild(style);
                 applyStylesRef.current();
             }
+
+            // Inject empty div for scrolling space
+            const spacerId = 'reader-bottom-spacer';
+            if (!doc.getElementById(spacerId)) {
+                const spacer = doc.createElement('div');
+                spacer.id = spacerId;
+                spacer.style.height = '150px';
+                spacer.style.width = '100%';
+                spacer.style.clear = 'both'; // Ensure it sits below floated content
+                doc.body.appendChild(spacer);
+            }
         });
 
       } catch (err) {

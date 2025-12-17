@@ -740,7 +740,7 @@ export const ReaderView: React.FC = () => {
 
          {/* Reader Area */}
          <div className="flex-1 relative min-w-0 flex flex-col items-center">
-            <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full max-w-2xl h-full overflow-hidden px-6 md:px-8 [&_iframe]:pb-[150px] [&_iframe]:box-border" />
+            <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full max-w-2xl h-full overflow-hidden px-6 md:px-8" />
 
              <AnnotationPopover
                 bookId={id || ''}
