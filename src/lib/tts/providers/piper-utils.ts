@@ -6,6 +6,10 @@ const CACHE_NAME = 'piper-voices-v1';
 
 // --- Cache API Helpers ---
 
+/**
+ * Opens the specific CacheStorage for Piper voices.
+ * Returns null if Cache API is unavailable (e.g. non-secure context or older browser).
+ */
 const getCache = async () => {
   if (typeof caches === 'undefined') return null;
   try {
@@ -16,6 +20,10 @@ const getCache = async () => {
   }
 };
 
+/**
+ * Stores a blob in the persistent CacheStorage.
+ * Failures are logged but do not block execution (best effort).
+ */
 const storeInCache = async (url: string, blob: Blob) => {
   const cache = await getCache();
   if (!cache) return;
@@ -26,6 +34,10 @@ const storeInCache = async (url: string, blob: Blob) => {
   }
 };
 
+/**
+ * Retrieves a blob from the persistent CacheStorage.
+ * Returns null if not found or if Cache API fails.
+ */
 const loadFromCache = async (url: string): Promise<Blob | null> => {
   const cache = await getCache();
   if (!cache) return null;
@@ -38,6 +50,9 @@ const loadFromCache = async (url: string): Promise<Blob | null> => {
   return null;
 };
 
+/**
+ * Removes a file from the persistent CacheStorage.
+ */
 const removeFromCache = async (url: string) => {
   const cache = await getCache();
   if (!cache) return;
@@ -48,6 +63,10 @@ const removeFromCache = async (url: string) => {
   }
 };
 
+/**
+ * Checks if a model file exists in the persistent CacheStorage.
+ * This is the primary check for "is downloaded" status.
+ */
 export const isModelPersisted = async (modelUrl: string): Promise<boolean> => {
     const cache = await getCache();
     if (!cache) return false;
@@ -61,6 +80,10 @@ export const isModelPersisted = async (modelUrl: string): Promise<boolean> => {
 
 // --- Core Utils ---
 
+/**
+ * Caches the model in both memory (blobs map) and persistent storage (Cache API).
+ * The in-memory map is used by the worker for immediate access.
+ */
 export const cacheModel = (url: string, blob: Blob) => {
   blobs[url] = blob;
   storeInCache(url, blob).catch(e => console.error("Background cache write failed", e));
@@ -68,6 +91,10 @@ export const cacheModel = (url: string, blob: Blob) => {
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Fetches a URL with exponential backoff retry logic.
+ * Useful for downloading large model files over unstable connections.
+ */
 export const fetchWithBackoff = async (url: string, retries = 3, delay = 1000): Promise<Blob> => {
   try {
     const response = await fetch(url);
@@ -103,9 +130,11 @@ export const isModelLoadedInWorker = async (modelUrl: string): Promise<boolean> 
   });
 };
 
-// Deprecated alias for backward compatibility, but prefer isModelLoadedInWorker or isModelPersisted
-export const isModelCached = isModelLoadedInWorker;
 
+/**
+ * Deletes a model from both memory and persistent storage.
+ * Also terminates the worker to ensure no stale state remains.
+ */
 export const deleteCachedModel = (modelUrl: string, modelConfigUrl: string) => {
   if (blobs[modelUrl]) delete blobs[modelUrl];
   if (blobs[modelConfigUrl]) delete blobs[modelConfigUrl];
@@ -116,6 +145,11 @@ export const deleteCachedModel = (modelUrl: string, modelConfigUrl: string) => {
   supervisor.terminate();
 };
 
+/**
+ * Ensures that the model and config files are loaded into the in-memory 'blobs' map.
+ * If they are missing from memory but exist in persistent cache, they are loaded.
+ * This is crucial for restoring state after a page reload.
+ */
 async function ensureModelLoaded(modelUrl: string, modelConfigUrl: string) {
     if (!blobs[modelUrl]) {
         const blob = await loadFromCache(modelUrl);
@@ -130,6 +164,8 @@ async function ensureModelLoaded(modelUrl: string, modelConfigUrl: string) {
 /**
  * Concatenates multiple WAV blobs into a single WAV blob.
  * Assumes blobs are standard WAV files (RIFF header + data chunk).
+ * It extracts the raw PCM data from each blob and stitches them together,
+ * creating a new valid WAV header.
  */
 export async function stitchWavs(blobs: Blob[]): Promise<Blob> {
     if (blobs.length === 0) return new Blob([], { type: 'audio/wav' });
