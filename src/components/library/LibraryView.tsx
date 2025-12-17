@@ -10,8 +10,8 @@ import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
 
 // Grid Configuration
-const CARD_WIDTH = 200; // Minimal width
-const CARD_HEIGHT = 320;
+const CARD_WIDTH = 240; // Minimal width
+const CARD_HEIGHT = 480;
 const GAP = 24;
 const LIST_ITEM_HEIGHT = 88;
 
@@ -30,7 +30,9 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
             width: Number(style.width) - GAP,
             height: Number(style.height) - GAP,
         }}>
-           <BookCard book={book} />
+           <div style={{ maxWidth: CARD_WIDTH, margin: '0 auto', height: '100%' }}>
+              <BookCard book={book} />
+           </div>
         </div>
     );
 }
