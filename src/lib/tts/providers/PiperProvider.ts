@@ -125,7 +125,7 @@ export class PiperProvider extends BaseCloudProvider {
         modelConfigUrl,
         voiceInfo.speakerId,
         "", // Empty input to trigger load
-        (progress) => {
+        () => {
              // Ignoring progress from worker during verification as we already have blobs
         }
       );
