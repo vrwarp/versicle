@@ -47,7 +47,6 @@ export const piperGenerate = async (
       kind: "init",
       input,
       speakerId,
-      // blobs is injected by supervisor
       piperPhonemizeJsUrl,
       piperPhonemizeWasmUrl,
       piperPhonemizeDataUrl,
