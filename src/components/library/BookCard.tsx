@@ -160,7 +160,11 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
            <DropdownMenu>
              <DropdownMenuTrigger asChild>
                <button
-                 className="p-1 rounded-full bg-black/50 text-white hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus-visible:opacity-100"
+                 className={cn(
+                   "rounded-full bg-black/50 text-white hover:bg-black/70 transition-opacity focus:opacity-100 focus-visible:opacity-100 touch-manipulation",
+                   "p-2", // Larger touch target
+                   "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
+                 )}
                  data-testid="book-menu-trigger"
                  aria-label="Book actions"
                >

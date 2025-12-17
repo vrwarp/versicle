@@ -197,7 +197,10 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button
-                                className="p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                className={cn(
+                                    "p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors focus:opacity-100 touch-manipulation",
+                                    "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
+                                )}
                                 aria-label="Book actions"
                                 data-testid={`book-actions-${book.id}`}
                             >
