@@ -94,7 +94,7 @@ class SearchClient {
             for (const item of batch) {
                 try {
                     const doc = await book.load(item.href);
-                    if (doc) {
+                    if (doc && doc.body) {
                         const text = doc.body.innerText;
                         sections.push({
                             id: item.id,
