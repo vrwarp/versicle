@@ -14,21 +14,30 @@ def test_compass_pill(page: Page):
 
     # 2. Simulate reading (navigate to a chapter)
     print("Navigating to chapter to ensure progress...")
-    # This uses TOC to jump to a chapter, which guarantees progress > 0
-    utils.navigate_to_chapter(page)
+    # Open TOC
+    page.get_by_test_id("reader-toc-button").click()
+    # Click item 2 (Chapter 2 usually, definitely > 0 progress)
+    page.get_by_test_id("toc-item-2").click()
+    # Wait for TOC to close (it auto closes)
+    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
 
-    # We need to wait for > 2 seconds for history to be saved (ReaderView.tsx constraint)
-    # And for dbService.saveProgress debounce (1s)
-    print("Reading for a few seconds...")
-    page.wait_for_timeout(3000)
+    # Dwell time to ensure history recording logic (which requires > 2s duration)
+    # works if we move again, but here we just want to establish a position.
+    print("Reading (dwelling) for a few seconds...")
+    page.wait_for_timeout(4000)
+
+    # Move page slightly to trigger onLocationChange again if needed and ensure updates
+    page.keyboard.press("ArrowRight")
+    page.wait_for_timeout(2000)
 
     # 3. Go back to Library
     print("Going back to library...")
     page.get_by_test_id("reader-back-button").click()
+    # Expect library url (root)
     expect(page).to_have_url(re.compile(r".*/$"))
 
     # Wait for library to load and update
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(2000)
 
     # 4. Check for Compass Pill
     print("Checking for Compass Pill...")
