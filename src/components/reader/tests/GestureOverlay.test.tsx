@@ -34,18 +34,22 @@ describe('GestureOverlay', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useReaderStore as any).mockReturnValue({
-      gestureMode: true
+    (useReaderStore as any).mockImplementation((selector: any) => {
+      const state = { gestureMode: true };
+      return selector ? selector(state) : state;
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useTTSStore as any).mockReturnValue({
-      isPlaying: false,
-      play: mockPlay,
-      pause: mockPause,
-      seek: mockSeek,
-      rate: 1.0,
-      setRate: mockSetRate,
-      providerId: 'cloud'
+    (useTTSStore as any).mockImplementation((selector: any) => {
+      const state = {
+        isPlaying: false,
+        play: mockPlay,
+        pause: mockPause,
+        seek: mockSeek,
+        rate: 1.0,
+        setRate: mockSetRate,
+        providerId: 'cloud'
+      };
+      return selector ? selector(state) : state;
     });
     // Set window dimensions for tap zones
     Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1000 });
@@ -57,7 +61,10 @@ describe('GestureOverlay', () => {
 
   it('renders nothing when gestureMode is false', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useReaderStore as any).mockReturnValue({ gestureMode: false });
+    (useReaderStore as any).mockImplementation((selector: any) => {
+      const state = { gestureMode: false };
+      return selector ? selector(state) : state;
+    });
     render(<GestureOverlay onClose={mockClose} />);
     expect(screen.queryByText('Gesture Mode Active')).not.toBeInTheDocument();
   });

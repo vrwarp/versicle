@@ -1,4 +1,5 @@
 import { useReaderStore } from "../../store/useReaderStore"
+import { useShallow } from 'zustand/react/shallow';
 import { PopoverContent, PopoverClose } from "../ui/Popover"
 import { Button } from "../ui/Button"
 import { Slider } from "../ui/Slider"
@@ -42,7 +43,20 @@ export const VisualSettings = () => {
     viewMode, setViewMode,
     lineHeight, setLineHeight,
     shouldForceFont, setShouldForceFont
-  } = useReaderStore();
+  } = useReaderStore(useShallow(state => ({
+    currentTheme: state.currentTheme,
+    setTheme: state.setTheme,
+    fontSize: state.fontSize,
+    setFontSize: state.setFontSize,
+    fontFamily: state.fontFamily,
+    setFontFamily: state.setFontFamily,
+    viewMode: state.viewMode,
+    setViewMode: state.setViewMode,
+    lineHeight: state.lineHeight,
+    setLineHeight: state.setLineHeight,
+    shouldForceFont: state.shouldForceFont,
+    setShouldForceFont: state.setShouldForceFont
+  })));
 
   return (
     <PopoverContent className="w-80 p-4 relative">

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
+import { useShallow } from 'zustand/react/shallow';
 
 interface GestureOverlayProps {
   /** Callback for swipe left gesture (Next Chapter). */
@@ -29,8 +30,17 @@ export const GestureOverlay: React.FC<GestureOverlayProps> = ({
   onPrevChapter,
   onClose
 }) => {
-  const { isPlaying, play, pause, seek, rate, setRate, providerId } = useTTSStore();
-  const { gestureMode } = useReaderStore(); // Assuming we add this to store
+  const { isPlaying, play, pause, seek, rate, setRate, providerId } = useTTSStore(useShallow(state => ({
+    isPlaying: state.isPlaying,
+    play: state.play,
+    pause: state.pause,
+    seek: state.seek,
+    rate: state.rate,
+    setRate: state.setRate,
+    providerId: state.providerId
+  })));
+
+  const gestureMode = useReaderStore(useShallow(state => state.gestureMode));
 
   const [icon, setIcon] = useState<React.ReactNode | null>(null);
   const [iconKey, setIconKey] = useState(0);

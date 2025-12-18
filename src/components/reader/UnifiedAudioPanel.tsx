@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
+import { useShallow } from 'zustand/react/shallow';
 import { SheetContent, SheetHeader, SheetTitle } from '../ui/Sheet';
 import { Button } from '../ui/Button';
 import { Slider } from '../ui/Slider';
@@ -35,9 +36,28 @@ export const UnifiedAudioPanel = () => {
     setSanitizationEnabled,
     prerollEnabled,
     setPrerollEnabled
-  } = useTTSStore();
+  } = useTTSStore(useShallow(state => ({
+    isPlaying: state.isPlaying,
+    play: state.play,
+    pause: state.pause,
+    rate: state.rate,
+    setRate: state.setRate,
+    voice: state.voice,
+    setVoice: state.setVoice,
+    voices: state.voices,
+    loadVoices: state.loadVoices,
+    seek: state.seek,
+    providerId: state.providerId,
+    sanitizationEnabled: state.sanitizationEnabled,
+    setSanitizationEnabled: state.setSanitizationEnabled,
+    prerollEnabled: state.prerollEnabled,
+    setPrerollEnabled: state.setPrerollEnabled
+  })));
 
-  const { gestureMode, setGestureMode } = useReaderStore();
+  const { gestureMode, setGestureMode } = useReaderStore(useShallow(state => ({
+    gestureMode: state.gestureMode,
+    setGestureMode: state.setGestureMode
+  })));
 
   const [view, setView] = useState<'queue' | 'settings'>('queue');
   const [isLexiconOpen, setIsLexiconOpen] = useState(false);
