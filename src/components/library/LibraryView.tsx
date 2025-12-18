@@ -160,12 +160,22 @@ export const LibraryView: React.FC = () => {
   };
 
   const columnCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
-  const rowCount = Math.ceil(books.length / columnCount);
+  // Add 1 to rowCount for spacer
+  const rowCount = Math.ceil(books.length / columnCount) + 1;
   const gridColumnWidth = Math.floor(dimensions.width / columnCount);
 
   // Memoize itemData (cellProps) to prevent unnecessary re-renders of the grid cells.
   // This version of react-window uses cellProps which are spread into the component props.
   const itemData = React.useMemo(() => ({ books, columnCount }), [books, columnCount]);
+
+  const getRowHeight = useCallback((index: number) => {
+      if (viewMode === 'list') {
+          if (index === books.length) return 100;
+          return LIST_ITEM_HEIGHT;
+      }
+      if (index === rowCount - 1) return 100;
+      return CARD_HEIGHT + GAP;
+  }, [viewMode, rowCount, books.length]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const GridAny = Grid as any;
@@ -262,8 +272,8 @@ export const LibraryView: React.FC = () => {
                 columnCount={viewMode === 'list' ? 1 : columnCount}
                 columnWidth={viewMode === 'list' ? dimensions.width : gridColumnWidth}
                 height={dimensions.height || 500}
-                rowCount={viewMode === 'list' ? books.length : rowCount}
-                rowHeight={viewMode === 'list' ? LIST_ITEM_HEIGHT : CARD_HEIGHT + GAP}
+                rowCount={viewMode === 'list' ? books.length + 1 : rowCount}
+                rowHeight={getRowHeight}
                 width={dimensions.width}
                 cellComponent={viewMode === 'list' ? ListCell : GridCell}
                 cellProps={itemData}
