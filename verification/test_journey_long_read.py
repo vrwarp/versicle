@@ -41,6 +41,9 @@ def test_long_reading_journey(page: Page):
 
     # 4. Highlight text
     print("Creating Highlight...")
+    # Capture text content before highlighting to verify return later
+    session1_text = frame.locator("body").inner_text()
+
     # Using the snippet from test_journey_annotations.py
     selection_success = frame.locator("body").evaluate("""
         () => {
@@ -138,6 +141,20 @@ def test_long_reading_journey(page: Page):
     # Wait for nav
     page.wait_for_timeout(3000)
     expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
+
+    # Verify content matches Session 1
+    session2_text = frame.locator("body").inner_text()
+
+    # We expect significant overlap in text
+    # Taking a substring to avoid minor rendering differences or dynamic content
+    snippet = session1_text[:50]
+    if snippet not in session2_text:
+        print(f"Warning: Text mismatch after resume.\nExpected start: {snippet}\nActual start: {session2_text[:50]}")
+        # Depending on strictness, we might assert here.
+        # For now, let's verify Chapter Title if available, or just assert something reasonable.
+        # But for 'journey', seeing the text is key.
+        assert snippet in session2_text, "Resumed content does not match Session 1 content"
+
     utils.capture_screenshot(page, "long_journey_06_history_resumed")
 
     # --- Session 3: Persistence Check (Reload) ---
