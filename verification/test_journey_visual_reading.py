@@ -18,12 +18,20 @@ def test_journey_visual_reading(page: Page):
     # Wait for content
     page.wait_for_timeout(3000)
 
-    # Navigate to Chapter 1 to ensure we have text (Cover might be image)
+    # Navigate to Chapter 1 (Down the Rabbit-Hole) which is long and ensures multiple pages
     print("Navigating to Chapter I...")
-    # navigate_to_chapter handles opening TOC and selecting item
-    navigate_to_chapter(page, "toc-item-1")
+    page.get_by_test_id("reader-toc-button").click()
+    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
 
-    # Wait for content after navigation
+    # Debug TOC and select "Chapter I"
+    try:
+        # Use loose match for Chapter I
+        page.get_by_text("Chapter I", exact=False).first.click()
+    except:
+        print("Failed to click 'Chapter I' by text. Trying toc-item-2...")
+        page.get_by_test_id("toc-item-2").click()
+
+    # Wait for content after navigation (TOC closes automatically)
     page.wait_for_timeout(3000)
 
     # Get Reader Frame
@@ -40,14 +48,25 @@ def test_journey_visual_reading(page: Page):
     initial_text = frame.locator("body").inner_text()
     print(f"Initial text length: {len(initial_text)}")
 
-    viewport = page.viewport_size
-    width = viewport['width'] if viewport else 1280
-    height = viewport['height'] if viewport else 720
+    # Determine tap targets based on Reader container (which might be centered max-w-2xl on desktop)
+    reader_container = page.locator("div[data-testid='reader-iframe-container']")
+    box = reader_container.bounding_box()
+    assert box, "Reader container has no bounding box"
+
+    reader_x = box['x']
+    reader_y = box['y']
+    reader_w = box['width']
+    reader_h = box['height']
+
+    print(f"Reader Box: x={reader_x}, y={reader_y}, w={reader_w}, h={reader_h}")
 
     # --- Test Next Page (Right Tap) ---
     print("Tapping Right Zone...")
-    # Right 10% from edge (x > 0.8 * width)
-    page.mouse.click(width * 0.9, height / 2)
+    # Right 10% of READER width
+    tap_x_right = reader_x + (reader_w * 0.9)
+    tap_y = reader_y + (reader_h / 2)
+
+    page.mouse.click(tap_x_right, tap_y)
     page.wait_for_timeout(3000) # Wait for page turn animation/render
 
     # Re-fetch frame as it might be detached/replaced
@@ -61,7 +80,7 @@ def test_journey_visual_reading(page: Page):
     # Assert changed
     if initial_text == new_text:
         print("Warning: Text did not change. Trying again...")
-        page.mouse.click(width * 0.9, height / 2)
+        page.mouse.click(tap_x_right, tap_y)
         page.wait_for_timeout(3000)
         frame = get_reader_frame(page)
         new_text = frame.locator("body").inner_text()
@@ -70,8 +89,10 @@ def test_journey_visual_reading(page: Page):
 
     # --- Test Prev Page (Left Tap) ---
     print("Tapping Left Zone...")
-    # Left 10%
-    page.mouse.click(width * 0.1, height / 2)
+    # Left 10% of READER width
+    tap_x_left = reader_x + (reader_w * 0.1)
+
+    page.mouse.click(tap_x_left, tap_y)
     page.wait_for_timeout(3000)
 
     # Re-fetch frame
@@ -86,7 +107,8 @@ def test_journey_visual_reading(page: Page):
     expect(page.locator("header")).to_be_visible()
 
     print("Tapping Center Zone...")
-    page.mouse.click(width / 2, height / 2)
+    tap_x_center = reader_x + (reader_w * 0.5)
+    page.mouse.click(tap_x_center, tap_y)
 
     # HUD should disappear
     expect(page.locator("header")).not_to_be_visible(timeout=3000)
@@ -94,7 +116,7 @@ def test_journey_visual_reading(page: Page):
     capture_screenshot(page, "visual_reading_immersive")
 
     # Tap Center again
-    page.mouse.click(width / 2, height / 2)
+    page.mouse.click(tap_x_center, tap_y)
 
     # HUD should reappear
     expect(page.locator("header")).to_be_visible(timeout=3000)
