@@ -44,6 +44,7 @@ const ListCell = ({ rowIndex, style, books }: any) => {
 }
 
 
+
 /**
  * The main library view component.
  * Displays the user's collection of books in a virtualized grid and allows importing new books.
@@ -167,6 +168,25 @@ export const LibraryView: React.FC = () => {
   // This version of react-window uses cellProps which are spread into the component props.
   const itemData = React.useMemo(() => ({ books, columnCount }), [books, columnCount]);
 
+  const getRowHeight = useCallback((index: number) => {
+      if (viewMode === 'list') return LIST_ITEM_HEIGHT;
+      const isLastRow = index === rowCount - 1;
+      return CARD_HEIGHT + GAP + (isLastRow ? 100 : 0);
+  }, [viewMode, rowCount]);
+
+  const spacer = React.useMemo(() => (
+      <div style={{
+          position: 'absolute',
+          top: (viewMode === 'list' ? books.length * LIST_ITEM_HEIGHT : rowCount * (CARD_HEIGHT + GAP)),
+          left: 0,
+          width: '100%',
+          height: '100px',
+          clear: 'both'
+      }}>
+          &nbsp;
+      </div>
+  ), [viewMode, books.length, rowCount]);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const GridAny = Grid as any;
 
@@ -263,11 +283,13 @@ export const LibraryView: React.FC = () => {
                 columnWidth={viewMode === 'list' ? dimensions.width : gridColumnWidth}
                 height={dimensions.height || 500}
                 rowCount={viewMode === 'list' ? books.length : rowCount}
-                rowHeight={viewMode === 'list' ? LIST_ITEM_HEIGHT : CARD_HEIGHT + GAP}
+                rowHeight={getRowHeight}
                 width={dimensions.width}
                 cellComponent={viewMode === 'list' ? ListCell : GridCell}
                 cellProps={itemData}
-             />
+             >
+                {spacer}
+             </GridAny>
           )}
         </section>
       )}
