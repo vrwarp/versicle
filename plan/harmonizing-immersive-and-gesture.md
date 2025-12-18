@@ -288,23 +288,30 @@ The Screen Curtain is a dedicated sub-mode for battery conservation and pocket s
 7\. Technical Implementation Strategy
 -------------------------------------
 
-### Phase 1: State Unification & Store Refactor
+### Phase 1: State Unification & Store Refactor (COMPLETED)
 
--   **Deprecate `isGestureMode`:** Remove the explicit toggle from `useUIStore`.
+-   **Deprecate `isGestureMode`:** Removed `gestureMode` from `useReaderStore` (not `useUIStore`). Updated `ReaderView` and `UnifiedAudioPanel` to remove gesture mode toggles.
 
--   **Introduce `isAudioActive`:** Create a derived state or a direct subscription to `useTTSStore.isPlaying`. The entire UI should react to this single source of truth.
+-   **Introduce `isAudioActive`:** Implemented by subscribing directly to `useTTSStore.isPlaying` in `UnifiedInputController`.
 
--   **Input Layer:** Lift the logic from `GestureOverlay.tsx` into a new `UnifiedInputController.tsx` that wraps `ReaderView`. This controller will listen to `isAudioActive` and swap the gesture configuration passed to `react-use-gesture`.
+-   **Input Layer:** Created `UnifiedInputController.tsx` which manages both "Visual Reading" and "Listening" states. Replaced `GestureOverlay.tsx` with this new controller.
 
-### Phase 2: Input Logic & Event Propagation
+### Phase 2: Input Logic & Event Propagation (COMPLETED)
 
--   **Overlay Strategy:** Since `epub.js` renders content in an iframe, capturing touches can be tricky.
+-   **Overlay Strategy:**
+    -   Implemented a full-screen overlay in `UnifiedInputController` that is active when `isPlaying` is true (Listening State).
+    -   When `isPlaying` is false (Visual Reading State), the overlay is effectively removed/hidden.
+    -   To support "Double Tap to Start Audio" in Visual Reading State (where overlay is inactive), we updated `useEpubReader` to pass click events from the iframe. `UnifiedInputController` listens to these events via `rendition.on('click')` and implements the tap zone logic (Left/Right/Center) and Double Tap detection.
 
-    -   *Solution:* When `isAudioActive` is true, a transparent `div` (z-index: 10) is placed *over* the iframe. This captures all swipes and taps natively, preventing them from reaching the iframe text (disabling native text selection/turning).
+-   **Conflict Resolution:** Implemented a 300ms delay on single taps to wait for potential double taps in both states.
 
-    -   *Passthrough:* When `isAudioActive` is false, this overlay is `pointer-events: none`, allowing direct interaction with the text.
+### Deviations & Discoveries
 
--   **Conflict Resolution:** Ensure that the "Double Tap" to start audio doesn't trigger a "Single Tap" HUD toggle during the transition. Use a 250ms delay on single-tap handlers to wait for a potential second tap.
+-   **GestureOverlay Removal:** `GestureOverlay.tsx` was deleted as its functionality is fully subsumed by `UnifiedInputController`.
+
+-   **Click Handling:** Modified `src/hooks/useEpubReader.ts` to pass the `MouseEvent` to the `onClick` handler. This was crucial for implementing tap zones (Left/Right/Center) on the iframe content itself.
+
+-   **Tap Zones:** Implemented explicit tap zones (Left 20%, Right 20%, Center 60%) for the Visual Reading state to support Prev/Next page and Toggle HUD actions, replacing native or undefined behavior.
 
 ### Phase 3: Visual Polish & Transitions
 

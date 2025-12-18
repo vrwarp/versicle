@@ -12,7 +12,7 @@ import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { LexiconManager } from './LexiconManager';
 import { VisualSettings } from './VisualSettings';
-import { GestureOverlay } from './GestureOverlay';
+import { UnifiedInputController } from './UnifiedInputController';
 import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
@@ -59,8 +59,6 @@ export const ReaderView: React.FC = () => {
     currentChapterTitle,
     viewMode,
     shouldForceFont,
-    gestureMode,
-    setGestureMode,
     immersiveMode,
     setImmersiveMode
   } = useReaderStore(useShallow(state => ({
@@ -78,8 +76,6 @@ export const ReaderView: React.FC = () => {
     currentChapterTitle: state.currentChapterTitle,
     viewMode: state.viewMode,
     shouldForceFont: state.shouldForceFont,
-    gestureMode: state.gestureMode,
-    setGestureMode: state.setGestureMode,
     immersiveMode: state.immersiveMode,
     setImmersiveMode: state.setImmersiveMode
   })));
@@ -478,13 +474,6 @@ export const ReaderView: React.FC = () => {
       }
   }, [status, autoPlayNext, play, queue]);
 
-  // Close Audio Panel when Gesture Mode is enabled
-  useEffect(() => {
-      if (gestureMode) {
-          setAudioPanelOpen(false);
-      }
-  }, [gestureMode]);
-
   const handlePlayFromSelection = useCallback((cfiRange: string) => {
       const queue = AudioPlayerService.getInstance().getQueue();
       if (!queue || queue.length === 0 || !rendition) return;
@@ -534,11 +523,12 @@ export const ReaderView: React.FC = () => {
          onNext={handleNext}
       />
 
-      {/* Gesture Overlay */}
-      <GestureOverlay
-          onNextChapter={handleNext}
-          onPrevChapter={handlePrev}
-          onClose={() => setGestureMode(false)}
+      {/* Unified Input Controller (Flow Mode) */}
+      <UnifiedInputController
+          rendition={rendition}
+          onPrev={handlePrev}
+          onNext={handleNext}
+          onToggleHUD={() => setImmersiveMode(!immersiveMode)}
       />
 
       {/* Immersive Mode Exit Button */}

@@ -32,8 +32,6 @@ interface ReaderState {
   toc: NavigationItem[];
   /** The viewing mode of the reader. */
   viewMode: 'paginated' | 'scrolled';
-  /** Flag for Gesture Mode Overlay */
-  gestureMode: boolean;
   /** Flag for Immersive Mode */
   immersiveMode: boolean;
   /** Whether to force the theme font and ignore book styles. */
@@ -65,8 +63,6 @@ interface ReaderState {
   setToc: (toc: NavigationItem[]) => void;
   /** Sets the viewing mode. */
   setViewMode: (mode: 'paginated' | 'scrolled') => void;
-  /** Sets gesture mode state */
-  setGestureMode: (enabled: boolean) => void;
   /** Sets immersive mode state */
   setImmersiveMode: (enabled: boolean) => void;
   /** Sets whether to force the theme font. */
@@ -95,7 +91,6 @@ export const useReaderStore = create<ReaderState>()(
       progress: 0,
       toc: [],
       viewMode: 'paginated',
-      gestureMode: false,
       immersiveMode: false,
       shouldForceFont: false,
 
@@ -115,7 +110,6 @@ export const useReaderStore = create<ReaderState>()(
         })),
       setToc: (toc) => set({ toc }),
       setViewMode: (mode) => set({ viewMode: mode }),
-      setGestureMode: (enabled) => set({ gestureMode: enabled }),
       setImmersiveMode: (enabled) => set({ immersiveMode: enabled }),
       setShouldForceFont: (force) => set({ shouldForceFont: force }),
       reset: () => set({
@@ -139,7 +133,6 @@ export const useReaderStore = create<ReaderState>()(
         lineHeight: state.lineHeight,
         fontSize: state.fontSize,
         viewMode: state.viewMode,
-        gestureMode: state.gestureMode,
         shouldForceFont: state.shouldForceFont,
       }),
     }
