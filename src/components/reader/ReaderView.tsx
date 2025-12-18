@@ -667,7 +667,7 @@ export const ReaderView: React.FC = () => {
                          </div>
                      </TabsContent>
 
-                     <TabsContent value="history" className="flex-1 overflow-y-auto mt-0 min-h-0 flex flex-col">
+                     <TabsContent value="history" className="flex-1 overflow-y-auto mt-0 min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
                          <ReadingHistoryPanel
                             bookId={id || ''}
                             rendition={rendition}
