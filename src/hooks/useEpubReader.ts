@@ -98,6 +98,28 @@ export function useEpubReader(
       setError(null);
       setIsReady(false);
 
+      // Handle Iframe Sandbox Patching
+      // Fixes "Blocked script execution" by injecting allow-scripts into the sandbox attribute
+      // created by epub.js, without enabling allowScriptedContent which changes loading behavior.
+      const observer = new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+              mutation.addedNodes.forEach((node) => {
+                  if (node.nodeName === 'IFRAME') {
+                      const iframe = node as HTMLIFrameElement;
+                      const sandbox = iframe.getAttribute('sandbox') || '';
+                      if (!sandbox.includes('allow-scripts')) {
+                          // Append allow-scripts if missing
+                          iframe.setAttribute('sandbox', sandbox + ' allow-scripts');
+                      }
+                  }
+              });
+          });
+      });
+
+      if (viewerRef.current) {
+          observer.observe(viewerRef.current, { childList: true, subtree: true });
+      }
+
       try {
         const { file: fileData, metadata: meta } = await dbService.getBook(bookId);
 
@@ -125,7 +147,8 @@ export function useEpubReader(
           height: '100%',
           flow: optionsRef.current.viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated',
           manager: 'default',
-          allowScriptedContent: true,
+          // Do NOT set allowScriptedContent: true here as it breaks hooks.content
+          // We patch sandbox attribute manually via MutationObserver instead.
         });
         renditionRef.current = newRendition;
         setRendition(newRendition);
@@ -293,14 +316,6 @@ export function useEpubReader(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newRendition.hooks.content as any).register(attachListeners);
 
-        // Also attach on 'rendered' event as fallback if hooks don't fire (e.g. allowScriptedContent=true)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        newRendition.on('rendered', (_section: any, view: any) => {
-             if (view && view.contents) {
-                 attachListeners(view.contents);
-             }
-        });
-
       } catch (err) {
         console.error('Error loading book:', err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error loading book';
@@ -308,6 +323,7 @@ export function useEpubReader(
         if (optionsRef.current.onError) optionsRef.current.onError(errorMessage);
       } finally {
         setIsLoading(false);
+        observer.disconnect();
       }
     };
 
