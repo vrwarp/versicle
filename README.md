@@ -11,6 +11,8 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
     *   **Customizable**: Light/Dark/Sepia themes, custom fonts, line height, and font size.
     *   **Modes**: Paginated (Book-like) and Scrolled (Web-like) view modes.
     *   **Force Font**: Option to override publisher styling for consistent readability.
+*   **Generative AI**:
+    *   **Smart TOC**: Automatically generate clean chapter titles for books with missing or poor tables of contents.
 *   **Text-to-Speech (TTS) Powerhouse**:
     *   **Hybrid Engine**: Seamlessly switch between **Local** (Web Speech, Piper WASM) and **Cloud** (Google, OpenAI) providers.
     *   **Smart Resume**: Intelligently rewinds context (2 sentences) after pauses.
@@ -21,7 +23,7 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 *   **Data Management**:
     *   **Backup/Restore**: Export your library metadata, reading progress, and settings to JSON. (Note: EPUB files are not currently included in backups and must be re-imported).
     *   **Offloading**: Remove large book files to save space on mobile devices while keeping your notes, reading progress, and metadata intact.
-    *   **Maintenance**: Run health checks to identify missing files or corrupt data, and perform factory resets if needed.
+    *   **Maintenance**: Run health checks to identify missing files or corrupt data, prune orphaned records, and perform factory resets if needed.
 *   **PWA & Mobile**: Installable as a standalone app on desktop and mobile. Native Android build via Capacitor.
 
 ## Tech Stack
@@ -33,6 +35,7 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 *   **Rendering**: `epub.js`
 *   **Search**: `FlexSearch` (in Web Worker)
 *   **TTS**: Piper (WASM), Web Speech API, Google/OpenAI Cloud APIs
+*   **AI**: Google Gemini (via `@google/generative-ai`)
 *   **Testing**: Vitest (Unit), Playwright (Visual/Integration)
 
 ## Prerequisites

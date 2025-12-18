@@ -44,6 +44,7 @@ graph TD
         TTSStore[useTTSStore]
         LibStore[useLibraryStore]
         AnnotStore[useAnnotationStore]
+        GenAIStore[useGenAIStore]
     end
 
     subgraph Core [Core Services]
@@ -52,6 +53,7 @@ graph TD
         SearchClient[SearchClient]
         Backup[BackupService]
         Maint[MaintenanceService]
+        GenAI[GenAIService]
     end
 
     subgraph TTS [TTS Subsystem]
@@ -99,6 +101,8 @@ graph TD
     Reader --> SearchClient
     SearchClient --> SearchWorker
     SearchWorker --> SearchEngine
+
+    GenAIStore --> GenAI
 
     Ingestion --> DBService
     TTSCache --> DBService
@@ -161,42 +165,62 @@ Manages data portability.
     *   **Strategy**: Upserts metadata. If a book exists, it preserves the existing binary.
 
 #### Maintenance (`src/lib/MaintenanceService.ts`)
-Handles database health.
+Handles database health and integrity.
 
-*   **`runHealthCheck()`**: Scans for inconsistencies, such as books missing their binary EPUB data.
-*   **`factoryReset()`**: Wipes all data from IndexedDB and reloads the application.
+*   **Goal**: Ensure the database is free of orphaned records (files, annotations, lexicon rules) that no longer have a parent book.
+*   **Logic**: Scans all object stores (`files`, `annotations`, `locations`, `lexicon`) and compares IDs against the `books` store.
+*   **Trade-off**: `pruneOrphans()` is a destructive operation. If logic is flawed, valid data could be lost. It is designed to be run manually or on specific error conditions.
+
+#### Generative AI (`src/lib/genai/`)
+Enhances the reading experience using LLMs (Google Gemini).
+
+*   **Goal**: Provide features like "Smart Table of Contents" generation, summarization, and text analysis.
+*   **Logic**:
+    *   **`GenAIService`**: Singleton wrapper around `@google/generative-ai`. Handles API configuration and request logging.
+    *   **`generateStructured`**: Uses Gemini's JSON schema enforcement to return strictly typed data (e.g., TOC structure).
+    *   **`textMatching.ts`**: Provides fuzzy matching to locate AI-generated quotes/references back in the original source text (handling whitespace/case differences).
+*   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets are sent to Google's servers.
 
 ---
 
 ### TTS Subsystem (`src/lib/tts/`)
 
-This is the most complex subsystem, handling audio generation, synchronization, and playback control.
+This is the most complex subsystem, handling audio generation, synchronization, and playback control. It is designed as a modular pipeline.
 
 #### `src/lib/tts/AudioPlayerService.ts`
-The singleton controller for TTS. It acts as the "brain" of the audio experience.
+The singleton controller (Orchestrator).
 
-**Key Responsibilities:**
-*   **State Machine**: Manages states (`playing`, `paused`, `stopped`, `loading`, `completed`).
-*   **Queue Management**: Maintains a list of `TTSQueueItem`s (sentences).
-*   **Provider Management**: Hot-swaps between providers (Google, OpenAI, Piper, WebSpeech).
-*   **Concurrency**: Uses `executeWithLock` (Mutex pattern) to prevent race conditions when the user taps multiple controls rapidly.
-*   **Smart Resume**: Resumes playback from `lastPauseTime` if available, or falls back to `lastPlayedCfi`.
-*   **Background Audio**: Uses a silent audio track strategy (`BackgroundAudio.ts`) and Capacitor Foreground Service to keep the app alive on Android/iOS when the screen is off.
-*   **Error Handling**: Implements automatic fallback from Cloud to Local providers if an API call fails.
+*   **Goal**: Manage the playback queue, provider selection, and state machine (`playing`, `paused`, `loading`, etc.).
+*   **Logic**:
+    *   **Concurrency**: Uses a **Mutex** pattern (`executeWithLock`) to serialize async operations (play, pause, next) and prevent race conditions.
+    *   **Smart Resume**: Automatically rewinds context (2 sentences) after a pause to re-orient the listener.
+    *   **Media Session**: Integrates with the OS Media Session API (lock screen controls) via `MediaSessionManager`.
+*   **Trade-off**: High complexity to handle all edge cases (network failure, background play, interruptions).
 
 #### `src/lib/tts/TextSegmenter.ts`
 Splits raw text into natural-sounding sentences.
 
-*   **Logic**: Uses `Intl.Segmenter` (browser native) where available.
-*   **Hardening**: Implements a custom post-processing step to merge sentences split incorrectly by abbreviations (e.g., "Mr.", "Dr.", "i.e."). Uses a list of "Always Merge" abbreviations and "Sentence Starters" (pronouns) to make intelligent decisions.
-
-#### `src/lib/tts/SyncEngine.ts`
-*   **Purpose**: Manages the visual karaoke-style highlighting.
-*   **Logic**: Efficiently searches a sorted list of `AlignmentData` (timepoints) to find the active word/sentence based on current playback time.
+*   **Logic**: Uses `Intl.Segmenter` (browser native) augmented with a custom Rules Engine.
+*   **Hardening**:
+    *   **Abbreviation Handling**: Merges splits caused by common abbreviations (e.g., "Mr.", "Dr.") using a whitelist.
+    *   **Sentence Starters**: Checks if the next segment starts with a lowercase letter (indicating a false split).
 
 #### `src/lib/tts/TTSCache.ts`
-*   **Purpose**: Caches generated audio buffers in IndexedDB (`tts_cache` store).
-*   **Key Generation**: Hash of `text + voiceId + speed + pitch + lexiconHash`. If any parameter changes (including lexicon rules), a new segment is generated.
+Persists synthesized audio to IndexedDB.
+
+*   **Logic**: Generates a cache key based on `text + voiceId + speed + pitch + lexiconHash`.
+*   **Benefit**: If you re-listen to a chapter, it plays instantly and costs zero API credits.
+
+#### `src/lib/tts/SyncEngine.ts`
+Manages visual "Karaoke" synchronization.
+
+*   **Logic**: Binary search (or optimized scan) through time-alignment data provided by the TTS provider to highlight the current word/sentence.
+
+#### `src/lib/tts/providers/`
+Plugin architecture for TTS backends.
+*   **`PiperProvider`**: Runs local WASM models.
+*   **`CloudProvider`**: Adapts Google/OpenAI APIs.
+*   **`WebSpeechProvider`**: Adapts browser native synthesis.
 
 ---
 
@@ -228,6 +252,9 @@ State is managed using **Zustand** with persistence to `localStorage` for prefer
     *   *Persisted*: `voice`, `rate`, `pitch`, `apiKeys`, `providerId`, `customAbbreviations`.
     *   *Transient*: `isPlaying`, `queue`, `currentIndex`, `activeCfi` (synced via subscription to `AudioPlayerService`).
     *   *Interaction*: Subscribes to `AudioPlayerService` events to update the UI.
+*   **`useGenAIStore`**: Manages AI settings (API key, model) and usage logs.
+    *   *Persisted*: `apiKey`, `model`, `isEnabled`, `logs`, `usageStats`.
+*   **`useUIStore`**: Manages global UI state (e.g., `isGlobalSettingsOpen`). Transient.
 
 ### Common Types (`src/types/db.ts`)
 *   **`BookMetadata`**: Includes `fileHash`, `isOffloaded`, `coverBlob`, and playback state (`lastPlayedCfi`).
