@@ -94,7 +94,7 @@ describe('useTTSStore Platform Detection', () => {
         useTTSStore.setState({
             providerId: 'local',
             apiKeys: { google: '', openai: '' },
-            silentAudioType: 'silence',
+            backgroundAudioMode: 'silence',
             whiteNoiseVolume: 0.1
         });
     });

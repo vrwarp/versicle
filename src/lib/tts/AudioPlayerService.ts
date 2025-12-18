@@ -1,6 +1,6 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
-import { BackgroundAudio, type BackgroundAudioConfig } from './BackgroundAudio';
+import { BackgroundAudio, type BackgroundAudioMode } from './BackgroundAudio';
 import { Capacitor } from '@capacitor/core';
 import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
@@ -75,6 +75,7 @@ export class AudioPlayerService {
   private operationLock: Promise<void> = Promise.resolve();
 
   private backgroundAudio: BackgroundAudio;
+  private backgroundAudioMode: BackgroundAudioMode = 'silence';
 
   private constructor() {
     this.backgroundAudio = new BackgroundAudio();
@@ -270,8 +271,15 @@ export class AudioPlayerService {
       }
   }
 
-  public setBackgroundAudioConfig(config: BackgroundAudioConfig) {
-      this.backgroundAudio.setConfig(config);
+  public setBackgroundAudioMode(mode: BackgroundAudioMode) {
+      this.backgroundAudioMode = mode;
+      if (this.status === 'playing' || this.status === 'loading') {
+          this.backgroundAudio.play(mode);
+      }
+  }
+
+  public setBackgroundVolume(volume: number) {
+      this.backgroundAudio.setVolume(volume);
   }
 
   public setProvider(provider: ITTSProvider) {
@@ -637,6 +645,7 @@ export class AudioPlayerService {
 
               // Advance to next item
               if (this.currentIndex < this.queue.length - 1) {
+                  this.backgroundAudio.stopWithDebounce(5000);
                   this.currentIndex++;
                   this.persistQueue(); // Persist state so we can resume later
                   await this.playInternal(signal); // Start playing the next item
@@ -669,11 +678,11 @@ export class AudioPlayerService {
       );
 
       if (status === 'playing' || status === 'loading') {
-          this.backgroundAudio.play();
+          this.backgroundAudio.play(this.backgroundAudioMode);
       } else if (status === 'paused') {
-          this.backgroundAudio.pause();
+          this.backgroundAudio.stopWithDebounce(500);
       } else {
-          this.backgroundAudio.stop();
+          this.backgroundAudio.forceStop();
       }
 
       const currentCfi = (this.queue[this.currentIndex] && (status === 'playing' || status === 'loading' || status === 'paused'))

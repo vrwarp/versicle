@@ -68,11 +68,11 @@ interface TTSState {
   sanitizationEnabled: boolean;
 
   /** Local Provider Settings */
-  silentAudioType: 'silence' | 'white-noise';
+  backgroundAudioMode: 'silence' | 'noise' | 'off';
   whiteNoiseVolume: number;
 
   /** Actions */
-  setSilentAudioType: (type: 'silence' | 'white-noise') => void;
+  setBackgroundAudioMode: (mode: 'silence' | 'noise' | 'off') => void;
   setWhiteNoiseVolume: (volume: number) => void;
   play: () => void;
   pause: () => void;
@@ -167,7 +167,7 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: true,
             prerollEnabled: false,
             sanitizationEnabled: true,
-            silentAudioType: 'silence',
+            backgroundAudioMode: 'silence',
             whiteNoiseVolume: 0.1,
             customAbbreviations: [
                 'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
@@ -232,15 +232,13 @@ export const useTTSStore = create<TTSState>()(
             setSanitizationEnabled: (enable) => {
                 set({ sanitizationEnabled: enable });
             },
-            setSilentAudioType: (type) => {
-                set({ silentAudioType: type });
-                const { whiteNoiseVolume } = get();
-                player.setBackgroundAudioConfig({ silentAudioType: type, whiteNoiseVolume });
+            setBackgroundAudioMode: (mode) => {
+                set({ backgroundAudioMode: mode });
+                player.setBackgroundAudioMode(mode);
             },
             setWhiteNoiseVolume: (volume) => {
                 set({ whiteNoiseVolume: volume });
-                const { silentAudioType } = get();
-                player.setBackgroundAudioConfig({ silentAudioType, whiteNoiseVolume: volume });
+                player.setBackgroundVolume(volume);
             },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
@@ -333,15 +331,13 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: state.enableCostWarning,
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,
-            silentAudioType: state.silentAudioType,
+            backgroundAudioMode: state.backgroundAudioMode,
             whiteNoiseVolume: state.whiteNoiseVolume,
         }),
         onRehydrateStorage: () => (state) => {
             if (state) {
-                player.setBackgroundAudioConfig({
-                    silentAudioType: state.silentAudioType,
-                    whiteNoiseVolume: state.whiteNoiseVolume
-                });
+                player.setBackgroundAudioMode(state.backgroundAudioMode);
+                player.setBackgroundVolume(state.whiteNoiseVolume);
             }
         },
     }

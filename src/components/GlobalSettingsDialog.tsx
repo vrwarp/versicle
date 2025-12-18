@@ -36,7 +36,7 @@ export const GlobalSettingsDialog = () => {
     const {
         providerId, setProviderId,
         apiKeys, setApiKey,
-        silentAudioType, setSilentAudioType,
+        backgroundAudioMode, setBackgroundAudioMode,
         whiteNoiseVolume, setWhiteNoiseVolume,
         voice, voices, setVoice,
         downloadVoice, deleteVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded
@@ -229,44 +229,43 @@ export const GlobalSettingsDialog = () => {
                                         </Select>
                                     </div>
 
-                                    {providerId === 'local' && (
-                                        <div className="space-y-4 pt-4 border-t">
-                                            <div className="space-y-1">
-                                                <h4 className="text-sm font-medium">Silent Audio Workaround</h4>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Some systems (like Android) pause playback if audio is totally silent. Use white noise to prevent this.
-                                                </p>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-medium">Silent Track Type</label>
-                                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                                <Select value={silentAudioType} onValueChange={(val: any) => setSilentAudioType(val)}>
-                                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="silence">Silence (Default)</SelectItem>
-                                                        <SelectItem value="white-noise">White Noise</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-
-                                            {silentAudioType === 'white-noise' && (
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between">
-                                                        <label className="text-sm font-medium">White Noise Volume</label>
-                                                        <span className="text-sm text-muted-foreground">{Math.round(whiteNoiseVolume * 100)}%</span>
-                                                    </div>
-                                                    <Slider
-                                                        value={[whiteNoiseVolume]}
-                                                        min={0}
-                                                        max={1}
-                                                        step={0.01}
-                                                        onValueChange={(vals) => setWhiteNoiseVolume(vals[0])}
-                                                    />
-                                                </div>
-                                            )}
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <div className="space-y-1">
+                                            <h4 className="text-sm font-medium">Background Audio & Keep-Alive</h4>
+                                            <p className="text-xs text-muted-foreground">
+                                                Prevents playback from stopping when the screen is locked.
+                                            </p>
                                         </div>
-                                    )}
+
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium">Mode</label>
+                                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                            <Select value={backgroundAudioMode} onValueChange={(val: any) => setBackgroundAudioMode(val)}>
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="silence">Silence (Default)</SelectItem>
+                                                    <SelectItem value="noise">White Noise</SelectItem>
+                                                    <SelectItem value="off">Off (Save Battery)</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        {backgroundAudioMode === 'noise' && (
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between">
+                                                    <label className="text-sm font-medium">White Noise Volume</label>
+                                                    <span className="text-sm text-muted-foreground">{Math.round(whiteNoiseVolume * 100)}%</span>
+                                                </div>
+                                                <Slider
+                                                    value={[whiteNoiseVolume]}
+                                                    min={0}
+                                                    max={1}
+                                                    step={0.01}
+                                                    onValueChange={(vals) => setWhiteNoiseVolume(vals[0])}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
 
                                     {providerId === 'piper' && (
                                         <div className="space-y-4 pt-4 border-t">
