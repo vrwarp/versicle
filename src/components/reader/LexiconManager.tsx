@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { LexiconService } from '../../lib/tts/LexiconService';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import type { LexiconRule } from '../../types/db';
-import { Plus, Trash2, Volume2, Save, X, Download, Upload } from 'lucide-react';
+import { Plus, Trash2, Volume2, Save, X, Download, Upload, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
 import { useReaderStore } from '../../store/useReaderStore';
@@ -64,17 +64,39 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
   const handleSave = async () => {
     if (!editingRule?.original || !editingRule?.replacement) return;
 
+    // Preserve existing order if editing, or append to end if new
+    const existingRule = rules.find(r => r.id === editingRule.id);
+    const order = existingRule?.order ?? rules.length;
+
     await lexiconService.saveRule({
       id: editingRule.id,
       original: editingRule.original,
       replacement: editingRule.replacement,
       isRegex: editingRule.isRegex,
-      bookId: scope === 'book' ? (currentBookId || undefined) : undefined
+      bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+      order
     });
 
     setIsAdding(false);
     setEditingRule(null);
     loadRules();
+  };
+
+  const moveRule = async (index: number, direction: 'up' | 'down') => {
+      const newRules = [...rules];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+
+      if (targetIndex < 0 || targetIndex >= newRules.length) return;
+
+      const temp = newRules[index];
+      newRules[index] = newRules[targetIndex];
+      newRules[targetIndex] = temp;
+
+      setRules(newRules);
+
+      // Persist order
+      const updates = newRules.map((rule, idx) => ({ id: rule.id, order: idx }));
+      await lexiconService.reorderRules(updates);
   };
 
   const handleDelete = async (id: string) => {
@@ -202,7 +224,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         <div data-testid="lexicon-list-container" className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
           {/* List */}
           <div className="space-y-2">
-            {rules.map(rule => (
+            {rules.map((rule, index) => (
                <div key={rule.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
                    {editingRule?.id === rule.id ? (
                        <div className="flex flex-1 items-center gap-2">
@@ -251,7 +273,25 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                </div>
                                <span className="text-sm text-gray-500 dark:text-gray-400">{rule.replacement}</span>
                            </div>
-                           <div className="flex gap-2">
+                           <div className="flex gap-2 items-center">
+                               <div className="flex flex-col mr-2">
+                                   <button
+                                       data-testid={`lexicon-move-up-${index}`}
+                                       onClick={() => moveRule(index, 'up')}
+                                       disabled={index === 0}
+                                       className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                                   >
+                                       <ArrowUp size={12} />
+                                   </button>
+                                   <button
+                                       data-testid={`lexicon-move-down-${index}`}
+                                       onClick={() => moveRule(index, 'down')}
+                                       disabled={index === rules.length - 1}
+                                       className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                                   >
+                                       <ArrowDown size={12} />
+                                   </button>
+                               </div>
                                <button onClick={() => setEditingRule(rule)} className="text-xs text-blue-600 hover:underline">Edit</button>
                                <button onClick={() => handleDelete(rule.id)} className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 p-1 rounded"><Trash2 size={16}/></button>
                            </div>

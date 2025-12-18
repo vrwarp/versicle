@@ -33,9 +33,19 @@ export class LexiconService {
     const db = await getDB();
     const allRules = await db.getAll('lexicon');
 
-    return allRules.filter(rule =>
+    const filtered = allRules.filter(rule =>
       !rule.bookId || (bookId && rule.bookId === bookId)
     );
+
+    return filtered.sort((a, b) => {
+      // Primary: Order (Ascending)
+      const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+
+      // Secondary: Length (Descending) - legacy/default
+      return b.original.length - a.original.length;
+    });
   }
 
   /**
@@ -52,9 +62,30 @@ export class LexiconService {
       replacement: rule.replacement,
       isRegex: rule.isRegex,
       bookId: rule.bookId,
+      order: rule.order,
       created: Date.now(),
     };
     await db.put('lexicon', newRule);
+  }
+
+  /**
+   * Updates the order of multiple rules.
+   *
+   * @param updates - Array of objects with rule ID and new order.
+   */
+  async reorderRules(updates: { id: string; order: number }[]): Promise<void> {
+    const db = await getDB();
+    const tx = db.transaction('lexicon', 'readwrite');
+    const store = tx.objectStore('lexicon');
+
+    for (const { id, order } of updates) {
+      const rule = await store.get(id);
+      if (rule) {
+        rule.order = order;
+        await store.put(rule);
+      }
+    }
+    await tx.done;
   }
 
   /**
@@ -79,10 +110,10 @@ export class LexiconService {
   applyLexicon(text: string, rules: LexiconRule[]): string {
     let processedText = text;
 
-    // Sort rules by length of 'original' (descending) to prevent substring collisions
-    const sortedRules = [...rules].sort((a, b) => b.original.length - a.original.length);
+    // Rules are applied in the order they are provided.
+    // It is expected that the caller provides them in the correct order (e.g. from getRules()).
 
-    for (const rule of sortedRules) {
+    for (const rule of rules) {
         if (!rule.original || !rule.replacement) continue;
 
         try {
