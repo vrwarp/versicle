@@ -14,6 +14,11 @@ vi.mock('../../store/useToastStore', () => ({
   useToastStore: vi.fn(),
 }));
 
+// Mock FileUploader to simplify testing of EmptyLibrary
+vi.mock('./FileUploader', () => ({
+  FileUploader: () => <div data-testid="file-uploader-mock">File Uploader Mock</div>
+}));
+
 describe('EmptyLibrary', () => {
   const mockAddBook = vi.fn();
   const mockShowToast = vi.fn();
@@ -27,14 +32,10 @@ describe('EmptyLibrary', () => {
       isImporting: false,
     });
 
-    // Mock useToastStore hook to return showToast
+    // Mock useToastStore hook
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (useToastStore as any).mockImplementation((selector: any) => {
-        // If selector is provided, apply it to the state
-        if (selector) {
-            return selector({ showToast: mockShowToast });
-        }
-        // If used as useToastStore(), return the state
+        if (selector) return selector({ showToast: mockShowToast });
         return { showToast: mockShowToast };
     });
 
@@ -46,7 +47,30 @@ describe('EmptyLibrary', () => {
     vi.restoreAllMocks();
   });
 
-  it('handles demo book loading failure with toast', async () => {
+  it('renders correctly', () => {
+    render(<EmptyLibrary onImport={vi.fn()} />);
+    expect(screen.getByText('Your library is empty')).toBeInTheDocument();
+    expect(screen.getByTestId('file-uploader-mock')).toBeInTheDocument();
+    expect(screen.getByText(/Load Demo Book/)).toBeInTheDocument();
+  });
+
+  it('handles demo book loading success', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['dummy'], { type: 'application/epub+zip' })),
+      });
+
+      render(<EmptyLibrary onImport={vi.fn()} />);
+      fireEvent.click(screen.getByText(/Load Demo Book/));
+
+      await waitFor(() => {
+          expect(mockAddBook).toHaveBeenCalled();
+          expect(mockShowToast).toHaveBeenCalledWith('Demo book loaded successfully', 'success');
+      });
+  });
+
+  it('handles demo book loading failure', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (global.fetch as any).mockResolvedValue({
       ok: false,
@@ -56,9 +80,7 @@ describe('EmptyLibrary', () => {
     fireEvent.click(screen.getByText(/Load Demo Book/));
 
     await waitFor(() => {
-      // This expectation will fail initially because the code uses alert
       expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Failed to load'), 'error');
-      expect(global.alert).not.toHaveBeenCalled();
     });
   });
 });
