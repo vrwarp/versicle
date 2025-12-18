@@ -9,3 +9,7 @@
 ## 2025-12-16 - Standardizing Buttons for Theme Consistency
 **Learning:** Hardcoded utility classes (e.g., `bg-blue-600`) in empty states break theme support (Dark/Sepia modes). Using semantic components (like `<Button>`) and tokens (like `bg-primary`) ensures instant adaptation to all themes.
 **Action:** Refactor raw HTML elements to design system components whenever possible to inherit accessibility and theming for free.
+
+## 2025-12-18 - Integrated Drop Zones & Toast Feedback
+**Learning:** Native `alert()` interrupts the user flow and feels outdated. Also, hiding key actions (like file upload) behind a button click in empty states adds friction.
+**Action:** Replaced `alert()` with non-blocking Toast notifications. Integrated the `FileUploader` directly into the `EmptyLibrary` view to make the primary action (importing) immediately accessible via drag-and-drop.

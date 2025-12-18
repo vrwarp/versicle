@@ -1,5 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { useToastStore } from '../../store/useToastStore';
+import { UploadCloud, Loader2 } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 /**
  * A component for uploading EPUB files via drag-and-drop or file selection.
@@ -9,6 +12,7 @@ import { useLibraryStore } from '../../store/useLibraryStore';
  */
 export const FileUploader: React.FC = () => {
   const { addBook, isImporting } = useLibraryStore();
+  const { showToast } = useToastStore();
   const [dragActive, setDragActive] = useState(false);
 
   /**
@@ -42,11 +46,11 @@ export const FileUploader: React.FC = () => {
         if (file.name.endsWith('.epub')) {
           addBook(file);
         } else {
-            alert("Only .epub files are supported");
+            showToast("Only .epub files are supported", 'error');
         }
       }
     },
-    [addBook]
+    [addBook, showToast]
   );
 
   /**
@@ -63,9 +67,12 @@ export const FileUploader: React.FC = () => {
 
   return (
     <div
-      className={`relative w-full border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-        dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-      }`}
+      className={cn(
+        "group relative w-full border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ease-in-out cursor-pointer",
+        dragActive
+          ? "border-primary bg-accent"
+          : "border-muted-foreground/25 hover:border-primary hover:bg-muted/30"
+      )}
       onDragEnter={handleDrag}
       onDragLeave={handleDrag}
       onDragOver={handleDrag}
@@ -79,21 +86,30 @@ export const FileUploader: React.FC = () => {
         onChange={handleChange}
         accept=".epub"
         disabled={isImporting}
+        aria-label="Upload EPUB file"
       />
 
       {isImporting ? (
-        <div className="flex flex-col items-center justify-center space-y-2">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-            <p className="text-gray-600">Importing book...</p>
+        <div className="flex flex-col items-center justify-center space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground font-medium">Importing book...</p>
         </div>
       ) : (
-        <div className="space-y-2">
-            <p className="text-lg font-medium text-gray-700">
-                Drop your EPUB here, or <span className="text-blue-500">browse</span>
-            </p>
-             <p className="text-sm text-gray-500">
-                Supports .epub files
-             </p>
+        <div className="flex flex-col items-center justify-center space-y-3">
+            <div className={cn(
+                "p-4 rounded-full bg-muted transition-colors",
+                dragActive ? "bg-background" : "group-hover:bg-background"
+            )}>
+                <UploadCloud className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <div className="space-y-1">
+                <p className="text-lg font-medium text-foreground">
+                    Drop your EPUB here, or <span className="text-primary hover:underline">browse</span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                    Supports .epub files
+                </p>
+            </div>
         </div>
       )}
     </div>

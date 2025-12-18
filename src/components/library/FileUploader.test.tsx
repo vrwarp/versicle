@@ -3,12 +3,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { FileUploader } from './FileUploader';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { useToastStore } from '../../store/useToastStore';
 
 // Mock dependencies
 vi.mock('../../store/useLibraryStore');
+vi.mock('../../store/useToastStore');
 
 describe('FileUploader', () => {
   const mockAddBook = vi.fn();
+  const mockShowToast = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -18,6 +21,12 @@ describe('FileUploader', () => {
     (useLibraryStore as any).mockReturnValue({
       addBook: mockAddBook,
       isImporting: false,
+    });
+
+    // Mock useToastStore
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useToastStore as any).mockReturnValue({
+        showToast: mockShowToast,
     });
   });
 
@@ -68,11 +77,11 @@ describe('FileUploader', () => {
 
     // Drag enter
     fireEvent.dragEnter(dropZone);
-    expect(dropZone).toHaveClass('border-blue-500');
+    expect(dropZone).toHaveClass('border-primary');
 
     // Drag leave
     fireEvent.dragLeave(dropZone);
-    expect(dropZone).not.toHaveClass('border-blue-500');
+    expect(dropZone).not.toHaveClass('border-primary');
 
     // Drop
     const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
@@ -83,11 +92,10 @@ describe('FileUploader', () => {
     });
 
     expect(mockAddBook).toHaveBeenCalledWith(file);
-    expect(dropZone).not.toHaveClass('border-blue-500');
+    expect(dropZone).not.toHaveClass('border-primary');
   });
 
   it('should reject non-epub files', () => {
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
     const { container } = render(<FileUploader />);
     const dropZone = container.firstChild as HTMLElement;
 
@@ -99,7 +107,6 @@ describe('FileUploader', () => {
     });
 
     expect(mockAddBook).not.toHaveBeenCalled();
-    expect(alertMock).toHaveBeenCalledWith('Only .epub files are supported');
-    alertMock.mockRestore();
+    expect(mockShowToast).toHaveBeenCalledWith('Only .epub files are supported', 'error');
   });
 });
