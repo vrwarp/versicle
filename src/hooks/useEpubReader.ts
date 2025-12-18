@@ -98,28 +98,6 @@ export function useEpubReader(
       setError(null);
       setIsReady(false);
 
-      // Handle Iframe Sandbox Patching
-      // Fixes "Blocked script execution" by injecting allow-scripts into the sandbox attribute
-      // created by epub.js, without enabling allowScriptedContent which changes loading behavior.
-      const observer = new MutationObserver((mutations) => {
-          mutations.forEach((mutation) => {
-              mutation.addedNodes.forEach((node) => {
-                  if (node.nodeName === 'IFRAME') {
-                      const iframe = node as HTMLIFrameElement;
-                      const sandbox = iframe.getAttribute('sandbox') || '';
-                      if (!sandbox.includes('allow-scripts')) {
-                          // Append allow-scripts if missing
-                          iframe.setAttribute('sandbox', sandbox + ' allow-scripts');
-                      }
-                  }
-              });
-          });
-      });
-
-      if (viewerRef.current) {
-          observer.observe(viewerRef.current, { childList: true, subtree: true });
-      }
-
       try {
         const { file: fileData, metadata: meta } = await dbService.getBook(bookId);
 
@@ -323,7 +301,6 @@ export function useEpubReader(
         if (optionsRef.current.onError) optionsRef.current.onError(errorMessage);
       } finally {
         setIsLoading(false);
-        observer.disconnect();
       }
     };
 
