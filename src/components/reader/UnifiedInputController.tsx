@@ -214,14 +214,15 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
 
     return (
         <div
-            className={`fixed inset-0 z-[60] flex items-center justify-center select-none touch-none transition-colors duration-300 ${isCurtainActive ? 'bg-black' : 'bg-transparent'}`}
+            data-testid="flow-mode-overlay"
+            className={`fixed inset-0 flex items-center justify-center select-none touch-none transition-colors duration-300 ${isCurtainActive ? 'bg-black z-[100]' : 'bg-transparent z-[30]'}`}
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
         >
              {!isCurtainActive && (
-                 <div className="absolute inset-0 border-4 border-primary/30 animate-pulse pointer-events-none" />
+                 <div data-testid="flow-mode-breathing-border" className="absolute inset-0 border-4 border-primary/30 animate-pulse pointer-events-none" />
              )}
 
              {isCurtainActive && (

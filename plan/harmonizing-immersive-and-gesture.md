@@ -313,6 +313,8 @@ The Screen Curtain is a dedicated sub-mode for battery conservation and pocket s
 
 -   **Tap Zones:** Implemented explicit tap zones (Left 20%, Right 20%, Center 60%) for the Visual Reading state to support Prev/Next page and Toggle HUD actions, replacing native or undefined behavior.
 
+-   **Overlay Z-Index:** Set `UnifiedInputController` overlay z-index to 30 (below Audio Panel/HUD) to ensure UI controls remain accessible in Listening Mode unless the Screen Curtain (z-100) is active.
+
 ### Phase 3: Visual Polish & Transitions
 
 -   **CSS Transitions:** Implement CSS transitions for `opacity`, `border-color`, and `box-shadow` on the main container. The switch between states should take ~300ms to feel organic.
