@@ -100,7 +100,7 @@ export const LibraryView: React.FC = () => {
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [isLoading]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
