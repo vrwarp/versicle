@@ -35,6 +35,9 @@ def test_journey_responsive_reader(page: Page, name, width, height):
     # Wait for reader
     expect(page.get_by_test_id("reader-view")).to_be_visible()
 
+    # Navigate to a middle chapter to verify text layout
+    utils.navigate_to_chapter(page)
+
     page.set_viewport_size({"width": width, "height": height})
     page.wait_for_timeout(1000)
     utils.capture_screenshot(page, f"responsive_reader_{name}")
