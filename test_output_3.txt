@@ -1,0 +1,159 @@
+🚀 Starting Vite Preview Server...
+⏳ Waiting for application to be ready at http://localhost:5173...
+
+> versicle@0.0.0 preview
+> vite preview --port 5173 --host
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://172.17.0.2:5173/
+✅ Application is ready!
+🧪 Running verification suite...
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: playwright-0.7.2, base-url-2.1.0
+collected 138 items / 136 deselected / 2 selected
+
+verification/test_lexicon_reorder.py FF                                  [100%]
+
+=================================== FAILURES ===================================
+____________________ test_lexicon_reorder[desktop-chromium] ____________________
+
+page = <Page url='http://localhost:5173/'>
+
+    def test_lexicon_reorder(page: Page):
+        """
+        Verifies that lexicon rules can be reordered in the UI.
+        """
+        utils.reset_app(page)
+
+        # Open Global Settings
+        page.get_by_test_id("header-settings-button").click()
+
+        # Go to Dictionary tab
+        page.get_by_role("button", name="Dictionary").click()
+
+        # Open Manage Rules
+        page.get_by_role("button", name="Manage Rules").click()
+
+        # Add first rule: Apple -> A
+        page.get_by_test_id("lexicon-add-rule-btn").click()
+        page.get_by_test_id("lexicon-input-original").fill("Apple")
+        page.get_by_test_id("lexicon-input-replacement").fill("A")
+        page.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Add second rule: Banana -> B
+        page.get_by_test_id("lexicon-add-rule-btn").click()
+        page.get_by_test_id("lexicon-input-original").fill("Banana")
+        page.get_by_test_id("lexicon-input-replacement").fill("B")
+        page.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Verify initial order (Insertion order)
+        # 1. Apple
+        # 2. Banana
+        items = page.locator("[data-testid='lexicon-list-container'] > div > div")
+>       expect(items).to_have_count(2)
+E       AssertionError: Locator expected to have count '2'
+E       Actual value: 3
+E       Call log:
+E       LocatorAssertions.to_have_count with timeout 2000ms
+E         - waiting for locator("[data-testid='lexicon-list-container'] > div > div")
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+
+verification/test_lexicon_reorder.py:36: AssertionError
+----------------------------- Captured stdout call -----------------------------
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: `DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+____________________ test_lexicon_reorder[mobile-chromium] _____________________
+
+page = <Page url='http://localhost:5173/'>
+
+    def test_lexicon_reorder(page: Page):
+        """
+        Verifies that lexicon rules can be reordered in the UI.
+        """
+        utils.reset_app(page)
+
+        # Open Global Settings
+        page.get_by_test_id("header-settings-button").click()
+
+        # Go to Dictionary tab
+        page.get_by_role("button", name="Dictionary").click()
+
+        # Open Manage Rules
+        page.get_by_role("button", name="Manage Rules").click()
+
+        # Add first rule: Apple -> A
+        page.get_by_test_id("lexicon-add-rule-btn").click()
+        page.get_by_test_id("lexicon-input-original").fill("Apple")
+        page.get_by_test_id("lexicon-input-replacement").fill("A")
+        page.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Add second rule: Banana -> B
+        page.get_by_test_id("lexicon-add-rule-btn").click()
+        page.get_by_test_id("lexicon-input-original").fill("Banana")
+        page.get_by_test_id("lexicon-input-replacement").fill("B")
+        page.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Verify initial order (Insertion order)
+        # 1. Apple
+        # 2. Banana
+        items = page.locator("[data-testid='lexicon-list-container'] > div > div")
+>       expect(items).to_have_count(2)
+E       AssertionError: Locator expected to have count '2'
+E       Actual value: 3
+E       Call log:
+E       LocatorAssertions.to_have_count with timeout 2000ms
+E         - waiting for locator("[data-testid='lexicon-list-container'] > div > div")
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+E         -   locator resolved to 3 elements
+E         -   unexpected value "3"
+
+verification/test_lexicon_reorder.py:36: AssertionError
+----------------------------- Captured stdout call -----------------------------
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: `DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+=========================== short test summary info ============================
+FAILED verification/test_lexicon_reorder.py::test_lexicon_reorder[desktop-chromium]
+FAILED verification/test_lexicon_reorder.py::test_lexicon_reorder[mobile-chromium]
+====================== 2 failed, 136 deselected in 7.27s =======================
+🚀 Running verification tests with pytest...
+Executing: /usr/bin/python -m pytest verification/ -k test_lexicon_reorder

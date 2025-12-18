@@ -1,0 +1,22 @@
+🚀 Starting Vite Preview Server...
+⏳ Waiting for application to be ready at http://localhost:5173...
+
+> versicle@0.0.0 preview
+> vite preview --port 5173 --host
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://172.17.0.2:5173/
+✅ Application is ready!
+🧪 Running verification suite...
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: playwright-0.7.2, base-url-2.1.0
+collected 138 items / 136 deselected / 2 selected
+
+verification/test_lexicon_reorder.py ..                                  [100%]
+
+====================== 2 passed, 136 deselected in 7.94s =======================
+🚀 Running verification tests with pytest...
+Executing: /usr/bin/python -m pytest verification/ -k test_lexicon_reorder
+🏁 Tests finished with exit code 0

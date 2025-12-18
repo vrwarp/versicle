@@ -1,0 +1,129 @@
+🚀 Starting Vite Preview Server...
+⏳ Waiting for application to be ready at http://localhost:5173...
+
+> versicle@0.0.0 preview
+> vite preview --port 5173 --host
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://172.17.0.2:5173/
+✅ Application is ready!
+🧪 Running verification suite...
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: playwright-0.7.2, base-url-2.1.0
+collected 138 items / 136 deselected / 2 selected
+
+verification/test_lexicon_reorder.py FF                                  [100%]
+
+=================================== FAILURES ===================================
+____________________ test_lexicon_reorder[desktop-chromium] ____________________
+
+page = <Page url='http://localhost:5173/'>
+
+    def test_lexicon_reorder(page: Page):
+        """
+        Verifies that lexicon rules can be reordered in the UI.
+        """
+        utils.reset_app(page)
+
+        # Open Global Settings
+>       page.get_by_test_id("reader-settings-button").click()
+
+verification/test_lexicon_reorder.py:12:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/usr/local/lib/python3.10/dist-packages/playwright/sync_api/_generated.py:15398: in click
+    self._sync(
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_locator.py:156: in click
+    return await self._frame.click(self._selector, strict=True, **params)
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_frame.py:488: in click
+    await self._channel.send("click", locals_to_params(locals()))
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:59: in send
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x7fc7d2927a90>
+cb = <function Channel.send.<locals>.<lambda> at 0x7fc7d1c3f520>
+is_internal = False
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        st: List[inspect.FrameInfo] = getattr(task, "__pw_stack__", inspect.stack())
+        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal)
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.TimeoutError: Locator.click: Timeout 2000ms exceeded.
+E           Call log:
+E           waiting for get_by_test_id("reader-settings-button")
+
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:520: TimeoutError
+----------------------------- Captured stdout call -----------------------------
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
+____________________ test_lexicon_reorder[mobile-chromium] _____________________
+
+page = <Page url='http://localhost:5173/'>
+
+    def test_lexicon_reorder(page: Page):
+        """
+        Verifies that lexicon rules can be reordered in the UI.
+        """
+        utils.reset_app(page)
+
+        # Open Global Settings
+>       page.get_by_test_id("reader-settings-button").click()
+
+verification/test_lexicon_reorder.py:12:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/usr/local/lib/python3.10/dist-packages/playwright/sync_api/_generated.py:15398: in click
+    self._sync(
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_locator.py:156: in click
+    return await self._frame.click(self._selector, strict=True, **params)
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_frame.py:488: in click
+    await self._channel.send("click", locals_to_params(locals()))
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:59: in send
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x7fc7d2927a90>
+cb = <function Channel.send.<locals>.<lambda> at 0x7fc7d2a37490>
+is_internal = False
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        st: List[inspect.FrameInfo] = getattr(task, "__pw_stack__", inspect.stack())
+        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal)
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.TimeoutError: Locator.click: Timeout 2000ms exceeded.
+E           Call log:
+E           waiting for get_by_test_id("reader-settings-button")
+
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:520: TimeoutError
+----------------------------- Captured stdout call -----------------------------
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
+=========================== short test summary info ============================
+FAILED verification/test_lexicon_reorder.py::test_lexicon_reorder[desktop-chromium]
+FAILED verification/test_lexicon_reorder.py::test_lexicon_reorder[mobile-chromium]
+====================== 2 failed, 136 deselected in 5.90s =======================
+🚀 Running verification tests with pytest...
+Executing: /usr/bin/python -m pytest verification/ -k test_lexicon_reorder

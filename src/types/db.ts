@@ -163,6 +163,8 @@ export interface LexiconRule {
   isRegex?: boolean;
   /** Optional ID of a specific book. If null/undefined, the rule is global. */
   bookId?: string;
+  /** Explicit order of the rule. Lower numbers run first. */
+  order?: number;
   /** Timestamp when the rule was created. */
   created: number;
 }

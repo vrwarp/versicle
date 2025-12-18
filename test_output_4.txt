@@ -1,0 +1,237 @@
+🚀 Starting Vite Preview Server...
+⏳ Waiting for application to be ready at http://localhost:5173...
+
+> versicle@0.0.0 preview
+> vite preview --port 5173 --host
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://172.17.0.2:5173/
+✅ Application is ready!
+🧪 Running verification suite...
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: playwright-0.7.2, base-url-2.1.0
+collected 138 items / 136 deselected / 2 selected
+
+verification/test_lexicon_reorder.py FF                                  [100%]
+
+=================================== FAILURES ===================================
+____________________ test_lexicon_reorder[desktop-chromium] ____________________
+
+page = <Page url='http://localhost:5173/'>
+
+    def test_lexicon_reorder(page: Page):
+        """
+        Verifies that lexicon rules can be reordered in the UI.
+        """
+        utils.reset_app(page)
+
+        # Open Global Settings
+        page.get_by_test_id("header-settings-button").click()
+
+        # Go to Dictionary tab
+        page.get_by_role("button", name="Dictionary").click()
+
+        # Open Manage Rules
+        page.get_by_role("button", name="Manage Rules").click()
+
+        # Add first rule: Apple -> A
+        page.get_by_test_id("lexicon-add-rule-btn").click()
+        page.get_by_test_id("lexicon-input-original").fill("Apple")
+        page.get_by_test_id("lexicon-input-replacement").fill("A")
+        page.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Add second rule: Banana -> B
+        page.get_by_test_id("lexicon-add-rule-btn").click()
+        page.get_by_test_id("lexicon-input-original").fill("Banana")
+        page.get_by_test_id("lexicon-input-replacement").fill("B")
+        page.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Verify initial order (Insertion order)
+        # 1. Apple
+        # 2. Banana
+        items = page.locator("[data-testid='lexicon-rules-list'] > div")
+        expect(items).to_have_count(2)
+
+        expect(items.nth(0)).to_contain_text("Apple")
+        expect(items.nth(1)).to_contain_text("Banana")
+
+        # Move Apple Down (Index 0)
+        btn = page.get_by_test_id("lexicon-move-down-0")
+        expect(btn).to_be_visible()
+        btn.click()
+
+        # Verify new order (UI update)
+        # 1. Banana
+        # 2. Apple
+        expect(items.nth(0)).to_contain_text("Banana")
+        expect(items.nth(1)).to_contain_text("Apple")
+
+        # Wait for persistence (IndexedDB async write)
+        page.wait_for_timeout(1000)
+
+        # Close Dialog
+>       page.get_by_role("button", name="Close").click()
+
+verification/test_lexicon_reorder.py:56:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/usr/local/lib/python3.10/dist-packages/playwright/sync_api/_generated.py:15398: in click
+    self._sync(
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_locator.py:156: in click
+    return await self._frame.click(self._selector, strict=True, **params)
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_frame.py:488: in click
+    await self._channel.send("click", locals_to_params(locals()))
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:59: in send
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x7f65fc34bf10>
+cb = <function Channel.send.<locals>.<lambda> at 0x7f65fb649750>
+is_internal = False
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        st: List[inspect.FrameInfo] = getattr(task, "__pw_stack__", inspect.stack())
+        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal)
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.Error: Locator.click: Error: strict mode violation: get_by_role("button", name="Close") resolved to 2 elements:
+E               1) <button class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2">Close</button> aka locator("div").filter(has_text=re.compile(r"^Close$")).get_by_role("button")
+E               2) <button type="button" class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">…</button> aka get_by_role("button", name="Close").nth(1)
+E
+E           Call log:
+E           waiting for get_by_role("button", name="Close")
+
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:520: Error
+----------------------------- Captured stdout call -----------------------------
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: `DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+____________________ test_lexicon_reorder[mobile-chromium] _____________________
+
+page = <Page url='http://localhost:5173/'>
+
+    def test_lexicon_reorder(page: Page):
+        """
+        Verifies that lexicon rules can be reordered in the UI.
+        """
+        utils.reset_app(page)
+
+        # Open Global Settings
+        page.get_by_test_id("header-settings-button").click()
+
+        # Go to Dictionary tab
+        page.get_by_role("button", name="Dictionary").click()
+
+        # Open Manage Rules
+        page.get_by_role("button", name="Manage Rules").click()
+
+        # Add first rule: Apple -> A
+        page.get_by_test_id("lexicon-add-rule-btn").click()
+        page.get_by_test_id("lexicon-input-original").fill("Apple")
+        page.get_by_test_id("lexicon-input-replacement").fill("A")
+        page.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Add second rule: Banana -> B
+        page.get_by_test_id("lexicon-add-rule-btn").click()
+        page.get_by_test_id("lexicon-input-original").fill("Banana")
+        page.get_by_test_id("lexicon-input-replacement").fill("B")
+        page.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Verify initial order (Insertion order)
+        # 1. Apple
+        # 2. Banana
+        items = page.locator("[data-testid='lexicon-rules-list'] > div")
+        expect(items).to_have_count(2)
+
+        expect(items.nth(0)).to_contain_text("Apple")
+        expect(items.nth(1)).to_contain_text("Banana")
+
+        # Move Apple Down (Index 0)
+        btn = page.get_by_test_id("lexicon-move-down-0")
+        expect(btn).to_be_visible()
+        btn.click()
+
+        # Verify new order (UI update)
+        # 1. Banana
+        # 2. Apple
+        expect(items.nth(0)).to_contain_text("Banana")
+        expect(items.nth(1)).to_contain_text("Apple")
+
+        # Wait for persistence (IndexedDB async write)
+        page.wait_for_timeout(1000)
+
+        # Close Dialog
+>       page.get_by_role("button", name="Close").click()
+
+verification/test_lexicon_reorder.py:56:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/usr/local/lib/python3.10/dist-packages/playwright/sync_api/_generated.py:15398: in click
+    self._sync(
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_locator.py:156: in click
+    return await self._frame.click(self._selector, strict=True, **params)
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_frame.py:488: in click
+    await self._channel.send("click", locals_to_params(locals()))
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:59: in send
+    return await self._connection.wrap_api_call(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <playwright._impl._connection.Connection object at 0x7f65fc34bf10>
+cb = <function Channel.send.<locals>.<lambda> at 0x7f65fc345cf0>
+is_internal = False
+
+    async def wrap_api_call(
+        self, cb: Callable[[], Any], is_internal: bool = False
+    ) -> Any:
+        if self._api_zone.get():
+            return await cb()
+        task = asyncio.current_task(self._loop)
+        st: List[inspect.FrameInfo] = getattr(task, "__pw_stack__", inspect.stack())
+        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal)
+        self._api_zone.set(parsed_st)
+        try:
+            return await cb()
+        except Exception as error:
+>           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E           playwright._impl._errors.Error: Locator.click: Error: strict mode violation: get_by_role("button", name="Close") resolved to 2 elements:
+E               1) <button class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2">Close</button> aka locator("div").filter(has_text=re.compile(r"^Close$")).get_by_role("button")
+E               2) <button type="button" class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">…</button> aka get_by_role("button", name="Close").nth(1)
+E
+E           Call log:
+E           waiting for get_by_role("button", name="Close")
+
+/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:520: Error
+----------------------------- Captured stdout call -----------------------------
+PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+PAGE LOG: 🗣️ [MockTTS] Worker Initialized
+PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
+PAGE LOG: `DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users.
+
+If you want to hide the `DialogTitle`, you can wrap it with our VisuallyHidden component.
+
+For more information, see https://radix-ui.com/primitives/docs/components/dialog
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
+PAGE LOG: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+=========================== short test summary info ============================
+FAILED verification/test_lexicon_reorder.py::test_lexicon_reorder[desktop-chromium]
+FAILED verification/test_lexicon_reorder.py::test_lexicon_reorder[mobile-chromium]
+====================== 2 failed, 136 deselected in 5.71s =======================
+🚀 Running verification tests with pytest...
+Executing: /usr/bin/python -m pytest verification/ -k test_lexicon_reorder
