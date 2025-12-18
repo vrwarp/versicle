@@ -19,6 +19,14 @@ vi.mock('../../../lib/tts/LexiconService', () => {
   };
 });
 
+vi.mock('../../../lib/tts/AudioPlayerService', () => ({
+  AudioPlayerService: {
+    getInstance: () => ({
+      preview: vi.fn(),
+    }),
+  },
+}));
+
 // Mock UI components
 vi.mock('../ui/Dialog', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,5 +78,33 @@ describe('LexiconManager', () => {
     // By default not adding if no initialTerm.
     expect(screen.queryByTestId('lexicon-input-original')).toBeNull();
     expect(screen.getByTestId('lexicon-test-input')).toHaveValue('');
+  });
+
+  it('should render test buttons', async () => {
+    render(
+      <LexiconManager
+        open={true}
+        onOpenChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+        expect(screen.getByTestId('lexicon-test-current-btn')).toBeInTheDocument();
+        expect(screen.getByTestId('lexicon-test-all-btn')).toBeInTheDocument();
+        expect(screen.getByTestId('lexicon-play-btn')).toBeInTheDocument();
+    });
+  });
+
+  it('should disable current replacement button when not editing', async () => {
+    render(
+      <LexiconManager
+        open={true}
+        onOpenChange={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+        expect(screen.getByTestId('lexicon-test-current-btn')).toBeDisabled();
+    });
   });
 });

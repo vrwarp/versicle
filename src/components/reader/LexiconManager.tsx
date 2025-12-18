@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { LexiconService } from '../../lib/tts/LexiconService';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import type { LexiconRule } from '../../types/db';
-import { Plus, Trash2, Volume2, Save, X, Download, Upload, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Trash2, Volume2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
 import { useReaderStore } from '../../store/useReaderStore';
@@ -104,27 +104,63 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     loadRules();
   };
 
-  const handleTest = () => {
-      const tempRules = [...rules];
+  const getTempRules = (useAllRules: boolean) => {
+    // If we only use current entry, we ignore the main 'rules' array and only use 'editingRule'
+    if (!useAllRules) {
       if (editingRule && editingRule.original && editingRule.replacement) {
-          const idx = tempRules.findIndex(r => r.id === editingRule.id);
-          const r = {
-              id: editingRule.id || 'temp',
-              original: editingRule.original,
-              replacement: editingRule.replacement,
-              isRegex: editingRule.isRegex,
-              bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
-              created: 0
-          } as LexiconRule;
-
-          if (idx >= 0) tempRules[idx] = r;
-          else tempRules.push(r);
+        return [{
+          id: editingRule.id || 'temp',
+          original: editingRule.original,
+          replacement: editingRule.replacement,
+          isRegex: editingRule.isRegex,
+          bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+          created: 0,
+          order: 0
+        } as LexiconRule];
       }
+      return [];
+    }
 
-      const result = lexiconService.applyLexicon(testInput, tempRules);
-      setTestOutput(result);
+    // Use all rules, merging current editing rule
+    const tempRules = [...rules];
+    if (editingRule && editingRule.original && editingRule.replacement) {
+      const idx = tempRules.findIndex(r => r.id === editingRule.id);
+      const r = {
+        id: editingRule.id || 'temp',
+        original: editingRule.original,
+        replacement: editingRule.replacement,
+        isRegex: editingRule.isRegex,
+        bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+        created: 0,
+        order: idx >= 0 ? tempRules[idx].order : tempRules.length
+      } as LexiconRule;
 
-      AudioPlayerService.getInstance().preview(result);
+      if (idx >= 0) tempRules[idx] = r;
+      else tempRules.push(r);
+    }
+    return tempRules;
+  };
+
+  const performReplacement = (useAllRules: boolean) => {
+    const tempRules = getTempRules(useAllRules);
+    const result = lexiconService.applyLexicon(testInput, tempRules);
+    setTestOutput(result);
+    return result;
+  };
+
+  const handleReplaceCurrent = () => performReplacement(false);
+  const handleReplaceAll = () => performReplacement(true);
+
+  const handlePlay = () => {
+    let textToPlay = testOutput;
+    // If output is empty, replace using all rules first
+    if (!textToPlay) {
+      textToPlay = performReplacement(true);
+    }
+
+    if (textToPlay) {
+      AudioPlayerService.getInstance().preview(textToPlay);
+    }
   };
 
   const handleDownloadSample = () => {
@@ -354,17 +390,44 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
           {/* Test Area */}
           <div className="mt-8 pt-4 border-t border-gray-100 dark:border-gray-700">
               <h4 className="text-xs font-semibold mb-2 text-gray-500 uppercase">Test Pronunciation</h4>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                   <input
                       data-testid="lexicon-test-input"
-                      className="flex-1 min-w-0 border p-2 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      className="w-full border p-2 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       placeholder="Type a sentence containing your words..."
                       value={testInput}
                       onChange={e => setTestInput(e.target.value)}
                   />
-                  <Button data-testid="lexicon-test-btn" onClick={handleTest} variant="outline" className="p-2">
-                      <Volume2 size={18} />
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                      <Button
+                          data-testid="lexicon-test-current-btn"
+                          onClick={handleReplaceCurrent}
+                          variant="outline"
+                          size="sm"
+                          disabled={!editingRule}
+                          title="Replace using only the current rule being edited"
+                      >
+                          <RefreshCw size={14} className="mr-2" /> Current
+                      </Button>
+                      <Button
+                          data-testid="lexicon-test-all-btn"
+                          onClick={handleReplaceAll}
+                          variant="outline"
+                          size="sm"
+                          title="Replace using all rules (including current edits)"
+                      >
+                          <RefreshCw size={14} className="mr-2" /> All Rules
+                      </Button>
+                      <Button
+                          data-testid="lexicon-play-btn"
+                          onClick={handlePlay}
+                          variant="outline"
+                          size="sm"
+                          title="Play the processed text"
+                      >
+                          <Play size={14} className="mr-2" /> Play
+                      </Button>
+                  </div>
               </div>
               {testOutput && (
                   <div className="mt-2 text-sm text-gray-500">
