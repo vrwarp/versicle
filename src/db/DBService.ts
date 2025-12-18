@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -291,16 +291,56 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              const tx = db.transaction('books', 'readwrite');
-              const store = tx.objectStore('books');
+              // Include 'reading_list' and 'files' in the transaction
+              const tx = db.transaction(['books', 'reading_list', 'files'], 'readwrite');
+              const bookStore = tx.objectStore('books');
+              const rlStore = tx.objectStore('reading_list');
+              const fileStore = tx.objectStore('files');
 
               for (const [id, data] of Object.entries(pending)) {
-                  const book = await store.get(id);
+                  const book = await bookStore.get(id);
                   if (book) {
                       book.currentCfi = data.cfi;
                       book.progress = data.progress;
                       book.lastRead = Date.now();
-                      await store.put(book);
+
+                      // Update Reading List Logic
+                      let filename = book.filename;
+                      if (!filename) {
+                          // Try to recover filename from file store if missing
+                          try {
+                              const fileData = await fileStore.get(id);
+                              // Check if it's a File or has a name property (fake-indexeddb might strip prototype)
+                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                              if (fileData instanceof File || (fileData && (fileData as any).name)) {
+                                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                  filename = (fileData instanceof File) ? fileData.name : (fileData as any).name;
+                                  book.filename = filename; // Update book metadata
+                              }
+                          } catch (e) {
+                              // Ignore file fetch errors
+                              Logger.warn('DBService', 'Failed to fetch file for filename recovery', e);
+                          }
+                      }
+
+                      await bookStore.put(book);
+
+                      if (filename) {
+                           // Fetch existing entry to preserve fields like rating/isbn that aren't in book metadata
+                           const existingEntry = await rlStore.get(filename);
+
+                           const entry: ReadingListEntry = {
+                               filename: filename,
+                               title: book.title,
+                               author: book.author,
+                               isbn: existingEntry?.isbn,
+                               rating: existingEntry?.rating,
+                               percentage: data.progress,
+                               lastUpdated: Date.now(),
+                               status: data.progress > 0.98 ? 'read' : 'currently-reading'
+                           };
+                           await rlStore.put(entry);
+                      }
                   }
               }
               await tx.done;
@@ -310,6 +350,76 @@ class DBService {
               // but we might want to surface this via a global error handler eventually.
           }
       }, 1000); // 1 second debounce
+  }
+
+  // --- Reading List Operations ---
+
+  /**
+   * Retrieves all entries in the reading list.
+   *
+   * @returns A Promise resolving to an array of ReadingListEntry objects.
+   */
+  async getReadingList(): Promise<ReadingListEntry[]> {
+    try {
+      const db = await this.getDB();
+      return await db.getAll('reading_list');
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Updates or adds a reading list entry.
+   *
+   * @param entry - The reading list entry to upsert.
+   */
+  async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
+    try {
+      const db = await this.getDB();
+      await db.put('reading_list', entry);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Imports reading list entries and syncs progress to books.
+   *
+   * @param entries - The list of entries to import.
+   */
+  async importReadingList(entries: ReadingListEntry[]): Promise<void> {
+      try {
+          const db = await this.getDB();
+          const tx = db.transaction(['reading_list', 'books'], 'readwrite');
+          const rlStore = tx.objectStore('reading_list');
+          const bookStore = tx.objectStore('books');
+
+          // 1. Bulk upsert to reading_list
+          for (const entry of entries) {
+              await rlStore.put(entry);
+          }
+
+          // 2. Reconciliation with books
+          let cursor = await bookStore.openCursor();
+          while (cursor) {
+              const book = cursor.value;
+              if (book.filename) {
+                  const rlEntry = await rlStore.get(book.filename);
+                  if (rlEntry) {
+                      if (rlEntry.percentage > (book.progress || 0)) {
+                          book.progress = rlEntry.percentage;
+                          book.lastRead = Date.now();
+                          cursor.update(book);
+                      }
+                  }
+              }
+              cursor = await cursor.continue();
+          }
+
+          await tx.done;
+      } catch (error) {
+          this.handleError(error);
+      }
   }
 
   /**

@@ -214,6 +214,7 @@ export async function processEpub(file: File): Promise<string> {
 
   const candidateBook: BookMetadata = {
     id: bookId,
+    filename: file.name,
     title: metadata.title || 'Untitled',
     author: metadata.creator || 'Unknown Author',
     description: metadata.description || '',

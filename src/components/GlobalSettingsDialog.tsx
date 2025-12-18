@@ -13,6 +13,9 @@ import { LexiconManager } from './reader/LexiconManager';
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
+import { dbService } from '../db/DBService';
+import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
+import { ReadingListDialog } from './ReadingListDialog';
 import { Trash2, Download } from 'lucide-react';
 
 /**
@@ -32,6 +35,67 @@ export const GlobalSettingsDialog = () => {
     const [orphanScanResult, setOrphanScanResult] = useState<string | null>(null);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const csvInputRef = useRef<HTMLInputElement>(null);
+    const [readingListCount, setReadingListCount] = useState<number | null>(null);
+    const [isReadingListOpen, setIsReadingListOpen] = useState(false);
+
+    useEffect(() => {
+        if (activeTab === 'data') {
+            dbService.getReadingList().then(list => setReadingListCount(list ? list.length : 0));
+        }
+    }, [activeTab]);
+
+    const handleExportReadingList = async () => {
+        try {
+            const list = await dbService.getReadingList();
+            if (!list || list.length === 0) {
+                alert('Reading list is empty.');
+                return;
+            }
+            const csv = exportReadingListToCSV(list);
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `versicle_reading_list_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            alert('Failed to export reading list.');
+        }
+    };
+
+    const handleImportReadingListClick = () => {
+        csvInputRef.current?.click();
+    };
+
+    const handleCsvFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            const text = ev.target?.result as string;
+            if (text) {
+                try {
+                    const entries = parseReadingListCSV(text);
+                    await dbService.importReadingList(entries);
+                    setReadingListCount(entries.length); // Rough update
+                    // Refresh count from DB to be sure
+                    dbService.getReadingList().then(list => setReadingListCount(list ? list.length : 0));
+                    alert(`Imported ${entries.length} entries and synced progress.`);
+                } catch (err) {
+                    console.error(err);
+                    alert('Failed to import CSV.');
+                }
+            }
+            e.target.value = ''; // Reset
+        };
+        reader.readAsText(file);
+    };
 
     const {
         providerId, setProviderId,
@@ -173,6 +237,7 @@ export const GlobalSettingsDialog = () => {
     };
 
     return (
+        <>
         <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
             <ModalContent className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg">
                 {/* Sidebar */}
@@ -482,6 +547,36 @@ export const GlobalSettingsDialog = () => {
                     {activeTab === 'data' && (
                         <div className="space-y-6">
                              <div className="space-y-4">
+                                <h3 className="text-lg font-medium">Reading List & Sync</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Manage your reading history separately from book files. Syncs with Goodreads CSV.
+                                </p>
+                                <div className="p-3 bg-muted/50 rounded-md flex items-center justify-between mb-2">
+                                     <span className="text-sm font-medium">Entries in Reading List</span>
+                                     <span className="text-sm">{readingListCount !== null ? readingListCount : '...'}</span>
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <Button onClick={() => setIsReadingListOpen(true)} variant="default" className="flex-1">
+                                        View List
+                                    </Button>
+                                    <Button onClick={handleExportReadingList} variant="outline" className="flex-1">
+                                        Export to CSV
+                                    </Button>
+                                    <Button onClick={handleImportReadingListClick} variant="outline" className="flex-1">
+                                        Import CSV
+                                    </Button>
+                                    <input
+                                        type="file"
+                                        ref={csvInputRef}
+                                        className="hidden"
+                                        accept=".csv"
+                                        onChange={handleCsvFileChange}
+                                        data-testid="reading-list-csv-input"
+                                    />
+                                </div>
+                             </div>
+
+                             <div className="border-t pt-4 space-y-4">
                                 <h3 className="text-lg font-medium">Backup & Restore</h3>
                                 <p className="text-sm text-muted-foreground">
                                     Export your library and settings to a file, or restore from a previous backup.
@@ -540,5 +635,7 @@ export const GlobalSettingsDialog = () => {
                 </div>
             </ModalContent>
         </Modal>
+        <ReadingListDialog open={isReadingListOpen} onOpenChange={setIsReadingListOpen} />
+        </>
     );
 };
