@@ -15,6 +15,7 @@ import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
 import { dbService } from '../db/DBService';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
+import { ReadingListDialog } from './ReadingListDialog';
 import { Trash2, Download } from 'lucide-react';
 
 /**
@@ -36,6 +37,7 @@ export const GlobalSettingsDialog = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const csvInputRef = useRef<HTMLInputElement>(null);
     const [readingListCount, setReadingListCount] = useState<number | null>(null);
+    const [isReadingListOpen, setIsReadingListOpen] = useState(false);
 
     useEffect(() => {
         if (activeTab === 'data') {
@@ -235,6 +237,7 @@ export const GlobalSettingsDialog = () => {
     };
 
     return (
+        <>
         <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
             <ModalContent className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg">
                 {/* Sidebar */}
@@ -554,6 +557,9 @@ export const GlobalSettingsDialog = () => {
                                      <span className="text-sm">{readingListCount !== null ? readingListCount : '...'}</span>
                                 </div>
                                 <div className="flex flex-col sm:flex-row gap-2">
+                                    <Button onClick={() => setIsReadingListOpen(true)} variant="default" className="flex-1">
+                                        View List
+                                    </Button>
                                     <Button onClick={handleExportReadingList} variant="outline" className="flex-1">
                                         Export to CSV
                                     </Button>
@@ -630,5 +636,7 @@ export const GlobalSettingsDialog = () => {
                 </div>
             </ModalContent>
         </Modal>
+        <ReadingListDialog open={isReadingListOpen} onOpenChange={setIsReadingListOpen} />
+        </>
     );
 };
