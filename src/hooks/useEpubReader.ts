@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
 import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
+import { parseCfiRange } from '../lib/cfi-utils';
 
 /**
  * Configuration options for the EpubReader hook.
@@ -162,7 +163,22 @@ export function useEpubReader(
         });
 
         // Display at saved location or start
-        const startLocation = meta?.currentCfi || undefined;
+        let startLocation = meta?.currentCfi || undefined;
+
+        // Try to infer better start location from reading history (end of last session)
+        try {
+            const history = await dbService.getReadingHistory(bookId);
+            if (history && history.length > 0) {
+                const lastRange = history[history.length - 1];
+                const parsed = parseCfiRange(lastRange);
+                if (parsed && parsed.fullEnd) {
+                    startLocation = parsed.fullEnd;
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load history for start location", e);
+        }
+
         await newRendition.display(startLocation);
 
         setIsReady(true);
