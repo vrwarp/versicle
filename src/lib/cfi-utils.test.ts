@@ -1,31 +1,7 @@
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mergeCfiRanges, parseCfiRange, generateCfiRange } from './cfi-utils';
 
-// We need to be able to reset the mock to test the fallback behavior
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockEpubCFI: any;
-
-vi.mock('epubjs', () => {
-  return {
-    default: {
-      get CFI() {
-        return mockEpubCFI;
-      }
-    }
-  };
-});
-
 describe('cfi-utils', () => {
-    beforeEach(() => {
-        // Default Mock Behavior: Simple Lexical Sort
-        mockEpubCFI = class MockCFI {
-            compare(a: string, b: string) {
-                if (a === b) return 0;
-                return a < b ? -1 : 1;
-            }
-        };
-    });
 
     describe('parseCfiRange', () => {
         it('parses a valid CFI range', () => {
@@ -72,66 +48,50 @@ describe('cfi-utils', () => {
     });
 
     describe('mergeCfiRanges', () => {
-        describe('Standard Behavior (with epubjs)', () => {
-             it('merges overlapping ranges', () => {
-                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:30)';
-                const range2 = 'epubcfi(/6/14!/4/2/1,:20,:40)';
-                const result = mergeCfiRanges([range1], range2);
-                expect(result).toHaveLength(1);
-                expect(result[0]).toBe('epubcfi(/6/14!/4/2/1,:10,:40)');
-            });
-
-            it('keeps disjoint ranges separate', () => {
-                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:20)';
-                const range2 = 'epubcfi(/6/14!/4/2/1,:30,:40)';
-                const result = mergeCfiRanges([range1], range2);
-                expect(result).toHaveLength(2);
-                expect(result[0]).toBe(range1);
-                expect(result[1]).toBe(range2);
-            });
-
-            it('merges contained ranges', () => {
-                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:40)';
-                const range2 = 'epubcfi(/6/14!/4/2/1,:20,:30)';
-                const result = mergeCfiRanges([range1], range2);
-                expect(result).toHaveLength(1);
-                expect(result[0]).toBe(range1);
-            });
+        it('merges overlapping ranges', () => {
+            const range1 = 'epubcfi(/6/14!/4/2/1,:10,:30)';
+            const range2 = 'epubcfi(/6/14!/4/2/1,:20,:40)';
+            const result = mergeCfiRanges([range1], range2);
+            expect(result).toHaveLength(1);
+            expect(result[0]).toBe('epubcfi(/6/14!/4/2/1,:10,:40)');
         });
 
-        describe('Fallback Behavior (without epubjs)', () => {
-            beforeEach(() => {
-                mockEpubCFI = undefined;
-            });
+        it('keeps disjoint ranges separate', () => {
+            const range1 = 'epubcfi(/6/14!/4/2/1,:10,:20)';
+            const range2 = 'epubcfi(/6/14!/4/2/1,:30,:40)';
+            const result = mergeCfiRanges([range1], range2);
+            expect(result).toHaveLength(2);
+            expect(result[0]).toBe(range1);
+            expect(result[1]).toBe(range2);
+        });
 
-            it('uses fallback comparator to sort and merge ranges', () => {
-                const range1 = 'epubcfi(/6/14!/4/2/1,:10,:30)';
-                const range2 = 'epubcfi(/6/14!/4/2/1,:20,:40)';
-                const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        it('merges contained ranges', () => {
+            const range1 = 'epubcfi(/6/14!/4/2/1,:10,:40)';
+            const range2 = 'epubcfi(/6/14!/4/2/1,:20,:30)';
+            const result = mergeCfiRanges([range1], range2);
+            expect(result).toHaveLength(1);
+            expect(result[0]).toBe(range1);
+        });
 
-                const result = mergeCfiRanges([range1], range2);
+        it('correctly compares numerical steps with assertions (2[id] vs 10[id])', () => {
+            const range1 = 'epubcfi(/6/14!/2[id]/2/1,:0,:10)';
+            const range2 = 'epubcfi(/6/14!/10[id]/2/1,:0,:10)';
 
-                expect(result).toHaveLength(1);
-                expect(result[0]).toBe('epubcfi(/6/14!/4/2/1,:10,:40)');
-                consoleSpy.mockRestore();
-            });
+            // Correct order: 2 comes before 10.
+            const result = mergeCfiRanges([range1], range2);
+            expect(result[0]).toBe(range1);
+            expect(result[1]).toBe(range2);
+        });
 
-            it('correctly compares numerical offsets (1:2 vs 1:10)', () => {
-                // This is the tricky case: lexicographically "1:10" < "1:2" because '1' < '2'
-                // But numerically 2 < 10.
-                const range1 = 'epubcfi(/6/14!/4/2/1,:2,:5)';
-                const range2 = 'epubcfi(/6/14!/4/2/1,:10,:15)';
+        it('correctly compares numerical offsets (1:2 vs 1:10)', () => {
+            const range1 = 'epubcfi(/6/14!/4/2/1,:2,:5)';
+            const range2 = 'epubcfi(/6/14!/4/2/1,:10,:15)';
 
-                // If sorted numerically: range1, range2.
-                // If sorted lexicographically: range2, range1 (WRONG).
+            const result = mergeCfiRanges([range1], range2);
 
-                const result = mergeCfiRanges([range1], range2);
-
-                expect(result).toHaveLength(2);
-                // Should be sorted by start
-                expect(result[0]).toBe(range1);
-                expect(result[1]).toBe(range2);
-            });
+            expect(result).toHaveLength(2);
+            expect(result[0]).toBe(range1);
+            expect(result[1]).toBe(range2);
         });
 
         describe('Edge Cases', () => {

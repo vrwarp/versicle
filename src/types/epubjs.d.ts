@@ -125,4 +125,9 @@ declare module 'epubjs' {
 
     function ePub(data: string | ArrayBuffer, options?: BookOptions): Book;
     export default ePub;
+
+    export class EpubCFI {
+      constructor(cfi?: string | object);
+      compare(a: string, b: string): number;
+    }
   }

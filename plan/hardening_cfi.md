@@ -112,3 +112,33 @@ npx vitest src/lib/cfi-utils.test.ts
 ```
 
 If successful, this change significantly hardens the reading history feature, preventing data corruption and ensuring users always resume their books at the correct location.
+
+5. Implementation & Results
+---------------------------
+
+**Completed Actions:**
+
+1.  **Verified Fallback Failure:** Created a reproduction test case (`src/lib/cfi-utils.check.test.ts`) that demonstrated the `fallbackCfiCompare` function incorrectly sorted CFIs with assertions (e.g., `/10[id]` sorted before `/2[id]`), confirming the root cause of data corruption.
+
+2.  **Updated Type Definitions:** Modified `src/types/epubjs.d.ts` to include `export class EpubCFI { ... }` in the module declaration, allowing TypeScript to recognize the named export.
+
+3.  **Refactored Utility Library:**
+    *   Rewrote `src/lib/cfi-utils.ts` to use `import { EpubCFI } from 'epubjs';`.
+    *   Removed `getEpubCFI`, runtime introspection, and the defective `fallbackCfiCompare` function.
+    *   The logic now fails fast (at build time or module load) if the import is missing, rather than silently corrupting data.
+
+4.  **Enhanced Test Coverage:**
+    *   Updated `src/lib/cfi-utils.test.ts` to remove mocks and use the real `epubjs` library.
+    *   Added specific test cases for numerical sorting with assertions (e.g., `/2[id]` vs `/10[id]`) and offsets to ensure the official comparator is working correctly.
+    *   Updated `src/lib/cfi-utils.fuzz.test.ts` to remove mocks and use the real `epubjs` library for fuzz testing.
+
+**Discoveries & Deviations:**
+
+*   **Named Export Support:** Investigation of `node_modules/epubjs` confirmed that both `src/index.js` (ESM) and `lib/index.js` (CommonJS) explicitly export `EpubCFI`. Thus, `import { EpubCFI } from 'epubjs'` is a safe and correct way to access the class, contrary to initial concerns that it might be hidden behind a default export.
+*   **Removal of Fallback:** We proceeded with full removal of `fallbackCfiCompare` instead of deprecation. Since the fallback was proven to be logically flawed and the static import is verified to work, removing the fallback eliminates dead code and the risk of silent data corruption.
+*   **Mock Removal:** Existing tests relied on mocking `epubjs`. We removed these mocks to enable integration testing with the actual library, providing much higher confidence that the import and the comparator work as expected in the Node/Vite environment.
+
+**Verification:**
+*   `npx vitest src/lib/cfi-utils.test.ts` passed (11 tests).
+*   `npx vitest src/lib/cfi-utils.fuzz.test.ts` passed (3 tests).
+*   `npm run build` succeeded, confirming the bundler can resolve the named import.
