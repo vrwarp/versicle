@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
 import { dbService } from '../../db/DBService';
@@ -22,6 +22,7 @@ describe('ReadingHistory Integration', () => {
 
     it('loads and displays reading history in panel', async () => {
         const ranges = ['epubcfi(/6/14!/4/2/1:0)'];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getReadingHistory as any).mockResolvedValue(ranges);
 
         render(
@@ -47,6 +48,7 @@ describe('ReadingHistory Integration', () => {
         const updatedRanges = ['epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/1:10)'];
 
         // First call returns initial
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getReadingHistory as any)
             .mockResolvedValueOnce(initialRanges)
             .mockResolvedValueOnce(updatedRanges);
@@ -82,6 +84,7 @@ describe('ReadingHistory Integration', () => {
     });
 
     it('handles empty history gracefully', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getReadingHistory as any).mockResolvedValue([]);
 
         render(
@@ -98,6 +101,7 @@ describe('ReadingHistory Integration', () => {
     });
 
     it('handles database fetch error gracefully', async () => {
+         // eslint-disable-next-line @typescript-eslint/no-explicit-any
          (dbService.getReadingHistory as any).mockRejectedValue(new Error('Fetch failed'));
 
          const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -130,6 +134,7 @@ describe('ReadingHistory Integration', () => {
          // Note: If we want real debounce, we'd need to add it to component.
          // Current implementation does NOT debounce the effect, so it should call twice.
 
+         // eslint-disable-next-line @typescript-eslint/no-explicit-any
          (dbService.getReadingHistory as any).mockResolvedValue(['range1']);
 
          const { rerender } = render(

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mergeCfiRanges, generateCfiRange } from './cfi-utils';
 
 // Mock epubjs
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockEpubCFI: any;
 vi.mock('epubjs', () => {
   return {
@@ -74,8 +75,6 @@ describe('cfi-utils Fuzzing', () => {
     it('handles large inputs without crashing', () => {
         const ranges: string[] = [];
         for(let i=0; i<100; i++) {
-            const start = generateRandomCfi(i);
-            const end = generateRandomCfi(i + 1);
             // Ensure strict ordering for generation
             // Actually generateRandomCfi is pseudo-random hash, not strictly increasing.
             // So we might have start > end.

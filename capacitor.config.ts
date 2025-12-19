@@ -16,7 +16,11 @@ const config: CapacitorConfig = {
 
     // Optional: Set to true only during development to allow live reloading
     // from a local server. Ensure this is false or omitted for production builds.
-    cleartext: false
+    cleartext: false,
+
+    // Block all navigation to external URLs from the WebView.
+    // This prevents malicious content from redirecting the user to external sites.
+    allowNavigation: []
   },
   plugins: {
     // Explicitly enable CapacitorHttp if we plan to proxy requests through the native layer
