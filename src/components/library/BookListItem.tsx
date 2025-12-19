@@ -12,6 +12,8 @@ import {
 } from '../ui/DropdownMenu';
 import { cn } from '../../lib/utils';
 import { useReaderStore } from '../../store/useReaderStore';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
 
 /**
  * Props for the BookListItem component.
@@ -58,6 +60,8 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
     const setBookId = useReaderStore(state => state.setCurrentBookId);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [coverUrl, setCoverUrl] = React.useState<string | null>(null);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+    const [isOffloadDialogOpen, setIsOffloadDialogOpen] = React.useState(false);
 
     React.useEffect(() => {
         let url: string | null = null;
@@ -86,20 +90,28 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
         navigate(`/read/${book.id}`);
     };
 
-    const handleDelete = async (e: React.MouseEvent) => {
+    const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (confirm(`Are you sure you want to delete "${book.title}"?`)) {
-            await removeBook(book.id);
-            showToast(`Deleted "${book.title}"`, 'success');
-        }
+        setIsDeleteDialogOpen(true);
     };
 
-    const handleOffload = async (e: React.MouseEvent) => {
+    const confirmDelete = async (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (confirm(`Offload "${book.title}"? This will delete the local file but keep your reading progress and annotations.`)) {
-            await offloadBook(book.id);
-            showToast(`Offloaded "${book.title}"`, 'success');
-        }
+        await removeBook(book.id);
+        showToast(`Deleted "${book.title}"`, 'success');
+        setIsDeleteDialogOpen(false);
+    };
+
+    const handleOffload = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsOffloadDialogOpen(true);
+    };
+
+    const confirmOffload = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        await offloadBook(book.id);
+        showToast(`Offloaded "${book.title}"`, 'success');
+        setIsOffloadDialogOpen(false);
     };
 
     const triggerRestore = (e: React.MouseEvent) => {
@@ -227,6 +239,48 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book, style }) => {
                     </DropdownMenu>
                 </div>
             </div>
+
+            <Dialog
+                isOpen={isOffloadDialogOpen}
+                onClose={() => setIsOffloadDialogOpen(false)}
+                title="Offload Book"
+                description={`Offload "${book.title}"? This will delete the local file to save space but keep your reading progress and annotations.`}
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setIsOffloadDialogOpen(false); }}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="default"
+                            onClick={confirmOffload}
+                            data-testid="confirm-offload"
+                        >
+                            Offload
+                        </Button>
+                    </>
+                }
+            />
+
+            <Dialog
+                isOpen={isDeleteDialogOpen}
+                onClose={() => setIsDeleteDialogOpen(false)}
+                title="Delete Book"
+                description={`Are you sure you want to delete "${book.title}"? This cannot be undone.`}
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setIsDeleteDialogOpen(false); }}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={confirmDelete}
+                            data-testid="confirm-delete"
+                        >
+                            Delete
+                        </Button>
+                    </>
+                }
+            />
         </div>
     );
 };
