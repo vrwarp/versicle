@@ -116,7 +116,7 @@ class SearchClient {
                             if (doc.body && doc.body.innerText) {
                                 text = doc.body.innerText;
                             } else if (doc.documentElement) {
-                                text = doc.documentElement.innerText || doc.documentElement.textContent || '';
+                                text = doc.documentElement.innerText || '';
                             }
                         }
                     }
