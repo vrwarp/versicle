@@ -5,46 +5,6 @@ import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 
-// Mock react-window
-vi.mock('react-window', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const MockGrid = ({ children, itemData, columnCount, rowCount }: any) => (
-    <div data-testid="virtual-grid">
-      {Array.from({ length: rowCount }).flatMap((_, r) =>
-         Array.from({ length: columnCount }).map((_, c) => {
-            const Cell = children;
-            return (
-              <div key={`${r}-${c}`}>
-                  <Cell columnIndex={c} rowIndex={r} style={{ width: 100, height: 100 }} data={itemData} />
-              </div>
-            );
-         })
-      )}
-    </div>
-  );
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const MockList = ({ children, itemCount, itemData }: any) => (
-      <div data-testid="virtual-list">
-          {Array.from({ length: itemCount }).map((_, index) => {
-               const Row = children;
-               return (
-                  <div key={index}>
-                      <Row index={index} style={{ height: 100 }} data={itemData} />
-                  </div>
-               );
-          })}
-      </div>
-  );
-
-  return {
-    FixedSizeGrid: MockGrid,
-    FixedSizeList: MockList,
-    VariableSizeList: MockList,
-    VariableSizeGrid: MockGrid,
-  };
-});
-
 // Mock BookCard
 vi.mock('./BookCard', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -94,7 +54,6 @@ describe('LibraryView', () => {
     it('renders loading state', () => {
         useLibraryStore.setState({ isLoading: true });
         render(<LibraryView />);
-        expect(screen.queryByTestId('virtual-grid')).not.toBeInTheDocument();
         expect(document.querySelector('.animate-spin')).toBeInTheDocument();
     });
 
@@ -119,11 +78,10 @@ describe('LibraryView', () => {
             window.dispatchEvent(new Event('resize'));
         });
 
+        // Wait for books to render
         await waitFor(() => {
-            expect(screen.getByTestId('virtual-grid')).toBeInTheDocument();
+            expect(screen.getAllByTestId('book-card')).toHaveLength(2);
         });
-
-        expect(screen.getAllByTestId('book-card')).toHaveLength(2);
     });
 
     it('handles drag and drop import', async () => {

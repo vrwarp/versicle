@@ -24,20 +24,23 @@ def test_library_grid_view(page: Page):
     utils.capture_screenshot(page, "library_grid_2_books")
 
     # 3. Check for Grid Layout vs List Layout
-    # By default it should be grid.
-    # We can check the toggle button state or aria-label
-    toggle_btn = page.get_by_test_id("view-toggle-button")
-    expect(toggle_btn).to_have_attribute("aria-label", "Switch to list view") # Means current is grid
+    # Check menu trigger text
+    menu_trigger = page.get_by_test_id("view-menu-trigger")
+    expect(menu_trigger).to_have_text(re.compile("Classic Grid"))
 
-    # 4. Switch to List View
-    print("Switching to List View...")
-    toggle_btn.click()
-    expect(toggle_btn).to_have_attribute("aria-label", "Switch to grid view")
+    # 4. Switch to Detailed List View
+    print("Switching to Detailed List View...")
+    menu_trigger.click()
+    # Click "Detailed List" item
+    page.get_by_role("menuitemradio", name="Detailed List").click()
+
+    expect(menu_trigger).to_have_text(re.compile("Detailed List"))
     utils.capture_screenshot(page, "library_list_view")
 
     # 5. Switch back to Grid View
-    print("Switching back to Grid View...")
-    toggle_btn.click()
-    expect(toggle_btn).to_have_attribute("aria-label", "Switch to list view")
+    print("Switching back to Classic Grid View...")
+    menu_trigger.click()
+    page.get_by_role("menuitemradio", name="Classic Grid").click()
+    expect(menu_trigger).to_have_text(re.compile("Classic Grid"))
 
     print("Library Grid View Journey Passed!")

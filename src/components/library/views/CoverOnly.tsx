@@ -1,17 +1,9 @@
-import React, { useMemo, useEffect, useState } from 'react';
-import * as ReactWindow from 'react-window';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Grid = (ReactWindow as any).FixedSizeGrid;
-import type { ViewProps } from './types';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { ViewProps } from './types';
 import type { BookMetadata } from '../../../types/db';
 
-const CARD_WIDTH = 120;
-const RATIO = 1.5;
-const CARD_HEIGHT = CARD_WIDTH * RATIO;
-const GAP = 16;
-
-const CoverItem = ({ book, style }: { book: BookMetadata, style: React.CSSProperties }) => {
+const CoverItem = ({ book }: { book: BookMetadata }) => {
     const navigate = useNavigate();
     const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
@@ -26,8 +18,7 @@ const CoverItem = ({ book, style }: { book: BookMetadata, style: React.CSSProper
 
     return (
         <div
-            style={style}
-            className="rounded-md overflow-hidden shadow-sm hover:shadow-lg transition-all hover:scale-105 cursor-pointer bg-muted relative group"
+            className="aspect-[2/3] rounded-md overflow-hidden shadow-sm hover:shadow-lg transition-all hover:scale-105 cursor-pointer bg-muted relative group"
             onClick={() => navigate(`/read/${book.id}`)}
             title={`${book.title} by ${book.author}`}
         >
@@ -38,7 +29,6 @@ const CoverItem = ({ book, style }: { book: BookMetadata, style: React.CSSProper
                     {book.title}
                 </div>
             )}
-            {/* Tooltip on hover (simple overlay) */}
             <div className="absolute inset-x-0 bottom-0 bg-black/60 text-white text-[10px] p-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
                 {book.title}
             </div>
@@ -46,46 +36,14 @@ const CoverItem = ({ book, style }: { book: BookMetadata, style: React.CSSProper
     );
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Cell = ({ columnIndex, rowIndex, style, data }: any) => {
-    const { books, columnCount } = data;
-    const index = rowIndex * columnCount + columnIndex;
-    if (index >= books.length) return <div style={style} />;
-    const book = books[index];
-
+export const CoverOnly: React.FC<ViewProps> = ({ books }) => {
     return (
-        <CoverItem
-            book={book}
-            style={{
-                ...style,
-                left: Number(style.left) + GAP / 2,
-                top: Number(style.top) + GAP / 2,
-                width: Number(style.width) - GAP,
-                height: Number(style.height) - GAP,
-            }}
-        />
-    );
-}
-
-export const CoverOnly: React.FC<ViewProps> = ({ books, dimensions }) => {
-    const columnCount = Math.floor(dimensions.width / (CARD_WIDTH + GAP)) || 3;
-    const rowCount = Math.ceil(books.length / columnCount);
-    const columnWidth = Math.floor(dimensions.width / columnCount);
-
-    const itemData = useMemo(() => ({ books, columnCount }), [books, columnCount]);
-
-    return (
-        <Grid
-            columnCount={columnCount}
-            columnWidth={columnWidth}
-            height={dimensions.height}
-            rowCount={rowCount}
-            rowHeight={CARD_HEIGHT + GAP}
-            width={dimensions.width}
-            itemData={itemData}
-            className="pb-20"
-        >
-            {Cell}
-        </Grid>
+        <div className="h-full overflow-y-auto pb-20 p-4">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+                {books.map(book => (
+                    <CoverItem key={book.id} book={book} />
+                ))}
+            </div>
+        </div>
     );
 };

@@ -55,7 +55,6 @@ export const LibraryView: React.FC = () => {
         const { width } = entry.contentRect;
         if (width <= 0) return;
 
-        // Use container height for the view components
         const height = entry.contentRect.height;
 
         setDimensions(prev => {
@@ -178,7 +177,6 @@ export const LibraryView: React.FC = () => {
         data-testid="hidden-file-input"
       />
 
-      {/* Drag Overlay */}
       {dragActive && (
         <div className="absolute inset-4 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center border-4 border-primary border-dashed rounded-xl transition-all duration-200 pointer-events-none">
             <div className="flex flex-col items-center gap-4 text-primary animate-in zoom-in-95 duration-200">
@@ -196,7 +194,7 @@ export const LibraryView: React.FC = () => {
         <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="gap-2 min-w-[140px] justify-between">
+                    <Button variant="outline" className="gap-2 min-w-[140px] justify-between" data-testid="view-menu-trigger">
                         <span className="flex items-center gap-2 truncate">
                             <LayoutGrid className="w-4 h-4" />
                             <span className="truncate">{viewLabels[viewMode]}</span>
