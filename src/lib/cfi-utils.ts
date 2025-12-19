@@ -131,7 +131,6 @@ export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
 
     if (allRanges.length === 0) return [];
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let cfi: any = null;
     const EpubCFI = getEpubCFI();
 

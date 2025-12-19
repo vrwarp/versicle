@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mergeCfiRanges, parseCfiRange, generateCfiRange } from './cfi-utils';
 
 // We need to be able to reset the mock to test the fallback behavior
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockEpubCFI: any;
 
 vi.mock('epubjs', () => {
@@ -43,7 +42,7 @@ describe('cfi-utils', () => {
             expect(parseCfiRange('invalid')).toBeNull();
             expect(parseCfiRange('epubcfi(/a,/b)')).toBeNull();
             expect(parseCfiRange('')).toBeNull();
-            expect(parseCfiRange(null as unknown as string)).toBeNull();
+            expect(parseCfiRange(null as any)).toBeNull();
         });
 
         it('handles offsets correctly', () => {
