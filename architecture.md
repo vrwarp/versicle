@@ -23,7 +23,7 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
     *   **Why**: To balance quality, cost, and offline availability.
     *   **How**:
         *   **Local**: Uses the Web Speech API (OS native) or local WASM models (Piper) for free, offline reading.
-        *   **Cloud**: Integrates with Google/OpenAI for high-quality neural voices, but caches generated audio to minimize API costs and latency on replay.
+        *   **Cloud**: Integrates with Google/OpenAI/LemonFox for high-quality neural voices, but caches generated audio to minimize API costs and latency on replay.
     *   **Stability**: The system implements a robust fallback mechanism. If a cloud provider fails, it automatically switches to a local provider.
 
 ## 2. System Architecture Diagram
@@ -54,6 +54,7 @@ graph TD
         Backup[BackupService]
         Maint[MaintenanceService]
         GenAI[GenAIService]
+        CostEst[CostEstimator]
     end
 
     subgraph TTS [TTS Subsystem]
@@ -62,7 +63,8 @@ graph TD
         TTSCache[TTSCache]
         Sync[SyncEngine]
         Providers[ITTSProvider]
-        Piper[PiperProvider (WASM)]
+        Piper[PiperProvider]
+        Supervisor[PiperProcessSupervisor]
     end
 
     subgraph Workers [Web Workers]
@@ -91,6 +93,9 @@ graph TD
     APS --> TTSCache
     APS --> Sync
     APS --> Piper
+    APS --> CostEst
+
+    Piper --> Supervisor
 
     Library --> LibStore
     LibStore --> DBService
@@ -146,7 +151,7 @@ Handles the complex task of importing an EPUB file.
     2.  **Parsing**: Uses `epub.js` to parse the container.
     3.  **Synthetic TOC**: Iterates through the spine to generate a table of contents and calculate character counts (for reading time estimation).
     4.  **Hashing**: Computes a SHA-256 hash of the file incrementally (chunked) to avoid memory spikes. Used for integrity checks during restore.
-    5.  **Sanitization**: Checks metadata length. Prompts the user if metadata fields are excessively long (security/UI hardening).
+    5.  **Sanitization**: Uses `DOMParser` to strip HTML and scripts from metadata fields, and enforces character limits (e.g. 255 chars for Author).
     *   *Returns*: `Promise<string>` (New Book ID).
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
@@ -180,6 +185,11 @@ Enhances the reading experience using LLMs (Google Gemini).
     *   **`generateStructured`**: Uses Gemini's JSON schema enforcement to return strictly typed data (e.g., TOC structure).
     *   **`textMatching.ts`**: Provides fuzzy matching to locate AI-generated quotes/references back in the original source text (handling whitespace/case differences).
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets are sent to Google's servers.
+
+#### Cost Estimator (`src/lib/tts/CostEstimator.ts`)
+*   **Goal**: Provide users with a rough estimate of API costs for Cloud TTS usage during a session.
+*   **Logic**: Tracks total characters sent to paid providers (Google, OpenAI) in a transient Zustand store (`useCostStore`).
+*   **Trade-off**: Estimates are client-side approximations and do not account for billing nuances (e.g., minimum request size, retries).
 
 ---
 
@@ -217,10 +227,17 @@ Manages visual "Karaoke" synchronization.
 *   **Logic**: Binary search (or optimized scan) through time-alignment data provided by the TTS provider to highlight the current word/sentence.
 
 #### `src/lib/tts/providers/`
-Plugin architecture for TTS backends.
-*   **`PiperProvider`**: Runs local WASM models.
+Plugin architecture for TTS backends. All providers implement `ITTSProvider`.
+*   **`PiperProvider`**: Runs local WASM models. Use `PiperProcessSupervisor` to manage the unstable Worker.
 *   **`CloudProvider`**: Adapts Google/OpenAI APIs.
+*   **`LemonFoxProvider`**: Adapts LemonFox.ai API (OpenAI-compatible) for lower cost.
+*   **`CapacitorTTSProvider`**: Wraps `@capacitor-community/text-to-speech` for native mobile playback.
 *   **`WebSpeechProvider`**: Adapts browser native synthesis.
+
+#### Hardening: `PiperProcessSupervisor`
+*   **Goal**: Prevent the application from crashing if the Piper WASM worker runs out of memory or hangs.
+*   **Logic**: Wraps the worker in a supervisor that handles timeouts and automatic restarts. If a request hangs or the worker terminates, the supervisor kills the worker, spawns a fresh instance, and retries the request (up to 1 retry).
+*   **Trade-off**: Restarting the worker introduces a latency spike on the next request.
 
 ---
 

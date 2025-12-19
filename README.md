@@ -14,7 +14,7 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 *   **Generative AI**:
     *   **Smart TOC**: Automatically generate clean chapter titles for books with missing or poor tables of contents.
 *   **Text-to-Speech (TTS) Powerhouse**:
-    *   **Hybrid Engine**: Seamlessly switch between **Local** (Web Speech, Piper WASM) and **Cloud** (Google, OpenAI) providers.
+    *   **Hybrid Engine**: Seamlessly switch between **Local** (Web Speech, Piper WASM, Native Mobile) and **Cloud** (Google, OpenAI, LemonFox) providers.
     *   **Smart Resume**: Intelligently rewinds context (2 sentences) after pauses.
     *   **Visual Sync**: Karaoke-style sentence and word highlighting.
     *   **Pronunciation Lexicon**: Fix mispronounced words using Regex-based replacement rules.
@@ -29,12 +29,13 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 ## Tech Stack
 
 *   **Frontend**: React, Vite, TypeScript
+*   **Runtime**: Web (PWA), Android (Capacitor)
 *   **Styling**: Tailwind CSS, Shadcn UI
 *   **State Management**: Zustand (with persistence)
 *   **Storage**: IndexedDB (via `idb`)
 *   **Rendering**: `epub.js`
 *   **Search**: `FlexSearch` (in Web Worker)
-*   **TTS**: Piper (WASM), Web Speech API, Google/OpenAI Cloud APIs
+*   **TTS**: Piper (WASM), Web Speech API, Google/OpenAI/LemonFox Cloud APIs, Capacitor Native TTS
 *   **AI**: Google Gemini (via `@google/generative-ai`)
 *   **Testing**: Vitest (Unit), Playwright (Visual/Integration)
 

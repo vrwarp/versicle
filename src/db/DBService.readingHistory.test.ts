@@ -139,11 +139,15 @@ describe('DBService Reading History', () => {
         });
 
         it('throws error when transaction fails', async () => {
+            const p = Promise.reject(new Error('Transaction Failed'));
+            // Silence unhandled rejection warning for the mock itself
+            p.catch(() => {});
+
             const mockTx = {
                 objectStore: vi.fn().mockReturnValue({
                     get: vi.fn().mockRejectedValue(new Error('Transaction Failed')),
                 }),
-                done: Promise.reject(new Error('Transaction Failed')),
+                done: p,
             };
             mockDB.transaction.mockReturnValue(mockTx);
 
