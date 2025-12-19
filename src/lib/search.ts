@@ -93,14 +93,34 @@ class SearchClient {
 
             for (const item of batch) {
                 try {
-                    const doc = await book.load(item.href);
-                    if (doc && doc.body) {
-                        const text = doc.body.innerText;
-                        sections.push({
-                            id: item.id,
-                            href: item.href,
-                            text: text
-                        });
+                    // Access raw file content from the archive (more robust than book.load)
+                    if (book.archive) {
+                        const blob = await book.archive.getBlob(item.href);
+                        if (blob) {
+                            const rawXml = await blob.text();
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(rawXml, 'application/xhtml+xml');
+
+                            const text = doc.body.textContent || '';
+                            if (text) {
+                                sections.push({
+                                    id: item.id,
+                                    href: item.href,
+                                    text: text
+                                });
+                            }
+                        }
+                    } else {
+                        // Fallback to legacy loading if archive is not available
+                        const doc = await book.load(item.href);
+                        if (doc && doc.body) {
+                            const text = doc.body.innerText;
+                            sections.push({
+                                id: item.id,
+                                href: item.href,
+                                text: text
+                            });
+                        }
                     }
                 } catch (e) {
                     console.warn(`Failed to index section ${item.href}`, e);
