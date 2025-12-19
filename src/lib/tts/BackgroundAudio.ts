@@ -33,7 +33,8 @@ export class BackgroundAudio {
         const targetVolume = mode === 'noise' ? this.whiteNoiseVolume : 1.0;
 
         // If switching source, or if just starting
-        if (this.audio.getAttribute('src') !== targetSrc) {
+        // Note: checking getAttribute('src') is unreliable as .src setter doesn't always update the content attribute
+        if (this.currentMode !== mode || this.audio.error || !this.audio.src) {
             this.audio.src = targetSrc;
             // When src changes, we might want to load(), though play() usually handles it.
             // load() resets currentTime to 0.

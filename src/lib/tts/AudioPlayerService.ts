@@ -653,7 +653,7 @@ export class AudioPlayerService {
 
               // Advance to next item
               if (this.currentIndex < this.queue.length - 1) {
-                  this.backgroundAudio.stopWithDebounce(5000);
+                  this.backgroundAudio.play(this.backgroundAudioMode);
                   this.currentIndex++;
                   this.persistQueue(); // Persist state so we can resume later
                   await this.playInternal(signal); // Start playing the next item
