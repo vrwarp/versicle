@@ -41,6 +41,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
 
     // Battery Monitor
     useEffect(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let batteryManager: any = null;
         const updateBattery = () => {
              if (batteryManager) {
@@ -51,6 +52,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const nav = navigator as any;
         if (nav.getBattery) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             nav.getBattery().then((battery: any) => {
                 batteryManager = battery;
                 updateBattery();
@@ -133,7 +135,8 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
              } else if (x > width * 0.8) {
                  callbacksRef.current.onNext();
              } else {
-                 callbacksRef.current.onToggleHUD();
+                 // Center tap disabled to prevent accidental immersive mode.
+                 // Button in header is used for immersive mode.
              }
         };
 

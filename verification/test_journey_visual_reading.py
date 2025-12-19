@@ -110,15 +110,9 @@ def test_journey_visual_reading(page: Page):
     tap_x_center = reader_x + (reader_w * 0.5)
     page.mouse.click(tap_x_center, tap_y)
 
-    # HUD should disappear
-    expect(page.locator("header")).not_to_be_visible(timeout=3000)
-
-    capture_screenshot(page, "visual_reading_immersive")
-
-    # Tap Center again
-    page.mouse.click(tap_x_center, tap_y)
-
-    # HUD should reappear
+    # HUD should REMAIN visible (Behavior change: Center tap disabled)
     expect(page.locator("header")).to_be_visible(timeout=3000)
+
+    capture_screenshot(page, "visual_reading_immersive_disabled")
 
     print("Visual Reading Journey Passed!")
