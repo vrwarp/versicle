@@ -20,18 +20,26 @@ def test_settings_persistence(page: Page):
     # Switch to Settings
     page.click("button:has-text('Settings')")
 
-    # 2. Toggle Gesture Mode (Enable)
-    print("Toggling Gesture Mode (Enable)...")
-    gesture_switch = page.get_by_text("Gesture Mode", exact=True).locator("xpath=..").get_by_role("switch")
-    gesture_switch.click()
+    # 2. Toggle "Announce Chapter Titles" (Enable)
+    print("Toggling Announce Chapter Titles (Enable)...")
+    # Find the switch
+    switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
+
+    # Ensure it's visible
+    expect(switch).to_be_visible()
+
+    # Get current state
+    is_checked = switch.get_attribute("aria-checked") == "true"
+
+    # Toggle it
+    switch.click()
     page.wait_for_timeout(500)
 
-    # Verify Overlay Appears (Switch disappears because Audio Panel closes)
-    expect(page.locator("text=Gesture Mode Active")).to_be_visible()
+    # Verify it flipped
+    expected_state = "false" if is_checked else "true"
+    expect(switch).to_have_attribute("aria-checked", expected_state)
 
-    utils.capture_screenshot(page, "settings_persistence_1_enabled")
-
-    # Audio Panel is already closed automatically.
+    utils.capture_screenshot(page, "settings_persistence_1_toggled")
 
     # 3. Reload
     print("Reloading...")
@@ -41,34 +49,14 @@ def test_settings_persistence(page: Page):
     # 4. Verify Persistence
     print("Verifying Persistence...")
 
-    # Since Gesture Mode is active, the GestureOverlay blocks the ReaderSettings button.
-    # However, GestureOverlay has an "Exit Gesture Mode" button (based on previous error log).
-    # Let's verify that button exists, which confirms Gesture Mode persisted.
+    # Open Audio Panel again
+    page.get_by_test_id("reader-audio-button").click()
+    # Switch to Settings
+    page.click("button:has-text('Settings')")
 
-    exit_btn = page.get_by_label("Exit Gesture Mode")
-    # Or based on GestureOverlay.tsx (which I haven't read but saw in logs)
-
-    expect(exit_btn).to_be_visible()
+    switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
+    expect(switch).to_have_attribute("aria-checked", expected_state)
 
     utils.capture_screenshot(page, "settings_persistence_2_restored")
-
-    # 5. Disable Gesture Mode to cleanup
-    print("Disabling Gesture Mode via Overlay...")
-    exit_btn.click()
-
-    # Verify Overlay is gone
-    expect(exit_btn).not_to_be_visible()
-
-    # Now we can open settings and verify switch is off?
-    # Wait, "Exit Gesture Mode" usually turns it off in the store?
-    # Let's check ReaderView.tsx or GestureOverlay.tsx logic.
-    # ReaderView: <GestureOverlay ... onClose={() => setGestureMode(false)} />
-    # Yes, it turns it off.
-
-    # Verify switch is now off in settings
-    page.get_by_test_id("reader-audio-button").click()
-    page.click("button:has-text('Settings')")
-    gesture_switch = page.get_by_text("Gesture Mode", exact=True).locator("xpath=..").get_by_role("switch")
-    expect(gesture_switch).to_have_attribute("aria-checked", "false")
 
     print("Settings Persistence Journey Passed!")

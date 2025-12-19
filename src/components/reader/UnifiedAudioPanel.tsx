@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
 import { useShallow } from 'zustand/react/shallow';
 import { SheetContent, SheetHeader, SheetTitle } from '../ui/Sheet';
 import { Button } from '../ui/Button';
@@ -9,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../ui/Badge';
 import { Switch } from '../ui/Switch';
 import { TTSQueue } from './TTSQueue';
-import { Play, Pause, RotateCcw, RotateCw, Mic, RefreshCw, Hand } from 'lucide-react';
+import { Play, Pause, RotateCcw, RotateCw, Mic, RefreshCw } from 'lucide-react';
 import { LexiconManager } from './LexiconManager';
 
 /**
@@ -54,11 +53,6 @@ export const UnifiedAudioPanel = () => {
     setPrerollEnabled: state.setPrerollEnabled
   })));
 
-  const { gestureMode, setGestureMode } = useReaderStore(useShallow(state => ({
-    gestureMode: state.gestureMode,
-    setGestureMode: state.setGestureMode
-  })));
-
   const [view, setView] = useState<'queue' | 'settings'>('queue');
   const [isLexiconOpen, setIsLexiconOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -84,10 +78,6 @@ export const UnifiedAudioPanel = () => {
       setIsRefreshing(true);
       await loadVoices();
       setIsRefreshing(false);
-  };
-
-  const handleGestureToggle = (checked: boolean) => {
-      setGestureMode(checked);
   };
 
   return (
@@ -119,16 +109,6 @@ export const UnifiedAudioPanel = () => {
              <Badge variant="outline" className="cursor-pointer truncate max-w-[150px]" onClick={() => setView('settings')}>
                 {voice?.name || 'Default Voice'}
              </Badge>
-             <Button
-                variant={gestureMode ? "default" : "outline"}
-                size="icon"
-                className={`h-8 w-8 rounded-full ${gestureMode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
-                onClick={() => handleGestureToggle(!gestureMode)}
-                title="Toggle Gesture Mode"
-                aria-label="Toggle Gesture Mode"
-             >
-                <Hand className="h-4 w-4" />
-             </Button>
           </div>
        </div>
 
@@ -187,10 +167,6 @@ export const UnifiedAudioPanel = () => {
                  <div className="flex items-center justify-between">
                     <label className="text-sm">Announce Chapter Titles</label>
                     <Switch checked={prerollEnabled} onCheckedChange={setPrerollEnabled} />
-                 </div>
-                 <div className="flex items-center justify-between">
-                    <label className="text-sm">Gesture Mode</label>
-                    <Switch checked={gestureMode} onCheckedChange={handleGestureToggle} />
                  </div>
               </section>
 

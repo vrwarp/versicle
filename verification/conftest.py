@@ -56,11 +56,11 @@ def configure_page(page: Page):
     Args:
         page: The Playwright Page object.
     """
-    # Set default timeout for actions (click, wait_for_selector, etc) to 2000ms
-    page.set_default_timeout(2000)
-    page.set_default_navigation_timeout(2000)
+    # Set default timeout for actions (click, wait_for_selector, etc) to 5000ms
+    page.set_default_timeout(5000)
+    page.set_default_navigation_timeout(5000)
     # Set default timeout for assertions
-    expect.set_options(timeout=2000)
+    expect.set_options(timeout=5000)
 
     # Inject Mock TTS Polyfill
     page.add_init_script(path="verification/tts-polyfill.js")

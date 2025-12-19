@@ -30,7 +30,7 @@ export interface EpubReaderOptions {
   /** Callback when book instance is ready. */
   onBookLoaded?: (book: Book) => void;
   /** Callback when the reader view is clicked. */
-  onClick?: () => void;
+  onClick?: (event: MouseEvent) => void;
   /** Callback when an error occurs. */
   onError?: (error: string) => void;
 }
@@ -234,8 +234,8 @@ export function useEpubReader(
              }
         });
 
-        newRendition.on('click', () => {
-            if (optionsRef.current.onClick) optionsRef.current.onClick();
+        newRendition.on('click', (event: MouseEvent) => {
+            if (optionsRef.current.onClick) optionsRef.current.onClick(event);
         });
 
         // Manual selection listener fallback
