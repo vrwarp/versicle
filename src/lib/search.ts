@@ -112,8 +112,12 @@ class SearchClient {
                     // Attempt 2: Fallback to rendering pipeline (slow but handles resource resolution)
                     if (!text) {
                         const doc = await book.load(item.href);
-                        if (doc && doc.body) {
-                            text = doc.body.innerText;
+                        if (doc) {
+                            if (doc.body && doc.body.innerText) {
+                                text = doc.body.innerText;
+                            } else if (doc.documentElement) {
+                                text = doc.documentElement.innerText || doc.documentElement.textContent || '';
+                            }
                         }
                     }
 
