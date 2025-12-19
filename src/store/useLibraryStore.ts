@@ -7,6 +7,20 @@ import { StorageFullError } from '../types/errors';
 /**
  * State interface for the Library store.
  */
+export type ViewMode =
+  | 'classic-grid'
+  | 'modern-cards'
+  | 'minimal-list'
+  | 'detailed-list'
+  | 'hero-card'
+  | 'stacked'
+  | 'compact-grid'
+  | 'carousel'
+  | 'timeline'
+  | 'masonry'
+  | 'cover-only'
+  | 'author-focus';
+
 interface LibraryState {
   /** List of book metadata currently in the library. */
   books: BookMetadata[];
@@ -17,12 +31,12 @@ interface LibraryState {
   /** Error message if an operation failed, or null. */
   error: string | null;
   /** The current view mode of the library. */
-  viewMode: 'grid' | 'list';
+  viewMode: ViewMode;
   /**
    * Sets the view mode of the library.
    * @param mode - The new view mode.
    */
-  setViewMode: (mode: 'grid' | 'list') => void;
+  setViewMode: (mode: ViewMode) => void;
   /**
    * Fetches all books from the database and updates the store.
    */
@@ -63,7 +77,7 @@ export const useLibraryStore = create<LibraryState>()(
       isLoading: false,
       isImporting: false,
       error: null,
-      viewMode: 'grid',
+      viewMode: 'classic-grid',
 
       setViewMode: (mode) => set({ viewMode: mode }),
 

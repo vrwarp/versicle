@@ -6,20 +6,44 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 
 // Mock react-window
-vi.mock('react-window', () => ({
+vi.mock('react-window', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Grid: ({ cellComponent: Cell, cellProps, columnCount, rowCount }: any) => (
+  const MockGrid = ({ children, itemData, columnCount, rowCount }: any) => (
     <div data-testid="virtual-grid">
       {Array.from({ length: rowCount }).flatMap((_, r) =>
-         Array.from({ length: columnCount }).map((_, c) =>
-            <div key={`${r}-${c}`}>
-                <Cell columnIndex={c} rowIndex={r} style={{ width: 100, height: 100 }} {...cellProps} />
-            </div>
-         )
+         Array.from({ length: columnCount }).map((_, c) => {
+            const Cell = children;
+            return (
+              <div key={`${r}-${c}`}>
+                  <Cell columnIndex={c} rowIndex={r} style={{ width: 100, height: 100 }} data={itemData} />
+              </div>
+            );
+         })
       )}
     </div>
-  )
-}));
+  );
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const MockList = ({ children, itemCount, itemData }: any) => (
+      <div data-testid="virtual-list">
+          {Array.from({ length: itemCount }).map((_, index) => {
+               const Row = children;
+               return (
+                  <div key={index}>
+                      <Row index={index} style={{ height: 100 }} data={itemData} />
+                  </div>
+               );
+          })}
+      </div>
+  );
+
+  return {
+    FixedSizeGrid: MockGrid,
+    FixedSizeList: MockList,
+    VariableSizeList: MockList,
+    VariableSizeGrid: MockGrid,
+  };
+});
 
 // Mock BookCard
 vi.mock('./BookCard', () => ({

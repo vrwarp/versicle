@@ -1,56 +1,34 @@
 import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from 'react';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useLibraryStore, type ViewMode } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
-import { BookCard } from './BookCard';
-import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
-import { Grid } from 'react-window';
-import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus } from 'lucide-react';
+import { Upload, Settings, LayoutGrid, FilePlus, ChevronDown } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+} from '../ui/DropdownMenu';
 
-// Grid Configuration
-const CARD_WIDTH = 200; // Minimal width
-const CARD_HEIGHT = 320;
-const GAP = 24;
-const LIST_ITEM_HEIGHT = 88;
+// Views
+import { ClassicGrid } from './views/ClassicGrid';
+import { ModernCards } from './views/ModernCards';
+import { MinimalList } from './views/MinimalList';
+import { DetailedList } from './views/DetailedList';
+import { HeroCard } from './views/HeroCard';
+import { StackedView } from './views/StackedView';
+import { CompactGrid } from './views/CompactGrid';
+import { Carousel } from './views/Carousel';
+import { Timeline } from './views/Timeline';
+import { MasonryGrid } from './views/MasonryGrid';
+import { CoverOnly } from './views/CoverOnly';
+import { AuthorFocus } from './views/AuthorFocus';
 
-/**
- * Renders a single cell within the virtualized grid of books.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => {
-    const index = rowIndex * columnCount + columnIndex;
-    if (index >= books.length) return <div style={style} />;
-    const book = books[index];
-
-    return (
-        <div style={{
-            ...style,
-            width: Number(style.width) - GAP,
-            height: Number(style.height) - GAP,
-        }}>
-           <BookCard book={book} />
-        </div>
-    );
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ListCell = ({ rowIndex, style, books }: any) => {
-    const index = rowIndex;
-    if (index >= books.length) return <div style={style} />;
-    const book = books[index];
-    return <BookListItem book={book} style={style} />;
-}
-
-
-/**
- * The main library view component.
- * Displays the user's collection of books in a virtualized grid and allows importing new books.
- * Handles fetching books from the store and responsive layout calculations.
- *
- * @returns A React component rendering the library interface.
- */
 export const LibraryView: React.FC = () => {
   const { books, fetchBooks, isLoading, error, addBook, isImporting, viewMode, setViewMode } = useLibraryStore();
   const { setGlobalSettingsOpen } = useUIStore();
@@ -71,22 +49,14 @@ export const LibraryView: React.FC = () => {
     if (!containerRef.current) return;
 
     const observer = new ResizeObserver((entries) => {
-      // Debounce logic could be added here if needed, but ResizeObserver is already reasonably efficient.
-      // For immediate responsiveness, we'll update directly but wrapped in requestAnimationFrame to align with paint cycles.
       window.requestAnimationFrame(() => {
         if (!Array.isArray(entries) || !entries.length) return;
         const entry = entries[0];
-
-        // Use contentRect for precise content box dimensions
         const { width } = entry.contentRect;
-
-        // Ignore invalid width updates (prevents collapse in some environments)
         if (width <= 0) return;
 
-        // Calculate height based on window to keep the original full-screen behavior
-        // (Though using contentRect height would be more robust if the parent container is constrained)
-        const top = entry.target.getBoundingClientRect().top;
-        const height = window.innerHeight - top - 20;
+        // Use container height for the view components
+        const height = entry.contentRect.height;
 
         setDimensions(prev => {
             if (prev.width === width && prev.height === height) return prev;
@@ -110,10 +80,7 @@ export const LibraryView: React.FC = () => {
         showToast(`Import failed: ${err.message}`, "error");
       });
     }
-    // Reset input so same file can be selected again if needed
-    if (e.target.value) {
-      e.target.value = '';
-    }
+    if (e.target.value) e.target.value = '';
   };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -159,26 +126,39 @@ export const LibraryView: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  const columnCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
-  // Add 1 to rowCount for spacer
-  const rowCount = Math.ceil(books.length / columnCount) + 1;
-  const gridColumnWidth = Math.floor(dimensions.width / columnCount);
-
-  // Memoize itemData (cellProps) to prevent unnecessary re-renders of the grid cells.
-  // This version of react-window uses cellProps which are spread into the component props.
-  const itemData = React.useMemo(() => ({ books, columnCount }), [books, columnCount]);
-
-  const getRowHeight = useCallback((index: number) => {
-      if (viewMode === 'list') {
-          if (index === books.length) return 100;
-          return LIST_ITEM_HEIGHT;
+  const renderView = () => {
+      const props = { books, dimensions };
+      switch (viewMode) {
+          case 'classic-grid': return <ClassicGrid {...props} />;
+          case 'modern-cards': return <ModernCards {...props} />;
+          case 'minimal-list': return <MinimalList {...props} />;
+          case 'detailed-list': return <DetailedList {...props} />;
+          case 'hero-card': return <HeroCard {...props} />;
+          case 'stacked': return <StackedView {...props} />;
+          case 'compact-grid': return <CompactGrid {...props} />;
+          case 'carousel': return <Carousel {...props} />;
+          case 'timeline': return <Timeline {...props} />;
+          case 'masonry': return <MasonryGrid {...props} />;
+          case 'cover-only': return <CoverOnly {...props} />;
+          case 'author-focus': return <AuthorFocus {...props} />;
+          default: return <ClassicGrid {...props} />;
       }
-      if (index === rowCount - 1) return 100;
-      return CARD_HEIGHT + GAP;
-  }, [viewMode, rowCount, books.length]);
+  };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const GridAny = Grid as any;
+  const viewLabels: Record<ViewMode, string> = {
+      'classic-grid': 'Classic Grid',
+      'modern-cards': 'Modern Cards',
+      'minimal-list': 'Minimal List',
+      'detailed-list': 'Detailed List',
+      'hero-card': 'Hero Card',
+      'stacked': 'Stacked View',
+      'compact-grid': 'Compact Grid',
+      'carousel': 'Carousel',
+      'timeline': 'Timeline',
+      'masonry': 'Masonry Grid',
+      'cover-only': 'Cover Only',
+      'author-focus': 'Author Focus'
+  };
 
   return (
     <div
@@ -208,45 +188,65 @@ export const LibraryView: React.FC = () => {
         </div>
       )}
 
-      <header className="mb-8 flex-none flex justify-between items-start">
+      <header className="mb-4 flex-none flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">My Library</h1>
-          <p className="text-muted-foreground">Manage and read your EPUB collection</p>
+          <h1 className="text-3xl font-bold text-foreground">My Library</h1>
+          <p className="text-muted-foreground text-sm">Manage and read your collection</p>
         </div>
-        <div className="flex gap-2">
-            <Button
-                variant="secondary"
-                size="icon"
-                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="shadow-sm"
-                aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
-                data-testid="view-toggle-button"
-            >
-                {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
-            </Button>
+        <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="gap-2 min-w-[140px] justify-between">
+                        <span className="flex items-center gap-2 truncate">
+                            <LayoutGrid className="w-4 h-4" />
+                            <span className="truncate">{viewLabels[viewMode]}</span>
+                        </span>
+                        <ChevronDown className="w-4 h-4 opacity-50" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 max-h-[80vh] overflow-y-auto">
+                    <DropdownMenuLabel>Layouts</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuRadioGroup value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
+                        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Foundational</DropdownMenuLabel>
+                        <DropdownMenuRadioItem value="classic-grid">Classic Grid</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="modern-cards">Modern Cards</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="minimal-list">Minimal List</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="detailed-list">Detailed List</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="hero-card">Hero Card</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="stacked">Stacked View</DropdownMenuRadioItem>
+
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Alternative</DropdownMenuLabel>
+                        <DropdownMenuRadioItem value="compact-grid">Compact Grid</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="carousel">Carousel</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="timeline">Timeline</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="masonry">Masonry Grid</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="cover-only">Cover Only</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="author-focus">Author Focus</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
             <Button
               variant="secondary"
               size="icon"
               onClick={() => setGlobalSettingsOpen(true)}
-              className="shadow-sm"
               aria-label="Settings"
-              data-testid="header-settings-button"
             >
               <Settings className="w-4 h-4" />
             </Button>
             <Button
               onClick={triggerFileUpload}
               disabled={isImporting}
-              className="gap-2 shadow-sm"
-              aria-label="Import book"
-              data-testid="header-add-button"
+              className="gap-2"
             >
               {isImporting ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
               ) : (
                 <Upload className="w-4 h-4" />
               )}
-              <span className="font-medium">Import Book</span>
+              <span className="hidden sm:inline">Import</span>
             </Button>
         </div>
       </header>
@@ -264,20 +264,11 @@ export const LibraryView: React.FC = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       ) : (
-        <section className="flex-1 min-h-0 w-full" ref={containerRef}>
+        <section className="flex-1 min-h-0 w-full overflow-hidden" ref={containerRef}>
           {books.length === 0 ? (
              <EmptyLibrary onImport={triggerFileUpload} />
           ) : (
-             <GridAny
-                columnCount={viewMode === 'list' ? 1 : columnCount}
-                columnWidth={viewMode === 'list' ? dimensions.width : gridColumnWidth}
-                height={dimensions.height || 500}
-                rowCount={viewMode === 'list' ? books.length + 1 : rowCount}
-                rowHeight={getRowHeight}
-                width={dimensions.width}
-                cellComponent={viewMode === 'list' ? ListCell : GridCell}
-                cellProps={itemData}
-             />
+             renderView()
           )}
         </section>
       )}
