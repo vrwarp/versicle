@@ -38,7 +38,20 @@ export class LexiconService {
     );
 
     return filtered.sort((a, b) => {
-      // Primary: Order (Ascending)
+      // Priority Group:
+      // 1. Book rules with applyBeforeGlobal=true
+      // 2. Global rules
+      // 3. Book rules with applyBeforeGlobal=false/undefined
+      const getGroup = (r: LexiconRule) => {
+        if (!r.bookId) return 2; // Global
+        return r.applyBeforeGlobal ? 1 : 3;
+      };
+
+      const groupA = getGroup(a);
+      const groupB = getGroup(b);
+      if (groupA !== groupB) return groupA - groupB;
+
+      // Primary: Order (Ascending) within group
       const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
       const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
       if (orderA !== orderB) return orderA - orderB;
@@ -62,6 +75,7 @@ export class LexiconService {
       replacement: rule.replacement,
       isRegex: rule.isRegex,
       bookId: rule.bookId,
+      applyBeforeGlobal: rule.applyBeforeGlobal,
       order: rule.order,
       created: Date.now(),
     };

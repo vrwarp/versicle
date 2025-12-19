@@ -165,10 +165,26 @@ export interface LexiconRule {
   isRegex?: boolean;
   /** Optional ID of a specific book. If null/undefined, the rule is global. */
   bookId?: string;
+  /**
+   * If true, this book-specific rule is applied BEFORE global rules.
+   * If false or undefined, it is applied AFTER global rules.
+   * Only applicable if bookId is set.
+   */
+  applyBeforeGlobal?: boolean;
   /** Explicit order of the rule. Lower numbers run first. */
   order?: number;
   /** Timestamp when the rule was created. */
   created: number;
+}
+
+/**
+ * Represents the reading history of a book.
+ */
+export interface ReadingSession {
+  /** The CFI range read during this session. */
+  cfiRange: string;
+  /** Timestamp when the session occurred. */
+  timestamp: number;
 }
 
 /**
@@ -181,6 +197,8 @@ export interface ReadingHistoryEntry {
    * A list of combined CFI ranges representing read content.
    */
   readRanges: string[];
+  /** A list of individual reading sessions (chronological). */
+  sessions?: ReadingSession[];
   /** Timestamp when the history was last updated. */
   lastUpdated: number;
 }

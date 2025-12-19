@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -652,6 +652,21 @@ class DBService {
   }
 
   /**
+   * Retrieves the full reading history entry for a book.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @returns A Promise resolving to the ReadingHistoryEntry or undefined.
+   */
+  async getReadingHistoryEntry(bookId: string): Promise<ReadingHistoryEntry | undefined> {
+      try {
+          const db = await this.getDB();
+          return await db.get('reading_history', bookId);
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  /**
    * Updates the reading history for a book by merging a new range.
    *
    * @param bookId - The unique identifier of the book.
@@ -666,8 +681,13 @@ class DBService {
           const entry = await store.get(bookId);
 
           let readRanges: string[] = [];
+          let sessions: ReadingSession[] = [];
+
           if (entry) {
               readRanges = entry.readRanges;
+              if (entry.sessions) {
+                  sessions = entry.sessions;
+              }
           }
 
           let updatedRanges = mergeCfiRanges(readRanges, newRange);
@@ -680,9 +700,21 @@ class DBService {
               updatedRanges = updatedRanges.slice(updatedRanges.length - 100);
           }
 
+          // Add new session
+          sessions.push({
+              cfiRange: newRange,
+              timestamp: Date.now()
+          });
+
+          // Limit sessions size too
+          if (sessions.length > 100) {
+             sessions = sessions.slice(sessions.length - 100);
+          }
+
           await store.put({
               bookId,
               readRanges: updatedRanges,
+              sessions,
               lastUpdated: Date.now()
           });
           await tx.done;

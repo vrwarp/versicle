@@ -11,8 +11,8 @@ hello,hi,false
 
       const result = LexiconCSV.parse(csv);
       expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({ original: 'hello', replacement: 'hi', isRegex: false });
-      expect(result[1]).toEqual({ original: 'Doctor', replacement: 'Dr.', isRegex: true });
+      expect(result[0]).toEqual({ original: 'hello', replacement: 'hi', isRegex: false, applyBeforeGlobal: false });
+      expect(result[1]).toEqual({ original: 'Doctor', replacement: 'Dr.', isRegex: true, applyBeforeGlobal: false });
     });
 
     it('should handle commas inside quotes', () => {
@@ -72,7 +72,7 @@ c,d,true`;
         const csv = `original,replacement
 a,b`;
         const result = LexiconCSV.parse(csv);
-        expect(result[0]).toEqual({ original: 'a', replacement: 'b', isRegex: false });
+        expect(result[0]).toEqual({ original: 'a', replacement: 'b', isRegex: false, applyBeforeGlobal: false });
     });
 
     it('should handle newlines inside quoted strings', () => {
@@ -91,8 +91,8 @@ Line 2","Replacement",false`;
 "Dr\\. ""Who""","The Doctor",false`;
         const result = LexiconCSV.parse(csv);
         expect(result).toHaveLength(2);
-        expect(result[0]).toEqual({ original: '(\\w+), (\\w+)', replacement: '\\2 \\1', isRegex: true });
-        expect(result[1]).toEqual({ original: 'Dr\\. "Who"', replacement: 'The Doctor', isRegex: false });
+        expect(result[0]).toEqual({ original: '(\\w+), (\\w+)', replacement: '\\2 \\1', isRegex: true, applyBeforeGlobal: false });
+        expect(result[1]).toEqual({ original: 'Dr\\. "Who"', replacement: 'The Doctor', isRegex: false, applyBeforeGlobal: false });
     });
 
     it('should handle a suite of complex REGEX strings', () => {
@@ -132,9 +132,9 @@ Line 2","Replacement",false`;
 
       const csv = LexiconCSV.generate(rules);
       const lines = csv.split('\n');
-      expect(lines[0]).toBe('original,replacement,isRegex');
-      expect(lines[1]).toBe('"hello","hi",false');
-      expect(lines[2]).toBe('"Dr.","Doctor",true');
+      expect(lines[0]).toBe('original,replacement,isRegex,applyBeforeGlobal');
+      expect(lines[1]).toBe('"hello","hi",false,false');
+      expect(lines[2]).toBe('"Dr.","Doctor",true,false');
     });
 
     it('should escape quotes in values', () => {
@@ -143,8 +143,8 @@ Line 2","Replacement",false`;
       ];
 
       const csv = LexiconCSV.generate(rules);
-      // Expected: "He said ""Hello""","Greeting",false
-      expect(csv).toContain('"He said ""Hello""","Greeting",false');
+      // Expected: "He said ""Hello""","Greeting",false,false
+      expect(csv).toContain('"He said ""Hello""","Greeting",false,false');
     });
 
     it('should handle newlines in generated CSV', () => {
@@ -153,7 +153,7 @@ Line 2","Replacement",false`;
         ];
         const csv = LexiconCSV.generate(rules);
         // Note: The new parser/generator might handle this differently, but for now we expect a single string containing the newline
-        expect(csv).toContain('"Line 1\nLine 2","R",false');
+        expect(csv).toContain('"Line 1\nLine 2","R",false,false');
     });
   });
 });

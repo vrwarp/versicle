@@ -35,7 +35,8 @@ export const LexiconCSV = {
                  original: row[0],
                  replacement: row[1],
                  // Default to false if missing
-                 isRegex: row[2]?.toLowerCase() === 'true' || row[2] === '1'
+                 isRegex: row[2]?.toLowerCase() === 'true' || row[2] === '1',
+                 applyBeforeGlobal: row[3]?.toLowerCase() === 'true' || row[3] === '1'
              });
         }
     }
@@ -45,14 +46,14 @@ export const LexiconCSV = {
   /**
    * Generates a CSV string from an array of LexiconRule objects.
    *
-   * Outputs a header row "original,replacement,isRegex".
+   * Outputs a header row "original,replacement,isRegex,applyBeforeGlobal".
    * Automatically escapes quotes by doubling them and wraps all string fields in quotes.
    *
    * @param rules - The array of lexicon rules to serialize.
    * @returns A string representing the CSV content.
    */
   generate(rules: LexiconRule[]): string {
-    const header = "original,replacement,isRegex";
+    const header = "original,replacement,isRegex,applyBeforeGlobal";
     if (rules.length === 0) {
         return header;
     }
@@ -60,11 +61,12 @@ export const LexiconCSV = {
     const rows = rules.map(r => [
         r.original || '',
         r.replacement || '',
-        !!r.isRegex
+        !!r.isRegex,
+        !!r.applyBeforeGlobal
     ]);
 
     const csv = Papa.unparse(rows, {
-        quotes: [true, true, false],
+        quotes: [true, true, false, false],
         newline: '\n'
     });
 

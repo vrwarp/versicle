@@ -8,7 +8,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 // Mock DBService
 vi.mock('../../db/DBService', () => ({
   dbService: {
-    getReadingHistory: vi.fn()
+    getReadingHistoryEntry: vi.fn()
   }
 }));
 
@@ -37,13 +37,13 @@ describe('ReadingHistoryPanel', () => {
   });
 
   it('renders "Loading history..." initially', () => {
-    (dbService.getReadingHistory as any).mockResolvedValue([]);
+    (dbService.getReadingHistoryEntry as any).mockResolvedValue(undefined);
     render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
     expect(screen.getByText('Loading history...')).toBeInTheDocument();
   });
 
   it('renders "No reading history recorded yet." when history is empty', async () => {
-    (dbService.getReadingHistory as any).mockResolvedValue([]);
+    (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions: [], readRanges: [] });
     render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
 
     await waitFor(() => {
@@ -51,9 +51,9 @@ describe('ReadingHistoryPanel', () => {
     });
   });
 
-  it('correctly displays chapter titles based on book.spine.get', async () => {
-    const historyRanges = ['epubcfi(/6/14!/4/2/1:0)'];
-    (dbService.getReadingHistory as any).mockResolvedValue(historyRanges);
+  it('correctly displays chapter titles based on sessions', async () => {
+    const sessions = [{ cfiRange: 'epubcfi(/6/14!/4/2/1:0)', timestamp: Date.now() }];
+    (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions, readRanges: [] });
 
     // Mock spine.get to return a section
     const mockSection = { href: 'chapter1.html', index: 0 };
@@ -72,8 +72,8 @@ describe('ReadingHistoryPanel', () => {
   });
 
   it('falls back to "Chapter X" if TOC label is missing', async () => {
-    const historyRanges = ['epubcfi(/6/16!/4/2/1:0)'];
-    (dbService.getReadingHistory as any).mockResolvedValue(historyRanges);
+    const sessions = [{ cfiRange: 'epubcfi(/6/16!/4/2/1:0)', timestamp: Date.now() }];
+    (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions, readRanges: [] });
 
     // Mock spine.get to return a section
     const mockSection = { href: 'chapter2.html', index: 1 };
@@ -88,9 +88,24 @@ describe('ReadingHistoryPanel', () => {
     });
   });
 
+  it('falls back to legacy readRanges if sessions are missing', async () => {
+    const readRanges = ['epubcfi(/6/16!/4/2/1:0)'];
+    (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions: [], readRanges });
+
+    const mockSection = { href: 'chapter2.html', index: 1 };
+    mockBook.spine.get.mockReturnValue(mockSection);
+    mockBook.navigation.get.mockReturnValue({ label: 'Legacy Chapter' });
+
+    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Legacy Chapter')).toBeInTheDocument();
+    });
+  });
+
   it('handles errors in book.spine.get gracefully', async () => {
-    const historyRanges = ['epubcfi(/6/18!/4/2/1:0)'];
-    (dbService.getReadingHistory as any).mockResolvedValue(historyRanges);
+    const sessions = [{ cfiRange: 'epubcfi(/6/18!/4/2/1:0)', timestamp: Date.now() }];
+    (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions, readRanges: [] });
 
     mockBook.spine.get.mockImplementation(() => {
         throw new Error("Invalid CFI");
@@ -103,9 +118,10 @@ describe('ReadingHistoryPanel', () => {
     });
   });
 
-  it('calls onNavigate when an item is clicked', async () => {
-      const historyRanges = ['epubcfi(/6/14!/4/2/1:0)'];
-      (dbService.getReadingHistory as any).mockResolvedValue(historyRanges);
+  it('calls onNavigate with correct CFI when an item is clicked', async () => {
+      const cfi = 'epubcfi(/6/14!/4/2/1:0)';
+      const sessions = [{ cfiRange: cfi, timestamp: Date.now() }];
+      (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions, readRanges: [] });
 
       const mockSection = { href: 'chapter1.html', index: 0 };
       mockBook.spine.get.mockReturnValue(mockSection);
@@ -119,6 +135,30 @@ describe('ReadingHistoryPanel', () => {
       });
 
       fireEvent.click(screen.getByText('Chapter One'));
-      expect(onNavigate).toHaveBeenCalledWith('epubcfi(/6/14!/4/2/1:0)');
+      // Since it's not a range, it falls back to the original CFI
+      expect(onNavigate).toHaveBeenCalledWith(cfi);
+  });
+
+  it('navigates to the end of the session range', async () => {
+      // proper range
+      const rangeCfi = 'epubcfi(/6/14!/4/2,/1:0,/1:10)';
+      const expectedEnd = 'epubcfi(/6/14!/4/2/1:10)';
+
+      const sessions = [{ cfiRange: rangeCfi, timestamp: Date.now() }];
+      (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions, readRanges: [] });
+
+      const mockSection = { href: 'chapter1.html', index: 0 };
+      mockBook.spine.get.mockReturnValue(mockSection);
+      mockBook.navigation.get.mockReturnValue({ label: 'Chapter One' });
+
+      const onNavigate = vi.fn();
+      render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={onNavigate} />);
+
+      await waitFor(() => {
+          expect(screen.getByText('Chapter One')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('Chapter One'));
+      expect(onNavigate).toHaveBeenCalledWith(expectedEnd);
   });
 });

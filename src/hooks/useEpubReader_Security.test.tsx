@@ -9,6 +9,7 @@ vi.mock('../db/DBService', () => ({
     getBook: vi.fn().mockResolvedValue({ file: new ArrayBuffer(0), metadata: {} }),
     getLocations: vi.fn().mockResolvedValue(null),
     saveLocations: vi.fn().mockResolvedValue(undefined),
+    getReadingHistory: vi.fn().mockResolvedValue([]),
   },
 }));
 

@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Modal, ModalContent } from './ui/Modal';
-import { Button } from './ui/Button';
 import { dbService } from '../db/DBService';
 import type { ReadingListEntry } from '../types/db';
-import { ArrowUpDown, X } from 'lucide-react';
+import { ArrowUpDown } from 'lucide-react';
 
 interface ReadingListDialogProps {
     open: boolean;
@@ -50,9 +49,6 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
             <ModalContent className="max-w-4xl h-[80vh] flex flex-col p-0 overflow-hidden sm:rounded-lg">
                 <div className="flex items-center justify-between p-4 border-b">
                     <h2 className="text-xl font-bold">Reading List</h2>
-                    <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
-                        <X className="w-5 h-5" />
-                    </Button>
                 </div>
 
                 <div className="flex-1 overflow-auto p-4">

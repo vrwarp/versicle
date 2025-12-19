@@ -7,6 +7,15 @@ export default {
   darkMode: 'class', // Enable class-based dark mode
   theme: {
     extend: {
+      keyframes: {
+        breathing: {
+          '0%, 100%': { opacity: '0.2' },
+          '50%': { opacity: '1' },
+        }
+      },
+      animation: {
+        breathing: 'breathing 4s ease-in-out infinite',
+      },
       colors: {
         background: 'var(--background)',
         foreground: 'var(--foreground)',

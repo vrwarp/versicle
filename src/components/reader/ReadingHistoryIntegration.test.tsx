@@ -9,6 +9,7 @@ import { dbService } from '../../db/DBService';
 vi.mock('../../db/DBService', () => ({
   dbService: {
     getReadingHistory: vi.fn(),
+    getReadingHistoryEntry: vi.fn(),
     updateReadingHistory: vi.fn().mockResolvedValue(undefined),
     saveProgress: vi.fn(),
     getBook: vi.fn(),
@@ -23,7 +24,10 @@ describe('ReadingHistory Integration', () => {
     it('loads and displays reading history in panel', async () => {
         const ranges = ['epubcfi(/6/14!/4/2/1:0)'];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getReadingHistory as any).mockResolvedValue(ranges);
+        (dbService.getReadingHistoryEntry as any).mockResolvedValue({
+            sessions: [],
+            readRanges: ranges
+        });
 
         render(
            <ReadingHistoryPanel
@@ -44,14 +48,14 @@ describe('ReadingHistory Integration', () => {
     });
 
     it('refreshes history when trigger changes', async () => {
-        const initialRanges = ['epubcfi(/6/14!/4/2/1:0)'];
-        const updatedRanges = ['epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/1:10)'];
+        const initialEntry = { sessions: [], readRanges: ['epubcfi(/6/14!/4/2/1:0)'] };
+        const updatedEntry = { sessions: [], readRanges: ['epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/1:10)'] };
 
         // First call returns initial
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getReadingHistory as any)
-            .mockResolvedValueOnce(initialRanges)
-            .mockResolvedValueOnce(updatedRanges);
+        (dbService.getReadingHistoryEntry as any)
+            .mockResolvedValueOnce(initialEntry)
+            .mockResolvedValueOnce(updatedEntry);
 
         const { rerender } = render(
            <ReadingHistoryPanel
@@ -80,12 +84,12 @@ describe('ReadingHistory Integration', () => {
              expect(screen.getByText('epubcfi(/6/14!/4/2/1:10)')).toBeInTheDocument();
         });
 
-        expect(dbService.getReadingHistory).toHaveBeenCalledTimes(2);
+        expect(dbService.getReadingHistoryEntry).toHaveBeenCalledTimes(2);
     });
 
     it('handles empty history gracefully', async () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getReadingHistory as any).mockResolvedValue([]);
+        (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions: [], readRanges: [] });
 
         render(
             <ReadingHistoryPanel
@@ -102,7 +106,7 @@ describe('ReadingHistory Integration', () => {
 
     it('handles database fetch error gracefully', async () => {
          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         (dbService.getReadingHistory as any).mockRejectedValue(new Error('Fetch failed'));
+         (dbService.getReadingHistoryEntry as any).mockRejectedValue(new Error('Fetch failed'));
 
          const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -135,7 +139,7 @@ describe('ReadingHistory Integration', () => {
          // Current implementation does NOT debounce the effect, so it should call twice.
 
          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         (dbService.getReadingHistory as any).mockResolvedValue(['range1']);
+         (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions: [], readRanges: ['range1'] });
 
          const { rerender } = render(
             <ReadingHistoryPanel
@@ -150,7 +154,7 @@ describe('ReadingHistory Integration', () => {
          rerender(<ReadingHistoryPanel bookId="book1" rendition={null} onNavigate={vi.fn()} trigger={2} />);
 
          await waitFor(() => {
-             expect(dbService.getReadingHistory).toHaveBeenCalledTimes(3);
+             expect(dbService.getReadingHistoryEntry).toHaveBeenCalledTimes(3);
          });
     });
 });

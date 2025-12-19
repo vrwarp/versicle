@@ -92,6 +92,35 @@ def test_journey_lexicon(page: Page):
 
     utils.capture_screenshot(page, "lexicon_02_rule_added")
 
+    # --- Test Priority Toggle (Book Scope) ---
+    print("Testing Priority Toggle (Book Scope)...")
+
+    # Switch to Book Scope
+    page.get_by_role("button", name="This Book").click()
+
+    # Add Rule
+    page.get_by_test_id("lexicon-add-rule-btn").click()
+
+    # Verify Priority Checkbox exists
+    priority_checkbox = page.get_by_test_id("lexicon-priority-checkbox")
+    expect(priority_checkbox).to_be_visible()
+
+    # Fill Rule
+    page.get_by_test_id("lexicon-input-original").fill("PriorityWord")
+    page.get_by_test_id("lexicon-input-replacement").fill("Replaced")
+    priority_checkbox.check()
+
+    # Save Rule
+    # Scroll if needed
+    page.get_by_test_id("lexicon-list-container").evaluate("el => el.scrollTop = el.scrollHeight")
+    page.get_by_test_id("lexicon-save-rule-btn").click()
+
+    # Verify Badge
+    expect(page.get_by_test_id("lexicon-priority-badge")).to_be_visible()
+    expect(page.get_by_text("Pre", exact=True)).to_be_visible()
+
+    utils.capture_screenshot(page, "lexicon_03_priority_rule_added")
+
     # Close Dialog
     print("Closing Lexicon...")
     # Attempting to click the close button by searching for the "Close" text if test-id fails,

@@ -74,6 +74,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
       replacement: editingRule.replacement,
       isRegex: editingRule.isRegex,
       bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+      applyBeforeGlobal: editingRule.applyBeforeGlobal,
       order
     });
 
@@ -114,6 +115,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
           replacement: editingRule.replacement,
           isRegex: editingRule.isRegex,
           bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+          applyBeforeGlobal: editingRule.applyBeforeGlobal,
           created: 0,
           order: 0
         } as LexiconRule];
@@ -131,6 +133,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         replacement: editingRule.replacement,
         isRegex: editingRule.isRegex,
         bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+        applyBeforeGlobal: editingRule.applyBeforeGlobal,
         created: 0,
         order: idx >= 0 ? tempRules[idx].order : tempRules.length
       } as LexiconRule;
@@ -202,7 +205,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                       original: r.original,
                       replacement: r.replacement,
                       isRegex: r.isRegex,
-                      bookId: scope === 'book' ? (currentBookId || undefined) : undefined
+                      bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+                      applyBeforeGlobal: r.applyBeforeGlobal
                   });
               }
               loadRules();
@@ -283,16 +287,30 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     />
                                </div>
                                <div className="flex items-center justify-between gap-2">
-                                   <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                                       <input
-                                           data-testid="lexicon-regex-checkbox"
-                                           type="checkbox"
-                                           checked={editingRule.isRegex || false}
-                                           onChange={e => setEditingRule({...editingRule, isRegex: e.target.checked})}
-                                           className="rounded border-gray-300 dark:border-gray-600"
-                                       />
-                                       Regex
-                                   </label>
+                                   <div className="flex gap-4">
+                                        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                            <input
+                                                data-testid="lexicon-regex-checkbox"
+                                                type="checkbox"
+                                                checked={editingRule.isRegex || false}
+                                                onChange={e => setEditingRule({...editingRule, isRegex: e.target.checked})}
+                                                className="rounded border-gray-300 dark:border-gray-600"
+                                            />
+                                            Regex
+                                        </label>
+                                        {scope === 'book' && (
+                                            <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400" title="Apply this rule before global rules">
+                                                <input
+                                                    data-testid="lexicon-priority-checkbox"
+                                                    type="checkbox"
+                                                    checked={editingRule.applyBeforeGlobal || false}
+                                                    onChange={e => setEditingRule({...editingRule, applyBeforeGlobal: e.target.checked})}
+                                                    className="rounded border-gray-300 dark:border-gray-600"
+                                                />
+                                                High Priority
+                                            </label>
+                                        )}
+                                   </div>
                                    <div className="flex gap-2">
                                         <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
                                         <button data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
@@ -305,6 +323,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                            <div className="flex-1 grid grid-cols-2 gap-4">
                                <div className="flex items-center gap-2">
                                    {rule.isRegex && <span data-testid="lexicon-regex-badge" className="text-[10px] uppercase font-bold text-purple-600 border border-purple-200 bg-purple-50 px-1 rounded">Re</span>}
+                                   {rule.applyBeforeGlobal && <span data-testid="lexicon-priority-badge" className="text-[10px] uppercase font-bold text-orange-600 border border-orange-200 bg-orange-50 px-1 rounded">Pre</span>}
                                    <span className="font-medium text-sm text-gray-900 dark:text-gray-100">{rule.original}</span>
                                </div>
                                <span className="text-sm text-gray-500 dark:text-gray-400">{rule.replacement}</span>
@@ -365,16 +384,30 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                         />
                    </div>
                    <div className="flex items-center justify-between gap-2">
-                       <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                           <input
-                               data-testid="lexicon-regex-checkbox"
-                               type="checkbox"
-                               checked={editingRule?.isRegex || false}
-                               onChange={e => setEditingRule({...editingRule, isRegex: e.target.checked})}
-                               className="rounded border-gray-300 dark:border-gray-600"
-                           />
-                           Regex
-                       </label>
+                       <div className="flex gap-4">
+                           <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                               <input
+                                   data-testid="lexicon-regex-checkbox"
+                                   type="checkbox"
+                                   checked={editingRule?.isRegex || false}
+                                   onChange={e => setEditingRule({...editingRule, isRegex: e.target.checked})}
+                                   className="rounded border-gray-300 dark:border-gray-600"
+                               />
+                               Regex
+                           </label>
+                           {scope === 'book' && (
+                                <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400" title="Apply this rule before global rules">
+                                    <input
+                                        data-testid="lexicon-priority-checkbox"
+                                        type="checkbox"
+                                        checked={editingRule?.applyBeforeGlobal || false}
+                                        onChange={e => setEditingRule({...editingRule, applyBeforeGlobal: e.target.checked})}
+                                        className="rounded border-gray-300 dark:border-gray-600"
+                                    />
+                                    High Priority
+                                </label>
+                           )}
+                       </div>
                        <div className="flex gap-2">
                             <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
                             <button data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>

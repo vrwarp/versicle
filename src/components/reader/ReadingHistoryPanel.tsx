@@ -16,6 +16,8 @@ interface HistoryItem {
     label: string;
     percentage: number;
     subLabel: string;
+    timestamp: number;
+    targetCfi: string;
 }
 
 export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavigate, trigger = 0 }) => {
@@ -30,72 +32,101 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
     const loadHistory = async () => {
         setLoading(true);
         try {
-            const ranges = await dbService.getReadingHistory(bookId);
+            const entry = await dbService.getReadingHistoryEntry(bookId);
             const loadedItems: HistoryItem[] = [];
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const book = rendition ? (rendition as any).book : null;
 
-            for (const range of ranges) {
-                let label = "Reading Segment";
-                let percentage = 0;
-                let subLabel = range;
+            if (entry) {
+                const processItem = (range: string, timestamp: number = 0) => {
+                    let label = "Reading Segment";
+                    let percentage = 0;
+                    let subLabel = range;
+                    let targetCfi = range;
 
-                if (book) {
-                    // Try to get percentage
+                    // Parse CFI to get end point
                     const parsed = parseCfiRange(range);
                     if (parsed) {
-                        // Use start of range for percentage
-                        // Check if locations are available
-                        if (book.locations && book.locations.length() > 0) {
-                             percentage = book.locations.percentageFromCfi(parsed.fullStart);
+                        targetCfi = parsed.fullEnd; // Navigate to end of session
+                    }
+
+                    if (book) {
+                        // Try to get percentage
+                        if (parsed) {
+                            // Use start of range for percentage (to show where it was in the book)
+                            // Check if locations are available
+                            if (book.locations && book.locations.length() > 0) {
+                                percentage = book.locations.percentageFromCfi(parsed.fullStart);
+                            }
+                        }
+
+                        // Try to get Chapter Title
+                        let section;
+                        try {
+                            section = book.spine.get(range);
+                        } catch (e) {
+                            console.warn("Failed to get section from CFI", e);
+                        }
+
+                        if (section) {
+                            let title = "";
+                            // Try to find label in TOC
+                            if (section.href) {
+                                // book.navigation.get() expects the href as it appears in the TOC
+                                const navItem = book.navigation.get(section.href);
+                                if (navItem && navItem.label) {
+                                    title = navItem.label.trim();
+                                }
+                            }
+
+                            if (title) {
+                                label = title;
+                            } else {
+                                // Fallback to generic Chapter label
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const spinePos = (section as any).index ?? book.spine.items.indexOf(section);
+                                label = spinePos >= 0 ? `Chapter ${spinePos + 1}` : 'Unknown Chapter';
+                            }
+                            // Add percentage to subLabel
+                            subLabel = `${(percentage * 100).toFixed(1)}% completed`;
+                        } else {
+                            label = `Segment at ${(percentage * 100).toFixed(1)}%`;
+                            subLabel = range;
                         }
                     }
 
-                    // Try to get Chapter Title
-                    let section;
-                    try {
-                        section = book.spine.get(range);
-                    } catch (e) {
-                        console.warn("Failed to get section from CFI", e);
+                    if (timestamp > 0) {
+                        const date = new Date(timestamp);
+                        subLabel = `${date.toLocaleDateString()} ${date.toLocaleTimeString()} • ${subLabel}`;
                     }
 
-                    if (section) {
-                         let title = "";
-                         // Try to find label in TOC
-                         if (section.href) {
-                              // book.navigation.get() expects the href as it appears in the TOC
-                              const navItem = book.navigation.get(section.href);
-                              if (navItem && navItem.label) {
-                                  title = navItem.label.trim();
-                              }
-                         }
+                    return {
+                        range,
+                        label,
+                        percentage,
+                        subLabel,
+                        timestamp,
+                        targetCfi
+                    };
+                };
 
-                         if (title) {
-                             label = title;
-                         } else {
-                             // Fallback to generic Chapter label
-                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                             const spinePos = (section as any).index ?? book.spine.items.indexOf(section);
-                             label = spinePos >= 0 ? `Chapter ${spinePos + 1}` : 'Unknown Chapter';
-                         }
-                         subLabel = `${(percentage * 100).toFixed(1)}% completed`;
-                    } else {
-                        label = `Segment at ${(percentage * 100).toFixed(1)}%`;
-                        subLabel = range;
+                // Prefer sessions if available
+                if (entry.sessions && entry.sessions.length > 0) {
+                    for (const session of entry.sessions) {
+                        loadedItems.push(processItem(session.cfiRange, session.timestamp));
                     }
+                    // Sort by timestamp descending (newest first)
+                    loadedItems.sort((a, b) => b.timestamp - a.timestamp);
+                } else if (entry.readRanges && entry.readRanges.length > 0) {
+                    // Fallback to legacy ranges
+                    for (const range of entry.readRanges) {
+                        loadedItems.push(processItem(range));
+                    }
+                    // Sort by percentage (legacy behavior)
+                    loadedItems.sort((a, b) => a.percentage - b.percentage);
                 }
-
-                loadedItems.push({
-                    range,
-                    label,
-                    percentage,
-                    subLabel
-                });
             }
-
-            // Sort by percentage/location
-            loadedItems.sort((a, b) => a.percentage - b.percentage);
 
             setItems(loadedItems);
         } catch (e) {
@@ -124,7 +155,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                     <li
                         key={idx}
                         className="p-3 hover:bg-muted cursor-pointer transition-colors"
-                        onClick={() => onNavigate(item.range)}
+                        onClick={() => onNavigate(item.targetCfi)}
                         role="button"
                         aria-label={`Jump to ${item.label}`}
                     >
