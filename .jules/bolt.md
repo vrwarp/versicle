@@ -5,3 +5,7 @@
 ## 2024-05-24 - [Zustand Selectors & Hidden Components]
 **Learning:** React components using `useStore()` without selectors will re-render on ANY state change, even if they return `null` (hidden) or don't use the changed data. This is critical for components like `GestureOverlay` that are often hidden but subscribed to high-frequency stores.
 **Action:** Always use granular selectors (e.g., `useStore(useShallow(state => ({ ... })))`) to prevent unnecessary re-renders, especially in components that subscribe to stores with frequent updates like `useReaderStore` (scroll position) or `useTTSStore` (playback progress).
+
+## 2024-05-25 - [Audio Metadata Debouncing]
+**Learning:** `AudioPlayerService` triggers a Native Bridge call (`MediaSession.setMetadata`) for *every* sentence during playback, even when metadata (Title/Author) hasn't changed. This causes unnecessary IPC overhead and battery drain.
+**Action:** Memoize the last set metadata and only call `setMetadata` when the content (Title/Author/Artwork) actually changes.

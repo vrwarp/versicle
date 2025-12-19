@@ -7,7 +7,7 @@ import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { LexiconService } from './LexiconService';
-import { MediaSessionManager } from './MediaSessionManager';
+import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
 
 interface OperationState {
@@ -76,6 +76,7 @@ export class AudioPlayerService {
 
   private backgroundAudio: BackgroundAudio;
   private backgroundAudioMode: BackgroundAudioMode = 'silence';
+  private lastMetadata: MediaSessionMetadata | null = null;
 
   private constructor() {
     this.backgroundAudio = new BackgroundAudio();
@@ -262,12 +263,19 @@ export class AudioPlayerService {
   private updateMediaSessionMetadata() {
       if (this.queue[this.currentIndex]) {
           const item = this.queue[this.currentIndex];
-          this.mediaSessionManager.setMetadata({
+          const newMetadata: MediaSessionMetadata = {
               title: item.title || 'Chapter Text',
               artist: item.author || 'Versicle',
               album: item.bookTitle || '',
               artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
-          });
+          };
+
+          if (this.lastMetadata && JSON.stringify(this.lastMetadata) === JSON.stringify(newMetadata)) {
+              return;
+          }
+
+          this.mediaSessionManager.setMetadata(newMetadata);
+          this.lastMetadata = newMetadata;
       }
   }
 
