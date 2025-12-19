@@ -315,11 +315,21 @@ The Screen Curtain is a dedicated sub-mode for battery conservation and pocket s
 
 -   **Overlay Z-Index:** Set `UnifiedInputController` overlay z-index to 30 (below Audio Panel/HUD) to ensure UI controls remain accessible in Listening Mode unless the Screen Curtain (z-100) is active.
 
-### Phase 3: Visual Polish & Transitions
+-   **UnifiedInputController Enhancements:**
+    -   Integrated Battery API for Peek Mode status.
+    -   Implemented custom timeout logic for Peek Mode (2s duration).
+    -   Added cleanup for event listeners to prevent memory leaks.
 
--   **CSS Transitions:** Implement CSS transitions for `opacity`, `border-color`, and `box-shadow` on the main container. The switch between states should take ~300ms to feel organic.
+### Phase 3: Visual Polish & Transitions (COMPLETED)
 
--   **Curtain Component:** Build the `ScreenCurtain` component as a high z-index overlay that mounts conditionally. Use the Fullscreen API where possible to hide the status bar for true blackness.
+-   **CSS Transitions:** Implemented CSS transitions for `opacity` on the main reader container. The switch between states takes 300ms.
+    -   Added `breathing` animation in `tailwind.config.js` for the border pulse.
+    -   Added text dimming (opacity 0.85) in `ReaderView.tsx`.
+
+-   **Curtain Component:** Built the `ScreenCurtain` logic directly into `UnifiedInputController` as a high z-index overlay (`z-[100]`) with black background.
+    -   Implemented "Peek Mode" (Single Tap) showing Time, Chapter Title, and Battery.
+    -   Integrated Fullscreen API to hide status bars when Curtain is active.
+    -   Added central faint Play/Pause glyph as a "Flow Mode" watermark.
 
 8\. Accessibility Considerations
 --------------------------------

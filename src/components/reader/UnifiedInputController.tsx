@@ -7,11 +7,12 @@ import {
     Volume1, Volume2,
     ChevronLeft, ChevronRight,
     Rewind, FastForward,
-    Moon
+    Battery
 } from 'lucide-react';
 
 interface UnifiedInputControllerProps {
     rendition: Rendition | null;
+    currentChapterTitle: string;
     onPrev: () => void;
     onNext: () => void;
     onToggleHUD: () => void;
@@ -19,6 +20,7 @@ interface UnifiedInputControllerProps {
 
 export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
     rendition,
+    currentChapterTitle,
     onPrev,
     onNext,
     onToggleHUD
@@ -34,6 +36,64 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
     })));
 
     const [isCurtainActive, setIsCurtainActive] = useState(false);
+    const [peekMode, setPeekMode] = useState(false);
+    const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
+
+    // Battery Monitor
+    useEffect(() => {
+        let batteryManager: any = null;
+        const updateBattery = () => {
+             if (batteryManager) {
+                 setBatteryLevel(Math.round(batteryManager.level * 100));
+             }
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nav = navigator as any;
+        if (nav.getBattery) {
+            nav.getBattery().then((battery: any) => {
+                batteryManager = battery;
+                updateBattery();
+                battery.addEventListener('levelchange', updateBattery);
+            });
+        }
+
+        return () => {
+            if (batteryManager) {
+                batteryManager.removeEventListener('levelchange', updateBattery);
+            }
+        };
+    }, []);
+
+    // Fullscreen Toggle for Curtain
+    useEffect(() => {
+        if (isCurtainActive) {
+            document.documentElement.requestFullscreen().catch(() => {
+                // Ignore errors if fullscreen is denied
+            });
+        } else {
+            if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+        }
+    }, [isCurtainActive]);
+
+    const peekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handlePeek = () => {
+        setPeekMode(true);
+        if (peekTimeoutRef.current) clearTimeout(peekTimeoutRef.current);
+        peekTimeoutRef.current = setTimeout(() => {
+            setPeekMode(false);
+            peekTimeoutRef.current = null;
+        }, 2000);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (peekTimeoutRef.current) clearTimeout(peekTimeoutRef.current);
+        };
+    }, []);
 
     // Feedback state
     const [icon, setIcon] = useState<React.ReactNode | null>(null);
@@ -161,7 +221,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
                 const x = touchEnd.x;
 
                 if (isCurtainActive) {
-                    showFeedback(<Moon size={64} />, "Curtain Active");
+                    handlePeek();
                     return;
                 }
 
@@ -188,6 +248,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
             }, 300);
 
         } else if (absDx > SWIPE_THRESHOLD || absDy > SWIPE_THRESHOLD) {
+             // Gestures pass through curtain
              if (absDx > absDy) {
                  if (dx > 0) { // Right Swipe (Left to Right) -> Prev
                      // However, standard is Swipe Right -> Go Back (Prev)
@@ -228,16 +289,32 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
             onContextMenu={(e) => e.preventDefault()}
         >
              {!isCurtainActive && (
-                 <div data-testid="flow-mode-breathing-border" className="absolute inset-0 border-4 border-primary/30 animate-pulse pointer-events-none" />
+                <>
+                 <div data-testid="flow-mode-breathing-border" className="absolute inset-0 border-[6px] border-primary/40 animate-breathing pointer-events-none" />
+                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.05]">
+                    <Pause className="w-64 h-64 text-foreground" />
+                 </div>
+                </>
              )}
 
-             {isCurtainActive && (
-                 <div className="text-neutral-500 text-sm font-medium pointer-events-none">
-                     Double tap to unlock
+             {isCurtainActive && peekMode && (
+                 <div className="absolute inset-0 flex flex-col items-center justify-center text-white animate-in fade-in duration-300 pointer-events-none">
+                     <div className="text-6xl font-bold mb-4">
+                         {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                     </div>
+                     <div className="text-xl mb-8 max-w-[80%] text-center line-clamp-2">
+                         {currentChapterTitle}
+                     </div>
+                     {batteryLevel !== null && (
+                         <div className="flex items-center gap-2 text-lg text-neutral-400">
+                             <Battery className="w-6 h-6" />
+                             <span>{batteryLevel}%</span>
+                         </div>
+                     )}
                  </div>
              )}
 
-             {icon && (
+             {icon && !isCurtainActive && (
                 <div key={iconKey} className="absolute inset-0 flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300 pointer-events-none z-[80]">
                   <div className="bg-white/20 p-8 rounded-full backdrop-blur-sm text-white drop-shadow-lg mb-4">
                     {icon}

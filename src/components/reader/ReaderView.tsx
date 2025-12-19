@@ -526,6 +526,7 @@ export const ReaderView: React.FC = () => {
       {/* Unified Input Controller (Flow Mode) */}
       <UnifiedInputController
           rendition={rendition}
+          currentChapterTitle={currentChapterTitle || ''}
           onPrev={handlePrev}
           onNext={handleNext}
           onToggleHUD={() => setImmersiveMode(!immersiveMode)}
@@ -758,7 +759,7 @@ export const ReaderView: React.FC = () => {
 
          {/* Reader Area */}
          <div className="flex-1 relative min-w-0 flex flex-col items-center">
-            <div data-testid="reader-iframe-container" ref={viewerRef} className="w-full max-w-2xl h-full overflow-hidden px-6 md:px-8" />
+            <div data-testid="reader-iframe-container" ref={viewerRef} className={`w-full max-w-2xl h-full overflow-hidden px-6 md:px-8 transition-opacity duration-300 ${isPlaying ? 'opacity-85' : 'opacity-100'}`} />
 
              <AnnotationPopover
                 bookId={id || ''}
