@@ -28,10 +28,16 @@ const BLOCK_TAGS = new Set([
  * @param rendition - The current epubjs Rendition object.
  * @returns An array of SentenceNode objects representing the sentences in the current view.
  */
-export const extractSentences = (rendition: Rendition): SentenceNode[] => {
+export const extractSentences = (source: Rendition | any): SentenceNode[] => {
     const sentences: SentenceNode[] = [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const contents = (rendition as any).getContents()[0];
+    let contents: any;
+
+    if (source && typeof source.getContents === 'function') {
+        contents = (source as Rendition).getContents()[0];
+    } else {
+        contents = source;
+    }
 
     if (!contents) return [];
 

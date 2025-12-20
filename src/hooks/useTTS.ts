@@ -33,6 +33,11 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
   } = useTTSStore();
 
   const currentChapterTitle = useReaderStore(state => state.currentChapterTitle);
+  const currentChapterTitleRef = useRef(currentChapterTitle);
+
+  useEffect(() => {
+      currentChapterTitleRef.current = currentChapterTitle;
+  }, [currentChapterTitle]);
 
   const [sentences, setSentences] = useState<SentenceNode[]>([]);
   const player = AudioPlayerService.getInstance();
@@ -47,16 +52,23 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
   useEffect(() => {
     if (!rendition) return;
 
-    const loadSentences = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const loadSentences = (contents?: any) => {
        try {
            // Check if chapter has changed
            let currentHref: string | undefined;
-           try {
-               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-               const currentLocation = (rendition as any).currentLocation();
-               currentHref = currentLocation?.start?.href;
-           } catch (err) {
-               console.warn("[TTS] Could not get current location", err);
+
+           // Try to get href from contents if available
+           if (contents && contents.section && contents.section.href) {
+                currentHref = contents.section.href;
+           } else {
+               try {
+                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                   const currentLocation = (rendition as any).currentLocation();
+                   currentHref = currentLocation?.start?.href;
+               } catch (err) {
+                   console.warn("[TTS] Could not get current location", err);
+               }
            }
 
            // If we have loaded this chapter already, don't reload queue
@@ -69,9 +81,11 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
                lastLoadedHref.current = currentHref;
            }
 
-           const extracted = extractSentences(rendition);
+           const source = contents || rendition;
+           const extracted = extractSentences(source);
            setSentences(extracted);
 
+           const title = currentChapterTitleRef.current || "Chapter";
            let queue: TTSQueueItem[] = [];
 
            if (extracted.length === 0) {
@@ -80,7 +94,7 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
                queue.push({
                    text: randomMessage,
                    cfi: null,
-                   title: currentChapterTitle || "Empty Chapter",
+                   title: title || "Empty Chapter",
                    isPreroll: true // Treat as system message
                });
            } else {
@@ -94,7 +108,6 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
            if (prerollEnabled && extracted.length > 0) {
                // Calculate word count
                const wordCount = extracted.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
-               const title = currentChapterTitle || "Chapter";
 
                const prerollText = player.generatePreroll(title, wordCount, rate);
 
@@ -116,8 +129,15 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
        }
     };
 
-    rendition.on('rendered', loadSentences);
-    rendition.on('relocated', loadSentences);
+    // Use content hook to ensure loading happens even in background
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onContent = (contents: any) => loadSentences(contents);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (rendition.hooks.content as any).register(onContent);
+
+    // Keep relocated for page turns/checking location updates
+    const onRelocated = () => loadSentences();
+    rendition.on('relocated', onRelocated);
 
     // Also try immediately if already rendered or if the book is ready
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,10 +148,18 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
     }
 
     return () => {
+        // Cleanup
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rendition as any).off('rendered', loadSentences);
+        if ((rendition.hooks.content as any).deregister) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (rendition.hooks.content as any).deregister(onContent);
+        } else if ((rendition.hooks.content as any).remove) {
+             // Fallback if remove is used in this version
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (rendition.hooks.content as any).remove(onContent);
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rendition as any).off('relocated', loadSentences);
+        (rendition as any).off('relocated', onRelocated);
     };
   }, [rendition, player, isReady]); // Removed currentCfi dependency
 

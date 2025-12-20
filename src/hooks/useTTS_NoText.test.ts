@@ -55,7 +55,14 @@ describe('useTTS - No Text Behavior', () => {
             currentLocation: vi.fn().mockReturnValue({ start: { href: 'chapter1.html' } }),
             on: vi.fn(),
             off: vi.fn(),
-            getContents: vi.fn().mockReturnValue([{ document: {} }])
+            getContents: vi.fn().mockReturnValue([{ document: {} }]),
+            hooks: {
+                content: {
+                    register: vi.fn(),
+                    deregister: vi.fn(),
+                    remove: vi.fn()
+                }
+            }
         };
     });
 
@@ -65,9 +72,9 @@ describe('useTTS - No Text Behavior', () => {
 
         renderHook(() => useTTS(mockRendition, true));
 
-        // Trigger the effect (simulate 'rendered' event)
-        const renderCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
-        renderCallback();
+        // Trigger the effect (simulate content hook)
+        const renderCallback = mockRendition.hooks.content.register.mock.calls[0][0];
+        renderCallback({ section: { href: 'chapter2.html' } });
 
         await waitFor(() => {
             expect(mockPlayerInstance.setQueue).toHaveBeenCalled();
@@ -89,8 +96,8 @@ describe('useTTS - No Text Behavior', () => {
          renderHook(() => useTTS(mockRendition, true));
 
          // Trigger
-         const renderCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
-         renderCallback();
+         const renderCallback = mockRendition.hooks.content.register.mock.calls[0][0];
+         renderCallback({ section: { href: 'chapter2.html' } });
 
          await waitFor(() => {
              expect(mockPlayerInstance.setQueue).toHaveBeenCalled();

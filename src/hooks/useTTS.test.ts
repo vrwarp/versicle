@@ -76,6 +76,13 @@ describe('useTTS', () => {
             off: vi.fn(),
             getContents: vi.fn().mockReturnValue([]),
             currentLocation: vi.fn().mockReturnValue({ start: { href: 'chapter1.html' } }),
+            hooks: {
+                content: {
+                    register: vi.fn(),
+                    deregister: vi.fn(),
+                    remove: vi.fn()
+                }
+            }
         };
     });
 
@@ -88,27 +95,30 @@ describe('useTTS', () => {
         expect(mockLoadVoices).toHaveBeenCalled();
     });
 
-    it('should subscribe to rendered event', () => {
+    it('should subscribe to content hook and relocated event', () => {
         renderHook(() => useTTS(mockRendition, true));
-        expect(mockRendition.on).toHaveBeenCalledWith('rendered', expect.any(Function));
+        expect(mockRendition.hooks.content.register).toHaveBeenCalledWith(expect.any(Function));
+        expect(mockRendition.on).toHaveBeenCalledWith('relocated', expect.any(Function));
     });
 
-    it('should extract sentences and update player queue when rendered', () => {
+    it('should extract sentences and update player queue when content is loaded', () => {
         const mockSentences = [{ text: 'Sentence 1', cfi: 'cfi1' }];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (ttsLib.extractSentences as any).mockReturnValue(mockSentences);
 
         const { result } = renderHook(() => useTTS(mockRendition, true));
 
-        // Simulate rendered callback
+        // Simulate content callback
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const loadSentencesCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
+        const loadSentencesCallback = mockRendition.hooks.content.register.mock.calls[0][0];
+
+        const mockContents = { section: { href: 'chapter2.html' } };
 
         act(() => {
-            loadSentencesCallback();
+            loadSentencesCallback(mockContents);
         });
 
-        expect(ttsLib.extractSentences).toHaveBeenCalledWith(mockRendition);
+        expect(ttsLib.extractSentences).toHaveBeenCalledWith(mockContents);
         expect(result.current.sentences).toEqual(mockSentences);
         expect(mockPlayerInstance.setQueue).toHaveBeenCalledWith([
             { text: 'Sentence 1', cfi: 'cfi1' }
@@ -130,12 +140,14 @@ describe('useTTS', () => {
 
         renderHook(() => useTTS(mockRendition, true));
 
-        // Simulate rendered callback
+        // Simulate content callback
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const loadSentencesCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
+        const loadSentencesCallback = mockRendition.hooks.content.register.mock.calls[0][0];
+
+        const mockContents = { section: { href: 'chapter2.html' } };
 
         act(() => {
-            loadSentencesCallback();
+            loadSentencesCallback(mockContents);
         });
 
         expect(mockPlayerInstance.generatePreroll).toHaveBeenCalledWith('Chapter 1', 2, 1.0); // 2 words in "Sentence 1"
