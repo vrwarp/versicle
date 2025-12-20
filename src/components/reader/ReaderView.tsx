@@ -549,8 +549,8 @@ export const ReaderView: React.FC = () => {
 
       {/* Header */}
       {!immersiveMode && (
-        <header className="flex items-center justify-between px-6 md:px-8 py-2 bg-surface shadow-sm z-10">
-            <div className="flex items-center gap-2">
+        <header className="flex items-center justify-between px-2 md:px-8 py-2 bg-surface shadow-sm z-10">
+            <div className="flex items-center gap-1 md:gap-2">
             <Button
                 variant="ghost"
                 size="icon"
@@ -592,10 +592,10 @@ export const ReaderView: React.FC = () => {
                     <Search className="w-5 h-5" />
             </Button>
             </div>
-            <h1 className="text-sm font-medium truncate max-w-xs text-foreground">
+            <h1 className="text-sm font-medium truncate max-w-xs text-foreground hidden md:block">
                 {currentChapterTitle || 'Reading'}
             </h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
             <Sheet open={audioPanelOpen} onOpenChange={setAudioPanelOpen}>
                 <SheetTrigger asChild>
                     <Button
