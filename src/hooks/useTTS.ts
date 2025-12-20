@@ -134,13 +134,16 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
         loadSentences();
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (rendition.hooks.content as any).register(onContentReady);
+    if (rendition.hooks?.content) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (rendition.hooks.content as any).register(onContentReady);
+    }
 
     // Also try immediately if already rendered or if the book is ready
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contents = (rendition as any).getContents();
 
-    if (isReady || (contents.length > 0 && contents[0].document && contents[0].document.body)) {
+    if (isReady || (contents.length > 0 && contents[0]?.document?.body)) {
         loadSentences();
     }
 
@@ -150,7 +153,10 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).off('relocated', loadSentences);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rendition.hooks.content as any).deregister(onContentReady);
+        if (rendition.hooks?.content) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (rendition.hooks.content as any).deregister(onContentReady);
+        }
     };
   }, [rendition, player, isReady]); // Removed currentCfi dependency
 
