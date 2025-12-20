@@ -1,7 +1,6 @@
-import { PiperProcessSupervisor } from './PiperProcessSupervisor';
 
 const blobs: Record<string, Blob> = {};
-const supervisor = new PiperProcessSupervisor();
+let currentWorker: Worker | null = null;
 const CACHE_NAME = 'piper-voices-v1';
 
 // --- Cache API Helpers ---
@@ -111,25 +110,12 @@ export const fetchWithBackoff = async (url: string, retries = 3, delay = 1000): 
   }
 };
 
-/**
- * Checks if the model is currently loaded in the worker.
- * Used internally to determine if we need to restart/init the worker.
- */
-export const isModelLoadedInWorker = async (modelUrl: string): Promise<boolean> => {
-  return new Promise<boolean>((resolve) => {
-    supervisor.send(
-      { kind: "isAlive", modelUrl },
-      (event: MessageEvent) => {
-        if (event.data.kind === "isAlive") {
-          resolve(event.data.isAlive);
-        }
-      },
-      () => resolve(false), // error handler
-      5000 // Short timeout for check
-    );
-  });
-};
-
+function terminateWorker() {
+    if (currentWorker) {
+        currentWorker.terminate();
+        currentWorker = null;
+    }
+}
 
 /**
  * Deletes a model from both memory and persistent storage.
@@ -142,7 +128,7 @@ export const deleteCachedModel = (modelUrl: string, modelConfigUrl: string) => {
   removeFromCache(modelUrl);
   removeFromCache(modelConfigUrl);
 
-  supervisor.terminate();
+  terminateWorker();
 };
 
 /**
@@ -255,48 +241,17 @@ export const piperGenerate = async (
   // Load from cache to memory if needed
   await ensureModelLoaded(modelUrl, modelConfigUrl);
 
-  // Initialize supervisor with worker URL
-  supervisor.init(workerUrl);
-
-  // Validate worker state before starting generation.
-  await new Promise<void>((resolve) => {
-      supervisor.send(
-          { kind: "isAlive", modelUrl },
-          (event) => {
-              if (event.data.kind === 'isAlive') {
-                  if (!event.data.isAlive) {
-                      supervisor.terminate();
-                      supervisor.init(workerUrl);
-                  }
-                  resolve();
-              }
-          },
-          () => {
-              supervisor.terminate();
-              supervisor.init(workerUrl);
-              resolve();
-          },
-          5000
-      )
-  });
-
+  if (!currentWorker) {
+      currentWorker = new Worker(workerUrl);
+  }
 
   return new Promise((resolve, reject) => {
-    supervisor.send(
-      {
-        kind: "init",
-        input,
-        speakerId,
-        blobs,
-        piperPhonemizeJsUrl,
-        piperPhonemizeWasmUrl,
-        piperPhonemizeDataUrl,
-        modelUrl,
-        modelConfigUrl,
-        onnxruntimeUrl,
-        workerUrl
-      },
-      (event: MessageEvent) => {
+    if (!currentWorker) {
+         reject(new Error("Worker failed to initialize"));
+         return;
+    }
+
+    currentWorker.onmessage = (event: MessageEvent) => {
         const data = event.data;
         switch (data.kind) {
           case "output": {
@@ -318,19 +273,31 @@ export const piperGenerate = async (
             break;
           }
           case "error": {
+              terminateWorker();
               reject(new Error(data.error));
               break;
           }
-          case "complete": {
-             break;
-          }
         }
-      },
-      (error) => {
-        reject(error);
-      },
-      60000,
-      1
-    );
+    };
+
+    currentWorker.onerror = (error) => {
+        console.error("Piper Worker Error:", error);
+        terminateWorker();
+        reject(error instanceof Error ? error : new Error("Worker error"));
+    };
+
+    currentWorker.postMessage({
+      kind: "init",
+      input,
+      speakerId,
+      blobs,
+      piperPhonemizeJsUrl,
+      piperPhonemizeWasmUrl,
+      piperPhonemizeDataUrl,
+      modelUrl,
+      modelConfigUrl,
+      onnxruntimeUrl,
+      workerUrl
+    });
   });
 };

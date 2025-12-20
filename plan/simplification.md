@@ -29,6 +29,7 @@ The simplification will be executed in three phases, detailed in separate docume
 This phase focuses on refactoring `src/lib/ingestion.ts` and `src/db/DBService.ts` to use a lightweight "3-Point Fingerprint" instead of full-file SHA-256 hashing.
 
 ### [Phase 2: Audio Simplification](simplification_phase2.md)
+**Status**: ✅ Completed
 **Objective**: Simplify the TTS state machine and worker management.
 This phase targets `src/lib/tts/AudioPlayerService.ts`, removing custom Mutex locks in favor of a robust Promise chain. It also involves removing `src/lib/tts/providers/PiperProcessSupervisor.ts` in favor of a simpler "Let It Crash" error boundary pattern for the TTS worker (modifying `src/lib/tts/providers/piper-utils.ts`).
 

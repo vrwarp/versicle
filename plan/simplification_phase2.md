@@ -72,3 +72,11 @@ Shift to manual recovery.
 
 *   **Stress Test**: Rapidly click Play/Pause/Next.
 *   **Crash Test**: Manually terminate the worker in DevTools while playing. Verify the app handles it gracefully (stops, shows error) instead of trying to restart it infinitely.
+
+## 4. Status Update
+
+**Completed Actions:**
+*   Refactored `AudioPlayerService.ts` to use a promise chain (`enqueue`) instead of custom mutex locking.
+*   Removed `PiperProcessSupervisor.ts`.
+*   Refactored `piper-utils.ts` to manage `Worker` directly with simple error handling ("Let It Crash").
+*   Verified with unit tests and Playwright UI verification (`piper_settings.png`).
