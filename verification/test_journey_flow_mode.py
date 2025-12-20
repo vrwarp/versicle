@@ -20,6 +20,12 @@ def test_journey_flow_mode(page: Page):
     page.click("text=Alice's Adventures in Wonderland")
     expect(page.locator("div[data-testid='reader-iframe-container']")).to_be_visible(timeout=5000)
 
+    # Navigate to Chapter 1 ("Down the Rabbit-Hole") to ensure sufficient text content
+    page.get_by_test_id("reader-toc-button").click()
+    page.click("text=Down the Rabbit-Hole")
+    # Wait for navigation to complete (title updates to 'Chapter' or similar)
+    expect(page.locator("h1")).not_to_contain_text("Reading", timeout=5000)
+
     # 3. Enter Listening State (Start Audio via Header Button)
     # Open Audio Panel
     page.get_by_test_id("reader-audio-button").click()
@@ -63,7 +69,7 @@ def test_journey_flow_mode(page: Page):
     # 6. Verify Peek Mode
     # Single tap triggers Peek Mode
     # Wait a bit to ensure previous double tap is processed
-    time.sleep(1.0)
+    time.sleep(2.0)
     page.mouse.click(center_x, center_y)
 
     # Expect time and battery/text to be visible
