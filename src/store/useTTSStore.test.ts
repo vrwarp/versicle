@@ -68,6 +68,11 @@ describe('useTTSStore', () => {
     expect(useTTSStore.getState().isPlaying).toBe(true);
     expect(useTTSStore.getState().status).toBe('loading');
 
+    // 'completed' should result in isPlaying = true (to support continuous background audio)
+    store.syncState('completed', null, 0, [], null);
+    expect(useTTSStore.getState().isPlaying).toBe(true);
+    expect(useTTSStore.getState().status).toBe('completed');
+
     store.syncState('stopped', null, 0, [], null);
     expect(useTTSStore.getState().isPlaying).toBe(false);
     expect(useTTSStore.getState().status).toBe('stopped');

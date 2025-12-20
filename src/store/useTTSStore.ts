@@ -122,7 +122,8 @@ export const useTTSStore = create<TTSState>()(
                 status,
                 // Treat 'loading' as playing to prevent UI flicker (play/pause button)
                 // during transitions between sentences or while buffering.
-                isPlaying: status === 'playing' || status === 'loading',
+                // Treat 'completed' as playing to keep background audio and UI active (immersive mode).
+                isPlaying: status === 'playing' || status === 'loading' || status === 'completed',
                 activeCfi,
                 currentIndex,
                 queue,
@@ -308,7 +309,7 @@ export const useTTSStore = create<TTSState>()(
 
             syncState: (status, activeCfi, currentIndex, queue, error) => set({
                 status,
-                isPlaying: status === 'playing' || status === 'loading',
+                isPlaying: status === 'playing' || status === 'loading' || status === 'completed',
                 activeCfi,
                 currentIndex,
                 queue,
