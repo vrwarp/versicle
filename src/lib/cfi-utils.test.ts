@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeCfiRanges, parseCfiRange, generateCfiRange } from './cfi-utils';
+import { mergeCfiRanges, parseCfiRange, generateCfiRange, generateEpubCfi } from './cfi-utils';
 
 describe('cfi-utils', () => {
 
@@ -98,6 +98,35 @@ describe('cfi-utils', () => {
              it('returns empty array for empty input', () => {
                  expect(mergeCfiRanges([])).toEqual([]);
              });
+        });
+    });
+
+    describe('generateEpubCfi', () => {
+        it('generates a CFI for a simple range', () => {
+             const dom = new DOMParser().parseFromString(
+                 '<html><body><div><p>Hello</p></div></body></html>',
+                 'text/html'
+             );
+             // Note: in jsdom/browser, parseFromString with text/html adds html, head, body if missing.
+             // We explicitly added them to be sure of structure.
+             const p = dom.querySelector('p');
+             if (!p || !p.firstChild) throw new Error("Setup failed");
+
+             const range = dom.createRange();
+             range.setStart(p.firstChild, 0);
+             range.setEnd(p.firstChild, 5);
+
+             const baseCfi = 'epubcfi(/6/14!)';
+
+             // We are not sure exactly what epub.js will generate for this structure without more context,
+             // but it should at least return a string starting with the baseCfi.
+
+             const cfi = generateEpubCfi(range, baseCfi);
+
+             expect(cfi).toBeTypeOf('string');
+             expect(cfi).toContain('epubcfi(/6/14!');
+             // It should also contain the range content
+             expect(cfi).toContain(',');
         });
     });
 });

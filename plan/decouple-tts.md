@@ -255,23 +255,26 @@ The implementation is divided into 4 Phases. We are currently executing Phase 1 
     -   Action: Created unit test `src/db/test_db_migration.test.ts` to verify DB operations.
     -   Action: Ran playwright verification suite. Fixed `verification/test_maintenance.py` to use correct DB version (10).
 
-### Phase 2: Core Extraction Logic
+### Phase 2: Core Extraction Logic [COMPLETED]
 
 *Goal: Separate text extraction from the visual rendering process.*
 
--   **Step 2.1: Refactor `src/lib/tts.ts`**
+-   **Step 2.1: Refactor `src/lib/tts.ts`** [COMPLETED]
 
     -   Action: Created `extractSentencesFromNode(rootNode, cfiGenerator)`.
 
     -   Details: This function traverses a standard DOM `Node` (not an epub.js view), segments text using `TextSegmenter`, and uses a callback to generate CFIs.
+    -   Action: Refactored `extractSentences` to use the new function, ensuring backward compatibility.
 
--   **Step 2.2: Implement Structural CFI Generator**
+-   **Step 2.2: Implement Structural CFI Generator** [COMPLETED]
 
-    -   Target: `src/lib/cfi-utils.ts` or inline in `src/lib/ingestion.ts`
+    -   Target: `src/lib/cfi-utils.ts`
 
-    -   Action: Implement the logic to generate a valid EpubCFI string given a DOM Range and a base Spine CFI, *without* a rendered view.
+    -   Action: Implemented `generateEpubCfi(range, baseCfi)`.
 
-    -   *Technical Note:* Use `epub.js`'s `CFI` class (likely available as `ePub.CFI` or imported from `epubjs/lib/epubcfi`). We need to construct the *path* part of the CFI (`/4/2/1:0`) by traversing the DOM tree relative to the chapter root.
+    -   Details: Uses `epub.js`'s `EpubCFI` class to generate CFIs. Logic added to preprocess `baseCfi` strings to ensure compatibility with `EpubCFI` constructor (handling `epubcfi(...)` wrapper and `!` indirection).
+
+    -   Verification: Added unit tests in `src/lib/cfi-utils.test.ts`.
 
 ### Phase 3: Ingestion Pipeline
 

@@ -127,7 +127,8 @@ declare module 'epubjs' {
     export default ePub;
 
     export class EpubCFI {
-      constructor(cfi?: string | object);
+      constructor(cfi?: string | Range | Node, base?: string | object, ignoreClass?: string);
       compare(a: string, b: string): number;
+      toString(): string;
     }
   }

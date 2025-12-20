@@ -22,21 +22,18 @@ const BLOCK_TAGS = new Set([
 ]);
 
 /**
- * Extracts sentences from the current rendition's chapter.
- * Uses TextSegmenter (Intl.Segmenter) for robust sentence splitting.
+ * Extracts sentences from a DOM Node (e.g., document body).
  *
- * @param rendition - The current epubjs Rendition object.
- * @returns An array of SentenceNode objects representing the sentences in the current view.
+ * @param rootNode - The root DOM node to traverse.
+ * @param cfiGenerator - A callback function that generates a CFI string from a DOM Range.
+ * @returns An array of SentenceNode objects.
  */
-export const extractSentences = (rendition: Rendition): SentenceNode[] => {
+export const extractSentencesFromNode = (
+    rootNode: Node,
+    cfiGenerator: (range: Range) => string | null
+): SentenceNode[] => {
     const sentences: SentenceNode[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const contents = (rendition as any).getContents()[0];
-
-    if (!contents) return [];
-
-    const doc = contents.document;
-    const body = doc.body;
+    const doc = rootNode.ownerDocument || (rootNode as Document);
 
     // Initialize segmenter
     const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
@@ -59,11 +56,10 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
             // Use closest if available (standard in browsers) or traverse up
             const parent = firstNode.parentElement;
             // Check for 'pre' (HTML/XHTML) or 'PRE' (canonical uppercase)
-            // Using closest is robust for nested elements like <pre><code>...</code></pre>
             if (parent.closest) {
                 isPre = !!parent.closest('pre, PRE');
             } else {
-                 // Fallback if closest is missing (unlikely in modern envs but safe)
+                 // Fallback if closest is missing
                  let current: Element | null = parent;
                  while (current) {
                      if (current.tagName.toUpperCase() === 'PRE') {
@@ -75,12 +71,7 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
             }
         }
 
-        // Replace newlines with spaces to avoid splitting sentences on newlines within block tags,
-        // unless we are in a PRE tag where formatting should be preserved.
-        // This preserves the string length so that indices mapping to textNodes remains valid.
-        // We also handle carriage returns for safety.
         const textForSegmentation = isPre ? textBuffer : textBuffer.replace(/[\n\r]/g, ' ');
-
         const segments = segmenter.segment(textForSegmentation);
 
         for (const segment of segments) {
@@ -90,7 +81,6 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
                 processedText = Sanitizer.sanitize(processedText);
             }
 
-            // Only process non-empty segments
             if (!processedText.trim()) continue;
 
             const start = segment.index;
@@ -102,15 +92,12 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
             let endSet = false;
 
             for (const { node, length } of textNodes) {
-                // Check if start is in this node
                 if (!startSet && currentBase + length > start) {
-                     // Ensure offset is non-negative
                      const offset = Math.max(0, start - currentBase);
                      range.setStart(node, offset);
                      startSet = true;
                 }
 
-                // Check if end is in this node
                 if (!endSet && currentBase + length >= end) {
                     const offset = Math.max(0, end - currentBase);
                     range.setEnd(node, offset);
@@ -123,11 +110,13 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
 
             if (startSet && endSet) {
                  try {
-                    const cfi = contents.cfiFromRange(range);
-                    sentences.push({
-                        text: processedText.trim(),
-                        cfi: cfi
-                    });
+                    const cfi = cfiGenerator(range);
+                    if (cfi) {
+                        sentences.push({
+                            text: processedText.trim(),
+                            cfi: cfi
+                        });
+                    }
                 } catch (e) {
                     console.warn("Failed to generate CFI for range", e);
                 }
@@ -170,8 +159,28 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
         }
     };
 
-    traverse(body);
+    traverse(rootNode);
     flushBuffer();
 
     return sentences;
+};
+
+/**
+ * Extracts sentences from the current rendition's chapter.
+ * Uses TextSegmenter (Intl.Segmenter) for robust sentence splitting.
+ *
+ * @param rendition - The current epubjs Rendition object.
+ * @returns An array of SentenceNode objects representing the sentences in the current view.
+ */
+export const extractSentences = (rendition: Rendition): SentenceNode[] => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contents = (rendition as any).getContents()[0];
+    if (!contents) return [];
+
+    const doc = contents.document;
+    const body = doc.body;
+
+    return extractSentencesFromNode(body, (range) => {
+        return contents.cfiFromRange(range);
+    });
 };
