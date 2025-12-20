@@ -133,6 +133,7 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
     const onContentReady = () => {
         loadSentences();
     };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (rendition.hooks?.content) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
