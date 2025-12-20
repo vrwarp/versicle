@@ -351,7 +351,10 @@ export function useEpubReader(
 
             resizeRaf.current = requestAnimationFrame(() => {
                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                 (renditionRef.current as any)?.resize(width, height);
+                 const r = renditionRef.current as any;
+                 if (r && r.manager) {
+                     r.resize(width, height);
+                 }
             });
         }
     });
