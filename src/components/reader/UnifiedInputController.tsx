@@ -36,6 +36,11 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
     })));
 
     const [isCurtainActive, setIsCurtainActive] = useState(false);
+    const isCurtainActiveRef = useRef(isCurtainActive);
+    useEffect(() => {
+        isCurtainActiveRef.current = isCurtainActive;
+    }, [isCurtainActive]);
+
     const [peekMode, setPeekMode] = useState(false);
     const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
 
@@ -200,7 +205,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
         const absDx = Math.abs(dx);
         const absDy = Math.abs(dy);
         const SWIPE_THRESHOLD = 50;
-        const TAP_THRESHOLD = 10;
+        const TAP_THRESHOLD = 20;
         const DOUBLE_TAP_TIMEOUT = 300;
 
         touchStart.current = null;
@@ -223,7 +228,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
                 const width = window.innerWidth;
                 const x = touchEnd.x;
 
-                if (isCurtainActive) {
+                if (isCurtainActiveRef.current) {
                     handlePeek();
                     return;
                 }
