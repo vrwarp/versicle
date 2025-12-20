@@ -26,10 +26,30 @@ export class PiperProvider extends BaseCloudProvider {
   id = 'piper';
   private voiceMap: Map<string, { modelPath: string; configPath: string; speakerId?: number }> = new Map();
   private segmenter: TextSegmenter;
+  private worker: Worker | null = null;
 
   constructor() {
     super();
     this.segmenter = new TextSegmenter();
+  }
+
+  private getWorker(): Worker {
+      if (!this.worker) {
+          this.worker = new Worker(PIPER_ASSETS_BASE + 'piper_worker.js');
+          this.worker.onerror = (e) => {
+              console.error("Piper Worker Crashed:", e);
+              this.terminateWorker();
+              this.emit({ type: 'error', error: new Error("TTS Engine crashed. Please retry.") });
+          };
+      }
+      return this.worker;
+  }
+
+  private terminateWorker() {
+      if (this.worker) {
+          this.worker.terminate();
+          this.worker = null;
+      }
   }
 
   async init(): Promise<void> {
@@ -90,6 +110,7 @@ export class PiperProvider extends BaseCloudProvider {
     const modelConfigUrl = HF_BASE + voiceInfo.configPath;
 
     deleteCachedModel(modelUrl, modelConfigUrl);
+    this.terminateWorker();
     this.emit({ type: 'download-progress', percent: 0, status: 'Not Downloaded', voiceId });
   }
 
@@ -124,6 +145,7 @@ export class PiperProvider extends BaseCloudProvider {
 
       // 3. Integrity Check (Test Load)
       await piperGenerate(
+        this.getWorker(),
         PIPER_ASSETS_BASE + 'piper_phonemize.js',
         PIPER_ASSETS_BASE + 'piper_phonemize.wasm',
         PIPER_ASSETS_BASE + 'piper_phonemize.data',
@@ -195,6 +217,7 @@ export class PiperProvider extends BaseCloudProvider {
 
          for (const subSegment of subSegments) {
             const result = await piperGenerate(
+                this.getWorker(),
                 PIPER_ASSETS_BASE + 'piper_phonemize.js',
                 PIPER_ASSETS_BASE + 'piper_phonemize.wasm',
                 PIPER_ASSETS_BASE + 'piper_phonemize.data',

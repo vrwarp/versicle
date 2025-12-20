@@ -1,7 +1,4 @@
-import { PiperProcessSupervisor } from './PiperProcessSupervisor';
-
 const blobs: Record<string, Blob> = {};
-const supervisor = new PiperProcessSupervisor();
 const CACHE_NAME = 'piper-voices-v1';
 
 // --- Cache API Helpers ---
@@ -112,28 +109,7 @@ export const fetchWithBackoff = async (url: string, retries = 3, delay = 1000): 
 };
 
 /**
- * Checks if the model is currently loaded in the worker.
- * Used internally to determine if we need to restart/init the worker.
- */
-export const isModelLoadedInWorker = async (modelUrl: string): Promise<boolean> => {
-  return new Promise<boolean>((resolve) => {
-    supervisor.send(
-      { kind: "isAlive", modelUrl },
-      (event: MessageEvent) => {
-        if (event.data.kind === "isAlive") {
-          resolve(event.data.isAlive);
-        }
-      },
-      () => resolve(false), // error handler
-      5000 // Short timeout for check
-    );
-  });
-};
-
-
-/**
  * Deletes a model from both memory and persistent storage.
- * Also terminates the worker to ensure no stale state remains.
  */
 export const deleteCachedModel = (modelUrl: string, modelConfigUrl: string) => {
   if (blobs[modelUrl]) delete blobs[modelUrl];
@@ -141,8 +117,6 @@ export const deleteCachedModel = (modelUrl: string, modelConfigUrl: string) => {
 
   removeFromCache(modelUrl);
   removeFromCache(modelConfigUrl);
-
-  supervisor.terminate();
 };
 
 /**
@@ -240,6 +214,7 @@ export async function stitchWavs(blobs: Blob[]): Promise<Blob> {
 }
 
 export const piperGenerate = async (
+  worker: Worker,
   piperPhonemizeJsUrl: string,
   piperPhonemizeWasmUrl: string,
   piperPhonemizeDataUrl: string,
@@ -255,52 +230,18 @@ export const piperGenerate = async (
   // Load from cache to memory if needed
   await ensureModelLoaded(modelUrl, modelConfigUrl);
 
-  // Initialize supervisor with worker URL
-  supervisor.init(workerUrl);
-
-  // Validate worker state before starting generation.
-  await new Promise<void>((resolve) => {
-      supervisor.send(
-          { kind: "isAlive", modelUrl },
-          (event) => {
-              if (event.data.kind === 'isAlive') {
-                  if (!event.data.isAlive) {
-                      supervisor.terminate();
-                      supervisor.init(workerUrl);
-                  }
-                  resolve();
-              }
-          },
-          () => {
-              supervisor.terminate();
-              supervisor.init(workerUrl);
-              resolve();
-          },
-          5000
-      )
-  });
-
-
   return new Promise((resolve, reject) => {
-    supervisor.send(
-      {
-        kind: "init",
-        input,
-        speakerId,
-        blobs,
-        piperPhonemizeJsUrl,
-        piperPhonemizeWasmUrl,
-        piperPhonemizeDataUrl,
-        modelUrl,
-        modelConfigUrl,
-        onnxruntimeUrl,
-        workerUrl
-      },
-      (event: MessageEvent) => {
+    const cleanup = () => {
+        worker.removeEventListener('message', handleMessage);
+        worker.removeEventListener('error', handleError);
+    };
+
+    const handleMessage = (event: MessageEvent) => {
         const data = event.data;
         switch (data.kind) {
           case "output": {
             resolve({ file: data.file, duration: data.duration });
+            cleanup();
             break;
           }
           case "stderr": {
@@ -319,18 +260,35 @@ export const piperGenerate = async (
           }
           case "error": {
               reject(new Error(data.error));
+              cleanup();
               break;
           }
           case "complete": {
              break;
           }
         }
-      },
-      (error) => {
-        reject(error);
-      },
-      60000,
-      1
-    );
+    };
+
+    const handleError = (event: ErrorEvent) => {
+        reject(new Error("Worker error: " + event.message));
+        cleanup();
+    };
+
+    worker.addEventListener('message', handleMessage);
+    worker.addEventListener('error', handleError);
+
+    worker.postMessage({
+        kind: "init",
+        input,
+        speakerId,
+        blobs,
+        piperPhonemizeJsUrl,
+        piperPhonemizeWasmUrl,
+        piperPhonemizeDataUrl,
+        modelUrl,
+        modelConfigUrl,
+        onnxruntimeUrl,
+        workerUrl
+    });
   });
 };

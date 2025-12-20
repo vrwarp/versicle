@@ -10,11 +10,6 @@ import { LexiconService } from './LexiconService';
 import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
 
-interface OperationState {
-    controller: AbortController;
-    isCritical: boolean;
-}
-
 /**
  * Defines the possible states of the TTS playback.
  */
@@ -71,12 +66,13 @@ export class AudioPlayerService {
   private sessionRestored: boolean = false;
   private isPreviewing: boolean = false;
 
-  private currentOperation: OperationState | null = null;
-  private operationLock: Promise<void> = Promise.resolve();
-
   private backgroundAudio: BackgroundAudio;
   private backgroundAudioMode: BackgroundAudioMode = 'silence';
   private lastMetadata: MediaSessionMetadata | null = null;
+
+  // The tail of the promise chain. Initialize as resolved.
+  private pendingPromise: Promise<void> = Promise.resolve();
+  private isDestroyed = false;
 
   private constructor() {
     this.backgroundAudio = new BackgroundAudio();
@@ -117,36 +113,25 @@ export class AudioPlayerService {
     return AudioPlayerService.instance;
   }
 
-  private async executeWithLock(operation: (signal: AbortSignal) => Promise<void>, isCritical: boolean = false) {
-      if (this.currentOperation) {
-          if (!this.currentOperation.isCritical) {
-              this.currentOperation.controller.abort();
-          }
-          this.currentOperation = null;
-      }
-
-      const controller = new AbortController();
-      this.currentOperation = { controller, isCritical };
-      const signal = controller.signal;
-
-      const currentLock = this.operationLock;
-      let resolveLock: () => void;
-      this.operationLock = new Promise<void>((resolve) => {
-          resolveLock = resolve;
-      });
-
+  /**
+   * The Enqueuer: The heart of the robustness strategy.
+   * It ensures sequential execution and fault tolerance.
+   */
+  private async enqueue<T>(task: () => Promise<T>): Promise<T | void> {
+    const resultPromise = this.pendingPromise.then(async () => {
+      if (this.isDestroyed) return; // Prevent zombie tasks
       try {
-          await currentLock.catch(() => {});
-          if (signal.aborted) {
-              return;
-          }
-          await operation(signal);
-      } finally {
-          resolveLock!();
-          if (this.currentOperation?.controller === controller) {
-              this.currentOperation = null;
-          }
+        return await task();
+      } catch (err) {
+        console.error("Audio task failed safely:", err);
+        // We absorb the error here so the chain doesn't break.
       }
+    });
+
+    // Update the tail reference.
+    this.pendingPromise = resultPromise.catch(() => {});
+
+    return resultPromise;
   }
 
   setBookId(bookId: string | null) {
@@ -196,10 +181,9 @@ export class AudioPlayerService {
   }
 
   private async restoreQueue(bookId: string) {
-      this.executeWithLock(async (signal) => {
+      this.enqueue(async () => {
           try {
               const state = await dbService.getTTSState(bookId);
-              if (signal.aborted) return;
               if (this.currentBookId !== bookId) return;
 
               if (state && state.queue && state.queue.length > 0) {
@@ -291,11 +275,11 @@ export class AudioPlayerService {
   }
 
   public setProvider(provider: ITTSProvider) {
-      return this.executeWithLock(async () => {
+      return this.enqueue(async () => {
         await this.stopInternal();
         this.provider = provider;
         this.setupProviderListeners();
-      }, true);
+      });
   }
 
   async init() {
@@ -351,7 +335,7 @@ export class AudioPlayerService {
   }
 
   setQueue(items: TTSQueueItem[], startIndex: number = 0) {
-    return this.executeWithLock(async () => {
+    return this.enqueue(async () => {
         if (this.isQueueEqual(items)) {
             this.queue = items;
             this.updateMediaSessionMetadata();
@@ -367,7 +351,7 @@ export class AudioPlayerService {
         this.updateMediaSessionMetadata();
         this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
         this.persistQueue();
-    }, true);
+    });
   }
 
   private persistQueue() {
@@ -384,18 +368,18 @@ export class AudioPlayerService {
   }
 
   jumpTo(index: number) {
-      return this.executeWithLock(async (signal) => {
+      return this.enqueue(async () => {
           if (index >= 0 && index < this.queue.length) {
               await this.stopInternal();
               this.currentIndex = index;
               this.persistQueue();
-              await this.playInternal(signal);
+              await this.playInternal();
           }
       });
   }
 
   async preview(text: string): Promise<void> {
-      return this.executeWithLock(async (signal) => {
+      return this.enqueue(async () => {
         await this.stopInternal();
         this.isPreviewing = true;
         this.setStatus('playing');
@@ -407,14 +391,7 @@ export class AudioPlayerService {
                 voiceId,
                 speed: this.speed
             });
-
-            if (signal.aborted) {
-                this.provider.stop();
-                return;
-            }
-
         } catch (e) {
-            if (signal.aborted) return;
             console.error("Preview error", e);
             this.setStatus('stopped');
             this.isPreviewing = false;
@@ -424,25 +401,24 @@ export class AudioPlayerService {
   }
 
   async play(): Promise<void> {
-    return this.executeWithLock((signal) => this.playInternal(signal));
+    return this.enqueue(() => this.playInternal());
   }
 
-  private async playInternal(signal: AbortSignal): Promise<void> {
+  private async playInternal(): Promise<void> {
     if (this.status === 'paused') {
-        return this.resumeInternal(signal);
+        return this.resumeInternal();
     }
 
     if (this.status === 'stopped' && this.currentBookId && !this.sessionRestored) {
         this.sessionRestored = true;
         try {
             const book = await dbService.getBookMetadata(this.currentBookId);
-            if (signal.aborted) return;
             if (book) {
                 if (book.lastPlayedCfi && this.currentIndex === 0) {
                      const index = this.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
                      if (index >= 0) this.currentIndex = index;
                 }
-                if (book.lastPauseTime) return this.resumeInternal(signal);
+                if (book.lastPauseTime) return this.resumeInternal();
             }
         } catch (e) {
             console.warn("Failed to restore playback state", e);
@@ -469,7 +445,6 @@ export class AudioPlayerService {
     try {
         const voiceId = this.voiceId || '';
         const rules = await this.lexiconService.getRules(this.currentBookId || undefined);
-        if (signal.aborted) return;
 
         const processedText = this.lexiconService.applyLexicon(item.text, rules);
 
@@ -488,8 +463,6 @@ export class AudioPlayerService {
         }
 
     } catch (e) {
-        if (signal.aborted) return;
-
         console.error("Play error", e);
 
         if (this.provider.id !== 'local') {
@@ -505,7 +478,7 @@ export class AudioPlayerService {
             }
             this.setupProviderListeners();
             await this.init();
-            return this.playInternal(signal);
+            return this.playInternal();
         }
 
         this.setStatus('stopped');
@@ -514,17 +487,17 @@ export class AudioPlayerService {
   }
 
   async resume(): Promise<void> {
-     return this.executeWithLock((signal) => this.resumeInternal(signal));
+     return this.enqueue(() => this.resumeInternal());
   }
 
-  private async resumeInternal(signal: AbortSignal): Promise<void> {
+  private async resumeInternal(): Promise<void> {
      this.sessionRestored = true;
 
      if (this.status === 'paused') {
          this.provider.resume();
          this.setStatus('playing');
      } else {
-         return this.playInternal(signal);
+         return this.playInternal();
      }
   }
 
@@ -542,7 +515,7 @@ export class AudioPlayerService {
   }
 
   pause() {
-    return this.executeWithLock(async () => {
+    return this.enqueue(async () => {
         this.provider.pause();
         this.setStatus('paused');
         await this.savePlaybackState();
@@ -550,7 +523,7 @@ export class AudioPlayerService {
   }
 
   stop() {
-      return this.executeWithLock(async () => {
+      return this.enqueue(async () => {
           await this.stopInternal();
       });
   }
@@ -569,12 +542,12 @@ export class AudioPlayerService {
   }
 
   next() {
-      return this.executeWithLock(async (signal) => {
+      return this.enqueue(async () => {
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this.persistQueue();
             if (this.status === 'paused') this.setStatus('stopped');
-            await this.playInternal(signal);
+            await this.playInternal();
         } else {
             await this.stopInternal();
         }
@@ -582,42 +555,42 @@ export class AudioPlayerService {
   }
 
   prev() {
-      return this.executeWithLock(async (signal) => {
+      return this.enqueue(async () => {
         if (this.currentIndex > 0) {
             this.currentIndex--;
             this.persistQueue();
             if (this.status === 'paused') this.setStatus('stopped');
-            await this.playInternal(signal);
+            await this.playInternal();
         }
       });
   }
 
   setSpeed(speed: number) {
       this.speed = speed;
-      return this.executeWithLock(async (signal) => {
+      return this.enqueue(async () => {
         if (this.status === 'playing') {
             await this.stopInternal();
-            await this.playInternal(signal);
+            await this.playInternal();
         } else if (this.status === 'paused') {
             this.setStatus('stopped');
             await this.stopInternal();
         }
-      }, true);
+      });
   }
 
   seek(offset: number) {
-      return this.executeWithLock(async (signal) => {
+      return this.enqueue(async () => {
           if (offset > 0) {
               if (this.currentIndex < this.queue.length - 1) {
                   this.currentIndex++;
                   this.persistQueue();
-                  await this.playInternal(signal);
+                  await this.playInternal();
               }
           } else {
               if (this.currentIndex > 0) {
                   this.currentIndex--;
                   this.persistQueue();
-                  await this.playInternal(signal);
+                  await this.playInternal();
               }
           }
       });
@@ -625,27 +598,23 @@ export class AudioPlayerService {
 
   setVoice(voiceId: string) {
       this.voiceId = voiceId;
-      return this.executeWithLock(async (signal) => {
+      return this.enqueue(async () => {
         if (this.status === 'playing') {
             await this.stopInternal();
-            await this.playInternal(signal);
+            await this.playInternal();
         } else if (this.status === 'paused') {
             this.setStatus('stopped');
         }
-      }, true);
+      });
   }
 
   private playNext() {
-      // Execute within the operation lock to prevent race conditions with user actions (pause, stop)
-      this.executeWithLock(async (signal) => {
+      // Execute within the operation queue
+      this.enqueue(async () => {
           if (this.status !== 'stopped') {
-              // Update Reading History:
-              // The current item (this.queue[this.currentIndex]) has finished playing.
-              // We mark its CFI range as "read" in the database.
-              // This is used to track reading coverage (percent read) and potential sync with visual reader.
+              // Update Reading History
               if (this.currentBookId) {
                   const item = this.queue[this.currentIndex];
-                  // Only track if it's a valid content item (not a preroll)
                   if (item && item.cfi && !item.isPreroll) {
                       dbService.updateReadingHistory(this.currentBookId, item.cfi).catch(console.error);
                   }
@@ -655,10 +624,9 @@ export class AudioPlayerService {
               if (this.currentIndex < this.queue.length - 1) {
                   this.backgroundAudio.stopWithDebounce(5000);
                   this.currentIndex++;
-                  this.persistQueue(); // Persist state so we can resume later
-                  await this.playInternal(signal); // Start playing the next item
+                  this.persistQueue();
+                  await this.playInternal();
               } else {
-                  // End of queue
                   this.setStatus('completed');
                   this.notifyListeners(null);
               }
@@ -667,19 +635,7 @@ export class AudioPlayerService {
   }
 
   private setStatus(status: TTSStatus) {
-      // State transition validation (placeholder logic for now)
-      if (this.status === 'stopped' && status === 'playing') { /* valid */ }
-      else if (this.status === 'stopped' && status === 'loading') { /* valid */ }
-      else if (this.status === 'loading' && status === 'playing') { /* valid */ }
-      else if (this.status === 'loading' && status === 'stopped') { /* valid */ }
-      else if (this.status === 'playing' && status === 'paused') { /* valid */ }
-      else if (this.status === 'paused' && status === 'playing') { /* valid */ }
-      else if (this.status === 'paused' && status === 'loading') { /* valid */ }
-      else if (this.status === 'playing' && status === 'stopped') { /* valid */ }
-      else if (this.status === 'paused' && status === 'stopped') { /* valid */ }
-      else if (status === 'completed') { /* valid */ }
-      else if (this.status === status) { /* valid */ }
-
+      // (Simplified validation)
       this.status = status;
       this.mediaSessionManager.setPlaybackState(
           status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
@@ -723,10 +679,6 @@ export class AudioPlayerService {
       this.listeners.forEach(l => l(this.status, this.queue[this.currentIndex]?.cfi || null, this.currentIndex, this.queue, null, { voiceId, percent, status }));
   }
 
-  /**
-   * OPTIONAL: Samsung Mitigation
-   * Checks if the app is restricted and prompts the user.
-   */
   public async checkBatteryOptimization() {
       if (Capacitor.getPlatform() === 'android') {
           const isEnabled = await BatteryOptimization.isBatteryOptimizationEnabled();

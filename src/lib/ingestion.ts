@@ -3,59 +3,52 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
 import type { BookMetadata, SectionMetadata } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
-import CryptoJS from 'crypto-js';
-
-// Chunk size for hashing (e.g., 2MB)
-const HASH_CHUNK_SIZE = 2 * 1024 * 1024;
 
 /**
- * Computes the SHA-256 hash of a file incrementally using chunks.
- * This avoids loading the entire file into memory.
- *
- * @param file - The file to hash.
- * @returns The hex string representation of the hash.
+ * Reads a slice of a file as an ArrayBuffer.
  */
-export async function computeFileHash(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    // CryptoJS.algo.SHA256.create() gives us an incremental hasher
-    const algo = CryptoJS.algo.SHA256.create();
-    let offset = 0;
-
-    const readNextChunk = () => {
-      if (offset >= file.size) {
-        // Finalize hash
-        const hash = algo.finalize();
-        resolve(hash.toString(CryptoJS.enc.Hex));
-        return;
-      }
-
-      const chunk = file.slice(offset, offset + HASH_CHUNK_SIZE);
-      const reader = new FileReader();
-
-      reader.onload = (e) => {
-        if (e.target?.result) {
-          const arrayBuffer = e.target.result as ArrayBuffer;
-          // Convert ArrayBuffer to crypto-js WordArray
-          const wordArray = CryptoJS.lib.WordArray.create(arrayBuffer);
-          algo.update(wordArray);
-          offset += HASH_CHUNK_SIZE;
-          readNextChunk();
-        } else {
-          reject(new Error('Failed to read chunk'));
-        }
-      };
-
-      reader.onerror = (e) => {
-        reject(e.target?.error || new Error('FileReader error'));
-      };
-
-      reader.readAsArrayBuffer(chunk);
-    };
-
-    readNextChunk();
-  });
+async function readSlice(file: File, start: number, length: number): Promise<ArrayBuffer> {
+  const slice = file.slice(start, start + length);
+  return slice.arrayBuffer();
 }
 
+/**
+ * Computes a simple hash (DJB2) for a buffer.
+ * Sufficient for fingerprinting when combined with metadata.
+ */
+function cheapHash(buffer: ArrayBuffer): string {
+  let hash = 5381;
+  const view = new DataView(buffer);
+  const len = buffer.byteLength;
+  for (let i = 0; i < len; i++) {
+    const char = view.getUint8(i);
+    hash = ((hash << 5) + hash) + char; /* hash * 33 + c */
+  }
+  // Convert to unsigned 32-bit integer then to hex
+  return (hash >>> 0).toString(16);
+}
+
+/**
+ * Generates a unique identifier for a file based on metadata and content sampling.
+ * Faster than full SHA-256 hashing.
+ *
+ * @param file - The file to fingerprint.
+ * @returns The fingerprint string.
+ */
+export async function generateFileFingerprint(file: File): Promise<string> {
+  // 1. Metadata: Primary filter
+  const metaString = `${file.name}-${file.size}-${file.lastModified}`;
+
+  // 2. Head/Tail Sampling: Read first 4KB and last 4KB
+  const headSize = Math.min(4096, file.size);
+  const tailSize = Math.min(4096, file.size);
+
+  const head = await readSlice(file, 0, headSize);
+  const tail = await readSlice(file, Math.max(0, file.size - tailSize), tailSize);
+
+  // 3. Fast non-crypto hash
+  return `${metaString}-${cheapHash(head)}-${cheapHash(tail)}`;
+}
 
 // Helper to convert Blob to text using FileReader (for compatibility)
 const blobToText = (blob: Blob): Promise<string> => {
@@ -209,8 +202,8 @@ export async function processEpub(file: File): Promise<string> {
     }
   }
 
-  // Calculate SHA-256 hash incrementally
-  const fileHash = await computeFileHash(file);
+  // Calculate file fingerprint
+  const fileHash = await generateFileFingerprint(file);
 
   const candidateBook: BookMetadata = {
     id: bookId,
