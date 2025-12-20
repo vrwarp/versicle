@@ -59,6 +59,7 @@ describe('SearchClient', () => {
             addDocuments: vi.fn().mockResolvedValue(undefined),
             search: vi.fn().mockResolvedValue([{ href: 'chap1.html', excerpt: '...found match...' }])
         };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (Comlink.wrap as any).mockReturnValue(mockEngine);
     });
 
