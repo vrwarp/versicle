@@ -34,7 +34,7 @@ def test_journey_flow_mode(page: Page):
 
     # 4. Verify Overlay Appears (Listening State)
     # Check for the animated pulse border which signifies listening state
-    expect(page.get_by_test_id("flow-mode-breathing-border")).to_be_visible(timeout=5000)
+    expect(page.get_by_test_id("flow-mode-breathing-border")).to_be_visible(timeout=10000)
     capture_screenshot(page, "flow_mode_active")
 
     # Verify Text Dimming

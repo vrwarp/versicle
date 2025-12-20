@@ -10,6 +10,11 @@ import { LexiconService } from './LexiconService';
 import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
 
+interface OperationState {
+    controller: AbortController;
+    isCritical: boolean;
+}
+
 /**
  * Defines the possible states of the TTS playback.
  */
@@ -66,8 +71,8 @@ export class AudioPlayerService {
   private sessionRestored: boolean = false;
   private isPreviewing: boolean = false;
 
-  private pendingPromise: Promise<void> = Promise.resolve();
-  private isDestroyed = false;
+  private currentOperation: OperationState | null = null;
+  private operationLock: Promise<void> = Promise.resolve();
 
   private backgroundAudio: BackgroundAudio;
   private backgroundAudioMode: BackgroundAudioMode = 'silence';
@@ -112,18 +117,36 @@ export class AudioPlayerService {
     return AudioPlayerService.instance;
   }
 
-  private async enqueue<T>(task: () => Promise<T>): Promise<T | void> {
-    const resultPromise = this.pendingPromise.then(async () => {
-      if (this.isDestroyed) return;
-      try {
-        return await task();
-      } catch (err) {
-        console.error("Audio task failed safely:", err);
+  private async executeWithLock(operation: (signal: AbortSignal) => Promise<void>, isCritical: boolean = false) {
+      if (this.currentOperation) {
+          if (!this.currentOperation.isCritical) {
+              this.currentOperation.controller.abort();
+          }
+          this.currentOperation = null;
       }
-    });
 
-    this.pendingPromise = resultPromise.catch(() => {}) as Promise<void>;
-    return resultPromise;
+      const controller = new AbortController();
+      this.currentOperation = { controller, isCritical };
+      const signal = controller.signal;
+
+      const currentLock = this.operationLock;
+      let resolveLock: () => void;
+      this.operationLock = new Promise<void>((resolve) => {
+          resolveLock = resolve;
+      });
+
+      try {
+          await currentLock.catch(() => {});
+          if (signal.aborted) {
+              return;
+          }
+          await operation(signal);
+      } finally {
+          resolveLock!();
+          if (this.currentOperation?.controller === controller) {
+              this.currentOperation = null;
+          }
+      }
   }
 
   setBookId(bookId: string | null) {
@@ -173,9 +196,10 @@ export class AudioPlayerService {
   }
 
   private async restoreQueue(bookId: string) {
-      this.enqueue(async () => {
+      this.executeWithLock(async (signal) => {
           try {
               const state = await dbService.getTTSState(bookId);
+              if (signal.aborted) return;
               if (this.currentBookId !== bookId) return;
 
               if (state && state.queue && state.queue.length > 0) {
@@ -267,11 +291,11 @@ export class AudioPlayerService {
   }
 
   public setProvider(provider: ITTSProvider) {
-      return this.enqueue(async () => {
+      return this.executeWithLock(async () => {
         await this.stopInternal();
         this.provider = provider;
         this.setupProviderListeners();
-      });
+      }, true);
   }
 
   async init() {
@@ -327,7 +351,7 @@ export class AudioPlayerService {
   }
 
   setQueue(items: TTSQueueItem[], startIndex: number = 0) {
-    return this.enqueue(async () => {
+    return this.executeWithLock(async () => {
         if (this.isQueueEqual(items)) {
             this.queue = items;
             this.updateMediaSessionMetadata();
@@ -343,7 +367,7 @@ export class AudioPlayerService {
         this.updateMediaSessionMetadata();
         this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
         this.persistQueue();
-    });
+    }, true);
   }
 
   private persistQueue() {
@@ -360,18 +384,18 @@ export class AudioPlayerService {
   }
 
   jumpTo(index: number) {
-      return this.enqueue(async () => {
+      return this.executeWithLock(async (signal) => {
           if (index >= 0 && index < this.queue.length) {
               await this.stopInternal();
               this.currentIndex = index;
               this.persistQueue();
-              await this.playInternal();
+              await this.playInternal(signal);
           }
       });
   }
 
   async preview(text: string): Promise<void> {
-      return this.enqueue(async () => {
+      return this.executeWithLock(async (signal) => {
         await this.stopInternal();
         this.isPreviewing = true;
         this.setStatus('playing');
@@ -383,7 +407,14 @@ export class AudioPlayerService {
                 voiceId,
                 speed: this.speed
             });
+
+            if (signal.aborted) {
+                this.provider.stop();
+                return;
+            }
+
         } catch (e) {
+            if (signal.aborted) return;
             console.error("Preview error", e);
             this.setStatus('stopped');
             this.isPreviewing = false;
@@ -393,24 +424,25 @@ export class AudioPlayerService {
   }
 
   async play(): Promise<void> {
-    return this.enqueue(() => this.playInternal());
+    return this.executeWithLock((signal) => this.playInternal(signal));
   }
 
-  private async playInternal(): Promise<void> {
+  private async playInternal(signal: AbortSignal): Promise<void> {
     if (this.status === 'paused') {
-        return this.resumeInternal();
+        return this.resumeInternal(signal);
     }
 
     if (this.status === 'stopped' && this.currentBookId && !this.sessionRestored) {
         this.sessionRestored = true;
         try {
             const book = await dbService.getBookMetadata(this.currentBookId);
+            if (signal.aborted) return;
             if (book) {
                 if (book.lastPlayedCfi && this.currentIndex === 0) {
                      const index = this.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
                      if (index >= 0) this.currentIndex = index;
                 }
-                if (book.lastPauseTime) return this.resumeInternal();
+                if (book.lastPauseTime) return this.resumeInternal(signal);
             }
         } catch (e) {
             console.warn("Failed to restore playback state", e);
@@ -437,6 +469,7 @@ export class AudioPlayerService {
     try {
         const voiceId = this.voiceId || '';
         const rules = await this.lexiconService.getRules(this.currentBookId || undefined);
+        if (signal.aborted) return;
 
         const processedText = this.lexiconService.applyLexicon(item.text, rules);
 
@@ -455,6 +488,8 @@ export class AudioPlayerService {
         }
 
     } catch (e) {
+        if (signal.aborted) return;
+
         console.error("Play error", e);
 
         if (this.provider.id !== 'local') {
@@ -470,7 +505,7 @@ export class AudioPlayerService {
             }
             this.setupProviderListeners();
             await this.init();
-            return this.playInternal();
+            return this.playInternal(signal);
         }
 
         this.setStatus('stopped');
@@ -479,17 +514,17 @@ export class AudioPlayerService {
   }
 
   async resume(): Promise<void> {
-     return this.enqueue(() => this.resumeInternal());
+     return this.executeWithLock((signal) => this.resumeInternal(signal));
   }
 
-  private async resumeInternal(): Promise<void> {
+  private async resumeInternal(signal: AbortSignal): Promise<void> {
      this.sessionRestored = true;
 
      if (this.status === 'paused') {
          this.provider.resume();
          this.setStatus('playing');
      } else {
-         return this.playInternal();
+         return this.playInternal(signal);
      }
   }
 
@@ -507,7 +542,7 @@ export class AudioPlayerService {
   }
 
   pause() {
-    return this.enqueue(async () => {
+    return this.executeWithLock(async () => {
         this.provider.pause();
         this.setStatus('paused');
         await this.savePlaybackState();
@@ -515,7 +550,7 @@ export class AudioPlayerService {
   }
 
   stop() {
-      return this.enqueue(async () => {
+      return this.executeWithLock(async () => {
           await this.stopInternal();
       });
   }
@@ -534,12 +569,12 @@ export class AudioPlayerService {
   }
 
   next() {
-      return this.enqueue(async () => {
+      return this.executeWithLock(async (signal) => {
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this.persistQueue();
             if (this.status === 'paused') this.setStatus('stopped');
-            await this.playInternal();
+            await this.playInternal(signal);
         } else {
             await this.stopInternal();
         }
@@ -547,42 +582,42 @@ export class AudioPlayerService {
   }
 
   prev() {
-      return this.enqueue(async () => {
+      return this.executeWithLock(async (signal) => {
         if (this.currentIndex > 0) {
             this.currentIndex--;
             this.persistQueue();
             if (this.status === 'paused') this.setStatus('stopped');
-            await this.playInternal();
+            await this.playInternal(signal);
         }
       });
   }
 
   setSpeed(speed: number) {
       this.speed = speed;
-      return this.enqueue(async () => {
+      return this.executeWithLock(async (signal) => {
         if (this.status === 'playing') {
             await this.stopInternal();
-            await this.playInternal();
+            await this.playInternal(signal);
         } else if (this.status === 'paused') {
             this.setStatus('stopped');
             await this.stopInternal();
         }
-      });
+      }, true);
   }
 
   seek(offset: number) {
-      return this.enqueue(async () => {
+      return this.executeWithLock(async (signal) => {
           if (offset > 0) {
               if (this.currentIndex < this.queue.length - 1) {
                   this.currentIndex++;
                   this.persistQueue();
-                  await this.playInternal();
+                  await this.playInternal(signal);
               }
           } else {
               if (this.currentIndex > 0) {
                   this.currentIndex--;
                   this.persistQueue();
-                  await this.playInternal();
+                  await this.playInternal(signal);
               }
           }
       });
@@ -590,19 +625,19 @@ export class AudioPlayerService {
 
   setVoice(voiceId: string) {
       this.voiceId = voiceId;
-      return this.enqueue(async () => {
+      return this.executeWithLock(async (signal) => {
         if (this.status === 'playing') {
             await this.stopInternal();
-            await this.playInternal();
+            await this.playInternal(signal);
         } else if (this.status === 'paused') {
             this.setStatus('stopped');
         }
-      });
+      }, true);
   }
 
   private playNext() {
       // Execute within the operation lock to prevent race conditions with user actions (pause, stop)
-      this.enqueue(async () => {
+      this.executeWithLock(async (signal) => {
           if (this.status !== 'stopped') {
               // Update Reading History:
               // The current item (this.queue[this.currentIndex]) has finished playing.
@@ -621,7 +656,7 @@ export class AudioPlayerService {
                   this.backgroundAudio.play(this.backgroundAudioMode);
                   this.currentIndex++;
                   this.persistQueue(); // Persist state so we can resume later
-                  await this.playInternal(); // Start playing the next item
+                  await this.playInternal(signal); // Start playing the next item
               } else {
                   // End of queue
                   this.setStatus('completed');
