@@ -51,14 +51,19 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
 
   // Main Effect: Load Content (DB Priority -> Legacy Fallback)
   useEffect(() => {
-    // 1. Reset state when book/chapter changes
-    if (currentSectionId && currentSectionId !== lastLoadedHref.current) {
-        lastLoadedHref.current = currentSectionId;
-        // Don't clear queue immediately to avoid audio glitch during transitions
-        // unless it's a completely new book.
-    }
+    let isMounted = true;
+
+    // We do NOT update lastLoadedHref here because we want to allow re-loading if the previous load was interrupted
+    // or if we switch logic. However, to prevent unnecessary re-fetches if nothing changed,
+    // we should rely on useEffect dependency array (currentSectionId) and internal checks.
+
+    // BUT, legacyLoadSentences checks (currentHref === lastLoadedHref.current) to avoid page-turn reloads.
+    // If we update lastLoadedHref prematurely, we break that check if DB load fails.
+    // So we ONLY update lastLoadedHref when we successfully load content (DB or Legacy).
 
     const legacyLoadSentences = (force = false) => {
+       if (!isMounted) return;
+
        // If we successfully loaded from DB, ignore legacy events for this chapter
        if (usingStoredContent.current) return;
 
@@ -140,8 +145,14 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
         if (currentBookId && currentSectionId) {
              try {
                  const stored = await dbService.getTTSContent(currentBookId, currentSectionId);
+
+                 if (!isMounted) return; // Prevent race condition updates
+
                  if (stored && stored.sentences.length > 0) {
                      usingStoredContent.current = true;
+
+                     // Only update lastLoadedHref if DB load succeeds
+                     if (currentSectionId) lastLoadedHref.current = currentSectionId;
 
                      // Convert to SentenceNodes for local state
                      const sentenceNodes: SentenceNode[] = stored.sentences.map(s => ({
@@ -178,6 +189,8 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
              }
         }
 
+        if (!isMounted) return;
+
         // --- Strategy B: Legacy Fallback (Rendered Mode) ---
         usingStoredContent.current = false;
 
@@ -193,7 +206,7 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
         }
     };
 
-    let cleanup: (() => void) | undefined;
+    let cleanupListeners: (() => void) | undefined;
 
     // Attach Legacy Listeners
     if (rendition) {
@@ -203,7 +216,7 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
         rendition.on('rendered', onLegacyRendered);
         rendition.on('relocated', onLegacyRelocated);
 
-        cleanup = () => {
+        cleanupListeners = () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (rendition as any).off('rendered', onLegacyRendered);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -214,7 +227,10 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
     // Trigger Load
     loadQueue();
 
-    return cleanup;
+    return () => {
+        isMounted = false;
+        if (cleanupListeners) cleanupListeners();
+    };
 
   }, [rendition, player, isReady, currentBookId, currentSectionId, currentChapterTitle, prerollEnabled, rate]);
 

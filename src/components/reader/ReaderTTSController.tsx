@@ -89,27 +89,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
              (rendition as any).display(cfiToSync).catch((err: unknown) => console.warn("Reconciliation failed", err));
          }
 
-         // Note: We don't need to re-add highlight here because the main effect
-         // will re-run if activeCfi is still that value, OR if activeCfi has changed
-         // since then, the main effect has already run (but stored it).
-         // Wait, if activeCfi changed while backgrounded, the main effect ran, found hidden, and updated lastBackgroundCfi.
-         // So lastBackgroundCfi holds the *latest* cfi.
-         // However, the main effect cleanup ran for the *previous* cfi.
-         // But the main effect for the *current* cfi ran while hidden, so it DID NOT add the highlight.
-         // So we DO need to add the highlight if we are just catching up.
-
-         // Actually, if we just call 'display', we are syncing the page.
-         // The highlight logic is inside the main effect.
-         // If the main effect ran while hidden, it skipped 'syncVisuals'.
-         // So the highlight is MISSING.
-
-         // We should probably trigger the highlight logic again.
-         // But we can't easily force the effect to re-run.
-
-         // Alternative: Check visibility inside the effect, and if visible, do work.
-         // But if we become visible LATER, we need to trigger that work.
-
-         // Let's manually add the highlight here if it matches current activeCfi
+         // If the active CFI matches, ensure the highlight is present.
          if (cfiToSync === activeCfi) {
              try {
                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
