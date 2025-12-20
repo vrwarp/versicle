@@ -17,7 +17,7 @@ The analysis has identified four specific subsystems where complexity outweighs 
 1.  **Ingestion Pipeline**: The current file verification uses essentially the same cryptographic rigor as a blockchain ledger. We will replace the removal of chunked SHA-256 hashing with a faster, heuristic-based fingerprinting system.
 2.  **Concurrency Control**: The application currently uses a custom Mutex to manage UI interactions as if they were multi-threaded race conditions. We will move to a reactive state model that aligns with JavaScript's single-threaded event loop.
 3.  **Worker Management**: The application implements a "Supervisor" pattern to manage the Piper TTS worker. We will move to a "Let It Crash" philosophy that delegates recovery to the user via Error Boundaries.
-4.  **Inter-Process Communication**: The search subsystem uses a hand-rolled Remote Procedure Call (RPC) protocol. We will replace this with a standard proxy library to reduce boilerplate and improve type safety.
+4.  **Inter-Process Communication**: The search subsystem uses a hand-rolled Remote Procedure Call (RPC) protocol. We will replace this with a standard proxy library (`comlink`) to reduce boilerplate and improve type safety.
 
 ## 3. Implementation Phases
 
@@ -25,15 +25,15 @@ The simplification will be executed in three phases, detailed in separate docume
 
 ### [Phase 1: Storage & Identity](simplification_phase1.md)
 **Objective**: Remove cryptographic hashing from the import path.
-This phase focuses on refactoring the `ingestion.ts` module and `DBService` to use a lightweight "3-Point Fingerprint" instead of full-file SHA-256 hashing.
+This phase focuses on refactoring `src/lib/ingestion.ts` and `src/db/DBService.ts` to use a lightweight "3-Point Fingerprint" instead of full-file SHA-256 hashing.
 
 ### [Phase 2: Audio Simplification](simplification_phase2.md)
 **Objective**: Simplify the TTS state machine and worker management.
-This phase targets `AudioPlayerService.ts`, removing custom Mutex locks in favor of a robust Promise chain. It also involves removing the `PiperProcessSupervisor` in favor of a simpler "Let It Crash" error boundary pattern for the TTS worker.
+This phase targets `src/lib/tts/AudioPlayerService.ts`, removing custom Mutex locks in favor of a robust Promise chain. It also involves removing `src/lib/tts/providers/PiperProcessSupervisor.ts` in favor of a simpler "Let It Crash" error boundary pattern for the TTS worker (modifying `src/lib/tts/providers/piper-utils.ts`).
 
 ### [Phase 3: Search Refactor](simplification_phase3.md)
 **Objective**: Modernize the Worker communication layer.
-This phase replaces the custom RPC layer in `search.ts` and `search.worker.ts` with `comlink` (or a similar lightweight wrapper) to improve type safety and reduce boilerplate.
+This phase replaces the custom RPC layer in `src/lib/search.ts` and `src/workers/search.worker.ts` with `comlink` to improve type safety and reduce boilerplate.
 
 ## 4. Conclusion
 

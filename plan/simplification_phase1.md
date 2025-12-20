@@ -4,10 +4,9 @@
 
 ## 1. Component Design: Ingestion Pipeline (Content Fingerprinting)
 
-**Current State:** The `ingestion.ts` module performs a full cryptographic SHA-256 hash of every imported EPUB. To prevent crashing the browser with large files (e.g., 500MB+ audiobooks or graphic novels), it utilizes a complex chunked reading strategy via `CryptoJS`.
-
--   **Cost**: This approach results in high CPU usage and significant main-thread blocking, leading to sluggish performance during import operations.
--   **Purpose**: The primary use case is validating that a "restored" file matches the original "offloaded" metadata bit-for-bit.
+**Current State:**
+-   `src/lib/ingestion.ts`: Uses `CryptoJS` to incrementally hash the file in chunks (`computeFileHash` function).
+-   `src/db/DBService.ts`: `restoreBook` verifies the incoming file by re-hashing it and comparing it to `book.fileHash`.
 
 **Problem:** Cryptographic certainty is overkill for personal library management. The threat model we are defending against---a user manually selecting a *different* file that happens to have the exact same filename and byte size---is vanishingly small. The current solution optimizes for a negligible edge case at the expense of everyday performance.
 
@@ -33,33 +32,32 @@ async function generateFileFingerprint(file: File): Promise<string> {
 ```
 
 **Impact:**
-
--   **Performance**: The hashing time becomes O(1), constant regardless of file size. An 800MB graphic novel will import as instantly as a 2MB text novel.
--   **Code**: We can remove the `crypto-js` dependency entirely, along with the complex asynchronous chunking loops that are hard to debug.
--   **Robustness**: This method remains robust against common data integrity issues. It still catches corrupted files (size mismatch), truncated downloads (tail hash mismatch), and wrong file selection (header/name mismatch).
+-   **Performance**: The hashing time becomes O(1), constant regardless of file size.
+-   **Code**: Remove `crypto-js` dependency.
+-   **Robustness**: Still catches corrupted files (size mismatch), truncated downloads (tail hash mismatch), and wrong file selection.
 
 ## 2. Implementation Plan
 
 ### Steps
 
-1.  **Refactor `ingestion.ts`**:
-    *   Implement the `generateFileFingerprint` function.
-    *   Remove `crypto-js` imports and the chunked hashing logic.
-    *   Replace calls to the old hashing function with `generateFileFingerprint`.
+1.  **Refactor `src/lib/ingestion.ts`**:
+    *   Implement `generateFileFingerprint`.
+    *   Delete `computeFileHash` and remove `crypto-js` imports.
+    *   Update `processEpub` to use `generateFileFingerprint` instead of `computeFileHash`.
 
-2.  **Update `DBService`**:
-    *   Modify `restoreBook` (and any other relevant methods) to use the new fingerprint for verification.
-    *   Ensure the `fileHash` field in the database can accommodate the new fingerprint format (likely a string).
+2.  **Update `src/db/DBService.ts`**:
+    *   Modify `restoreBook`: Replace the `crypto.subtle.digest` logic with `generateFileFingerprint`.
+    *   Modify `offloadBook`: If the book needs a hash calculated (legacy path), use the new fingerprinting method if possible, or support a migration path.
 
 3.  **Migration Strategy**:
-    *   The database schema should support the new fingerprint format.
-    *   For existing books with SHA-256 hashes, treat them as "legacy verified."
-    *   When restoring a legacy book, we can either:
-        *   Re-hash the incoming file (slow, one-time cost) if we want strict backward compatibility.
-        *   Or, simply accept the file based on metadata matching only, effectively migrating it to the new system upon restore. (Preferred for simplicity).
+    *   The `fileHash` field in `BookMetadata` is a string. The new fingerprint will fit in this field.
+    *   **Legacy Compatibility**:
+        *   If `restoreBook` receives a file, calculate its new fingerprint.
+        *   If the stored `book.fileHash` looks like a SHA-256 hex string (64 chars), we have a mismatch.
+        *   **Decision**: For simplicity, if the stored hash is legacy, we can choose to *trust* the filename/size match and update the stored hash to the new fingerprint, or perform a one-time migration. Given the "Let It Crash" philosophy, strict backward compatibility for *offloaded* books might be relaxed: if name and size match, update the hash.
 
 ### Validation
 
-*   **Performance Test**: Import a large file (200MB+) and verify it is instantaneous compared to the previous implementation.
-*   **Functional Test**: Verify the "Offload/Restore" cycle still functions correctly with the new fingerprinting.
-*   **Edge Case Test**: Ensure small files (< 8KB) are handled correctly by the head/tail sampling logic (i.e., don't read past EOF).
+*   **Performance Test**: Import a large file (200MB+) and verify it is instantaneous.
+*   **Functional Test**: Verify "Offload/Restore" cycle.
+*   **Edge Case Test**: Ensure small files (< 8KB) are handled correctly.

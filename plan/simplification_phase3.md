@@ -4,58 +4,53 @@
 
 ## 1. Component Design: Search IPC (Comlink)
 
-**Current State:** The `SearchClient` manually manages the communication with `SearchWorker` using `postMessage`, UUIDs, and a `Map` of pending promises.
+**Current State:**
+-   `src/lib/search.ts` (`SearchClient`): Manually manages `postMessage`, `UUID` generation, and a `pendingRequests` Map.
+-   `src/workers/search.worker.ts`: Uses a large `switch` statement in `onmessage` to route commands.
 
-**Problem:** Custom RPC layers are boilerplate-heavy, error-prone, and difficult to maintain type safety across the worker boundary.
+**Problem:** Boilerplate-heavy, error-prone, and lacks type safety across the boundary.
 
 **Proposed Design: Comlink**
-Adopt a standard library like `comlink` (or a lightweight wrapper) to expose the Worker API as if it were a local class instance.
+Use `comlink` to expose the `SearchEngine` class directly.
 
 ```typescript
 // search.worker.ts
 import * as Comlink from 'comlink';
+import { SearchEngine } from '../lib/search-engine';
 
-class SearchEngine {
-  indexBook(id: string, content: string) { ... }
-  search(query: string) { ... }
-}
-
-const searchEngine = new SearchEngine();
-Comlink.expose(searchEngine);
-
-// search.ts
-import * as Comlink from 'comlink';
-const worker = new Worker(new URL('./workers/search.worker.ts', import.meta.url));
-// The type wrapper ensures strict type safety for all method calls
-const searchEngine = Comlink.wrap<SearchEngine>(worker);
-
-// Usage becomes trivial:
-await searchEngine.indexBook(bookId, content);
+const engine = new SearchEngine();
+Comlink.expose(engine);
 ```
 
-**Impact:**
+```typescript
+// search.ts
+import * as Comlink from 'comlink';
+// Define the type or interface of the exposed object
+import type { SearchEngine } from './search-engine';
 
--   **Type Safety**: Automatic TypeScript support across the worker boundary.
--   **Code Reduction**: Removes 50+ lines of custom message handling.
--   **Robustness**: Relies on a battle-tested library for message passing.
+const worker = new Worker(new URL('../workers/search.worker.ts', import.meta.url), { type: 'module' });
+const searchEngine = Comlink.wrap<SearchEngine>(worker);
+
+// Usage:
+await searchEngine.indexBook(bookId, sections);
+```
 
 ## 2. Implementation Plan
 
 ### Steps
 
-1.  **Install Dependency**:
-    *   Add `comlink` to the project (it is very small, < 1kb compressed).
+1.  **Dependencies**: Add `comlink` to `package.json`.
 
-2.  **Rewrite `search.worker.ts`**:
-    *   Remove the `onmessage` switch statement.
-    *   Expose the `SearchEngine` class (or relevant functions) using `Comlink.expose`.
+2.  **Refactor `src/workers/search.worker.ts`**:
+    *   Delete the `self.onmessage` switch block.
+    *   Expose `engine` using `Comlink.expose(engine)`.
 
-3.  **Rewrite `search.ts`**:
-    *   Remove the custom `postMessage` wrapping logic, UUID generation, and promise map.
-    *   Initialize the worker and wrap it using `Comlink.wrap`.
-    *   Update method calls to use the proxied object.
+3.  **Refactor `src/lib/search.ts`**:
+    *   Delete `SearchClient` class complexity (pending map, send method).
+    *   Instantiate worker and wrap with `Comlink.wrap`.
+    *   Export the wrapped proxy.
 
 ### Validation
 
-*   **Functional Test**: Verify search results are returned correctly.
-*   **Type Check**: Ensure TypeScript types properly infer method signatures across the boundary (try changing a method signature in the worker and see if the client code flags an error).
+*   **Functional Test**: Verify search queries return expected results.
+*   **Type Safety**: Ensure TypeScript correctly infers arguments for `searchEngine.search` and `searchEngine.indexBook`.
