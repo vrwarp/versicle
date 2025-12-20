@@ -32,3 +32,6 @@ android-sdk/
 cmdline-tools.zip
 public/piper/
 venv/
+
+# Test output
+test_output*.txt
