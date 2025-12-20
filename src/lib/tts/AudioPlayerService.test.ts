@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
+import { BackgroundAudio } from './BackgroundAudio';
 
 // Mock WebSpeechProvider class
 vi.mock('./providers/WebSpeechProvider', () => {
@@ -162,5 +163,24 @@ describe('AudioPlayerService', () => {
         const errorCalls = listener.mock.calls.filter(args => args[4] && args[4].includes("Cloud voice failed"));
         expect(errorCalls.length).toBeGreaterThan(0);
         expect(errorCalls[0][4]).toContain("API Quota Exceeded");
+    });
+
+    it('should continue playing background audio when status becomes completed', async () => {
+        const playSpy = vi.spyOn(BackgroundAudio.prototype, 'play');
+        const forceStopSpy = vi.spyOn(BackgroundAudio.prototype, 'forceStop');
+
+        // Ensure we are in a playing state
+        // @ts-expect-error Access private
+        service.setStatus('playing');
+
+        expect(playSpy).toHaveBeenCalled();
+        playSpy.mockClear();
+
+        // Transition to completed
+        // @ts-expect-error Access private
+        service.setStatus('completed');
+
+        expect(playSpy).toHaveBeenCalled();
+        expect(forceStopSpy).not.toHaveBeenCalled();
     });
 });

@@ -685,7 +685,7 @@ export class AudioPlayerService {
           status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
       );
 
-      if (status === 'playing' || status === 'loading') {
+      if (status === 'playing' || status === 'loading' || status === 'completed') {
           this.backgroundAudio.play(this.backgroundAudioMode);
       } else if (status === 'paused') {
           this.backgroundAudio.stopWithDebounce(500);
