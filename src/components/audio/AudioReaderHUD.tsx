@@ -3,13 +3,18 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { useShallow } from 'zustand/react/shallow';
 import { CompassPill } from './CompassPill';
 import { SatelliteFAB } from './SatelliteFAB';
 
 export const AudioReaderHUD: React.FC = () => {
-    const { queue, isPlaying, pause } = useTTSStore();
-    const { immersiveMode } = useReaderStore();
-    const { books } = useLibraryStore();
+    const { queue, isPlaying, pause } = useTTSStore(useShallow(state => ({
+        queue: state.queue,
+        isPlaying: state.isPlaying,
+        pause: state.pause
+    })));
+    const immersiveMode = useReaderStore(state => state.immersiveMode);
+    const books = useLibraryStore(state => state.books);
     const location = useLocation();
     const navigate = useNavigate();
 
