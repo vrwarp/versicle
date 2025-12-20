@@ -33,7 +33,7 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contents = (rendition as any).getContents()[0];
 
-    if (!contents) return [];
+    if (!contents?.document?.body) return [];
 
     const doc = contents.document;
     const body = doc.body;
