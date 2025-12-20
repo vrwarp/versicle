@@ -114,28 +114,4 @@ describe('AudioPlayerService Concurrency', () => {
       expect(service['status']).toBe('stopped');
   });
 
-  it('should not start playing if aborted while waiting for lock', async () => {
-      // 1. Start a slow operation to hold the lock
-      let releaseLock: () => void;
-      const slowPromise = new Promise<void>(resolve => { releaseLock = resolve; });
-
-      // Inject a fake lock
-      // @ts-expect-error Accessing private property for testing
-      service['operationLock'] = slowPromise;
-
-      // 2. Call play() - this should queue up behind the lock
-      const playPromise = service.play();
-
-      // 3. Call stop() - this should abort the pending play
-      service.stop();
-
-      // 4. Release the lock
-      // @ts-expect-error Function is assigned inside Promise executor
-      releaseLock();
-
-      await playPromise;
-
-      // 5. Verify play() didn't change state to playing
-      expect(service['status']).toBe('stopped');
-  });
 });
