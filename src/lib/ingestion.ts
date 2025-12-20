@@ -36,8 +36,9 @@ function cheapHash(buffer: ArrayBuffer): string {
  * @returns The fingerprint string.
  */
 export async function generateFileFingerprint(file: File): Promise<string> {
+  console.log(`[Fingerprint] Start for ${file.name}, size=${file.size}, lastMod=${file.lastModified}`);
   // 1. Metadata: Primary filter
-  const metaString = `${file.name}-${file.size}-${file.lastModified}`;
+  const metaString = `${file.name}-${file.size}`;
 
   // 2. Head/Tail Sampling: Read first 4KB and last 4KB
   const headSize = Math.min(4096, file.size);
@@ -47,7 +48,11 @@ export async function generateFileFingerprint(file: File): Promise<string> {
   const tail = await readSlice(file, Math.max(0, file.size - tailSize), tailSize);
 
   // 3. Fast non-crypto hash
-  return `${metaString}-${cheapHash(head)}-${cheapHash(tail)}`;
+  const headHash = cheapHash(head);
+  const tailHash = cheapHash(tail);
+  const fp = `${metaString}-${headHash}-${tailHash}`;
+  console.log(`[Fingerprint] File: ${file.name}, Size: ${file.size}, FP: ${fp}`);
+  return fp;
 }
 
 // Helper to convert Blob to text using FileReader (for compatibility)

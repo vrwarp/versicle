@@ -6,6 +6,7 @@ import { validateBookMetadata } from './validators';
 import { mergeCfiRanges } from '../lib/cfi-utils';
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
+import { generateFileFingerprint } from '../lib/ingestion';
 
 class DBService {
   private async getDB() {
@@ -207,17 +208,8 @@ class DBService {
       if (!book.fileHash) {
         const fileStore = tx.objectStore('files');
         const fileData = await fileStore.get(id);
-        if (fileData) {
-          let arrayBuffer: ArrayBuffer;
-          if (fileData instanceof Blob) {
-             arrayBuffer = await fileData.arrayBuffer();
-          } else {
-             arrayBuffer = fileData;
-          }
-
-          const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-          const hashArray = Array.from(new Uint8Array(hashBuffer));
-          book.fileHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+        if (fileData && fileData instanceof File) {
+             book.fileHash = await generateFileFingerprint(fileData);
         }
       }
 
@@ -246,13 +238,24 @@ class DBService {
       if (!book) throw new Error('Book not found');
       if (!book.fileHash) throw new Error('Cannot verify file (missing hash).');
 
-      const arrayBuffer = await file.arrayBuffer();
-      const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const fileHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+      const newFingerprint = await generateFileFingerprint(file);
+      console.log(`[Restore] Stored: ${book.fileHash}, New: ${newFingerprint}`);
 
-      if (fileHash !== book.fileHash) {
-        throw new Error('File verification failed: Checksum mismatch.');
+      if (newFingerprint !== book.fileHash) {
+          // Check for legacy SHA-256 hash
+          const isLegacyHash = /^[a-f0-9]{64}$/i.test(book.fileHash);
+          if (isLegacyHash) {
+              // For legacy books, rely on metadata verification to avoid expensive/crashing re-hash
+              // Check filename and size (approximate)
+              if (file.name === book.filename && file.size === book.fileSize) {
+                  // Validated via metadata. Update to new fingerprint.
+                  book.fileHash = newFingerprint;
+              } else {
+                  throw new Error('File verification failed: Metadata mismatch (Legacy).');
+              }
+          } else {
+              throw new Error('File verification failed: Checksum mismatch.');
+          }
       }
 
       const tx = db.transaction(['books', 'files'], 'readwrite');

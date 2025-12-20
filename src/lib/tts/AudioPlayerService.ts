@@ -129,7 +129,7 @@ export class AudioPlayerService {
     });
 
     // Update the tail reference.
-    this.pendingPromise = resultPromise.catch(() => {});
+    this.pendingPromise = resultPromise.then(() => {}, () => {});
 
     return resultPromise;
   }
