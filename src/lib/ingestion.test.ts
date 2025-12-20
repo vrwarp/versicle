@@ -17,18 +17,23 @@ vi.mock('epubjs', () => {
       },
       coverUrl: vi.fn(() => Promise.resolve('blob:cover')),
       archive: {
-        getBlob: vi.fn(() => Promise.resolve(new Blob(['<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Chapter Content</p></body></html>'], { type: 'application/xhtml+xml' }))),
+        getBlob: vi.fn(() => Promise.resolve(new Blob(['<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Chapter Content. Second Sentence.</p></body></html>'], { type: 'application/xhtml+xml' }))),
       },
       spine: {
         each: (cb: any) => {
             const items = [
-                { id: 'chap1', href: 'chapter1.html' },
-                { id: 'chap2', href: 'chapter2.html' }
+                { id: 'chap1', href: 'chapter1.html', index: 0 },
+                { id: 'chap2', href: 'chapter2.html', index: 1 }
             ];
             items.forEach(cb);
         }
       }
     })),
+    // Mock EpubCFI class
+    EpubCFI: class {
+        toString() { return 'epubcfi(/6/2[chap1]!/4/2/1:0)'; }
+        compare() { return 0; }
+    }
   };
 });
 
@@ -109,6 +114,13 @@ describe('ingestion', () => {
 
     const storedFile = await db.get('files', bookId);
     expect(storedFile).toBeDefined();
+
+    // Verify TTS content
+    const ttsContent = await db.getAll('tts_content');
+    expect(ttsContent.length).toBeGreaterThan(0);
+    expect(ttsContent[0].bookId).toBe(bookId);
+    expect(ttsContent[0].sentences.length).toBeGreaterThan(0);
+    expect(ttsContent[0].sentences[0].text).toBe('Chapter Content.');
   });
 
   it('should handle missing cover gracefully', async () => {

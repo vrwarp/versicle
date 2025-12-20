@@ -1,8 +1,10 @@
 import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
-import type { BookMetadata, SectionMetadata } from '../types/db';
+import type { BookMetadata, SectionMetadata, TTSContent } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
+import { extractSentencesFromNode } from './tts';
+import { generateEpubCfi } from './cfi-utils';
 
 function cheapHash(buffer: ArrayBuffer): string {
   const view = new Uint8Array(buffer);
@@ -102,6 +104,7 @@ export async function processEpub(file: File): Promise<string> {
   // Generate Synthetic TOC and Calculate Durations
   const syntheticToc: NavigationItem[] = [];
   const sections: SectionMetadata[] = [];
+  const ttsContentBatches: TTSContent[] = [];
   let totalChars = 0;
 
   try {
@@ -129,6 +132,28 @@ export async function processEpub(file: File): Promise<string> {
                         const text = await blobToText(blob);
                         const parser = new DOMParser();
                         const doc = parser.parseFromString(text, "application/xhtml+xml");
+
+                        // Extract TTS sentences
+                        try {
+                            // Format: epubcfi(/6/{spineIndex}[{itemId}]!)
+                            const spineIndex = (i + 1) * 2;
+                            const baseCfi = `epubcfi(/6/${spineIndex}${item.id ? `[${item.id}]` : ''}!)`;
+
+                            const sentences = extractSentencesFromNode(doc.body, (range) => {
+                                return generateEpubCfi(range, baseCfi);
+                            });
+
+                            if (sentences.length > 0) {
+                                ttsContentBatches.push({
+                                    id: `${bookId}-${item.href}`,
+                                    bookId: bookId,
+                                    sectionId: item.href,
+                                    sentences: sentences
+                                });
+                            }
+                        } catch (e) {
+                            console.warn(`Failed to extract TTS content for ${item.href}`, e);
+                        }
 
                         const headings = doc.querySelectorAll('h1, h2, h3');
                         if (headings.length > 0) {
@@ -231,7 +256,7 @@ export async function processEpub(file: File): Promise<string> {
 
   const db = await getDB();
 
-  const tx = db.transaction(['books', 'files', 'sections'], 'readwrite');
+  const tx = db.transaction(['books', 'files', 'sections', 'tts_content'], 'readwrite');
   await tx.objectStore('books').add(finalBook);
   await tx.objectStore('files').add(file, bookId);
 
@@ -239,6 +264,12 @@ export async function processEpub(file: File): Promise<string> {
   const sectionsStore = tx.objectStore('sections');
   for (const section of sections) {
     await sectionsStore.add(section);
+  }
+
+  // Store TTS content
+  const ttsStore = tx.objectStore('tts_content');
+  for (const batch of ttsContentBatches) {
+      await ttsStore.add(batch);
   }
 
   await tx.done;
