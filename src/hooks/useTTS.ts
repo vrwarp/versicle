@@ -33,6 +33,12 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
   } = useTTSStore();
 
   const currentChapterTitle = useReaderStore(state => state.currentChapterTitle);
+  // Use a ref to access the fresh title inside the effect closure without re-triggering the effect
+  const titleRef = useRef(currentChapterTitle);
+
+  useEffect(() => {
+      titleRef.current = currentChapterTitle;
+  }, [currentChapterTitle]);
 
   const [sentences, setSentences] = useState<SentenceNode[]>([]);
   const player = AudioPlayerService.getInstance();
@@ -80,7 +86,7 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
                queue.push({
                    text: randomMessage,
                    cfi: null,
-                   title: currentChapterTitle || "Empty Chapter",
+                   title: titleRef.current || "Empty Chapter",
                    isPreroll: true // Treat as system message
                });
            } else {
@@ -94,7 +100,7 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
            if (prerollEnabled && extracted.length > 0) {
                // Calculate word count
                const wordCount = extracted.reduce((acc, s) => acc + s.text.split(/\s+/).length, 0);
-               const title = currentChapterTitle || "Chapter";
+               const title = titleRef.current || "Chapter";
 
                const prerollText = player.generatePreroll(title, wordCount, rate);
 
@@ -116,8 +122,19 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
        }
     };
 
+    // Standard events (visual)
     rendition.on('rendered', loadSentences);
     rendition.on('relocated', loadSentences);
+
+    // CRITICAL FIX: Hook into content loading.
+    // 'rendered' relies on requestAnimationFrame which is throttled in background tabs.
+    // 'content' hooks fire as soon as the DOM is ready, ensuring the queue populates
+    // even if the tab is inactive.
+    const onContentReady = () => {
+        loadSentences();
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (rendition.hooks.content as any).register(onContentReady);
 
     // Also try immediately if already rendered or if the book is ready
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -132,6 +149,8 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
         (rendition as any).off('rendered', loadSentences);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).off('relocated', loadSentences);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (rendition.hooks.content as any).deregister(onContentReady);
     };
   }, [rendition, player, isReady]); // Removed currentCfi dependency
 

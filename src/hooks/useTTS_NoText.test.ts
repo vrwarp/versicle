@@ -55,7 +55,13 @@ describe('useTTS - No Text Behavior', () => {
             currentLocation: vi.fn().mockReturnValue({ start: { href: 'chapter1.html' } }),
             on: vi.fn(),
             off: vi.fn(),
-            getContents: vi.fn().mockReturnValue([{ document: {} }])
+            getContents: vi.fn().mockReturnValue([{ document: {} }]),
+            hooks: {
+                content: {
+                    register: vi.fn(),
+                    deregister: vi.fn()
+                }
+            }
         };
     });
 

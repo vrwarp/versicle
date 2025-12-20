@@ -76,6 +76,12 @@ describe('useTTS', () => {
             off: vi.fn(),
             getContents: vi.fn().mockReturnValue([]),
             currentLocation: vi.fn().mockReturnValue({ start: { href: 'chapter1.html' } }),
+            hooks: {
+                content: {
+                    register: vi.fn(),
+                    deregister: vi.fn()
+                }
+            }
         };
     });
 
