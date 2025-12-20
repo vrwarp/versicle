@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
 import { Button } from '../ui/Button';
 import { useSmartTOC } from '../../hooks/useSmartTOC';
 import { Wand2 } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 /**
  * The main reader interface component.
@@ -534,59 +535,115 @@ export const ReaderView: React.FC = () => {
 
       {/* Immersive Mode Exit Button */}
       {immersiveMode && (
-        <button
+        <Button
+            variant="ghost"
+            size="icon"
             data-testid="reader-immersive-exit-button"
             aria-label="Exit Immersive Mode"
             onClick={() => setImmersiveMode(false)}
-            className="absolute top-4 right-4 z-50 p-2 rounded-full bg-surface/50 hover:bg-surface shadow-md backdrop-blur-sm transition-colors"
+            className="absolute top-4 right-4 z-50 rounded-full bg-surface/50 hover:bg-surface shadow-md backdrop-blur-sm transition-colors"
         >
             <Minimize className="w-5 h-5 text-foreground" />
-        </button>
+        </Button>
       )}
 
       {/* Header */}
       {!immersiveMode && (
-        <header className="flex items-center justify-between px-6 md:px-8 py-2 bg-surface shadow-sm z-10">
-            <div className="flex items-center gap-2">
-            <button data-testid="reader-back-button" aria-label="Back" onClick={() => navigate('/')} className="p-2 rounded-full hover:bg-border">
-                <ArrowLeft className="w-5 h-5 text-muted-foreground" />
-            </button>
-            <button data-testid="reader-toc-button" aria-label="Table of Contents" onClick={() => { setShowToc(!showToc); setShowAnnotations(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showToc ? 'bg-border' : ''}`}>
-                <List className="w-5 h-5 text-muted-foreground" />
-            </button>
-            <button data-testid="reader-annotations-button" aria-label="Annotations" onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); setShowSearch(false); }} className={`p-2 rounded-full hover:bg-border ${showAnnotations ? 'bg-border' : ''}`}>
-                <Highlighter className="w-5 h-5 text-muted-foreground" />
-            </button>
-            <button data-testid="reader-search-button" aria-label="Search" onClick={() => { setShowSearch(!showSearch); setShowToc(false); setShowAnnotations(false); }} className="p-2 rounded-full hover:bg-border">
-                    <Search className="w-5 h-5 text-muted-foreground" />
-            </button>
+        <header className="flex items-center justify-between px-2 md:px-8 py-2 bg-surface shadow-sm z-10">
+            <div className="flex items-center gap-1 md:gap-2">
+            <Button
+                variant="ghost"
+                size="icon"
+                data-testid="reader-back-button"
+                aria-label="Back"
+                onClick={() => navigate('/')}
+                className="rounded-full text-muted-foreground"
+            >
+                <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <Button
+                variant="ghost"
+                size="icon"
+                data-testid="reader-toc-button"
+                aria-label="Table of Contents"
+                onClick={() => { setShowToc(!showToc); setShowAnnotations(false); setShowSearch(false); }}
+                className={cn("rounded-full text-muted-foreground", showToc && "bg-accent text-accent-foreground")}
+            >
+                <List className="w-5 h-5" />
+            </Button>
+            <Button
+                variant="ghost"
+                size="icon"
+                data-testid="reader-annotations-button"
+                aria-label="Annotations"
+                onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); setShowSearch(false); }}
+                className={cn("rounded-full text-muted-foreground", showAnnotations && "bg-accent text-accent-foreground")}
+            >
+                <Highlighter className="w-5 h-5" />
+            </Button>
+            <Button
+                variant="ghost"
+                size="icon"
+                data-testid="reader-search-button"
+                aria-label="Search"
+                onClick={() => { setShowSearch(!showSearch); setShowToc(false); setShowAnnotations(false); }}
+                className="rounded-full text-muted-foreground"
+            >
+                    <Search className="w-5 h-5" />
+            </Button>
             </div>
-            <h1 className="text-sm font-medium truncate max-w-xs text-foreground">
+            <h1 className="text-sm font-medium truncate max-w-xs text-foreground hidden md:block">
                 {currentChapterTitle || 'Reading'}
             </h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 md:gap-2">
             <Sheet open={audioPanelOpen} onOpenChange={setAudioPanelOpen}>
                 <SheetTrigger asChild>
-                    <button data-testid="reader-audio-button" aria-label="Open Audio Deck" className={`p-2 rounded-full hover:bg-border ${isPlaying ? 'text-primary' : 'text-muted-foreground'}`}>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        data-testid="reader-audio-button"
+                        aria-label="Open Audio Deck"
+                        className={cn("rounded-full", isPlaying ? "text-primary" : "text-muted-foreground")}
+                    >
                         <Headphones className="w-5 h-5" />
-                    </button>
+                    </Button>
                 </SheetTrigger>
                 <UnifiedAudioPanel />
             </Sheet>
-            <button data-testid="reader-immersive-enter-button" aria-label="Enter Immersive Mode" onClick={() => setImmersiveMode(true)} className="p-2 rounded-full hover:bg-border">
-                <Maximize className="w-5 h-5 text-muted-foreground" />
-            </button>
+            <Button
+                variant="ghost"
+                size="icon"
+                data-testid="reader-immersive-enter-button"
+                aria-label="Enter Immersive Mode"
+                onClick={() => setImmersiveMode(true)}
+                className="rounded-full text-muted-foreground"
+            >
+                <Maximize className="w-5 h-5" />
+            </Button>
             <Popover>
                 <PopoverTrigger asChild>
-                    <button data-testid="reader-visual-settings-button" aria-label="Visual Settings" className="p-2 rounded-full hover:bg-border">
-                        <Type className="w-5 h-5 text-muted-foreground" />
-                    </button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        data-testid="reader-visual-settings-button"
+                        aria-label="Visual Settings"
+                        className="rounded-full text-muted-foreground"
+                    >
+                        <Type className="w-5 h-5" />
+                    </Button>
                 </PopoverTrigger>
                 <VisualSettings />
             </Popover>
-            <button data-testid="reader-settings-button" aria-label="Settings" onClick={() => setGlobalSettingsOpen(true)} className="p-2 rounded-full hover:bg-border">
-                <Settings className="w-5 h-5 text-muted-foreground" />
-            </button>
+            <Button
+                variant="ghost"
+                size="icon"
+                data-testid="reader-settings-button"
+                aria-label="Settings"
+                onClick={() => setGlobalSettingsOpen(true)}
+                className="rounded-full text-muted-foreground"
+            >
+                <Settings className="w-5 h-5" />
+            </Button>
             </div>
         </header>
       )}
