@@ -1,8 +1,10 @@
-import { PiperProcessSupervisor } from './PiperProcessSupervisor';
 
 const blobs: Record<string, Blob> = {};
-const supervisor = new PiperProcessSupervisor();
 const CACHE_NAME = 'piper-voices-v1';
+
+let worker: Worker | null = null;
+let currentWorkerUrl: string | null = null;
+let pendingPromise: Promise<void> = Promise.resolve();
 
 // --- Cache API Helpers ---
 
@@ -117,16 +119,39 @@ export const fetchWithBackoff = async (url: string, retries = 3, delay = 1000): 
  */
 export const isModelLoadedInWorker = async (modelUrl: string): Promise<boolean> => {
   return new Promise<boolean>((resolve) => {
-    supervisor.send(
-      { kind: "isAlive", modelUrl },
-      (event: MessageEvent) => {
-        if (event.data.kind === "isAlive") {
-          resolve(event.data.isAlive);
+    pendingPromise = pendingPromise.then(async () => {
+        if (!worker) {
+            resolve(false);
+            return;
         }
-      },
-      () => resolve(false), // error handler
-      5000 // Short timeout for check
-    );
+
+        let resolved = false;
+
+        const cleanup = () => {
+            if (worker) worker.onmessage = null;
+        };
+
+        const timeout = setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                cleanup();
+                resolve(false);
+            }
+        }, 2000);
+
+        worker.onmessage = (event: MessageEvent) => {
+            if (event.data.kind === "isAlive") {
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timeout);
+                    cleanup();
+                    resolve(event.data.isAlive);
+                }
+            }
+        };
+
+        worker.postMessage({ kind: "isAlive", modelUrl });
+    }).catch(() => resolve(false));
   });
 };
 
@@ -142,7 +167,11 @@ export const deleteCachedModel = (modelUrl: string, modelConfigUrl: string) => {
   removeFromCache(modelUrl);
   removeFromCache(modelConfigUrl);
 
-  supervisor.terminate();
+  if (worker) {
+      worker.terminate();
+      worker = null;
+      currentWorkerUrl = null;
+  }
 };
 
 /**
@@ -255,82 +284,96 @@ export const piperGenerate = async (
   // Load from cache to memory if needed
   await ensureModelLoaded(modelUrl, modelConfigUrl);
 
-  // Initialize supervisor with worker URL
-  supervisor.init(workerUrl);
-
-  // Validate worker state before starting generation.
-  await new Promise<void>((resolve) => {
-      supervisor.send(
-          { kind: "isAlive", modelUrl },
-          (event) => {
-              if (event.data.kind === 'isAlive') {
-                  if (!event.data.isAlive) {
-                      supervisor.terminate();
-                      supervisor.init(workerUrl);
-                  }
-                  resolve();
-              }
-          },
-          () => {
-              supervisor.terminate();
-              supervisor.init(workerUrl);
-              resolve();
-          },
-          5000
-      )
-  });
-
-
   return new Promise((resolve, reject) => {
-    supervisor.send(
-      {
-        kind: "init",
-        input,
-        speakerId,
-        blobs,
-        piperPhonemizeJsUrl,
-        piperPhonemizeWasmUrl,
-        piperPhonemizeDataUrl,
-        modelUrl,
-        modelConfigUrl,
-        onnxruntimeUrl,
-        workerUrl
-      },
-      (event: MessageEvent) => {
-        const data = event.data;
-        switch (data.kind) {
-          case "output": {
-            resolve({ file: data.file, duration: data.duration });
-            break;
+      pendingPromise = pendingPromise.then(async () => {
+          try {
+              if (!worker || currentWorkerUrl !== workerUrl) {
+                  if (worker) worker.terminate();
+                  worker = new Worker(workerUrl);
+                  currentWorkerUrl = workerUrl;
+                  worker.onerror = (e) => {
+                      console.error("Piper Worker Error", e);
+                      // Let it crash
+                      if (worker) worker.terminate();
+                      worker = null;
+                      currentWorkerUrl = null;
+                  };
+              }
+
+              // Capture worker instance locally to satisfy TypeScript and ensure consistency
+              const w = worker;
+              const result = await new Promise<{ file: Blob; duration: number }>((innerResolve, innerReject) => {
+                   if (!w) {
+                       innerReject(new Error("Failed to create worker"));
+                       return;
+                   }
+
+                   // Attach temporary listener
+                   const cleanup = () => {
+                       w.onmessage = null;
+                   };
+
+                   // Handle errors during this specific task
+                   const oldOnError = w.onerror;
+                   w.onerror = (e) => {
+                       if (oldOnError) oldOnError.call(w, e);
+                       cleanup();
+                       innerReject(new Error("Worker crashed during generation"));
+                   };
+
+                   w.onmessage = (event: MessageEvent) => {
+                        const data = event.data;
+                        switch (data.kind) {
+                          case "output": {
+                            cleanup();
+                            // Restore onerror
+                            w.onerror = oldOnError;
+                            innerResolve({ file: data.file, duration: data.duration });
+                            break;
+                          }
+                          case "stderr": {
+                            console.error(data.message);
+                            break;
+                          }
+                          case "fetch": {
+                            if (data.blob) blobs[data.url] = data.blob;
+                            const progress = data.blob
+                              ? 1
+                              : data.total
+                              ? data.loaded / data.total
+                              : 0;
+                            onProgress(Math.round(progress * 100));
+                            break;
+                          }
+                          case "error": {
+                              cleanup();
+                              w.onerror = oldOnError;
+                              innerReject(new Error(data.error));
+                              break;
+                          }
+                        }
+                   };
+
+                   w.postMessage({
+                        kind: "init",
+                        input,
+                        speakerId,
+                        blobs,
+                        piperPhonemizeJsUrl,
+                        piperPhonemizeWasmUrl,
+                        piperPhonemizeDataUrl,
+                        modelUrl,
+                        modelConfigUrl,
+                        onnxruntimeUrl,
+                        workerUrl
+                   });
+              });
+
+              resolve(result);
+
+          } catch (e) {
+              reject(e);
           }
-          case "stderr": {
-            console.error(data.message);
-            break;
-          }
-          case "fetch": {
-            if (data.blob) blobs[data.url] = data.blob;
-            const progress = data.blob
-              ? 1
-              : data.total
-              ? data.loaded / data.total
-              : 0;
-            onProgress(Math.round(progress * 100));
-            break;
-          }
-          case "error": {
-              reject(new Error(data.error));
-              break;
-          }
-          case "complete": {
-             break;
-          }
-        }
-      },
-      (error) => {
-        reject(error);
-      },
-      60000,
-      1
-    );
+      }).catch(() => {});
   });
 };
