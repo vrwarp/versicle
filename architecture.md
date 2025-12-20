@@ -162,12 +162,22 @@ Implements full-text search off the main thread to prevent UI freezing.
 *   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book and initiates a search. This avoids storing massive indices in IndexedDB but adds a delay before search is ready for large books.
 
 #### Backup (`src/lib/BackupService.ts`)
-Manages data portability.
+Manages internal state backup and restoration (JSON/ZIP).
 
 *   **`createMetadataBackup()`**: Exports JSON containing metadata, themes, and settings.
     *   *Note*: Does **not** include EPUB binaries (metadata only).
 *   **`restoreMetadataBackup(json)`**: Restores data from a JSON backup string.
     *   **Strategy**: Upserts metadata. If a book exists, it preserves the existing binary.
+
+#### Data Portability (`src/lib/csv.ts`)
+Handles interoperability with external reading trackers (Goodreads).
+
+*   **Goal**: Allow users to import/export their reading lists and status without vendor lock-in.
+*   **Logic**:
+    *   **Parsing**: Uses `PapaParse` to handle CSV complexity (quoted fields, newlines).
+    *   **Heuristics**: If the CSV lacks a unique filename (e.g. Goodreads export), it generates a deterministic ID from ISBN or Title+Author.
+    *   **Normalization**: Maps various status strings (e.g., "to-read", "want to read") to internal states.
+*   **Trade-off**: Fuzzy matching by Title/Author when ISBN is missing can be imprecise (e.g., different editions of the same book).
 
 #### Maintenance (`src/lib/MaintenanceService.ts`)
 Handles database health and integrity.
@@ -225,6 +235,20 @@ Persists synthesized audio to IndexedDB.
 Manages visual "Karaoke" synchronization.
 
 *   **Logic**: Binary search (or optimized scan) through time-alignment data provided by the TTS provider to highlight the current word/sentence.
+
+#### `src/lib/tts/AudioElementPlayer.ts`
+Low-level wrapper around the HTML5 `<audio>` element.
+
+*   **Goal**: Abstract resource management for Blob-based playback used by `BaseCloudProvider` (Piper, OpenAI, etc.).
+*   **Logic**: Automatically revokes `ObjectURLs` on track end or stop to prevent memory leaks.
+
+#### `src/lib/tts/BackgroundAudio.ts`
+*   **Goal**: Prevent mobile operating systems (iOS/Android) from killing the app or pausing audio when the screen is locked or the app is in the background.
+*   **Logic**: Plays a silent loop (or optional white noise) to keep the OS Media Session active.
+*   **Trade-off**: "Hack" solution required due to restrictive mobile browser policies.
+
+#### TTS Processors (`src/lib/tts/processors/`)
+*   **`Sanitizer.ts`**: Cleans text before speech generation. Removes page numbers, citations, and URLs to improve listening flow.
 
 #### `src/lib/tts/providers/`
 Plugin architecture for TTS backends. All providers implement `ITTSProvider`.

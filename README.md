@@ -18,10 +18,11 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
     *   **Smart Resume**: Intelligently rewinds context (2 sentences) after pauses.
     *   **Visual Sync**: Karaoke-style sentence and word highlighting.
     *   **Pronunciation Lexicon**: Fix mispronounced words using Regex-based replacement rules.
-    *   **Background Playback**: (Android) Continue listening when the screen is off.
+    *   **Background Playback**: (Android) Continue listening when the screen is off using Media Session API and optional White Noise generation.
 *   **Full-Text Search**: Fast, off-main-thread search using Web Workers and FlexSearch.
 *   **Data Management**:
     *   **Backup/Restore**: Export your library metadata, reading progress, and settings to JSON. (Note: EPUB files are not currently included in backups and must be re-imported).
+    *   **Interoperability**: Import/Export reading lists (CSV) compatible with Goodreads.
     *   **Offloading**: Remove large book files to save space on mobile devices while keeping your notes, reading progress, and metadata intact.
     *   **Maintenance**: Run health checks to identify missing files or corrupt data, prune orphaned records, and perform factory resets if needed.
 *   **PWA & Mobile**: Installable as a standalone app on desktop and mobile. Native Android build via Capacitor.
@@ -33,6 +34,7 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 *   **Styling**: Tailwind CSS, Shadcn UI
 *   **State Management**: Zustand (with persistence)
 *   **Storage**: IndexedDB (via `idb`)
+*   **Data Portability**: PapaParse
 *   **Rendering**: `epub.js`
 *   **Search**: `FlexSearch` (in Web Worker)
 *   **TTS**: Piper (WASM), Web Speech API, Google/OpenAI/LemonFox Cloud APIs, Capacitor Native TTS
