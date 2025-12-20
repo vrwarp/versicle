@@ -34,6 +34,7 @@ This phase focuses on refactoring `src/lib/ingestion.ts` and `src/db/DBService.t
 This phase targets `src/lib/tts/AudioPlayerService.ts`, removing custom Mutex locks in favor of a robust Promise chain. It also involves removing `src/lib/tts/providers/PiperProcessSupervisor.ts` in favor of a simpler "Let It Crash" error boundary pattern for the TTS worker (modifying `src/lib/tts/providers/piper-utils.ts`).
 
 ### [Phase 3: Search Refactor](simplification_phase3.md)
+**Status**: ✅ Completed
 **Objective**: Modernize the Worker communication layer.
 This phase replaces the custom RPC layer in `src/lib/search.ts` and `src/workers/search.worker.ts` with `comlink` to improve type safety and reduce boilerplate.
 

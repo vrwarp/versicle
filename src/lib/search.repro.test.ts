@@ -2,36 +2,30 @@ import { describe, it, expect, vi } from 'vitest';
 
 // Mock Worker
 class MockWorker {
-  onmessage: ((e: MessageEvent) => void) | null = null;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  postMessage(data: any) {
-    if (data.type === 'SEARCH') {
-        const id = data.id; // Extract ID
-        setTimeout(() => {
-            if (this.onmessage) {
-                const query = data.payload.query;
-                this.onmessage({
-                    data: {
-                        type: 'SEARCH_RESULTS',
-                        id, // Return ID
-                        results: [
-                            { href: 'result', excerpt: `Result for ${query}` }
-                        ]
-                    }
-                } as MessageEvent);
-            }
-        }, 50);
-    }
-  }
   terminate() {}
 }
-
 vi.stubGlobal('Worker', MockWorker);
 vi.stubGlobal('URL', class {
     constructor(url: string) { return url; }
     toString() { return ''; }
 });
+
+// Mock Comlink
+const mockEngine = {
+    search: vi.fn().mockImplementation(async (_bookId: string, query: string) => {
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return [{ href: 'result', excerpt: `Result for ${query}` }];
+    }),
+    initIndex: vi.fn(),
+    addDocuments: vi.fn()
+};
+
+vi.mock('comlink', () => ({
+    wrap: vi.fn(() => mockEngine),
+    expose: vi.fn(),
+    Remote: {}
+}));
 
 import { searchClient } from './search';
 

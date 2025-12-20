@@ -1,49 +1,28 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// Move mock setup BEFORE import
 // Mock Worker
 class MockWorker {
-  onmessage: ((e: MessageEvent) => void) | null = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  postMessage(data: any) {
-    const { id, type } = data;
-
-    // Simulate async response
-    setTimeout(() => {
-        if (!this.onmessage) return;
-
-        if (type === 'INDEX_BOOK') {
-           // Legacy path, should not be called by new implementation
-        } else if (type === 'INIT_INDEX') {
-            this.onmessage({ data: { id, type: 'ACK' } } as MessageEvent);
-        } else if (type === 'ADD_TO_INDEX') {
-            this.onmessage({ data: { id, type: 'ACK' } } as MessageEvent);
-        } else if (type === 'FINISH_INDEXING') {
-            this.onmessage({ data: { id, type: 'ACK' } } as MessageEvent);
-        } else if (type === 'SEARCH') {
-            this.onmessage({
-                data: {
-                    type: 'SEARCH_RESULTS',
-                    id,
-                    results: [
-                        { href: 'chap1.html', excerpt: '...found match...' }
-                    ]
-                }
-            } as MessageEvent);
-        }
-    }, 10);
-  }
   terminate() {}
 }
-
-// Mock Worker global
 vi.stubGlobal('Worker', MockWorker);
 vi.stubGlobal('URL', class {
     constructor(url: string) { return url; }
     toString() { return ''; }
 });
 
-// Now import the client which uses the global Worker
+// Mock Comlink
+const mockEngine = {
+    initIndex: vi.fn().mockResolvedValue(undefined),
+    addDocuments: vi.fn().mockResolvedValue(undefined),
+    search: vi.fn().mockResolvedValue([{ href: 'chap1.html', excerpt: '...found match...' }])
+};
+
+vi.mock('comlink', () => ({
+    wrap: vi.fn(() => mockEngine),
+    expose: vi.fn(),
+    Remote: {}
+}));
+
 import { searchClient } from './search';
 
 // Mock epubjs Book
@@ -66,8 +45,7 @@ const mockBook = {
 
 describe('SearchClient', () => {
 
-    it('should index a book using archive access and send completion signal', async () => {
-        const postMessageSpy = vi.spyOn(MockWorker.prototype, 'postMessage');
+    it('should index a book using archive access', async () => {
         // Reset mocks
         vi.clearAllMocks();
         mockBook.archive.getBlob.mockResolvedValue(mockBlob);
@@ -76,10 +54,7 @@ describe('SearchClient', () => {
         await searchClient.indexBook(mockBook as any, 'book-1');
 
         // Should initialize
-        expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'INIT_INDEX',
-            payload: { bookId: 'book-1' }
-        }));
+        expect(mockEngine.initIndex).toHaveBeenCalledWith('book-1');
 
         // Should use archive to get blob
         expect(mockBook.archive.getBlob).toHaveBeenCalledWith('chap1.html');
@@ -87,25 +62,12 @@ describe('SearchClient', () => {
         expect(mockBook.load).not.toHaveBeenCalled();
 
         // Should send add message
-        expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'ADD_TO_INDEX',
-            payload: {
-                bookId: 'book-1',
-                sections: expect.arrayContaining([
-                    expect.objectContaining({ href: 'chap1.html', text: expect.stringContaining('This is some text content in chapter 1.') })
-                ])
-            }
-        }));
-
-        // Should send completion signal
-        expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'FINISH_INDEXING',
-            payload: { bookId: 'book-1' }
-        }));
+        expect(mockEngine.addDocuments).toHaveBeenCalledWith('book-1', expect.arrayContaining([
+            expect.objectContaining({ href: 'chap1.html', text: expect.stringContaining('This is some text content in chapter 1.') })
+        ]));
     });
 
     it('should fallback to book.load if archive fails', async () => {
-        const postMessageSpy = vi.spyOn(MockWorker.prototype, 'postMessage');
         // Reset mocks
         vi.clearAllMocks();
         mockBook.archive.getBlob.mockResolvedValue(null); // Simulate archive failure/missing file
@@ -119,15 +81,9 @@ describe('SearchClient', () => {
         expect(mockBook.load).toHaveBeenCalledWith('chap1.html');
 
         // Should send add message (with content from load)
-        expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'ADD_TO_INDEX',
-            payload: {
-                bookId: 'book-1',
-                sections: expect.arrayContaining([
-                    expect.objectContaining({ href: 'chap1.html', text: expect.stringContaining('This is some text content in chapter 1.') })
-                ])
-            }
-        }));
+        expect(mockEngine.addDocuments).toHaveBeenCalledWith('book-1', expect.arrayContaining([
+            expect.objectContaining({ href: 'chap1.html', text: expect.stringContaining('This is some text content in chapter 1.') })
+        ]));
     });
 
     it('should report progress', async () => {
@@ -141,6 +97,7 @@ describe('SearchClient', () => {
         const results = await searchClient.search('query', 'book-1');
         expect(results).toHaveLength(1);
         expect(results[0].href).toBe('chap1.html');
+        expect(mockEngine.search).toHaveBeenCalledWith('book-1', 'query');
     });
 
     it('should wait for book.ready before indexing', async () => {
@@ -166,14 +123,10 @@ describe('SearchClient', () => {
             })
         };
 
-        const postMessageSpy = vi.spyOn(MockWorker.prototype, 'postMessage');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await searchClient.indexBook(delayedBook as any, 'book-2');
 
         expect(delayedBook.spine).toBeDefined();
-        expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({
-            type: 'INIT_INDEX',
-            payload: { bookId: 'book-2' }
-        }));
+        expect(mockEngine.initIndex).toHaveBeenCalledWith('book-2');
     });
 });
