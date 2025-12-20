@@ -21,24 +21,6 @@ export interface SearchResult {
 }
 
 /**
- * Defines the available message types for communication between the main thread and the Search Worker.
- */
-export type SearchRequestType =
-    | 'INDEX_BOOK'
-    | 'INIT_INDEX'
-    | 'ADD_TO_INDEX'
-    | 'FINISH_INDEXING'
-    | 'SEARCH';
-
-/**
- * Defines the possible response types from the Search Worker.
- */
-export type SearchResponseType =
-    | 'ACK'
-    | 'SEARCH_RESULTS'
-    | 'ERROR';
-
-/**
  * Represents a section of a book to be indexed.
  * Typically corresponds to a single spine item (chapter/file).
  */
@@ -50,71 +32,3 @@ export interface SearchSection {
     /** The raw text content of the section. */
     text: string;
 }
-
-/**
- * Discriminated Union of all possible requests sent to the Search Worker.
- * The `type` field is the discriminator.
- *
- * Usage:
- * - `INDEX_BOOK`: Indexes an entire book in one go (legacy/unused by batched client).
- * - `INIT_INDEX`: Initializes/clears the index for a book.
- * - `ADD_TO_INDEX`: Adds a batch of sections to the index.
- * - `FINISH_INDEXING`: Signals that all batches have been sent.
- * - `SEARCH`: Performs a search query.
- *
- * @example
- * ```ts
- * const req: SearchRequest = {
- *   id: "uuid-123",
- *   type: "SEARCH",
- *   payload: { query: "whale", bookId: "moby-dick" }
- * };
- * ```
- */
-export type SearchRequest =
-  | {
-      id: string;
-      type: 'INDEX_BOOK';
-      payload: { bookId: string; sections: SearchSection[] }
-    }
-  | {
-      id: string;
-      type: 'INIT_INDEX';
-      payload: { bookId: string }
-    }
-  | {
-      id: string;
-      type: 'ADD_TO_INDEX';
-      payload: { bookId: string; sections: SearchSection[] }
-    }
-  | {
-      id: string;
-      type: 'FINISH_INDEXING';
-      payload: { bookId: string }
-    }
-  | {
-      id: string;
-      type: 'SEARCH';
-      payload: { query: string; bookId: string }
-    };
-
-/**
- * Discriminated Union of all possible responses from the Search Worker.
- * The `type` field is the discriminator.
- *
- * @example
- * ```ts
- * const res: SearchResponse = {
- *   id: "uuid-123",
- *   type: "SEARCH_RESULTS",
- *   results: [{ href: "chap1.html", excerpt: "..." }]
- * };
- * ```
- */
-export type SearchResponse =
-  /** Acknowledgment that a command (like INIT_INDEX) was received/processed. */
-  | { id: string; type: 'ACK' }
-  /** The result of a successful search query. */
-  | { id: string; type: 'SEARCH_RESULTS'; results: SearchResult[] }
-  /** Indicates that an error occurred during processing. */
-  | { id: string; type: 'ERROR'; error: string };

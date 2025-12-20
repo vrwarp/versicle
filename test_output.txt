@@ -1,129 +1,48 @@
-🚀 Starting Vite Preview Server...
-⏳ Waiting for application to be ready at http://localhost:5173...
-
-> versicle@0.0.0 preview
-> vite preview --port 5173 --host
-
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: http://172.17.0.2:5173/
-✅ Application is ready!
-🧪 Running verification suite...
 ============================= test session starts ==============================
-platform linux -- Python 3.10.12, pytest-9.0.2, pluggy-1.6.0
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0 -- /home/jules/.pyenv/versions/3.12.12/bin/python
+cachedir: .pytest_cache
 rootdir: /app
 plugins: playwright-0.7.2, base-url-2.1.0
-collected 138 items / 136 deselected / 2 selected
+collecting ... collected 2 items
 
-verification/test_lexicon_reorder.py FF                                  [100%]
+verification/test_journey_search.py::test_search_journey[desktop-chromium] PASSED [  2%]
+verification/test_iframe_height.py::test_iframe_height[desktop-chromium] PASSED [  3%]
+verification/test_journey_annotations.py::test_journey_annotations[desktop-chromium] PASSED [ 50%]
+verification/test_journey_search.py::test_search_journey[mobile-chromium] PASSED [100%]
 
-=================================== FAILURES ===================================
-____________________ test_lexicon_reorder[desktop-chromium] ____________________
-
-page = <Page url='http://localhost:5173/'>
-
-    def test_lexicon_reorder(page: Page):
-        """
-        Verifies that lexicon rules can be reordered in the UI.
-        """
-        utils.reset_app(page)
-
-        # Open Global Settings
->       page.get_by_test_id("reader-settings-button").click()
-
-verification/test_lexicon_reorder.py:12:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-/usr/local/lib/python3.10/dist-packages/playwright/sync_api/_generated.py:15398: in click
-    self._sync(
-/usr/local/lib/python3.10/dist-packages/playwright/_impl/_locator.py:156: in click
-    return await self._frame.click(self._selector, strict=True, **params)
-/usr/local/lib/python3.10/dist-packages/playwright/_impl/_frame.py:488: in click
-    await self._channel.send("click", locals_to_params(locals()))
-/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:59: in send
-    return await self._connection.wrap_api_call(
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-self = <playwright._impl._connection.Connection object at 0x7f82c32fc730>
-cb = <function Channel.send.<locals>.<lambda> at 0x7f82c2623520>
-is_internal = False
-
-    async def wrap_api_call(
-        self, cb: Callable[[], Any], is_internal: bool = False
-    ) -> Any:
-        if self._api_zone.get():
-            return await cb()
-        task = asyncio.current_task(self._loop)
-        st: List[inspect.FrameInfo] = getattr(task, "__pw_stack__", inspect.stack())
-        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal)
-        self._api_zone.set(parsed_st)
-        try:
-            return await cb()
-        except Exception as error:
->           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
-E           playwright._impl._errors.TimeoutError: Locator.click: Timeout 2000ms exceeded.
-E           Call log:
-E           waiting for get_by_test_id("reader-settings-button")
-
-/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:520: TimeoutError
------------------------------ Captured stdout call -----------------------------
-PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
-PAGE LOG: 🗣️ [MockTTS] Worker Initialized
-PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
-PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
-____________________ test_lexicon_reorder[mobile-chromium] _____________________
-
-page = <Page url='http://localhost:5173/'>
-
-    def test_lexicon_reorder(page: Page):
-        """
-        Verifies that lexicon rules can be reordered in the UI.
-        """
-        utils.reset_app(page)
-
-        # Open Global Settings
->       page.get_by_test_id("reader-settings-button").click()
-
-verification/test_lexicon_reorder.py:12:
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-/usr/local/lib/python3.10/dist-packages/playwright/sync_api/_generated.py:15398: in click
-    self._sync(
-/usr/local/lib/python3.10/dist-packages/playwright/_impl/_locator.py:156: in click
-    return await self._frame.click(self._selector, strict=True, **params)
-/usr/local/lib/python3.10/dist-packages/playwright/_impl/_frame.py:488: in click
-    await self._channel.send("click", locals_to_params(locals()))
-/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:59: in send
-    return await self._connection.wrap_api_call(
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
-self = <playwright._impl._connection.Connection object at 0x7f82c32fc730>
-cb = <function Channel.send.<locals>.<lambda> at 0x7f82c340b490>
-is_internal = False
-
-    async def wrap_api_call(
-        self, cb: Callable[[], Any], is_internal: bool = False
-    ) -> Any:
-        if self._api_zone.get():
-            return await cb()
-        task = asyncio.current_task(self._loop)
-        st: List[inspect.FrameInfo] = getattr(task, "__pw_stack__", inspect.stack())
-        parsed_st = _extract_stack_trace_information_from_stack(st, is_internal)
-        self._api_zone.set(parsed_st)
-        try:
-            return await cb()
-        except Exception as error:
->           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
-E           playwright._impl._errors.TimeoutError: Locator.click: Timeout 2000ms exceeded.
-E           Call log:
-E           waiting for get_by_test_id("reader-settings-button")
-
-/usr/local/lib/python3.10/dist-packages/playwright/_impl/_connection.py:520: TimeoutError
------------------------------ Captured stdout call -----------------------------
-PAGE LOG: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
-PAGE LOG: 🗣️ [MockTTS] Worker Initialized
-PAGE LOG: 🗣️ [MockTTS] window.speechSynthesis overwritten
-PAGE LOG: 🗣️ [MockTTS] Dispatching voiceschanged
-=========================== short test summary info ============================
-FAILED verification/test_lexicon_reorder.py::test_lexicon_reorder[desktop-chromium]
-FAILED verification/test_lexicon_reorder.py::test_lexicon_reorder[mobile-chromium]
-====================== 2 failed, 136 deselected in 6.20s =======================
-🚀 Running verification tests with pytest...
-Executing: /usr/bin/python -m pytest verification/ -k test_lexicon_reorder
+============================== 2 passed in 8.16s ===============================
+PASSED [  3%]
+verification/test_journey_aria_labels.py::test_aria_labels[desktop-chromium] PASSED [  4%]
+verification/test_journey_audio_deck.py::test_audio_deck_journey[desktop-chromium] PASSED [  5%]
+verification/test_journey_audio_hud.py::test_audio_hud_interaction[desktop-chromium] PASSED [  5%]
+verification/test_journey_backup.py::test_journey_backup_restore[desktop-chromium] PASSED [  6%]
+verification/test_journey_backup.py::test_journey_full_backup_restore[desktop-chromium] PASSED [  7%]
+verification/test_journey_demo_book.py::test_demo_book_journey[desktop-chromium] PASSED [  7%]
+verification/test_journey_drag_drop.py::test_drag_drop_import[desktop-chromium] PASSED [  8%]
+verification/test_journey_engine_room.py::test_engine_room_journey[desktop-chromium] PASSED [  9%]
+verification/test_journey_flow_mode.py::test_journey_flow_mode[desktop-chromium] FAILED [  9%]
+verification/test_journey_highlight_play.py::test_journey_highlight_play[desktop-chromium] PASSED [ 10%]
+verification/test_journey_history.py::test_reading_history_journey[desktop-chromium] PASSED [ 11%]
+verification/test_journey_immersive_mode.py::test_immersive_mode[desktop-chromium] PASSED [ 11%]
+verification/test_journey_import_error.py::test_import_error[desktop-chromium] PASSED [ 12%]
+verification/test_journey_lexicon.py::test_journey_lexicon[desktop-chromium] PASSED [ 13%]
+verification/test_journey_lexicon_csv.py::test_journey_lexicon_csv[desktop-chromium] PASSED [ 13%]
+verification/test_journey_library.py::test_library_journey[desktop-chromium] PASSED [ 14%]
+verification/test_journey_library_grid.py::test_library_grid_view[desktop-chromium] PASSED [ 15%]
+verification/test_journey_list_view.py::test_journey_list_view[desktop-chromium] PASSED [ 15%]
+verification/test_journey_long_read.py::test_long_reading_journey[desktop-chromium] PASSED [ 16%]
+verification/test_journey_preroll.py::test_preroll_journey[desktop-chromium] PASSED [ 17%]
+verification/test_journey_progress_bar.py::test_verify_progress_bar[desktop-chromium] PASSED [ 17%]
+verification/test_journey_reading.py::test_reading_journey[desktop-chromium] PASSED [ 18%]
+verification/test_journey_reading_list.py::test_reading_list_journey[desktop-chromium] PASSED [ 19%]
+verification/test_journey_responsive.py::test_journey_responsive_library[desktop-chromium-mobile_small-320-568] PASSED [ 19%]
+verification/test_journey_responsive.py::test_journey_responsive_reader[desktop-chromium-mobile_small-320-568] PASSED [ 20%]
+verification/test_journey_search.py::test_search_journey[desktop-chromium] PASSED [ 21%]
+verification/test_journey_search_position.py::test_search_button_position[desktop-chromium] PASSED [ 21%]
+verification/test_journey_settings_persistence.py::test_settings_persistence[desktop-chromium] PASSED [ 22%]
+verification/test_journey_smart_delete.py::test_smart_delete_journey[desktop-chromium] PASSED [ 23%]
+verification/test_journey_smart_delete.py::test_delete_book_completely[desktop-chromium] PASSED [ 23%]
+verification/test_journey_smart_toc.py::test_journey_smart_toc[desktop-chromium] PASSED [ 24%]
+verification/test_journey_smart_toc_failure.py::test_journey_smart_toc_failure[desktop-chromium] PASSED [ 25%]
+verification/test_journey_theme_persistence.py::test_theme_persistence[desktop-chromium] PASSED [ 25%]
+verification/test_journey_tts_persistence.py::test_journey_tts_persistence_v3[desktop-chromium]

@@ -35,6 +35,7 @@
     "@types/react-window": "^1.8.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "comlink": "^4.4.2",
     "epubjs": "^0.3.93",
     "file-saver": "^2.0.5",
     "flexsearch": "^0.8.212",

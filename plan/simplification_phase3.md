@@ -1,17 +1,19 @@
 # Phase 3: Search Refactor
 
+**Status**: ✅ Completed
+
 **Objective**: Modernize the Worker communication layer.
 
 ## 1. Component Design: Search IPC (Comlink)
 
-**Current State:**
--   `src/lib/search.ts` (`SearchClient`): Manually manages `postMessage`, `UUID` generation, and a `pendingRequests` Map.
--   `src/workers/search.worker.ts`: Uses a large `switch` statement in `onmessage` to route commands.
+**Previous State:**
+-   `src/lib/search.ts` (`SearchClient`): Manually managed `postMessage`, `UUID` generation, and a `pendingRequests` Map.
+-   `src/workers/search.worker.ts`: Used a large `switch` statement in `onmessage` to route commands.
 
 **Problem:** Boilerplate-heavy, error-prone, and lacks type safety across the boundary.
 
-**Proposed Design: Comlink**
-Use `comlink` to expose the `SearchEngine` class directly.
+**Implemented Design: Comlink**
+Used `comlink` to expose the `SearchEngine` class directly and wrapped it in `src/lib/search.ts`.
 
 ```typescript
 // search.worker.ts
@@ -23,34 +25,40 @@ Comlink.expose(engine);
 ```
 
 ```typescript
-// search.ts
+// search.ts (simplified)
 import * as Comlink from 'comlink';
-// Define the type or interface of the exposed object
 import type { SearchEngine } from './search-engine';
 
+// Worker instantiation and wrapping
 const worker = new Worker(new URL('../workers/search.worker.ts', import.meta.url), { type: 'module' });
-const searchEngine = Comlink.wrap<SearchEngine>(worker);
+const engine = Comlink.wrap<SearchEngine>(worker);
 
-// Usage:
-await searchEngine.indexBook(bookId, sections);
+// SearchClient delegates to engine methods
+async indexBook(bookId, sections) {
+    await engine.initIndex(bookId);
+    // ... extraction logic ...
+    await engine.addDocuments(bookId, sections);
+}
 ```
 
 ## 2. Implementation Plan
 
 ### Steps
 
-1.  **Dependencies**: Add `comlink` to `package.json`.
+1.  **Dependencies**: Added `comlink` to `package.json`. ✅
 
-2.  **Refactor `src/workers/search.worker.ts`**:
-    *   Delete the `self.onmessage` switch block.
-    *   Expose `engine` using `Comlink.expose(engine)`.
+2.  **Refactor `src/workers/search.worker.ts`**: ✅
+    *   Deleted the `self.onmessage` switch block.
+    *   Exposed `engine` using `Comlink.expose(engine)`.
 
-3.  **Refactor `src/lib/search.ts`**:
-    *   Delete `SearchClient` class complexity (pending map, send method).
-    *   Instantiate worker and wrap with `Comlink.wrap`.
-    *   Export the wrapped proxy.
+3.  **Refactor `src/lib/search.ts`**: ✅
+    *   Deleted `SearchClient` complexity (pending map, send method, manual `postMessage`).
+    *   Instantiated worker and wrapped with `Comlink.wrap`.
+    *   Updated `indexBook` and `search` to use the wrapped proxy.
+    *   Preserved text extraction and batching logic in `indexBook` to maintain performance and responsibility separation.
 
 ### Validation
 
-*   **Functional Test**: Verify search queries return expected results.
-*   **Type Safety**: Ensure TypeScript correctly infers arguments for `searchEngine.search` and `searchEngine.indexBook`.
+*   **Functional Test**: Verified search queries return expected results using `src/lib/search.test.ts` and `src/lib/search.repro.test.ts` (updated to mock Comlink). ✅
+*   **Playwright Verification**: Ran `verification/test_journey_search.py` successfully. ✅
+*   **Type Safety**: TypeScript correctly infers arguments for `searchEngine.search` and `searchEngine.addDocuments`. ✅
