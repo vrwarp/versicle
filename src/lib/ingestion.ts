@@ -17,13 +17,17 @@ function cheapHash(buffer: ArrayBuffer): string {
  * Generates a unique fingerprint for a file based on metadata and content sampling.
  * This is much faster than a full cryptographic hash (SHA-256).
  *
- * @param file - The file to fingerprint.
+ * @param file - The file (or blob) to fingerprint.
+ * @param metadata - The metadata to include in the fingerprint (title, author, filename).
  * @returns A string fingerprint.
  */
-export async function generateFileFingerprint(file: File): Promise<string> {
+export async function generateFileFingerprint(
+  file: Blob,
+  metadata: { title: string; author: string; filename: string }
+): Promise<string> {
   // 1. Metadata: This acts as the primary filter.
-  // It is extremely rare for two different files to share name, size, and modification time.
-  const metaString = `${file.name}-${file.size}-${file.lastModified}`;
+  // We use title/author/filename instead of volatile attributes like size/lastModified.
+  const metaString = `${metadata.filename}-${metadata.title}-${metadata.author}`;
 
   // 2. Head/Tail Sampling: Read the first 4KB and last 4KB of the file.
   // The header usually contains file format signatures (magic bytes) and metadata.
@@ -192,7 +196,11 @@ export async function processEpub(file: File): Promise<string> {
   }
 
   // Calculate fingerprint
-  const fileHash = await generateFileFingerprint(file);
+  const fileHash = await generateFileFingerprint(file, {
+    title: metadata.title || 'Untitled',
+    author: metadata.creator || 'Unknown Author',
+    filename: file.name
+  });
 
   const candidateBook: BookMetadata = {
     id: bookId,

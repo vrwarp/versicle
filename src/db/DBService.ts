@@ -207,8 +207,12 @@ class DBService {
       if (!book.fileHash) {
         const fileStore = tx.objectStore('files');
         const fileData = await fileStore.get(id);
-        if (fileData instanceof File) {
-          book.fileHash = await generateFileFingerprint(fileData);
+        if (fileData) {
+          book.fileHash = await generateFileFingerprint(fileData, {
+            title: book.title,
+            author: book.author,
+            filename: book.filename || 'unknown.epub'
+          });
         }
       }
 
@@ -236,22 +240,15 @@ class DBService {
 
       if (!book) throw new Error('Book not found');
 
-      const newFingerprint = await generateFileFingerprint(file);
+      const newFingerprint = await generateFileFingerprint(file, {
+        title: book.title,
+        author: book.author,
+        filename: file.name
+      });
 
-      if (book.fileHash) {
-        if (book.fileHash !== newFingerprint) {
-          // Check for legacy SHA-256 hash (64 hex characters)
-          const isLegacy = book.fileHash.length === 64 && /^[0-9a-fA-F]+$/.test(book.fileHash);
-          const matchesLegacyCriteria = file.name === book.filename && file.size === book.fileSize;
-
-          if (isLegacy && matchesLegacyCriteria) {
-            // Migrate to new fingerprint
-            book.fileHash = newFingerprint;
-          } else {
-            throw new Error('File verification failed: Fingerprint mismatch.');
-          }
-        }
-      } else {
+      if (book.fileHash && book.fileHash !== newFingerprint) {
+        throw new Error('File verification failed: Fingerprint mismatch.');
+      } else if (!book.fileHash) {
         // If hash was missing, we accept the file and set the hash
         book.fileHash = newFingerprint;
       }
