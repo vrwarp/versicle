@@ -17,6 +17,7 @@ interface ReaderTTSControllerProps {
  * Handles:
  * 1. Highlighting the current sentence (activeCfi)
  * 2. Keyboard navigation during TTS (currentIndex)
+ * 3. Visibility reconciliation (syncing visual state when returning to foreground)
  */
 export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   rendition,
@@ -31,28 +32,75 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   const queue = useTTSStore(state => state.queue);
   const jumpTo = useTTSStore(state => state.jumpTo);
 
-  // --- TTS Highlighting ---
+  const lastBackgroundCfi = useRef<string | null>(null);
+
+  // --- TTS Highlighting & Sync ---
   useEffect(() => {
       if (!rendition || !activeCfi) return;
 
-      // Auto-turn page in paginated mode
-      if (viewMode === 'paginated') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition as any).display(activeCfi);
-      }
+      const syncVisuals = () => {
+         // Auto-turn page in paginated mode
+         if (viewMode === 'paginated') {
+             // Non-blocking display call
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (rendition as any).display(activeCfi).catch((err: unknown) => {
+                 console.warn("[TTS] Sync skipped", err);
+             });
+         }
 
-      // Add highlight
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
-          // Click handler for TTS highlight
-      }, 'tts-highlight');
+         // Add highlight
+         try {
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
+                 // Click handler for TTS highlight
+             }, 'tts-highlight');
+         } catch (e) {
+             console.warn("[TTS] Highlight failed", e);
+         }
+      };
+
+      if (document.visibilityState === 'visible') {
+           syncVisuals();
+      } else {
+           // Background mode: Store for later
+           lastBackgroundCfi.current = activeCfi;
+      }
 
       // Remove highlight when activeCfi changes
       return () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition as any).annotations.remove(activeCfi, 'highlight');
+          try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (rendition as any).annotations.remove(activeCfi, 'highlight');
+          } catch { /* ignore removal errors */ }
       };
   }, [activeCfi, viewMode, rendition]);
+
+  // --- Visibility Reconciliation ---
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && lastBackgroundCfi.current && rendition) {
+         // We just came back to foreground.
+         // If we have a stored CFI that we missed syncing, jump to it now.
+         const cfiToSync = lastBackgroundCfi.current;
+         lastBackgroundCfi.current = null;
+
+         if (viewMode === 'paginated') {
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (rendition as any).display(cfiToSync).catch((err: unknown) => console.warn("Reconciliation failed", err));
+         }
+
+         // If the active CFI matches, ensure the highlight is present.
+         if (cfiToSync === activeCfi) {
+             try {
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 (rendition as any).annotations.add('highlight', cfiToSync, {}, () => {}, 'tts-highlight');
+             } catch (e) { console.warn("Reconciliation highlight failed", e); }
+         }
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [rendition, viewMode, activeCfi]); // Added activeCfi dependency to ensure we have fresh value
 
   // --- Keyboard Navigation ---
   // Use a ref to access the latest state in the event listener without re-binding it constantly.
