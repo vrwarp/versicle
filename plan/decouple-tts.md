@@ -235,27 +235,25 @@ This approach ensures that users eventually get the performance benefits of the 
 
 The implementation is divided into 4 Phases. We are currently executing Phase 1 and 2.
 
-### Phase 1: Foundation (Data & Types)
+### Phase 1: Foundation (Data & Types) [COMPLETED]
 
 *Goal: Establish the storage layer and data structures.*
 
--   **Step 1.1: Database Schema Update**
-
+-   **Step 1.1: Database Schema Update** [COMPLETED]
     -   Target: `src/db/db.ts`
-
     -   Action: Incremented DB version to 10. Added `tts_content` object store with index `by_bookId`.
 
--   **Step 1.2: Type Definitions**
-
+-   **Step 1.2: Type Definitions** [COMPLETED]
     -   Target: `src/types/db.ts`
-
     -   Action: Defined `TTSContent` interface containing `id`, `bookId`, `sectionId`, and `sentences[]`.
 
--   **Step 1.3: DB Service Extensions**
-
+-   **Step 1.3: DB Service Extensions** [COMPLETED]
     -   Target: `src/db/DBService.ts`
-
     -   Action: Added methods `saveTTSContent(content)`, `getTTSContent(bookId, sectionId)`, and updated `deleteBook` to clean up `tts_content`.
+
+-   **Step 1.4: Verification** [COMPLETED]
+    -   Action: Created unit test `src/db/test_db_migration.test.ts` to verify DB operations.
+    -   Action: Ran playwright verification suite. Fixed `verification/test_maintenance.py` to use correct DB version (10).
 
 ### Phase 2: Core Extraction Logic
 

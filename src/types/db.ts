@@ -224,3 +224,28 @@ export interface ReadingListEntry {
   /** User rating (1-5). */
   rating?: number;
 }
+
+/**
+ * Pre-extracted text content for TTS, allowing playback without rendering.
+ */
+export interface TTSContent {
+  /** Composite key: `${bookId}-${sectionId}` */
+  id: string;
+
+  /** Foreign key to Books store */
+  bookId: string;
+
+  /** The href/id of the spine item (e.g., "text/chapter01.xhtml") */
+  sectionId: string;
+
+  /** Ordered list of sentences for this section */
+  sentences: {
+    /** The raw or sanitized text to speak */
+    text: string;
+
+    /** * The CFI range for highlighting.
+     * Generated during ingestion relative to the root of the spine item.
+     */
+    cfi: string;
+  }[];
+}

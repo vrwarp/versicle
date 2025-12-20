@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, TTSContent } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -146,7 +146,7 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'content_analysis'], 'readwrite');
+      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'content_analysis', 'tts_content'], 'readwrite');
 
       await Promise.all([
           tx.objectStore('books').delete(id),
@@ -180,6 +180,15 @@ class DBService {
       while (analysisCursor) {
         await analysisCursor.delete();
         analysisCursor = await analysisCursor.continue();
+      }
+
+      // Delete TTS content
+      const ttsContentStore = tx.objectStore('tts_content');
+      const ttsContentIndex = ttsContentStore.index('by_bookId');
+      let ttsContentCursor = await ttsContentIndex.openCursor(IDBKeyRange.only(id));
+      while (ttsContentCursor) {
+        await ttsContentCursor.delete();
+        ttsContentCursor = await ttsContentCursor.continue();
       }
 
       await tx.done;
@@ -773,6 +782,39 @@ class DBService {
   // --- Lexicon ---
   // Adding minimal support for lexicon to match removeBook requirements,
   // full service migration for LexiconManager can be done later or added here if needed.
+
+  // --- TTS Content Operations ---
+
+  /**
+   * Saves extracted TTS content for a section.
+   *
+   * @param content - The TTS content to save.
+   * @returns A Promise that resolves when the content is saved.
+   */
+  async saveTTSContent(content: TTSContent): Promise<void> {
+    try {
+      const db = await this.getDB();
+      await db.put('tts_content', content);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Retrieves extracted TTS content for a specific section.
+   *
+   * @param bookId - The book ID.
+   * @param sectionId - The section ID.
+   * @returns A Promise resolving to the TTSContent or undefined.
+   */
+  async getTTSContent(bookId: string, sectionId: string): Promise<TTSContent | undefined> {
+    try {
+      const db = await this.getDB();
+      return await db.get('tts_content', `${bookId}-${sectionId}`);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
 }
 
 export const dbService = new DBService();
