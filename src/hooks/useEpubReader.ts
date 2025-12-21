@@ -83,6 +83,8 @@ export function useEpubReader(
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeRaf = useRef<number | null>(null);
   const applyStylesRef = useRef<() => void>(() => {});
+  const lastKnownCfi = useRef<string | undefined>(undefined);
+  const prevBookId = useRef<string | undefined>(undefined);
 
   // Use a ref for options to access latest values in event listeners without re-binding
   const optionsRef = useRef(options);
@@ -93,6 +95,12 @@ export function useEpubReader(
   // Load Book
   useEffect(() => {
     if (!bookId || !viewerRef.current) return;
+
+    // Reset last known location if book changed
+    if (bookId !== prevBookId.current) {
+        lastKnownCfi.current = undefined;
+        prevBookId.current = bookId;
+    }
 
     const loadBook = async () => {
       setIsLoading(true);
@@ -165,18 +173,23 @@ export function useEpubReader(
         // Display at saved location or start
         let startLocation = meta?.currentCfi || undefined;
 
-        // Try to infer better start location from reading history (end of last session)
-        try {
-            const history = await dbService.getReadingHistory(bookId);
-            if (history && history.length > 0) {
-                const lastRange = history[history.length - 1];
-                const parsed = parseCfiRange(lastRange);
-                if (parsed && parsed.fullEnd) {
-                    startLocation = parsed.fullEnd;
+        // Use last known location if available (from view mode switch)
+        if (lastKnownCfi.current) {
+            startLocation = lastKnownCfi.current;
+        } else {
+            // Try to infer better start location from reading history (end of last session)
+            try {
+                const history = await dbService.getReadingHistory(bookId);
+                if (history && history.length > 0) {
+                    const lastRange = history[history.length - 1];
+                    const parsed = parseCfiRange(lastRange);
+                    if (parsed && parsed.fullEnd) {
+                        startLocation = parsed.fullEnd;
+                    }
                 }
+            } catch (e) {
+                console.error("Failed to load history for start location", e);
             }
-        } catch (e) {
-            console.error("Failed to load history for start location", e);
         }
 
         await newRendition.display(startLocation);
@@ -225,6 +238,8 @@ export function useEpubReader(
         // Event Listeners
         newRendition.on('relocated', (location: Location) => {
              const cfi = location.start.cfi;
+             lastKnownCfi.current = cfi;
+
              let percentage = 0;
              try {
                  percentage = newBook.locations.percentageFromCfi(cfi);
@@ -332,7 +347,7 @@ export function useEpubReader(
           cancelAnimationFrame(resizeRaf.current);
       }
     };
-  }, [bookId]); // Dependencies: only bookId
+  }, [bookId, options.viewMode]); // Dependencies: bookId and viewMode (triggers reload on switch)
 
   // Handle Resize with RequestAnimationFrame
   useEffect(() => {
@@ -405,18 +420,7 @@ export function useEpubReader(
         body: { 'line-height': `${options.lineHeight} !important` }
       });
 
-      // Flow
-      // Capture current location before changing flow to prevent reset
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const currentLoc = (r as any).location?.start?.cfi;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (r as any).flow(options.viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated');
-
-      // Restore location if available
-      if (currentLoc) {
-          r.display(currentLoc);
-      }
+      // Flow handling moved to main useEffect (re-render) to avoid crashes
 
       // Forced Styles
       const applyStyles = () => {
@@ -487,7 +491,7 @@ export function useEpubReader(
       options.fontSize,
       options.fontFamily,
       options.lineHeight,
-      options.viewMode,
+      // options.viewMode handled in main effect
       options.shouldForceFont
   ]);
 
