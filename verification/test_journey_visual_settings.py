@@ -86,6 +86,11 @@ def test_visual_settings(page: Page):
     scrolled_tab = page.get_by_role("tab", name="Scrolled")
     scrolled_tab.click()
     page.wait_for_timeout(2000)
+
+    # Re-acquire frame locator as the iframe might have been reloaded
+    frame_loc = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
+    frame_loc.locator("body").wait_for(timeout=5000)
+
     utils.capture_screenshot(page, "visual_settings_04_scrolled")
 
     # Close the popover to see the content clearly
