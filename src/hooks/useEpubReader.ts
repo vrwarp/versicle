@@ -296,14 +296,20 @@ export function useEpubReader(
             }
 
             // Inject empty div for scrolling space
-            const spacerId = 'reader-bottom-spacer';
-            if (!doc.getElementById(spacerId)) {
-                const spacer = doc.createElement('div');
-                spacer.id = spacerId;
-                spacer.style.height = '150px';
-                spacer.style.width = '100%';
-                spacer.style.clear = 'both'; // Ensure it sits below floated content
-                doc.body.appendChild(spacer);
+            // FIX: Wrap in requestAnimationFrame to avoid interfering with epub.js annotation injection
+            if (contents.window) {
+                contents.window.requestAnimationFrame(() => {
+                    const spacerId = 'reader-bottom-spacer';
+                    // Check if doc exists and element isn't there (double-check inside rAF)
+                    if (doc && doc.body && !doc.getElementById(spacerId)) {
+                        const spacer = doc.createElement('div');
+                        spacer.id = spacerId;
+                        spacer.style.height = '150px';
+                        spacer.style.width = '100%';
+                        spacer.style.clear = 'both'; // Ensure it sits below floated content
+                        doc.body.appendChild(spacer);
+                    }
+                });
             }
         };
 
