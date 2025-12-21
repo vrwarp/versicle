@@ -54,7 +54,9 @@ vi.mock('../../db/DBService', () => ({
     getBookMetadata: vi.fn().mockResolvedValue({}),
     updatePlaybackState: vi.fn().mockResolvedValue(undefined),
     getTTSState: vi.fn().mockResolvedValue(null),
-    saveTTSState: vi.fn()
+    saveTTSState: vi.fn(),
+    getSections: vi.fn().mockResolvedValue([]),
+    getTTSContent: vi.fn().mockResolvedValue(null),
   }
 }));
 vi.mock('./CostEstimator');

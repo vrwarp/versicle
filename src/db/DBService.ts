@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, TTSContent } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, TTSContent, SectionMetadata } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -472,12 +472,14 @@ class DBService {
    * @param bookId - The unique identifier of the book.
    * @param queue - The current TTS queue.
    * @param currentIndex - The index of the currently playing item.
+   * @param currentSectionIndex - The index of the currently playing chapter in the playlist.
    */
-  saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number): void {
+  saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number, currentSectionIndex?: number): void {
       this.pendingTTSState[bookId] = {
           bookId,
           queue,
           currentIndex,
+          currentSectionIndex,
           updatedAt: Date.now()
       };
 
@@ -817,6 +819,22 @@ class DBService {
     try {
       const db = await this.getDB();
       return await db.get('tts_content', `${bookId}-${sectionId}`);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Retrieves the ordered list of chapters (spine items) for a given book.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @returns A Promise resolving to an array of SectionMetadata.
+   */
+  async getSections(bookId: string): Promise<SectionMetadata[]> {
+    try {
+      const db = await this.getDB();
+      const sections = await db.getAllFromIndex('sections', 'by_bookId', bookId);
+      return sections.sort((a, b) => a.playOrder - b.playOrder);
     } catch (error) {
       this.handleError(error);
     }

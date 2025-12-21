@@ -9,6 +9,7 @@ import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { LexiconService } from './LexiconService';
 import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
+import type { SectionMetadata, BookMetadata } from '../../types/db';
 
 /**
  * Defines the possible states of the TTS playback.
@@ -58,6 +59,10 @@ export class AudioPlayerService {
   private currentIndex: number = 0;
   private status: TTSStatus = 'stopped';
   private listeners: PlaybackListener[] = [];
+
+  private playlist: SectionMetadata[] = [];
+  private currentSectionIndex: number = -1;
+  private bookMetadata: BookMetadata | null = null;
 
   private speed: number = 1.0;
   private voiceId: string | null = null;
@@ -135,6 +140,9 @@ export class AudioPlayerService {
           } else {
               this.queue = [];
               this.currentIndex = 0;
+              this.currentSectionIndex = -1;
+              this.playlist = [];
+              this.bookMetadata = null;
               this.setStatus('stopped');
           }
       }
@@ -175,6 +183,10 @@ export class AudioPlayerService {
   private async restoreQueue(bookId: string) {
       this.enqueue(async () => {
           try {
+              // Load playlist and metadata
+              this.playlist = await dbService.getSections(bookId);
+              this.bookMetadata = (await dbService.getBookMetadata(bookId)) || null;
+
               const state = await dbService.getTTSState(bookId);
               if (this.currentBookId !== bookId) return;
 
@@ -182,13 +194,70 @@ export class AudioPlayerService {
                   await this.stopInternal();
                   this.queue = state.queue;
                   this.currentIndex = state.currentIndex || 0;
+
+                  // Restore section index or try to infer it
+                  if (state.currentSectionIndex !== undefined && state.currentSectionIndex >= 0) {
+                      this.currentSectionIndex = state.currentSectionIndex;
+                  } else {
+                      // Infer from cfi if possible, otherwise default to -1 (will prevent auto-advance until synchronized)
+                      this.currentSectionIndex = -1;
+                  }
+
                   this.updateMediaSessionMetadata();
                   this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+              } else if (this.playlist.length > 0) {
+                  // If no saved state, load the first chapter so play() works immediately
+                  await this.loadSectionInternal(0);
               }
           } catch (e) {
               console.error("Failed to restore TTS queue", e);
           }
       });
+  }
+
+  public loadSection(index: number) {
+      return this.enqueue(async () => {
+          await this.loadSectionInternal(index);
+      });
+  }
+
+  private async loadSectionInternal(index: number): Promise<boolean> {
+      if (!this.currentBookId || !this.playlist[index]) return false;
+
+      const section = this.playlist[index];
+      try {
+          const content = await dbService.getTTSContent(this.currentBookId, section.sectionId);
+
+          if (content && content.sentences.length > 0) {
+                this.currentSectionIndex = index;
+
+                // Determine title
+                let chapterTitle = `Chapter ${index + 1}`;
+                if (this.bookMetadata && this.bookMetadata.syntheticToc) {
+                    const tocItem = this.bookMetadata.syntheticToc.find(t => t.href.includes(section.sectionId));
+                    if (tocItem) chapterTitle = tocItem.label;
+                }
+
+                const newQueue: TTSQueueItem[] = content.sentences.map(s => ({
+                    text: s.text,
+                    cfi: s.cfi,
+                    title: chapterTitle,
+                    bookTitle: this.bookMetadata?.title,
+                    author: this.bookMetadata?.author
+                }));
+
+                this.queue = newQueue;
+                this.currentIndex = 0;
+                this.persistQueue();
+
+                this.updateMediaSessionMetadata();
+                this.notifyListeners(this.queue[0]?.cfi || null);
+                return true;
+          }
+      } catch (e) {
+          console.warn(`Failed to load content for section ${index}`, e);
+      }
+      return false;
   }
 
   private setupProviderListeners() {
@@ -348,7 +417,7 @@ export class AudioPlayerService {
 
   private persistQueue() {
       if (this.currentBookId) {
-          dbService.saveTTSState(this.currentBookId, this.queue, this.currentIndex);
+          dbService.saveTTSState(this.currentBookId, this.queue, this.currentIndex, this.currentSectionIndex);
       }
   }
 
@@ -625,11 +694,40 @@ export class AudioPlayerService {
                   await this.playInternal(); // Start playing the next item
               } else {
                   // End of queue
-                  this.setStatus('completed');
-                  this.notifyListeners(null);
+                  await this.advanceToNextChapter();
               }
           }
       });
+  }
+
+  private async advanceToNextChapter() {
+      if (!this.currentBookId || this.playlist.length === 0) {
+           this.setStatus('completed');
+           this.notifyListeners(null);
+           return;
+      }
+
+      let nextIndex = this.currentSectionIndex + 1;
+      let foundContent = false;
+
+      // Loop to skip empty chapters
+      while (nextIndex < this.playlist.length) {
+          // Attempt to load the next section
+          const success = await this.loadSectionInternal(nextIndex);
+          if (success) {
+               // Playback is handled here because we are in auto-advance context
+               this.backgroundAudio.play(this.backgroundAudioMode);
+               await this.playInternal();
+               foundContent = true;
+               break;
+          }
+          nextIndex++;
+      }
+
+      if (!foundContent) {
+          this.setStatus('completed');
+          this.notifyListeners(null);
+      }
   }
 
   private setStatus(status: TTSStatus) {

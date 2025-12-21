@@ -157,3 +157,25 @@ Move the logic for generating "Chapter X - 5 minutes remaining" (Preroll) from t
 -   **Empty Chapters**: Some EPUBs have empty wrapper chapters (e.g., "Part 1").
 
     -   *Mitigation*: The `advanceToNextChapter` method must be recursive or loop-based to skip empty sections until content is found or the book ends.
+
+8. Progress and Notes
+---------------------
+
+**Implemented Phase 1 & 2**
+
+*   **DBService**: Added `getSections(bookId)` to retrieve spine items.
+*   **AudioPlayerService**:
+    *   Added `playlist` and `currentSectionIndex`.
+    *   Implemented `advanceToNextChapter` which handles auto-advance and skips empty chapters.
+    *   Updated `setBookId` to fetch `playlist` and `restoreQueue`.
+    *   Added `loadSection(index)` and `loadSectionInternal(index)` to allow loading specific chapters.
+    *   Updated `restoreQueue` to fallback to loading the first chapter if no saved state exists (fixing "New Book" silence issue).
+*   **useTTS**:
+    *   Removed all data loading logic (`getTTSContent`, `setQueue`).
+    *   Reduced to a pure subscriber (mainly for `loadVoices`).
+
+**Deviations & Discoveries**
+
+*   **Preroll Support Suspended**: Preroll generation logic was removed from `useTTS` and has NOT yet been moved to `AudioPlayerService`. Prerolls will not play until Phase 3 is implemented.
+*   **Manual Navigation Sync**: Since `useTTS` no longer updates the queue on navigation, manual visual navigation does NOT update the audio queue. The audio service remains on the last played/loaded chapter. The user must rely on the audio service's own state or explicit "Play from here" actions (though "Play from here" currently relies on the queue containing the target CFI, which might fail if the chapter differs).
+*   **Initialization Fallback**: Logic was added to `AudioPlayerService` to load the first chapter (index 0) if no saved TTS state is found, ensuring that `play()` works immediately for new books.
