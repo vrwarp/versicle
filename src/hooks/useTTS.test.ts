@@ -3,7 +3,6 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { useTTS } from './useTTS';
 import { useTTSStore } from '../store/useTTSStore';
 import { useReaderStore } from '../store/useReaderStore';
-import { dbService } from '../db/DBService';
 
 // Hoist mocks
 const { mockPlayerInstance, mockLoadVoices } = vi.hoisted(() => {
@@ -13,6 +12,7 @@ const { mockPlayerInstance, mockLoadVoices } = vi.hoisted(() => {
             setQueue: vi.fn(),
             stop: vi.fn(),
             generatePreroll: vi.fn().mockReturnValue("Chapter 1. Estimated reading time: 1 minute."),
+            loadSectionBySectionId: vi.fn(),
         },
         mockLoadVoices: vi.fn()
     };
@@ -29,7 +29,8 @@ vi.mock('../store/useTTSStore', () => {
     const mockGetState = vi.fn(() => ({
         loadVoices: mockLoadVoices,
         prerollEnabled: false,
-        rate: 1.0
+        rate: 1.0,
+        status: 'stopped'
     }));
 
     // The hook function
@@ -49,12 +50,6 @@ vi.mock('../store/useReaderStore', () => ({
     useReaderStore: vi.fn(),
 }));
 
-vi.mock('../db/DBService', () => ({
-    dbService: {
-        getTTSContent: vi.fn()
-    }
-}));
-
 describe('useTTS', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -64,7 +59,8 @@ describe('useTTS', () => {
         (useTTSStore.getState as any).mockReturnValue({
             loadVoices: mockLoadVoices,
             prerollEnabled: false,
-            rate: 1.0
+            rate: 1.0,
+            status: 'stopped'
         });
 
         // Setup Reader Store mock
@@ -88,58 +84,27 @@ describe('useTTS', () => {
         expect(mockLoadVoices).toHaveBeenCalled();
     });
 
-    it('should load content from DB and set queue', async () => {
-        const mockContent = {
-            sentences: [
-                { text: 'Sentence 1', cfi: 'cfi1' },
-                { text: 'Sentence 2', cfi: 'cfi2' }
-            ]
-        };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getTTSContent as any).mockResolvedValue(mockContent);
-
-        const { result } = renderHook(() => useTTS());
-
-        await waitFor(() => {
-            expect(result.current.sentences).toHaveLength(2);
-        });
-
-        expect(dbService.getTTSContent).toHaveBeenCalledWith('book1', 'section1');
-        expect(result.current.sentences).toEqual(mockContent.sentences);
-        expect(mockPlayerInstance.setQueue).toHaveBeenCalledWith(mockContent.sentences);
-    });
-
-    it('should inject pre-roll if enabled', async () => {
-         // Override store mock for this test
-         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         (useTTSStore.getState as any).mockReturnValue({
-            loadVoices: mockLoadVoices,
-            prerollEnabled: true,
-            rate: 1.0
-        });
-
-        const mockContent = {
-            sentences: [{ text: 'Sentence 1', cfi: 'cfi1' }]
-        };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getTTSContent as any).mockResolvedValue(mockContent);
-
+    it('should request player to load section by ID when idle', async () => {
         renderHook(() => useTTS());
 
         await waitFor(() => {
-            expect(mockPlayerInstance.setQueue).toHaveBeenCalled();
+            expect(mockPlayerInstance.loadSectionBySectionId).toHaveBeenCalledWith('section1', false);
+        });
+    });
+
+    it('should NOT request player to load section if playing', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (useTTSStore.getState as any).mockReturnValue({
+            loadVoices: mockLoadVoices,
+            status: 'playing'
         });
 
-        expect(mockPlayerInstance.generatePreroll).toHaveBeenCalledWith('Chapter 1', 2, 1.0);
-        expect(mockPlayerInstance.setQueue).toHaveBeenCalledWith([
-            {
-                text: "Chapter 1. Estimated reading time: 1 minute.",
-                cfi: null,
-                title: 'Chapter 1',
-                isPreroll: true
-            },
-            { text: 'Sentence 1', cfi: 'cfi1' }
-        ]);
+        renderHook(() => useTTS());
+
+        // Wait a bit to ensure it doesn't call
+        await new Promise(r => setTimeout(r, 100));
+
+        expect(mockPlayerInstance.loadSectionBySectionId).not.toHaveBeenCalled();
     });
 
     it('should stop player on unmount', () => {

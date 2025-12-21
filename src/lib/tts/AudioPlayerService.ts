@@ -9,6 +9,20 @@ import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { LexiconService } from './LexiconService';
 import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
+import type { SectionMetadata } from '../../types/db';
+
+const NO_TEXT_MESSAGES = [
+    "This chapter appears to be empty.",
+    "There is no text to read here.",
+    "This page contains only images or formatting.",
+    "Silence fills this chapter.",
+    "Moving on, as this section has no content.",
+    "No words found on this page.",
+    "This section is blank.",
+    "Skipping this empty section.",
+    "Nothing to read here.",
+    "This part of the book is silent."
+];
 
 /**
  * Defines the possible states of the TTS playback.
@@ -63,7 +77,11 @@ export class AudioPlayerService {
   private voiceId: string | null = null;
 
   private currentBookId: string | null = null;
+  private playlist: SectionMetadata[] = [];
+  private playlistPromise: Promise<void> | null = null;
+  private currentSectionIndex: number = -1;
   private sessionRestored: boolean = false;
+  private prerollEnabled: boolean = false;
   private isPreviewing: boolean = false;
 
   private pendingPromise: Promise<void> = Promise.resolve();
@@ -131,9 +149,15 @@ export class AudioPlayerService {
           this.currentBookId = bookId;
           this.sessionRestored = false;
           if (bookId) {
-              this.restoreQueue(bookId);
+              this.playlistPromise = dbService.getSections(bookId).then(sections => {
+                  this.playlist = sections;
+                  this.restoreQueue(bookId);
+              }).catch(e => console.error("Failed to load playlist", e));
           } else {
               this.queue = [];
+              this.playlist = [];
+              this.playlistPromise = null;
+              this.currentSectionIndex = -1;
               this.currentIndex = 0;
               this.setStatus('stopped');
           }
@@ -182,6 +206,7 @@ export class AudioPlayerService {
                   await this.stopInternal();
                   this.queue = state.queue;
                   this.currentIndex = state.currentIndex || 0;
+                  this.currentSectionIndex = state.sectionIndex ?? -1;
                   this.updateMediaSessionMetadata();
                   this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
               }
@@ -266,6 +291,10 @@ export class AudioPlayerService {
       this.backgroundAudio.setVolume(volume);
   }
 
+  public setPrerollEnabled(enabled: boolean) {
+      this.prerollEnabled = enabled;
+  }
+
   public setProvider(provider: ITTSProvider) {
       return this.enqueue(async () => {
         await this.stopInternal();
@@ -317,6 +346,20 @@ export class AudioPlayerService {
       return this.queue;
   }
 
+  public loadSection(sectionIndex: number, autoPlay: boolean = true) {
+      return this.enqueue(() => this.loadSectionInternal(sectionIndex, autoPlay));
+  }
+
+  public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true) {
+      return this.enqueue(async () => {
+          if (this.playlistPromise) await this.playlistPromise;
+          const index = this.playlist.findIndex(s => s.sectionId === sectionId);
+          if (index !== -1) {
+              await this.loadSectionInternal(index, autoPlay);
+          }
+      });
+  }
+
   private isQueueEqual(newItems: TTSQueueItem[]): boolean {
       if (this.queue.length !== newItems.length) return false;
       for (let i = 0; i < this.queue.length; i++) {
@@ -348,7 +391,7 @@ export class AudioPlayerService {
 
   private persistQueue() {
       if (this.currentBookId) {
-          dbService.saveTTSState(this.currentBookId, this.queue, this.currentIndex);
+          dbService.saveTTSState(this.currentBookId, this.queue, this.currentIndex, this.currentSectionIndex);
       }
   }
 
@@ -624,9 +667,12 @@ export class AudioPlayerService {
                   this.persistQueue(); // Persist state so we can resume later
                   await this.playInternal(); // Start playing the next item
               } else {
-                  // End of queue
-                  this.setStatus('completed');
-                  this.notifyListeners(null);
+                  // End of queue, try to load next chapter
+                  const loaded = await this.advanceToNextChapter();
+                  if (!loaded) {
+                      this.setStatus('completed');
+                      this.notifyListeners(null);
+                  }
               }
           }
       });
@@ -700,5 +746,94 @@ export class AudioPlayerService {
               // TODO: Prompt user to disable optimization
           }
       }
+  }
+
+  private async loadSectionInternal(sectionIndex: number, autoPlay: boolean): Promise<boolean> {
+      if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
+
+      const section = this.playlist[sectionIndex];
+      try {
+          const ttsContent = await dbService.getTTSContent(this.currentBookId, section.sectionId);
+
+          // Determine Title
+          let title = `Chapter ${sectionIndex + 1}`;
+          const analysis = await dbService.getContentAnalysis(this.currentBookId, section.sectionId);
+          if (analysis && analysis.structure.title) {
+              title = analysis.structure.title;
+          }
+
+          const bookMetadata = await dbService.getBookMetadata(this.currentBookId);
+          const newQueue: TTSQueueItem[] = [];
+
+          if (ttsContent && ttsContent.sentences.length > 0) {
+              // Add Preroll if enabled
+              if (this.prerollEnabled) {
+                  const prerollText = this.generatePreroll(title, Math.round(section.characterCount / 5), this.speed);
+                  newQueue.push({
+                      text: prerollText,
+                      cfi: null,
+                      isPreroll: true,
+                      title: title,
+                      bookTitle: bookMetadata?.title,
+                      author: bookMetadata?.author
+                  });
+              }
+
+              ttsContent.sentences.forEach(s => {
+                  newQueue.push({
+                      text: s.text,
+                      cfi: s.cfi,
+                      title: title,
+                      bookTitle: bookMetadata?.title,
+                      author: bookMetadata?.author,
+                      coverUrl: bookMetadata?.coverUrl
+                  });
+              });
+          } else {
+              // Empty Chapter Handling
+              const randomMessage = NO_TEXT_MESSAGES[Math.floor(Math.random() * NO_TEXT_MESSAGES.length)];
+              newQueue.push({
+                  text: randomMessage,
+                  cfi: null,
+                  isPreroll: true,
+                  title: title,
+                  bookTitle: bookMetadata?.title,
+                  author: bookMetadata?.author
+              });
+          }
+
+          if (newQueue.length > 0) {
+              await this.stopInternal();
+              this.queue = newQueue;
+              this.currentIndex = 0;
+              this.currentSectionIndex = sectionIndex;
+              this.updateMediaSessionMetadata();
+              this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+              this.persistQueue();
+
+              if (autoPlay) {
+                   await this.playInternal();
+              }
+              return true;
+          }
+      } catch (e) {
+          console.error("Failed to load section content", e);
+      }
+      return false;
+  }
+
+  private async advanceToNextChapter(): Promise<boolean> {
+      if (!this.currentBookId || this.playlist.length === 0) return false;
+
+      let nextSectionIndex = this.currentSectionIndex + 1;
+
+      if (this.currentSectionIndex === -1) nextSectionIndex = 0;
+
+      while (nextSectionIndex < this.playlist.length) {
+          const loaded = await this.loadSectionInternal(nextSectionIndex, true);
+          if (loaded) return true;
+          nextSectionIndex++;
+      }
+      return false;
   }
 }

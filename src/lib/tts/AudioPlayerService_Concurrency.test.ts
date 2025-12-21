@@ -7,6 +7,12 @@ vi.mock('../../db/DBService', () => ({
   dbService: {
     getBookMetadata: vi.fn().mockResolvedValue({}),
     updatePlaybackState: vi.fn().mockResolvedValue(undefined),
+    getTTSState: vi.fn().mockResolvedValue(null),
+    saveTTSState: vi.fn(),
+    getSections: vi.fn().mockResolvedValue([]),
+    getContentAnalysis: vi.fn(),
+    getTTSContent: vi.fn(),
+    updateReadingHistory: vi.fn(),
   }
 }));
 

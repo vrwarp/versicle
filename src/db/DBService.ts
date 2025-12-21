@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, TTSContent } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, TTSContent, SectionMetadata } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -119,6 +119,22 @@ class DBService {
       try {
           const db = await this.getDB();
           return await db.get('files', id);
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  /**
+   * Retrieves all sections for a book, ordered by playOrder.
+   *
+   * @param bookId - The book ID.
+   * @returns A Promise resolving to an array of SectionMetadata.
+   */
+  async getSections(bookId: string): Promise<SectionMetadata[]> {
+      try {
+          const db = await this.getDB();
+          const sections = await db.getAllFromIndex('sections', 'by_bookId', bookId);
+          return sections.sort((a, b) => a.playOrder - b.playOrder);
       } catch (error) {
           this.handleError(error);
       }
@@ -472,12 +488,14 @@ class DBService {
    * @param bookId - The unique identifier of the book.
    * @param queue - The current TTS queue.
    * @param currentIndex - The index of the currently playing item.
+   * @param sectionIndex - The index of the current section in the playlist (optional).
    */
-  saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number): void {
+  saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number, sectionIndex?: number): void {
       this.pendingTTSState[bookId] = {
           bookId,
           queue,
           currentIndex,
+          sectionIndex,
           updatedAt: Date.now()
       };
 

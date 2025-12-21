@@ -18,6 +18,9 @@ vi.mock('../lib/tts/AudioPlayerService', () => {
                     // Simulate playing state when play is called if needed
                     // But for unit test we might want to manually trigger syncState
                 }),
+                setBackgroundAudioMode: vi.fn(),
+                setBackgroundVolume: vi.fn(),
+                setPrerollEnabled: vi.fn(),
             }))
         }
     };

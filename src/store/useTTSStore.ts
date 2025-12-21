@@ -228,6 +228,7 @@ export const useTTSStore = create<TTSState>()(
                 set({ enableCostWarning: enable });
             },
             setPrerollEnabled: (enable) => {
+                player.setPrerollEnabled(enable);
                 set({ prerollEnabled: enable });
             },
             setSanitizationEnabled: (enable) => {
@@ -339,6 +340,7 @@ export const useTTSStore = create<TTSState>()(
             if (state) {
                 player.setBackgroundAudioMode(state.backgroundAudioMode);
                 player.setBackgroundVolume(state.whiteNoiseVolume);
+                player.setPrerollEnabled(state.prerollEnabled);
             }
         },
     }

@@ -83,9 +83,6 @@ export const ReaderView: React.FC = () => {
 
   // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
   const isPlaying = useTTSStore(state => state.isPlaying);
-  const status = useTTSStore(state => state.status);
-  const play = useTTSStore(state => state.play);
-  const queue = useTTSStore(state => state.queue);
   const lastError = useTTSStore(state => state.lastError);
   const clearError = useTTSStore(state => state.clearError);
 
@@ -396,23 +393,15 @@ export const ReaderView: React.FC = () => {
       }
   };
 
-  const [autoPlayNext, setAutoPlayNext] = useState(false);
-
   const handlePrev = useCallback(() => {
       // console.log("Navigating to previous page");
-      if (status === 'playing' || status === 'loading') {
-          setAutoPlayNext(true);
-      }
       rendition?.prev();
-  }, [status, rendition]);
+  }, [rendition]);
 
   const handleNext = useCallback(() => {
       // console.log("Navigating to next page");
-      if (status === 'playing' || status === 'loading') {
-          setAutoPlayNext(true);
-      }
       rendition?.next();
-  }, [status, rendition]);
+  }, [rendition]);
 
   const scrollToText = (text: string) => {
       const iframe = viewerRef.current?.querySelector('iframe');
@@ -473,23 +462,6 @@ export const ReaderView: React.FC = () => {
       }
   };
 
-  // Auto-advance chapter when TTS completes
-  useEffect(() => {
-      if (status === 'completed') {
-          setAutoPlayNext(true);
-          handleNext();
-      }
-  }, [status, handleNext]);
-
-  // Trigger auto-play when new chapter loads (queue changes)
-  useEffect(() => {
-      // Check if we are waiting to auto-play and the player is stopped (meaning new queue loaded)
-      // We also check queue length to ensure we actually have content
-      if (autoPlayNext && status === 'stopped' && queue.length > 0) {
-          play();
-          setAutoPlayNext(false);
-      }
-  }, [status, autoPlayNext, play, queue]);
 
   const handlePlayFromSelection = useCallback((cfiRange: string) => {
       const queue = AudioPlayerService.getInstance().getQueue();

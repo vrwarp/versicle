@@ -147,6 +147,8 @@ export interface TTSState {
   queue: TTSQueueItem[];
   /** The current index in the queue. */
   currentIndex: number;
+  /** The index of the current section in the playlist. */
+  sectionIndex?: number;
   /** Timestamp of last update. */
   updatedAt: number;
 }

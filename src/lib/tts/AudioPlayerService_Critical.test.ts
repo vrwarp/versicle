@@ -9,6 +9,10 @@ vi.mock('../../db/DBService', () => ({
     updatePlaybackState: vi.fn().mockResolvedValue(undefined),
     saveTTSState: vi.fn().mockResolvedValue(undefined),
     getTTSState: vi.fn().mockResolvedValue({ queue: [], currentIndex: 0 }),
+    getSections: vi.fn().mockResolvedValue([]),
+    getContentAnalysis: vi.fn(),
+    getTTSContent: vi.fn(),
+    updateReadingHistory: vi.fn(),
   }
 }));
 
