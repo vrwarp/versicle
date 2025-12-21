@@ -16,6 +16,7 @@ interface UnifiedInputControllerProps {
     onPrev: () => void;
     onNext: () => void;
     onToggleHUD: () => void;
+    immersiveMode: boolean;
 }
 
 export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
@@ -23,7 +24,8 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
     currentChapterTitle,
     onPrev,
     onNext,
-    onToggleHUD
+    onToggleHUD,
+    immersiveMode
 }) => {
     const { isPlaying, play, pause, seek, rate, setRate, providerId } = useTTSStore(useShallow(state => ({
         isPlaying: state.isPlaying,
@@ -125,12 +127,12 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
     }, [onPrev, onNext, onToggleHUD, play]);
 
     useEffect(() => {
-        if (!rendition || isPlaying) return;
+        if (!rendition || isPlaying || !immersiveMode) return;
 
         const handleSingleTapVisual = (e: MouseEvent) => {
-             const view = e.view;
-             if (!view) return;
-             const width = view.innerWidth;
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             const container = (rendition as any).manager?.container;
+             const width = container ? container.clientWidth : (e.view?.innerWidth || window.innerWidth);
              const x = e.clientX;
 
              if (e.defaultPrevented) return;
@@ -177,7 +179,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
             (rendition as any).off('click', handleClick);
             if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
         };
-    }, [rendition, isPlaying]); // Stable dependencies
+    }, [rendition, isPlaying, immersiveMode]); // Stable dependencies
 
 
     // --- Listening State (Audio Playing) ---
