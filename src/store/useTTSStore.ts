@@ -9,7 +9,7 @@ import { LemonFoxProvider } from '../lib/tts/providers/LemonFoxProvider';
 import { PiperProvider } from '../lib/tts/providers/PiperProvider';
 import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider';
-import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
+import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS, DEFAULT_ABBREVIATIONS } from '../lib/tts/TextSegmenter';
 import { Capacitor } from '@capacitor/core';
 
 /**
@@ -170,10 +170,7 @@ export const useTTSStore = create<TTSState>()(
             sanitizationEnabled: true,
             backgroundAudioMode: 'silence',
             whiteNoiseVolume: 0.1,
-            customAbbreviations: [
-                'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
-                'e.g.', 'i.e.'
-            ],
+            customAbbreviations: DEFAULT_ABBREVIATIONS,
             alwaysMerge: DEFAULT_ALWAYS_MERGE,
             sentenceStarters: DEFAULT_SENTENCE_STARTERS,
 

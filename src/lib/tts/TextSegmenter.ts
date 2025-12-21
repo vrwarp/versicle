@@ -11,6 +11,14 @@ export interface TextSegment {
 }
 
 /**
+ * Common abbreviations that should be treated as part of the sentence unless followed by a starter.
+ */
+export const DEFAULT_ABBREVIATIONS = [
+    'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
+    'e.g.', 'i.e.'
+];
+
+/**
  * Abbreviations that are almost exclusively titles and should always trigger a merge
  * regardless of the next word.
  */
@@ -52,7 +60,7 @@ export class TextSegmenter {
      */
     constructor(
         locale: string = 'en',
-        abbreviations: string[] = [],
+        abbreviations: string[] = DEFAULT_ABBREVIATIONS,
         alwaysMerge: string[] = DEFAULT_ALWAYS_MERGE,
         sentenceStarters: string[] = DEFAULT_SENTENCE_STARTERS
     ) {

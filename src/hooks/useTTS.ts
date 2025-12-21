@@ -30,7 +30,11 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
   const {
     loadVoices,
     prerollEnabled,
-    rate
+    rate,
+    customAbbreviations,
+    alwaysMerge,
+    sentenceStarters,
+    sanitizationEnabled
   } = useTTSStore();
 
   const currentChapterTitle = useReaderStore(state => state.currentChapterTitle);
@@ -87,7 +91,12 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
                lastLoadedHref.current = currentHref;
            }
 
-           const extracted = extractSentences(rendition);
+           const extracted = extractSentences(rendition, {
+               customAbbreviations,
+               alwaysMerge,
+               sentenceStarters,
+               sanitizationEnabled
+           });
            setSentences(extracted);
 
            let queue: TTSQueueItem[] = [];
@@ -158,7 +167,7 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
                      setSentences(sentenceNodes);
 
                      // Build Queue
-                     let queue: TTSQueueItem[] = stored.sentences.map(s => ({
+                     const queue: TTSQueueItem[] = stored.sentences.map(s => ({
                          text: s.text,
                          cfi: s.cfi
                      }));
@@ -228,7 +237,7 @@ export const useTTS = (rendition: Rendition | null, isReady: boolean) => {
         if (cleanupListeners) cleanupListeners();
     };
 
-  }, [rendition, player, isReady, currentBookId, currentSectionId, currentChapterTitle, prerollEnabled, rate]);
+  }, [rendition, player, isReady, currentBookId, currentSectionId, currentChapterTitle, prerollEnabled, rate, customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled]);
 
   // Cleanup on unmount
   useEffect(() => {

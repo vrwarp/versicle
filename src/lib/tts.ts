@@ -1,6 +1,5 @@
 import type { Rendition } from 'epubjs';
 import { TextSegmenter } from './tts/TextSegmenter';
-import { useTTSStore } from '../store/useTTSStore';
 import { Sanitizer } from './tts/processors/Sanitizer';
 
 /**
@@ -11,6 +10,16 @@ export interface SentenceNode {
     text: string;
     /** The Canonical Fragment Identifier (CFI) pointing to the sentence's location. */
     cfi: string;
+}
+
+/**
+ * Options for text segmentation and sanitization.
+ */
+export interface SegmentationOptions {
+    customAbbreviations?: string[];
+    alwaysMerge?: string[];
+    sentenceStarters?: string[];
+    sanitizationEnabled?: boolean;
 }
 
 const BLOCK_TAGS = new Set([
@@ -26,17 +35,19 @@ const BLOCK_TAGS = new Set([
  *
  * @param rootNode - The root DOM node to traverse.
  * @param cfiGenerator - A callback function that generates a CFI string from a DOM Range.
+ * @param options - Configuration options for segmentation.
  * @returns An array of SentenceNode objects.
  */
 export const extractSentencesFromNode = (
     rootNode: Node,
-    cfiGenerator: (range: Range) => string | null
+    cfiGenerator: (range: Range) => string | null,
+    options: SegmentationOptions = {}
 ): SentenceNode[] => {
     const sentences: SentenceNode[] = [];
     const doc = rootNode.ownerDocument || (rootNode as Document);
 
     // Initialize segmenter
-    const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+    const { customAbbreviations = [], alwaysMerge = [], sentenceStarters = [], sanitizationEnabled = true } = options;
     const segmenter = new TextSegmenter('en', customAbbreviations, alwaysMerge, sentenceStarters);
 
     let textBuffer = '';
@@ -170,9 +181,10 @@ export const extractSentencesFromNode = (
  * Uses TextSegmenter (Intl.Segmenter) for robust sentence splitting.
  *
  * @param rendition - The current epubjs Rendition object.
+ * @param options - Configuration options for segmentation.
  * @returns An array of SentenceNode objects representing the sentences in the current view.
  */
-export const extractSentences = (rendition: Rendition): SentenceNode[] => {
+export const extractSentences = (rendition: Rendition, options: SegmentationOptions = {}): SentenceNode[] => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contents = (rendition as any).getContents()[0];
     if (!contents) return [];
@@ -182,5 +194,5 @@ export const extractSentences = (rendition: Rendition): SentenceNode[] => {
 
     return extractSentencesFromNode(body, (range) => {
         return contents.cfiFromRange(range);
-    });
+    }, options);
 };

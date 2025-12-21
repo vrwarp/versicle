@@ -59,7 +59,11 @@ describe('useTTS', () => {
         (useTTSStore as any).mockReturnValue({
             loadVoices: mockLoadVoices,
             prerollEnabled: false,
-            rate: 1.0
+            rate: 1.0,
+            customAbbreviations: [],
+            alwaysMerge: [],
+            sentenceStarters: [],
+            sanitizationEnabled: true
         });
 
         // Setup Reader Store mock
@@ -108,7 +112,12 @@ describe('useTTS', () => {
             loadSentencesCallback();
         });
 
-        expect(ttsLib.extractSentences).toHaveBeenCalledWith(mockRendition);
+        expect(ttsLib.extractSentences).toHaveBeenCalledWith(mockRendition, {
+             customAbbreviations: [],
+             alwaysMerge: [],
+             sentenceStarters: [],
+             sanitizationEnabled: true
+        });
         expect(result.current.sentences).toEqual(mockSentences);
         expect(mockPlayerInstance.setQueue).toHaveBeenCalledWith([
             { text: 'Sentence 1', cfi: 'cfi1' }
@@ -121,7 +130,11 @@ describe('useTTS', () => {
         (useTTSStore as any).mockReturnValue({
             loadVoices: mockLoadVoices,
             prerollEnabled: true,
-            rate: 1.0
+            rate: 1.0,
+            customAbbreviations: [],
+            alwaysMerge: [],
+            sentenceStarters: [],
+            sanitizationEnabled: true
         });
 
         const mockSentences = [{ text: 'Sentence 1', cfi: 'cfi1' }];

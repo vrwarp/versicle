@@ -400,3 +400,29 @@ The implementation is divided into 4 Phases. We are currently executing Phase 1 
 
     -   **Discovery:**
         -   Since this requires a full browser automation test with tab switching (which is hard to simulate in JSDOM or unit tests perfectly), we rely on the component logic verification. The code paths for "hidden" state and reconciliation are covered by `ReaderTTSController.test.tsx`.
+
+8\. Verification & Fixes (Post-Implementation)
+----------------------------------------------
+
+During the verification phase, the following issues were identified and resolved:
+
+1.  **Circular Dependency:**
+    -   **Issue:** A circular dependency was detected: `src/lib/tts.ts` depended on `src/store/useTTSStore.ts`, which led to a cycle involving `AudioPlayerService`, `Providers`, `TTSCache`, `DBService`, and `ingestion`.
+    -   **Fix:** Refactored `extractSentences` and `extractSentencesFromNode` in `src/lib/tts.ts` to accept an options object instead of importing the store directly.
+
+2.  **Missing Default Abbreviations in Ingestion:**
+    -   **Issue:** `ingestion.ts` called `extractSentencesFromNode` without options, leading to an empty abbreviations list, which could cause incorrect sentence splitting.
+    -   **Fix:** Promoted `DEFAULT_ABBREVIATIONS` to `src/lib/tts/TextSegmenter.ts` and used them as defaults in the `TextSegmenter` constructor.
+
+3.  **Linting & Test Updates:**
+    -   **Issue:** `useTTS.ts` had a lint error (`prefer-const`). `useTTS.test.ts` failed due to the signature change of `extractSentences`.
+    -   **Fix:** Fixed lint error and updated unit tests to match the new API signature.
+
+4.  **Missing Test File:**
+    -   **Issue:** `ReaderTTSController.test.tsx` was mentioned in the plan but missing from the codebase.
+    -   **Fix:** Created `src/components/reader/ReaderTTSController.test.tsx` and added unit tests for visibility reconciliation and keyboard navigation.
+
+**Verification Results:**
+-   `npm run build` & `npm run lint`: PASSED
+-   `npm test`: PASSED
+-   Verification Suite (Docker): PASSED for relevant TTS tests (`test_mock_tts.py`, `test_tts_queue.py`, `test_journey_highlight_play.py`).
