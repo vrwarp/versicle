@@ -131,9 +131,13 @@ class DBService {
    * @param ttsOptions - Optional TTS extraction settings.
    * @returns A Promise that resolves when the book is added.
    */
-  async addBook(file: File, ttsOptions?: ExtractionOptions): Promise<void> {
+  async addBook(
+    file: File,
+    ttsOptions?: ExtractionOptions,
+    onProgress?: (progress: number, message: string) => void
+  ): Promise<void> {
     try {
-      await processEpub(file, ttsOptions);
+      await processEpub(file, ttsOptions, onProgress);
     } catch (error) {
       this.handleError(error);
     }

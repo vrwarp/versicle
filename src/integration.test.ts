@@ -5,6 +5,20 @@ import { useReaderStore } from './store/useReaderStore';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Mock offscreen renderer
+vi.mock('./lib/offscreen-renderer', () => ({
+  extractContentOffscreen: vi.fn(async () => {
+    return [
+      {
+        href: 'chapter1.html',
+        sentences: [{ text: 'Mock Sentence', cfi: 'epubcfi(/6/2!/4/2/1:0)' }],
+        textContent: 'Mock Content',
+        title: 'Mock Chapter'
+      }
+    ];
+  })
+}));
+
 // Mock epub.js but preserve behavior for ingestion (metadata)
 // while mocking behavior for Reader (rendering)
 vi.mock('epubjs', async (importOriginal) => {
@@ -16,7 +30,21 @@ vi.mock('epubjs', async (importOriginal) => {
 
       // Spy/Mock renderTo
       book.renderTo = vi.fn().mockReturnValue({
-        display: vi.fn(),
+        display: vi.fn().mockResolvedValue(undefined),
+        getContents: vi.fn().mockReturnValue([{
+             document: {
+                 body: {
+                     textContent: 'Mock Content',
+                     querySelectorAll: () => [],
+                     querySelector: () => null,
+                     childNodes: [],
+                     nodeType: 1, // ELEMENT_NODE
+                     tagName: 'BODY',
+                     ownerDocument: { createRange: () => ({ setStart: vi.fn(), setEnd: vi.fn() }) }
+                 }
+             },
+             cfiFromRange: vi.fn().mockReturnValue('epubcfi(/6/2!/4/2/1:0)'),
+        }]),
         themes: {
           register: vi.fn(),
           select: vi.fn(),
@@ -40,10 +68,12 @@ describe('Feature Integration Tests', () => {
   beforeEach(async () => {
     // Clear DB
     const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'annotations'], 'readwrite');
+    const tx = db.transaction(['books', 'files', 'annotations', 'sections', 'tts_content'], 'readwrite');
     await tx.objectStore('books').clear();
     await tx.objectStore('files').clear();
     await tx.objectStore('annotations').clear();
+    await tx.objectStore('sections').clear();
+    await tx.objectStore('tts_content').clear();
     await tx.done;
 
     // Reset stores

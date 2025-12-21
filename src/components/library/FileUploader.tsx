@@ -12,7 +12,7 @@ import { validateEpubFile } from '../../lib/ingestion';
  * @returns A React component rendering the file upload area.
  */
 export const FileUploader: React.FC = () => {
-  const { addBook, isImporting } = useLibraryStore();
+  const { addBook, isImporting, importProgress, importStatus } = useLibraryStore();
   const { showToast } = useToastStore();
   const [dragActive, setDragActive] = useState(false);
 
@@ -107,7 +107,13 @@ export const FileUploader: React.FC = () => {
       {isImporting ? (
         <div className="flex flex-col items-center justify-center space-y-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground font-medium">Importing book...</p>
+            <p className="text-muted-foreground font-medium">{importStatus || 'Importing book...'}</p>
+            <div className="w-64 h-2 bg-muted rounded-full overflow-hidden mt-2">
+                <div
+                    className="h-full bg-primary transition-all duration-300 ease-out"
+                    style={{ width: `${importProgress}%` }}
+                />
+            </div>
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center space-y-3">

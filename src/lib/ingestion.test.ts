@@ -3,6 +3,21 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { processEpub, validateEpubFile } from './ingestion';
 import { getDB } from '../db/db';
 
+// Mock offscreen renderer
+vi.mock('./offscreen-renderer', () => ({
+  extractContentOffscreen: vi.fn(async (file, options, onProgress) => {
+    if (onProgress) onProgress(50, 'Processing...');
+    return [
+      {
+        href: 'chapter1.html',
+        sentences: [{ text: 'Chapter Content.', cfi: 'epubcfi(/6/2!/4/2/1:0)' }],
+        textContent: 'Chapter Content.',
+        title: 'Mock Chapter 1'
+      }
+    ];
+  })
+}));
+
 // Mock epubjs
 vi.mock('epubjs', () => {
   return {
@@ -16,18 +31,7 @@ vi.mock('epubjs', () => {
         }),
       },
       coverUrl: vi.fn(() => Promise.resolve('blob:cover')),
-      archive: {
-        getBlob: vi.fn(() => Promise.resolve(new Blob(['<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Chapter Content. Second Sentence.</p></body></html>'], { type: 'application/xhtml+xml' }))),
-      },
-      spine: {
-        each: (cb: any) => {
-            const items = [
-                { id: 'chap1', href: 'chapter1.html', index: 0 },
-                { id: 'chap2', href: 'chapter2.html', index: 1 }
-            ];
-            items.forEach(cb);
-        }
-      }
+      destroy: vi.fn(),
     })),
     // Mock EpubCFI class
     EpubCFI: class {
@@ -53,10 +57,11 @@ describe('ingestion', () => {
   beforeEach(async () => {
     vi.spyOn(window, 'confirm').mockImplementation(() => true);
     const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'sections', 'annotations'], 'readwrite');
+    const tx = db.transaction(['books', 'files', 'sections', 'annotations', 'tts_content'], 'readwrite');
     await tx.objectStore('books').clear();
     await tx.objectStore('files').clear();
     await tx.objectStore('sections').clear();
+    await tx.objectStore('tts_content').clear();
     await tx.done;
   });
 
@@ -135,8 +140,7 @@ describe('ingestion', () => {
         }),
       },
       coverUrl: vi.fn(() => Promise.resolve(null)),
-      spine: { each: vi.fn() },
-      archive: { getBlob: vi.fn() }
+      destroy: vi.fn(),
     }));
 
     const mockFile = createMockFile(true);
@@ -161,8 +165,7 @@ describe('ingestion', () => {
         }),
       },
       coverUrl: vi.fn(() => Promise.resolve(null)),
-      spine: { each: vi.fn() },
-      archive: { getBlob: vi.fn() }
+      destroy: vi.fn(),
     }));
 
     const mockFile = createMockFile(true);
@@ -191,8 +194,7 @@ describe('ingestion', () => {
          }),
        },
        coverUrl: vi.fn(() => Promise.resolve(null)),
-       spine: { each: vi.fn() },
-       archive: { getBlob: vi.fn() }
+       destroy: vi.fn(),
      }));
 
      // Confirm should NOT be called

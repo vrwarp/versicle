@@ -3,8 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
 import type { BookMetadata, SectionMetadata, TTSContent } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
-import { extractSentencesFromNode, type ExtractionOptions } from './tts';
-import { generateEpubCfi } from './cfi-utils';
+import type { ExtractionOptions } from './tts';
+import { extractContentOffscreen } from './offscreen-renderer';
 
 function cheapHash(buffer: ArrayBuffer): string {
   const view = new Uint8Array(buffer);
@@ -44,17 +44,6 @@ export async function generateFileFingerprint(
   return `${metaString}-${cheapHash(head)}-${cheapHash(tail)}`;
 }
 
-
-// Helper to convert Blob to text using FileReader (for compatibility)
-const blobToText = (blob: Blob): Promise<string> => {
-  return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsText(blob);
-  });
-};
-
 /**
  * Validates that the file has a ZIP header (PK\x03\x04), which is required for EPUBs.
  * This prevents uploading random files or potential malware masked as EPUBs.
@@ -83,159 +72,31 @@ export async function validateEpubFile(file: File): Promise<boolean> {
  *
  * @param file - The EPUB file object to process.
  * @param ttsOptions - Configuration options for TTS sentence extraction.
+ * @param onProgress - Callback for progress updates.
  * @returns A Promise that resolves to the UUID of the newly created book.
  * @throws Will throw an error if the file cannot be parsed or database operations fail.
  */
-export async function processEpub(file: File, ttsOptions?: ExtractionOptions): Promise<string> {
+export async function processEpub(
+  file: File,
+  ttsOptions?: ExtractionOptions,
+  onProgress?: (progress: number, message: string) => void
+): Promise<string> {
   // 1. Security Check: Validate File Header
   const isValid = await validateEpubFile(file);
   if (!isValid) {
       throw new Error("Invalid file format. File must be a valid EPUB (ZIP archive).");
   }
 
-  // Pass File directly to ePub.js (it supports Blob/File/ArrayBuffer/Url)
+  // 2. Metadata & Cover (Fast pass)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const book = (ePub as any)(file);
-
   await book.ready;
 
-  const metadata = await book.loaded.metadata;
-  const bookId = uuidv4();
-
-  // Generate Synthetic TOC and Calculate Durations
-  const syntheticToc: NavigationItem[] = [];
-  const sections: SectionMetadata[] = [];
-  const ttsContentBatches: TTSContent[] = [];
-  let totalChars = 0;
-
-  try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const spine = (book.spine as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const items: any[] = [];
-      if (spine.each) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          spine.each((item: any) => items.push(item));
-      } else if (spine.items) {
-         items.push(...spine.items);
-      }
-
-      for (let i = 0; i < items.length; i++) {
-           const item = items[i];
-           let characterCount = 0;
-           try {
-               let title = '';
-               // In ingestion context (file input), book.archive is available.
-               // We use blob extraction + DOMParser as book.load() might rely on DOM attachment or network.
-               if (book.archive) {
-                    let blob = await book.archive.getBlob(item.href);
-
-                    // Fallback: Try to find file if path is relative
-                    if (!blob) {
-                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                         const zipFiles = Object.keys((book.archive as any).zip?.files || {});
-                         // Try to match end of string
-                         const match = zipFiles.find(f => f.endsWith(item.href));
-                         if (match) {
-                             // Use JSZip directly via internal property to bypass potential path resolution issues in getBlob
-                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                             const zipObj = (book.archive as any).zip;
-                             if (zipObj && zipObj.file) {
-                                 const fileObj = zipObj.file(match);
-                                 if (fileObj) {
-                                     blob = await fileObj.async("blob");
-                                 }
-                             }
-                             // Fallback to getBlob if direct zip access failed (though unlikely if match found)
-                             if (!blob) {
-                                 blob = await book.archive.getBlob(match);
-                             }
-                         }
-                    }
-                    if (blob) {
-                        const text = await blobToText(blob);
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(text, "application/xhtml+xml");
-
-                        // Extract TTS sentences
-                        try {
-                            // Format: epubcfi(/6/{spineIndex}[{itemId}]!)
-                            const spineIndex = (i + 1) * 2;
-                            const baseCfi = `epubcfi(/6/${spineIndex}${item.id ? `[${item.id}]` : ''}!)`;
-
-                            const sentences = extractSentencesFromNode(doc.body, (range) => {
-                                return generateEpubCfi(range, baseCfi);
-                            }, ttsOptions);
-
-                            if (sentences.length > 0) {
-                                ttsContentBatches.push({
-                                    id: `${bookId}-${item.href}`,
-                                    bookId: bookId,
-                                    sectionId: item.href,
-                                    sentences: sentences
-                                });
-                            }
-                        } catch (e) {
-                            console.warn(`Failed to extract TTS content for ${item.href}`, e);
-                        }
-
-                        const headings = doc.querySelectorAll('h1, h2, h3');
-                        if (headings.length > 0) {
-                            title = headings[0].textContent || '';
-                        }
-
-                        if (!title.trim()) {
-                            const p = doc.querySelector('p');
-                            if (p && p.textContent) title = p.textContent;
-                        }
-
-                        if (!title.trim()) {
-                            title = doc.body.textContent || '';
-                        }
-
-                        // Calculate character count from text content
-                        const contentText = doc.body.textContent || '';
-                        characterCount = contentText.length;
-                        totalChars += characterCount;
-
-
-                        // Clean up
-                        title = title.replace(/\s+/g, ' ').trim();
-                        if (title.length > 60) {
-                           title = title.substring(0, 60) + '...';
-                        }
-                    }
-               }
-
-               if (!title) title = `Chapter ${i+1}`;
-
-               syntheticToc.push({
-                   id: item.id || `syn-toc-${i}`,
-                   href: item.href,
-                   label: title
-               });
-
-               // Store section metadata
-               sections.push({
-                 id: `${bookId}-${item.href}`, // Composite key
-                 bookId: bookId,
-                 sectionId: item.href, // This corresponds to currentSectionId
-                 characterCount: characterCount,
-                 playOrder: i
-               });
-
-           } catch (e) {
-                console.error("Error generating TOC item or calculating duration", e);
-                syntheticToc.push({ id: item.id || `syn-toc-${i}`, href: item.href, label: `Chapter ${i+1}` });
-           }
-      }
-  } catch (e) {
-      console.error("Error generating synthetic TOC", e);
-  }
-
-  let coverBlob: Blob | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const metadata = await (book.loaded as any).metadata;
   const coverUrl = await book.coverUrl();
 
+  let coverBlob: Blob | undefined;
   if (coverUrl) {
     try {
       const response = await fetch(coverUrl);
@@ -244,6 +105,47 @@ export async function processEpub(file: File, ttsOptions?: ExtractionOptions): P
       console.warn('Failed to retrieve cover blob:', error);
     }
   }
+
+  // Destroy this instance as we will use a new one for offscreen rendering
+  book.destroy();
+
+  // 3. Offscreen Extraction (Slow pass)
+  const chapters = await extractContentOffscreen(file, ttsOptions, onProgress);
+
+  const bookId = uuidv4();
+  const syntheticToc: NavigationItem[] = [];
+  const sections: SectionMetadata[] = [];
+  const ttsContentBatches: TTSContent[] = [];
+  let totalChars = 0;
+
+  chapters.forEach((chapter, i) => {
+      // Synthetic TOC
+      syntheticToc.push({
+          id: `syn-toc-${i}`,
+          href: chapter.href,
+          label: chapter.title || `Chapter ${i+1}`
+      });
+
+      // Section Metadata
+      sections.push({
+          id: `${bookId}-${chapter.href}`,
+          bookId,
+          sectionId: chapter.href,
+          characterCount: chapter.textContent.length,
+          playOrder: i
+      });
+      totalChars += chapter.textContent.length;
+
+      // TTS Content
+      if (chapter.sentences.length > 0) {
+          ttsContentBatches.push({
+              id: `${bookId}-${chapter.href}`,
+              bookId,
+              sectionId: chapter.href,
+              sentences: chapter.sentences
+          });
+      }
+  });
 
   // Calculate fingerprint
   const fileHash = await generateFileFingerprint(file, {

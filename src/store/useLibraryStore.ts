@@ -15,6 +15,10 @@ interface LibraryState {
   isLoading: boolean;
   /** Flag indicating if a book is currently being imported. */
   isImporting: boolean;
+  /** Progress percentage of the current import (0-100). */
+  importProgress: number;
+  /** Status message of the current import. */
+  importStatus: string;
   /** Error message if an operation failed, or null. */
   error: string | null;
   /** The current view mode of the library. */
@@ -63,6 +67,8 @@ export const useLibraryStore = create<LibraryState>()(
       books: [],
       isLoading: false,
       isImporting: false,
+      importProgress: 0,
+      importStatus: '',
       error: null,
       viewMode: 'grid',
 
@@ -80,7 +86,7 @@ export const useLibraryStore = create<LibraryState>()(
   },
 
   addBook: async (file: File) => {
-    set({ isImporting: true, error: null });
+    set({ isImporting: true, importProgress: 0, importStatus: 'Starting import...', error: null });
     try {
       const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
       await dbService.addBook(file, {
@@ -88,17 +94,19 @@ export const useLibraryStore = create<LibraryState>()(
           alwaysMerge,
           sentenceStarters,
           sanitizationEnabled
+      }, (progress, message) => {
+          set({ importProgress: progress, importStatus: message });
       });
       // Refresh library
       await get().fetchBooks();
-      set({ isImporting: false });
+      set({ isImporting: false, importProgress: 0, importStatus: '' });
     } catch (err) {
       console.error('Failed to import book:', err);
       let errorMessage = 'Failed to import book.';
       if (err instanceof StorageFullError) {
           errorMessage = 'Device storage full. Please delete some books.';
       }
-      set({ error: errorMessage, isImporting: false });
+      set({ error: errorMessage, isImporting: false, importProgress: 0, importStatus: '' });
       throw err; // Re-throw so components can handle UI feedback (e.g. Toasts)
     }
   },

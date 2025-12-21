@@ -5,7 +5,21 @@ import { getDB } from '../db/db';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// We do NOT mock epubjs here because we want to test the real integration with a real file.
+// Mock offscreen renderer because epubjs rendering requires a real browser layout engine
+vi.mock('./offscreen-renderer', () => ({
+  extractContentOffscreen: vi.fn(async () => {
+    return [
+      {
+        href: 'chapter1.html',
+        sentences: [{ text: 'Down the Rabbit-Hole', cfi: 'epubcfi(/6/2!/4/2/1:0)' }],
+        textContent: 'Down the Rabbit-Hole',
+        title: 'Chapter 1'
+      }
+    ];
+  })
+}));
+
+// We do NOT mock epubjs (for metadata) here because we want to test the real integration with a real file.
 // However, we still need to make sure the environment (JSDOM) supports what epubjs needs.
 // epubjs uses XMLSerializer, DOMParser, and potentially FileReader/Blob. JSDOM provides these.
 
@@ -13,9 +27,11 @@ describe('ingestion integration', () => {
   beforeEach(async () => {
     // Clear DB
     const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'annotations'], 'readwrite');
+    const tx = db.transaction(['books', 'files', 'annotations', 'sections', 'tts_content'], 'readwrite');
     await tx.objectStore('books').clear();
     await tx.objectStore('files').clear();
+    await tx.objectStore('sections').clear();
+    await tx.objectStore('tts_content').clear();
     await tx.done;
   });
 
