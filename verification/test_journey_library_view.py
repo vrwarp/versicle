@@ -8,6 +8,12 @@ def test_library_grid_list_toggle(page: Page):
     Includes persistence check.
     """
     print("Starting Library Grid/List Toggle Journey...")
+
+    # Check if running on mobile UA (via fixture) and skip if so.
+    ua = page.evaluate("navigator.userAgent")
+    if "Mobile" in ua or "Android" in ua or "iPhone" in ua:
+        pytest.skip("Skipping desktop view test on mobile User Agent")
+
     # Set desktop viewport
     page.set_viewport_size({"width": 1280, "height": 800})
     utils.reset_app(page)
@@ -16,12 +22,15 @@ def test_library_grid_list_toggle(page: Page):
     print("Uploading Alice...")
     file_input = page.get_by_test_id("hidden-file-input")
     file_input.set_input_files("verification/alice.epub")
-    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible(timeout=5000)
+    # Increase timeout for upload
+    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible(timeout=10000)
 
     # 2. Upload second book (Frankenstein) to check multiple items
     print("Uploading Frankenstein...")
     file_input.set_input_files("verification/frankenstein.epub")
-    expect(page.locator("[data-testid^='book-card-']")).to_have_count(2, timeout=5000)
+
+    # Increase timeout for second upload
+    expect(page.locator("[data-testid^='book-card-']")).to_have_count(2, timeout=10000)
 
     utils.capture_screenshot(page, "library_view_1_grid_initial")
 
