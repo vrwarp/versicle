@@ -14,7 +14,8 @@ vi.stubGlobal('URL', class {
 const mockEngine = {
     initIndex: vi.fn().mockResolvedValue(undefined),
     addDocuments: vi.fn().mockResolvedValue(undefined),
-    search: vi.fn().mockResolvedValue([{ href: 'chap1.html', excerpt: '...found match...' }])
+    search: vi.fn().mockResolvedValue([{ href: 'chap1.html', excerpt: '...found match...' }]),
+    supportsXmlParsing: vi.fn().mockResolvedValue(false)
 };
 
 vi.mock('comlink', () => ({
@@ -128,5 +129,28 @@ describe('SearchClient', () => {
 
         expect(delayedBook.spine).toBeDefined();
         expect(mockEngine.initIndex).toHaveBeenCalledWith('book-2');
+    });
+
+    it('should offload XML to worker if supported', async () => {
+        // Mock supported
+        mockEngine.supportsXmlParsing.mockResolvedValue(true);
+        mockBook.archive.getBlob.mockResolvedValue(mockBlob);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await searchClient.indexBook(mockBook as any, 'book-offload');
+
+        // Should use archive
+        expect(mockBook.archive.getBlob).toHaveBeenCalled();
+
+        // Should NOT parse on main thread (checking if DOMParser was instantiated is hard if we don't spy on it,
+        // but we can check what was sent to addDocuments)
+
+        expect(mockEngine.addDocuments).toHaveBeenCalledWith('book-offload', expect.arrayContaining([
+            expect.objectContaining({
+                href: 'chap1.html',
+                xml: expect.stringContaining('<html'),
+                text: undefined
+            })
+        ]));
     });
 });

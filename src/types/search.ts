@@ -30,5 +30,7 @@ export interface SearchSection {
     /** Relative path/href to the section file. */
     href: string;
     /** The raw text content of the section. */
-    text: string;
+    text?: string;
+    /** The raw XML content of the section (optional, for worker-side parsing). */
+    xml?: string;
 }

@@ -44,6 +44,9 @@ class SearchClient {
         // Init/Clear index
         await engine.initIndex(bookId);
 
+        // Check if worker supports XML parsing to offload main thread
+        const canOffload = await engine.supportsXmlParsing();
+
         const spineItems = book.spine.items;
         const total = spineItems.length;
         const BATCH_SIZE = 5;
@@ -54,6 +57,7 @@ class SearchClient {
 
             for (const item of batch) {
                 let text = '';
+                let xml = '';
                 try {
                     // Attempt 1: Access raw file content from the archive (fast & robust)
                     if (book.archive) {
@@ -61,9 +65,13 @@ class SearchClient {
                             const blob = await book.archive.getBlob(item.href);
                             if (blob) {
                                 const rawXml = await blob.text();
-                                const parser = new DOMParser();
-                                const doc = parser.parseFromString(rawXml, 'application/xhtml+xml');
-                                text = doc.body.textContent || '';
+                                if (canOffload) {
+                                    xml = rawXml;
+                                } else {
+                                    const parser = new DOMParser();
+                                    const doc = parser.parseFromString(rawXml, 'application/xhtml+xml');
+                                    text = doc.body.textContent || '';
+                                }
                             }
                         } catch (err) {
                             console.warn(`Archive extraction failed for ${item.href}, falling back to render`, err);
@@ -71,7 +79,7 @@ class SearchClient {
                     }
 
                     // Attempt 2: Fallback to rendering pipeline (slow but handles resource resolution)
-                    if (!text) {
+                    if (!text && !xml) {
                         const doc = await book.load(item.href);
                         if (doc) {
                             if (doc.body && doc.body.innerText) {
@@ -82,11 +90,12 @@ class SearchClient {
                         }
                     }
 
-                    if (text) {
+                    if (text || xml) {
                         sections.push({
                             id: item.id,
                             href: item.href,
-                            text: text
+                            text: text || undefined,
+                            xml: xml || undefined
                         });
                     }
                 } catch (e) {

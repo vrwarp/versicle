@@ -24,6 +24,14 @@ export class SearchEngine {
     }
 
     /**
+     * Checks if the current environment supports XML parsing (DOMParser).
+     * @returns True if DOMParser is available.
+     */
+    supportsXmlParsing(): boolean {
+        return typeof DOMParser !== 'undefined';
+    }
+
+    /**
      * Adds documents to the index for a book. Creates the index if it doesn't exist.
      *
      * @param bookId - The unique identifier of the book.
@@ -48,11 +56,26 @@ export class SearchEngine {
         }
 
         sections.forEach(section => {
-            index.add({
-                id: section.href,
-                text: section.text,
-                href: section.href
-            });
+            let text = section.text;
+
+            // Offload XML parsing if text is missing but XML is provided
+            if (!text && section.xml && typeof DOMParser !== 'undefined') {
+                try {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(section.xml, 'application/xhtml+xml');
+                    text = doc.body?.textContent || doc.documentElement?.textContent || '';
+                } catch (e) {
+                    console.warn(`Failed to parse XML for ${section.href}`, e);
+                }
+            }
+
+            if (text) {
+                index.add({
+                    id: section.href,
+                    text: text,
+                    href: section.href
+                });
+            }
         });
     }
 
