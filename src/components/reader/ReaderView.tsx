@@ -165,13 +165,9 @@ export const ReaderView: React.FC = () => {
              );
          }
     },
-    onBookLoaded: (book) => {
-         if (id) {
-            // Index for Search (Async)
-            searchClient.indexBook(book, id).then(() => {
-                // console.log("Book indexed for search");
-            });
-         }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onBookLoaded: (_book) => {
+         // Indexing is now deferred until search is opened
     },
     onClick: () => hidePopover(),
     onError: (msg) => {
@@ -377,6 +373,24 @@ export const ReaderView: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
+  // Indexing State
+  const [isIndexing, setIsIndexing] = useState(false);
+  const [indexingProgress, setIndexingProgress] = useState(0);
+
+  const handleCheckIndex = useCallback(async () => {
+      if (!id || !book) return;
+      if (searchClient.isIndexed(id)) return;
+
+      setIsIndexing(true);
+      try {
+          await searchClient.indexBook(book, id, (progress) => {
+              setIndexingProgress(Math.round(progress * 100));
+          });
+      } finally {
+          setIsIndexing(false);
+      }
+  }, [id, book]);
+
   // Load synthetic TOC from metadata
   useEffect(() => {
       if (metadata?.syntheticToc) {
@@ -575,7 +589,15 @@ export const ReaderView: React.FC = () => {
                 size="icon"
                 data-testid="reader-search-button"
                 aria-label="Search"
-                onClick={() => { setShowSearch(!showSearch); setShowToc(false); setShowAnnotations(false); }}
+                onClick={() => {
+                    const willOpen = !showSearch;
+                    setShowSearch(willOpen);
+                    setShowToc(false);
+                    setShowAnnotations(false);
+                    if (willOpen) {
+                        handleCheckIndex();
+                    }
+                }}
                 className="rounded-full text-muted-foreground"
             >
                     <Search className="w-5 h-5" />
@@ -766,6 +788,20 @@ export const ReaderView: React.FC = () => {
                             <X className="w-4 h-4 text-muted-foreground" />
                          </button>
                      </div>
+                     {isIndexing && (
+                        <div className="mt-3 space-y-1">
+                             <div className="flex justify-between text-xs text-muted-foreground">
+                                 <span>Indexing book...</span>
+                                 <span>{indexingProgress}%</span>
+                             </div>
+                             <div className="h-1.5 bg-secondary rounded-full overflow-hidden w-full">
+                                 <div
+                                    className="h-full bg-primary transition-all duration-300 ease-in-out"
+                                    style={{ width: `${indexingProgress}%` }}
+                                 />
+                             </div>
+                        </div>
+                     )}
                  </div>
                  <div className="flex-1 overflow-y-auto p-4">
                      {isSearching ? (

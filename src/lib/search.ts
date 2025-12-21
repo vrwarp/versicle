@@ -12,6 +12,8 @@ export type { SearchResult };
 class SearchClient {
     private worker: Worker | null = null;
     private engine: Comlink.Remote<SearchEngine> | null = null;
+    private indexedBooks = new Set<string>();
+    private pendingIndexes = new Map<string, Promise<void>>();
 
     /**
      * Retrieves the existing Web Worker instance or creates a new one if it doesn't exist.
@@ -30,6 +32,13 @@ class SearchClient {
     }
 
     /**
+     * Checks if a book is already indexed.
+     */
+    isIndexed(bookId: string): boolean {
+        return this.indexedBooks.has(bookId);
+    }
+
+    /**
      * Extracts text content from a book's spine items and sends it to the worker for indexing.
      * Uses batch processing to avoid blocking the main thread.
      *
@@ -39,6 +48,30 @@ class SearchClient {
      * @returns A Promise that resolves when the indexing command is sent to the worker.
      */
     async indexBook(book: Book, bookId: string, onProgress?: (percent: number) => void) {
+        if (this.indexedBooks.has(bookId)) {
+            if (onProgress) onProgress(1.0);
+            return;
+        }
+
+        if (this.pendingIndexes.has(bookId)) {
+            // Wait for pending index
+            await this.pendingIndexes.get(bookId);
+            if (onProgress) onProgress(1.0);
+            return;
+        }
+
+        const task = this.indexBookInternal(book, bookId, onProgress);
+        this.pendingIndexes.set(bookId, task);
+
+        try {
+            await task;
+            this.indexedBooks.add(bookId);
+        } finally {
+            this.pendingIndexes.delete(bookId);
+        }
+    }
+
+    private async indexBookInternal(book: Book, bookId: string, onProgress?: (percent: number) => void) {
         const engine = this.getEngine();
         await book.ready;
         // Init/Clear index
@@ -137,6 +170,8 @@ class SearchClient {
             this.worker.terminate();
             this.worker = null;
             this.engine = null;
+            this.indexedBooks.clear();
+            this.pendingIndexes.clear();
         }
     }
 }

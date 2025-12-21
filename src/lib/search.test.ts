@@ -45,10 +45,12 @@ const mockBook = {
 };
 
 describe('SearchClient', () => {
+    beforeEach(() => {
+        searchClient.terminate();
+        vi.clearAllMocks();
+    });
 
     it('should index a book using archive access', async () => {
-        // Reset mocks
-        vi.clearAllMocks();
         mockBook.archive.getBlob.mockResolvedValue(mockBlob);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,8 +71,6 @@ describe('SearchClient', () => {
     });
 
     it('should fallback to book.load if archive fails', async () => {
-        // Reset mocks
-        vi.clearAllMocks();
         mockBook.archive.getBlob.mockResolvedValue(null); // Simulate archive failure/missing file
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -152,5 +152,17 @@ describe('SearchClient', () => {
                 text: undefined
             })
         ]));
+    });
+
+    it('should skip indexing if already indexed', async () => {
+        mockBook.archive.getBlob.mockResolvedValue(mockBlob);
+
+        // First index
+        await searchClient.indexBook(mockBook as any, 'book-idempotent');
+        expect(mockEngine.initIndex).toHaveBeenCalledTimes(1);
+
+        // Second index
+        await searchClient.indexBook(mockBook as any, 'book-idempotent');
+        expect(mockEngine.initIndex).toHaveBeenCalledTimes(1); // Should NOT be called again
     });
 });
