@@ -209,6 +209,14 @@ export const ReaderView: React.FC = () => {
       setIsLoading(hookLoading);
   }, [hookLoading, setIsLoading]);
 
+  // Expose rendition for testing
+  useEffect(() => {
+    if (rendition) {
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       (window as any).rendition = rendition;
+    }
+  }, [rendition]);
+
   // Handle errors
   useEffect(() => {
       if (hookError) {
@@ -286,11 +294,15 @@ export const ReaderView: React.FC = () => {
                annotation.color === 'blue' ? 'highlight-blue' :
                annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow';
 
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, () => {
-                // console.log("Clicked annotation", annotation.id);
-            }, className, getAnnotationStyles(annotation.color));
-           addedAnnotations.current.add(annotation.id);
+           try {
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, () => {
+                    // console.log("Clicked annotation", annotation.id);
+                }, className, getAnnotationStyles(annotation.color));
+               addedAnnotations.current.add(annotation.id);
+           } catch (e) {
+               console.warn(`Failed to add annotation ${annotation.id}`, e);
+           }
         }
       });
 
@@ -316,9 +328,13 @@ export const ReaderView: React.FC = () => {
       if (rendition && isRenditionReady && id) {
           dbService.getReadingHistory(id).then(ranges => {
                ranges.forEach(range => {
-                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                   (rendition as any).annotations.add('highlight', range, {}, null, 'reading-history-highlight', { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' });
-                   addedRanges.push(range);
+                   try {
+                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                       (rendition as any).annotations.add('highlight', range, {}, null, 'reading-history-highlight', { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' });
+                       addedRanges.push(range);
+                   } catch (e) {
+                       console.warn("Failed to add history highlight", e);
+                   }
                });
           });
       }
@@ -531,6 +547,7 @@ export const ReaderView: React.FC = () => {
           onPrev={handlePrev}
           onNext={handleNext}
           onToggleHUD={() => setImmersiveMode(!immersiveMode)}
+          immersiveMode={immersiveMode}
       />
 
       {/* Immersive Mode Exit Button */}

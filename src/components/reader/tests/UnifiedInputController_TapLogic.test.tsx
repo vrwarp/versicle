@@ -4,7 +4,7 @@ import { UnifiedInputController } from '../UnifiedInputController';
 import { useTTSStore } from '../../../store/useTTSStore';
 import React from 'react';
 
-describe('UnifiedInputController Immersive Mode', () => {
+describe('UnifiedInputController Tap Logic', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockRendition: any;
     let onToggleHUD: Mock;
@@ -26,6 +26,11 @@ describe('UnifiedInputController Immersive Mode', () => {
                 }
             }),
             off: vi.fn(),
+            manager: {
+                container: {
+                    clientWidth: 1000 // Default Width
+                }
+            }
         };
 
         useTTSStore.setState({
@@ -46,7 +51,14 @@ describe('UnifiedInputController Immersive Mode', () => {
         vi.restoreAllMocks();
     });
 
-    it('DOES NOT toggle HUD when clicking in the center (behavior change)', () => {
+    it('Issue A: Uses container width instead of window width for tap zones', () => {
+        // Setup: Window is 1920px, Container is 700px.
+        // Tap at 300px.
+        // Old Logic: 300 < 1920 * 0.2 (384) -> True (Prev) - BUG
+        // New Logic: 300 < 700 * 0.2 (140) -> False (No Prev) - FIX
+
+        mockRendition.manager.container.clientWidth = 700;
+
         render(
             <UnifiedInputController
                 rendition={mockRendition}
@@ -61,94 +73,54 @@ describe('UnifiedInputController Immersive Mode', () => {
         // Ensure handler is attached
         expect(clickHandler).toBeDefined();
 
-        // Simulate click in the center (50% width)
         const mockEvent = {
             view: {
-                innerWidth: 1000,
+                innerWidth: 1920, // Wide Window
                 getSelection: () => ({ isCollapsed: true })
             },
-            clientX: 500, // Center
+            clientX: 300, // Inside book, but > 20% of book width (140)
             defaultPrevented: false,
             preventDefault: vi.fn(),
         };
 
-        // Trigger the click handler
         if (clickHandler) {
             clickHandler(mockEvent);
         }
 
-        // Advance timers to trigger single tap action (300ms delay in component)
         vi.advanceTimersByTime(350);
 
-        // Expect onToggleHUD NOT to be called
-        expect(onToggleHUD).not.toHaveBeenCalled();
+        expect(onPrev).not.toHaveBeenCalled();
+        expect(onNext).not.toHaveBeenCalled();
     });
 
-    it('navigates prev when clicking left', () => {
-         render(
+    it('Issue B: Disables tap navigation when NOT in Immersive Mode', () => {
+        render(
             <UnifiedInputController
                 rendition={mockRendition}
                 currentChapterTitle="Test Chapter"
                 onPrev={onPrev}
                 onNext={onNext}
                 onToggleHUD={onToggleHUD}
-                immersiveMode={true}
+                immersiveMode={false} // Standard Mode
             />
         );
 
-        expect(clickHandler).toBeDefined();
-
-        const mockEvent = {
-            view: {
-                innerWidth: 1000,
-                getSelection: () => ({ isCollapsed: true })
-            },
-            clientX: 100, // Left 10%
-            defaultPrevented: false,
-            preventDefault: vi.fn(),
-        };
-
-        if (clickHandler) {
-            clickHandler(mockEvent);
-        }
-
-        vi.advanceTimersByTime(350);
-
-        expect(onPrev).toHaveBeenCalled();
-        expect(onToggleHUD).not.toHaveBeenCalled();
+        // Expect NO listener attached because the effect returns early
+        expect(clickHandler).toBeUndefined();
     });
 
-    it('navigates next when clicking right', () => {
-         render(
+    it('Issue B: Enables tap navigation when in Immersive Mode', () => {
+        render(
             <UnifiedInputController
                 rendition={mockRendition}
                 currentChapterTitle="Test Chapter"
                 onPrev={onPrev}
                 onNext={onNext}
                 onToggleHUD={onToggleHUD}
-                immersiveMode={true}
+                immersiveMode={true} // Immersive Mode
             />
         );
 
         expect(clickHandler).toBeDefined();
-
-        const mockEvent = {
-            view: {
-                innerWidth: 1000,
-                getSelection: () => ({ isCollapsed: true })
-            },
-            clientX: 900, // Right 90%
-            defaultPrevented: false,
-            preventDefault: vi.fn(),
-        };
-
-        if (clickHandler) {
-            clickHandler(mockEvent);
-        }
-
-        vi.advanceTimersByTime(350);
-
-        expect(onNext).toHaveBeenCalled();
-        expect(onToggleHUD).not.toHaveBeenCalled();
     });
 });

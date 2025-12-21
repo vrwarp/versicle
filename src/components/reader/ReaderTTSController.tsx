@@ -36,7 +36,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
-      if (!rendition || !activeCfi) return;
+      if (!rendition || !activeCfi || status === 'stopped') return;
 
       const syncVisuals = () => {
          // Auto-turn page in paginated mode
