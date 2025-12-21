@@ -4,7 +4,6 @@ import { useTTS } from './useTTS';
 import { useTTSStore } from '../store/useTTSStore';
 import { useReaderStore } from '../store/useReaderStore';
 import { dbService } from '../db/DBService';
-import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 
 // Hoist mocks
 const { mockPlayerInstance, mockLoadVoices } = vi.hoisted(() => {

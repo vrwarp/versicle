@@ -135,9 +135,10 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
 
              if (e.defaultPrevented) return;
 
-             if (x < width * 0.2) {
+             // Reduced tap zones to 15% to prevent accidental navigation when clicking text
+             if (x < width * 0.15) {
                  callbacksRef.current.onPrev();
-             } else if (x > width * 0.8) {
+             } else if (x > width * 0.85) {
                  callbacksRef.current.onNext();
              } else {
                  // Center tap disabled to prevent accidental immersive mode.
