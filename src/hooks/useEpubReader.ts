@@ -130,6 +130,16 @@ export function useEpubReader(
           // We patch sandbox attribute manually via MutationObserver instead.
         });
         renditionRef.current = newRendition;
+
+        // Manually ensure allow-scripts is present to fix event handling in strict environments (like Docker)
+        // This is a backup to the MutationObserver strategy mentioned above (which might be missing or slow)
+        const iframe = viewerRef.current?.querySelector('iframe');
+        if (iframe) {
+            const sandbox = iframe.getAttribute('sandbox') || '';
+            if (!sandbox.includes('allow-scripts')) {
+                iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
+            }
+        }
         setRendition(newRendition);
 
         // Disable spreads
