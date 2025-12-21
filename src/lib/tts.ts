@@ -1,6 +1,4 @@
-import type { Rendition } from 'epubjs';
 import { TextSegmenter } from './tts/TextSegmenter';
-import { useTTSStore } from '../store/useTTSStore';
 import { Sanitizer } from './tts/processors/Sanitizer';
 
 /**
@@ -11,6 +9,13 @@ export interface SentenceNode {
     text: string;
     /** The Canonical Fragment Identifier (CFI) pointing to the sentence's location. */
     cfi: string;
+}
+
+export interface ExtractionOptions {
+    abbreviations?: string[];
+    alwaysMerge?: string[];
+    sentenceStarters?: string[];
+    sanitizationEnabled?: boolean;
 }
 
 const BLOCK_TAGS = new Set([
@@ -26,18 +31,27 @@ const BLOCK_TAGS = new Set([
  *
  * @param rootNode - The root DOM node to traverse.
  * @param cfiGenerator - A callback function that generates a CFI string from a DOM Range.
+ * @param options - Configuration options for segmentation.
  * @returns An array of SentenceNode objects.
  */
 export const extractSentencesFromNode = (
     rootNode: Node,
-    cfiGenerator: (range: Range) => string | null
+    cfiGenerator: (range: Range) => string | null,
+    options: ExtractionOptions = {}
 ): SentenceNode[] => {
     const sentences: SentenceNode[] = [];
     const doc = rootNode.ownerDocument || (rootNode as Document);
 
+    // Default sanitization to true if not specified
+    const sanitizationEnabled = options.sanitizationEnabled !== undefined ? options.sanitizationEnabled : true;
+
     // Initialize segmenter
-    const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
-    const segmenter = new TextSegmenter('en', customAbbreviations, alwaysMerge, sentenceStarters);
+    const segmenter = new TextSegmenter(
+        'en',
+        options.abbreviations || [],
+        options.alwaysMerge,
+        options.sentenceStarters
+    );
 
     let textBuffer = '';
     let textNodes: { node: Node, length: number }[] = [];
@@ -163,24 +177,4 @@ export const extractSentencesFromNode = (
     flushBuffer();
 
     return sentences;
-};
-
-/**
- * Extracts sentences from the current rendition's chapter.
- * Uses TextSegmenter (Intl.Segmenter) for robust sentence splitting.
- *
- * @param rendition - The current epubjs Rendition object.
- * @returns An array of SentenceNode objects representing the sentences in the current view.
- */
-export const extractSentences = (rendition: Rendition): SentenceNode[] => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const contents = (rendition as any).getContents()[0];
-    if (!contents) return [];
-
-    const doc = contents.document;
-    const body = doc.body;
-
-    return extractSentencesFromNode(body, (range) => {
-        return contents.cfiFromRange(range);
-    });
 };

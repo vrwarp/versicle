@@ -6,6 +6,7 @@ import { validateBookMetadata } from './validators';
 import { mergeCfiRanges } from '../lib/cfi-utils';
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
+import type { ExtractionOptions } from '../lib/tts';
 
 class DBService {
   private async getDB() {
@@ -127,11 +128,12 @@ class DBService {
    * Adds a new book to the library.
    *
    * @param file - The EPUB file to add.
+   * @param ttsOptions - Optional TTS extraction settings.
    * @returns A Promise that resolves when the book is added.
    */
-  async addBook(file: File): Promise<void> {
+  async addBook(file: File, ttsOptions?: ExtractionOptions): Promise<void> {
     try {
-      await processEpub(file);
+      await processEpub(file, ttsOptions);
     } catch (error) {
       this.handleError(error);
     }

@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
 import { StorageFullError } from '../types/errors';
+import { useTTSStore } from './useTTSStore';
 
 /**
  * State interface for the Library store.
@@ -81,7 +82,13 @@ export const useLibraryStore = create<LibraryState>()(
   addBook: async (file: File) => {
     set({ isImporting: true, error: null });
     try {
-      await dbService.addBook(file);
+      const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+      await dbService.addBook(file, {
+          abbreviations: customAbbreviations,
+          alwaysMerge,
+          sentenceStarters,
+          sanitizationEnabled
+      });
       // Refresh library
       await get().fetchBooks();
       set({ isImporting: false });

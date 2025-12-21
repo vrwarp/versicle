@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
 import type { BookMetadata, SectionMetadata, TTSContent } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
-import { extractSentencesFromNode } from './tts';
+import { extractSentencesFromNode, type ExtractionOptions } from './tts';
 import { generateEpubCfi } from './cfi-utils';
 
 function cheapHash(buffer: ArrayBuffer): string {
@@ -82,10 +82,11 @@ export async function validateEpubFile(file: File): Promise<boolean> {
  * Processes an EPUB file, extracting metadata and cover image, and storing it in the database.
  *
  * @param file - The EPUB file object to process.
+ * @param ttsOptions - Configuration options for TTS sentence extraction.
  * @returns A Promise that resolves to the UUID of the newly created book.
  * @throws Will throw an error if the file cannot be parsed or database operations fail.
  */
-export async function processEpub(file: File): Promise<string> {
+export async function processEpub(file: File, ttsOptions?: ExtractionOptions): Promise<string> {
   // 1. Security Check: Validate File Header
   const isValid = await validateEpubFile(file);
   if (!isValid) {
@@ -141,7 +142,7 @@ export async function processEpub(file: File): Promise<string> {
 
                             const sentences = extractSentencesFromNode(doc.body, (range) => {
                                 return generateEpubCfi(range, baseCfi);
-                            });
+                            }, ttsOptions);
 
                             if (sentences.length > 0) {
                                 ttsContentBatches.push({
