@@ -531,6 +531,7 @@ export const ReaderView: React.FC = () => {
           onPrev={handlePrev}
           onNext={handleNext}
           onToggleHUD={() => setImmersiveMode(!immersiveMode)}
+          immersiveMode={immersiveMode}
       />
 
       {/* Immersive Mode Exit Button */}
