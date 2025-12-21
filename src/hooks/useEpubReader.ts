@@ -126,20 +126,9 @@ export function useEpubReader(
           height: '100%',
           flow: optionsRef.current.viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated',
           manager: 'default',
-          // Do NOT set allowScriptedContent: true here as it breaks hooks.content
-          // We patch sandbox attribute manually via MutationObserver instead.
+          // Security: Do NOT set allowScriptedContent: true.
         });
         renditionRef.current = newRendition;
-
-        // Manually ensure allow-scripts is present to fix event handling in strict environments (like Docker)
-        // This is a backup to the MutationObserver strategy mentioned above (which might be missing or slow)
-        const iframe = viewerRef.current?.querySelector('iframe');
-        if (iframe) {
-            const sandbox = iframe.getAttribute('sandbox') || '';
-            if (!sandbox.includes('allow-scripts')) {
-                iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
-            }
-        }
         setRendition(newRendition);
 
         // Disable spreads

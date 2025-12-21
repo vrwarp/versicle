@@ -27,3 +27,8 @@
 **Vulnerability:** The previously implemented regex-based sanitization for book metadata (`<[a-zA-Z/][^>]*>`) was bypassed by nested tags (e.g., `<<script>script>`) and attribute values containing `>`.
 **Learning:** Security fixes based on "clever regex" often introduce new edge cases. Trying to preserve "math symbols" by guessing HTML syntax via regex is fragile.
 **Prevention:** Replaced regex with `DOMParser` to leverage the browser's native HTML parsing capability, which robustly handles entities, attributes, and nesting while still allowing plain text (like `A < B`).
+
+## 2025-12-16 - Epub.js Script Sandbox
+**Vulnerability:** `epub.js` rendering logic sometimes requires `allow-scripts` in the iframe sandbox for interaction events, creating an XSS vector for malicious EPUBs.
+**Learning:** Third-party libraries that manage their own rendering context (iframes) may impose security weaknesses to support functionality. Developers might manually patch security controls (like sandboxes) to fix bugs, inadvertently opening vulnerabilities.
+**Prevention:** Strictly validate library requirements. If scripts are required, content sanitization (DOMPurify) is mandatory. If scripts are not required, ensure sandboxes are locked down.
