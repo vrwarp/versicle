@@ -222,6 +222,22 @@ export function useEpubReader(
         }
         await newBook.ready;
 
+        const injectSpacer = () => {
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (newRendition as any).getContents().forEach((content: any) => {
+                const doc = content.document;
+                const spacerId = 'reader-bottom-spacer';
+                if (doc && doc.body && !doc.getElementById(spacerId)) {
+                     const spacer = doc.createElement('div');
+                     spacer.id = spacerId;
+                     spacer.style.height = '150px';
+                     spacer.style.width = '100%';
+                     spacer.style.clear = 'both'; // Ensure it sits below floated content
+                     doc.body.appendChild(spacer);
+                }
+             });
+        };
+
         // Event Listeners
         newRendition.on('relocated', (location: Location) => {
              const cfi = location.start.cfi;
@@ -240,6 +256,9 @@ export function useEpubReader(
              if (optionsRef.current.onLocationChange) {
                  optionsRef.current.onLocationChange(location, percentage, title, sectionId);
              }
+
+             // Inject spacer safely after navigation/render is complete
+             injectSpacer();
         });
 
         newRendition.on('selected', (cfiRange: string, contents: unknown) => {
@@ -295,22 +314,6 @@ export function useEpubReader(
                 applyStylesRef.current();
             }
 
-            // Inject empty div for scrolling space
-            // FIX: Wrap in requestAnimationFrame to avoid interfering with epub.js annotation injection
-            if (contents.window) {
-                contents.window.requestAnimationFrame(() => {
-                    const spacerId = 'reader-bottom-spacer';
-                    // Check if doc exists and element isn't there (double-check inside rAF)
-                    if (doc && doc.body && !doc.getElementById(spacerId)) {
-                        const spacer = doc.createElement('div');
-                        spacer.id = spacerId;
-                        spacer.style.height = '150px';
-                        spacer.style.width = '100%';
-                        spacer.style.clear = 'both'; // Ensure it sits below floated content
-                        doc.body.appendChild(spacer);
-                    }
-                });
-            }
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
