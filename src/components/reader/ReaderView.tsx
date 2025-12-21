@@ -491,8 +491,14 @@ export const ReaderView: React.FC = () => {
               if (!item.cfi) continue;
 
               // Get range for item
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const itemRange = (rendition as any).getRange(item.cfi);
+              let itemRange;
+              try {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  itemRange = (rendition as any).getRange(item.cfi);
+              } catch {
+                  continue;
+              }
+
               if (!itemRange) continue;
 
               // Compare start points

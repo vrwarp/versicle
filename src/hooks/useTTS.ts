@@ -62,7 +62,7 @@ export const useTTS = () => {
                  setSentences(sentenceNodes);
 
                  // Build Queue
-                 let queue: TTSQueueItem[] = stored.sentences.map(s => ({
+                 const queue: TTSQueueItem[] = stored.sentences.map(s => ({
                      text: s.text,
                      cfi: s.cfi
                  }));
