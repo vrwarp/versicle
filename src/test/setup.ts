@@ -65,14 +65,10 @@ global.ResizeObserver = class {
 };
 
 // Mock Pointer Capture methods for JSDOM environment
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 if (!Element.prototype.setPointerCapture) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (Element.prototype as any).setPointerCapture = vi.fn();
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 if (!Element.prototype.releasePointerCapture) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (Element.prototype as any).releasePointerCapture = vi.fn();
 }
 
@@ -138,7 +134,6 @@ if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
 
 
 // Polyfill innerText for JSDOM
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 if (typeof HTMLElement !== 'undefined' && !Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'innerText')) {
   Object.defineProperty(HTMLElement.prototype, 'innerText', {
     get() {

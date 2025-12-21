@@ -73,7 +73,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
               (rendition as any).annotations.remove(activeCfi, 'highlight');
           } catch { /* ignore removal errors */ }
       };
-  }, [activeCfi, viewMode, rendition]);
+  }, [activeCfi, viewMode, rendition, status]);
 
   // --- Visibility Reconciliation ---
   useEffect(() => {

@@ -342,7 +342,7 @@ export function useEpubReader(
           cancelAnimationFrame(resizeRaf.current);
       }
     };
-  }, [bookId]); // Dependencies: only bookId
+  }, [bookId, viewerRef]);
 
   // Handle Resize with RequestAnimationFrame
   useEffect(() => {
@@ -375,7 +375,7 @@ export function useEpubReader(
         observer.disconnect();
         if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
     };
-  }, [viewerRef.current]);
+  }, [viewerRef]);
 
   // Update Settings/Themes
   useEffect(() => {

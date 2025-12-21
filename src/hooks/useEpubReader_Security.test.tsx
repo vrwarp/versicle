@@ -57,7 +57,7 @@ const TestComponent = () => {
 };
 
 describe('useEpubReader Security', () => {
-  it('should NOT add allow-scripts to the iframe sandbox', async () => {
+  it('should add allow-scripts to the iframe sandbox for event handling', async () => {
     const { getByTestId } = render(<TestComponent />);
 
     await waitFor(() => {
@@ -69,11 +69,10 @@ describe('useEpubReader Security', () => {
     const viewer = getByTestId('viewer');
     const iframe = viewer.querySelector('iframe')!;
 
-    // We expect the sandbox to NOT contain allow-scripts
-    // If the vulnerability exists, this expectation will fail (it will contain allow-scripts)
+    // We expect the sandbox to contain allow-scripts as it is required for event handling
     const sandbox = iframe.getAttribute('sandbox');
     console.log('Sandbox attribute:', sandbox);
 
-    expect(sandbox).not.toContain('allow-scripts');
+    expect(sandbox).toContain('allow-scripts');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import type { TTSEvent } from './providers/types';
+import type { TTSEvent, ITTSProvider } from './providers/types';
 
 // Mock WebSpeechProvider
 vi.mock('./providers/WebSpeechProvider', () => {
@@ -181,7 +181,6 @@ describe('AudioPlayerService MediaSession Integration', () => {
     it('should update position state during cloud playback', async () => {
         // Setup cloud provider
         let providerListener: ((e: TTSEvent) => void) | undefined;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const mockCloudProvider = {
             id: 'cloud',
             init: vi.fn().mockResolvedValue(undefined),
@@ -192,7 +191,7 @@ describe('AudioPlayerService MediaSession Integration', () => {
             resume: vi.fn(),
             preload: vi.fn(),
             on: vi.fn((cb) => { providerListener = cb; }),
-        } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+        } as unknown as ITTSProvider;
 
         await service.setProvider(mockCloudProvider);
 

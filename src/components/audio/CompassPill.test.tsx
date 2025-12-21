@@ -56,7 +56,6 @@ describe('CompassPill', () => {
              jumpTo: mockJumpTo,
              play: mockPlay,
              pause: mockPause
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
 
         render(<CompassPill variant="active" />);
@@ -81,7 +80,6 @@ describe('CompassPill', () => {
              jumpTo: mockJumpTo,
              play: mockPlay,
              pause: mockPause
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
          } as any);
 
         render(<CompassPill variant="active" />);
@@ -106,7 +104,6 @@ describe('CompassPill', () => {
              jumpTo: mockJumpTo,
              play: mockPlay,
              pause: mockPause
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
          } as any);
 
         render(<CompassPill variant="active" />);
@@ -125,7 +122,6 @@ describe('CompassPill', () => {
             jumpTo: mockJumpTo,
             play: mockPlay,
             pause: mockPause
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
 
         render(<CompassPill variant="compact" />);
@@ -142,7 +138,6 @@ describe('CompassPill', () => {
             jumpTo: mockJumpTo,
             play: mockPlay,
             pause: mockPause
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any);
 
         render(<CompassPill variant="compact" />);
@@ -159,7 +154,6 @@ describe('CompassPill', () => {
            jumpTo: mockJumpTo,
            play: mockPlay,
            pause: mockPause
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
        } as any);
 
        render(<CompassPill variant="compact" />);
