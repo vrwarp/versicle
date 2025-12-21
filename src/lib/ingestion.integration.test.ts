@@ -61,6 +61,17 @@ describe('ingestion integration', () => {
     // Verify cover extraction
     expect(book?.coverBlob).toBeDefined();
 
+    // Verify TTS Content
+    const ttsContent = await db.getAll('tts_content');
+    expect(ttsContent.length).toBeGreaterThan(0);
+
+    // Check first batch
+    const firstBatch = ttsContent[0];
+    expect(firstBatch.bookId).toBe(bookId);
+    expect(firstBatch.sentences.length).toBeGreaterThan(0);
+    expect(firstBatch.sentences[0].text).toBeTruthy();
+    expect(firstBatch.sentences[0].cfi).toContain('epubcfi');
+
     // Restore fetch
     fetchSpy.mockRestore();
 

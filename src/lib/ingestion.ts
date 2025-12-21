@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
 import type { BookMetadata, SectionMetadata, TTSContent } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
-import { extractSentencesFromNode } from './tts';
+import { extractSentencesFromNode, type ExtractionOptions } from './tts';
 import { generateEpubCfi } from './cfi-utils';
 
 function cheapHash(buffer: ArrayBuffer): string {
@@ -82,10 +82,11 @@ export async function validateEpubFile(file: File): Promise<boolean> {
  * Processes an EPUB file, extracting metadata and cover image, and storing it in the database.
  *
  * @param file - The EPUB file object to process.
+ * @param ttsOptions - Configuration options for TTS sentence extraction.
  * @returns A Promise that resolves to the UUID of the newly created book.
  * @throws Will throw an error if the file cannot be parsed or database operations fail.
  */
-export async function processEpub(file: File): Promise<string> {
+export async function processEpub(file: File, ttsOptions?: ExtractionOptions): Promise<string> {
   // 1. Security Check: Validate File Header
   const isValid = await validateEpubFile(file);
   if (!isValid) {
@@ -127,7 +128,30 @@ export async function processEpub(file: File): Promise<string> {
                // In ingestion context (file input), book.archive is available.
                // We use blob extraction + DOMParser as book.load() might rely on DOM attachment or network.
                if (book.archive) {
-                    const blob = await book.archive.getBlob(item.href);
+                    let blob = await book.archive.getBlob(item.href);
+
+                    // Fallback: Try to find file if path is relative
+                    if (!blob) {
+                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                         const zipFiles = Object.keys((book.archive as any).zip?.files || {});
+                         // Try to match end of string
+                         const match = zipFiles.find(f => f.endsWith(item.href));
+                         if (match) {
+                             // Use JSZip directly via internal property to bypass potential path resolution issues in getBlob
+                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                             const zipObj = (book.archive as any).zip;
+                             if (zipObj && zipObj.file) {
+                                 const fileObj = zipObj.file(match);
+                                 if (fileObj) {
+                                     blob = await fileObj.async("blob");
+                                 }
+                             }
+                             // Fallback to getBlob if direct zip access failed (though unlikely if match found)
+                             if (!blob) {
+                                 blob = await book.archive.getBlob(match);
+                             }
+                         }
+                    }
                     if (blob) {
                         const text = await blobToText(blob);
                         const parser = new DOMParser();
@@ -141,7 +165,7 @@ export async function processEpub(file: File): Promise<string> {
 
                             const sentences = extractSentencesFromNode(doc.body, (range) => {
                                 return generateEpubCfi(range, baseCfi);
-                            });
+                            }, ttsOptions);
 
                             if (sentences.length > 0) {
                                 ttsContentBatches.push({

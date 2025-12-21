@@ -31,7 +31,7 @@ describe('DBService', () => {
       const processSpy = vi.mocked(ingestion.processEpub).mockResolvedValue('new-id');
 
       await dbService.addBook(file);
-      expect(processSpy).toHaveBeenCalledWith(file);
+      expect(processSpy).toHaveBeenCalledWith(file, undefined);
     });
 
     it('should handle error', async () => {

@@ -251,7 +251,7 @@ export const ReaderView: React.FC = () => {
 
 
   // Use TTS Hook
-  useTTS(rendition, isRenditionReady);
+  useTTS();
 
   // Note: TTS Highlighting and Keyboard navigation logic moved to ReaderTTSController
   // to prevent unnecessary re-renders of the main ReaderView.

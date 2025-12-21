@@ -3,18 +3,19 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { useTTS } from './useTTS';
 import { useReaderStore } from '../store/useReaderStore';
 import { useTTSStore } from '../store/useTTSStore';
-import * as ttsLib from '../lib/tts';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { dbService } from '../db/DBService';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Hoist mock instance
-const { mockPlayerInstance } = vi.hoisted(() => {
+const { mockPlayerInstance, mockLoadVoices } = vi.hoisted(() => {
     return {
         mockPlayerInstance: {
             subscribe: vi.fn(),
             setQueue: vi.fn(),
             stop: vi.fn(),
             generatePreroll: vi.fn()
-        }
+        },
+        mockLoadVoices: vi.fn()
     };
 });
 
@@ -22,52 +23,68 @@ const { mockPlayerInstance } = vi.hoisted(() => {
 vi.mock('../store/useReaderStore', () => ({
     useReaderStore: vi.fn()
 }));
-vi.mock('../store/useTTSStore');
+
+vi.mock('../store/useTTSStore', () => {
+    const mockGetState = vi.fn(() => ({
+        loadVoices: mockLoadVoices,
+        prerollEnabled: false,
+        rate: 1.0
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const useTTSStore = vi.fn((selector?: any) => {
+        const state = mockGetState();
+        return selector ? selector(state) : state;
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useTTSStore as any).getState = mockGetState;
+    return { useTTSStore };
+});
+
 vi.mock('../lib/tts/AudioPlayerService', () => ({
     AudioPlayerService: {
         getInstance: vi.fn(() => mockPlayerInstance)
     }
 }));
-vi.mock('../lib/tts');
+
+vi.mock('../db/DBService', () => ({
+    dbService: {
+        getTTSContent: vi.fn()
+    }
+}));
 
 describe('useTTS - No Text Behavior', () => {
-    let mockRendition: any;
-
     beforeEach(() => {
-        // Reset mocks
         vi.clearAllMocks();
 
-        // Mock Stores
         (useReaderStore as any).mockImplementation((selector: any) => {
-             // Mock state selector
-             const state = { currentChapterTitle: 'Test Chapter' };
+             const state = {
+                currentBookId: 'book1',
+                currentSectionId: 'section1',
+                currentChapterTitle: 'Test Chapter'
+             };
              return selector(state);
         });
 
-        (useTTSStore as any).mockReturnValue({
-            loadVoices: vi.fn(),
+        // Default: no preroll
+        (useTTSStore.getState as any).mockReturnValue({
+            loadVoices: mockLoadVoices,
             prerollEnabled: false,
             rate: 1.0
         });
-
-        // Mock Rendition
-        mockRendition = {
-            currentLocation: vi.fn().mockReturnValue({ start: { href: 'chapter1.html' } }),
-            on: vi.fn(),
-            off: vi.fn(),
-            getContents: vi.fn().mockReturnValue([{ document: {} }])
-        };
     });
 
-    it('should populate queue with a random "no text" message when extraction returns empty', async () => {
-        // Mock extraction to return empty array
-        (ttsLib.extractSentences as any).mockReturnValue([]);
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
 
-        renderHook(() => useTTS(mockRendition, true));
+    it('should populate queue with a random "no text" message when DB returns empty content', async () => {
+        // Mock DB returning empty sentences
+        const mockContent = {
+            sentences: []
+        };
+        (dbService.getTTSContent as any).mockResolvedValue(mockContent);
 
-        // Trigger the effect (simulate 'rendered' event)
-        const renderCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
-        renderCallback();
+        renderHook(() => useTTS());
 
         await waitFor(() => {
             expect(mockPlayerInstance.setQueue).toHaveBeenCalled();
@@ -81,16 +98,14 @@ describe('useTTS - No Text Behavior', () => {
         console.log("Generated message:", queueArg[0].text);
     });
 
-    it('should NOT populate queue with "no text" message when extraction returns sentences', async () => {
-         // Mock extraction to return valid sentences
-         const mockSentences = [{ text: 'Hello world', cfi: 'cfi:/1/2' }];
-         (ttsLib.extractSentences as any).mockReturnValue(mockSentences);
+    it('should NOT populate queue with "no text" message when DB returns sentences', async () => {
+         // Mock DB returning valid sentences
+         const mockContent = {
+            sentences: [{ text: 'Hello world', cfi: 'cfi:/1/2' }]
+         };
+         (dbService.getTTSContent as any).mockResolvedValue(mockContent);
 
-         renderHook(() => useTTS(mockRendition, true));
-
-         // Trigger
-         const renderCallback = mockRendition.on.mock.calls.find((call: any) => call[0] === 'rendered')[1];
-         renderCallback();
+         renderHook(() => useTTS());
 
          await waitFor(() => {
              expect(mockPlayerInstance.setQueue).toHaveBeenCalled();
