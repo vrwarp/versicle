@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import type { Rendition } from 'epubjs';
-import { useShallow } from 'zustand/react/shallow';
 import {
     Pause, RotateCcw, RotateCw,
     Volume1, Volume2,
@@ -25,7 +24,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
     onNext,
     onToggleHUD
 }) => {
-    const { isPlaying, play, pause, seek, rate, setRate, providerId } = useTTSStore(useShallow(state => ({
+    const { isPlaying, play, pause, seek, rate, setRate, providerId } = useTTSStore(state => ({
         isPlaying: state.isPlaying,
         play: state.play,
         pause: state.pause,
@@ -33,7 +32,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
         rate: state.rate,
         setRate: state.setRate,
         providerId: state.providerId
-    })));
+    }));
 
     const [isCurtainActive, setIsCurtainActive] = useState(false);
     const isCurtainActiveRef = useRef(isCurtainActive);

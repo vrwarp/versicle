@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import type { NavigationItem } from 'epubjs';
 import { useReaderStore } from '../../store/useReaderStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useUIStore } from '../../store/useUIStore';
 import { useTTS } from '../../hooks/useTTS';
@@ -62,7 +61,7 @@ export const ReaderView: React.FC = () => {
     shouldForceFont,
     immersiveMode,
     setImmersiveMode
-  } = useReaderStore(useShallow(state => ({
+  } = useReaderStore(state => ({
     currentTheme: state.currentTheme,
     customTheme: state.customTheme,
     fontFamily: state.fontFamily,
@@ -79,7 +78,7 @@ export const ReaderView: React.FC = () => {
     shouldForceFont: state.shouldForceFont,
     immersiveMode: state.immersiveMode,
     setImmersiveMode: state.setImmersiveMode
-  })));
+  }));
 
   // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
   const isPlaying = useTTSStore(state => state.isPlaying);

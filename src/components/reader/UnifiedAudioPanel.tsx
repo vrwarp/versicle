@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useShallow } from 'zustand/react/shallow';
 import { SheetContent, SheetHeader, SheetTitle } from '../ui/Sheet';
 import { Button } from '../ui/Button';
 import { Slider } from '../ui/Slider';
@@ -35,7 +34,7 @@ export const UnifiedAudioPanel = () => {
     setSanitizationEnabled,
     prerollEnabled,
     setPrerollEnabled
-  } = useTTSStore(useShallow(state => ({
+  } = useTTSStore(state => ({
     isPlaying: state.isPlaying,
     play: state.play,
     pause: state.pause,
@@ -51,7 +50,7 @@ export const UnifiedAudioPanel = () => {
     setSanitizationEnabled: state.setSanitizationEnabled,
     prerollEnabled: state.prerollEnabled,
     setPrerollEnabled: state.setPrerollEnabled
-  })));
+  }));
 
   const [view, setView] = useState<'queue' | 'settings'>('queue');
   const [isLexiconOpen, setIsLexiconOpen] = useState(false);

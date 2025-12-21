@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
-import { useShallow } from 'zustand/react/shallow';
 import { useChapterDuration } from '../../hooks/useChapterDuration';
 import { ChevronsLeft, ChevronsRight, SkipBack, SkipForward, Play, Pause } from 'lucide-react';
 
@@ -21,14 +20,14 @@ export const CompassPill: React.FC<CompassPillProps> = ({ variant, title, subtit
     jumpTo,
     play,
     pause
-  } = useTTSStore(useShallow(state => ({
+  } = useTTSStore(state => ({
       isPlaying: state.isPlaying,
       queue: state.queue,
       currentIndex: state.currentIndex,
       jumpTo: state.jumpTo,
       play: state.play,
       pause: state.pause
-  })));
+  }));
 
   // Optimize: Select only currentChapterTitle to prevent re-renders on progress/cfi updates
   const readerChapterTitle = useReaderStore(state => state.currentChapterTitle);
