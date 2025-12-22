@@ -18,11 +18,6 @@
 **Learning:** Security controls that impact user experience or legacy use-cases ("I want my long title") may be rejected even if they close a vulnerability.
 **Prevention:** When a security control must be bypassable, ensure the risk is documented and the user is explicitly warned (e.g., "Not Recommended"). In this case, the vulnerability (DoS via massive metadata) persists if the user chooses to ignore the warning.
 
-## 2025-05-26 - Metadata XSS Sanitization
-**Vulnerability:** Stored XSS potential in book metadata fields (Title, Author, Description) if rendered unsafely.
-**Learning:** While React escapes content by default, sanitizing input at ingestion provides defense-in-depth and protects against future unsafe usage (e.g. `dangerouslySetInnerHTML`).
-**Prevention:** Implemented HTML tag stripping in `sanitizeString`. Use regex `/<[a-zA-Z\/][^>]*>/gm` to avoid stripping math symbols (`A < B`).
-
 ## 2025-12-16 - [Fragile Regex Sanitization Revisited]
 **Vulnerability:** The previously implemented regex-based sanitization for book metadata (`<[a-zA-Z/][^>]*>`) was bypassed by nested tags (e.g., `<<script>script>`) and attribute values containing `>`.
 **Learning:** Security fixes based on "clever regex" often introduce new edge cases. Trying to preserve "math symbols" by guessing HTML syntax via regex is fragile.
