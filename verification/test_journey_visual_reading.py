@@ -83,6 +83,9 @@ def test_journey_visual_reading(page: Page):
     page.get_by_test_id("reader-immersive-enter-button").click()
     expect(page.locator("header")).not_to_be_visible()
 
+    # Verify Exit Button is visible
+    expect(page.get_by_test_id("reader-immersive-exit-button")).to_be_visible()
+
     # Recalculate bounding box just in case
     reader_container = page.locator("div[data-testid='reader-iframe-container']")
     box = reader_container.bounding_box()
@@ -159,7 +162,11 @@ def test_journey_visual_reading(page: Page):
 
     # --- Exit Immersive Mode ---
     print("Exiting Immersive Mode...")
-    page.get_by_test_id("reader-immersive-exit-button").click()
+    exit_btn = page.get_by_test_id("reader-immersive-exit-button")
+    exit_btn.click()
     expect(page.locator("header")).to_be_visible()
+
+    # Verify Exit Button is hidden
+    expect(exit_btn).not_to_be_visible()
 
     print("Visual Reading Journey Passed!")
