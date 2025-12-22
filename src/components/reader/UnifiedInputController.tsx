@@ -306,7 +306,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
              {!isCurtainActive && (
                 <>
                  <div data-testid="flow-mode-breathing-border" className="absolute inset-0 border-[6px] border-primary/40 animate-breathing pointer-events-none" />
-                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.05]">
+                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-25">
                     <Pause className="w-64 h-64 text-foreground" />
                  </div>
                 </>
