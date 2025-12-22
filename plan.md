@@ -10,18 +10,15 @@ Versicle is a web-based EPUB manager and reader designed for a "Local-First" exp
 
 ## 2. Roadmap
 
-### 2.1 Current Priorities: Hardening & Stability
-We are currently focusing on hardening the core systems to ensure reliability, performance, and type safety.
+### 2.1 Active Priorities: Stability & Hardening
+We are finalizing the hardening of core systems.
 
 - **Ingestion Hardening** (`plan/hardening_ingestion.md`)
-  - robust error handling for parsing, memory optimization for large files.
-- **Search Hardening** (`plan/hardening_search.md`)
-  - batch processing for indexing, worker stability.
+  - **Status:** Mostly Complete.
+  - **Remaining:** UI feedback for errors, deep integrity checks.
 - **TTS Resilience** (`plan/hardening_tts.md`)
-  - state machine robustness, improved voice loading.
-- **Reader Engine Stability** (`plan/hardening_reader.md`)
-  - `useEpubReader` hook abstraction, better highlighting.
-- **General Hardening** (`plan/general_hardening.md`)
+  - **Status:** Partial.
+  - **Remaining:** Strict state machine implementation, robust cancellation (AbortController), watchdog timers.
 
 ### 2.2 Feature Roadmap: TTS v2
 Building the next generation of audio features.
@@ -42,6 +39,15 @@ Building the next generation of audio features.
 ## 3. Completed Initiatives (Archive)
 *Historical plans and completed features can be found in `plan/archive/`.*
 
+### Recently Completed (Hardening Phase)
+- **Search Hardening** (`plan/archive/hardening_search.md`)
+  - Implemented batch processing, incremental indexing, and optimized text extraction.
+- **Reader Engine Stability** (`plan/archive/hardening_reader.md`)
+  - Implemented `useEpubReader` hook, resize optimization, and better theming.
+- **General Hardening** (`plan/archive/general_hardening.md`)
+  - Overview of the hardening strategy.
+
+### Previous Milestones
 - **Design Sprints 1-5**: Core UI, Reader, Library, Audio Panel, Settings, Navigation.
 - **TTS v2 Foundations**:
     - Media Session Integration (`plan/archive/tts_v2_plan02_media_session.md`)
@@ -68,7 +74,7 @@ Building the next generation of audio features.
 
 ### Data Persistence (IndexedDB)
 *   **books**: Metadata (Title, Author, Cover Blob).
-*   **files**: Raw binary EPUBs (lazy loaded).
+*   **files**: Raw binary EPUBs (Stored as Blobs).
 *   **annotations**: User highlights/notes.
 *   **reading_history**: Reading progress segments.
 *   **tts_queue**: Smart resume state.
@@ -76,8 +82,8 @@ Building the next generation of audio features.
 
 ### TTS Architecture
 The "Walk and Highlight" strategy:
-1.  **Extraction**: Extract text from `epub.js` DOM.
+1.  **Extraction**: Extract text from `epub.js` DOM or via `offscreen-renderer` for fast ingestion.
 2.  **Segmentation**: Split into sentences (`TextSegmenter`).
 3.  **Sanitization**: Clean cruft (`Sanitizer`).
 4.  **Queueing**: Queue for playback.
-5.  **Synchronization**: Sync audio with visual highlighting via `AudioPlayerService`.
+5.  **Synchronization**: Sync audio with visual highlighting via `AudioPlayerService` and `SyncEngine`.
