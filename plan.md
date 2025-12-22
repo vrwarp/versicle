@@ -30,8 +30,8 @@ We are building the next generation of audio features, moving from `AudioElement
 ## 3. Completed Initiatives (Archive)
 *Historical plans and completed features can be found in `plan/archive/`.*
 
-### Major Milestone: Architectural Simplification (2024)
-Ref: `plan/archive/2024_simplification/`
+### Major Milestone: Architectural Simplification (2025)
+Ref: `plan/archive/2025_simplification/`
 - **Ingestion**: Replaced crypto-hashing with "3-Point Fingerprint" (O(1) checks).
 - **Concurrency**: Replaced Mutex locks with Sequential Promise Chains in `AudioPlayerService`.
 - **Worker Management**: Replaced Supervisor pattern with "Let It Crash" Error Boundaries.
