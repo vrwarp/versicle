@@ -1,4 +1,4 @@
-import { EpubCFI } from 'epubjs';
+import { Book, EpubCFI } from 'epubjs';
 
 export interface CfiRangeData {
   parent: string;
@@ -150,5 +150,69 @@ export function generateEpubCfi(range: Range, baseCfi: string): string {
     } catch (e) {
         console.error("Error generating CFI", e);
         return "";
+    }
+}
+
+/**
+ * Snaps a CFI to the nearest sentence start.
+ *
+ * @param book - The epub.js Book instance.
+ * @param cfi - The input CFI (e.g. from a scroll event).
+ * @returns A Promise resolving to the snapped CFI string.
+ */
+export async function snapCfiToSentence(book: Book, cfi: string): Promise<string> {
+    try {
+        const range = await book.getRange(cfi);
+        if (!range) return cfi;
+
+        const container = range.startContainer;
+        const offset = range.startOffset;
+
+        // Ensure we have a text node
+        if (container.nodeType !== Node.TEXT_NODE) {
+            return cfi;
+        }
+
+        const text = container.textContent || '';
+        let sentenceStart = 0;
+
+        // Use Intl.Segmenter to find sentence boundaries
+        if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+            const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' });
+            const segments = segmenter.segment(text);
+
+            for (const segment of segments) {
+                if (segment.index <= offset && segment.index + segment.segment.length > offset) {
+                    sentenceStart = segment.index;
+                    break;
+                }
+            }
+        } else {
+            // Regex fallback
+            // Simple regex to find sentence endings.
+            // We search backwards from offset.
+            const sentRegex = /[^.!?]+[.!?]+(\s+|$)/g;
+            let match;
+            while ((match = sentRegex.exec(text)) !== null) {
+                if (match.index <= offset && match.index + match[0].length > offset) {
+                     sentenceStart = match.index;
+                     break;
+                }
+            }
+        }
+
+        // Update the CFI with the new offset.
+        // Assuming the CFI ends with :offset)
+        const match = cfi.match(/:(\d+)\)$/);
+        if (match) {
+             const newCfi = cfi.replace(/:(\d+)\)$/, `:${sentenceStart})`);
+             return newCfi;
+        }
+
+        return cfi;
+
+    } catch (e) {
+        console.warn("Error snapping CFI", e);
+        return cfi;
     }
 }

@@ -24,7 +24,7 @@ import { searchClient, type SearchResult } from '../../lib/search';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import { ReaderTTSController } from './ReaderTTSController';
-import { generateCfiRange } from '../../lib/cfi-utils';
+import { generateCfiRange, snapCfiToSentence } from '../../lib/cfi-utils';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
 import { Button } from '../ui/Button';
@@ -43,7 +43,6 @@ export const ReaderView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const viewerRef = useRef<HTMLDivElement>(null);
-  const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
 
   const {
     currentTheme,
@@ -61,7 +60,8 @@ export const ReaderView: React.FC = () => {
     viewMode,
     shouldForceFont,
     immersiveMode,
-    setImmersiveMode
+    setImmersiveMode,
+    currentCfi
   } = useReaderStore(useShallow(state => ({
     currentTheme: state.currentTheme,
     customTheme: state.customTheme,
@@ -78,7 +78,8 @@ export const ReaderView: React.FC = () => {
     viewMode: state.viewMode,
     shouldForceFont: state.shouldForceFont,
     immersiveMode: state.immersiveMode,
-    setImmersiveMode: state.setImmersiveMode
+    setImmersiveMode: state.setImmersiveMode,
+    currentCfi: state.currentCfi
   })));
 
   // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
@@ -106,44 +107,8 @@ export const ReaderView: React.FC = () => {
     lineHeight,
     shouldForceFont,
     onLocationChange: (location, percentage, title, sectionId) => {
-         // Initialize previousLocation if it's null (e.g. initial load), so we can track subsequent moves
-         if (!previousLocation.current) {
-             previousLocation.current = {
-                 start: location.start.cfi,
-                 end: location.end.cfi,
-                 timestamp: Date.now()
-             };
-         }
-
          // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
          if (location.start.cfi === useReaderStore.getState().currentCfi) return;
-
-         // Reading History
-         if (id && previousLocation.current) {
-             const prevStart = previousLocation.current.start;
-             const prevEnd = previousLocation.current.end;
-             const duration = Date.now() - previousLocation.current.timestamp;
-
-             // console.log(`[History] Check: prev=${prevStart}, curr=${location.start.cfi}, dur=${duration}`);
-
-             // Ensure we don't save zero-length ranges (where start == current start)
-             // And enforce a Dwell Time of 2 seconds to avoid recording skips
-             if (prevStart && prevEnd && prevStart !== location.start.cfi && duration > 2000) {
-                 const range = generateCfiRange(prevStart, prevEnd);
-                 // console.log(`[History] Saving range: ${range}`);
-                 dbService.updateReadingHistory(id, range)
-                    .then(() => setHistoryTick(t => t + 1))
-                    .catch((err) => {
-                        console.error("History update failed", err);
-                        useToastStore.getState().showToast('Failed to save reading history', 'error');
-                    });
-             }
-         }
-         previousLocation.current = {
-             start: location.start.cfi,
-             end: location.end.cfi,
-             timestamp: Date.now()
-         };
 
          updateLocation(location.start.cfi, percentage, title, sectionId);
          if (id) {
@@ -228,19 +193,48 @@ export const ReaderView: React.FC = () => {
     }
   }, [id, setCurrentBookId]);
 
-  // Save reading history on unmount
+  // History Event Logic
+  const historyTimer = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-      return () => {
-          if (id && previousLocation.current) {
-             const prevStart = previousLocation.current.start;
-             const prevEnd = previousLocation.current.end;
-             if (prevStart && prevEnd) {
-                 const range = generateCfiRange(prevStart, prevEnd);
-                 dbService.updateReadingHistory(id, range).catch(console.error);
-             }
-          }
+      if (!book || !rendition || !id || !isRenditionReady || !currentCfi) return;
+
+      const handleHistory = async () => {
+           try {
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               const loc = (rendition as any).location;
+               if (!loc || !loc.start || !loc.end) return;
+
+               const startCfi = loc.start.cfi;
+               const endCfi = loc.end.cfi;
+
+               const snappedStart = await snapCfiToSentence(book, startCfi);
+               const snappedEnd = await snapCfiToSentence(book, endCfi);
+               const range = generateCfiRange(snappedStart, snappedEnd);
+
+               // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               const item = book.spine.get(loc.start.href) as any;
+               const label = (item && item.label) ? item.label.trim() : (currentChapterTitle || undefined);
+
+               await dbService.updateReadingHistory(id, range, viewMode === 'scrolled' ? 'scroll' : 'page', label);
+               setHistoryTick(t => t + 1);
+           } catch (e) {
+               console.warn("History update failed", e);
+           }
       };
-  }, [id]);
+
+      if (historyTimer.current) clearTimeout(historyTimer.current);
+
+      if (viewMode === 'scrolled') {
+           historyTimer.current = setTimeout(handleHistory, 2000);
+      } else {
+           historyTimer.current = setTimeout(handleHistory, 500);
+      }
+
+      return () => {
+          if (historyTimer.current) clearTimeout(historyTimer.current);
+      };
+  }, [currentCfi, book, rendition, isRenditionReady, id, viewMode, currentChapterTitle]);
 
   // Handle Unmount Cleanup
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, TTSContent, SectionMetadata } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, TTSContent, SectionMetadata, ReadingEventType } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -703,9 +703,11 @@ class DBService {
    *
    * @param bookId - The unique identifier of the book.
    * @param newRange - The new CFI range to add.
+   * @param type - The type of event (tts, scroll, page).
+   * @param label - Optional label for the event.
    * @returns A Promise that resolves when the history is updated.
    */
-  async updateReadingHistory(bookId: string, newRange: string): Promise<void> {
+  async updateReadingHistory(bookId: string, newRange: string, type: ReadingEventType = 'page', label?: string): Promise<void> {
       try {
           const db = await this.getDB();
           const tx = db.transaction('reading_history', 'readwrite');
@@ -732,11 +734,38 @@ class DBService {
               updatedRanges = updatedRanges.slice(updatedRanges.length - 100);
           }
 
-          // Add new session
-          sessions.push({
+          const now = Date.now();
+          const newSession: ReadingSession = {
               cfiRange: newRange,
-              timestamp: Date.now()
-          });
+              timestamp: now,
+              type,
+              label
+          };
+
+          let shouldPush = true;
+
+          if (sessions.length > 0) {
+              const lastSession = sessions[sessions.length - 1];
+
+              // Coalescing Logic
+              // Exception: TTS events are never coalesced (unless implemented differently, but plan says "TTS events are never coalesced if user manually pauses/stops")
+              // The trigger for 'tts' type is pause/stop, so each is unique.
+
+              if (type !== 'tts' && lastSession.type === type) {
+                  const timeDiff = now - lastSession.timestamp;
+                  if (timeDiff < 5 * 60 * 1000) { // 5 minutes
+                       // Update last session
+                       lastSession.cfiRange = newRange;
+                       lastSession.timestamp = now;
+                       lastSession.label = label || lastSession.label;
+                       shouldPush = false;
+                  }
+              }
+          }
+
+          if (shouldPush) {
+              sessions.push(newSession);
+          }
 
           // Limit sessions size too
           if (sessions.length > 100) {
@@ -747,7 +776,7 @@ class DBService {
               bookId,
               readRanges: updatedRanges,
               sessions,
-              lastUpdated: Date.now()
+              lastUpdated: now
           });
           await tx.done;
       } catch (error) {

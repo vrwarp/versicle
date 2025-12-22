@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import type { Rendition } from 'epubjs';
 import { useTTSStore } from '../../store/useTTSStore';
+import { dbService } from '../../db/DBService';
 
 interface ReaderTTSControllerProps {
   rendition: Rendition | null;
@@ -25,6 +27,8 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   onNext,
   onPrev
 }) => {
+  const { id } = useParams<{ id: string }>();
+
   // We subscribe to these changing values here, so ReaderView doesn't have to.
   const activeCfi = useTTSStore(state => state.activeCfi);
   const currentIndex = useTTSStore(state => state.currentIndex);
@@ -33,6 +37,31 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   const jumpTo = useTTSStore(state => state.jumpTo);
 
   const lastBackgroundCfi = useRef<string | null>(null);
+
+  // --- TTS Reading History ---
+  const prevStatus = useRef(status);
+  const lastActiveCfi = useRef(activeCfi);
+
+  useEffect(() => {
+      if (activeCfi) lastActiveCfi.current = activeCfi;
+  }, [activeCfi]);
+
+  useEffect(() => {
+      const wasPlaying = prevStatus.current === 'playing' || prevStatus.current === 'buffering';
+      const isStoppedOrPaused = status === 'paused' || status === 'stopped';
+
+      if (wasPlaying && isStoppedOrPaused) {
+           const cfi = activeCfi || lastActiveCfi.current;
+           if (id && cfi) {
+               const item = queue.find(q => q.cfi === cfi);
+               const text = item ? item.text : undefined;
+               const label = text ? (text.length > 50 ? text.substring(0, 50) + '...' : text) : 'Audio';
+
+               dbService.updateReadingHistory(id, cfi, 'tts', label).catch(e => console.warn("TTS History save failed", e));
+           }
+      }
+      prevStatus.current = status;
+  }, [status, id, activeCfi, queue]);
 
   // --- TTS Highlighting & Sync ---
   useEffect(() => {

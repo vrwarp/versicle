@@ -179,14 +179,24 @@ export interface LexiconRule {
   created: number;
 }
 
+export type ReadingEventType = 'tts' | 'scroll' | 'page';
+
 /**
  * Represents the reading history of a book.
  */
 export interface ReadingSession {
-  /** The CFI range read during this session. */
+  /** The snapped CFI range associated with this event. */
   cfiRange: string;
-  /** Timestamp when the session occurred. */
+  /** Timestamp of the event. */
   timestamp: number;
+  /** The source of the reading event. */
+  type: ReadingEventType;
+  /**
+   * Contextual label for the event.
+   * - TTS: The text of the sentence (e.g., "Call me Ishmael.")
+   * - Page/Scroll: The chapter title or progress (e.g., "Chapter 1 - 15%")
+   */
+  label?: string;
 }
 
 /**
@@ -196,11 +206,11 @@ export interface ReadingHistoryEntry {
   /** The ID of the book. */
   bookId: string;
   /**
-   * A list of combined CFI ranges representing read content.
+   * A list of combined CFI ranges representing read content (Coverage).
    */
   readRanges: string[];
-  /** A list of individual reading sessions (chronological). */
-  sessions?: ReadingSession[];
+  /** A list of individual reading sessions (Rich Timeline). */
+  sessions: ReadingSession[];
   /** Timestamp when the history was last updated. */
   lastUpdated: number;
 }

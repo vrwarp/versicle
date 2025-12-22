@@ -185,3 +185,42 @@ While the *Timeline* tracks distinct points, the *Coverage* tracks the ground co
 5.  **UI:** Update `ReadingHistoryPanel` to visualize the rich data.
 
 6.  **Migration:** Bump DB version and add the clear logic in `src/db/db.ts`.
+
+## Execution Report
+
+### Implementation Details
+The plan was executed successfully across all phases.
+
+1.  **Foundation**:
+    - Updated `src/types/db.ts` to include `ReadingEventType` and modified `ReadingSession` (added `type`, `label`) and `ReadingHistoryEntry` (made `sessions` mandatory).
+    - Updated `src/db/DBService.ts` to support the new `updateReadingHistory` signature (`type`, `label`) and implemented the coalescing logic (update existing session if same type and < 5 mins).
+
+2.  **Logic**:
+    - Implemented `snapCfiToSentence` in `src/lib/cfi-utils.ts` using `Intl.Segmenter` (with fallback) to align CFIs to sentence starts. This ensures clean visual highlights.
+
+3.  **Integration (Visual)**:
+    - Modified `src/components/reader/ReaderView.tsx` to use a `useEffect` hook monitoring location changes (`currentCfi`).
+    - Implemented Dwell Timer logic: 2s delay for scroll mode, 0.5s debounce for paginated mode (to handle rapid page turns).
+    - Removed legacy "save on unmount" logic to strictly enforce dwell times and prevent accidental saves.
+
+4.  **Integration (TTS)**:
+    - Updated `src/components/reader/ReaderTTSController.tsx` to capture TTS events.
+    - Triggered on transition from `playing`/`buffering` to `paused`/`stopped`.
+    - Captures the active sentence and uses the sentence text as the label.
+
+5.  **UI**:
+    - Rewrote `src/components/reader/ReadingHistoryPanel.tsx` to display the new event-based history.
+    - Added icons (`Headphones`, `BookOpen`, `ScrollText`) and relative timestamps.
+    - Improved label resolution logic to gracefully handle missing TOC data.
+
+6.  **Migration**:
+    - Bumped database version to 11 in `src/db/db.ts`.
+    - Added migration logic to clear the `reading_history` object store, ensuring a clean slate for the new semantic history system.
+
+### Verification
+-   **Unit/Integration Tests**: Updated `ReadingHistoryPanel.test.tsx` and `ReadingHistoryIntegration.test.tsx` to align with the new data model and logic. All tests passed.
+-   **Frontend Verification**: Performed manual verification using a Playwright script (`verification/verify_history.py`) and screenshots. Confirmed that history entries are created, coalesced correctly (single entry for continuous reading), and displayed with correct metadata in the UI.
+
+### Deviations
+-   **Unmount Behavior**: The original plan implied saving on unmount. I chose to clear the timer on unmount instead. This ensures that if a user quickly opens and closes a book (or scrolls and immediately exits), it is not recorded as a reading session, adhering strictly to the "dwell" concept.
+-   **Label Fallback**: Enhanced the label generation in `ReadingHistoryPanel` to look up chapter titles via `book.navigation` if `book.spine` metadata is incomplete, providing better context for history entries.

@@ -22,11 +22,11 @@ describe('ReadingHistory Integration', () => {
     });
 
     it('loads and displays reading history in panel', async () => {
-        const ranges = ['epubcfi(/6/14!/4/2/1:0)'];
+        const session = { cfiRange: 'epubcfi(/6/14!/4/2/1:0)', timestamp: Date.now(), type: 'page', label: 'Chapter 1' };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getReadingHistoryEntry as any).mockResolvedValue({
-            sessions: [],
-            readRanges: ranges
+            sessions: [session],
+            readRanges: []
         });
 
         render(
@@ -43,13 +43,15 @@ describe('ReadingHistory Integration', () => {
             expect(screen.queryByText('Loading history...')).not.toBeInTheDocument();
         });
 
-        expect(screen.getByText('Reading Segment')).toBeInTheDocument();
-        expect(screen.getByText('epubcfi(/6/14!/4/2/1:0)')).toBeInTheDocument();
+        expect(screen.getByText('Chapter 1')).toBeInTheDocument();
     });
 
     it('refreshes history when trigger changes', async () => {
-        const initialEntry = { sessions: [], readRanges: ['epubcfi(/6/14!/4/2/1:0)'] };
-        const updatedEntry = { sessions: [], readRanges: ['epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/1:10)'] };
+        const s1 = { cfiRange: 'epubcfi(/6/14!/4/2/1:0)', timestamp: 1000, type: 'page', label: 'Chapter 1' };
+        const s2 = { cfiRange: 'epubcfi(/6/14!/4/2/1:10)', timestamp: 2000, type: 'page', label: 'Chapter 2' };
+
+        const initialEntry = { sessions: [s1], readRanges: [] };
+        const updatedEntry = { sessions: [s1, s2], readRanges: [] };
 
         // First call returns initial
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,7 +69,7 @@ describe('ReadingHistory Integration', () => {
         );
 
         await waitFor(() => {
-             expect(screen.getByText('epubcfi(/6/14!/4/2/1:0)')).toBeInTheDocument();
+             expect(screen.getByText('Chapter 1')).toBeInTheDocument();
         });
 
         // Update trigger
@@ -81,7 +83,7 @@ describe('ReadingHistory Integration', () => {
         );
 
         await waitFor(() => {
-             expect(screen.getByText('epubcfi(/6/14!/4/2/1:10)')).toBeInTheDocument();
+             expect(screen.getByText('Chapter 2')).toBeInTheDocument();
         });
 
         expect(dbService.getReadingHistoryEntry).toHaveBeenCalledTimes(2);
@@ -139,7 +141,7 @@ describe('ReadingHistory Integration', () => {
          // Current implementation does NOT debounce the effect, so it should call twice.
 
          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions: [], readRanges: ['range1'] });
+         (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions: [], readRanges: [] });
 
          const { rerender } = render(
             <ReadingHistoryPanel

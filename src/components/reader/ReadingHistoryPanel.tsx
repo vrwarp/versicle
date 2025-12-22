@@ -2,21 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { dbService } from '../../db/DBService';
 import { parseCfiRange } from '../../lib/cfi-utils';
 import type { Rendition } from 'epubjs';
+import { Headphones, BookOpen, ScrollText, Clock } from 'lucide-react';
+import type { ReadingEventType } from '../../types/db';
 
 interface Props {
   bookId: string;
   rendition: Rendition | null;
   onNavigate: (cfi: string) => void;
-  onClose?: () => void;
   trigger?: number;
 }
 
 interface HistoryItem {
     range: string;
     label: string;
-    percentage: number;
-    subLabel: string;
     timestamp: number;
+    type: ReadingEventType;
     targetCfi: string;
 }
 
@@ -35,97 +35,57 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
             const entry = await dbService.getReadingHistoryEntry(bookId);
             const loadedItems: HistoryItem[] = [];
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const book = rendition ? (rendition as any).book : null;
+            if (entry && entry.sessions) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const book = rendition ? (rendition as any).book : null;
 
-            if (entry) {
-                const processItem = (range: string, timestamp: number = 0) => {
-                    let label = "Reading Segment";
-                    let percentage = 0;
-                    let subLabel = range;
-                    let targetCfi = range;
+                for (const session of entry.sessions) {
+                    let label = session.label;
+                    let targetCfi = session.cfiRange;
 
-                    // Parse CFI to get end point
-                    const parsed = parseCfiRange(range);
+                    // Parse CFI to get start point for navigation if it's a range
+                    const parsed = parseCfiRange(session.cfiRange);
                     if (parsed) {
-                        targetCfi = parsed.fullEnd; // Navigate to end of session
+                        targetCfi = parsed.fullStart;
                     }
 
-                    if (book) {
-                        // Try to get percentage
-                        if (parsed) {
-                            // Use start of range for percentage (to show where it was in the book)
-                            // Check if locations are available
-                            if (book.locations && book.locations.length() > 0) {
-                                percentage = book.locations.percentageFromCfi(parsed.fullStart);
-                            }
-                        }
-
-                        // Try to get Chapter Title
-                        let section;
+                    if (!label && book) {
+                        // Fallback: Generate label from CFI
                         try {
-                            section = book.spine.get(range);
+                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                             const item = book.spine.get(targetCfi) as any;
+
+                             if (item) {
+                                 label = item.label ? item.label.trim() : undefined;
+                                 if (!label && item.href && book.navigation) {
+                                     const navItem = book.navigation.get(item.href);
+                                     if (navItem) label = navItem.label.trim();
+                                 }
+                             }
+
+                             if (!label) label = 'Unknown Chapter';
+
+                             // Add percentage?
+                             if (book.locations && book.locations.length() > 0) {
+                                 const p = book.locations.percentageFromCfi(targetCfi);
+                                 label += ` (${(p * 100).toFixed(0)}%)`;
+                             }
                         } catch (e) {
-                            console.warn("Failed to get section from CFI", e);
-                        }
-
-                        if (section) {
-                            let title = "";
-                            // Try to find label in TOC
-                            if (section.href) {
-                                // book.navigation.get() expects the href as it appears in the TOC
-                                const navItem = book.navigation.get(section.href);
-                                if (navItem && navItem.label) {
-                                    title = navItem.label.trim();
-                                }
-                            }
-
-                            if (title) {
-                                label = title;
-                            } else {
-                                // Fallback to generic Chapter label
-                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                const spinePos = (section as any).index ?? book.spine.items.indexOf(section);
-                                label = spinePos >= 0 ? `Chapter ${spinePos + 1}` : 'Unknown Chapter';
-                            }
-                            // Add percentage to subLabel
-                            subLabel = `${(percentage * 100).toFixed(1)}% completed`;
-                        } else {
-                            label = `Segment at ${(percentage * 100).toFixed(1)}%`;
-                            subLabel = range;
+                             label = 'Reading Session';
                         }
                     }
 
-                    if (timestamp > 0) {
-                        const date = new Date(timestamp);
-                        subLabel = `${date.toLocaleDateString()} ${date.toLocaleTimeString()} • ${subLabel}`;
-                    }
-
-                    return {
-                        range,
-                        label,
-                        percentage,
-                        subLabel,
-                        timestamp,
+                    loadedItems.push({
+                        range: session.cfiRange,
+                        label: label || 'Reading Session',
+                        timestamp: session.timestamp,
+                        type: session.type,
                         targetCfi
-                    };
-                };
-
-                // Prefer sessions if available
-                if (entry.sessions && entry.sessions.length > 0) {
-                    for (const session of entry.sessions) {
-                        loadedItems.push(processItem(session.cfiRange, session.timestamp));
-                    }
-                    // Sort by timestamp descending (newest first)
-                    loadedItems.sort((a, b) => b.timestamp - a.timestamp);
-                } else if (entry.readRanges && entry.readRanges.length > 0) {
-                    // Fallback to legacy ranges
-                    for (const range of entry.readRanges) {
-                        loadedItems.push(processItem(range));
-                    }
-                    // Sort by percentage (legacy behavior)
-                    loadedItems.sort((a, b) => a.percentage - b.percentage);
+                    });
                 }
+
+                // Sort descending
+                loadedItems.sort((a, b) => b.timestamp - a.timestamp);
             }
 
             setItems(loadedItems);
@@ -134,6 +94,23 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
         } finally {
             setLoading(false);
         }
+    };
+
+    const getIcon = (type: ReadingEventType) => {
+        switch (type) {
+            case 'tts': return <Headphones className="w-4 h-4 text-blue-500" />;
+            case 'scroll': return <ScrollText className="w-4 h-4 text-orange-500" />;
+            case 'page': return <BookOpen className="w-4 h-4 text-green-500" />;
+            default: return <BookOpen className="w-4 h-4" />;
+        }
+    };
+
+    const formatTime = (ts: number) => {
+        const diff = Date.now() - ts;
+        if (diff < 60000) return 'Just now';
+        if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+        if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+        return new Date(ts).toLocaleDateString();
     };
 
     if (loading) return <div className="p-4 text-sm text-foreground">Loading history...</div>;
@@ -147,7 +124,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
              <div className="p-4 border-b border-border">
                  <h2 className="text-lg font-bold text-foreground">Reading History</h2>
                  <p className="text-xs text-muted-foreground mt-1">
-                     Showing {items.length} read segments.
+                     {items.length} sessions recorded.
                  </p>
              </div>
              <ul className="divide-y divide-border">
@@ -159,12 +136,22 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                         role="button"
                         aria-label={`Jump to ${item.label}`}
                     >
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm font-medium text-foreground">{item.label}</span>
+                        <div className="flex items-start gap-3">
+                            <div className="mt-1">
+                                {getIcon(item.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate">
+                                    {item.label}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <Clock className="w-3 h-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">
+                                        {formatTime(item.timestamp)}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                        <p className="text-xs text-muted-foreground truncate mt-1 font-mono opacity-70">
-                            {item.subLabel}
-                        </p>
                     </li>
                 ))}
              </ul>
