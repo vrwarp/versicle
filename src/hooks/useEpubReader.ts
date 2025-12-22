@@ -264,6 +264,33 @@ export function useEpubReader(
             if (optionsRef.current.onClick) optionsRef.current.onClick(event);
         });
 
+        // Inject styles and spacer
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const injectExtras = (contents: any) => {
+            const doc = contents.document;
+            if (!doc) return;
+
+            // Re-apply forced styles on content load
+            const styleId = 'force-theme-style';
+            if (!doc.getElementById(styleId)) {
+                const style = doc.createElement('style');
+                style.id = styleId;
+                doc.head.appendChild(style);
+                applyStylesRef.current();
+            }
+
+            // Inject empty div for scrolling space
+            const spacerId = 'reader-bottom-spacer';
+            if (optionsRef.current.viewMode === 'scrolled' && !doc.getElementById(spacerId)) {
+                const spacer = doc.createElement('div');
+                spacer.id = spacerId;
+                spacer.style.height = '150px';
+                spacer.style.width = '100%';
+                spacer.style.clear = 'both'; // Ensure it sits below floated content
+                doc.body.appendChild(spacer);
+            }
+        };
+
         // Manual selection listener fallback
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const attachListeners = (contents: any) => {
@@ -295,30 +322,16 @@ export function useEpubReader(
                     }
                 }, 10);
             });
-
-            // Re-apply forced styles on content load
-            const styleId = 'force-theme-style';
-            if (!doc.getElementById(styleId)) {
-                const style = doc.createElement('style');
-                style.id = styleId;
-                doc.head.appendChild(style);
-                applyStylesRef.current();
-            }
-
-            // Inject empty div for scrolling space
-            const spacerId = 'reader-bottom-spacer';
-            if (!doc.getElementById(spacerId)) {
-                const spacer = doc.createElement('div');
-                spacer.id = spacerId;
-                spacer.style.height = '150px';
-                spacer.style.width = '100%';
-                spacer.style.clear = 'both'; // Ensure it sits below floated content
-                doc.body.appendChild(spacer);
-            }
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (newRendition.hooks.content as any).register(injectExtras);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newRendition.hooks.content as any).register(attachListeners);
+
+        // Manually trigger extras for initially loaded content
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (newRendition as any).getContents().forEach((contents: any) => injectExtras(contents));
 
       } catch (err) {
         console.error('Error loading book:', err);

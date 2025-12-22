@@ -158,10 +158,12 @@ describe('SearchClient', () => {
         mockBook.archive.getBlob.mockResolvedValue(mockBlob);
 
         // First index
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await searchClient.indexBook(mockBook as any, 'book-idempotent');
         expect(mockEngine.initIndex).toHaveBeenCalledTimes(1);
 
         // Second index
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await searchClient.indexBook(mockBook as any, 'book-idempotent');
         expect(mockEngine.initIndex).toHaveBeenCalledTimes(1); // Should NOT be called again
     });
