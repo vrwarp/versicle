@@ -1,7 +1,7 @@
 
 import pytest
 from playwright.sync_api import Page, expect
-from verification.utils import capture_screenshot
+from verification import utils
 
 def test_journey_advanced_import(page: Page):
     """
@@ -10,7 +10,7 @@ def test_journey_advanced_import(page: Page):
     # 1. Open App
     page.goto("/")
     expect(page.get_by_test_id("library-view")).to_be_visible()
-    capture_screenshot(page, "advanced_import_01_library_view")
+    utils.capture_screenshot(page, "advanced_import_01_library_view")
 
     # 2. Open Global Settings
     page.get_by_test_id("header-settings-button").click()
@@ -25,7 +25,7 @@ def test_journey_advanced_import(page: Page):
     expect(zip_btn).to_be_visible()
     expect(folder_btn).to_be_visible()
 
-    capture_screenshot(page, "advanced_import_02_settings_dialog")
+    utils.capture_screenshot(page, "advanced_import_02_settings_dialog")
 
     # 3. Simulate ZIP Upload (Partial verification - ensuring file chooser triggers)
     # We won't actually upload a file because we need a valid ZIP in the container,
@@ -45,4 +45,4 @@ def test_journey_advanced_import(page: Page):
     # Close settings
     page.keyboard.press("Escape")
     expect(page.get_by_role("dialog")).not_to_be_visible()
-    capture_screenshot(page, "advanced_import_03_closed_settings")
+    utils.capture_screenshot(page, "advanced_import_03_closed_settings")
