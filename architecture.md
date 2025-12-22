@@ -24,7 +24,7 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
     *   **How**:
         *   **Local**: Uses the Web Speech API (OS native) or local WASM models (Piper) for free, offline reading.
         *   **Cloud**: Integrates with Google/OpenAI/LemonFox for high-quality neural voices, but caches generated audio to minimize API costs and latency on replay.
-    *   **Stability**: The system implements a robust fallback mechanism. If a cloud provider fails, it automatically switches to a local provider.
+    *   **Stability**: The system implements a "Let It Crash" philosophy for worker management to ensure resilience.
 
 ## 2. System Architecture Diagram
 
@@ -64,7 +64,7 @@ graph TD
         Sync[SyncEngine]
         Providers[ITTSProvider]
         Piper[PiperProvider]
-        Supervisor[PiperProcessSupervisor]
+        PiperUtils[piper-utils.ts]
     end
 
     subgraph Workers [Web Workers]
@@ -95,7 +95,7 @@ graph TD
     APS --> Piper
     APS --> CostEst
 
-    Piper --> Supervisor
+    Piper --> PiperUtils
 
     Library --> LibStore
     LibStore --> DBService
@@ -137,10 +137,10 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   **`saveTTSState(bookId, queue, currentIndex)`**: Persists the current TTS playlist and position.
     *   *Why*: Allows the user to close the app and resume the audiobook exactly where they left off.
 *   **`offloadBook(id)`**: Deletes the large binary EPUB file to save space but keeps metadata, annotations, and reading progress. Sets `isOffloaded: true`.
-    *   *Trade-off*: User must re-import the *exact same file* (verified via SHA-256 hash) to read again.
-*   **`restoreBook(id, file)`**: Restores an offloaded book. Verifies `fileHash` matches the original before accepting.
+    *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
+*   **`restoreBook(id, file)`**: Restores an offloaded book. Verifies the file fingerprint matches the original before accepting.
 *   **`updateReadingHistory(bookId, newRange)`**: Merges a new CFI range into the book's reading history.
-    *   *Logic*: Coalesces frequent updates (within 5 minutes) into a single "session" to prevent database bloat.
+    *   *Logic*: Coalesces frequent updates (within 5 minutes) into a single "session" to prevent database bloat. Uses "Semantic Snap" to align history entries to sentence boundaries.
     *   *Limits*: Enforces a hard limit (100 sessions) to prevent unbounded growth.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
@@ -164,17 +164,18 @@ Handles the complex task of importing an EPUB file.
     2.  **Offscreen Rendering**: Uses a hidden `<iframe>` (via `offscreen-renderer.ts`) to render chapters. This ensures that the extracted text and CFIs match *exactly* what the user will see/hear, which is critical for accurate TTS synchronization.
     3.  **Parsing**: Uses `epub.js` to parse the container.
     4.  **Synthetic TOC**: Iterates through the spine to generate a table of contents and calculate character counts (for reading time estimation).
-    5.  **Fingerprinting**: Generates a fast fingerprint using metadata + head/tail sampling + simple hash (`cheapHash`).
-        *   *Why*: Full SHA-256 hashing is too slow for large files in the browser.
-        *   *Trade-off*: Theoretical risk of collision if two different files have identical metadata and start/end bytes, but sufficient for local deduplication and restore verification.
+    5.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** based on metadata (filename, title, author) and head/tail file sampling.
+        *   *Refactoring*: Replaced full-file SHA-256 hashing (which was slow and memory-intensive) with this constant-time O(1) check.
+        *   *Trade-off*: Theoretical risk of collision is negligible for personal library scale, while performance gain is massive.
     6.  **Sanitization**: Uses `DOMParser` to strip HTML and scripts from metadata fields, and enforces character limits (e.g. 255 chars for Author).
     *   *Returns*: `Promise<string>` (New Book ID).
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread to prevent UI freezing.
 
-*   **`SearchClient`**: The main-thread interface. Manages the Worker lifecycle and request/response correlation using UUIDs.
+*   **`SearchClient`**: The main-thread interface.
 *   **`SearchEngine`**: Runs inside the Worker. Uses `FlexSearch` to build an inverted index.
+*   **Communication**: Uses **`comlink`** to proxy method calls to the worker. This replaces the previous custom RPC layer, providing better type safety and less boilerplate.
 *   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book and initiates a search. This avoids storing massive indices in IndexedDB but adds a delay before search is ready for large books.
 
 #### Backup (`src/lib/BackupService.ts`)
@@ -228,9 +229,9 @@ The singleton controller (Orchestrator).
 
 *   **Goal**: Manage the playback queue, provider selection, and state machine (`playing`, `paused`, `loading`, etc.).
 *   **Logic**:
-    *   **Concurrency**: Uses a **Mutex** pattern (`executeWithLock`) to serialize async operations (play, pause, next) and prevent race conditions.
+    *   **Concurrency**: Uses a **Sequential Promise Chain** (`enqueue`) to serialize async operations (play, pause, next). This replaces the previous complex Mutex pattern.
     *   **Media Session**: Integrates with the OS Media Session API (lock screen controls) via `MediaSessionManager`.
-*   **Trade-off**: High complexity to handle all edge cases (network failure, background play, interruptions).
+*   **Trade-off**: Sequential execution ensures consistency but can feel slightly less responsive if a previous operation hangs (though timeouts are applied).
 
 #### `src/lib/tts/TextSegmenter.ts`
 Splits raw text into natural-sounding sentences.
@@ -267,16 +268,16 @@ Low-level wrapper around the HTML5 `<audio>` element.
 
 #### `src/lib/tts/providers/`
 Plugin architecture for TTS backends. All providers implement `ITTSProvider`.
-*   **`PiperProvider`**: Runs local WASM models. Use `PiperProcessSupervisor` to manage the unstable Worker.
+*   **`PiperProvider`**: Runs local WASM models. Use `piper-utils.ts` to manage the Worker.
 *   **`CloudProvider`**: Adapts Google/OpenAI APIs.
 *   **`LemonFoxProvider`**: Adapts LemonFox.ai API (OpenAI-compatible) for lower cost.
 *   **`CapacitorTTSProvider`**: Wraps `@capacitor-community/text-to-speech` for native mobile playback.
 *   **`WebSpeechProvider`**: Adapts browser native synthesis.
 
-#### Hardening: `PiperProcessSupervisor`
-*   **Goal**: Prevent the application from crashing if the Piper WASM worker runs out of memory or hangs.
-*   **Logic**: Wraps the worker in a supervisor that handles timeouts and automatic restarts. If a request hangs or the worker terminates, the supervisor kills the worker, spawns a fresh instance, and retries the request (up to 1 retry).
-*   **Trade-off**: Restarting the worker introduces a latency spike on the next request.
+#### Resilience: `piper-utils.ts` ("Let It Crash")
+*   **Goal**: Prevent the application from entering invalid states if the Piper WASM worker crashes.
+*   **Logic**: Instead of a complex "Supervisor" that attempts restarts, we use a simple **Error Boundary** pattern. If the worker crashes or errors, the current request rejects immediately. The worker is terminated, and a fresh instance is lazily created on the next request.
+*   **Philosophy**: Simplicity > Complex Recovery.
 
 ---
 
@@ -311,6 +312,8 @@ State is managed using **Zustand** with persistence to `localStorage` for prefer
 *   **`useGenAIStore`**: Manages AI settings (API key, model) and usage logs.
     *   *Persisted*: `apiKey`, `model`, `isEnabled`, `logs`, `usageStats`.
 *   **`useUIStore`**: Manages global UI state (e.g., `isGlobalSettingsOpen`). Transient.
+*   **`useReadingListStore`**: Manages the exportable reading list.
+    *   *Logic*: Syncs with IDB `reading_list` store. Handles CSV import/export.
 
 ### UI Layer
 
