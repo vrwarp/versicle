@@ -139,7 +139,9 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   **`offloadBook(id)`**: Deletes the large binary EPUB file to save space but keeps metadata, annotations, and reading progress. Sets `isOffloaded: true`.
     *   *Trade-off*: User must re-import the *exact same file* (verified via SHA-256 hash) to read again.
 *   **`restoreBook(id, file)`**: Restores an offloaded book. Verifies `fileHash` matches the original before accepting.
-*   **`updateReadingHistory(bookId, newRange)`**: Merges a new CFI range into the book's reading history to track "read" status.
+*   **`updateReadingHistory(bookId, newRange)`**: Merges a new CFI range into the book's reading history.
+    *   *Logic*: Coalesces frequent updates (within 5 minutes) into a single "session" to prevent database bloat.
+    *   *Limits*: Enforces a hard limit (100 sessions) to prevent unbounded growth.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks from malicious EPUB metadata.
@@ -162,8 +164,10 @@ Handles the complex task of importing an EPUB file.
     2.  **Offscreen Rendering**: Uses a hidden `<iframe>` (via `offscreen-renderer.ts`) to render chapters. This ensures that the extracted text and CFIs match *exactly* what the user will see/hear, which is critical for accurate TTS synchronization.
     3.  **Parsing**: Uses `epub.js` to parse the container.
     4.  **Synthetic TOC**: Iterates through the spine to generate a table of contents and calculate character counts (for reading time estimation).
-    4.  **Hashing**: Computes a SHA-256 hash of the file incrementally (chunked) to avoid memory spikes. Used for integrity checks during restore.
-    5.  **Sanitization**: Uses `DOMParser` to strip HTML and scripts from metadata fields, and enforces character limits (e.g. 255 chars for Author).
+    5.  **Fingerprinting**: Generates a fast fingerprint using metadata + head/tail sampling + simple hash (`cheapHash`).
+        *   *Why*: Full SHA-256 hashing is too slow for large files in the browser.
+        *   *Trade-off*: Theoretical risk of collision if two different files have identical metadata and start/end bytes, but sufficient for local deduplication and restore verification.
+    6.  **Sanitization**: Uses `DOMParser` to strip HTML and scripts from metadata fields, and enforces character limits (e.g. 255 chars for Author).
     *   *Returns*: `Promise<string>` (New Book ID).
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
@@ -225,7 +229,6 @@ The singleton controller (Orchestrator).
 *   **Goal**: Manage the playback queue, provider selection, and state machine (`playing`, `paused`, `loading`, etc.).
 *   **Logic**:
     *   **Concurrency**: Uses a **Mutex** pattern (`executeWithLock`) to serialize async operations (play, pause, next) and prevent race conditions.
-    *   **Smart Resume**: Automatically rewinds context (2 sentences) after a pause to re-orient the listener.
     *   **Media Session**: Integrates with the OS Media Session API (lock screen controls) via `MediaSessionManager`.
 *   **Trade-off**: High complexity to handle all edge cases (network failure, background play, interruptions).
 
@@ -256,8 +259,8 @@ Low-level wrapper around the HTML5 `<audio>` element.
 
 #### `src/lib/tts/BackgroundAudio.ts`
 *   **Goal**: Prevent mobile operating systems (iOS/Android) from killing the app or pausing audio when the screen is locked or the app is in the background.
-*   **Logic**: Plays a silent loop (or optional white noise) to keep the OS Media Session active.
-*   **Trade-off**: "Hack" solution required due to restrictive mobile browser policies.
+*   **Logic**: Plays a silent loop (or optional white noise) to keep the OS Media Session active. On Android, it upgrades to a **Foreground Service** (via `@capawesome-team/capacitor-android-foreground-service`) to guarantee process survival.
+*   **Trade-off**: "Hack" solution required due to restrictive mobile browser policies (iOS). Foreground Service requires explicit permissions on Android.
 
 #### TTS Processors (`src/lib/tts/processors/`)
 *   **`Sanitizer.ts`**: Cleans text before speech generation. Removes page numbers, citations, and URLs to improve listening flow.

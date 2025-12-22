@@ -15,13 +15,12 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
     *   **Smart TOC**: Automatically generate clean chapter titles for books with missing or poor tables of contents.
 *   **Text-to-Speech (TTS) Powerhouse**:
     *   **Hybrid Engine**: Seamlessly switch between **Local** (Web Speech, Piper WASM, Native Mobile) and **Cloud** (Google, OpenAI, LemonFox) providers.
-    *   **Smart Resume**: Intelligently rewinds context (2 sentences) after pauses.
     *   **Visual Sync**: Karaoke-style sentence and word highlighting.
     *   **Pronunciation Lexicon**: Fix mispronounced words using Regex-based replacement rules.
     *   **Background Playback**: (Android) Continue listening when the screen is off using Media Session API and optional White Noise generation.
 *   **Full-Text Search**: Fast, off-main-thread search using Web Workers and FlexSearch.
 *   **Data Management**:
-    *   **Backup/Restore**: Export your library metadata, reading progress, and settings to JSON. (Note: EPUB files are not currently included in backups and must be re-imported).
+    *   **Backup/Restore**: Create **Light** (JSON, metadata only) or **Full** (ZIP, includes EPUB files) backups to keep your data safe.
     *   **Interoperability**: Import/Export reading lists (CSV) compatible with Goodreads.
     *   **Offloading**: Remove large book files to save space on mobile devices while keeping your notes, reading progress, and metadata intact.
     *   **Maintenance**: Run health checks to identify missing files or corrupt data, prune orphaned records, and perform factory resets (Safe Mode) if needed.
@@ -31,7 +30,7 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 
 *   **Frontend**: React, Vite, TypeScript
 *   **Runtime**: Web (PWA), Android (Capacitor)
-*   **Styling**: Tailwind CSS, Shadcn UI
+*   **UI/Styling**: Tailwind CSS, Radix UI, Shadcn UI
 *   **State Management**: Zustand (with persistence)
 *   **Storage**: IndexedDB (via `idb`)
 *   **Data Portability**: PapaParse
