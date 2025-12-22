@@ -6,39 +6,47 @@ import { cn } from '../../lib/utils';
 import { validateEpubFile } from '../../lib/ingestion';
 
 /**
- * A component for uploading EPUB files via drag-and-drop or file selection.
+ * A component for uploading EPUB files, ZIP archives, or directories via drag-and-drop or file selection.
  * Handles user interactions and triggers the book import process.
  *
  * @returns A React component rendering the file upload area.
  */
 export const FileUploader: React.FC = () => {
-  const { addBook, isImporting, importProgress, importStatus } = useLibraryStore();
+  const { addBook, addBooks, isImporting, importProgress, importStatus } = useLibraryStore();
   const { showToast } = useToastStore();
   const [dragActive, setDragActive] = useState(false);
-
   /**
-   * Validates and processes the selected file.
-   * Checks for .epub extension and validates ZIP magic bytes.
+   * Validates and processes a single file.
    */
-  const processFile = useCallback(async (file: File) => {
-      // Check extension first for quick feedback
-      if (file.name.endsWith('.epub')) {
-           // Security Check: Validate Magic Bytes
+  const processSingleFile = useCallback(async (file: File) => {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.epub')) {
            const isValid = await validateEpubFile(file);
            if (isValid) {
-               addBook(file);
+               await addBook(file);
            } else {
-               showToast("Invalid EPUB file (header mismatch)", 'error');
+               showToast(`Invalid EPUB file (header mismatch): ${file.name}`, 'error');
            }
+      } else if (lowerName.endsWith('.zip')) {
+          await addBooks([file]);
       } else {
-           showToast("Only .epub files are supported", 'error');
+           showToast(`Unsupported file type: ${file.name}`, 'error');
       }
-  }, [addBook, showToast]);
+  }, [addBook, addBooks, showToast]);
 
   /**
-   * Handles drag events to toggle visual feedback for the drop zone.
-   *
-   * @param e - The React DragEvent.
+   * Processes a list of files (batch import).
+   */
+  const processFiles = useCallback(async (files: File[]) => {
+      if (files.length === 1) {
+          await processSingleFile(files[0]);
+      } else {
+          await addBooks(files);
+      }
+  }, [addBooks, processSingleFile]);
+
+  /**
+   * Handles drag events.
    */
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -51,9 +59,7 @@ export const FileUploader: React.FC = () => {
   }, []);
 
   /**
-   * Handles the drop event to process the dropped file.
-   *
-   * @param e - The React DragEvent containing the dropped files.
+   * Handles drop events.
    */
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
@@ -61,26 +67,29 @@ export const FileUploader: React.FC = () => {
       e.stopPropagation();
       setDragActive(false);
 
-      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-        await processFile(e.dataTransfer.files[0]);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const files = Array.from(e.dataTransfer.files);
+        await processFiles(files);
       }
     },
-    [processFile]
+    [processFiles]
   );
 
   /**
-   * Handles the file input change event for browsing and selecting files.
-   *
-   * @param e - The React ChangeEvent from the file input.
+   * Handles standard file input change.
    */
   const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
-    if (e.target.files && e.target.files[0]) {
-      await processFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      await processFiles(files);
     }
+    // Reset input
+    e.target.value = '';
   };
 
   return (
+    <div className="space-y-4">
     <div
       className={cn(
         "group relative w-full border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ease-in-out cursor-pointer",
@@ -97,17 +106,18 @@ export const FileUploader: React.FC = () => {
         type="file"
         id="file-upload"
         data-testid="file-upload-input"
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
         onChange={handleChange}
-        accept=".epub"
+        accept=".epub,.zip"
+        multiple
         disabled={isImporting}
-        aria-label="Upload EPUB file"
+        aria-label="Upload EPUB or ZIP files"
       />
 
       {isImporting ? (
         <div className="flex flex-col items-center justify-center space-y-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground font-medium">{importStatus || 'Importing book...'}</p>
+            <p className="text-muted-foreground font-medium">{importStatus || 'Importing books...'}</p>
             <div className="w-64 h-2 bg-muted rounded-full overflow-hidden mt-2">
                 <div
                     className="h-full bg-primary transition-all duration-300 ease-out"
@@ -116,7 +126,7 @@ export const FileUploader: React.FC = () => {
             </div>
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center space-y-3">
+        <div className="flex flex-col items-center justify-center space-y-3 pointer-events-none">
             <div className={cn(
                 "p-4 rounded-full bg-muted transition-colors",
                 dragActive ? "bg-background" : "group-hover:bg-background"
@@ -125,14 +135,16 @@ export const FileUploader: React.FC = () => {
             </div>
             <div className="space-y-1">
                 <p className="text-lg font-medium text-foreground">
-                    Drop your EPUB here, or <span className="text-primary hover:underline">browse</span>
+                    Drop EPUBs or ZIPs here, or <span className="text-primary hover:underline">browse</span>
                 </p>
                 <p className="text-sm text-muted-foreground">
-                    Supports .epub files
+                    Supports .epub and .zip archives
                 </p>
             </div>
         </div>
       )}
+    </div>
+
     </div>
   );
 };

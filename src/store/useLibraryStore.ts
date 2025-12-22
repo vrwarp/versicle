@@ -4,6 +4,7 @@ import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
 import { StorageFullError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
+import { processBatchImport } from '../lib/batch-ingestion';
 
 /**
  * State interface for the Library store.
@@ -37,6 +38,11 @@ interface LibraryState {
    * @param file - The EPUB file to import.
    */
   addBook: (file: File) => Promise<void>;
+  /**
+   * Imports multiple files (EPUBs or ZIPs) into the library.
+   * @param files - The array of files to import.
+   */
+  addBooks: (files: File[]) => Promise<void>;
   /**
    * Removes a book and its associated data (files, annotations) from the library.
    * @param id - The unique identifier of the book to remove.
@@ -109,6 +115,40 @@ export const useLibraryStore = create<LibraryState>()(
       set({ error: errorMessage, isImporting: false, importProgress: 0, importStatus: '' });
       throw err; // Re-throw so components can handle UI feedback (e.g. Toasts)
     }
+  },
+
+  addBooks: async (files: File[]) => {
+      set({ isImporting: true, importProgress: 0, importStatus: 'Analyzing files...', error: null });
+      try {
+          const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+          await processBatchImport(
+              files,
+              {
+                  abbreviations: customAbbreviations,
+                  alwaysMerge,
+                  sentenceStarters,
+                  sanitizationEnabled
+              },
+              (processed, total, filename) => {
+                  const percent = Math.round((processed / total) * 100);
+                  set({
+                      importProgress: percent,
+                      importStatus: `Importing ${processed + 1} of ${total}: ${filename}`
+                  });
+              }
+          );
+          // Refresh library
+          await get().fetchBooks();
+          set({ isImporting: false, importProgress: 0, importStatus: '' });
+      } catch (err) {
+          console.error('Failed to batch import books:', err);
+          let errorMessage = 'Failed to import books.';
+          if (err instanceof StorageFullError) {
+              errorMessage = 'Device storage full. Please delete some books.';
+          }
+          set({ error: errorMessage, isImporting: false, importProgress: 0, importStatus: '' });
+          throw err;
+      }
   },
 
   removeBook: async (id: string) => {

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { useTTSStore } from '../store/useTTSStore';
+import { useLibraryStore } from '../store/useLibraryStore';
+import { useToastStore } from '../store/useToastStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
@@ -37,8 +39,13 @@ export const GlobalSettingsDialog = () => {
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const csvInputRef = useRef<HTMLInputElement>(null);
+    const zipImportRef = useRef<HTMLInputElement>(null);
+    const folderImportRef = useRef<HTMLInputElement>(null);
     const [readingListCount, setReadingListCount] = useState<number | null>(null);
     const [isReadingListOpen, setIsReadingListOpen] = useState(false);
+
+    const { addBooks, isImporting } = useLibraryStore();
+    const showToast = useToastStore(state => state.showToast);
 
     useEffect(() => {
         if (activeTab === 'data') {
@@ -96,6 +103,21 @@ export const GlobalSettingsDialog = () => {
             e.target.value = ''; // Reset
         };
         reader.readAsText(file);
+    };
+
+    const handleBatchImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const files = Array.from(e.target.files);
+            try {
+                await addBooks(files);
+                showToast(`Batch import started for ${files.length} items.`, 'success');
+                setGlobalSettingsOpen(false);
+            } catch (err) {
+                console.error("Batch import failed", err);
+                showToast("Failed to start batch import.", "error");
+            }
+        }
+        e.target.value = '';
     };
 
     const {
@@ -286,10 +308,42 @@ export const GlobalSettingsDialog = () => {
                     {activeTab === 'general' && (
                         <div className="space-y-6">
                             <div>
-                                <h3 className="text-lg font-medium mb-2">Interaction</h3>
-                                <p className="text-sm text-muted-foreground">
-                                    General system interaction settings.
+                                <h3 className="text-lg font-medium mb-4">Advanced Import</h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    Tools for importing multiple books at once.
                                 </p>
+                                <div className="flex flex-col gap-2">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => zipImportRef.current?.click()}
+                                        disabled={isImporting}
+                                    >
+                                        Import ZIP Archive
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => folderImportRef.current?.click()}
+                                        disabled={isImporting}
+                                    >
+                                        Import Folder
+                                    </Button>
+                                </div>
+                                <input
+                                    type="file"
+                                    ref={zipImportRef}
+                                    accept=".zip"
+                                    className="hidden"
+                                    onChange={handleBatchImport}
+                                />
+                                <input
+                                    type="file"
+                                    ref={folderImportRef}
+                                    // @ts-expect-error webkitdirectory is non-standard
+                                    webkitdirectory=""
+                                    directory=""
+                                    className="hidden"
+                                    onChange={handleBatchImport}
+                                />
                             </div>
                         </div>
                     )}
