@@ -140,7 +140,7 @@ def test_long_reading_journey(page: Page):
 
     # Wait for nav
     page.wait_for_timeout(3000)
-    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible()
+    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
 
     # Verify content matches Session 1
     session2_text = frame.locator("body").inner_text()

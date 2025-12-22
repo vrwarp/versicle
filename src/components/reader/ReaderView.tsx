@@ -758,7 +758,6 @@ export const ReaderView: React.FC = () => {
                             trigger={historyTick}
                             onNavigate={(cfi) => {
                                 rendition?.display(cfi);
-                                setShowToc(false);
                             }}
                          />
                      </TabsContent>

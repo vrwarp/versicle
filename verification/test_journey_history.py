@@ -72,4 +72,7 @@ def test_reading_history_journey(page: Page):
     # Wait for navigation
     page.wait_for_timeout(2000)
 
+    # Verify that the history panel (sidebar) is still open
+    expect(page.locator("[data-testid='reader-toc-sidebar']")).to_be_visible()
+
     print("Reading history journey completed successfully")
