@@ -41,11 +41,13 @@ When a search is initiated, the system will iterate through this map and apply a
 
 ### 2.2 Architecture Changes
 
-|Component |Current State |Future State |Implications |
-|**Storage** |`FlexSearch.Document` instance (Complex Object) |`Map<string, string>` (href -> text) |drastic reduction in memory usage and initialization time. |
-|**Ingestion** |Tokenize text -> Apply Stemming -> Build Index |Store raw text directly in Map |Removes the heavy CPU "startup tax" when opening a book. |
-|**Query Strategy** |Two-step: `index.search()` for ID -> Separate `RegExp` scan for excerpt |Single-step: `RegExp.exec()` loop handles detection and extraction simultaneously. |Eliminates synchronization bugs between search hits and visual highlights. |
-|**Dependencies** |`flexsearch` (External Library) |None (Standard Lib) |Reduces application bundle size and maintenance surface area. |
+-   **Storage:** Transitioning from a complex `FlexSearch.Document` instance to a simple `Map<string, string>` (href -> text). This implies a drastic reduction in memory usage and initialization time.
+
+-   **Ingestion:** Moving from tokenization and index building to storing raw text directly in a Map. This removes the heavy CPU "startup tax" when opening a book.
+
+-   **Query Strategy:** Changing from a two-step process (index search + separate Regex scan) to a single-step `RegExp.exec()` loop that handles detection and extraction simultaneously. This eliminates synchronization bugs between search hits and visual highlights.
+
+-   **Dependencies:** Removing the `flexsearch` external library in favor of the standard library. This reduces the application bundle size and maintenance surface area.
 
 3\. Implementation Details
 --------------------------
@@ -113,9 +115,9 @@ This entry point file remains the "dumb" host for the engine. Its only responsib
 
 1.  **Unit Testing:** Run the test suite again. The goal is for all tests to pass without modification to the test files themselves (preserving behavior).
 
-2.  **Verification:**
+2.  **Manual Verification:**
 
-    -   Load a standard EPUB
+    -   Load a standard EPUB (e.g., *Alice in Wonderland*).
 
     -   Search for a unique phrase. Confirm the excerpt is centered correctly on the match.
 
