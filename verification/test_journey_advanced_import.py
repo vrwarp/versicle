@@ -1,7 +1,7 @@
 
 import pytest
 from playwright.sync_api import Page, expect
-from utils import screenshot_step
+from verification.utils import screenshot_step
 
 def test_journey_advanced_import(page: Page):
     """
