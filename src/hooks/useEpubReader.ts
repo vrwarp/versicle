@@ -172,6 +172,62 @@ export function useEpubReader(
           'a': { 'color': '#0000ee !important' }
         });
 
+        // Manual selection listener fallback
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const attachListeners = (contents: any) => {
+            const doc = contents.document;
+            if (!doc) return;
+
+            // Prevent duplicate listeners
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if ((contents as any)._listenersAttached) return;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (contents as any)._listenersAttached = true;
+
+            // Prevent default context menu (especially for Android)
+            doc.addEventListener('contextmenu', (e: Event) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            doc.addEventListener('mouseup', () => {
+                const selection = contents.window.getSelection();
+                if (!selection || selection.isCollapsed) return;
+
+                setTimeout(() => {
+                    const range = selection.getRangeAt(0);
+                    if (!range) return;
+                    const cfi = contents.cfiFromRange(range);
+                    if (cfi && optionsRef.current.onSelection) {
+                        optionsRef.current.onSelection(cfi, range, contents);
+                    }
+                }, 10);
+            });
+
+            // Re-apply forced styles on content load
+            const styleId = 'force-theme-style';
+            if (!doc.getElementById(styleId)) {
+                const style = doc.createElement('style');
+                style.id = styleId;
+                doc.head.appendChild(style);
+                applyStylesRef.current();
+            }
+
+            // Inject empty div for scrolling space
+            const spacerId = 'reader-bottom-spacer';
+            if (!doc.getElementById(spacerId)) {
+                const spacer = doc.createElement('div');
+                spacer.id = spacerId;
+                spacer.style.height = '150px';
+                spacer.style.width = '100%';
+                spacer.style.clear = 'both'; // Ensure it sits below floated content
+                doc.body.appendChild(spacer);
+            }
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (newRendition.hooks.content as any).register(attachListeners);
+
         // Display at saved location or start
         let startLocation = meta?.currentCfi || undefined;
 
@@ -263,62 +319,6 @@ export function useEpubReader(
         newRendition.on('click', (event: MouseEvent) => {
             if (optionsRef.current.onClick) optionsRef.current.onClick(event);
         });
-
-        // Manual selection listener fallback
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const attachListeners = (contents: any) => {
-            const doc = contents.document;
-            if (!doc) return;
-
-            // Prevent duplicate listeners
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if ((contents as any)._listenersAttached) return;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (contents as any)._listenersAttached = true;
-
-            // Prevent default context menu (especially for Android)
-            doc.addEventListener('contextmenu', (e: Event) => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
-
-            doc.addEventListener('mouseup', () => {
-                const selection = contents.window.getSelection();
-                if (!selection || selection.isCollapsed) return;
-
-                setTimeout(() => {
-                    const range = selection.getRangeAt(0);
-                    if (!range) return;
-                    const cfi = contents.cfiFromRange(range);
-                    if (cfi && optionsRef.current.onSelection) {
-                        optionsRef.current.onSelection(cfi, range, contents);
-                    }
-                }, 10);
-            });
-
-            // Re-apply forced styles on content load
-            const styleId = 'force-theme-style';
-            if (!doc.getElementById(styleId)) {
-                const style = doc.createElement('style');
-                style.id = styleId;
-                doc.head.appendChild(style);
-                applyStylesRef.current();
-            }
-
-            // Inject empty div for scrolling space
-            const spacerId = 'reader-bottom-spacer';
-            if (!doc.getElementById(spacerId)) {
-                const spacer = doc.createElement('div');
-                spacer.id = spacerId;
-                spacer.style.height = '150px';
-                spacer.style.width = '100%';
-                spacer.style.clear = 'both'; // Ensure it sits below floated content
-                doc.body.appendChild(spacer);
-            }
-        };
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newRendition.hooks.content as any).register(attachListeners);
 
       } catch (err) {
         console.error('Error loading book:', err);
