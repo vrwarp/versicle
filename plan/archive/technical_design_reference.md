@@ -277,22 +277,22 @@ epub.js provides a robust annotation API based on **Canonical Fragment Identifie
 
 ## **TTS Enhancement Plan (V2)**
 
-- [ ] **Phase 1: Architecture Refactor** (`plan/tts_phase1.md`)
+- [ ] **Phase 1: Architecture Refactor** (Completed)
   - [ ] Refactor `src/lib/tts.ts` into a `WebSpeechProvider` class.
   - [ ] Create `AudioPlayerService` to decouple state from React.
   - [ ] Update `useTTSStore` to use the provider pattern.
 
-- [ ] **Phase 2: Cloud Foundation** (`plan/tts_phase2.md`)
+- [ ] **Phase 2: Cloud Foundation** (Completed)
   - [ ] Create `AudioElementPlayer` for playing audio blobs.
   - [ ] Implement `MediaSession` API for background play controls.
   - [ ] Create `SyncEngine` for time-based alignment.
 
-- [ ] **Phase 3: Cloud Integration** (`plan/tts_phase3.md`)
+- [ ] **Phase 3: Cloud Integration** (Completed)
   - [ ] Implement `GoogleTTSProvider` (Text-to-Speech API).
   - [ ] Implement `OpenAIProvider`.
   - [ ] Create `TTSCache` using IndexedDB to store audio/alignments.
 
-- [ ] **Phase 4: Advanced Sync & Polish** (`plan/tts_phase4.md`)
+- [ ] **Phase 4: Advanced Sync & Polish** (Completed)
   - [ ] Use `Intl.Segmenter` for better text splitting.
   - [ ] Implement playback queue UI.
   - [ ] Add buffering/prefetching logic.

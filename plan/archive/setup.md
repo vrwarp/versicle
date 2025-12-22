@@ -46,7 +46,7 @@ Set up basic linting rules to ensure code quality.
 
 ## **5. Directory Structure Creation**
 
-Run the following command to create the folder structure defined in `step01.md`:
+Run the following command to create the folder structure:
 
 ```bash
 mkdir -p src/assets
@@ -100,4 +100,4 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 3.  Check localhost to see the default Vite + React app.
 
 ## **8. Next Steps**
-Proceed to **Step 1: Skeleton & Database** implementation.
+Proceed to implementation.
