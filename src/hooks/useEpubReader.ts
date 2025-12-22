@@ -122,6 +122,11 @@ export function useEpubReader(
         if ((newBook.spine as any).hooks?.serialize) {
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
              (newBook.spine as any).hooks.serialize.register((html: string) => {
+                 // Optimization: Allow disabling sanitization in E2E tests for performance
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 if ((window as any).__VERSICLE_SANITIZATION_DISABLED__) {
+                     return html;
+                 }
                  return sanitizeContent(html);
              });
         }
