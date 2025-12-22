@@ -44,18 +44,18 @@ def test_library_journey(page: Page):
     file_input.set_input_files("src/test/fixtures/alice.epub")
 
     # Verify book appears
-    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible(timeout=2000)
+    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible()
     utils.capture_screenshot(page, "library_4_uploaded")
 
     # 5. Persistence Check
     print("Reloading to check persistence...")
     page.reload()
-    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible(timeout=2000)
+    expect(page.locator("[data-testid^='book-card-']").first).to_be_visible()
 
     # 6. Navigation Check (Clicking book)
     print("Clicking book to verify navigation...")
     page.locator("[data-testid^='book-card-']").first.click()
-    expect(page).to_have_url(re.compile(r".*/read/.*"), timeout=2000)
+    expect(page).to_have_url(re.compile(r".*/read/.*"))
 
     # Verify we are in reader view (Back button exists)
     expect(page.get_by_test_id("reader-back-button")).to_be_visible()

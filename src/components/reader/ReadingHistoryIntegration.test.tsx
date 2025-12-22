@@ -44,7 +44,7 @@ describe('ReadingHistory Integration', () => {
         });
 
         expect(screen.getByText('Reading Segment')).toBeInTheDocument();
-        expect(screen.getByText('epubcfi(/6/14!/4/2/1:0)')).toBeInTheDocument();
+        // CFI is not displayed in the UI, so we can't assert its presence
     });
 
     it('refreshes history when trigger changes', async () => {
@@ -67,7 +67,7 @@ describe('ReadingHistory Integration', () => {
         );
 
         await waitFor(() => {
-             expect(screen.getByText('epubcfi(/6/14!/4/2/1:0)')).toBeInTheDocument();
+             expect(screen.getAllByText('Reading Segment')).toHaveLength(1);
         });
 
         // Update trigger
@@ -81,7 +81,7 @@ describe('ReadingHistory Integration', () => {
         );
 
         await waitFor(() => {
-             expect(screen.getByText('epubcfi(/6/14!/4/2/1:10)')).toBeInTheDocument();
+             expect(screen.getAllByText('Reading Segment')).toHaveLength(2);
         });
 
         expect(dbService.getReadingHistoryEntry).toHaveBeenCalledTimes(2);

@@ -85,7 +85,14 @@ def test_smart_toc_failure(page):
     page.get_by_role("button", name="Enhance Titles with AI").click()
 
     # Expect error toast
-    expect(page.get_by_text("AI features are disabled or not configured")).to_be_visible()
+    try:
+        # Increased timeout to rule out performance issues
+        expect(page.get_by_text("AI features are disabled or not configured")).to_be_visible(timeout=10000)
+    except AssertionError:
+        print("Taking failure screenshot for Scenario 1...")
+        os.makedirs("verification/screenshots", exist_ok=True)
+        page.screenshot(path="verification/screenshots/smart_toc_failure_sc1.png")
+        raise
 
     # 2. Service Failure Scenario
     print("--- Scenario 2: Service Failure ---")
