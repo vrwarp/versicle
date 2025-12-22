@@ -17,40 +17,27 @@ describe('validators', () => {
       expect(sanitizeString(123 as any)).toBe('');
     });
 
-    it('robustly sanitizes tricky HTML payloads (using DOMParser)', () => {
-      // Nested tags: DOMParser parses as Text "<" followed by Script element
-      // Script element is removed, leaving "<"
+    it('robustly sanitizes tricky HTML payloads (using DOMPurify)', () => {
+      // Nested tags: DOMPurify strips tags
+      // <<script>script>alert(1)</script>
+      // First < is treated as text because it's not a valid tag start with <script
+      // Or DOMPurify cleans it.
+      // Expected: < (from textContent)
       expect(sanitizeString('<<script>script>alert(1)</script>')).toBe('<');
 
-      // Attribute injection that bypassed regex: DOMParser handles quotes correctly
+      // Attribute injection
       expect(sanitizeString('<a title=">">Link</a>')).toBe('Link');
 
-      // Complex image tag: Text "<" followed by Img element
+      // Complex image tag
       expect(sanitizeString('<<img src=x onerror=alert(1)>')).toBe('<');
 
-      // Script with whitespace: Script element removed
+      // Script with whitespace: Script element removed along with content
       expect(sanitizeString('<script >alert(1)</script >')).toBe('');
 
-      // Style tag removal: Style element removed
+      // Style tag removal: Style element removed along with content
       expect(sanitizeString('<style>body{color:red}</style>')).toBe('');
     });
 
-    it('uses safe fallback (escaping) if DOMParser is missing', () => {
-        // Mock DOMParser to be undefined
-        const originalDOMParser = global.DOMParser;
-        vi.stubGlobal('DOMParser', undefined);
-
-        try {
-            const input = '<b>Title</b> <script>alert(1)</script>';
-            const result = sanitizeString(input);
-
-            // Expect safe escaping instead of vulnerable regex stripping
-            expect(result).toBe('&lt;b&gt;Title&lt;/b&gt; &lt;script&gt;alert(1)&lt;/script&gt;');
-        } finally {
-            // Restore
-            vi.stubGlobal('DOMParser', originalDOMParser);
-        }
-    });
   });
 
   describe('getSanitizedBookMetadata', () => {
@@ -117,7 +104,7 @@ describe('validators', () => {
           const result = getSanitizedBookMetadata(input);
           expect(result?.wasModified).toBe(true);
           expect(result?.sanitized.title).toBe('Title');
-          expect(result?.sanitized.author).toBe('A < B'); // Preserved
+          expect(result?.sanitized.author).toBe('A < B'); // Preserved as text
 
           // New behavior: content of script tags is removed
           expect(result?.sanitized.description).toBe('');

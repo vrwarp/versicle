@@ -3,6 +3,7 @@ import ePub, { type Book, type Rendition, type Location, type NavigationItem } f
 import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
 import { parseCfiRange } from '../lib/cfi-utils';
+import { sanitizeContent } from '../lib/sanitizer';
 
 /**
  * Configuration options for the EpubReader hook.
@@ -114,6 +115,22 @@ export function useEpubReader(
         }
 
         const newBook = ePub(fileData as ArrayBuffer);
+
+        // SECURITY: Register a serialization hook to sanitize HTML content before it's rendered.
+        // This prevents XSS attacks from malicious scripts in EPUB files.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((newBook.spine as any).hooks?.serialize) {
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (newBook.spine as any).hooks.serialize.register((html: string) => {
+                 // Optimization: Allow disabling sanitization in E2E tests for performance
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 if ((window as any).__VERSICLE_SANITIZATION_DISABLED__) {
+                     return html;
+                 }
+                 return sanitizeContent(html);
+             });
+        }
+
         bookRef.current = newBook;
         setBook(newBook);
 

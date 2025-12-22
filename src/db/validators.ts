@@ -1,4 +1,5 @@
 import type { BookMetadata } from '../types/db';
+import { sanitizeMetadata } from '../lib/sanitizer';
 
 /**
  * Validates if an object conforms to the BookMetadata interface.
@@ -40,8 +41,7 @@ export function validateBookMetadata(data: any): data is BookMetadata {
 
 /**
  * Sanitizes a string by stripping HTML, trimming, and enforcing a maximum length.
- * Uses DOMParser to robustly handle HTML parsing and entity decoding.
- * This runs primarily in the browser (client-side ingestion).
+ * Uses DOMPurify (via sanitizer lib) for robust cleaning.
  *
  * @param input - The string to sanitize.
  * @param maxLength - The maximum allowed length (default: 255).
@@ -50,34 +50,13 @@ export function validateBookMetadata(data: any): data is BookMetadata {
 export function sanitizeString(input: string, maxLength: number = 255): string {
     if (typeof input !== 'string') return '';
 
-    // Primary Path: Use DOMParser (Browser/JSDOM)
-    if (typeof DOMParser !== 'undefined') {
-        try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(input, 'text/html');
+    // Use the robust DOMPurify-based sanitizer
+    const text = sanitizeMetadata(input);
 
-            // Remove script and style elements entirely to prevent their content from being included
-            const elementsToRemove = doc.querySelectorAll('script, style');
-            elementsToRemove.forEach(el => el.remove());
+    // Fallback if sanitizer returns empty but input wasn't (unlikely for plain text, but possible if it was all tags)
+    // If input was "<b>bold</b>", text is "bold".
 
-            const text = doc.body.textContent || '';
-            return text.trim().slice(0, maxLength);
-        } catch (e) {
-            console.error('DOMParser sanitization failed', e);
-        }
-    }
-
-    // Fail-Safe Fallback: If DOMParser is missing or fails (e.g., obscure env),
-    // we escape HTML characters. This degrades UX (visible tags) but guarantees safety,
-    // unlike the previous regex which could be bypassed.
-    console.warn('Using fallback HTML escaping for sanitization.');
-    return input
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;')
-        .trim().slice(0, maxLength);
+    return text.trim().slice(0, maxLength);
 }
 
 export interface SanitizationResult {

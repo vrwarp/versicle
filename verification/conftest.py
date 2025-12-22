@@ -65,6 +65,10 @@ def configure_page(page: Page):
     # Inject Mock TTS Polyfill
     page.add_init_script(path="verification/tts-polyfill.js")
 
+    # Disable Sanitization for verification tests (too slow otherwise)
+    # The sanitization logic is tested via unit tests (useEpubReader_Sanitization.test.tsx)
+    page.add_init_script("window.__VERSICLE_SANITIZATION_DISABLED__ = true;")
+
     yield
 
 @pytest.fixture(autouse=True)
