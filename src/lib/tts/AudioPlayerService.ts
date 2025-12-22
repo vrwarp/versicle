@@ -656,7 +656,7 @@ export class AudioPlayerService {
                   const item = this.queue[this.currentIndex];
                   // Only track if it's a valid content item (not a preroll)
                   if (item && item.cfi && !item.isPreroll) {
-                      dbService.updateReadingHistory(this.currentBookId, item.cfi).catch(console.error);
+                      dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, true).catch(console.error);
                   }
               }
 
@@ -679,6 +679,17 @@ export class AudioPlayerService {
   }
 
   private setStatus(status: TTSStatus) {
+      // Record TTS Session on Pause/Stop
+      const oldStatus = this.status;
+      if ((oldStatus === 'playing' || oldStatus === 'loading') && (status === 'paused' || status === 'stopped')) {
+           if (this.currentBookId && this.queue[this.currentIndex]) {
+               const item = this.queue[this.currentIndex];
+               if (item && item.cfi && !item.isPreroll) {
+                   dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, false).catch(console.error);
+               }
+           }
+      }
+
       // State transition validation (placeholder logic for now)
       if (this.status === 'stopped' && status === 'playing') { /* valid */ }
       else if (this.status === 'stopped' && status === 'loading') { /* valid */ }

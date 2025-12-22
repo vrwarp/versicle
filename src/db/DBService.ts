@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, TTSContent, SectionMetadata } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -703,9 +703,11 @@ class DBService {
    *
    * @param bookId - The unique identifier of the book.
    * @param newRange - The new CFI range to add.
+   * @param type - The source of the reading event.
+   * @param label - Optional contextual label.
    * @returns A Promise that resolves when the history is updated.
    */
-  async updateReadingHistory(bookId: string, newRange: string): Promise<void> {
+  async updateReadingHistory(bookId: string, newRange: string, type: ReadingEventType, label?: string, skipSession: boolean = false): Promise<void> {
       try {
           const db = await this.getDB();
           const tx = db.transaction('reading_history', 'readwrite');
@@ -725,22 +727,48 @@ class DBService {
           let updatedRanges = mergeCfiRanges(readRanges, newRange);
 
           // Enforce limit on history size to prevent unbounded growth
-          // We keep the last 100 merged ranges.
-          // Since merging usually reduces count, this is a safety net against
-          // pathological cases where merging fails or users skip around excessively.
           if (updatedRanges.length > 100) {
               updatedRanges = updatedRanges.slice(updatedRanges.length - 100);
           }
 
-          // Add new session
-          sessions.push({
-              cfiRange: newRange,
-              timestamp: Date.now()
-          });
+          if (!skipSession) {
+              // Coalescing Logic
+              const newTimestamp = Date.now();
+              const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
 
-          // Limit sessions size too
-          if (sessions.length > 100) {
-             sessions = sessions.slice(sessions.length - 100);
+              let shouldCoalesce = false;
+
+              if (lastSession && lastSession.type === type && type !== 'tts') {
+                   const timeDiff = newTimestamp - lastSession.timestamp;
+                   // 5 minutes = 300,000 ms
+                   if (timeDiff < 300000) {
+                       shouldCoalesce = true;
+                   }
+              }
+
+              if (shouldCoalesce && lastSession) {
+                  // Update last session
+                  lastSession.cfiRange = newRange;
+                  lastSession.timestamp = newTimestamp;
+                  if (label) lastSession.label = label;
+
+                  // Update in array
+                  sessions[sessions.length - 1] = lastSession;
+              } else {
+                  // Add new session
+                  const newSession: ReadingSession = {
+                      cfiRange: newRange,
+                      timestamp: newTimestamp,
+                      type: type,
+                      label: label
+                  };
+                  sessions.push(newSession);
+              }
+
+              // Limit sessions size too
+              if (sessions.length > 100) {
+                 sessions = sessions.slice(sessions.length - 100);
+              }
           }
 
           await store.put({

@@ -185,3 +185,34 @@ While the *Timeline* tracks distinct points, the *Coverage* tracks the ground co
 5.  **UI:** Update `ReadingHistoryPanel` to visualize the rich data.
 
 6.  **Migration:** Bump DB version and add the clear logic in `src/db/db.ts`.
+
+9\. Implementation Notes
+-----------------------
+
+### Deviations & Discoveries
+
+1.  **TTS History Tracking Location:**
+    -   Initially planned to implement tracking in `ReaderTTSController`.
+    -   **Deviation:** Moved tracking logic to `AudioPlayerService` (`src/lib/tts/AudioPlayerService.ts`).
+    -   **Reason:** `ReaderTTSController` is a UI component and unmounts when navigating away from the reader (e.g., to the library), which stops history tracking during background playback. `AudioPlayerService` is a singleton service that persists, ensuring reliable tracking of background audio sessions.
+
+2.  **TTS Coverage vs. Sessions:**
+    -   Implemented a `skipSession` flag in `updateReadingHistory` (`src/db/DBService.ts`).
+    -   `AudioPlayerService` updates *coverage* (`readRanges`) continuously as sentences complete (with `skipSession: true`).
+    -   It creates a *session* (timeline entry) only when playback is Paused or Stopped.
+    -   This prevents history spam (one entry per sentence) while maintaining accurate coverage data.
+
+3.  **Coalescing Logic:**
+    -   Implemented coalescing for `scroll` and `page` events within 5 minutes in `DBService`.
+    -   Explicitly excluded `tts` events from coalescing in `DBService` (when `skipSession` is false), as they are now discrete "Pause/Stop" events.
+
+4.  **Database Migration:**
+    -   Bumped Database version to 11 in `src/db/db.ts`.
+    -   Added logic to clear `reading_history` store on upgrade to ensure clean state and enforce semantic boundaries.
+
+5.  **Snap Logic:**
+    -   `snapCfiToSentence` (`src/lib/cfi-utils.ts`) uses `Intl.Segmenter` for robust sentence boundary detection, falling back to original CFI if unavailable.
+    -   Added `getRange` to `epubjs` type definition (`src/types/epubjs.d.ts`).
+
+6.  **Verification:**
+    -   Created `verification/verify_event_history.py` to end-to-end test the history generation, icon rendering, and label correctness using Playwright.

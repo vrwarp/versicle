@@ -24,7 +24,7 @@ import { searchClient, type SearchResult } from '../../lib/search';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import { ReaderTTSController } from './ReaderTTSController';
-import { generateCfiRange } from '../../lib/cfi-utils';
+import { generateCfiRange, snapCfiToSentence } from '../../lib/cfi-utils';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
 import { Button } from '../ui/Button';
@@ -123,20 +123,29 @@ export const ReaderView: React.FC = () => {
              const prevStart = previousLocation.current.start;
              const prevEnd = previousLocation.current.end;
              const duration = Date.now() - previousLocation.current.timestamp;
+             const mode = useReaderStore.getState().viewMode;
+             const isScroll = mode === 'scrolled';
+             const shouldSave = isScroll ? duration > 2000 : true;
 
-             // console.log(`[History] Check: prev=${prevStart}, curr=${location.start.cfi}, dur=${duration}`);
+             if (prevStart && prevEnd && prevStart !== location.start.cfi && shouldSave) {
+                 const currentBook = bookRef.current;
+                 if (currentBook) {
+                     Promise.all([
+                         snapCfiToSentence(currentBook, prevStart),
+                         snapCfiToSentence(currentBook, prevEnd)
+                     ]).then(([snappedStart, snappedEnd]) => {
+                         const range = generateCfiRange(snappedStart, snappedEnd);
+                         const type = isScroll ? 'scroll' : 'page';
+                         const label = useReaderStore.getState().currentChapterTitle || undefined;
 
-             // Ensure we don't save zero-length ranges (where start == current start)
-             // And enforce a Dwell Time of 2 seconds to avoid recording skips
-             if (prevStart && prevEnd && prevStart !== location.start.cfi && duration > 2000) {
-                 const range = generateCfiRange(prevStart, prevEnd);
-                 // console.log(`[History] Saving range: ${range}`);
-                 dbService.updateReadingHistory(id, range)
-                    .then(() => setHistoryTick(t => t + 1))
-                    .catch((err) => {
-                        console.error("History update failed", err);
-                        useToastStore.getState().showToast('Failed to save reading history', 'error');
-                    });
+                         dbService.updateReadingHistory(id, range, type, label)
+                            .then(() => setHistoryTick(t => t + 1))
+                            .catch((err) => {
+                                console.error("History update failed", err);
+                                useToastStore.getState().showToast('Failed to save reading history', 'error');
+                            });
+                     });
+                 }
              }
          }
          previousLocation.current = {
@@ -197,6 +206,11 @@ export const ReaderView: React.FC = () => {
       error: hookError
   } = useEpubReader(id, viewerRef, readerOptions);
 
+  const bookRef = useRef(book);
+  useEffect(() => {
+      bookRef.current = book;
+  }, [book]);
+
   // Sync loading state
   useEffect(() => {
       setIsLoading(hookLoading);
@@ -235,8 +249,19 @@ export const ReaderView: React.FC = () => {
              const prevStart = previousLocation.current.start;
              const prevEnd = previousLocation.current.end;
              if (prevStart && prevEnd) {
-                 const range = generateCfiRange(prevStart, prevEnd);
-                 dbService.updateReadingHistory(id, range).catch(console.error);
+                 const currentBook = bookRef.current;
+                 if (currentBook) {
+                     Promise.all([
+                         snapCfiToSentence(currentBook, prevStart),
+                         snapCfiToSentence(currentBook, prevEnd)
+                     ]).then(([snappedStart, snappedEnd]) => {
+                         const range = generateCfiRange(snappedStart, snappedEnd);
+                         const mode = useReaderStore.getState().viewMode;
+                         const type = mode === 'scrolled' ? 'scroll' : 'page';
+                         const label = useReaderStore.getState().currentChapterTitle || undefined;
+                         dbService.updateReadingHistory(id, range, type, label).catch(console.error);
+                     });
+                 }
              }
           }
       };

@@ -120,7 +120,8 @@ declare module 'epubjs' {
       spine: {
         get(target: string | number): Section;
         items: Section[];
-      }
+      };
+      getRange(cfi: string): Promise<Range>;
     }
 
     function ePub(data: string | ArrayBuffer, options?: BookOptions): Book;

@@ -1,4 +1,3 @@
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { dbService } from './DBService';
 
@@ -53,24 +52,15 @@ describe('DBService Reading History', () => {
         });
 
         it('handles corrupted history entry (missing readRanges)', async () => {
-            mockDB.get.mockResolvedValue({ someOtherProp: 'test' }); // Missing readRanges
+            mockDB.get.mockResolvedValue({ someOtherProp: 'test' });
 
             const result = await dbService.getReadingHistory('book1');
-            // Logic: return entry ? entry.readRanges : []
-            // entry exists, but readRanges is undefined.
-            // TS check would usually catch this, but runtime IDB can return anything.
-            expect(result).toBeUndefined(); // Or should it default to empty?
-            // Checking implementation: `return entry ? entry.readRanges : [];`
-            // If entry.readRanges is undefined, it returns undefined.
-            // Ideally it should return []. But let's verify current behavior first.
+            expect(result).toBeUndefined();
         });
 
         it('handles database errors gracefully', async () => {
              mockDB.get.mockRejectedValue(new Error('DB Connection Failed'));
              const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-             // The error handling in DBService calls handleError, which might throw or log.
-             // DBService.ts: handleError logs and throws.
 
              await expect(dbService.getReadingHistory('book1')).rejects.toThrow('An unexpected database error occurred');
              consoleSpy.mockRestore();
@@ -92,13 +82,15 @@ describe('DBService Reading History', () => {
             };
             mockDB.transaction.mockReturnValue(mockTx);
 
-            await dbService.updateReadingHistory(bookId, newRange);
+            await dbService.updateReadingHistory(bookId, newRange, 'page');
 
             expect(mockDB.transaction).toHaveBeenCalledWith('reading_history', 'readwrite');
             const putArg = mockTx.objectStore().put.mock.calls[0][0];
             expect(putArg.bookId).toBe(bookId);
             expect(putArg.readRanges).toEqual(['range1', 'range2', 'range3']);
             expect(putArg.lastUpdated).toBeDefined();
+            expect(putArg.sessions).toHaveLength(1);
+            expect(putArg.sessions[0].type).toBe('page');
         });
 
         it('creates new entry if none exists', async () => {
@@ -114,28 +106,79 @@ describe('DBService Reading History', () => {
             };
             mockDB.transaction.mockReturnValue(mockTx);
 
-            await dbService.updateReadingHistory(bookId, newRange);
+            await dbService.updateReadingHistory(bookId, newRange, 'page');
 
             const putArg = mockTx.objectStore().put.mock.calls[0][0];
             expect(putArg.bookId).toBe(bookId);
             expect(putArg.readRanges).toEqual(['range1']);
         });
 
-        it('handles concurrency race conditions (simulated)', async () => {
-             const bookId = 'book1';
+        it('coalesces scroll events within 5 minutes', async () => {
+            const bookId = 'book1';
+            const initialRange = 'range1';
+            const updatedRange = 'range2';
 
-             // Simulate a slow transaction
-             const mockTx = {
+            const now = Date.now();
+            const existingSession = {
+                cfiRange: initialRange,
+                timestamp: now - 1000, // 1 sec ago
+                type: 'scroll',
+                label: 'Chapter 1'
+            };
+
+            const mockTx = {
                 objectStore: vi.fn().mockReturnValue({
-                    get: vi.fn().mockResolvedValue({ readRanges: ['existing'] }),
+                    get: vi.fn().mockResolvedValue({
+                        readRanges: [],
+                        sessions: [existingSession]
+                    }),
                     put: vi.fn().mockResolvedValue(undefined),
                 }),
-                done: new Promise(resolve => setTimeout(resolve, 10)),
+                done: Promise.resolve(),
             };
             mockDB.transaction.mockReturnValue(mockTx);
 
-            await dbService.updateReadingHistory(bookId, 'new1');
-            expect(mockTx.objectStore().put).toHaveBeenCalledTimes(1);
+            await dbService.updateReadingHistory(bookId, updatedRange, 'scroll', 'Chapter 1');
+
+            const putArg = mockTx.objectStore().put.mock.calls[0][0];
+
+            // Should still have 1 session, but updated
+            expect(putArg.sessions).toHaveLength(1);
+            expect(putArg.sessions[0].cfiRange).toBe(updatedRange);
+            expect(putArg.sessions[0].type).toBe('scroll');
+        });
+
+        it('does NOT coalesce TTS events', async () => {
+            const bookId = 'book1';
+            const initialRange = 'range1';
+            const updatedRange = 'range2';
+
+            const now = Date.now();
+            const existingSession = {
+                cfiRange: initialRange,
+                timestamp: now - 1000,
+                type: 'tts',
+                label: 'Sentence 1'
+            };
+
+            const mockTx = {
+                objectStore: vi.fn().mockReturnValue({
+                    get: vi.fn().mockResolvedValue({
+                        readRanges: [],
+                        sessions: [existingSession]
+                    }),
+                    put: vi.fn().mockResolvedValue(undefined),
+                }),
+                done: Promise.resolve(),
+            };
+            mockDB.transaction.mockReturnValue(mockTx);
+
+            await dbService.updateReadingHistory(bookId, updatedRange, 'tts', 'Sentence 2');
+
+            const putArg = mockTx.objectStore().put.mock.calls[0][0];
+
+            // Should have 2 sessions
+            expect(putArg.sessions).toHaveLength(2);
         });
 
         it('throws error when transaction fails', async () => {
@@ -152,7 +195,7 @@ describe('DBService Reading History', () => {
 
             const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-            await expect(dbService.updateReadingHistory('book1', 'range1')).rejects.toThrow('An unexpected database error occurred');
+            await expect(dbService.updateReadingHistory('book1', 'range1', 'page')).rejects.toThrow('An unexpected database error occurred');
             consoleSpy.mockRestore();
         });
     });

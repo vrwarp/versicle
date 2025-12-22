@@ -128,8 +128,14 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 10, { // Upgrading to v10
-      upgrade(db) {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 11, { // Upgrading to v11
+      upgrade(db, oldVersion, _newVersion, transaction) {
+        // Migration to v11: Clear old reading history to enforce semantic boundaries
+        if (oldVersion < 11) {
+             if (db.objectStoreNames.contains('reading_history')) {
+                 transaction.objectStore('reading_history').clear();
+             }
+        }
         // Books store
         if (!db.objectStoreNames.contains('books')) {
           const booksStore = db.createObjectStore('books', { keyPath: 'id' });

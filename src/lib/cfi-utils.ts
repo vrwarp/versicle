@@ -1,4 +1,4 @@
-import { EpubCFI } from 'epubjs';
+import { EpubCFI, type Book } from 'epubjs';
 
 export interface CfiRangeData {
   parent: string;
@@ -150,5 +150,53 @@ export function generateEpubCfi(range: Range, baseCfi: string): string {
     } catch (e) {
         console.error("Error generating CFI", e);
         return "";
+    }
+}
+
+export async function snapCfiToSentence(book: Book, cfi: string): Promise<string> {
+    try {
+        if (!cfi || !cfi.includes('!')) return cfi;
+
+        const range = await book.getRange(cfi);
+        if (!range) return cfi;
+
+        const startNode = range.startContainer;
+        const startOffset = range.startOffset;
+
+        if (startNode.nodeType !== Node.TEXT_NODE) {
+            return cfi;
+        }
+
+        const text = startNode.textContent || '';
+
+        // Use Intl.Segmenter if available
+        if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+             const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' });
+             const segments = segmenter.segment(text);
+             let bestStart = 0;
+             for (const segment of segments) {
+                 if (segment.index <= startOffset) {
+                     bestStart = segment.index;
+                 } else {
+                     break;
+                 }
+             }
+
+             if (bestStart !== startOffset) {
+                 const newRange = document.createRange();
+                 newRange.setStart(startNode, bestStart);
+                 newRange.setEnd(startNode, bestStart);
+
+                 const baseCfi = cfi.split('!')[0] + '!';
+
+                 const newCfi = new EpubCFI(newRange, baseCfi).toString();
+                 return newCfi;
+             }
+        }
+
+        return cfi;
+    } catch (e) {
+        console.warn('snapCfiToSentence failed', e);
+        return cfi;
     }
 }
