@@ -9,11 +9,6 @@ def test_library_grid_list_toggle(page: Page):
     """
     print("Starting Library Grid/List Toggle Journey...")
 
-    # Check if running on mobile UA (via fixture) and skip if so.
-    ua = page.evaluate("navigator.userAgent")
-    if "Mobile" in ua or "Android" in ua or "iPhone" in ua:
-        pytest.skip("Skipping desktop view test on mobile User Agent")
-
     # Set desktop viewport
     page.set_viewport_size({"width": 1280, "height": 800})
     utils.reset_app(page)
@@ -47,11 +42,13 @@ def test_library_grid_list_toggle(page: Page):
 
     # Verify List View
     expect(toggle_btn).to_have_attribute("aria-label", "Switch to grid view")
-    book_list_item = page.locator("[data-testid^='book-list-item-']").first
+
+    # Find Alice specifically (since Frankenstein might be first due to sort order)
+    book_list_item = page.locator("[data-testid^='book-list-item-']").filter(has_text="Alice's Adventures in Wonderland").first
     expect(book_list_item).to_be_visible()
 
     # Verify Metadata in List Item
-    expect(book_list_item).to_contain_text("Lewis Carroll") # Alice
+    expect(book_list_item).to_contain_text("Lewis Carroll")
     expect(book_list_item.locator("img")).to_be_visible()
 
     utils.capture_screenshot(page, "library_view_2_list_mode")
