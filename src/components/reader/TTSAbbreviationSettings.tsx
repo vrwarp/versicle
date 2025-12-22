@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
+import { useShallow } from 'zustand/react/shallow';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../../lib/tts/TextSegmenter';
 import { X, Plus, RotateCcw, Download, Upload } from 'lucide-react';
 import { SimpleListCSV } from '../../lib/tts/CsvUtils';
@@ -194,7 +195,15 @@ export const TTSAbbreviationSettings: React.FC = () => {
         customAbbreviations, setCustomAbbreviations,
         alwaysMerge, setAlwaysMerge,
         sentenceStarters, setSentenceStarters
-    } = useTTSStore();
+    } = useTTSStore(useShallow(state => ({
+        // Optimization: Prevent re-renders on TTS playback ticks
+        customAbbreviations: state.customAbbreviations,
+        setCustomAbbreviations: state.setCustomAbbreviations,
+        alwaysMerge: state.alwaysMerge,
+        setAlwaysMerge: state.setAlwaysMerge,
+        sentenceStarters: state.sentenceStarters,
+        setSentenceStarters: state.setSentenceStarters
+    })));
 
     const defaultAbbreviations = [
         'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',

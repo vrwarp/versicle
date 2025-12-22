@@ -1,10 +1,16 @@
 import React from 'react';
 import { Play, Pause } from 'lucide-react';
 import { useTTSStore } from '../../store/useTTSStore';
+import { useShallow } from 'zustand/react/shallow';
 import { cn } from '../../lib/utils';
 
 export const SatelliteFAB: React.FC = () => {
-    const { isPlaying, play, pause } = useTTSStore();
+    const { isPlaying, play, pause } = useTTSStore(useShallow(state => ({
+        // Select only necessary state to prevent re-renders on every TTS progress update (activeCfi changes)
+        isPlaying: state.isPlaying,
+        play: state.play,
+        pause: state.pause
+    })));
 
     const handleToggle = () => {
         if (isPlaying) {

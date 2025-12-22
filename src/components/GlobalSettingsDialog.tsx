@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { useTTSStore } from '../store/useTTSStore';
+import { useShallow } from 'zustand/react/shallow';
 import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
@@ -104,7 +105,26 @@ export const GlobalSettingsDialog = () => {
         whiteNoiseVolume, setWhiteNoiseVolume,
         voice, voices, setVoice,
         downloadVoice, deleteVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded
-    } = useTTSStore();
+    } = useTTSStore(useShallow(state => ({
+        // Optimization: Use shallow selector to avoid re-renders on activeCfi/progress updates during playback
+        providerId: state.providerId,
+        setProviderId: state.setProviderId,
+        apiKeys: state.apiKeys,
+        setApiKey: state.setApiKey,
+        backgroundAudioMode: state.backgroundAudioMode,
+        setBackgroundAudioMode: state.setBackgroundAudioMode,
+        whiteNoiseVolume: state.whiteNoiseVolume,
+        setWhiteNoiseVolume: state.setWhiteNoiseVolume,
+        voice: state.voice,
+        voices: state.voices,
+        setVoice: state.setVoice,
+        downloadVoice: state.downloadVoice,
+        deleteVoice: state.deleteVoice,
+        downloadProgress: state.downloadProgress,
+        downloadStatus: state.downloadStatus,
+        isDownloading: state.isDownloading,
+        checkVoiceDownloaded: state.checkVoiceDownloaded
+    })));
 
     const [isVoiceReady, setIsVoiceReady] = useState(false);
 
