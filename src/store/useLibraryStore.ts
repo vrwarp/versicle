@@ -20,6 +20,10 @@ interface LibraryState {
   importProgress: number;
   /** Status message of the current import. */
   importStatus: string;
+  /** Progress percentage of the current upload/extraction (0-100). */
+  uploadProgress: number;
+  /** Status message of the current upload/extraction. */
+  uploadStatus: string;
   /** Error message if an operation failed, or null. */
   error: string | null;
   /** The current view mode of the library. */
@@ -75,6 +79,8 @@ export const useLibraryStore = create<LibraryState>()(
       isImporting: false,
       importProgress: 0,
       importStatus: '',
+      uploadProgress: 0,
+      uploadStatus: '',
       error: null,
       viewMode: 'grid',
 
@@ -82,111 +88,144 @@ export const useLibraryStore = create<LibraryState>()(
 
       fetchBooks: async () => {
         set({ isLoading: true, error: null });
-    try {
-      const books = await dbService.getLibrary();
-      set({ books, isLoading: false });
-    } catch (err) {
-      console.error('Failed to fetch books:', err);
-      set({ error: 'Failed to load library.', isLoading: false });
-    }
-  },
+        try {
+          const books = await dbService.getLibrary();
+          set({ books, isLoading: false });
+        } catch (err) {
+          console.error('Failed to fetch books:', err);
+          set({ error: 'Failed to load library.', isLoading: false });
+        }
+      },
 
-  addBook: async (file: File) => {
-    set({ isImporting: true, importProgress: 0, importStatus: 'Starting import...', error: null });
-    try {
-      const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
-      await dbService.addBook(file, {
-          abbreviations: customAbbreviations,
-          alwaysMerge,
-          sentenceStarters,
-          sanitizationEnabled
-      }, (progress, message) => {
-          set({ importProgress: progress, importStatus: message });
-      });
-      // Refresh library
-      await get().fetchBooks();
-      set({ isImporting: false, importProgress: 0, importStatus: '' });
-    } catch (err) {
-      console.error('Failed to import book:', err);
-      let errorMessage = 'Failed to import book.';
-      if (err instanceof StorageFullError) {
-          errorMessage = 'Device storage full. Please delete some books.';
-      }
-      set({ error: errorMessage, isImporting: false, importProgress: 0, importStatus: '' });
-      throw err; // Re-throw so components can handle UI feedback (e.g. Toasts)
-    }
-  },
-
-  addBooks: async (files: File[]) => {
-      set({ isImporting: true, importProgress: 0, importStatus: 'Analyzing files...', error: null });
-      try {
+      addBook: async (file: File) => {
+        set({
+            isImporting: true,
+            importProgress: 0,
+            importStatus: 'Starting import...',
+            uploadProgress: 0,
+            uploadStatus: '',
+            error: null
+        });
+        try {
           const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
-          await processBatchImport(
-              files,
-              {
-                  abbreviations: customAbbreviations,
-                  alwaysMerge,
-                  sentenceStarters,
-                  sanitizationEnabled
-              },
-              (processed, total, filename) => {
-                  const percent = Math.round((processed / total) * 100);
-                  set({
-                      importProgress: percent,
-                      importStatus: `Importing ${processed + 1} of ${total}: ${filename}`
-                  });
-              }
-          );
+          await dbService.addBook(file, {
+              abbreviations: customAbbreviations,
+              alwaysMerge,
+              sentenceStarters,
+              sanitizationEnabled
+          }, (progress, message) => {
+              set({ importProgress: progress, importStatus: message });
+          });
           // Refresh library
           await get().fetchBooks();
           set({ isImporting: false, importProgress: 0, importStatus: '' });
-      } catch (err) {
-          console.error('Failed to batch import books:', err);
-          let errorMessage = 'Failed to import books.';
+        } catch (err) {
+          console.error('Failed to import book:', err);
+          let errorMessage = 'Failed to import book.';
           if (err instanceof StorageFullError) {
               errorMessage = 'Device storage full. Please delete some books.';
           }
           set({ error: errorMessage, isImporting: false, importProgress: 0, importStatus: '' });
-          throw err;
-      }
-  },
+          throw err; // Re-throw so components can handle UI feedback (e.g. Toasts)
+        }
+      },
 
-  removeBook: async (id: string) => {
-    try {
-      await dbService.deleteBook(id);
-      await get().fetchBooks();
-    } catch (err) {
-      console.error('Failed to remove book:', err);
-      set({ error: 'Failed to remove book.' });
-    }
-  },
+      addBooks: async (files: File[]) => {
+          set({
+              isImporting: true,
+              importProgress: 0,
+              importStatus: 'Pending...',
+              uploadProgress: 0,
+              uploadStatus: 'Starting processing...',
+              error: null
+          });
+          try {
+              const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+              await processBatchImport(
+                  files,
+                  {
+                      abbreviations: customAbbreviations,
+                      alwaysMerge,
+                      sentenceStarters,
+                      sanitizationEnabled
+                  },
+                  (processed, total, filename) => {
+                      const percent = Math.round((processed / total) * 100);
+                      set({
+                          importProgress: percent,
+                          importStatus: `Importing ${processed + 1} of ${total}: ${filename}`
+                      });
+                  },
+                  (percent, status) => {
+                      set({
+                          uploadProgress: percent,
+                          uploadStatus: status
+                      });
+                  }
+              );
+              // Refresh library
+              await get().fetchBooks();
+              set({
+                  isImporting: false,
+                  importProgress: 0,
+                  importStatus: '',
+                  uploadProgress: 0,
+                  uploadStatus: ''
+              });
+          } catch (err) {
+              console.error('Failed to batch import books:', err);
+              let errorMessage = 'Failed to import books.';
+              if (err instanceof StorageFullError) {
+                  errorMessage = 'Device storage full. Please delete some books.';
+              }
+              set({
+                  error: errorMessage,
+                  isImporting: false,
+                  importProgress: 0,
+                  importStatus: '',
+                  uploadProgress: 0,
+                  uploadStatus: ''
+              });
+              throw err;
+          }
+      },
 
-  offloadBook: async (id: string) => {
-    try {
-      await dbService.offloadBook(id);
-      await get().fetchBooks();
-    } catch (err) {
-      console.error('Failed to offload book:', err);
-      set({ error: 'Failed to offload book.' });
-    }
-  },
+      removeBook: async (id: string) => {
+        try {
+          await dbService.deleteBook(id);
+          await get().fetchBooks();
+        } catch (err) {
+          console.error('Failed to remove book:', err);
+          set({ error: 'Failed to remove book.' });
+        }
+      },
 
-  restoreBook: async (id: string, file: File) => {
-    set({ isImporting: true, error: null });
-    try {
-      await dbService.restoreBook(id, file);
-      await get().fetchBooks();
-      set({ isImporting: false });
-    } catch (err) {
-      console.error('Failed to restore book:', err);
-      // Ensure we expose the error message to the UI
-      set({ error: err instanceof Error ? err.message : 'Failed to restore book.', isImporting: false });
+      offloadBook: async (id: string) => {
+        try {
+          await dbService.offloadBook(id);
+          await get().fetchBooks();
+        } catch (err) {
+          console.error('Failed to offload book:', err);
+          set({ error: 'Failed to offload book.' });
+        }
+      },
+
+      restoreBook: async (id: string, file: File) => {
+        set({ isImporting: true, error: null });
+        try {
+          await dbService.restoreBook(id, file);
+          await get().fetchBooks();
+          set({ isImporting: false });
+        } catch (err) {
+          console.error('Failed to restore book:', err);
+          // Ensure we expose the error message to the UI
+          set({ error: err instanceof Error ? err.message : 'Failed to restore book.', isImporting: false });
+        }
+      },
+    }),
+    {
+      name: 'library-storage',
+      partialize: (state) => ({ viewMode: state.viewMode }),
     }
-  },
-}),
-{
-  name: 'library-storage',
-  partialize: (state) => ({ viewMode: state.viewMode }),
-}
-)
+  )
 );

@@ -22,6 +22,16 @@ vi.mock('jszip', () => {
     };
 });
 
+// Mock FileReader
+global.FileReader = class {
+    readAsArrayBuffer() {
+        // immediately trigger onload with dummy buffer
+        // @ts-ignore
+        this.onload({ target: { result: new ArrayBuffer(8) } });
+    }
+} as any;
+
+
 describe('batch-ingestion', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -66,6 +76,37 @@ describe('batch-ingestion', () => {
             mockLoadAsync.mockRejectedValue(new Error('Corrupted zip'));
 
             await expect(extractEpubsFromZip(zipFile)).rejects.toThrow('Failed to process ZIP file');
+        });
+
+        it('should report progress when onProgress is provided', async () => {
+             const zipFile = new File(['dummy zip content'], 'books.zip', { type: 'application/zip' });
+             const onProgress = vi.fn();
+
+             // Override mock FileReader to support progress testing if needed,
+             // but here we just check if it runs without crashing given our global mock.
+             // Our simple global mock calls onload immediately, skipping progress events unless we enhance it.
+             // Enhancing global mock for this test:
+
+             const originalFileReader = global.FileReader;
+             global.FileReader = class {
+                 readAsArrayBuffer() {
+                     // @ts-ignore
+                     if (this.onprogress) this.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
+                     // @ts-ignore
+                     this.onload({ target: { result: new ArrayBuffer(8) } });
+                 }
+             } as any;
+
+             mockLoadAsync.mockResolvedValue({
+                 files: {},
+                 forEach: () => {}
+             });
+
+             await extractEpubsFromZip(zipFile, onProgress);
+
+             expect(onProgress).toHaveBeenCalled();
+
+             global.FileReader = originalFileReader;
         });
     });
 
@@ -128,7 +169,7 @@ describe('batch-ingestion', () => {
              expect(successCount).toBe(1);
         });
 
-        it('should report progress', async () => {
+        it('should report import progress', async () => {
             const file1 = new File(['content'], 'book1.epub');
             const file2 = new File(['content'], 'book2.epub');
             const onProgress = vi.fn();
@@ -138,6 +179,16 @@ describe('batch-ingestion', () => {
             expect(onProgress).toHaveBeenCalledTimes(2);
             expect(onProgress).toHaveBeenCalledWith(0, 2, 'book1.epub');
             expect(onProgress).toHaveBeenCalledWith(1, 2, 'book2.epub');
+        });
+
+        it('should report upload progress', async () => {
+            const file1 = new File(['content'], 'book1.epub');
+            const onUploadProgress = vi.fn();
+
+            await processBatchImport([file1], undefined, undefined, onUploadProgress);
+
+            expect(onUploadProgress).toHaveBeenCalled();
+            expect(onUploadProgress).toHaveBeenLastCalledWith(100, expect.stringContaining('All files processed'));
         });
     });
 });
