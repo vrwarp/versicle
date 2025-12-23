@@ -28,7 +28,12 @@ export const FileUploader: React.FC = () => {
                showToast(`Invalid EPUB file (header mismatch): ${file.name}`, 'error');
            }
       } else if (lowerName.endsWith('.zip')) {
-          await addBooks([file]);
+          const isValid = await validateEpubFile(file);
+          if (isValid) {
+              await addBooks([file]);
+          } else {
+              showToast(`Invalid ZIP file (header mismatch): ${file.name}`, 'error');
+          }
       } else {
            showToast(`Unsupported file type: ${file.name}`, 'error');
       }
@@ -41,9 +46,27 @@ export const FileUploader: React.FC = () => {
       if (files.length === 1) {
           await processSingleFile(files[0]);
       } else {
-          await addBooks(files);
+          // Validate all files before passing to batch import
+          const validFiles: File[] = [];
+          for (const file of files) {
+              const lowerName = file.name.toLowerCase();
+              if (lowerName.endsWith('.epub') || lowerName.endsWith('.zip')) {
+                   const isValid = await validateEpubFile(file);
+                   if (isValid) {
+                       validFiles.push(file);
+                   } else {
+                       showToast(`Skipping invalid file: ${file.name}`, 'error');
+                   }
+              } else {
+                   showToast(`Skipping unsupported file: ${file.name}`, 'error');
+              }
+          }
+
+          if (validFiles.length > 0) {
+              await addBooks(validFiles);
+          }
       }
-  }, [addBooks, processSingleFile]);
+  }, [addBooks, processSingleFile, showToast]);
 
   /**
    * Handles drag events.
