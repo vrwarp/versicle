@@ -95,6 +95,8 @@ export function useEpubReader(
   useEffect(() => {
     if (!bookId || !viewerRef.current) return;
 
+    let active = true;
+
     const loadBook = async () => {
       setIsLoading(true);
       setError(null);
@@ -102,6 +104,8 @@ export function useEpubReader(
 
       try {
         const { file: fileData, metadata: meta } = await dbService.getBook(bookId);
+
+        if (!active) return;
 
         if (!fileData) {
           throw new Error('Book file not found');
@@ -165,6 +169,7 @@ export function useEpubReader(
 
         // Load navigation
         const nav = await newBook.loaded.navigation;
+        if (!active) return;
         setToc(nav.toc);
         if (optionsRef.current.onTocLoaded) {
             optionsRef.current.onTocLoaded(nav.toc);
@@ -195,6 +200,7 @@ export function useEpubReader(
         // Try to infer better start location from reading history (end of last session)
         try {
             const history = await dbService.getReadingHistory(bookId);
+            if (!active) return;
             if (history && history.length > 0) {
                 const lastRange = history[history.length - 1];
                 const parsed = parseCfiRange(lastRange);
@@ -206,8 +212,10 @@ export function useEpubReader(
             console.error("Failed to load history for start location", e);
         }
 
+        if (!active) return;
         await newRendition.display(startLocation);
 
+        if (!active) return;
         setIsReady(true);
 
         // Location Generation
@@ -236,14 +244,18 @@ export function useEpubReader(
         };
 
         const savedLocations = await dbService.getLocations(bookId);
+        if (!active) return;
+
         if (savedLocations) {
             newBook.locations.load(savedLocations.locations);
             updateProgress();
         } else {
             // Generate in background
             newBook.locations.generate(1000).then(async () => {
+                 if (!active) return;
                  const locationStr = newBook.locations.save();
                  await dbService.saveLocations(bookId, locationStr);
+                 if (!active) return;
                  updateProgress();
             });
         }
@@ -351,18 +363,22 @@ export function useEpubReader(
         (newRendition as any).getContents().forEach((contents: any) => injectExtras(contents));
 
       } catch (err) {
+        if (!active) return;
         console.error('Error loading book:', err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error loading book';
         setError(errorMessage);
         if (optionsRef.current.onError) optionsRef.current.onError(errorMessage);
       } finally {
-        setIsLoading(false);
+        if (active) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadBook();
 
     return () => {
+      active = false;
       if (bookRef.current) {
         bookRef.current.destroy();
         bookRef.current = null;
