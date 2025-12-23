@@ -28,6 +28,7 @@ vi.mock('epubjs', () => {
             hooks: { content: { register: vi.fn() } },
             spread: vi.fn(),
             flow: vi.fn(),
+            getContents: vi.fn().mockReturnValue([]),
         };
       }),
       loaded: { navigation: Promise.resolve({ toc: [] }) },
