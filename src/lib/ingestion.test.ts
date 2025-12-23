@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { processEpub, validateEpubFile } from './ingestion';
+import { processEpub, validateZipSignature } from './ingestion';
 import { getDB } from '../db/db';
 
 // Mock offscreen renderer
@@ -84,15 +84,15 @@ describe('ingestion', () => {
       return file;
   };
 
-  it('validateEpubFile should return true for valid zip signature', async () => {
+  it('validateZipSignature should return true for valid zip signature', async () => {
       const file = createMockFile(true);
-      const isValid = await validateEpubFile(file);
+      const isValid = await validateZipSignature(file);
       expect(isValid).toBe(true);
   });
 
-  it('validateEpubFile should return false for invalid signature', async () => {
+  it('validateZipSignature should return false for invalid signature', async () => {
       const file = createMockFile(false);
-      const isValid = await validateEpubFile(file);
+      const isValid = await validateZipSignature(file);
       expect(isValid).toBe(false);
   });
 

@@ -6,7 +6,7 @@ import { processEpub } from './ingestion';
 // Mock dependencies
 vi.mock('./ingestion', () => ({
     processEpub: vi.fn(),
-    validateEpubFile: vi.fn().mockResolvedValue(true),
+    validateZipSignature: vi.fn().mockResolvedValue(true),
 }));
 
 const { mockLoadAsync, mockAsync } = vi.hoisted(() => ({

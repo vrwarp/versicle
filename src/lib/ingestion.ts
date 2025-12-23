@@ -52,7 +52,7 @@ export async function generateFileFingerprint(
  * @param file - The file to validate.
  * @returns A Promise resolving to true if valid, false otherwise.
  */
-export async function validateEpubFile(file: File): Promise<boolean> {
+export async function validateZipSignature(file: File): Promise<boolean> {
     try {
         const buffer = await file.slice(0, 4).arrayBuffer();
         const view = new DataView(buffer);
@@ -82,7 +82,7 @@ export async function processEpub(
   onProgress?: (progress: number, message: string) => void
 ): Promise<string> {
   // 1. Security Check: Validate File Header
-  const isValid = await validateEpubFile(file);
+  const isValid = await validateZipSignature(file);
   if (!isValid) {
       throw new Error("Invalid file format. File must be a valid EPUB (ZIP archive).");
   }
