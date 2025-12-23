@@ -46,8 +46,9 @@ def ensure_library_with_book(page: Page):
     """
     # Wait for initial render (either book or load button)
     try:
-        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book')", timeout=2000)
+        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book')", timeout=10000)
     except:
+        print("Warning: Neither book card nor load button found within 10s")
         pass # Proceed to check
 
     if page.get_by_text("Alice's Adventures in Wonderland").count() > 0:

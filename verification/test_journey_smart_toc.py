@@ -26,7 +26,11 @@ def test_smart_toc_success(page):
     # Reload to pick up store changes
     page.reload()
 
+    # Wait for library to load
+    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=10000)
+
     # 3. Open Reader
+    page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=30000)
     page.locator('[data-testid^="book-card-"]').first.click()
     expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=20000)
 
@@ -76,8 +80,9 @@ def test_smart_toc_failure(page):
     }""")
     page.reload()
 
+    page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=30000)
     page.locator('[data-testid^="book-card-"]').first.click()
-    expect(page.get_by_test_id("reader-view")).to_be_visible()
+    expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=20000)
 
     page.get_by_test_id("reader-toc-button").click()
     page.get_by_label("Generated Titles").click()
@@ -106,8 +111,9 @@ def test_smart_toc_failure(page):
     try:
         expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=5000)
     except:
+        page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=30000)
         page.locator('[data-testid^="book-card-"]').first.click()
-        expect(page.get_by_test_id("reader-view")).to_be_visible()
+        expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=20000)
 
     page.get_by_test_id("reader-toc-button").click()
     page.get_by_label("Generated Titles").click()

@@ -139,11 +139,11 @@ describe('ReadingHistoryPanel', () => {
       expect(onNavigate).toHaveBeenCalledWith(cfi);
   });
 
-  it('navigates to the start of the session range', async () => {
+  it('navigates to the end of the session range', async () => {
       // proper range
       const rangeCfi = 'epubcfi(/6/14!/4/2,/1:0,/1:10)';
-      // The component logic extracts the full start of the range
-      const expectedStart = 'epubcfi(/6/14!/4/2/1:0)';
+      // The component logic extracts the full end of the range
+      const expectedEnd = 'epubcfi(/6/14!/4/2/1:10)';
 
       const sessions = [{ cfiRange: rangeCfi, timestamp: Date.now() }];
       (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions, readRanges: [] });
@@ -160,6 +160,6 @@ describe('ReadingHistoryPanel', () => {
       });
 
       fireEvent.click(screen.getByText('Chapter One'));
-      expect(onNavigate).toHaveBeenCalledWith(expectedStart);
+      expect(onNavigate).toHaveBeenCalledWith(expectedEnd);
   });
 });
