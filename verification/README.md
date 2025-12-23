@@ -11,7 +11,7 @@ This directory contains the Playwright-based visual verification tests for Versi
 
 *   **`__init__.py`**: Python package marker.
 *   **`conftest.py`**: Pytest configuration file. It defines fixtures for setting up the Playwright browser context, including mobile emulation and timeout settings.
-*   **`run_all.py`**: The master script to execute all verification tests. It invokes `pytest`.
+*   **`run_all.py`**: The master script to execute all verification tests. It invokes `pytest`. Defaults to parallel execution (`-n auto`) unless overridden (e.g., `-n 0` for serial).
 *   **`utils.py`**: Contains helper functions for tests, such as `reset_app` (to clear state and load the app) and `capture_screenshot`.
 
 ## Test Scripts

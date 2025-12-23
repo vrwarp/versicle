@@ -20,7 +20,7 @@ RUN npm ci
 
 # Install Python dependencies
 # We pin playwright to 1.48.0 to match the base image's browser binaries.
-RUN pip install pytest pytest-playwright playwright==1.48.0
+RUN pip install pytest pytest-playwright pytest-xdist playwright==1.48.0
 RUN playwright install
 
 # 3. Copy Source Code

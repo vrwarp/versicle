@@ -12,6 +12,11 @@ def main():
     # Base command
     cmd = [sys.executable, "-m", "pytest", "verification/"]
 
+    # Check if user provided -n or --numprocesses argument to control parallelism
+    if not any(arg.startswith("-n") or arg.startswith("--numprocesses") for arg in sys.argv):
+        # Default to auto parallelism (utilize all available cores)
+        cmd.extend(["-n", "auto"])
+
     # Append any arguments passed to this script (e.g. --update-snapshots)
     # sys.argv[0] is the script name, so we take everything after it.
     cmd.extend(sys.argv[1:])
