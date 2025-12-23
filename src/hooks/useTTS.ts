@@ -43,12 +43,5 @@ export const useTTS = () => {
 
   }, [player, currentBookId, currentSectionId]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-      return () => {
-          player.stop();
-      };
-  }, [player]);
-
   return {};
 };
