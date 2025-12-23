@@ -44,7 +44,8 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
          if (viewMode === 'paginated') {
              let alreadyVisible = false;
              try {
-                 // Optimization: Check if activeCfi is already visible on the current page to avoid expensive re-render/calculation
+                 // Optimization: Skip expensive page turns if the text is already visible.
+                 // We check if the activeCfi falls within the current page's start/end range.
                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                  const location = (rendition as any).location;
                  if (location && location.start && location.end) {
