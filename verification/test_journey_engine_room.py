@@ -29,7 +29,7 @@ def test_engine_room_journey(page: Page):
     expect(page.get_by_role("button", name="Dictionary")).to_be_visible()
 
     # Check General Tab Content (default)
-    expect(page.get_by_role("heading", name="Interaction")).to_be_visible()
+    expect(page.get_by_role("heading", name="Advanced Import")).to_be_visible()
 
     # Switch to TTS
     page.get_by_role("button", name="TTS Engine").click()
@@ -57,7 +57,7 @@ def test_engine_room_journey(page: Page):
     # Capture General Tab
     # In the React component, the active tab uses Button variant="secondary" which doesn't set data-state="active".
     # Instead, we should check if it has the secondary background color class, or just take the screenshot as verified by visibility of content.
-    # Since we already verified "Interaction" is visible, we are on General tab.
+    # Since we already verified "Advanced Import" is visible, we are on General tab.
     utils.capture_screenshot(page, "settings_01_general")
 
     # Capture Dictionary Tab

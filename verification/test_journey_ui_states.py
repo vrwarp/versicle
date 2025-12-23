@@ -4,7 +4,7 @@ from verification import utils
 
 # Updated to match GlobalSettingsDialog.tsx
 TABS = [
-    ("General", "General", "Interaction"),
+    ("General", "General", "Advanced Import"),
     ("TTS", "TTS Engine", "Provider Configuration"),
     ("GenAI", "Generative AI", "Generative AI Configuration"),
     ("Dictionary", "Dictionary", "Pronunciation Lexicon"),
