@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { Rendition } from 'epubjs';
+import { EpubCFI } from 'epubjs';
 import { useTTSStore } from '../../store/useTTSStore';
 
 interface ReaderTTSControllerProps {
@@ -41,11 +42,35 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
       const syncVisuals = () => {
          // Auto-turn page in paginated mode
          if (viewMode === 'paginated') {
-             // Non-blocking display call
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (rendition as any).display(activeCfi).catch((err: unknown) => {
-                 console.warn("[TTS] Sync skipped", err);
-             });
+             let alreadyVisible = false;
+             try {
+                 // Optimization: Check if activeCfi is already visible on the current page to avoid expensive re-render/calculation
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 const location = (rendition as any).location;
+                 if (location && location.start && location.end) {
+                     const cfi = new EpubCFI();
+                     // Check if activeCfi is >= start AND activeCfi <= end
+                     // compare(a, b): -1 if a < b, 1 if a > b, 0 if equal
+                     // active >= start  => start <= active => compare(start, active) <= 0
+                     // active <= end    => compare(active, end) <= 0
+
+                     if (cfi.compare(location.start.cfi, activeCfi) <= 0 &&
+                         cfi.compare(activeCfi, location.end.cfi) <= 0) {
+                         alreadyVisible = true;
+                     }
+                 }
+             } catch (e) {
+                 // Fallback to safe behavior
+                 console.warn("[TTS] Visibility check failed", e);
+             }
+
+             if (!alreadyVisible) {
+                 // Non-blocking display call
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 (rendition as any).display(activeCfi).catch((err: unknown) => {
+                     console.warn("[TTS] Sync skipped", err);
+                 });
+             }
          }
 
          // Add highlight
