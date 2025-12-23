@@ -12,7 +12,7 @@ import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { ForegroundService, Importance } from '@capawesome-team/capacitor-android-foreground-service';
 import { AudioPlayerService } from './lib/tts/AudioPlayerService';
 
@@ -61,6 +61,9 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let listenerHandlePromise: Promise<PluginListenerHandle> | null = null;
+    let isMounted = true;
+
     const initAndroid = async () => {
       if (Capacitor.getPlatform() === 'android') {
         try {
@@ -74,13 +77,17 @@ function App() {
               importance: Importance.Default
           });
 
+          if (!isMounted) return;
+
           // 2. Listen for "Pause" button clicks on the notification itself
-          await ForegroundService.addListener('buttonClicked', async (event) => {
+          listenerHandlePromise = ForegroundService.addListener('buttonClicked', async (event) => {
               if (event.buttonId === 101) {
                   // Map the notification button to our Service logic
                   AudioPlayerService.getInstance().pause();
               }
           });
+
+          await listenerHandlePromise;
         } catch (error) {
            console.error('Failed to initialize Android services:', error);
         }
@@ -88,6 +95,13 @@ function App() {
     };
 
     initAndroid();
+
+    return () => {
+      isMounted = false;
+      if (listenerHandlePromise) {
+        listenerHandlePromise.then(handle => handle.remove().catch(console.error));
+      }
+    };
   }, []);
 
   const handleReset = async () => {

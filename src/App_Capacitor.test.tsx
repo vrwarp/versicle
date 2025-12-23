@@ -41,7 +41,7 @@ vi.mock('@capacitor/core', () => ({
 vi.mock('@capawesome-team/capacitor-android-foreground-service', () => ({
   ForegroundService: {
     createNotificationChannel: vi.fn().mockResolvedValue(undefined),
-    addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
+    addListener: vi.fn().mockResolvedValue({ remove: vi.fn().mockResolvedValue(undefined) }),
   },
   Importance: { Default: 3 }
 }));
@@ -103,7 +103,7 @@ describe('App Capacitor Initialization', () => {
     let listenerCallback: any;
     (ForegroundService.addListener as any).mockImplementation((event: string, callback: any) => {
         listenerCallback = callback;
-        return Promise.resolve({ remove: vi.fn() });
+        return Promise.resolve({ remove: vi.fn().mockResolvedValue(undefined) });
     });
 
     render(<App />);
@@ -114,5 +114,25 @@ describe('App Capacitor Initialization', () => {
     }
 
     expect(pauseMock).toHaveBeenCalled();
+  });
+
+  it('should remove event listener when unmounting', async () => {
+    (Capacitor.getPlatform as any).mockReturnValue('android');
+    const removeMock = vi.fn().mockResolvedValue(undefined);
+    (ForegroundService.addListener as any).mockResolvedValue({ remove: removeMock });
+
+    const { unmount } = render(<App />);
+
+    // Wait for effects
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ForegroundService.addListener).toHaveBeenCalled();
+
+    unmount();
+
+    // Wait for cleanup
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(removeMock).toHaveBeenCalled();
   });
 });
