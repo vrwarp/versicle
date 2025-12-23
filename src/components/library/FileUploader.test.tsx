@@ -4,13 +4,13 @@ import React from 'react';
 import { FileUploader } from './FileUploader';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
-import { validateEpubFile } from '../../lib/ingestion';
+import { validateZipSignature } from '../../lib/ingestion';
 
 // Mock dependencies
 vi.mock('../../store/useLibraryStore');
 vi.mock('../../store/useToastStore');
 vi.mock('../../lib/ingestion', () => ({
-  validateEpubFile: vi.fn(),
+  validateZipSignature: vi.fn(),
 }));
 
 describe('FileUploader', () => {
@@ -34,12 +34,12 @@ describe('FileUploader', () => {
     });
 
     // Mock validation to pass by default
-    (validateEpubFile as Mock).mockResolvedValue(true);
+    (validateZipSignature as Mock).mockResolvedValue(true);
   });
 
   it('should render upload instructions', () => {
     render(<FileUploader />);
-    expect(screen.getByText(/Drop your EPUB here/)).toBeInTheDocument();
+    expect(screen.getByText(/Drop EPUBs or ZIPs here/)).toBeInTheDocument();
   });
 
   it('should handle file selection', async () => {
@@ -54,7 +54,7 @@ describe('FileUploader', () => {
     fireEvent.change(input!, { target: { files: [file] } });
 
     await waitFor(() => {
-        expect(validateEpubFile).toHaveBeenCalledWith(file);
+        expect(validateZipSignature).toHaveBeenCalledWith(file);
         expect(mockAddBook).toHaveBeenCalledWith(file);
     });
   });
@@ -77,15 +77,18 @@ describe('FileUploader', () => {
     (useLibraryStore as any).mockReturnValue({
       addBook: mockAddBook,
       isImporting: true,
+      importStatus: 'Importing books...',
     });
 
     render(<FileUploader />);
-    expect(screen.getByText('Importing book...')).toBeInTheDocument();
+    expect(screen.getByText('Importing books...')).toBeInTheDocument();
   });
 
   it('should handle drag and drop', async () => {
     const { container } = render(<FileUploader />);
-    const dropZone = container.firstChild as HTMLElement;
+    // Select the drop zone div (nested inside the wrapper)
+    const dropZone = container.querySelector('.group.relative') as HTMLElement;
+    expect(dropZone).toBeInTheDocument();
 
     // Drag enter
     fireEvent.dragEnter(dropZone);
@@ -111,7 +114,7 @@ describe('FileUploader', () => {
 
   it('should reject non-epub extension files', async () => {
     const { container } = render(<FileUploader />);
-    const dropZone = container.firstChild as HTMLElement;
+    const dropZone = container.querySelector('.group.relative') as HTMLElement;
 
     const file = new File(['dummy'], 'test.pdf', { type: 'application/pdf' });
     fireEvent.drop(dropZone, {
@@ -122,13 +125,13 @@ describe('FileUploader', () => {
 
     await waitFor(() => {
         expect(mockAddBook).not.toHaveBeenCalled();
-        expect(mockShowToast).toHaveBeenCalledWith('Only .epub files are supported', 'error');
+        expect(mockShowToast).toHaveBeenCalledWith('Unsupported file type: test.pdf', 'error');
     });
   });
 
   it('should reject epub files with invalid content', async () => {
       // Mock validation to fail
-      (validateEpubFile as Mock).mockResolvedValue(false);
+      (validateZipSignature as Mock).mockResolvedValue(false);
 
       const { container } = render(<FileUploader />);
       const input = container.querySelector('input[type="file"]');
@@ -138,9 +141,27 @@ describe('FileUploader', () => {
       fireEvent.change(input!, { target: { files: [file] } });
 
       await waitFor(() => {
-          expect(validateEpubFile).toHaveBeenCalledWith(file);
+          expect(validateZipSignature).toHaveBeenCalledWith(file);
           expect(mockAddBook).not.toHaveBeenCalled();
-          expect(mockShowToast).toHaveBeenCalledWith('Invalid EPUB file (header mismatch)', 'error');
+          expect(mockShowToast).toHaveBeenCalledWith('Invalid EPUB file (header mismatch): test.epub', 'error');
+      });
+  });
+
+  it('should reject zip files with invalid content', async () => {
+      // Mock validation to fail
+      (validateZipSignature as Mock).mockResolvedValue(false);
+
+      const { container } = render(<FileUploader />);
+      const input = container.querySelector('input[type="file"]');
+
+      const file = new File(['invalid content'], 'test.zip', { type: 'application/zip' });
+
+      fireEvent.change(input!, { target: { files: [file] } });
+
+      await waitFor(() => {
+          expect(validateZipSignature).toHaveBeenCalledWith(file);
+          expect(mockAddBook).not.toHaveBeenCalled();
+          expect(mockShowToast).toHaveBeenCalledWith('Invalid ZIP file (header mismatch): test.zip', 'error');
       });
   });
 });

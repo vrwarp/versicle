@@ -3,7 +3,7 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { UploadCloud, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { validateEpubFile } from '../../lib/ingestion';
+import { validateZipSignature } from '../../lib/ingestion';
 
 /**
  * A component for uploading EPUB files, ZIP archives, or directories via drag-and-drop or file selection.
@@ -12,23 +12,38 @@ import { validateEpubFile } from '../../lib/ingestion';
  * @returns A React component rendering the file upload area.
  */
 export const FileUploader: React.FC = () => {
-  const { addBook, addBooks, isImporting, importProgress, importStatus } = useLibraryStore();
+  const {
+    addBook,
+    addBooks,
+    isImporting,
+    importProgress,
+    importStatus,
+    uploadProgress,
+    uploadStatus
+  } = useLibraryStore();
+
   const { showToast } = useToastStore();
   const [dragActive, setDragActive] = useState(false);
+
   /**
    * Validates and processes a single file.
    */
   const processSingleFile = useCallback(async (file: File) => {
       const lowerName = file.name.toLowerCase();
       if (lowerName.endsWith('.epub')) {
-           const isValid = await validateEpubFile(file);
+           const isValid = await validateZipSignature(file);
            if (isValid) {
                await addBook(file);
            } else {
                showToast(`Invalid EPUB file (header mismatch): ${file.name}`, 'error');
            }
       } else if (lowerName.endsWith('.zip')) {
-          await addBooks([file]);
+          const isValid = await validateZipSignature(file);
+          if (isValid) {
+              await addBooks([file]);
+          } else {
+              showToast(`Invalid ZIP file (header mismatch): ${file.name}`, 'error');
+          }
       } else {
            showToast(`Unsupported file type: ${file.name}`, 'error');
       }
@@ -41,9 +56,27 @@ export const FileUploader: React.FC = () => {
       if (files.length === 1) {
           await processSingleFile(files[0]);
       } else {
-          await addBooks(files);
+          // Validate all files before passing to batch import
+          const validFiles: File[] = [];
+          for (const file of files) {
+              const lowerName = file.name.toLowerCase();
+              if (lowerName.endsWith('.epub') || lowerName.endsWith('.zip')) {
+                   const isValid = await validateZipSignature(file);
+                   if (isValid) {
+                       validFiles.push(file);
+                   } else {
+                       showToast(`Skipping invalid file: ${file.name}`, 'error');
+                   }
+              } else {
+                   showToast(`Skipping unsupported file: ${file.name}`, 'error');
+              }
+          }
+
+          if (validFiles.length > 0) {
+              await addBooks(validFiles);
+          }
       }
-  }, [addBooks, processSingleFile]);
+  }, [addBooks, processSingleFile, showToast]);
 
   /**
    * Handles drag events.
@@ -117,13 +150,30 @@ export const FileUploader: React.FC = () => {
       {isImporting ? (
         <div className="flex flex-col items-center justify-center space-y-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground font-medium">{importStatus || 'Importing books...'}</p>
-            <div className="w-64 h-2 bg-muted rounded-full overflow-hidden mt-2">
-                <div
-                    className="h-full bg-primary transition-all duration-300 ease-out"
-                    style={{ width: `${importProgress}%` }}
-                />
+
+            {/* Upload/Processing Progress */}
+            <div className="w-full flex flex-col items-center space-y-1">
+                <p className="text-sm text-muted-foreground">{uploadStatus || 'Processing files...'}</p>
+                <div className="w-64 h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-primary/70 transition-all duration-300 ease-out"
+                        style={{ width: `${uploadProgress}%` }}
+                    />
+                </div>
             </div>
+
+            {/* Import Progress (only show if upload is done or if import started) */}
+            {(importProgress > 0 || uploadProgress >= 100) && (
+                <div className="w-full flex flex-col items-center space-y-1 mt-2">
+                     <p className="text-muted-foreground font-medium">{importStatus || 'Importing books...'}</p>
+                     <div className="w-64 h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-primary transition-all duration-300 ease-out"
+                            style={{ width: `${importProgress}%` }}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center space-y-3 pointer-events-none">

@@ -107,9 +107,9 @@ describe('useTTS', () => {
         expect(mockPlayerInstance.loadSectionBySectionId).not.toHaveBeenCalled();
     });
 
-    it('should stop player on unmount', () => {
+    it('should NOT stop player on unmount', () => {
         const { unmount } = renderHook(() => useTTS());
         unmount();
-        expect(mockPlayerInstance.stop).toHaveBeenCalled();
+        expect(mockPlayerInstance.stop).not.toHaveBeenCalled();
     });
 });

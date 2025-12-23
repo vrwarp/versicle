@@ -8,14 +8,42 @@ import type { ExtractionOptions } from './tts';
  * It recursively checks for EPUBs but currently only extracts from the root or flattened structure of the zip.
  *
  * @param file - The ZIP file to process.
+ * @param onProgress - Optional callback for reading progress (0-100).
  * @returns A Promise resolving to an array of EPUB Files.
  */
-export async function extractEpubsFromZip(file: File): Promise<File[]> {
+export async function extractEpubsFromZip(
+    file: File,
+    onProgress?: (percent: number) => void
+): Promise<File[]> {
     const zip = new JSZip();
     const epubFiles: File[] = [];
 
     try {
-        const zipContent = await zip.loadAsync(file);
+        let zipContent: JSZip;
+
+        if (onProgress) {
+             // Read the file with FileReader to report progress
+             const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+                 const reader = new FileReader();
+                 reader.onload = (e) => {
+                     if (e.target?.result) {
+                         resolve(e.target.result as ArrayBuffer);
+                     } else {
+                         reject(new Error("Failed to read file"));
+                     }
+                 };
+                 reader.onerror = () => reject(reader.error);
+                 reader.onprogress = (e) => {
+                     if (e.lengthComputable) {
+                         onProgress((e.loaded / e.total) * 100);
+                     }
+                 };
+                 reader.readAsArrayBuffer(file);
+             });
+             zipContent = await zip.loadAsync(buffer);
+        } else {
+             zipContent = await zip.loadAsync(file);
+        }
 
         const processingPromises: Promise<void>[] = [];
 
@@ -52,20 +80,37 @@ export async function extractEpubsFromZip(file: File): Promise<File[]> {
  *
  * @param files - Array of files to process.
  * @param ttsOptions - TTS options for processing.
- * @param onProgress - Callback for overall progress.
+ * @param onProgress - Callback for overall import progress.
+ * @param onUploadProgress - Callback for upload/extraction progress.
  */
 export async function processBatchImport(
     files: File[],
     ttsOptions?: ExtractionOptions,
-    onProgress?: (processed: number, total: number, filename: string) => void
+    onProgress?: (processed: number, total: number, filename: string) => void,
+    onUploadProgress?: (percent: number, status: string) => void
 ): Promise<number> {
     let allEpubs: File[] = [];
 
+    // Calculate total size for upload/extraction progress
+    const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+    let processedBytes = 0;
+
+    const updateUploadProgress = (bytes: number, filename: string) => {
+        if (onUploadProgress) {
+             const percentage = totalSize > 0 ? Math.min(100, Math.round((bytes / totalSize) * 100)) : 100;
+             onUploadProgress(percentage, `Processing ${filename}...`);
+        }
+    };
+
     // Pre-processing: Expand ZIPs
     for (const file of files) {
+        const startBytes = processedBytes;
         if (file.name.toLowerCase().endsWith('.zip')) {
             try {
-                const extracted = await extractEpubsFromZip(file);
+                const extracted = await extractEpubsFromZip(file, (percent) => {
+                    const fileBytesDone = (percent / 100) * file.size;
+                    updateUploadProgress(startBytes + fileBytesDone, file.name);
+                });
                 allEpubs = [...allEpubs, ...extracted];
             } catch (e) {
                 console.warn(`Failed to extract zip ${file.name}:`, e);
@@ -74,6 +119,15 @@ export async function processBatchImport(
         } else if (file.name.toLowerCase().endsWith('.epub')) {
             allEpubs.push(file);
         }
+
+        // Mark this file as fully processed
+        processedBytes += file.size;
+        updateUploadProgress(processedBytes, file.name);
+    }
+
+    // Ensure 100% upload progress when done
+    if (onUploadProgress) {
+        onUploadProgress(100, 'All files processed. Starting import...');
     }
 
     let successCount = 0;

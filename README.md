@@ -20,6 +20,7 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
     *   **Background Playback**: (Android) Continue listening when the screen is off using Media Session API and optional White Noise generation.
 *   **Full-Text Search**: Fast, off-main-thread search using Web Workers and FlexSearch.
 *   **Data Management**:
+    *   **Batch Import**: Import multiple EPUBs at once or upload a ZIP archive containing your library.
     *   **Backup/Restore**: Create **Light** (JSON, metadata only) or **Full** (ZIP, includes EPUB files) backups to keep your data safe.
     *   **Interoperability**: Import/Export reading lists (CSV) compatible with Goodreads.
     *   **Offloading**: Remove large book files to save space on mobile devices while keeping your notes, reading progress, and metadata intact.
@@ -33,7 +34,8 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 *   **UI/Styling**: Tailwind CSS, Radix UI, Shadcn UI
 *   **State Management**: Zustand (with persistence)
 *   **Storage**: IndexedDB (via `idb`)
-*   **Data Portability**: PapaParse
+*   **Data Portability**: PapaParse, JSZip
+*   **Security**: DOMPurify
 *   **Rendering**: `epub.js`
 *   **Search**: `FlexSearch` (in Web Worker)
 *   **TTS**: Piper (WASM), Web Speech API, Google/OpenAI/LemonFox Cloud APIs, Capacitor Native TTS

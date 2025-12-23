@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
@@ -172,6 +172,47 @@ describe('DBService', () => {
       const updated = await db.get('books', id);
       expect(updated?.currentCfi).toBe('cfi2');
       expect(updated?.progress).toBe(0.2);
+    });
+  });
+
+  describe('cleanup', () => {
+    it('should prevent saveProgress from writing if cleaned up', async () => {
+      const db = await getDB();
+      const id = 'clean-1';
+      const book = { id, title: 'Clean', addedAt: 100, isOffloaded: false, fileHash: 'h', fileSize: 10, syntheticToc: [], totalChars: 0, author: 'A', description: '', progress: 0, currentCfi: '' };
+      await db.put('books', book);
+
+      dbService.saveProgress(id, 'cfi-updated', 0.5);
+
+      // Verify not yet written
+      let updated = await db.get('books', id);
+      expect(updated?.progress).toBe(0);
+
+      // Cleanup
+      dbService.cleanup();
+
+      // Wait > 1000ms (real time)
+      await new Promise(resolve => setTimeout(resolve, 1100));
+
+      // Verify STILL not written
+      updated = await db.get('books', id);
+      expect(updated?.progress).toBe(0);
+    });
+
+    it('should prevent saveTTSState from writing if cleaned up', async () => {
+       const db = await getDB();
+       const id = 'tts-clean-1';
+       // Ensure no previous state
+       await db.delete('tts_queue', id);
+
+       dbService.saveTTSState(id, [], 1);
+
+       dbService.cleanup();
+
+       await new Promise(resolve => setTimeout(resolve, 1100));
+
+       const state = await db.get('tts_queue', id);
+       expect(state).toBeUndefined();
     });
   });
 });

@@ -8,6 +8,7 @@ import { ToastContainer } from './components/ui/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useEffect, useState } from 'react';
 import { getDB } from './db/db';
+import { dbService } from './db/DBService';
 import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
@@ -49,7 +50,39 @@ function App() {
   useEffect(() => {
     const init = async () => {
       try {
+        // Start Android init in parallel if applicable
+        const androidInitPromise = (async () => {
+          if (Capacitor.getPlatform() === 'android') {
+            try {
+              // 1. Setup Notification Channel
+              // This defines how the notification behaves (sound, vibration, visibility).
+              // 'importance: 3' means it shows up but doesn't make a noise (good for media).
+              await ForegroundService.createNotificationChannel({
+                  id: 'versicle_tts_channel',
+                  name: 'Versicle Playback',
+                  description: 'Controls for background reading',
+                  importance: Importance.Default
+              });
+
+              // 2. Listen for "Pause" button clicks on the notification itself
+              await ForegroundService.addListener('buttonClicked', async (event) => {
+                  if (event.buttonId === 101) {
+                      // Map the notification button to our Service logic
+                      AudioPlayerService.getInstance().pause();
+                  }
+              });
+            } catch (error) {
+               console.error('Failed to initialize Android services:', error);
+            }
+          }
+        })();
+
+        // Initialize DB
         await getDB();
+
+        // Wait for Android init to complete (or fail gracefully)
+        await androidInitPromise;
+
         setDbStatus('ready');
       } catch (err) {
         console.error('Failed to initialize DB:', err);
@@ -60,41 +93,12 @@ function App() {
     init();
   }, []);
 
-  useEffect(() => {
-    const initAndroid = async () => {
-      if (Capacitor.getPlatform() === 'android') {
-        try {
-          // 1. Setup Notification Channel
-          // This defines how the notification behaves (sound, vibration, visibility).
-          // 'importance: 3' means it shows up but doesn't make a noise (good for media).
-          await ForegroundService.createNotificationChannel({
-              id: 'versicle_tts_channel',
-              name: 'Versicle Playback',
-              description: 'Controls for background reading',
-              importance: Importance.Default
-          });
-
-          // 2. Listen for "Pause" button clicks on the notification itself
-          await ForegroundService.addListener('buttonClicked', async (event) => {
-              if (event.buttonId === 101) {
-                  // Map the notification button to our Service logic
-                  AudioPlayerService.getInstance().pause();
-              }
-          });
-        } catch (error) {
-           console.error('Failed to initialize Android services:', error);
-        }
-      }
-    };
-
-    initAndroid();
-  }, []);
-
   const handleReset = async () => {
     if (!window.confirm('Are you sure you want to delete all data? This cannot be undone.')) {
       return;
     }
     try {
+      dbService.cleanup();
       await deleteDB('EpubLibraryDB');
       window.location.reload();
     } catch (err) {

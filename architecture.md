@@ -143,12 +143,12 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   *Logic*: Coalesces frequent updates (within 5 minutes) into a single "session" to prevent database bloat. Uses "Semantic Snap" to align history entries to sentence boundaries.
     *   *Limits*: Enforces a hard limit (100 sessions) to prevent unbounded growth.
 
-#### Hardening: Validation & Sanitization (`src/db/validators.ts`)
+#### Hardening: Validation & Sanitization (`src/db/validators.ts` & `src/lib/sanitizer.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks from malicious EPUB metadata.
 *   **Logic**:
     *   **`validateBookMetadata`**: Ensures required fields (ID, Title, AddedAt) exist.
-    *   **`sanitizeString`**: Uses `DOMParser` to strip HTML (scripts, styles) from text fields. Falls back to HTML escaping if `DOMParser` fails.
-*   **Trade-off**: Stripping HTML might lose formatting in book descriptions, but ensures safety.
+    *   **`sanitizeString`**: Delegates to `DOMPurify` (via `src/lib/sanitizer.ts`) to strip all HTML tags from metadata fields (Title, Author), ensuring only plain text remains.
+*   **Trade-off**: Stripping HTML removes formatting in book descriptions, but ensures safety against stored XSS.
 
 #### Resilience: Safe Mode (`src/components/SafeModeView.tsx`)
 *   **Goal**: Provide a recovery path if IndexedDB fails to initialize (e.g., corruption or storage quota exceeded).
@@ -167,8 +167,15 @@ Handles the complex task of importing an EPUB file.
     5.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** based on metadata (filename, title, author) and head/tail file sampling.
         *   *Refactoring*: Replaced full-file SHA-256 hashing (which was slow and memory-intensive) with this constant-time O(1) check.
         *   *Trade-off*: Theoretical risk of collision is negligible for personal library scale, while performance gain is massive.
-    6.  **Sanitization**: Uses `DOMParser` to strip HTML and scripts from metadata fields, and enforces character limits (e.g. 255 chars for Author).
+    6.  **Sanitization**: Uses `DOMPurify` to strip HTML and scripts from metadata fields, and enforces character limits (e.g. 255 chars for Author).
     *   *Returns*: `Promise<string>` (New Book ID).
+
+#### Batch Ingestion (`src/lib/batch-ingestion.ts`)
+*   **Goal**: Allow bulk import of multiple EPUBs or ZIP archives containing books.
+*   **Logic**:
+    *   **ZIP Expansion**: Uses `JSZip` to recursively scan and extract `.epub` files from uploaded archives.
+    *   **Sequential Processing**: Processes files one by one to avoid memory spikes, reporting progress to the UI.
+*   **Trade-off**: Processing a large ZIP happens on the main thread (mostly), which might cause minor UI jank, though `JSZip` is async.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread to prevent UI freezing.
@@ -263,8 +270,9 @@ Low-level wrapper around the HTML5 `<audio>` element.
 *   **Logic**: Plays a silent loop (or optional white noise) to keep the OS Media Session active. On Android, it upgrades to a **Foreground Service** (via `@capawesome-team/capacitor-android-foreground-service`) to guarantee process survival.
 *   **Trade-off**: "Hack" solution required due to restrictive mobile browser policies (iOS). Foreground Service requires explicit permissions on Android.
 
-#### TTS Processors (`src/lib/tts/processors/`)
-*   **`Sanitizer.ts`**: Cleans text before speech generation. Removes page numbers, citations, and URLs to improve listening flow.
+#### TTS Processors & Extraction
+*   **`Sanitizer.ts` (TTS-Specific)**: Located in `src/lib/tts/processors/`. Cleans text *before* speech generation. Removes page numbers, citations, and URLs to improve listening flow.
+*   **`extractSentencesFromNode` (`src/lib/tts.ts`)**: The bridge between the DOM (rendered in `offscreen-renderer`) and the `TextSegmenter`. Traverses the DOM tree to extract text nodes while respecting block-level tags.
 
 #### `src/lib/tts/providers/`
 Plugin architecture for TTS backends. All providers implement `ITTSProvider`.
@@ -312,6 +320,7 @@ State is managed using **Zustand** with persistence to `localStorage` for prefer
 *   **`useGenAIStore`**: Manages AI settings (API key, model) and usage logs.
     *   *Persisted*: `apiKey`, `model`, `isEnabled`, `logs`, `usageStats`.
 *   **`useUIStore`**: Manages global UI state (e.g., `isGlobalSettingsOpen`). Transient.
+*   **useToastStore**: Manages global ephemeral notifications (Success/Error feedback). Transient.
 *   **`useReadingListStore`**: Manages the exportable reading list.
     *   *Logic*: Syncs with IDB `reading_list` store. Handles CSV import/export.
 

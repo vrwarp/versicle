@@ -249,19 +249,15 @@ export const ReaderView: React.FC = () => {
              const prevStart = previousLocation.current.start;
              const prevEnd = previousLocation.current.end;
              if (prevStart && prevEnd) {
-                 const currentBook = bookRef.current;
-                 if (currentBook) {
-                     Promise.all([
-                         snapCfiToSentence(currentBook, prevStart),
-                         snapCfiToSentence(currentBook, prevEnd)
-                     ]).then(([snappedStart, snappedEnd]) => {
-                         const range = generateCfiRange(snappedStart, snappedEnd);
-                         const mode = useReaderStore.getState().viewMode;
-                         const type = mode === 'scrolled' ? 'scroll' : 'page';
-                         const label = useReaderStore.getState().currentChapterTitle || undefined;
-                         dbService.updateReadingHistory(id, range, type, label).catch(console.error);
-                     });
-                 }
+                 // Panic Save: Synchronous, raw capture.
+                 // We bypass snapCfiToSentence to avoid async calls on the Book instance,
+                 // which might be destroyed during unmount, causing crashes.
+                 // This ensures reading history is saved even if the reader is tearing down.
+                 const range = generateCfiRange(prevStart, prevEnd);
+                 const mode = useReaderStore.getState().viewMode;
+                 const type = mode === 'scrolled' ? 'scroll' : 'page';
+                 const label = useReaderStore.getState().currentChapterTitle || undefined;
+                 dbService.updateReadingHistory(id, range, type, label).catch(console.error);
              }
           }
       };

@@ -50,13 +50,12 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
                  const location = (rendition as any).location;
                  if (location && location.start && location.end) {
                      const cfi = new EpubCFI();
-                     // Check if activeCfi is >= start AND activeCfi <= end
-                     // compare(a, b): -1 if a < b, 1 if a > b, 0 if equal
-                     // active >= start  => start <= active => compare(start, active) <= 0
-                     // active <= end    => compare(active, end) <= 0
+                     // Ensure the active sentence is within the current visible page range.
+                     // The logic checks: Start <= Active <= End
+                     const isAfterStart = cfi.compare(location.start.cfi, activeCfi) <= 0;
+                     const isBeforeEnd = cfi.compare(activeCfi, location.end.cfi) <= 0;
 
-                     if (cfi.compare(location.start.cfi, activeCfi) <= 0 &&
-                         cfi.compare(activeCfi, location.end.cfi) <= 0) {
+                     if (isAfterStart && isBeforeEnd) {
                          alreadyVisible = true;
                      }
                  }

@@ -153,8 +153,26 @@ export function generateEpubCfi(range: Range, baseCfi: string): string {
     }
 }
 
+/**
+ * Snaps a CFI to the nearest sentence boundary.
+ *
+ * @param book - The epub.js Book instance.
+ * @param cfi - The CFI to snap.
+ * @returns The snapped CFI, or the original if snapping failed.
+ *
+ * @warning This function is asynchronous and relies on the Book instance being active.
+ * Do NOT use this in component cleanup/unmount phases where the Book instance might be destroyed.
+ */
 export async function snapCfiToSentence(book: Book, cfi: string): Promise<string> {
     try {
+        // Lifecycle safety check: ensure book instance is valid
+        // Prevents crash during reader destruction if called late
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (!book || !(book as any).spine) {
+            console.warn('snapCfiToSentence: Book instance is destroyed or invalid. Returning raw CFI.');
+            return cfi;
+        }
+
         if (!cfi || !cfi.includes('!')) return cfi;
 
         const range = await book.getRange(cfi);
@@ -187,7 +205,10 @@ export async function snapCfiToSentence(book: Book, cfi: string): Promise<string
                  newRange.setStart(startNode, bestStart);
                  newRange.setEnd(startNode, bestStart);
 
-                 const baseCfi = cfi.split('!')[0] + '!';
+                 let baseCfi = cfi.split('!')[0] + '!';
+                 if (baseCfi.startsWith('epubcfi(')) {
+                     baseCfi = baseCfi.slice(8);
+                 }
 
                  const newCfi = new EpubCFI(newRange, baseCfi).toString();
                  return newCfi;
