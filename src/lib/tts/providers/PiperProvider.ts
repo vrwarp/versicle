@@ -187,6 +187,7 @@ export class PiperProvider extends BaseCloudProvider {
     const totalSegments = segments.length;
 
     for (const segment of segments) {
+         if (options.signal?.aborted) throw new Error('Aborted');
          if (!segment.trim()) continue;
 
          // Double-check length; if a single sentence is huge, we must split it hard.
@@ -194,6 +195,7 @@ export class PiperProvider extends BaseCloudProvider {
          const subSegments = segment.length > MAX_CHARS ? segment.match(new RegExp(`.{1,${MAX_CHARS}}`, 'g')) || [segment] : [segment];
 
          for (const subSegment of subSegments) {
+            if (options.signal?.aborted) throw new Error('Aborted');
             const result = await piperGenerate(
                 PIPER_ASSETS_BASE + 'piper_phonemize.js',
                 PIPER_ASSETS_BASE + 'piper_phonemize.wasm',

@@ -96,7 +96,8 @@ export class GoogleTTSProvider extends BaseCloudProvider {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': this.apiKey
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal: options.signal
     });
 
     if (!response.ok) {

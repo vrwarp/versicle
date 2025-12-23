@@ -58,7 +58,7 @@ export class OpenAIProvider extends BaseCloudProvider {
           response_format: 'mp3'
       }, {
           'Authorization': `Bearer ${this.apiKey}`
-      });
+      }, options.signal);
 
       // OpenAI does not return timestamps
       return {

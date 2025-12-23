@@ -43,6 +43,7 @@ export interface TTSOptions {
   voiceId: string;
   speed: number;
   volume?: number;
+  signal?: AbortSignal;
 }
 
 export type TTSEvent =

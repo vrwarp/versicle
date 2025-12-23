@@ -86,6 +86,7 @@ export class AudioPlayerService {
 
   private pendingPromise: Promise<void> = Promise.resolve();
   private isDestroyed = false;
+  private currentAbortController: AbortController | null = null;
 
   private backgroundAudio: BackgroundAudio;
   private backgroundAudioMode: BackgroundAudioMode = 'silence';
@@ -142,6 +143,13 @@ export class AudioPlayerService {
 
     this.pendingPromise = resultPromise.then(() => {}).catch(() => {});
     return resultPromise;
+  }
+
+  private abortCurrentOperation() {
+      if (this.currentAbortController) {
+          this.currentAbortController.abort();
+          this.currentAbortController = null;
+      }
   }
 
   setBookId(bookId: string | null) {
@@ -231,6 +239,9 @@ export class AudioPlayerService {
                // Handle common interruption errors or real errors
                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                const errorType = (event.error as any)?.error || event.error;
+
+               if (event.error instanceof Error && event.error.name === 'AbortError') return;
+
                // If it's just an interruption (e.g. from cancel), ignore
                if (errorType === 'interrupted' || errorType === 'canceled') return;
 
@@ -296,6 +307,7 @@ export class AudioPlayerService {
   }
 
   public setProvider(provider: ITTSProvider) {
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
         await this.stopInternal();
         this.provider = provider;
@@ -347,10 +359,12 @@ export class AudioPlayerService {
   }
 
   public loadSection(sectionIndex: number, autoPlay: boolean = true) {
+      this.abortCurrentOperation();
       return this.enqueue(() => this.loadSectionInternal(sectionIndex, autoPlay));
   }
 
   public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true) {
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
           if (this.playlistPromise) await this.playlistPromise;
           const index = this.playlist.findIndex(s => s.sectionId === sectionId);
@@ -370,6 +384,7 @@ export class AudioPlayerService {
   }
 
   setQueue(items: TTSQueueItem[], startIndex: number = 0) {
+    this.abortCurrentOperation();
     return this.enqueue(async () => {
         if (this.isQueueEqual(items)) {
             this.queue = items;
@@ -403,6 +418,7 @@ export class AudioPlayerService {
   }
 
   jumpTo(index: number) {
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
           if (index >= 0 && index < this.queue.length) {
               await this.stopInternal();
@@ -414,6 +430,7 @@ export class AudioPlayerService {
   }
 
   async preview(text: string): Promise<void> {
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
         await this.stopInternal();
         this.isPreviewing = true;
@@ -422,12 +439,19 @@ export class AudioPlayerService {
         try {
             const voiceId = this.voiceId || '';
 
+            // Create temporary controller for preview if needed, or just use play logic
+            // Preview is also an operation.
+            this.currentAbortController = new AbortController();
+            const signal = this.currentAbortController.signal;
+
             await this.provider.play(text, {
                 voiceId,
-                speed: this.speed
+                speed: this.speed,
+                signal
             });
 
         } catch (e) {
+            if (e instanceof Error && e.name === 'AbortError') return;
             console.error("Preview error", e);
             this.setStatus('stopped');
             this.isPreviewing = false;
@@ -437,10 +461,14 @@ export class AudioPlayerService {
   }
 
   async play(): Promise<void> {
+    this.abortCurrentOperation();
     return this.enqueue(() => this.playInternal());
   }
 
   private async playInternal(): Promise<void> {
+    this.currentAbortController = new AbortController();
+    const signal = this.currentAbortController.signal;
+
     if (this.status === 'paused') {
         return this.resumeInternal();
     }
@@ -449,6 +477,7 @@ export class AudioPlayerService {
         this.sessionRestored = true;
         try {
             const book = await dbService.getBookMetadata(this.currentBookId);
+            if (signal.aborted) return;
             if (book) {
                 if (book.lastPlayedCfi && this.currentIndex === 0) {
                      const index = this.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
@@ -471,6 +500,7 @@ export class AudioPlayerService {
 
     if (this.status !== 'playing') {
         await this.engageBackgroundMode(item);
+        if (signal.aborted) return;
         this.setStatus('loading');
     }
 
@@ -481,12 +511,14 @@ export class AudioPlayerService {
     try {
         const voiceId = this.voiceId || '';
         const rules = await this.lexiconService.getRules(this.currentBookId || undefined);
+        if (signal.aborted) return;
 
         const processedText = this.lexiconService.applyLexicon(item.text, rules);
 
         await this.provider.play(processedText, {
             voiceId,
-            speed: this.speed
+            speed: this.speed,
+            signal
         });
 
         if (this.currentIndex < this.queue.length - 1) {
@@ -494,11 +526,13 @@ export class AudioPlayerService {
              const nextProcessed = this.lexiconService.applyLexicon(nextItem.text, rules);
              this.provider.preload(nextProcessed, {
                  voiceId,
-                 speed: this.speed
+                 speed: this.speed,
+                 signal
              });
         }
 
     } catch (e) {
+        if (signal.aborted || (e as Error).name === 'AbortError') return;
         console.error("Play error", e);
 
         if (this.provider.id !== 'local') {
@@ -523,6 +557,7 @@ export class AudioPlayerService {
   }
 
   async resume(): Promise<void> {
+     this.abortCurrentOperation();
      return this.enqueue(() => this.resumeInternal());
   }
 
@@ -551,6 +586,7 @@ export class AudioPlayerService {
   }
 
   pause() {
+    this.abortCurrentOperation();
     return this.enqueue(async () => {
         this.provider.pause();
         this.setStatus('paused');
@@ -559,6 +595,7 @@ export class AudioPlayerService {
   }
 
   stop() {
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
           await this.stopInternal();
       });
@@ -578,6 +615,7 @@ export class AudioPlayerService {
   }
 
   next() {
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
@@ -591,6 +629,7 @@ export class AudioPlayerService {
   }
 
   prev() {
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
         if (this.currentIndex > 0) {
             this.currentIndex--;
@@ -603,6 +642,7 @@ export class AudioPlayerService {
 
   setSpeed(speed: number) {
       this.speed = speed;
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
         if (this.status === 'playing') {
             await this.stopInternal();
@@ -615,6 +655,7 @@ export class AudioPlayerService {
   }
 
   seek(offset: number) {
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
           if (offset > 0) {
               if (this.currentIndex < this.queue.length - 1) {
@@ -634,6 +675,7 @@ export class AudioPlayerService {
 
   setVoice(voiceId: string) {
       this.voiceId = voiceId;
+      this.abortCurrentOperation();
       return this.enqueue(async () => {
         if (this.status === 'playing') {
             await this.stopInternal();
