@@ -6,23 +6,17 @@ from verification.utils import reset_app, capture_screenshot
 def test_journey_backup_restore(page: Page):
     """
     Test the full Backup & Restore journey:
-    1. Import a book (Alice).
+    1. Import a book (Alice) - using preloading optimization.
     2. Add an annotation.
     3. Export Metadata Only (Light Backup).
     4. Delete the book.
     5. Restore from backup.
     6. Verify book and annotation are back (Metadata only means book is offloaded).
     """
-    reset_app(page)
+    # 1. Import Book via preload
+    reset_app(page, preload_epub="public/books/alice.epub")
 
-    # 1. Import Book
-    # Use hidden input locator consistent with other tests
-    # Wait for the view to be stable
-    page.wait_for_timeout(1000)
-    page.set_input_files("data-testid=hidden-file-input", "public/books/alice.epub")
-
-    # Wait for processing - wait for the card to be visible
-    # Using selector similar to test_journey_smart_delete.py
+    # Verify book is visible immediately
     book_card = page.locator("[data-testid^='book-card-']").first
     expect(book_card).to_be_visible(timeout=5000)
 
@@ -132,17 +126,14 @@ def test_journey_backup_restore(page: Page):
 def test_journey_full_backup_restore(page: Page):
     """
     Test the Full Backup & Restore journey (ZIP):
-    1. Import a book (Alice).
+    1. Import a book (Alice) - using preloading optimization.
     2. Export Full Backup.
     3. Delete the book.
     4. Restore from backup.
     5. Verify book is back and NOT offloaded (file restored).
     """
-    reset_app(page)
-
-    # 1. Import Book
-    page.wait_for_timeout(1000)
-    page.set_input_files("data-testid=hidden-file-input", "public/books/alice.epub")
+    # 1. Import Book via preload
+    reset_app(page, preload_epub="public/books/alice.epub")
 
     book_card = page.locator("[data-testid^='book-card-']").first
     expect(book_card).to_be_visible(timeout=5000)
