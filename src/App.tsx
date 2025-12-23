@@ -8,6 +8,7 @@ import { ToastContainer } from './components/ui/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useEffect, useState } from 'react';
 import { getDB } from './db/db';
+import { dbService } from './db/DBService';
 import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
@@ -95,6 +96,7 @@ function App() {
       return;
     }
     try {
+      dbService.cleanup();
       await deleteDB('EpubLibraryDB');
       window.location.reload();
     } catch (err) {

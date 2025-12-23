@@ -867,6 +867,23 @@ class DBService {
       this.handleError(error);
     }
   }
+
+  /**
+   * Cleans up any pending operations/timeouts.
+   * Call this before deleting the database or when shutting down the service.
+   */
+  cleanup(): void {
+      if (this.saveProgressTimeout) {
+          clearTimeout(this.saveProgressTimeout);
+          this.saveProgressTimeout = null;
+          this.pendingProgress = {};
+      }
+      if (this.saveTTSStateTimeout) {
+          clearTimeout(this.saveTTSStateTimeout);
+          this.saveTTSStateTimeout = null;
+          this.pendingTTSState = {};
+      }
+  }
 }
 
 export const dbService = new DBService();

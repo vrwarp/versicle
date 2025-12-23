@@ -170,6 +170,7 @@ export const GlobalSettingsDialog = () => {
 
     const handleClearAllData = async () => {
         if (confirm("Are you sure you want to delete ALL data? This includes books, annotations, and settings.")) {
+            dbService.cleanup();
             // Clear IndexedDB
             const db = await getDB();
             await db.clear('books');
