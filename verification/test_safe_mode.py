@@ -21,7 +21,7 @@ def test_safe_mode_trigger(page: Page):
         };
     """)
 
-    page.goto("http://localhost:5173")
+    page.goto("/")
 
     # Wait for Safe Mode screen
     # We look for the "Safe Mode" heading

@@ -28,11 +28,11 @@ def test_journey_tts_persistence_v3(page: Page):
     page.get_by_test_id("tts-play-pause-button").click()
 
     # 6. Wait
-    page.wait_for_timeout(3000)
+    # page.wait_for_timeout(3000)
 
     # Check pause state by aria-label
     btn = page.get_by_test_id("tts-play-pause-button")
-    expect(btn).to_have_attribute("aria-label", "Pause")
+    expect(btn).to_have_attribute("aria-label", "Pause", timeout=10000)
 
     # 7. Pause
     btn.click()

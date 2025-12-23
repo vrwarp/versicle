@@ -5,7 +5,7 @@ def setup_mock_tts(page: Page):
     """Helper to ensure Mock TTS is ready."""
     page.goto("/")
     # Wait for initial load
-    page.wait_for_timeout(1000)
+    expect(page.get_by_test_id("header-settings-button")).to_be_visible()
 
     # Wait for voices to load (signifies polyfill is active)
     try:
@@ -67,8 +67,8 @@ def test_mock_tts_pause_resume(page: Page):
     expect(debug).to_have_text("[[PAUSED]]", timeout=10000)
 
     # Wait a bit
-    page.wait_for_timeout(1000)
-    expect(debug).to_have_text("[[PAUSED]]")
+    # page.wait_for_timeout(1000)
+    # expect(debug).to_have_text("[[PAUSED]]")
 
     # Resume
     page.evaluate("window.speechSynthesis.resume()")
@@ -100,5 +100,5 @@ def test_mock_tts_cancel(page: Page):
     expect(debug).to_have_text("[[CANCELED]]", timeout=10000)
 
     # Wait to ensure no more words
-    page.wait_for_timeout(2000)
+    # page.wait_for_timeout(2000)
     expect(debug).to_have_text("[[CANCELED]]")

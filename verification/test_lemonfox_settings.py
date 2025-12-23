@@ -7,7 +7,7 @@ def test_lemonfox_settings(page: Page):
     utils.reset_app(page)
 
     # Wait for library to load
-    page.wait_for_timeout(1000)
+    expect(page.get_by_test_id("header-settings-button")).to_be_visible()
 
     # Open Global Settings
     print("Opening Global Settings...")

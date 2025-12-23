@@ -30,15 +30,19 @@ def test_theme_persistence(page: Page):
     # Checking for ring class or similar visual indicator
     # Based on previous tests, we can check if it has ring-2
     # But evaluating class list is safer
-    is_active = dark_btn.evaluate("el => el.classList.contains('ring-2')")
-    assert is_active, "Dark theme button should be active"
+    # is_active = dark_btn.evaluate("el => el.classList.contains('ring-2')")
+    # assert is_active, "Dark theme button should be active"
+    # Using expect assertion for retry
+    expect(dark_btn).to_have_class(re.compile(r"ring-2"))
 
     utils.capture_screenshot(page, "theme_persistence_1_dark")
 
     # 3. Reload Page
     print("Reloading...")
     page.reload()
-    page.wait_for_timeout(2000)
+
+    # Wait for reload
+    expect(page.get_by_test_id("reader-visual-settings-button")).to_be_visible()
 
     # 4. Verify Theme Persisted
     print("Verifying Theme Persistence...")
@@ -47,8 +51,7 @@ def test_theme_persistence(page: Page):
     # Open settings again to check button state
     page.get_by_test_id("reader-visual-settings-button").click()
     dark_btn = page.locator('button[aria-label="Select dark theme"]')
-    is_active_reload = dark_btn.evaluate("el => el.classList.contains('ring-2')")
-    assert is_active_reload, "Dark theme button should be active after reload"
+    expect(dark_btn).to_have_class(re.compile(r"ring-2"))
 
     utils.capture_screenshot(page, "theme_persistence_2_restored")
 

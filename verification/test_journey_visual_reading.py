@@ -68,14 +68,19 @@ def test_journey_visual_reading(page: Page):
     tap_y = reader_y + (reader_h / 2)
 
     page.mouse.click(tap_x_right, tap_y)
-    page.wait_for_timeout(2000) # Short wait
 
-    # Get new text
-    frame = get_reader_frame(page)
-    text_after_tap_standard = frame.locator("body").inner_text()
+    # We verify that text does NOT change.
+    # Waiting for timeout is necessary to ensure "absence" of change.
+    # But we can try to wait for a short period and check.
+    try:
+        expect(frame.locator("body")).not_to_have_text(initial_text, timeout=2000)
+        raise AssertionError("Tap navigation should be disabled in Standard Mode (Text Changed)")
+    except AssertionError as e:
+        if "Text Changed" in str(e):
+            raise e
+        # If timeout waiting for text change, it means text did NOT change (Success)
+        pass
 
-    # Should match initial text (No navigation)
-    assert initial_text == text_after_tap_standard, "Tap navigation should be disabled in Standard Mode"
     print("Confirmed: Tap navigation disabled in Standard Mode")
 
     # --- Enter Immersive Mode ---
@@ -102,58 +107,43 @@ def test_journey_visual_reading(page: Page):
 
     # --- Test Next Page (Right Tap) in Immersive Mode ---
     print("Tapping Right Zone (Immersive)...")
-    page.wait_for_timeout(1000) # Wait for UI to settle
+    # page.wait_for_timeout(1000) # Wait for UI to settle
     page.mouse.click(tap_x_right, tap_y)
-    page.wait_for_timeout(3000) # Wait for page turn animation/render
+
+    # Wait for CFI change
+    # Manually poll for CFI change with wait_for_function
+    try:
+        page.wait_for_function(f"window.rendition && window.rendition.location && window.rendition.location.start && window.rendition.location.start.cfi !== '{cfi_before}'", timeout=5000)
+    except:
+        print("Failure: CFI did not change. Retrying tap...")
+        page.mouse.click(tap_x_right, tap_y)
+        page.wait_for_function(f"window.rendition && window.rendition.location && window.rendition.location.start && window.rendition.location.start.cfi !== '{cfi_before}'", timeout=5000)
 
     cfi_after = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")
 
-    # Re-fetch frame as it might be detached/replaced
-    frame = get_reader_frame(page)
-    assert frame, "Reader frame lost after navigation"
-
-    # Get new text
-    new_text = frame.locator("body").inner_text()
-    print(f"New text length: {len(new_text)}")
-
-    # Assert changed
-    if initial_text == new_text:
-        # Text might be unchanged in paginated mode (CSS columns), so we rely on CFI check
-        if cfi_before and cfi_after and cfi_before == cfi_after:
-            print("Failure: CFI did not change. Retrying tap...")
-            page.mouse.click(tap_x_right, tap_y)
-            page.wait_for_timeout(3000)
-            cfi_after = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")
-
-            if cfi_before == cfi_after:
-                # Last resort manual next check to confirm engine isn't completely frozen
-                page.evaluate("window.rendition.next()")
-                page.wait_for_timeout(3000)
-                assert cfi_before != cfi_after, f"Page did not turn after retry. CFI remained {cfi_before}"
-
     # --- Test Prev Page (Left Tap) in Immersive Mode ---
     print(f"Tapping Left Zone (Immersive)...")
-    page.wait_for_timeout(1000)
+    # page.wait_for_timeout(1000)
 
     page.mouse.click(tap_x_left, tap_y)
-    page.wait_for_timeout(3000)
 
-    cfi_prev = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")
-
-    if cfi_prev == cfi_after:
+    try:
+        page.wait_for_function(f"window.rendition.location.start.cfi !== '{cfi_after}'", timeout=5000)
+    except:
          print("Failure: CFI did not change on Prev. Retrying...")
          page.mouse.click(tap_x_left, tap_y)
-         page.wait_for_timeout(3000)
-         cfi_prev = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")
+         page.wait_for_function(f"window.rendition.location.start.cfi !== '{cfi_after}'", timeout=5000)
 
-         assert cfi_prev != cfi_after, f"Page did not turn back. CFI remained {cfi_after}"
+    cfi_prev = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")
 
     # --- Test Center Tap (No Action/Exit) ---
     # Center tap is disabled in code.
     print("Tapping Center Zone...")
     tap_x_center = reader_x + (reader_w * 0.5)
     page.mouse.click(tap_x_center, tap_y)
-    page.wait_for_timeout(1000)
+
+    # Wait to ensure no exit
+    page.wait_for_timeout(500)
 
     # Header should still be hidden (Center tap does NOT exit immersive mode anymore)
     expect(page.locator("header")).not_to_be_visible()

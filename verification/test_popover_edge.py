@@ -24,10 +24,10 @@ def test_popover_edge_collision(page: Page):
 
     # Wait for iframe content
     frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
-    frame.locator("body").wait_for(timeout=5000)
+    expect(frame.locator("body")).to_be_visible(timeout=5000)
 
     # Wait for layout to stabilize
-    page.wait_for_timeout(2000)
+    # page.wait_for_timeout(2000)
 
     print("Step 1: Selecting text near the right edge")
 

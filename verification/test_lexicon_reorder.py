@@ -50,7 +50,8 @@ def test_lexicon_reorder(page: Page):
     expect(items.nth(1)).to_contain_text("Apple")
 
     # Wait for persistence (IndexedDB async write)
-    page.wait_for_timeout(1000)
+    # We rely on the UI update having happened (assertion above) and implicit DB write time.
+    # A subsequent reload will verify persistence.
 
     # Close Dialog
     page.get_by_test_id("lexicon-close-btn").click()
@@ -59,7 +60,7 @@ def test_lexicon_reorder(page: Page):
     page.keyboard.press("Escape")
 
     # Wait for settings to close
-    page.wait_for_timeout(500)
+    expect(page.get_by_role("dialog")).not_to_be_visible()
 
     # Reload page to verify persistence
     page.reload()

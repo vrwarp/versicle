@@ -34,48 +34,40 @@ def test_visual_settings(page: Page):
     print("Testing Theme Switching (Sepia)...")
     sepia_btn = page.locator('button[aria-label="Select sepia theme"]')
     sepia_btn.click()
-    page.wait_for_timeout(1000)
+
+    # Wait for state change
+    expect(page.locator("html")).to_have_class(re.compile(r".*sepia.*"), timeout=5000)
+    expect(sepia_btn).to_have_class(re.compile(r"ring-2"))
+
     utils.capture_screenshot(page, "visual_settings_02_sepia")
-
-    # Verify Outer UI Theme (ThemeSynchronizer)
-    main_html_class = page.locator("html").get_attribute("class")
-    print(f"Main HTML Class: {main_html_class}")
-
-    # Verify Button State
-    is_sepia_active = sepia_btn.evaluate("el => el.classList.contains('ring-2')")
-    print(f"Sepia Button Active: {is_sepia_active}")
-
-    assert main_html_class and "sepia" in main_html_class, "Main document does not have sepia class"
-    assert is_sepia_active, "Sepia button is not active"
 
     print("Testing Theme Switching (Dark)...")
     dark_btn = page.locator('button[aria-label="Select dark theme"]')
     dark_btn.click()
-    page.wait_for_timeout(1000)
+
+    # Wait for state change
+    expect(page.locator("html")).to_have_class(re.compile(r".*dark.*"), timeout=5000)
+    expect(dark_btn).to_have_class(re.compile(r"ring-2"))
+
     utils.capture_screenshot(page, "visual_settings_03_dark")
-
-    # Verify Outer UI Theme (Dark)
-    main_html_class_dark = page.locator("html").get_attribute("class")
-    print(f"Main HTML Class (Dark): {main_html_class_dark}")
-
-    is_dark_active = dark_btn.evaluate("el => el.classList.contains('ring-2')")
-    print(f"Dark Button Active: {is_dark_active}")
-
-    assert main_html_class_dark and "dark" in main_html_class_dark, "Main document does not have dark class"
-    assert is_dark_active, "Dark button is not active"
 
     # 2. Test Font Size
     print("Testing Font Size...")
+    # Get current font size
+    frame_loc = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
+    frame_loc.locator("body").wait_for()
+    initial_font_size = frame_loc.locator("body").evaluate("element => getComputedStyle(element).fontSize")
+
     increase_font_btn = page.locator('button[aria-label="Increase font size"]')
     increase_font_btn.click()
     increase_font_btn.click()
-    page.wait_for_timeout(1000)
 
-    # Check font size in iframe
-    frame_loc = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
-
-    # Wait for body
-    frame_loc.locator("body").wait_for(timeout=2000)
+    # Wait for font size change
+    try:
+        # Expect font size to be different
+        expect(frame_loc.locator("body")).not_to_have_css("font-size", initial_font_size)
+    except:
+        pass
 
     font_size = frame_loc.locator("body").evaluate("element => getComputedStyle(element).fontSize")
     print(f"Font Size Style: {font_size}")
@@ -85,7 +77,10 @@ def test_visual_settings(page: Page):
     # Tabs trigger
     scrolled_tab = page.get_by_role("tab", name="Scrolled")
     scrolled_tab.click()
-    page.wait_for_timeout(2000)
+
+    # Wait for active state
+    expect(scrolled_tab).to_have_attribute("data-state", "active")
+
     utils.capture_screenshot(page, "visual_settings_04_scrolled")
 
     # Close the popover to see the content clearly
@@ -103,7 +98,9 @@ def test_visual_settings(page: Page):
     # Scroll the iframe body to the bottom
     # FrameLocator does not have evaluate, we need to access the element via locator
     frame_loc.locator("html").evaluate("el => el.ownerDocument.defaultView.scrollTo(0, el.ownerDocument.body.scrollHeight)")
-    page.wait_for_timeout(1000)
+
+    # Wait for scroll event or spacer visibility
+    expect(frame_loc.locator('#reader-bottom-spacer')).to_be_visible()
 
     # Verify that the iframe has spacer div applied
     # The fix applied spacer div to the reader body

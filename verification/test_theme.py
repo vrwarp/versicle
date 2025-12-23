@@ -47,8 +47,11 @@ def test_theme(page: Page):
     page.evaluate(f"localStorage.setItem('reader-storage', '{json_state}')")
     page.reload()
 
+    # Wait for reload
+    expect(page.get_by_test_id("hidden-file-input")).to_be_attached()
+
     # Verify Dark Class
-    expect(html).to_have_class(re.compile(r"\bdark\b"))
+    expect(html).to_have_class(re.compile(r"\bdark\b"), timeout=5000)
 
     # Verify visual change
     utils.capture_screenshot(page, "theme_2_library_dark")
@@ -59,8 +62,11 @@ def test_theme(page: Page):
     page.evaluate(f"localStorage.setItem('reader-storage', '{sepia_state}')")
     page.reload()
 
+    # Wait for reload
+    expect(page.get_by_test_id("hidden-file-input")).to_be_attached()
+
     # Verify Sepia Class
-    expect(html).to_have_class(re.compile(r"\bsepia\b"))
+    expect(html).to_have_class(re.compile(r"\bsepia\b"), timeout=5000)
 
     # Verify visual change
     utils.capture_screenshot(page, "theme_3_library_sepia")

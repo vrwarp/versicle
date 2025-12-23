@@ -40,16 +40,19 @@ def test_tts_queue(page: Page):
 
     for i in range(max_pages):
         print(f"Checking page {i+1} for text...")
-        page.wait_for_timeout(2000)
 
         # Check queue status
         queue_items = page.locator("[data-testid^='tts-queue-item-']")
-        count = queue_items.count()
-
-        if count > 0:
-            print(f"Found {count} queue items.")
-            found_text = True
-            break
+        # Allow time for TTS to populate
+        try:
+            expect(queue_items.first).to_be_visible(timeout=3000)
+            count = queue_items.count()
+            if count > 0:
+                print(f"Found {count} queue items.")
+                found_text = True
+                break
+        except:
+            pass
 
         print("Queue empty. Navigating to next page...")
         # Close TTS panel to allow navigation (avoid focus trap)
@@ -63,7 +66,15 @@ def test_tts_queue(page: Page):
 
         # Navigate
         page.keyboard.press("ArrowRight")
-        page.wait_for_timeout(2000)
+        # Wait for navigation implicitly by checking queue update after reopen
+        # We can wait for CFI change or body text change if available, but simplest is wait for "something" to change in reader
+        # Or just wait a short moment for the engine to render the new page
+
+        # Since we are blind to the exact content, we rely on the loop to check for TTS queue items.
+        # But we should try to avoid a blind 2000ms wait if possible.
+        # We can wait for the iframe to be "stable" or for a new page event.
+        # Given the test complexity, we'll keep a shorter wait + expectation loop.
+        page.wait_for_timeout(1000)
 
         # Re-open TTS panel
         page.get_by_test_id("reader-audio-button").click()

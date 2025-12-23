@@ -54,6 +54,7 @@ def test_journey_dialogs(page: Page, dialog_name, trigger_id):
     if dialog_name == "toc_sidebar":
         expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
     elif dialog_name == "search_in_book":
+        # Search sidebar opens on click
         expect(page.get_by_test_id("reader-search-sidebar")).to_be_visible()
 
     utils.capture_screenshot(page, f"dialog_{dialog_name}")
