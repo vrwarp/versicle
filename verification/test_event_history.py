@@ -28,16 +28,24 @@ def verify_event_history():
         page.wait_for_selector("[data-testid='reader-view']", timeout=15000)
         print("Reader loaded.")
 
+        # Allow epub.js/iframe to stabilize before freezing time
+        # This prevents issues where iframe scripts are blocked if clock is installed too early
+        time.sleep(2)
+
+        # Install Clock
+        print("Installing clock...")
+        page.clock.install()
+
         # 1. Test Page Event (Dwell)
-        print("Dwelling on page 1 for 3s...")
-        time.sleep(3)
+        print("Dwelling on page 1 for 3s (fast-forward)...")
+        page.clock.fast_forward(3000)
 
         print("Navigating to next page...")
         page.keyboard.press("ArrowRight")
 
         # Dwell on page 2
-        print("Dwelling on page 2 for 3s...")
-        time.sleep(3)
+        print("Dwelling on page 2 for 3s (fast-forward)...")
+        page.clock.fast_forward(3000)
 
         # 2. Open History
         print("Opening History...")
