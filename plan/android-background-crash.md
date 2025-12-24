@@ -110,3 +110,9 @@ To verify this fix:
 5.  **Success:** The audio for the next chapter begins automatically, and the lock screen metadata updates to the new chapter title.
 
 6.  **Failure:** The audio stops, and the app crashes (verify via `adb logcat`).
+
+### Automated Verification
+A verification test suite has been added in `src/verification/test_background_crash.test.ts`. This test mocks the Capacitor plugins and verifies that `stopForegroundService` is not called during an automatic chapter transition, ensuring service continuity.
+
+### Deviations
+No major deviations from the original plan. The verification suite was added to ensure regression testing is possible without a physical device.

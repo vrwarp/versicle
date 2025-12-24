@@ -165,13 +165,13 @@ export class AudioPlayerService {
       }
   }
 
-  private async engageBackgroundMode(item: TTSQueueItem) {
+  private async engageBackgroundMode(item: TTSQueueItem): Promise<boolean> {
       if (this.foregroundStopTimer) {
           clearTimeout(this.foregroundStopTimer);
           this.foregroundStopTimer = null;
       }
 
-      if (Capacitor.getPlatform() !== 'android') return;
+      if (Capacitor.getPlatform() !== 'android') return true;
       try {
           await ForegroundService.createNotificationChannel({
               id: 'versicle_tts_channel',
@@ -197,8 +197,10 @@ export class AudioPlayerService {
               playbackState: 'playing',
               playbackSpeed: this.speed
           });
+          return true;
       } catch (e) {
           console.error('Background engagement failed', e);
+          return false;
       }
   }
 
@@ -476,7 +478,12 @@ export class AudioPlayerService {
     const item = this.queue[this.currentIndex];
 
     if (this.status !== 'playing') {
-        await this.engageBackgroundMode(item);
+        const engaged = await this.engageBackgroundMode(item);
+        if (!engaged && Capacitor.getPlatform() === 'android') {
+             this.setStatus('stopped');
+             this.notifyError("Cannot play in background");
+             return;
+        }
         this.setStatus('loading');
     }
 
@@ -830,7 +837,18 @@ export class AudioPlayerService {
           }
 
           if (newQueue.length > 0) {
-              await this.stopInternal();
+              if (autoPlay) {
+                  this.provider.stop();
+                  await this.savePlaybackState();
+                  if (this.foregroundStopTimer) {
+                      clearTimeout(this.foregroundStopTimer);
+                      this.foregroundStopTimer = null;
+                  }
+                  this.setStatus('loading');
+              } else {
+                  await this.stopInternal();
+              }
+
               this.queue = newQueue;
               this.currentIndex = 0;
               this.currentSectionIndex = sectionIndex;
