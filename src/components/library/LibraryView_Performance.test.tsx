@@ -12,7 +12,7 @@ const MockGrid = React.memo((props: any) => {
     // but the Grid itself might re-render if its props change.
     // However, react-window is smart.
     // We log the prop we want to ensure is stable.
-    renderLog(props.cellProps);
+    renderLog(props.itemData);
     return <div data-testid="mock-grid">Grid</div>;
 });
 

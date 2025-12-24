@@ -19,7 +19,8 @@ const LIST_ITEM_HEIGHT = 88;
  * Renders a single cell within the virtualized grid of books.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => {
+const GridCell = ({ columnIndex, rowIndex, style, data }: any) => {
+    const { books, columnCount } = data;
     const index = rowIndex * columnCount + columnIndex;
     if (index >= books.length) return <div style={style} />;
     const book = books[index];
@@ -36,7 +37,8 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ListCell = ({ rowIndex, style, books }: any) => {
+const ListCell = ({ rowIndex, style, data }: any) => {
+    const { books } = data;
     const index = rowIndex;
     if (index >= books.length) return <div style={style} />;
     const book = books[index];
@@ -275,9 +277,10 @@ export const LibraryView: React.FC = () => {
                 rowCount={viewMode === 'list' ? books.length + 1 : rowCount}
                 rowHeight={getRowHeight}
                 width={dimensions.width}
-                cellComponent={viewMode === 'list' ? ListCell : GridCell}
-                cellProps={itemData}
-             />
+                itemData={itemData}
+             >
+                {viewMode === 'list' ? ListCell : GridCell}
+             </GridAny>
           )}
         </section>
       )}
