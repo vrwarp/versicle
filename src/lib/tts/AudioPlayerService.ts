@@ -2,7 +2,6 @@ import type { ITTSProvider, TTSVoice } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { BackgroundAudio, type BackgroundAudioMode } from './BackgroundAudio';
 import { Capacitor } from '@capacitor/core';
-import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { SyncEngine, type AlignmentData } from './SyncEngine';
@@ -161,38 +160,6 @@ export class AudioPlayerService {
               this.currentIndex = 0;
               this.setStatus('stopped');
           }
-      }
-  }
-
-  private async engageBackgroundMode(item: TTSQueueItem) {
-      if (Capacitor.getPlatform() !== 'android') return;
-      try {
-          await ForegroundService.createNotificationChannel({
-              id: 'versicle_tts_channel',
-              name: 'Versicle Playback',
-              description: 'Controls for background reading',
-              importance: 3
-          });
-          await ForegroundService.startForegroundService({
-              id: 1001,
-              title: 'Versicle',
-              body: `Reading: ${item.title || 'Chapter'}`,
-              smallIcon: 'ic_stat_versicle',
-              notificationChannelId: 'versicle_tts_channel',
-              buttons: [{ id: 101, title: 'Pause' }]
-          });
-          await this.mediaSessionManager.setMetadata({
-              title: item.title || 'Chapter Text',
-              artist: 'Versicle',
-              album: item.bookTitle || '',
-              artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
-          });
-          await this.mediaSessionManager.setPlaybackState({
-              playbackState: 'playing',
-              playbackSpeed: this.speed
-          });
-      } catch (e) {
-          console.error('Background engagement failed', e);
       }
   }
 
@@ -470,8 +437,18 @@ export class AudioPlayerService {
     const item = this.queue[this.currentIndex];
 
     if (this.status !== 'playing') {
-        await this.engageBackgroundMode(item);
         this.setStatus('loading');
+        // Ensure Media Session starts
+        await this.mediaSessionManager.setPlaybackState({
+            playbackState: 'playing',
+            playbackSpeed: this.speed
+        });
+        if (Capacitor.isNativePlatform()) {
+             // We also want to set metadata here explicitly if needed by the OS
+             // although updateMediaSessionMetadata() does it, it might rely on queue changes
+             // let's ensure it's synced.
+             this.updateMediaSessionMetadata();
+        }
     }
 
     this.notifyListeners(item.cfi);
@@ -486,7 +463,13 @@ export class AudioPlayerService {
 
         await this.provider.play(processedText, {
             voiceId,
-            speed: this.speed
+            speed: this.speed,
+            metadata: {
+                title: item.title,
+                bookTitle: item.bookTitle,
+                author: item.author,
+                coverUrl: item.coverUrl
+            }
         });
 
         if (this.currentIndex < this.queue.length - 1) {
@@ -530,7 +513,7 @@ export class AudioPlayerService {
      this.sessionRestored = true;
 
      if (this.status === 'paused') {
-         this.provider.resume();
+         await this.provider.resume();
          this.setStatus('playing');
      } else {
          return this.playInternal();
@@ -568,7 +551,6 @@ export class AudioPlayerService {
     await this.savePlaybackState();
     if (Capacitor.isNativePlatform()) {
         try {
-            await ForegroundService.stopForegroundService();
             await this.mediaSessionManager.setPlaybackState({ playbackState: 'none' });
         } catch (e) { console.warn(e); }
     }

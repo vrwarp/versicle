@@ -98,7 +98,7 @@ export interface ITTSProvider {
   preload(text: string, options: TTSOptions): Promise<void>;
 
   pause(): void;
-  resume(): void;
+  resume(): Promise<void>;
   stop(): void;
 
   on(callback: (event: TTSEvent) => void): void;

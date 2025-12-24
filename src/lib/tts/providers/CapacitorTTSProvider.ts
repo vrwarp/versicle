@@ -1,4 +1,6 @@
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
+import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
+import { Capacitor } from '@capacitor/core';
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice } from './types';
 
 export class CapacitorTTSProvider implements ITTSProvider {
@@ -9,6 +11,10 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
   private lastText: string | null = null;
   private lastOptions: TTSOptions | null = null;
+
+  private stopTimeout: ReturnType<typeof setTimeout> | null = null;
+  private isForegroundServiceActive = false;
+  private lastMetadataTitle: string | null = null;
 
   async init(): Promise<void> {
     await this.getVoices();
@@ -42,8 +48,16 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   async play(text: string, options: TTSOptions): Promise<void> {
+    // Cancel any pending stop timeout
+    if (this.stopTimeout) {
+        clearTimeout(this.stopTimeout);
+        this.stopTimeout = null;
+    }
+
     this.lastText = text;
     this.lastOptions = options;
+
+    await this.engageForegroundService(options);
 
     const myId = ++this.activeUtteranceId;
 
@@ -76,6 +90,44 @@ export class CapacitorTTSProvider implements ITTSProvider {
     });
   }
 
+  private async engageForegroundService(options: TTSOptions) {
+      if (Capacitor.getPlatform() !== 'android') return;
+
+      const title = options.metadata?.title || 'Chapter';
+
+      // If service is active and title hasn't changed, do nothing
+      if (this.isForegroundServiceActive && this.lastMetadataTitle === title) {
+          return;
+      }
+
+      try {
+          // Create channel only if not active (or maybe just once? createNotificationChannel is idempotent usually)
+          // But to be safe, we can do it if not active.
+          if (!this.isForegroundServiceActive) {
+              await ForegroundService.createNotificationChannel({
+                  id: 'versicle_tts_channel',
+                  name: 'Versicle Playback',
+                  description: 'Controls for background reading',
+                  importance: 3
+              });
+          }
+
+          await ForegroundService.startForegroundService({
+              id: 1001,
+              title: 'Versicle',
+              body: `Reading: ${title}`,
+              smallIcon: 'ic_stat_versicle',
+              notificationChannelId: 'versicle_tts_channel',
+              buttons: [{ id: 101, title: 'Pause' }]
+          });
+
+          this.isForegroundServiceActive = true;
+          this.lastMetadataTitle = title;
+      } catch (e) {
+          console.error('Background engagement failed', e);
+      }
+  }
+
   async preload(_text: string, _options: TTSOptions): Promise<void> {
       void _text;
       void _options;
@@ -85,6 +137,22 @@ export class CapacitorTTSProvider implements ITTSProvider {
   stop(): void {
     this.activeUtteranceId++;
     TextToSpeech.stop().catch(e => console.warn('Failed to stop TTS', e));
+
+    // Delayed stop for foreground service
+    if (this.stopTimeout) clearTimeout(this.stopTimeout);
+
+    this.stopTimeout = setTimeout(async () => {
+        if (Capacitor.getPlatform() === 'android' && this.isForegroundServiceActive) {
+            try {
+                await ForegroundService.stopForegroundService();
+                this.isForegroundServiceActive = false;
+                this.lastMetadataTitle = null;
+            } catch (e) {
+                console.warn('Failed to stop foreground service', e);
+            }
+        }
+        this.stopTimeout = null;
+    }, 1000);
   }
 
   pause(): void {
@@ -92,10 +160,10 @@ export class CapacitorTTSProvider implements ITTSProvider {
     this.stop();
   }
 
-  resume(): void {
+  async resume(): Promise<void> {
       // Native resume not reliable. We restart the current sentence.
       if (this.lastText && this.lastOptions) {
-          this.play(this.lastText, this.lastOptions);
+          await this.play(this.lastText, this.lastOptions);
       }
   }
 

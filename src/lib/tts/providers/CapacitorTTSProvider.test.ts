@@ -69,7 +69,7 @@ describe('CapacitorTTSProvider', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (TextToSpeech.speak as any).mockClear();
 
-    provider.resume();
+    await provider.resume();
 
     expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
         text: 'hello'

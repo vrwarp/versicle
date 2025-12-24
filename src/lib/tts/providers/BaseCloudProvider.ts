@@ -98,7 +98,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
       this.audioPlayer.pause();
   }
 
-  resume(): void {
+  async resume(): Promise<void> {
       this.audioPlayer.resume();
   }
 

@@ -130,9 +130,9 @@ export class WebSpeechProvider implements ITTSProvider {
     }
   }
 
-  resume(): void {
+  async resume(): Promise<void> {
     if (this.lastText && this.lastOptions) {
-        this.play(this.lastText, this.lastOptions);
+        await this.play(this.lastText, this.lastOptions);
     }
   }
 
