@@ -83,4 +83,19 @@ describe('EmptyLibrary', () => {
       expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Failed to load'), 'error');
     });
   });
+
+  it('displays loading spinner when importing', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useLibraryStore as any).mockReturnValue({
+      addBook: mockAddBook,
+      isImporting: true,
+    });
+
+    render(<EmptyLibrary onImport={vi.fn()} />);
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    // Verify spinner is present (Loader2 usually renders an svg with specific class)
+    const button = screen.getByText('Loading...').closest('button');
+    expect(button).toBeDisabled();
+    expect(button?.querySelector('.animate-spin')).toBeInTheDocument();
+  });
 });

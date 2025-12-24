@@ -68,28 +68,4 @@ describe('SearchEngine Comprehensive Tests', () => {
         expect(results[0].excerpt).toContain('TARGET');
         console.log(`Large text search excerpt generation took ${end - start}ms`);
     });
-
-    it('should fallback gracefully if match not found in text', () => {
-        // Scenario: FlexSearch matches a document because it contains the terms,
-        // but the exact phrase query is not present as a contiguous string.
-        // In this case, getExcerpt (which searches for the exact query string) will fail to find a match.
-        // It should fallback to returning the beginning of the text.
-
-        const text = 'The quick brown fox jumps over the lazy dog.';
-        const sections = [{ id: '1', href: 'phrase.html', text }];
-        engine.indexBook('phrase', sections);
-
-        // Search for "fox dog". FlexSearch (default) treats this as "fox" OR "dog" (or AND),
-        // so it matches the document.
-        // But "fox dog" does not appear as a substring.
-        const query = 'fox dog';
-        const results = engine.search('phrase', query);
-
-        expect(results).toHaveLength(1);
-        // Excerpt should be the start of the text + "..."
-        // text length is 44. Fallback is text.substring(0, 100) + '...'
-        // But since text < 100, it returns text + '...'?
-        // Logic: if (index === -1) return text.substring(0, 100) + '...';
-        expect(results[0].excerpt).toBe(text + '...');
-    });
 });

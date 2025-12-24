@@ -78,6 +78,7 @@ describe('FileUploader', () => {
       addBook: mockAddBook,
       isImporting: true,
       importStatus: 'Importing books...',
+      importProgress: 10,
     });
 
     render(<FileUploader />);

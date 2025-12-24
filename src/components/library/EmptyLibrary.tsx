@@ -2,6 +2,7 @@ import React from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { Button } from '../ui/Button';
+import { Loader2 } from 'lucide-react';
 import { FileUploader } from './FileUploader';
 
 /**
@@ -54,7 +55,14 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = () => {
         disabled={isImporting}
         className="text-primary font-medium"
       >
-        {isImporting ? 'Loading...' : 'Load Demo Book (Alice in Wonderland)'}
+        {isImporting ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading...
+          </>
+        ) : (
+          'Load Demo Book (Alice in Wonderland)'
+        )}
       </Button>
     </div>
   );
