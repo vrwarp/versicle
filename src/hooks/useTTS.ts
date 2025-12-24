@@ -22,13 +22,12 @@ export const useTTS = () => {
       loadVoices();
   }, [loadVoices]);
 
-  const status = useTTSStore(state => state.status);
-
   // Main Effect: Sync Audio Service with Visual Location (when idle)
   useEffect(() => {
     if (!currentBookId || !currentSectionId) return;
 
     const syncQueue = async () => {
+         const status = useTTSStore.getState().status;
          // If audio is active, we don't interrupt it just because the user is browsing
          if (status === 'playing' || status === 'paused' || status === 'loading') {
              return;
@@ -42,7 +41,7 @@ export const useTTS = () => {
 
     syncQueue();
 
-  }, [player, currentBookId, currentSectionId, status]);
+  }, [player, currentBookId, currentSectionId]);
 
   return {};
 };
