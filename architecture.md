@@ -14,7 +14,7 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
 2.  **Heavy Client-Side Logic**:
     *   **Why**: To avoid server costs and maintain privacy. Features typically done on a backend (Text-to-Speech segmentation, Full-Text Indexing, File Parsing) are moved to the client.
     *   **How**:
-        *   **Search**: Uses a **Web Worker** running `FlexSearch` to build an in-memory index of the book on demand.
+        *   **Search**: Uses a **Web Worker** running a custom `SearchEngine` with **RegExp** scanning to find text in memory.
         *   **TTS**: Uses client-side logic (`TextSegmenter`) to split text into sentences and caches audio segments locally (`TTSCache`).
         *   **Ingestion**: Parses EPUB files directly in the browser using `epub.js` and a custom **Offscreen Renderer** for accurate text extraction.
     *   **Trade-off**: Higher memory and CPU usage on the client device. Large books may take seconds to index for search or parse for ingestion.
@@ -55,6 +55,7 @@ graph TD
         Maint[MaintenanceService]
         GenAI[GenAIService]
         CostEst[CostEstimator]
+        TaskRunner[cancellable-task-runner.ts]
     end
 
     subgraph TTS [TTS Subsystem]
@@ -65,6 +66,7 @@ graph TD
         Providers[ITTSProvider]
         Piper[PiperProvider]
         PiperUtils[piper-utils.ts]
+        BG[BackgroundAudio]
     end
 
     subgraph Workers [Web Workers]
@@ -94,6 +96,7 @@ graph TD
     APS --> Sync
     APS --> Piper
     APS --> CostEst
+    APS --> BG
 
     Piper --> PiperUtils
 
@@ -181,17 +184,19 @@ Handles the complex task of importing an EPUB file.
 Implements full-text search off the main thread to prevent UI freezing.
 
 *   **`SearchClient`**: The main-thread interface.
-*   **`SearchEngine`**: Runs inside the Worker. Uses `FlexSearch` to build an inverted index.
-*   **Communication**: Uses **`comlink`** to proxy method calls to the worker. This replaces the previous custom RPC layer, providing better type safety and less boilerplate.
-*   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book and initiates a search. This avoids storing massive indices in IndexedDB but adds a delay before search is ready for large books.
+*   **`SearchEngine`**: Runs inside the Worker.
+*   **Logic**: Uses a simple **RegExp** scanning approach over in-memory text.
+    *   *Why*: `FlexSearch` (previously used) proved too memory-intensive and complex for typical "find on page" use cases in personal libraries.
+    *   *Logic*: Maintains a `Map<BookID, Map<Href, Text>>`. Performs linear scan for matches.
+*   **Communication**: Uses **`comlink`** to proxy method calls to the worker.
+*   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book. Linear scanning is slower than an inverted index for massive corpora but perfectly adequate for single books.
 
 #### Backup (`src/lib/BackupService.ts`)
 Manages internal state backup and restoration (JSON/ZIP).
 
-*   **`createMetadataBackup()`**: Exports JSON containing metadata, themes, and settings.
-    *   *Note*: Does **not** include EPUB binaries (metadata only).
-*   **`restoreMetadataBackup(json)`**: Restores data from a JSON backup string.
-    *   **Strategy**: Upserts metadata. If a book exists, it preserves the existing binary.
+*   **`createMetadataBackup()`**: Exports JSON containing metadata, themes, and settings ("Light Backup").
+*   **`createFullBackup()`**: Exports a ZIP file containing the "Light" JSON manifest plus all original `.epub` files ("Full Backup").
+    *   *Logic*: Uses `JSZip` to stream file content from IndexedDB into a downloadable archive.
 
 #### Data Portability (`src/lib/csv.ts`)
 Handles interoperability with external reading trackers (Goodreads).
@@ -225,6 +230,13 @@ Enhances the reading experience using LLMs (Google Gemini).
 *   **Logic**: Tracks total characters sent to paid providers (Google, OpenAI) in a transient Zustand store (`useCostStore`).
 *   **Trade-off**: Estimates are client-side approximations and do not account for billing nuances (e.g., minimum request size, retries).
 
+#### Utilities
+
+*   **`cancellable-task-runner.ts`**:
+    *   **Goal**: Manage async flows that need to be aborted (e.g., `useEffect` data fetching).
+    *   **Logic**: Uses Generators to yield Promises. This allows the runner to inject a `CancellationError` at any yield point, effectively halting execution and triggering `finally` cleanup blocks.
+    *   **Why**: Standard Promises are not cancellable. AbortController is clunky for complex logic.
+
 ---
 
 ### TTS Subsystem (`src/lib/tts/`)
@@ -238,7 +250,15 @@ The singleton controller (Orchestrator).
 *   **Logic**:
     *   **Concurrency**: Uses a **Sequential Promise Chain** (`enqueue`) to serialize async operations (play, pause, next). This replaces the previous complex Mutex pattern.
     *   **Media Session**: Integrates with the OS Media Session API (lock screen controls) via `MediaSessionManager`.
-*   **Trade-off**: Sequential execution ensures consistency but can feel slightly less responsive if a previous operation hangs (though timeouts are applied).
+
+#### `src/lib/tts/LexiconService.ts`
+Manages pronunciation rules.
+
+*   **Goal**: Fix mispronounced words (e.g., names, fantasy terms).
+*   **Logic**: Applies a list of replacement rules to text *before* sending it to the TTS provider.
+    *   **Rules**: Supports simple string replacement and **RegExp**.
+    *   **Scoping**: Rules can be Global (apply to all books) or Scoped (apply to a specific book ID).
+    *   **Order**: Scoped rules take precedence, followed by Global rules.
 
 #### `src/lib/tts/TextSegmenter.ts`
 Splits raw text into natural-sounding sentences.
@@ -267,7 +287,9 @@ Low-level wrapper around the HTML5 `<audio>` element.
 
 #### `src/lib/tts/BackgroundAudio.ts`
 *   **Goal**: Prevent mobile operating systems (iOS/Android) from killing the app or pausing audio when the screen is locked or the app is in the background.
-*   **Logic**: Plays a silent loop (or optional white noise) to keep the OS Media Session active. On Android, it upgrades to a **Foreground Service** (via `@capawesome-team/capacitor-android-foreground-service`) to guarantee process survival.
+*   **Logic**:
+    *   **Web**: Plays a silent loop (or optional white noise) to keep the OS Media Session active.
+    *   **Android**: Upgrades to a **Foreground Service** (via `@capawesome-team/capacitor-android-foreground-service`) which displays a persistent notification. This signals to Android that the app is "active" and should not be killed.
 *   **Trade-off**: "Hack" solution required due to restrictive mobile browser policies (iOS). Foreground Service requires explicit permissions on Android.
 
 #### TTS Processors & Extraction
@@ -277,6 +299,8 @@ Low-level wrapper around the HTML5 `<audio>` element.
 #### `src/lib/tts/providers/`
 Plugin architecture for TTS backends. All providers implement `ITTSProvider`.
 *   **`PiperProvider`**: Runs local WASM models. Use `piper-utils.ts` to manage the Worker.
+    *   **Transactional Download**: Downloads model files to memory first, verifies integrity (by attempting a test synthesis), and only *then* commits them to the Cache API. This prevents corrupted partial downloads.
+    *   **Stitching**: If a sentence is too long for the model, it is split into chunks, synthesized separately, and the resulting WAV blobs are stitched together (rewriting RIFF headers) into a single seamless audio file.
 *   **`CloudProvider`**: Adapts Google/OpenAI APIs.
 *   **`LemonFoxProvider`**: Adapts LemonFox.ai API (OpenAI-compatible) for lower cost.
 *   **`CapacitorTTSProvider`**: Wraps `@capacitor-community/text-to-speech` for native mobile playback.

@@ -17,8 +17,8 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
     *   **Hybrid Engine**: Seamlessly switch between **Local** (Web Speech, Piper WASM, Native Mobile) and **Cloud** (Google, OpenAI, LemonFox) providers.
     *   **Visual Sync**: Karaoke-style sentence and word highlighting.
     *   **Pronunciation Lexicon**: Fix mispronounced words using Regex-based replacement rules.
-    *   **Background Playback**: (Android) Continue listening when the screen is off using Media Session API and optional White Noise generation.
-*   **Full-Text Search**: Fast, off-main-thread search using Web Workers and FlexSearch.
+    *   **Background Playback**: (Android) Continue listening when the screen is off using Media Session API and Foreground Service.
+*   **Full-Text Search**: Fast, off-main-thread search using Web Workers.
 *   **Data Management**:
     *   **Batch Import**: Import multiple EPUBs at once or upload a ZIP archive containing your library.
     *   **Backup/Restore**: Create **Light** (JSON, metadata only) or **Full** (ZIP, includes EPUB files) backups to keep your data safe.
@@ -37,8 +37,9 @@ It is designed to be a "Forever Reader"—an app that you can rely on for decade
 *   **Data Portability**: PapaParse, JSZip
 *   **Security**: DOMPurify
 *   **Rendering**: `epub.js`
-*   **Search**: `FlexSearch` (in Web Worker)
+*   **Search**: Custom `RegExp` engine (in Web Worker)
 *   **TTS**: Piper (WASM), Web Speech API, Google/OpenAI/LemonFox Cloud APIs, Capacitor Native TTS
+*   **Mobile Plugins**: `@capawesome-team/capacitor-android-foreground-service`, `@capawesome-team/capacitor-android-battery-optimization`, `@jofr/capacitor-media-session`
 *   **AI**: Google Gemini (via `@google/generative-ai`)
 *   **Testing**: Vitest (Unit), Playwright (Visual/Integration)
 
