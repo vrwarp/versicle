@@ -252,6 +252,7 @@ export class AudioPlayerService {
                });
           } else if (event.type === 'boundary') {
               // Optionally update sync engine or progress
+              this.syncEngine?.setActiveIndex(event.charIndex);
           } else if (event.type === 'meta') {
               if (event.alignment && this.syncEngine) {
                    const alignmentData: AlignmentData[] = event.alignment.map(tp => ({

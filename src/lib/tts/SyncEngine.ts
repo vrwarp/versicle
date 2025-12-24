@@ -76,6 +76,17 @@ export class SyncEngine {
   }
 
   /**
+   * Directly sets the active character index (for boundary events).
+   *
+   * @param charIndex - The character index to highlight.
+   */
+  public setActiveIndex(charIndex: number) {
+      if (this.onHighlightCallback) {
+          this.onHighlightCallback(charIndex);
+      }
+  }
+
+  /**
    * Sets the callback to be invoked when a new segment should be highlighted.
    *
    * @param callback - Function receiving the character index and optional length.
