@@ -31,6 +31,7 @@ import { Button } from '../ui/Button';
 import { useSmartTOC } from '../../hooks/useSmartTOC';
 import { Wand2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { Dialog } from '../ui/Dialog';
 
 /**
  * The main reader interface component.
@@ -95,6 +96,12 @@ export const ReaderView: React.FC = () => {
 
   const [historyTick, setHistoryTick] = useState(0);
 
+  // --- Import Progress Jump Logic ---
+  const [showImportJumpDialog, setShowImportJumpDialog] = useState(false);
+  const [importJumpTarget, setImportJumpTarget] = useState(0);
+  const hasPromptedForImport = useRef(false);
+  const metadataRef = useRef(null as unknown); // Will hold metadata
+
   // --- Setup useEpubReader Hook ---
 
   const readerOptions = useMemo<EpubReaderOptions>(() => ({
@@ -114,6 +121,23 @@ export const ReaderView: React.FC = () => {
                  timestamp: Date.now()
              };
          }
+
+         // Import Jump Check
+         // If we have metadata, no saved CFI (never opened), but have progress (from import), and haven't prompted yet.
+         // And current position is effectively start.
+         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         const meta = metadataRef.current as any;
+         if (meta && !meta.currentCfi && meta.progress > 0 && !hasPromptedForImport.current && id) {
+             // We only trigger if we are at the start (percentage ~0)
+             if (percentage < 0.01) {
+                 setImportJumpTarget(meta.progress);
+                 setShowImportJumpDialog(true);
+                 hasPromptedForImport.current = true;
+                 // SKIP SAVING PROGRESS this time to avoid overwriting the imported progress with 0
+                 return;
+             }
+         }
+         hasPromptedForImport.current = true; // Ensure we only check once per session
 
          // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
          if (location.start.cfi === useReaderStore.getState().currentCfi) return;
@@ -206,6 +230,10 @@ export const ReaderView: React.FC = () => {
       error: hookError
   } = useEpubReader(id, viewerRef, readerOptions);
 
+  useEffect(() => {
+    metadataRef.current = metadata;
+  }, [metadata]);
+
   const bookRef = useRef(book);
   useEffect(() => {
       bookRef.current = book;
@@ -284,6 +312,47 @@ export const ReaderView: React.FC = () => {
       loadAnnotations(id);
     }
   }, [id, loadAnnotations]);
+
+  const handleJumpConfirm = async () => {
+      setShowImportJumpDialog(false);
+      if (book && rendition) {
+          try {
+             // Ensure locations are ready?
+             // If not, cfiFromPercentage might crash or return null?
+             // epub.js cfiFromPercentage usually requires locations.
+             // But we can check book.locations.total.
+             if (book.locations.length() > 0) {
+                  const cfi = book.locations.cfiFromPercentage(importJumpTarget);
+                  if (cfi) {
+                      await rendition.display(cfi);
+                      // dbService.saveProgress will be called by the subsequent onLocationChange
+                  }
+             } else {
+                 // Fallback: try cfiFromPercentage anyway
+                 const cfi = book.locations.cfiFromPercentage(importJumpTarget);
+                 if (cfi) {
+                     await rendition.display(cfi);
+                 } else {
+                     useToastStore.getState().showToast("Locations not ready yet, please wait.", "error");
+                 }
+             }
+          } catch (e) {
+              console.error("Jump failed", e);
+              useToastStore.getState().showToast('Failed to jump to location', 'error');
+          }
+      }
+  };
+
+  const handleJumpCancel = () => {
+      setShowImportJumpDialog(false);
+      // Explicitly save current position (0) to mark as "started"
+      if (id && useReaderStore.getState().currentCfi) {
+          const state = useReaderStore.getState();
+          if (state.currentCfi) {
+             dbService.saveProgress(id, state.currentCfi, state.progress);
+          }
+      }
+  };
 
   // Apply Annotations to Rendition
   const addedAnnotations = useRef<Set<string>>(new Set());
@@ -540,6 +609,23 @@ export const ReaderView: React.FC = () => {
 
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
+      <Dialog
+        isOpen={showImportJumpDialog}
+        onClose={handleJumpCancel}
+        title="Resume from Reading List?"
+        description={`This book has progress saved in your reading list (${Math.round(importJumpTarget * 100)}%). Would you like to jump to this location?`}
+        footer={
+            <>
+                <Button variant="ghost" onClick={handleJumpCancel}>
+                    No, start from beginning
+                </Button>
+                <Button onClick={handleJumpConfirm}>
+                    Yes, jump to location
+                </Button>
+            </>
+        }
+      />
+
       <ReaderTTSController
          rendition={rendition}
          viewMode={viewMode}

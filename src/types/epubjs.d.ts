@@ -91,6 +91,7 @@ declare module 'epubjs' {
         percentageFromCfi(cfi: string): number;
         save(): string;
         load(locations: string): void;
+        length(): number;
     }
 
     export interface Section {
