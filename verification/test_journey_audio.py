@@ -79,6 +79,10 @@ def test_journey_audio(page: Page):
     page.get_by_test_id("tts-play-pause-button").click()
     page.keyboard.press("Escape")
 
+    # Enter Immersive Mode (required for Flow Mode overlay)
+    print("Entering Immersive Mode...")
+    page.get_by_test_id("reader-immersive-enter-button").click()
+
     # Verify Overlay Appears (Listening State)
     expect(page.get_by_test_id("flow-mode-breathing-border")).to_be_visible(timeout=5000)
     utils.capture_screenshot(page, "audio_3_flow_mode_active")
@@ -128,6 +132,10 @@ def test_journey_audio(page: Page):
     # Verify Overlay Disappears
     expect(page.get_by_test_id("flow-mode-breathing-border")).not_to_be_visible(timeout=5000)
     expect(container).to_have_css("opacity", "1")
+
+    # Exit Immersive Mode to see header
+    print("Exiting Immersive Mode...")
+    page.get_by_test_id("reader-immersive-exit-button").click()
 
     # --- Part 4: Summary Mode in Library ---
     print("--- Testing Summary Mode in Library ---")
