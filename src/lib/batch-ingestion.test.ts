@@ -26,10 +26,10 @@ vi.mock('jszip', () => {
 global.FileReader = class {
     readAsArrayBuffer() {
         // immediately trigger onload with dummy buffer
-        // @ts-ignore
+        // @ts-expect-error Mocking internals
         this.onload({ target: { result: new ArrayBuffer(8) } });
     }
-} as any;
+} as unknown as typeof FileReader;
 
 
 describe('batch-ingestion', () => {
@@ -90,12 +90,12 @@ describe('batch-ingestion', () => {
              const originalFileReader = global.FileReader;
              global.FileReader = class {
                  readAsArrayBuffer() {
-                     // @ts-ignore
+                     // @ts-expect-error Mocking internals
                      if (this.onprogress) this.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
-                     // @ts-ignore
+                     // @ts-expect-error Mocking internals
                      this.onload({ target: { result: new ArrayBuffer(8) } });
                  }
-             } as any;
+             } as unknown as typeof FileReader;
 
              mockLoadAsync.mockResolvedValue({
                  files: {},
