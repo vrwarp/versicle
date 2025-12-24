@@ -19,7 +19,7 @@ import { backupService } from '../lib/BackupService';
 import { dbService } from '../db/DBService';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { ReadingListDialog } from './ReadingListDialog';
-import { Trash2, Download } from 'lucide-react';
+import { Trash2, Download, Loader2 } from 'lucide-react';
 
 /**
  * Global application settings dialog.
@@ -44,7 +44,14 @@ export const GlobalSettingsDialog = () => {
     const [readingListCount, setReadingListCount] = useState<number | null>(null);
     const [isReadingListOpen, setIsReadingListOpen] = useState(false);
 
-    const { addBooks, isImporting } = useLibraryStore();
+    const {
+        addBooks,
+        isImporting,
+        importProgress,
+        importStatus,
+        uploadProgress,
+        uploadStatus
+    } = useLibraryStore();
     const showToast = useToastStore(state => state.showToast);
 
     useEffect(() => {
@@ -345,6 +352,36 @@ export const GlobalSettingsDialog = () => {
                                     className="hidden"
                                     onChange={handleBatchImport}
                                 />
+
+                                {isImporting && (
+                                    <div className="flex flex-col items-center justify-center space-y-3 mt-4 p-4 bg-muted/30 rounded-lg">
+                                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+
+                                        {/* Upload/Processing Progress */}
+                                        <div className="w-full flex flex-col items-center space-y-1">
+                                            <p className="text-sm text-muted-foreground">{uploadStatus || 'Processing files...'}</p>
+                                            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-primary/70 transition-all duration-300 ease-out"
+                                                    style={{ width: `${uploadProgress}%` }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Import Progress (only show if upload is done or if import started) */}
+                                        {(importProgress > 0 || uploadProgress >= 100) && (
+                                            <div className="w-full flex flex-col items-center space-y-1 mt-2">
+                                                <p className="text-muted-foreground font-medium">{importStatus || 'Importing books...'}</p>
+                                                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-primary transition-all duration-300 ease-out"
+                                                        style={{ width: `${importProgress}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
