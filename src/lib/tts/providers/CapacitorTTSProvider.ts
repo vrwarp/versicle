@@ -14,10 +14,11 @@ export class CapacitorTTSProvider implements ITTSProvider {
     await this.getVoices();
     try {
         await TextToSpeech.addListener('onRangeStart', (info) => {
+             // Check 1: Are we in a valid playback session?
              if (!this.lastText) return;
 
-             // If the index is outside the bounds of the current text,
-             // it belongs to a previous, longer utterance.
+             // Check 2: The "Zombie Event" Filter
+             // If the index is impossible for the current text, it belongs to the past.
              if (info.start >= this.lastText.length) return;
 
              this.emit({ type: 'boundary', charIndex: info.start });
@@ -48,18 +49,21 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   async play(text: string, options: TTSOptions): Promise<void> {
+    // Step A: Kill previous session immediately
+    this.activeUtteranceId++;
     this.lastText = null;
 
     try {
+        // Step B: Flush native queue (best effort)
         await TextToSpeech.stop();
     } catch (e) {
         // Ignore errors if nothing was playing
     }
 
+    // Step C: Start new session
+    const myId = ++this.activeUtteranceId;
     this.lastText = text;
     this.lastOptions = options;
-
-    const myId = ++this.activeUtteranceId;
 
     let lang = 'en-US';
     const voice = this.voiceMap.get(options.voiceId);
