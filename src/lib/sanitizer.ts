@@ -7,6 +7,15 @@ import DOMPurify from 'dompurify';
  * @param html - The raw HTML string.
  * @returns The sanitized HTML string.
  */
+// Configure DOMPurify hooks once
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  // Fix Reverse Tabnabbing Vulnerability
+  // Ensure all links with target="_blank" have rel="noopener noreferrer"
+  if ('target' in node && node.getAttribute('target') === '_blank') {
+    node.setAttribute('rel', 'noopener noreferrer');
+  }
+});
+
 export function sanitizeContent(html: string): string {
   return DOMPurify.sanitize(html, {
     // Allow standard HTML tags and attributes
@@ -15,7 +24,7 @@ export function sanitizeContent(html: string): string {
 
     // Ensure we don't break SVGs or MathML if present (common in EPUBs)
     ADD_TAGS: ['link', 'style', 'svg', 'path', 'g', 'circle', 'rect', 'line', 'image', 'text'],
-    ADD_ATTR: ['xmlns', 'epub:type', 'viewBox', 'd', 'fill', 'stroke', 'stroke-width'],
+    ADD_ATTR: ['xmlns', 'epub:type', 'viewBox', 'd', 'fill', 'stroke', 'stroke-width', 'target'],
 
     // Explicitly forbid known XSS vectors that might sneak in
     FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'base'],
