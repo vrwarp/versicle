@@ -20,10 +20,14 @@ const LIST_ITEM_HEIGHT = 88;
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const GridCell = ({ columnIndex, rowIndex, style, data }: any) => {
+    if (!data) return null;
     const { books, columnCount } = data;
+    if (!books) return null;
+
     const index = rowIndex * columnCount + columnIndex;
     if (index >= books.length) return <div style={style} />;
     const book = books[index];
+    if (!book) return <div style={style} />;
 
     return (
         <div style={{
@@ -38,10 +42,15 @@ const GridCell = ({ columnIndex, rowIndex, style, data }: any) => {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ListCell = ({ rowIndex, style, data }: any) => {
+    if (!data) return null;
     const { books } = data;
+    if (!books) return null;
+
     const index = rowIndex;
     if (index >= books.length) return <div style={style} />;
     const book = books[index];
+    if (!book) return <div style={style} />;
+
     return <BookListItem book={book} style={style} />;
 }
 
