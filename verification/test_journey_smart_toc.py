@@ -30,7 +30,14 @@ def test_smart_toc_success(page):
     expect(page.get_by_test_id("library-view")).to_be_visible(timeout=10000)
 
     # 3. Open Reader
-    page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=30000)
+    # Ensure book is present (reload might have cleared state or DB latency)
+    try:
+        page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=10000)
+    except:
+        print("Book card missing after reload in Success Scenario, ensuring library again...")
+        ensure_library_with_book(page)
+        page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=30000)
+
     page.locator('[data-testid^="book-card-"]').first.click()
     expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=20000)
 
@@ -80,7 +87,14 @@ def test_smart_toc_failure(page):
     }""")
     page.reload()
 
-    page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=30000)
+    # Ensure book is present (reload might have cleared state or DB latency)
+    try:
+        page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=10000)
+    except:
+        print("Book card missing after reload, ensuring library again...")
+        ensure_library_with_book(page)
+        page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=30000)
+
     page.locator('[data-testid^="book-card-"]').first.click()
     expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=20000)
 

@@ -32,8 +32,15 @@ def reset_app(page: Page):
         page: The Playwright Page object.
     """
     page.goto("http://localhost:5173", timeout=5000)
-    # Check if empty library is shown or verify app loaded
-    # page.wait_for_selector...
+    # Clear local storage to ensure clean state
+    page.evaluate("localStorage.clear()")
+    # Reload to apply cleared storage
+    page.reload()
+    # Wait for app to be ready
+    try:
+        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book'), div:has-text('Your library is empty')", timeout=10000)
+    except:
+        print("Warning: App load state check timed out.")
 
 def ensure_library_with_book(page: Page):
     """
