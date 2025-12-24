@@ -90,6 +90,7 @@ export class AudioPlayerService {
   private backgroundAudio: BackgroundAudio;
   private backgroundAudioMode: BackgroundAudioMode = 'silence';
   private lastMetadata: MediaSessionMetadata | null = null;
+  private foregroundStopTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor() {
     this.backgroundAudio = new BackgroundAudio();
@@ -165,6 +166,11 @@ export class AudioPlayerService {
   }
 
   private async engageBackgroundMode(item: TTSQueueItem) {
+      if (this.foregroundStopTimer) {
+          clearTimeout(this.foregroundStopTimer);
+          this.foregroundStopTimer = null;
+      }
+
       if (Capacitor.getPlatform() !== 'android') return;
       try {
           await ForegroundService.createNotificationChannel({
@@ -566,11 +572,21 @@ export class AudioPlayerService {
 
   private async stopInternal() {
     await this.savePlaybackState();
+
+    if (this.foregroundStopTimer) {
+        clearTimeout(this.foregroundStopTimer);
+        this.foregroundStopTimer = null;
+    }
+
     if (Capacitor.isNativePlatform()) {
-        try {
-            await ForegroundService.stopForegroundService();
-            await this.mediaSessionManager.setPlaybackState({ playbackState: 'none' });
-        } catch (e) { console.warn(e); }
+        // Delay stopping the foreground service to prevent flickering during chapter transitions
+        this.foregroundStopTimer = setTimeout(async () => {
+            try {
+                await ForegroundService.stopForegroundService();
+                await this.mediaSessionManager.setPlaybackState({ playbackState: 'none' });
+            } catch (e) { console.warn(e); }
+            this.foregroundStopTimer = null;
+        }, 1000);
     }
     this.setStatus('stopped');
     this.notifyListeners(null);
