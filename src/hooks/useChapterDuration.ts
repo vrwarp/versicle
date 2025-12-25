@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
 
 export function useChapterDuration() {
@@ -5,18 +6,28 @@ export function useChapterDuration() {
   const index = useTTSStore(state => state.currentIndex);
   const rate = useTTSStore(state => state.rate);
 
+  // Memoize cumulative lengths to avoid O(N) iteration on every render/sentence change.
+  // This array stores the cumulative character count up to each index.
+  // prefixSums[i] = total characters in queue[0...i-1]
+  const prefixSums = useMemo(() => {
+    if (!queue || queue.length === 0) return [0];
+    const sums = new Array(queue.length + 1).fill(0);
+    for (let i = 0; i < queue.length; i++) {
+        sums[i + 1] = sums[i] + (queue[i].text?.length || 0);
+    }
+    return sums;
+  }, [queue]);
+
   if (!queue || queue.length === 0) {
     return { timeRemaining: 0, progress: 0 };
   }
 
-  // Calculate remaining characters from current index to end
-  let remainingChars = 0;
   // Ensure index is within bounds
   const validIndex = Math.max(0, Math.min(index, queue.length));
 
-  for (let i = validIndex; i < queue.length; i++) {
-    remainingChars += queue[i].text.length;
-  }
+  const totalChars = prefixSums[queue.length];
+  const consumedChars = prefixSums[validIndex];
+  const remainingChars = totalChars - consumedChars;
 
   // Progress based on sentence count as per plan
   const progress = (validIndex / (queue.length || 1)) * 100;
