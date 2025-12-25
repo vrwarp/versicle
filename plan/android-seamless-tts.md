@@ -192,3 +192,34 @@ sequenceDiagram
 
 1. **Duplicate Content:** Create a text with "Hello. Hello." verifying that the transition logic handles identical consecutive strings correctly.
 2. **Provider Switching:** Disconnect internet to force a fallback from Cloud to Local. Verify `init()` cleans up listeners and doesn't cause double-event firing.
+
+---
+
+## 7. Implementation Status (Updated)
+
+**Date:** 2024-05-22
+**Status:** Implemented
+
+### Actions Taken:
+1.  **Refactored `CapacitorTTSProvider.ts`:**
+    *   Added state variables: `nextText`, `nextUtterancePromise`, `currentUtteranceFinished`, `listenerHandle`.
+    *   Implemented `preload()` to use `queueStrategy: 1` (Add) and store the promise.
+    *   Implemented `play()` with Smart Handoff logic (adopt promise if eligible, else flush).
+    *   Updated `init()` to handle listener cleanup.
+    *   Updated `stop()` and `pause()` to clear preload state.
+
+2.  **Updated Tests:**
+    *   Expanded `CapacitorTTSProvider.test.ts` to cover:
+        *   Smart Handoff scenario (mocked `speak` not called on `play`).
+        *   Fallback to Flush when content mismatches.
+        *   Fallback to Flush when interruption occurs (previous not finished).
+        *   Verify `preload` uses `queueStrategy: 1`.
+        *   Verify listener cleanup in `init`.
+
+### Deviations:
+*   The original plan mentioned checking if "audio is currently playing" in `preload()`. In implementation, we unconditionally buffer if `preload()` is called, as the Service usually only calls it during playback. The `play()` logic correctly handles the "Natural Flow" check via `currentUtteranceFinished` flag.
+*   Added `listenerHandle` property to properly track and remove the listener returned by the Capacitor plugin.
+
+### Verification Results:
+*   **Unit Tests:** All tests in `CapacitorTTSProvider.test.ts` passed.
+*   **Integration:** Ran `verification/test_mock_tts.py` to ensure no regression in general TTS infrastructure.

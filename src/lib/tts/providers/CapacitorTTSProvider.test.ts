@@ -32,7 +32,7 @@ describe('CapacitorTTSProvider', () => {
     expect(typeof provider.on).toBe('function');
   });
 
-  it('should use queueStrategy 0 (Flush) for play', async () => {
+  it('should use queueStrategy 0 (Flush) for play without preload', async () => {
     // Setup voices
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
@@ -51,6 +51,149 @@ describe('CapacitorTTSProvider', () => {
       lang: 'en-US',
       rate: 1.0,
       queueStrategy: 0 // Assert interruption strategy
+    }));
+  });
+
+  it('should use queueStrategy 1 (Add) for preload', async () => {
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockResolvedValue(undefined);
+
+    await provider.init();
+    await provider.preload('next sentence', { voiceId: 'voice1', speed: 1.0 });
+
+    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
+        text: 'next sentence',
+        queueStrategy: 1
+    }));
+  });
+
+  it('should perform Smart Handoff when eligible', async () => {
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+
+    let resolveSentence1: () => void;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockImplementation((options: any) => {
+        if (options.text === 'Sentence 1') {
+            return new Promise<void>(r => resolveSentence1 = r);
+        }
+        if (options.text === 'Sentence 2') {
+             return Promise.resolve(); // Resolves immediately for test simplicity
+        }
+        return Promise.resolve();
+    });
+
+    await provider.init();
+    const eventSpy = vi.fn();
+    provider.on(eventSpy);
+
+    // 1. Play Sentence 1
+    await provider.play('Sentence 1', { voiceId: 'voice1', speed: 1.0 });
+
+    // 2. Preload Sentence 2
+    await provider.preload('Sentence 2', { voiceId: 'voice1', speed: 1.0 });
+
+    // Check that preload called speak with Add
+    expect(TextToSpeech.speak).toHaveBeenLastCalledWith(expect.objectContaining({
+        text: 'Sentence 2',
+        queueStrategy: 1
+    }));
+
+    // 3. Finish Sentence 1
+    resolveSentence1!();
+    await new Promise(r => setTimeout(r, 0)); // Allow promise chain to settle
+
+    // Assert Sentence 1 finished naturally (end event)
+    expect(eventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'end' }));
+
+    // Reset spy to track Sentence 2 events clearly
+    eventSpy.mockClear();
+
+    // 4. Play Sentence 2
+    // Clear speak mock to ensure it's NOT called again
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockClear();
+
+    await provider.play('Sentence 2', { voiceId: 'voice1', speed: 1.0 });
+
+    // Assert: NO new speak call
+    expect(TextToSpeech.speak).not.toHaveBeenCalled();
+
+    // Assert: Immediate start event
+    expect(eventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'start' }));
+
+    // Wait for the preloaded promise to resolve
+    await new Promise(r => setTimeout(r, 0));
+    expect(eventSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'end' }));
+  });
+
+  it('should fallback to Flush if content does not match preload', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockResolvedValue(undefined);
+
+    await provider.init();
+
+    // 1. Play Sentence 1 (Finish it so natural flow is true)
+    await provider.play('Sentence 1', { voiceId: 'voice1', speed: 1.0 });
+    await new Promise(r => setTimeout(r, 0)); // finish it
+
+    // 2. Preload Sentence 2
+    await provider.preload('Sentence 2', { voiceId: 'voice1', speed: 1.0 });
+
+    // 3. Play DIFFERENT sentence (Seek/Jump)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockClear();
+
+    await provider.play('Sentence 3', { voiceId: 'voice1', speed: 1.0 });
+
+    // Assert: Stop called, Speak called with Flush
+    expect(TextToSpeech.stop).toHaveBeenCalled();
+    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
+        text: 'Sentence 3',
+        queueStrategy: 0
+    }));
+  });
+
+  it('should fallback to Flush if previous sentence interrupted (not natural flow)', async () => {
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+
+    // Mock speak to NOT resolve immediately (simulating playing)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockReturnValue(new Promise(() => {}));
+
+    await provider.init();
+
+    // 1. Play Sentence 1 (It stays playing)
+    await provider.play('Sentence 1', { voiceId: 'voice1', speed: 1.0 });
+
+    // 2. Preload Sentence 2
+    await provider.preload('Sentence 2', { voiceId: 'voice1', speed: 1.0 });
+
+    // 3. Play Sentence 2 (User skipped Sentence 1)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockClear();
+
+    await provider.play('Sentence 2', { voiceId: 'voice1', speed: 1.0 });
+
+    // Assert: Stop called (to kill S1 and the queued S2), then Speak S2 with Flush
+    expect(TextToSpeech.stop).toHaveBeenCalled();
+    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
+        text: 'Sentence 2',
+        queueStrategy: 0
     }));
   });
 
@@ -256,5 +399,18 @@ describe('CapacitorTTSProvider', () => {
       type: 'boundary',
       charIndex: 10
     }));
+  });
+
+  it('should remove existing listener on init to prevent leaks', async () => {
+     const removeSpy = vi.fn();
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.addListener as any).mockResolvedValue({ remove: removeSpy });
+
+    await provider.init();
+
+    // Call init again
+    await provider.init();
+
+    expect(removeSpy).toHaveBeenCalled();
   });
 });
