@@ -15,13 +15,6 @@ export class CapacitorTTSProvider implements ITTSProvider {
   // Smart Handoff State
   private nextText: string | null = null;
   private nextUtterancePromise: Promise<void> | null = null;
-  // We don't strictly need nextUtteranceId if we check equality of the text and promise existence,
-  // but let's stick to the design doc if possible.
-  // Actually, the design says `nextUtteranceId` to ensure we don't resolve the wrong one.
-  // But since we create a new closure for the promise handler in play(), we might not need it there
-  // if we attach handlers in play().
-  // However, the design doc says: "Attach completion handlers to the EXISTING promise".
-  // The promise returned by TextToSpeech.speak() resolves when speech finishes.
 
   async init(): Promise<void> {
     await this.getVoices();
@@ -177,9 +170,6 @@ export class CapacitorTTSProvider implements ITTSProvider {
     // We increment activeUtteranceId so that any pending 'end' events from the stopped utterance are ignored.
     this.activeUtteranceId++;
 
-    // Also clear preload state on pause?
-    // The design doc says for stop: "If the user stops playback while a preload is pending, we must ensure the preloaded item is also cancelled and the state cleared."
-    // Pause should probably behave similarly regarding the native queue - if we pause, we usually stop the native engine.
     this.nextText = null;
     this.nextUtterancePromise = null;
 
