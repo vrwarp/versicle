@@ -46,16 +46,33 @@ describe('DBService', () => {
   describe('getLibrary', () => {
     it('should return sorted books', async () => {
       const db = await getDB();
+      // Book 1: Oldest added, never read
       const book1 = { id: '1', title: 'A', addedAt: 100, isOffloaded: false, fileHash: 'h1', fileSize: 100, syntheticToc: [], totalChars: 0, author: 'A', description: '' };
+      // Book 2: Newer added, never read
       const book2 = { id: '2', title: 'B', addedAt: 200, isOffloaded: false, fileHash: 'h2', fileSize: 100, syntheticToc: [], totalChars: 0, author: 'B', description: '' };
+      // Book 3: Oldest added, read recently
+      const book3 = { id: '3', title: 'C', addedAt: 50, lastRead: 300, isOffloaded: false, fileHash: 'h3', fileSize: 100, syntheticToc: [], totalChars: 0, author: 'C', description: '' };
+      // Book 4: Oldest added, read long ago
+      const book4 = { id: '4', title: 'D', addedAt: 50, lastRead: 250, isOffloaded: false, fileHash: 'h4', fileSize: 100, syntheticToc: [], totalChars: 0, author: 'D', description: '' };
 
       await db.put('books', book1);
       await db.put('books', book2);
+      await db.put('books', book3);
+      await db.put('books', book4);
 
       const library = await dbService.getLibrary();
-      expect(library).toHaveLength(2);
-      expect(library[0].id).toBe('2'); // Sorted by addedAt desc
-      expect(library[1].id).toBe('1');
+      expect(library).toHaveLength(4);
+
+      // Expected order:
+      // 1. Book 3 (lastRead: 300)
+      // 2. Book 4 (lastRead: 250)
+      // 3. Book 2 (lastRead: undefined, addedAt: 200)
+      // 4. Book 1 (lastRead: undefined, addedAt: 100)
+
+      expect(library[0].id).toBe('3');
+      expect(library[1].id).toBe('4');
+      expect(library[2].id).toBe('2');
+      expect(library[3].id).toBe('1');
     });
 
     it('should filter invalid books', async () => {
