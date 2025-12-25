@@ -1,6 +1,5 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
-import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 
 /**
  * Metadata for the Media Session API.
@@ -48,9 +47,6 @@ export interface PlaybackState {
 export class MediaSessionManager {
   private isNative = Capacitor.isNativePlatform();
   private hasWebMediaSession = typeof navigator !== 'undefined' && 'mediaSession' in navigator;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private stopTimer: any | null = null;
-  private currentMetadata: MediaSessionMetadata | null = null;
 
   /**
    * Initializes the MediaSessionManager with the provided callbacks.
@@ -59,22 +55,6 @@ export class MediaSessionManager {
    */
   constructor(private callbacks: MediaSessionCallbacks) {
     this.setupActionHandlers();
-    this.setupAndroidChannel();
-  }
-
-  private async setupAndroidChannel() {
-      if (this.isNative && Capacitor.getPlatform() === 'android') {
-          try {
-              await ForegroundService.createNotificationChannel({
-                  id: 'versicle_tts_channel',
-                  name: 'Versicle Playback',
-                  description: 'Controls for background reading',
-                  importance: 3
-              });
-          } catch (e) {
-              console.error('Failed to create notification channel', e);
-          }
-      }
   }
 
   /**
@@ -132,8 +112,6 @@ export class MediaSessionManager {
    * @param metadata - The new metadata to display.
    */
   async setMetadata(metadata: MediaSessionMetadata) {
-    this.currentMetadata = metadata;
-
     if (this.isNative) {
         await MediaSession.setMetadata({
             title: metadata.title,
@@ -141,22 +119,6 @@ export class MediaSessionManager {
             album: metadata.album,
             artwork: metadata.artwork
         });
-
-        if (Capacitor.getPlatform() === 'android') {
-             try {
-                 // According to the types, updateForegroundService requires StartForegroundServiceOptions
-                 // which includes id and smallIcon.
-                 await ForegroundService.updateForegroundService({
-                     id: 1001,
-                     title: metadata.title,
-                     body: metadata.artist,
-                     smallIcon: 'ic_stat_versicle'
-                 });
-             } catch (e) {
-                 // Service might not be running yet, which is fine
-                 console.debug("Failed to update foreground service metadata (service might be stopped)", e);
-             }
-        }
     } else if (this.hasWebMediaSession) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         navigator.mediaSession.metadata = new (window as any).MediaMetadata({
@@ -178,41 +140,6 @@ export class MediaSessionManager {
     const playbackSpeed = typeof state === 'string' ? 1.0 : state.playbackSpeed;
     const position = typeof state === 'string' ? undefined : state.position;
     const duration = typeof state === 'string' ? undefined : state.duration;
-
-    if (playbackState === 'playing') {
-        if (this.stopTimer) {
-            clearTimeout(this.stopTimer);
-            this.stopTimer = null;
-        }
-
-        if (this.isNative && Capacitor.getPlatform() === 'android') {
-            try {
-                await ForegroundService.startForegroundService({
-                    id: 1001,
-                    title: this.currentMetadata?.title || 'Versicle',
-                    body: this.currentMetadata?.artist || 'Reading...',
-                    smallIcon: 'ic_stat_versicle',
-                    notificationChannelId: 'versicle_tts_channel',
-                    buttons: [{ id: 101, title: 'Pause' }]
-                });
-            } catch (e) {
-                console.error("Failed to start foreground service", e);
-            }
-        }
-    } else if (playbackState === 'paused' || playbackState === 'none') {
-         if (this.isNative && Capacitor.getPlatform() === 'android') {
-             if (!this.stopTimer) {
-                 this.stopTimer = setTimeout(async () => {
-                     try {
-                         await ForegroundService.stopForegroundService();
-                     } catch (e) {
-                         console.warn("Failed to stop foreground service", e);
-                     }
-                     this.stopTimer = null;
-                 }, 5 * 60 * 1000); // 5 minutes debounce
-             }
-         }
-    }
 
     if (this.isNative) {
         await MediaSession.setPlaybackState({

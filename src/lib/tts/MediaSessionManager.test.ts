@@ -2,13 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 import { MediaSessionManager } from './MediaSessionManager';
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
-import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 
 // Mock Capacitor and MediaSession
 vi.mock('@capacitor/core', () => ({
   Capacitor: {
     isNativePlatform: vi.fn(),
-    getPlatform: vi.fn(),
   },
 }));
 
@@ -19,15 +17,6 @@ vi.mock('@jofr/capacitor-media-session', () => ({
     setPlaybackState: vi.fn(),
     setPositionState: vi.fn(),
   },
-}));
-
-vi.mock('@capawesome-team/capacitor-android-foreground-service', () => ({
-    ForegroundService: {
-        createNotificationChannel: vi.fn(),
-        startForegroundService: vi.fn(),
-        stopForegroundService: vi.fn(),
-        updateForegroundService: vi.fn(),
-    }
 }));
 
 describe('MediaSessionManager', () => {
@@ -67,15 +56,10 @@ describe('MediaSessionManager', () => {
 
     // Reset mocks and setup default implementations
     vi.clearAllMocks();
-    (Capacitor.getPlatform as Mock).mockReturnValue('web');
     (MediaSession.setActionHandler as Mock).mockResolvedValue(undefined);
     (MediaSession.setMetadata as Mock).mockResolvedValue(undefined);
     (MediaSession.setPlaybackState as Mock).mockResolvedValue(undefined);
     (MediaSession.setPositionState as Mock).mockResolvedValue(undefined);
-    (ForegroundService.createNotificationChannel as Mock).mockResolvedValue(undefined);
-    (ForegroundService.startForegroundService as Mock).mockResolvedValue(undefined);
-    (ForegroundService.stopForegroundService as Mock).mockResolvedValue(undefined);
-    (ForegroundService.updateForegroundService as Mock).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -85,7 +69,6 @@ describe('MediaSessionManager', () => {
   describe('Web Environment', () => {
       beforeEach(() => {
           (Capacitor.isNativePlatform as Mock).mockReturnValue(false);
-          (Capacitor.getPlatform as Mock).mockReturnValue('web');
       });
 
       it('sets up action handlers on initialization', () => {
@@ -237,103 +220,6 @@ describe('MediaSessionManager', () => {
               playbackRate: 1,
               position: 30
           });
-      });
-  });
-
-  describe('Android Specific', () => {
-      beforeEach(() => {
-          (Capacitor.isNativePlatform as Mock).mockReturnValue(true);
-          (Capacitor.getPlatform as Mock).mockReturnValue('android');
-      });
-
-      it('initializes android notification channel', async () => {
-          new MediaSessionManager(callbacks);
-          // Allow async constructor call to complete
-          await new Promise(resolve => setTimeout(resolve, 0));
-
-          expect(ForegroundService.createNotificationChannel).toHaveBeenCalledWith({
-              id: 'versicle_tts_channel',
-              name: 'Versicle Playback',
-              description: 'Controls for background reading',
-              importance: 3
-          });
-      });
-
-      it('updates foreground service metadata when setMetadata called', async () => {
-          const manager = new MediaSessionManager(callbacks);
-          const metadata = {
-              title: 'Android Title',
-              artist: 'Android Artist',
-              album: 'Android Album',
-          };
-
-          await manager.setMetadata(metadata);
-
-          expect(ForegroundService.updateForegroundService).toHaveBeenCalledWith({
-              id: 1001,
-              title: 'Android Title',
-              body: 'Android Artist',
-              smallIcon: 'ic_stat_versicle'
-          });
-      });
-
-      it('starts foreground service on playing state', async () => {
-          const manager = new MediaSessionManager(callbacks);
-          await manager.setMetadata({ title: 'Title', artist: 'Artist', album: 'Album' });
-          await manager.setPlaybackState('playing');
-
-          expect(ForegroundService.startForegroundService).toHaveBeenCalledWith(expect.objectContaining({
-              id: 1001,
-              title: 'Title',
-              body: 'Artist',
-              notificationChannelId: 'versicle_tts_channel'
-          }));
-      });
-
-      it('debounces stop foreground service on paused state', async () => {
-          vi.useFakeTimers();
-          const manager = new MediaSessionManager(callbacks);
-
-          await manager.setPlaybackState('playing');
-          expect(ForegroundService.startForegroundService).toHaveBeenCalled();
-
-          // Set to paused
-          await manager.setPlaybackState('paused');
-          // Should not be called immediately
-          expect(ForegroundService.stopForegroundService).not.toHaveBeenCalled();
-
-          // Advance time by 4 minutes
-          vi.advanceTimersByTime(4 * 60 * 1000);
-          expect(ForegroundService.stopForegroundService).not.toHaveBeenCalled();
-
-          // Advance time by 1 more minute (total 5)
-          vi.advanceTimersByTime(1 * 60 * 1000);
-          expect(ForegroundService.stopForegroundService).toHaveBeenCalled();
-
-          vi.useRealTimers();
-      });
-
-      it('cancels pending stop if playing resumes', async () => {
-          vi.useFakeTimers();
-          const manager = new MediaSessionManager(callbacks);
-
-          await manager.setPlaybackState('playing');
-          await manager.setPlaybackState('paused');
-
-          // Advance time partially
-          vi.advanceTimersByTime(3 * 60 * 1000);
-
-          // Resume playing
-          await manager.setPlaybackState('playing');
-
-          // Advance past the original timeout
-          vi.advanceTimersByTime(3 * 60 * 1000);
-
-          expect(ForegroundService.stopForegroundService).not.toHaveBeenCalled();
-          // Should have started service again (or ensured it's started)
-          expect(ForegroundService.startForegroundService).toHaveBeenCalledTimes(2);
-
-          vi.useRealTimers();
       });
   });
 });
