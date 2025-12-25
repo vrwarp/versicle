@@ -377,7 +377,7 @@ export const ReaderView: React.FC = () => {
             setIsWaitingForJump(false);
             setShowImportJumpDialog(false);
             useToastStore.getState().showToast("Could not calculate location. Starting from beginning.", "error");
-        }, 15000); // 15s timeout
+        }, 120000); // 2 minutes timeout
     }
     return () => clearTimeout(timeout);
   }, [isWaitingForJump]);
