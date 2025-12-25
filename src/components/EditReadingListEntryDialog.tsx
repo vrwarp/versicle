@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, ModalContent, ModalFooter, ModalHeader, ModalTitle } from './ui/Modal';
+import { Modal, ModalContent, ModalHeader, ModalTitle } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Label } from './ui/Label';
@@ -123,12 +123,12 @@ export const EditReadingListEntryDialog: React.FC<EditReadingListEntryDialogProp
                         </div>
                     </div>
                 </div>
-                <ModalFooter>
+                <div className="flex justify-end gap-2 pt-4">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
                     <Button onClick={handleSave}>Save changes</Button>
-                </ModalFooter>
+                </div>
             </ModalContent>
         </Modal>
     );
