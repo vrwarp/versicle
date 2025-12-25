@@ -257,4 +257,135 @@ describe('CapacitorTTSProvider', () => {
       charIndex: 10
     }));
   });
+
+  // START: Smart Handoff Tests
+
+  it('should preload text using QueueStrategy.Add (1)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockResolvedValue(undefined);
+
+    await provider.init();
+
+    // Play something first so preload has context (lastText)
+    await provider.play('first', { voiceId: 'voice1', speed: 1.0 });
+
+    // Preload
+    await provider.preload('second', { voiceId: 'voice1', speed: 1.0 });
+
+    expect(TextToSpeech.speak).toHaveBeenLastCalledWith(expect.objectContaining({
+      text: 'second',
+      queueStrategy: 1 // Add
+    }));
+  });
+
+  it('should perform Smart Handoff when play matches preloaded text', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+
+    let resolveFirst: (() => void) | null = null;
+    let resolveSecond: (() => void) | null = null;
+
+    // Mock speak to return promises we control
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockImplementation(({ text }: { text: string }) => {
+        if (text === 'first') return new Promise<void>(r => { resolveFirst = r; });
+        if (text === 'second') return new Promise<void>(r => { resolveSecond = r; });
+        return Promise.resolve();
+    });
+
+    await provider.init();
+    const eventSpy = vi.fn();
+    provider.on(eventSpy);
+
+    // 1. Play first
+    await provider.play('first', { voiceId: 'voice1', speed: 1.0 });
+
+    // 2. Preload second
+    await provider.preload('second', { voiceId: 'voice1', speed: 1.0 });
+
+    expect(TextToSpeech.speak).toHaveBeenCalledTimes(2);
+    // Verify second call was Add
+    expect(TextToSpeech.speak).toHaveBeenLastCalledWith(expect.objectContaining({
+      text: 'second',
+      queueStrategy: 1
+    }));
+
+    // 3. Play second (Handoff)
+    // Should NOT call speak again, should NOT call stop
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockClear();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.stop as any).mockClear();
+
+    await provider.play('second', { voiceId: 'voice1', speed: 1.0 });
+
+    expect(TextToSpeech.speak).not.toHaveBeenCalled();
+    expect(TextToSpeech.stop).not.toHaveBeenCalled();
+    expect(eventSpy).toHaveBeenCalledWith({ type: 'start' });
+
+    // 4. Resolve second promise -> emit end
+    if (resolveSecond) resolveSecond();
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(eventSpy).toHaveBeenCalledWith({ type: 'end' });
+  });
+
+  it('should fallback to standard play (Flush) if play does NOT match preloaded text', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+
+    await provider.init();
+
+    // 1. Play first
+    await provider.play('first', { voiceId: 'voice1', speed: 1.0 });
+
+    // 2. Preload second
+    await provider.preload('second', { voiceId: 'voice1', speed: 1.0 });
+
+    // 3. Play THIRD (user skipped)
+    await provider.play('third', { voiceId: 'voice1', speed: 1.0 });
+
+    // Should call stop (to clear queue) and speak third
+    expect(TextToSpeech.stop).toHaveBeenCalled();
+    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
+      text: 'third',
+      queueStrategy: 0 // Flush
+    }));
+  });
+
+  it('should clear preload state on stop', async () => {
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+    });
+
+    await provider.init();
+
+    // 1. Play first
+    await provider.play('first', { voiceId: 'voice1', speed: 1.0 });
+    // 2. Preload second
+    await provider.preload('second', { voiceId: 'voice1', speed: 1.0 });
+
+    // 3. Stop
+    provider.stop();
+
+    // 4. Play second -> Should NOT be handoff because stop cleared it
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.speak as any).mockClear();
+
+    await provider.play('second', { voiceId: 'voice1', speed: 1.0 });
+
+    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
+        text: 'second',
+        queueStrategy: 0 // Flush
+    }));
+  });
 });
