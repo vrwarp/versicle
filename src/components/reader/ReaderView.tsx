@@ -98,6 +98,8 @@ export const ReaderView: React.FC = () => {
 
   // --- Import Progress Jump Logic ---
   const [showImportJumpDialog, setShowImportJumpDialog] = useState(false);
+  // Tracks if we are waiting for the engine to finish generating locations to perform a jump
+  const [isWaitingForJump, setIsWaitingForJump] = useState(false);
   const [importJumpTarget, setImportJumpTarget] = useState(0);
   const hasPromptedForImport = useRef(false);
   const metadataRef = useRef(null as unknown); // Will hold metadata
@@ -225,6 +227,7 @@ export const ReaderView: React.FC = () => {
       rendition,
       book,
       isReady: isRenditionReady,
+      areLocationsReady,
       isLoading: hookLoading,
       metadata,
       error: hookError
@@ -314,37 +317,29 @@ export const ReaderView: React.FC = () => {
   }, [id, loadAnnotations]);
 
   const handleJumpConfirm = async () => {
-      setShowImportJumpDialog(false);
-      if (book && rendition) {
-          try {
-             // Ensure locations are ready?
-             // If not, cfiFromPercentage might crash or return null?
-             // epub.js cfiFromPercentage usually requires locations.
-             // But we can check book.locations.total.
-             if (book.locations.length() > 0) {
+      if (areLocationsReady) {
+          setShowImportJumpDialog(false);
+          if (book && rendition) {
+              try {
                   const cfi = book.locations.cfiFromPercentage(importJumpTarget);
                   if (cfi) {
                       await rendition.display(cfi);
                       // dbService.saveProgress will be called by the subsequent onLocationChange
                   }
-             } else {
-                 // Fallback: try cfiFromPercentage anyway
-                 const cfi = book.locations.cfiFromPercentage(importJumpTarget);
-                 if (cfi) {
-                     await rendition.display(cfi);
-                 } else {
-                     useToastStore.getState().showToast("Locations not ready yet, please wait.", "error");
-                 }
-             }
-          } catch (e) {
-              console.error("Jump failed", e);
-              useToastStore.getState().showToast('Failed to jump to location', 'error');
+              } catch (e) {
+                  console.error("Jump failed", e);
+                  useToastStore.getState().showToast('Failed to jump to location', 'error');
+              }
           }
+      } else {
+          // Keep dialog open but change UI to loading
+          setIsWaitingForJump(true);
       }
   };
 
   const handleJumpCancel = () => {
       setShowImportJumpDialog(false);
+      setIsWaitingForJump(false);
       // Explicitly save current position (0) to mark as "started"
       if (id && useReaderStore.getState().currentCfi) {
           const state = useReaderStore.getState();
@@ -353,6 +348,39 @@ export const ReaderView: React.FC = () => {
           }
       }
   };
+
+  // Watch for locations to become ready if waiting
+  useEffect(() => {
+    // If we are waiting, and the capability arrives...
+    if (isWaitingForJump && areLocationsReady && book && rendition) {
+        try {
+            const cfi = book.locations.cfiFromPercentage(importJumpTarget);
+            if (cfi) {
+                rendition.display(cfi);
+                setIsWaitingForJump(false);
+                setShowImportJumpDialog(false);
+            }
+        } catch (e) {
+            console.error("Deferred jump failed", e);
+            useToastStore.getState().showToast('Failed to jump to location', 'error');
+            setIsWaitingForJump(false);
+            setShowImportJumpDialog(false);
+        }
+    }
+  }, [isWaitingForJump, areLocationsReady, book, rendition, importJumpTarget]);
+
+  // Timeout safety for jump wait
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (isWaitingForJump) {
+        timeout = setTimeout(() => {
+            setIsWaitingForJump(false);
+            setShowImportJumpDialog(false);
+            useToastStore.getState().showToast("Could not calculate location. Starting from beginning.", "error");
+        }, 120000); // 2 minutes timeout
+    }
+    return () => clearTimeout(timeout);
+  }, [isWaitingForJump]);
 
   // Apply Annotations to Rendition
   const addedAnnotations = useRef<Set<string>>(new Set());
@@ -612,15 +640,19 @@ export const ReaderView: React.FC = () => {
       <Dialog
         isOpen={showImportJumpDialog}
         onClose={handleJumpCancel}
-        title="Resume from Reading List?"
-        description={`This book has progress saved in your reading list (${Math.round(importJumpTarget * 100)}%). Would you like to jump to this location?`}
+        title={isWaitingForJump ? "Locating..." : "Resume from Reading List?"}
+        description={
+            isWaitingForJump
+            ? "Please wait while we calculate the page position..."
+            : `This book has progress saved in your reading list (${Math.round(importJumpTarget * 100)}%). Would you like to jump to this location?`
+        }
         footer={
             <>
-                <Button variant="ghost" onClick={handleJumpCancel}>
-                    No, start from beginning
+                <Button variant="ghost" onClick={handleJumpCancel} disabled={isWaitingForJump}>
+                    {isWaitingForJump ? "Cancel" : "No, start from beginning"}
                 </Button>
-                <Button onClick={handleJumpConfirm}>
-                    Yes, jump to location
+                <Button onClick={handleJumpConfirm} disabled={isWaitingForJump}>
+                    {isWaitingForJump ? "Calculating..." : "Yes, jump to location"}
                 </Button>
             </>
         }

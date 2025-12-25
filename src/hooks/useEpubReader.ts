@@ -48,6 +48,8 @@ export interface EpubReaderResult {
   rendition: Rendition | null;
   /** Whether the book is fully ready for interaction. */
   isReady: boolean;
+  /** Whether the book's location registry (CFI <-> Percentage) is fully generated */
+  areLocationsReady: boolean;
   /** Whether the book is currently loading. */
   isLoading: boolean;
   /** Metadata of the loaded book. */
@@ -75,6 +77,7 @@ export function useEpubReader(
   const [book, setBook] = useState<Book | null>(null);
   const [rendition, setRendition] = useState<Rendition | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [areLocationsReady, setAreLocationsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [metadata, setMetadata] = useState<BookMetadata | null>(null);
   const [toc, setToc] = useState<NavigationItem[]>([]);
@@ -100,6 +103,7 @@ export function useEpubReader(
       setIsLoading(true);
       setError(null);
       setIsReady(false);
+      setAreLocationsReady(false);
 
       try {
         const { file: fileData, metadata: meta } = yield dbService.getBook(currentBookId);
@@ -239,12 +243,14 @@ export function useEpubReader(
         const savedLocations = yield dbService.getLocations(currentBookId);
         if (savedLocations) {
             newBook.locations.load(savedLocations.locations);
+            setAreLocationsReady(true);
             updateProgress();
         } else {
             // Generate in background
             newBook.locations.generate(1000).then(async () => {
                  const locationStr = newBook.locations.save();
                  await dbService.saveLocations(currentBookId, locationStr);
+                 setAreLocationsReady(true);
                  updateProgress();
             });
         }
@@ -540,5 +546,5 @@ export function useEpubReader(
       options.shouldForceFont
   ]);
 
-  return { book, rendition, isReady, isLoading, metadata, toc, error };
+  return { book, rendition, isReady, areLocationsReady, isLoading, metadata, toc, error };
 }
