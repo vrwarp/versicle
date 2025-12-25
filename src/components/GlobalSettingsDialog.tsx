@@ -43,9 +43,13 @@ export const GlobalSettingsDialog = () => {
     const folderImportRef = useRef<HTMLInputElement>(null);
     const [readingListCount, setReadingListCount] = useState<number | null>(null);
     const [isReadingListOpen, setIsReadingListOpen] = useState(false);
+    const [isCsvImporting, setIsCsvImporting] = useState(false);
+    const [csvImportMessage, setCsvImportMessage] = useState('');
+    const [csvImportComplete, setCsvImportComplete] = useState(false);
 
     const {
         addBooks,
+        fetchBooks,
         isImporting,
         importProgress,
         importStatus,
@@ -91,25 +95,50 @@ export const GlobalSettingsDialog = () => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        setIsCsvImporting(true);
+        setCsvImportComplete(false);
+        setCsvImportMessage('Reading file...');
+
         const reader = new FileReader();
         reader.onload = async (ev) => {
             const text = ev.target?.result as string;
             if (text) {
                 try {
+                    setCsvImportMessage('Parsing CSV...');
+                    // Artificial delay for UX
+                    await new Promise(r => setTimeout(r, 500));
                     const entries = parseReadingListCSV(text);
+
+                    setCsvImportMessage(`Importing ${entries.length} entries and syncing with library...`);
+                    // Another small delay to ensure the user sees the message
+                    await new Promise(r => setTimeout(r, 500));
+
                     await dbService.importReadingList(entries);
-                    setReadingListCount(entries.length); // Rough update
-                    // Refresh count from DB to be sure
+
+                    // Update local count
+                    setReadingListCount(entries.length);
                     dbService.getReadingList().then(list => setReadingListCount(list ? list.length : 0));
-                    alert(`Imported ${entries.length} entries and synced progress.`);
+
+                    setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
+                    setCsvImportComplete(true);
                 } catch (err) {
                     console.error(err);
-                    alert('Failed to import CSV.');
+                    setCsvImportMessage('Failed to import CSV.');
+                    // Allow retry after a delay
+                    setTimeout(() => setIsCsvImporting(false), 2000);
                 }
             }
             e.target.value = ''; // Reset
         };
         reader.readAsText(file);
+    };
+
+    const handleReturnToLibrary = async () => {
+        setIsCsvImporting(false);
+        setCsvImportComplete(false);
+        setCsvImportMessage('');
+        await fetchBooks();
+        setGlobalSettingsOpen(false);
     };
 
     const handleBatchImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -289,7 +318,21 @@ export const GlobalSettingsDialog = () => {
     return (
         <>
         <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
-            <ModalContent className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg">
+            <ModalContent className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg relative">
+                {isCsvImporting && (
+                    <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 text-center">
+                        <Loader2 className={`h-12 w-12 text-primary mb-4 ${!csvImportComplete ? 'animate-spin' : ''}`} />
+                        <h3 className="text-xl font-semibold mb-2">{csvImportComplete ? 'Import Complete' : 'Importing Reading List'}</h3>
+                        <p className="text-muted-foreground mb-6">{csvImportMessage}</p>
+
+                        {csvImportComplete && (
+                            <Button size="lg" onClick={handleReturnToLibrary}>
+                                Return to Library
+                            </Button>
+                        )}
+                    </div>
+                )}
+
                 {/* Sidebar */}
                 <div className="w-full sm:w-1/4 bg-muted/30 border-b sm:border-r sm:border-b-0 p-2 sm:p-4 flex flex-row sm:flex-col gap-2 overflow-x-auto sm:overflow-visible items-center sm:items-stretch shrink-0">
                     <h2 className="text-lg font-semibold mb-4 px-2 hidden sm:block">Settings</h2>
