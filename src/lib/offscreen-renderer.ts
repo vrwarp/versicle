@@ -1,5 +1,6 @@
 import ePub from 'epubjs';
 import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from './tts';
+import { sanitizeContent } from './sanitizer';
 
 export interface ProcessedChapter {
   href: string;
@@ -36,6 +37,16 @@ export async function extractContentOffscreen(
   // ePub can take File, ArrayBuffer, or URL.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const book = (ePub as any)(file);
+
+  // SECURITY: Register a serialization hook to sanitize HTML content before it's rendered.
+  // This prevents XSS attacks from malicious scripts in EPUB files during the ingestion phase.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((book.spine as any).hooks?.serialize) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (book.spine as any).hooks.serialize.register((html: string) => {
+          return sanitizeContent(html);
+      });
+  }
 
   try {
     await book.ready;
