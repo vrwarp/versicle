@@ -26,6 +26,13 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
         *   **Cloud**: Integrates with Google/OpenAI/LemonFox for high-quality neural voices, but caches generated audio to minimize API costs and latency on replay.
     *   **Stability**: The system implements a "Let It Crash" philosophy for worker management to ensure resilience.
 
+### User Interface: The "Three Rooms"
+
+The UI is organized into three distinct operational modes to reduce cognitive load:
+1.  **The Reading Room**: The distraction-free reading interface, controlled via `VisualSettings` (fonts, themes, layout).
+2.  **The Listening Room**: The audio experience, managed by `UnifiedAudioPanel` (playback, speed, voice selection).
+3.  **The Engine Room**: Global configuration, handled by `GlobalSettingsDialog` (data management, API keys, advanced imports).
+
 ## 2. System Architecture Diagram
 
 ```mermaid
@@ -34,8 +41,9 @@ graph TD
         App[App.tsx]
         Library[LibraryView]
         Reader[ReaderView]
-        TTSController[ReaderTTSController]
+        VisualSettings[VisualSettings]
         AudioPanel[UnifiedAudioPanel]
+        GlobalSettings[GlobalSettingsDialog]
         useEpub[useEpubReader Hook]
     end
 
@@ -45,11 +53,15 @@ graph TD
         LibStore[useLibraryStore]
         AnnotStore[useAnnotationStore]
         GenAIStore[useGenAIStore]
+        UIStore[useUIStore]
+        ToastStore[useToastStore]
+        ReadingListStore[useReadingListStore]
     end
 
     subgraph Core [Core Services]
         APS[AudioPlayerService]
         Ingestion[ingestion.ts]
+        BatchIngestion[batch-ingestion.ts]
         SearchClient[SearchClient]
         Backup[BackupService]
         Maint[MaintenanceService]
@@ -81,13 +93,23 @@ graph TD
 
     App --> Library
     App --> Reader
-    Reader --> ReaderStore
-    Reader --> TTSController
+    Reader --> VisualSettings
     Reader --> AudioPanel
+    Reader --> GlobalSettings
     Reader --> useEpub
 
+    VisualSettings --> ReaderStore
     AudioPanel --> TTSStore
+    GlobalSettings --> UIStore
+    GlobalSettings --> ReadingListStore
+
     TTSStore --> APS
+    Library --> LibStore
+    LibStore --> DBService
+    LibStore --> Ingestion
+    LibStore --> BatchIngestion
+    LibStore --> Backup
+    LibStore --> Maint
 
     APS --> Providers
     APS --> Segmenter
@@ -99,12 +121,6 @@ graph TD
     APS --> BG
 
     Piper --> PiperUtils
-
-    Library --> LibStore
-    LibStore --> DBService
-    LibStore --> Ingestion
-    LibStore --> Backup
-    LibStore --> Maint
 
     Reader --> SearchClient
     SearchClient --> SearchWorker
@@ -142,9 +158,9 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   **`offloadBook(id)`**: Deletes the large binary EPUB file to save space but keeps metadata, annotations, and reading progress. Sets `isOffloaded: true`.
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 *   **`restoreBook(id, file)`**: Restores an offloaded book. Verifies the file fingerprint matches the original before accepting.
-*   **`updateReadingHistory(bookId, newRange)`**: Merges a new CFI range into the book's reading history.
-    *   *Logic*: Coalesces frequent updates (within 5 minutes) into a single "session" to prevent database bloat. Uses "Semantic Snap" to align history entries to sentence boundaries.
-    *   *Limits*: Enforces a hard limit (100 sessions) to prevent unbounded growth.
+*   **`updateReadingHistory(bookId, newRange, type)`**: Records reading sessions.
+    *   *Logic*: Merges overlapping ranges. Coalesces events within 5 minutes into a single session to prevent database bloat.
+    *   *Limits*: Enforces a rolling window of the last 100 sessions per book.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts` & `src/lib/sanitizer.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks from malicious EPUB metadata.
@@ -194,7 +210,7 @@ Implements full-text search off the main thread to prevent UI freezing.
 #### Backup (`src/lib/BackupService.ts`)
 Manages internal state backup and restoration (JSON/ZIP).
 
-*   **`createMetadataBackup()`**: Exports JSON containing metadata, themes, and settings ("Light Backup").
+*   **`createMetadataBackup()`**: Exports JSON containing metadata, themes, settings, and reading history ("Light Backup").
 *   **`createFullBackup()`**: Exports a ZIP file containing the "Light" JSON manifest plus all original `.epub` files ("Full Backup").
     *   *Logic*: Uses `JSZip` to stream file content from IndexedDB into a downloadable archive.
 
@@ -344,7 +360,7 @@ State is managed using **Zustand** with persistence to `localStorage` for prefer
 *   **`useGenAIStore`**: Manages AI settings (API key, model) and usage logs.
     *   *Persisted*: `apiKey`, `model`, `isEnabled`, `logs`, `usageStats`.
 *   **`useUIStore`**: Manages global UI state (e.g., `isGlobalSettingsOpen`). Transient.
-*   **useToastStore**: Manages global ephemeral notifications (Success/Error feedback). Transient.
+*   **`useToastStore`**: Manages global ephemeral notifications (Success/Error feedback). Transient.
 *   **`useReadingListStore`**: Manages the exportable reading list.
     *   *Logic*: Syncs with IDB `reading_list` store. Handles CSV import/export.
 
