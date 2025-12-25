@@ -99,3 +99,38 @@ By moving the Foreground Service logic into MediaSessionManager, we achieve:
     *   Verify the notification remains.
     *   Wait 5 minutes (or temporarily shorten the timer).
     *   Verify the notification disappears (service stops) to save battery.
+
+## 6. Implementation Status (Updated)
+
+**Status:** Completed
+
+### 6.1 Changes Made
+
+1.  **MediaSessionManager.ts**:
+    *   Imported `ForegroundService` from `@capawesome-team/capacitor-android-foreground-service`.
+    *   Implemented `setupAndroidChannel()` to create the notification channel on instantiation if on Android.
+    *   Added `stopTimer` and `currentMetadata` properties.
+    *   Updated `setMetadata` to cache metadata and call `ForegroundService.updateForegroundService` if on Android.
+    *   Updated `setPlaybackState` to manage the foreground service lifecycle:
+        *   Starts service on `playing`.
+        *   Debounces service stop (5 minutes) on `paused` or `none`.
+        *   Clears stop timer if state switches back to `playing`.
+
+2.  **AudioPlayerService.ts**:
+    *   Removed `ForegroundService` imports.
+    *   Removed `foregroundStopTimer`, `engageBackgroundMode`, and explicit service management logic.
+    *   Refactored `playInternal` to assume `MediaSessionManager` handles service starting.
+    *   Refactor `stopInternal` to delegate service stopping to `MediaSessionManager` (via `setPlaybackState('none')`).
+
+### 6.2 Verification
+
+*   **Unit Tests**:
+    *   `src/lib/tts/MediaSessionManager.test.ts`: Updated to mock `ForegroundService` and verify calls to `startForegroundService`, `stopForegroundService` (debounced), and `updateForegroundService`. Confirmed that debouncing logic works as expected using fake timers.
+    *   `src/lib/tts/AudioPlayerService.test.ts`: Confirmed that tests pass after removing direct dependency on `ForegroundService`.
+
+*   **Integration Tests (Verification Suite)**:
+    *   Ran `verification/test_mock_tts.py`, `verification/test_journey_audio.py`, `verification/test_journey_tts_persistence.py`, and `verification/test_tts_queue.py`. All passed successfully, indicating no regression in TTS functionality.
+
+### 6.3 Deviations
+
+*   No significant deviations from the original plan. The `AudioPlayerService` code was simplified as expected, and `MediaSessionManager` successfully took over the responsibility.
