@@ -318,7 +318,7 @@ export const GlobalSettingsDialog = () => {
     return (
         <>
         <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
-            <ModalContent className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg relative">
+            <ModalContent className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg">
                 {isCsvImporting && (
                     <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 text-center">
                         <Loader2 className={`h-12 w-12 text-primary mb-4 ${!csvImportComplete ? 'animate-spin' : ''}`} />
