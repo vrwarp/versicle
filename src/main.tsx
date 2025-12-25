@@ -5,7 +5,8 @@ import './index.css'
 
 /**
  * Application entry point.
- * Mounts the React app to the DOM.
+ * Mounts the root React component (`App`) to the DOM.
+ * Enables Strict Mode for development checks.
  */
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

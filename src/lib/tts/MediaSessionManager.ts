@@ -3,7 +3,7 @@ import { MediaSession } from '@jofr/capacitor-media-session';
 import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 
 /**
- * Metadata for the Media Session API.
+ * Metadata for the Media Session API (Title, Artist, Artwork).
  */
 export interface MediaSessionMetadata {
   /** The title of the media. */
@@ -18,6 +18,7 @@ export interface MediaSessionMetadata {
 
 /**
  * Callbacks for Media Session action handlers.
+ * These connect the OS-level controls to the app's internal logic.
  */
 export interface MediaSessionCallbacks {
   onPlay?: () => void;
@@ -31,7 +32,7 @@ export interface MediaSessionCallbacks {
 }
 
 /**
- * Represents the current state of playback.
+ * Represents the current state of playback for updating the OS UI.
  */
 export interface PlaybackState {
     playbackState: 'playing' | 'paused' | 'none';
@@ -43,7 +44,7 @@ export interface PlaybackState {
 /**
  * Wrapper for the Media Session API to integrate browser media controls.
  * Allows controlling playback from hardware keys, notification center, or lock screen.
- * Handles both Native (Capacitor) and Web environments.
+ * Handles platform divergence between Web and Native (Capacitor/Android) implementations.
  */
 export class MediaSessionManager {
   private isNative = Capacitor.isNativePlatform();
@@ -54,6 +55,7 @@ export class MediaSessionManager {
 
   /**
    * Initializes the MediaSessionManager with the provided callbacks.
+   * Sets up platform-specific channels (Android notifications) and action handlers.
    *
    * @param callbacks - The set of action handlers for media events.
    */
@@ -62,6 +64,9 @@ export class MediaSessionManager {
     this.setupAndroidChannel();
   }
 
+  /**
+   * Configures the Android Notification Channel required for Foreground Services.
+   */
   private async setupAndroidChannel() {
       if (this.isNative && Capacitor.getPlatform() === 'android') {
           try {
@@ -79,10 +84,11 @@ export class MediaSessionManager {
 
   /**
    * Sets up the action handlers for the Media Session API.
+   * Maps 'play', 'pause', 'seek', etc. to the provided callbacks.
    */
   private async setupActionHandlers() {
     if (this.isNative) {
-        // NATIVE MODE
+        // NATIVE MODE (Capacitor Plugin)
         await this.setNativeActionHandler('play', this.callbacks.onPlay);
         await this.setNativeActionHandler('pause', this.callbacks.onPause);
         await this.setNativeActionHandler('stop', this.callbacks.onStop);
@@ -91,7 +97,7 @@ export class MediaSessionManager {
         await this.setNativeActionHandler('seekbackward', this.callbacks.onSeekBackward);
         await this.setNativeActionHandler('seekforward', this.callbacks.onSeekForward);
     } else if (this.hasWebMediaSession) {
-        // WEB MODE
+        // WEB MODE (Browser API)
         const actionHandlers: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [
           ['play', this.callbacks.onPlay],
           ['pause', this.callbacks.onPause],
@@ -120,7 +126,6 @@ export class MediaSessionManager {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async setNativeActionHandler(action: string, handler?: (...args: any[]) => void) {
       if (handler) {
-          // The types for MediaSessionAction might not perfectly align with string but it works at runtime or needs explicit casting
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await MediaSession.setActionHandler({ action: action as any }, handler);
       }
@@ -128,6 +133,7 @@ export class MediaSessionManager {
 
   /**
    * Updates the media metadata (Title, Artist, Artwork).
+   * Also updates the Android Foreground Service notification if running.
    *
    * @param metadata - The new metadata to display.
    */
@@ -144,8 +150,7 @@ export class MediaSessionManager {
 
         if (Capacitor.getPlatform() === 'android') {
              try {
-                 // According to the types, updateForegroundService requires StartForegroundServiceOptions
-                 // which includes id and smallIcon.
+                 // Update the persistent notification
                  await ForegroundService.updateForegroundService({
                      id: 1001,
                      title: metadata.title,
@@ -153,7 +158,7 @@ export class MediaSessionManager {
                      smallIcon: 'ic_stat_versicle'
                  });
              } catch (e) {
-                 // Service might not be running yet, which is fine
+                 // Service might not be running yet if playback hasn't started, which is expected
                  console.debug("Failed to update foreground service metadata (service might be stopped)", e);
              }
         }
@@ -170,8 +175,9 @@ export class MediaSessionManager {
 
   /**
    * Updates the playback state (playing/paused) and optionally position state.
+   * Manages the lifecycle of the Android Foreground Service (starting on play, stopping on pause).
    *
-   * @param state - The current playback state or just the string 'playing' | 'paused' | 'none' for compatibility.
+   * @param state - The current playback state object or string.
    */
   async setPlaybackState(state: PlaybackState | 'playing' | 'paused' | 'none') {
     const playbackState = typeof state === 'string' ? state : state.playbackState;
@@ -187,6 +193,7 @@ export class MediaSessionManager {
 
         if (this.isNative && Capacitor.getPlatform() === 'android') {
             try {
+                // Start Foreground Service to prevent app kill
                 await ForegroundService.startForegroundService({
                     id: 1001,
                     title: this.currentMetadata?.title || 'Versicle',
@@ -201,6 +208,7 @@ export class MediaSessionManager {
         }
     } else if (playbackState === 'paused' || playbackState === 'none') {
          if (this.isNative && Capacitor.getPlatform() === 'android') {
+             // Debounce stopping the service to handle quick pauses/resumes or buffering
              if (!this.stopTimer) {
                  this.stopTimer = setTimeout(async () => {
                      try {
@@ -239,7 +247,7 @@ export class MediaSessionManager {
 
   /**
    * Updates the position state (duration, playback rate, current time).
-   * Kept for backward compatibility with Web implementation usage.
+   * Kept for granular updates separate from playback state.
    *
    * @param state - The current position state.
    */

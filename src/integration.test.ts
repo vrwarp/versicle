@@ -5,7 +5,13 @@ import { useReaderStore } from './store/useReaderStore';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Mock offscreen renderer
+/**
+ * Integration Tests for Core Features.
+ * These tests verify the interaction between Stores, Database, and Services
+ * without rendering the full React UI (which is covered by Playwright).
+ */
+
+// Mock offscreen renderer (used during ingestion) to avoid actual DOM operations in Node/JSDOM
 vi.mock('./lib/offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn(async () => {
     return [
@@ -19,8 +25,8 @@ vi.mock('./lib/offscreen-renderer', () => ({
   })
 }));
 
-// Mock epub.js but preserve behavior for ingestion (metadata)
-// while mocking behavior for Reader (rendering)
+// Mock epub.js but preserve behavior for ingestion (metadata extraction)
+// while mocking behavior for Reader (rendering) to avoid canvas/layout errors in JSDOM.
 vi.mock('epubjs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('epubjs')>();
   return {
@@ -28,7 +34,7 @@ vi.mock('epubjs', async (importOriginal) => {
     default: vi.fn((data, options) => {
       const book = actual.default(data, options);
 
-      // Spy/Mock renderTo
+      // Spy/Mock renderTo (visual rendering)
       book.renderTo = vi.fn().mockReturnValue({
         display: vi.fn().mockResolvedValue(undefined),
         getContents: vi.fn().mockReturnValue([{
@@ -56,7 +62,7 @@ vi.mock('epubjs', async (importOriginal) => {
         destroy: vi.fn(),
       });
 
-      // Mock locations.generate if needed to avoid heavy lifting
+      // Mock locations.generate if needed to avoid heavy calculation
       book.locations.generate = vi.fn().mockResolvedValue(['cfi1', 'cfi2']);
 
       return book;
@@ -66,7 +72,7 @@ vi.mock('epubjs', async (importOriginal) => {
 
 describe('Feature Integration Tests', () => {
   beforeEach(async () => {
-    // Clear DB
+    // Clear DB (indexeddb-mock)
     const db = await getDB();
     const tx = db.transaction(['books', 'files', 'annotations', 'sections', 'tts_content'], 'readwrite');
     await tx.objectStore('books').clear();
@@ -80,7 +86,7 @@ describe('Feature Integration Tests', () => {
     useLibraryStore.setState({ books: [], isLoading: false, isImporting: false, error: null });
     useReaderStore.getState().reset();
 
-    // Mock global fetch for cover extraction
+    // Mock global fetch for cover extraction within epub.js
     global.fetch = vi.fn((url) => {
         if (typeof url === 'string' && url.startsWith('blob:')) {
             return Promise.resolve({
@@ -103,7 +109,7 @@ describe('Feature Integration Tests', () => {
     const buffer = fs.readFileSync(fixturePath);
     const file = new File([buffer], 'alice.epub', { type: 'application/epub+zip' });
 
-    // Polyfill arrayBuffer if needed
+    // Polyfill arrayBuffer if needed (JSDOM environment specific)
     if (!file.arrayBuffer) {
         file.arrayBuffer = () => new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -121,7 +127,7 @@ describe('Feature Integration Tests', () => {
     expect(updatedStore.books[0].title).toContain("Alice's Adventures in Wonderland");
     expect(updatedStore.books[0].coverBlob).toBeDefined();
 
-    // Verify DB
+    // Verify DB persistence
     const db = await getDB();
     const booksInDb = await db.getAll('books');
     expect(booksInDb).toHaveLength(1);
@@ -136,7 +142,7 @@ describe('Feature Integration Tests', () => {
     const finalStore = useLibraryStore.getState();
     expect(finalStore.books).toHaveLength(0);
 
-    // Verify DB empty
+    // Verify DB cleanup
     const booksInDbAfter = await db.getAll('books');
     expect(booksInDbAfter).toHaveLength(0);
     const filesInDbAfter = await db.getAll('files');
@@ -170,8 +176,9 @@ describe('Feature Integration Tests', () => {
         bookId,
         cfiRange: 'epubcfi(/6/4[chapter1]!/4/2/1:0)',
         text: 'Selected text',
+        type: 'highlight' as const,
         color: 'yellow',
-        createdAt: Date.now()
+        created: Date.now()
     };
 
     const tx = db.transaction('annotations', 'readwrite');
@@ -205,7 +212,7 @@ describe('Feature Integration Tests', () => {
           addedAt: Date.now(),
           progress: 0
       });
-      await db.put('files', buffer.buffer, bookId); // Store as ArrayBuffer with key
+      await db.put('files', buffer.buffer, bookId);
 
       // 2. Initialize Reader Store (simulating component mount)
       const readerStore = useReaderStore.getState();
@@ -223,7 +230,7 @@ describe('Feature Integration Tests', () => {
       readerStore.setToc(mockToc);
       expect(useReaderStore.getState().toc).toEqual(mockToc);
 
-      // Simulate the persistence logic used in ReaderView
+      // Simulate the persistence logic used in ReaderView (usually triggered by onRelocated)
       const saveProgress = async (id: string, cfi: string, prog: number) => {
         const tx = db.transaction('books', 'readwrite');
         const store = tx.objectStore('books');

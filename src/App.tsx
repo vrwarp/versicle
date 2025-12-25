@@ -20,17 +20,25 @@ import { AudioPlayerService } from './lib/tts/AudioPlayerService';
 /**
  * Main Application component.
  * Sets up routing, global providers, error handling, and initial database connection.
- * Handles "Safe Mode" if the database fails to initialize.
+ * Handles "Safe Mode" if the database fails to initialize (e.g. corruption or quota limits).
+ *
+ * Responsibilities:
+ * - Database Initialization (waiting for IndexedDB).
+ * - Global Event Listeners (Unhandled Promise Rejections for storage errors).
+ * - Android Foreground Service Initialization (Notification Channels).
+ * - Routing (Library vs Reader).
+ * - Global UI Elements (HUD, Toast, Settings Dialog).
  */
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [dbError, setDbError] = useState<unknown>(null);
 
+  // Global Error Handler for Async Storage Failures
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('Unhandled Promise Rejection:', event.reason);
 
-      // Check for critical errors
+      // Check for critical errors like Storage Quota Exceeded
       if (event.reason instanceof StorageFullError) {
         useToastStore.getState().showToast(event.reason.message, 'error', 5000);
       } else if (event.reason?.name === 'QuotaExceededError' ||
@@ -47,6 +55,7 @@ function App() {
     };
   }, []);
 
+  // Initialization Logic
   useEffect(() => {
     const init = async () => {
       try {
@@ -54,9 +63,9 @@ function App() {
         const androidInitPromise = (async () => {
           if (Capacitor.getPlatform() === 'android') {
             try {
-              // 1. Setup Notification Channel
+              // 1. Setup Notification Channel for Foreground Service
               // This defines how the notification behaves (sound, vibration, visibility).
-              // 'importance: 3' means it shows up but doesn't make a noise (good for media).
+              // 'importance: 3' (Default) means it shows up but doesn't make a noise (good for media).
               await ForegroundService.createNotificationChannel({
                   id: 'versicle_tts_channel',
                   name: 'Versicle Playback',
@@ -77,7 +86,7 @@ function App() {
           }
         })();
 
-        // Initialize DB
+        // Initialize DB (This creates the schema if needed)
         await getDB();
 
         // Wait for Android init to complete (or fail gracefully)
@@ -93,6 +102,10 @@ function App() {
     init();
   }, []);
 
+  /**
+   * Hard reset handler for Safe Mode.
+   * Deletes the entire IndexedDB database and reloads the page.
+   */
   const handleReset = async () => {
     if (!window.confirm('Are you sure you want to delete all data? This cannot be undone.')) {
       return;
@@ -117,17 +130,7 @@ function App() {
     return <SafeModeView error={dbError} onReset={handleReset} onRetry={handleRetry} />;
   }
 
-  // Optional: Show a loading screen, or just render the app (LibraryView handles its own loading state)
-  // Rendering the app immediately allows the UI to show up faster,
-  // but if getDB failed we would have hit the error block.
-  // If getDB hangs, we are in 'loading'.
-  // We can just proceed if 'loading' assuming idb promise handles concurrency if components call getDB.
-  // However, for Safe Mode to work, we want to know if it fails.
-  // So we wait for 'ready' or just rely on the error catch.
-
-  // If we return null while loading, the app feels slow.
-  // But if we render, components might fail if DB is truly broken.
-  // Given we want to catch "DB fails to open", waiting is safer for this feature.
+  // Show a simple loading screen during initialization
   if (dbStatus === 'loading') {
       return <div className="min-h-screen flex items-center justify-center bg-background text-foreground">Initializing...</div>;
   }
