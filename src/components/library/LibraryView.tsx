@@ -12,7 +12,7 @@ import { Button } from '../ui/Button';
 // Grid Configuration
 const CARD_WIDTH = 200; // Minimal width
 const CARD_HEIGHT = 320;
-const GAP = 24;
+const GAP = 12;
 const LIST_ITEM_HEIGHT = 88;
 
 /**
@@ -27,6 +27,8 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
     return (
         <div style={{
             ...style,
+            left: Number(style.left) + GAP / 2,
+            top: Number(style.top) + GAP / 2,
             width: Number(style.width) - GAP,
             height: Number(style.height) - GAP,
         }}>
@@ -162,7 +164,35 @@ export const LibraryView: React.FC = () => {
   const columnCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
   // Add 1 to rowCount for spacer
   const rowCount = Math.ceil(books.length / columnCount) + 1;
-  const gridColumnWidth = Math.floor(dimensions.width / columnCount);
+
+  // To center the grid:
+  // 1. We keep the column width fixed (or close to fixed) so we know the total grid width.
+  // 2. Alternatively, we calculate the remaining space and center the Grid component.
+
+  // Previous approach (expand to fill):
+  // const gridColumnWidth = Math.floor(dimensions.width / columnCount);
+
+  // New approach (Center the grid block):
+  // We use the fixed column width logic (CARD_WIDTH + GAP) but since react-window handles layout,
+  // we might want to expand slightly but not too much, OR just center the block.
+  // If we don't expand, we have leftover space.
+
+  const totalGridWidth = columnCount * (CARD_WIDTH + GAP);
+  // Actually, wait. If we use fixed width, the columns won't stretch.
+  // But if we want it centered, we can calculate the left margin.
+
+  // Let's use the expanding logic but wrap the Grid in a centered flex container?
+  // No, react-window requires specific width props.
+
+  // Correct approach for centering a grid in a container where columns match items:
+  // If we assume columns should just be CARD_WIDTH + GAP, then the grid width is totalGridWidth.
+  // We can pass `width={totalGridWidth}` to the Grid component (if it's less than dimensions.width).
+  // But react-window needs to handle scrolling if it overflows?
+  // Here we are likely not overflowing horizontally (responsive logic reduces columns).
+
+  // So:
+  const gridWidth = Math.min(dimensions.width, columnCount * (CARD_WIDTH + GAP));
+  const gridColumnWidth = CARD_WIDTH + GAP; // Fixed width columns
 
   // Memoize itemData (cellProps) to prevent unnecessary re-renders of the grid cells.
   // This version of react-window uses cellProps which are spread into the component props.
@@ -264,7 +294,10 @@ export const LibraryView: React.FC = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       ) : (
-        <section className="flex-1 min-h-0 w-full" ref={containerRef}>
+        <section
+          className="flex-1 min-h-0 w-full flex flex-col items-center"
+          ref={containerRef}
+        >
           {books.length === 0 ? (
              <EmptyLibrary onImport={triggerFileUpload} />
           ) : (
@@ -274,9 +307,10 @@ export const LibraryView: React.FC = () => {
                 height={dimensions.height || 500}
                 rowCount={viewMode === 'list' ? books.length + 1 : rowCount}
                 rowHeight={getRowHeight}
-                width={dimensions.width}
+                width={viewMode === 'list' ? dimensions.width : gridWidth}
                 cellComponent={viewMode === 'list' ? ListCell : GridCell}
                 cellProps={itemData}
+                style={viewMode === 'grid' ? { margin: '0 auto' } : undefined}
              />
           )}
         </section>
