@@ -51,6 +51,7 @@ export class MediaSessionManager {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private stopTimer: any | null = null;
   private currentMetadata: MediaSessionMetadata | null = null;
+  private channelPromise: Promise<void> | null = null;
 
   /**
    * Initializes the MediaSessionManager with the provided callbacks.
@@ -59,7 +60,7 @@ export class MediaSessionManager {
    */
   constructor(private callbacks: MediaSessionCallbacks) {
     this.setupActionHandlers();
-    this.setupAndroidChannel();
+    this.channelPromise = this.setupAndroidChannel();
   }
 
   private async setupAndroidChannel() {
@@ -187,6 +188,11 @@ export class MediaSessionManager {
 
         if (this.isNative && Capacitor.getPlatform() === 'android') {
             try {
+                // BLOCKING: Wait for channel registration to complete
+                if (this.channelPromise) {
+                    await this.channelPromise;
+                }
+
                 await ForegroundService.startForegroundService({
                     id: 1001,
                     title: this.currentMetadata?.title || 'Versicle',
