@@ -177,7 +177,6 @@ export const LibraryView: React.FC = () => {
   // we might want to expand slightly but not too much, OR just center the block.
   // If we don't expand, we have leftover space.
 
-  const totalGridWidth = columnCount * (CARD_WIDTH + GAP);
   // Actually, wait. If we use fixed width, the columns won't stretch.
   // But if we want it centered, we can calculate the left margin.
 
