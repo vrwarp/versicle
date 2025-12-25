@@ -138,11 +138,10 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   async preload(text: string, options: TTSOptions): Promise<void> {
-      // Logic: Only preload if something is currently playing (implied by usage,
-      // but we can check if activeUtteranceId > 0 or similar if needed.
-      // The plan says "it verifies that audio is currently playing", but
-      // strict verification might be complex.
-      // However, we only care about setting up the variables.
+      // Preload the next utterance to achieve gapless playback (Smart Handoff).
+      // We use QueueStrategy 1 (Add) to append this to the native Android buffer
+      // immediately after the current utterance. The `play` method will later
+      // check if `nextText` matches and adopt the running promise instead of restarting.
 
       this.nextText = text;
 
