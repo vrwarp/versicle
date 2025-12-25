@@ -144,9 +144,13 @@ export class MediaSessionManager {
 
         if (Capacitor.getPlatform() === 'android') {
              try {
+                 // According to the types, updateForegroundService requires StartForegroundServiceOptions
+                 // which includes id and smallIcon.
                  await ForegroundService.updateForegroundService({
+                     id: 1001,
                      title: metadata.title,
                      body: metadata.artist,
+                     smallIcon: 'ic_stat_versicle'
                  });
              } catch (e) {
                  // Service might not be running yet, which is fine

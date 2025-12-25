@@ -270,8 +270,10 @@ describe('MediaSessionManager', () => {
           await manager.setMetadata(metadata);
 
           expect(ForegroundService.updateForegroundService).toHaveBeenCalledWith({
+              id: 1001,
               title: 'Android Title',
-              body: 'Android Artist'
+              body: 'Android Artist',
+              smallIcon: 'ic_stat_versicle'
           });
       });
 

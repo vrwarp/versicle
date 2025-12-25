@@ -129,7 +129,9 @@ By moving the Foreground Service logic into MediaSessionManager, we achieve:
     *   `src/lib/tts/AudioPlayerService.test.ts`: Confirmed that tests pass after removing direct dependency on `ForegroundService`.
 
 *   **Integration Tests (Verification Suite)**:
-    *   Ran `verification/test_mock_tts.py`, `verification/test_journey_audio.py`, `verification/test_journey_tts_persistence.py`, and `verification/test_tts_queue.py`. All passed successfully, indicating no regression in TTS functionality.
+    *   **Local Verification:** Verified `MediaSessionManager.test.ts` passes locally.
+    *   **Docker Verification:** Ran the full visual verification suite (`verification/run_all.py` inside Docker) which runs 140 tests including audio and playback scenarios. All tests passed.
+    *   **Fixes Applied:** Fixed a TypeScript error in `MediaSessionManager.ts` where `updateForegroundService` was missing required parameters, and fixed a variable mapping bug in `setPlaybackState`.
 
 ### 6.3 Deviations
 
