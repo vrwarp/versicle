@@ -257,4 +257,19 @@ describe('CapacitorTTSProvider', () => {
       charIndex: 10
     }));
   });
+
+  it('should clean up old listener when init is called multiple times', async () => {
+    const removeMock = vi.fn();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.addListener as any).mockResolvedValue({ remove: removeMock });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({ voices: [] });
+
+    await provider.init();
+    expect(TextToSpeech.addListener).toHaveBeenCalledTimes(1);
+
+    await provider.init();
+    expect(TextToSpeech.addListener).toHaveBeenCalledTimes(2);
+    expect(removeMock).toHaveBeenCalled();
+  });
 });

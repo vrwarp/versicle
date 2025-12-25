@@ -9,19 +9,27 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
   private lastText: string | null = null;
   private lastOptions: TTSOptions | null = null;
+  private rangeListener: { remove: () => Promise<void> } | null = null;
 
   async init(): Promise<void> {
     await this.getVoices();
     try {
-        await TextToSpeech.addListener('onRangeStart', (info) => {
-             if (!this.lastText) return;
+      if (this.rangeListener) {
+        await this.rangeListener.remove();
+        this.rangeListener = null;
+      }
+      this.rangeListener = await TextToSpeech.addListener(
+        'onRangeStart',
+        (info) => {
+          if (!this.lastText) return;
 
-             // If the index is outside the bounds of the current text,
-             // it belongs to a previous, longer utterance.
-             if (info.start >= this.lastText.length) return;
+          // If the index is outside the bounds of the current text,
+          // it belongs to a previous, longer utterance.
+          if (info.start >= this.lastText.length) return;
 
-             this.emit({ type: 'boundary', charIndex: info.start });
-        });
+          this.emit({ type: 'boundary', charIndex: info.start });
+        }
+      );
     } catch (e) {
         console.warn('Failed to add listener for TTS', e);
     }
