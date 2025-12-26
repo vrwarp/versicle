@@ -92,6 +92,9 @@ export class AudioPlayerService {
   private lastMetadata: MediaSessionMetadata | null = null;
   private foregroundStopTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Track last persisted queue to avoid redundant heavy writes
+  private lastPersistedQueue: TTSQueueItem[] | null = null;
+
   private constructor() {
     this.backgroundAudio = new BackgroundAudio();
     this.syncEngine = new SyncEngine();
@@ -149,6 +152,9 @@ export class AudioPlayerService {
       if (this.currentBookId !== bookId) {
           this.currentBookId = bookId;
           this.sessionRestored = false;
+          // Clear tracked state when book changes
+          this.lastPersistedQueue = null;
+
           if (bookId) {
               this.playlistPromise = dbService.getSections(bookId).then(sections => {
                   this.playlist = sections;
@@ -215,6 +221,10 @@ export class AudioPlayerService {
                   this.queue = state.queue;
                   this.currentIndex = state.currentIndex || 0;
                   this.currentSectionIndex = state.sectionIndex ?? -1;
+
+                  // Track restored queue as persisted
+                  this.lastPersistedQueue = this.queue;
+
                   this.updateMediaSessionMetadata();
                   this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
               }
@@ -391,6 +401,9 @@ export class AudioPlayerService {
         this.queue = items;
         this.currentIndex = startIndex;
 
+        // Reset persisted tracker since queue changed
+        this.lastPersistedQueue = null;
+
         this.updateMediaSessionMetadata();
         this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
         this.persistQueue();
@@ -399,7 +412,15 @@ export class AudioPlayerService {
 
   private persistQueue() {
       if (this.currentBookId) {
-          dbService.saveTTSState(this.currentBookId, this.queue, this.currentIndex, this.currentSectionIndex);
+          // Optimization: If queue has not changed since last persist,
+          // only update the position (currentIndex/sectionIndex).
+          // This avoids serializing and writing the entire queue array to IndexedDB repeatedly.
+          if (this.lastPersistedQueue === this.queue) {
+              dbService.saveTTSPosition(this.currentBookId, this.currentIndex, this.currentSectionIndex);
+          } else {
+              dbService.saveTTSState(this.currentBookId, this.queue, this.currentIndex, this.currentSectionIndex);
+              this.lastPersistedQueue = this.queue;
+          }
       }
   }
 
@@ -852,6 +873,8 @@ export class AudioPlayerService {
               this.queue = newQueue;
               this.currentIndex = 0;
               this.currentSectionIndex = sectionIndex;
+              this.lastPersistedQueue = null; // Reset persisted tracker on new section
+
               this.updateMediaSessionMetadata();
               this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
               this.persistQueue();

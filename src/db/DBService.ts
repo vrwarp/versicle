@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition } from '../types/db';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -193,7 +193,7 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'content_analysis', 'tts_content', 'covers'], 'readwrite');
+      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'covers'], 'readwrite');
 
       await Promise.all([
           tx.objectStore('books').delete(id),
@@ -201,6 +201,7 @@ class DBService {
           tx.objectStore('covers').delete(id),
           tx.objectStore('locations').delete(id),
           tx.objectStore('tts_queue').delete(id),
+          tx.objectStore('tts_position').delete(id),
       ]);
 
       // Delete annotations
@@ -544,6 +545,9 @@ class DBService {
   private saveTTSStateTimeout: NodeJS.Timeout | null = null;
   private pendingTTSState: { [bookId: string]: TTSState } = {};
 
+  private saveTTSPositionTimeout: NodeJS.Timeout | null = null;
+  private pendingTTSPosition: { [bookId: string]: TTSPosition } = {};
+
   /**
    * Saves TTS Queue and Index. Debounced.
    *
@@ -584,7 +588,46 @@ class DBService {
   }
 
   /**
+   * Saves only the TTS playback position (lightweight).
+   * Debounced separately to allow more frequent updates without heavy serialization.
+   *
+   * @param bookId - The unique identifier of the book.
+   * @param currentIndex - The current index in the queue.
+   * @param sectionIndex - The index of the current section in the playlist (optional).
+   */
+  saveTTSPosition(bookId: string, currentIndex: number, sectionIndex?: number): void {
+      this.pendingTTSPosition[bookId] = {
+          bookId,
+          currentIndex,
+          sectionIndex,
+          updatedAt: Date.now()
+      };
+
+      if (this.saveTTSPositionTimeout) return;
+
+      this.saveTTSPositionTimeout = setTimeout(async () => {
+          this.saveTTSPositionTimeout = null;
+          const pending = { ...this.pendingTTSPosition };
+          this.pendingTTSPosition = {};
+
+          try {
+              const db = await this.getDB();
+              const tx = db.transaction('tts_position', 'readwrite');
+              const store = tx.objectStore('tts_position');
+
+              for (const position of Object.values(pending)) {
+                  await store.put(position);
+              }
+              await tx.done;
+          } catch (error) {
+              Logger.error('DBService', 'Failed to save TTS position', error);
+          }
+      }, 500); // 500ms debounce
+  }
+
+  /**
    * Retrieves the saved TTS state for a book.
+   * Merges data from both `tts_queue` and `tts_position` stores.
    *
    * @param bookId - The unique identifier of the book.
    * @returns A Promise resolving to the TTSState or undefined.
@@ -592,7 +635,18 @@ class DBService {
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
       try {
           const db = await this.getDB();
-          return await db.get('tts_queue', bookId);
+          const state = await db.get('tts_queue', bookId);
+          const position = await db.get('tts_position', bookId);
+
+          if (state && position && position.updatedAt > state.updatedAt) {
+              return {
+                  ...state,
+                  currentIndex: position.currentIndex,
+                  sectionIndex: position.sectionIndex !== undefined ? position.sectionIndex : state.sectionIndex
+              };
+          }
+
+          return state;
       } catch (error) {
           this.handleError(error);
       }
@@ -944,6 +998,11 @@ class DBService {
           clearTimeout(this.saveTTSStateTimeout);
           this.saveTTSStateTimeout = null;
           this.pendingTTSState = {};
+      }
+      if (this.saveTTSPositionTimeout) {
+          clearTimeout(this.saveTTSPositionTimeout);
+          this.saveTTSPositionTimeout = null;
+          this.pendingTTSPosition = {};
       }
   }
 }

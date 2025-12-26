@@ -154,6 +154,20 @@ export interface TTSState {
 }
 
 /**
+ * Lightweight persisted TTS position for frequent updates.
+ */
+export interface TTSPosition {
+  /** The book ID this position belongs to. */
+  bookId: string;
+  /** The current index in the queue. */
+  currentIndex: number;
+  /** The index of the current section in the playlist. */
+  sectionIndex?: number;
+  /** Timestamp of last update. */
+  updatedAt: number;
+}
+
+/**
  * A pronunciation rule for the TTS engine.
  */
 export interface LexiconRule {
