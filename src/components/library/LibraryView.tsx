@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useLayoutEffect, useCallback, useMemo } from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
@@ -64,6 +64,7 @@ export const LibraryView: React.FC = () => {
     height: typeof window !== 'undefined' ? window.innerHeight : 0
   });
   const [dragActive, setDragActive] = useState(false);
+  const gridRef = useRef(null);
 
   useEffect(() => {
     fetchBooks();
@@ -161,25 +162,24 @@ export const LibraryView: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  const columnCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
-  // Add 1 to rowCount for spacer
-  const rowCount = Math.ceil(books.length / columnCount) + 1;
+  // Derived state (memoized to prevent recalculation churn and unstable props)
+  const { columnCount, gridWidth, gridColumnWidth, rowCount } = useMemo(() => {
+      const colCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
+      const rCount = Math.ceil(books.length / colCount) + 1; // +1 for spacer
 
-  // Logic to determine grid width and column width
-  // If columnCount is 1 (e.g. mobile), we allow the single column to stretch to fill the available space.
-  // This ensures the card is centered and substantial on small screens, satisfying the "no horizontal scroll" and "width > 300px" checks if the screen permits.
-  // For multi-column layouts (desktop), we use a fixed column width (CARD_WIDTH + GAP) and center the grid block to avoid awkward stretching.
+      let gWidth: number;
+      let gColWidth: number;
 
-  let gridWidth: number;
-  let gridColumnWidth: number;
+      if (colCount === 1) {
+          gWidth = dimensions.width;
+          gColWidth = dimensions.width;
+      } else {
+          gWidth = Math.min(dimensions.width, colCount * (CARD_WIDTH + GAP));
+          gColWidth = CARD_WIDTH + GAP;
+      }
 
-  if (columnCount === 1) {
-      gridWidth = dimensions.width;
-      gridColumnWidth = dimensions.width;
-  } else {
-      gridWidth = Math.min(dimensions.width, columnCount * (CARD_WIDTH + GAP));
-      gridColumnWidth = CARD_WIDTH + GAP;
-  }
+      return { columnCount: colCount, gridWidth: gWidth, gridColumnWidth: gColWidth, rowCount: rCount };
+  }, [dimensions.width, books.length]);
 
   // Memoize itemData (cellProps) to prevent unnecessary re-renders of the grid cells.
   // This version of react-window uses cellProps which are spread into the component props.
@@ -194,8 +194,12 @@ export const LibraryView: React.FC = () => {
       return CARD_HEIGHT + GAP;
   }, [viewMode, rowCount, books.length]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const GridAny = Grid as any;
+  const getColumnWidth = useCallback(() => {
+    return viewMode === 'list' ? dimensions.width : gridColumnWidth;
+  }, [viewMode, dimensions.width, gridColumnWidth]);
+
+  // Memoize style to prevent re-renders when other state changes
+  const gridStyle = useMemo(() => viewMode === 'grid' ? { margin: '0 auto' } : undefined, [viewMode]);
 
   return (
     <div
@@ -288,16 +292,17 @@ export const LibraryView: React.FC = () => {
           {books.length === 0 ? (
              <EmptyLibrary onImport={triggerFileUpload} />
           ) : (
-             <GridAny
+             <Grid
+                ref={gridRef}
                 columnCount={viewMode === 'list' ? 1 : columnCount}
-                columnWidth={viewMode === 'list' ? dimensions.width : gridColumnWidth}
+                columnWidth={getColumnWidth}
                 height={dimensions.height || 500}
                 rowCount={viewMode === 'list' ? books.length + 1 : rowCount}
                 rowHeight={getRowHeight}
                 width={viewMode === 'list' ? dimensions.width : gridWidth}
                 cellComponent={viewMode === 'list' ? ListCell : GridCell}
                 cellProps={itemData}
-                style={viewMode === 'grid' ? { margin: '0 auto' } : undefined}
+                style={gridStyle}
              />
           )}
         </section>
