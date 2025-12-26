@@ -15,6 +15,7 @@ export class MaintenanceService {
     locations: number;
     lexicon: number;
     covers: number;
+    tts_position: number;
   }> {
     const db = await getDB();
     const books = await db.getAllKeys('books');
@@ -36,6 +37,10 @@ export class MaintenanceService {
     const coverKeys = await db.getAllKeys('covers');
     const orphanedCovers = coverKeys.filter((k) => !bookIds.has(k.toString()));
 
+    // Check TTS positions
+    const ttsPositionKeys = await db.getAllKeys('tts_position');
+    const orphanedTTSPositions = ttsPositionKeys.filter((k) => !bookIds.has(k.toString()));
+
     // Check lexicon
     const rules = await db.getAll('lexicon');
     // Lexicon rules can be global (bookId is null/undefined), so only check if bookId is present
@@ -49,6 +54,7 @@ export class MaintenanceService {
       locations: orphanedLocations.length,
       lexicon: orphanedLexicon.length,
       covers: orphanedCovers.length,
+      tts_position: orphanedTTSPositions.length,
     };
   }
 
@@ -63,7 +69,7 @@ export class MaintenanceService {
     const bookIds = new Set(books.map((k) => k.toString()));
 
     const tx = db.transaction(
-      ['files', 'annotations', 'locations', 'lexicon', 'covers'],
+      ['files', 'annotations', 'locations', 'lexicon', 'covers', 'tts_position'],
       'readwrite'
     );
 
@@ -101,6 +107,15 @@ export class MaintenanceService {
     for (const key of coverKeys) {
       if (!bookIds.has(key.toString())) {
         await coversStore.delete(key);
+      }
+    }
+
+    // Prune TTS positions
+    const ttsPositionStore = tx.objectStore('tts_position');
+    const ttsPositionKeys = await ttsPositionStore.getAllKeys();
+    for (const key of ttsPositionKeys) {
+      if (!bookIds.has(key.toString())) {
+        await ttsPositionStore.delete(key);
       }
     }
 
