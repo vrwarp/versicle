@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
 import { MoreVertical, Trash2, CloudOff, Cloud, RefreshCw } from 'lucide-react';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { LazyLoadImage } from 'react-lazy-load-image-component';
+import 'react-lazy-load-image-component/src/effects/blur.css';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -130,15 +132,18 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
         data-testid={`restore-input-${book.id}`}
       />
 
-      <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner">
+      <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner flex flex-col">
         {coverUrl ? (
-          <img
+          <LazyLoadImage
             src={coverUrl}
             alt={`Cover of ${book.title}`}
+            effect="blur"
+            wrapperClassName="w-full h-full !block"
             className={cn(
                 "w-full h-full object-cover transition-transform group-hover:scale-105",
                 book.isOffloaded && 'opacity-50 grayscale'
             )}
+            threshold={200}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted-foreground/50">
@@ -153,7 +158,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
         )}
 
         <div
-          className="absolute top-2 right-2"
+          className="absolute top-2 right-2 z-10"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
@@ -198,7 +203,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
     title="Delete Book"
     description="Are you sure you want to delete this book completely? This cannot be undone."
     footer={
-      <>
+      <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={() => setIsDeleteDialogOpen(false)}>
           Cancel
         </Button>
@@ -209,7 +214,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
         >
           Delete
         </Button>
-      </>
+      </div>
     }
   />
 

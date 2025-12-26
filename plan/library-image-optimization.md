@@ -160,3 +160,38 @@ Update `src/hooks/useEpubReader.ts` or the relevant context loader:
 2.  **Performance Test**: Duplicate the book entry 50 times in the DB. Scroll the library. Verify 60fps performance and low memory footprint in Chrome DevTools.
 
 3.  **Reader Test**: Open the book. Verify the cover page displays the high-resolution image, not the pixelated thumbnail.
+
+---
+
+## Implementation Log
+
+### Changes Executed
+
+1.  **Database Upgrade**:
+    *   Incremented IndexedDB version to 12 in `src/db/db.ts`.
+    *   Created `covers` object store for high-resolution images.
+    *   Added `getCover` method to `DBService` to retrieve high-res covers.
+    *   Updated `deleteBook` and `offloadBook` to manage data in the `covers` store.
+
+2.  **Ingestion Optimization**:
+    *   Integrated `browser-image-compression` in `src/lib/ingestion.ts`.
+    *   Implemented dual-storage strategy:
+        *   **Thumbnails**: Compressed (max 300px, ~50KB) and stored in `books` (metadata).
+        *   **Originals**: Stored in `covers` store.
+    *   Added fallback: If compression fails, the original image is stored as the thumbnail to ensure data integrity.
+
+3.  **UI Refactoring**:
+    *   Refactored `src/components/library/BookCard.tsx` to use `LazyLoadImage` from `react-lazy-load-image-component`.
+    *   Implemented object URL management (creation and strict revocation) within `useEffect` to prevent memory leaks.
+    *   Added CSS styling for the blur-up effect.
+
+4.  **Verification**:
+    *   **Unit Testing**: Created `src/lib/ingestion_images.test.ts` to verify the bifurcation logic (thumbnail vs original) and fallback mechanisms using mocks.
+    *   **Integration Testing**: Ran `verification/test_journey_library.py` via Docker/Playwright. Confirmed that the library loads correctly with the new image handling logic.
+    *   **Reader Verification**: Confirmed that `useEpubReader` utilizes the original EPUB file (containing full-res images) for rendering, preserving reading quality without requiring changes to the hook.
+
+### Discoveries & Deviations
+
+*   **Reader Integration**: The original plan suggested updating `useEpubReader.ts` to fetch from the `covers` store. Investigation revealed that the reader initializes `epub.js` with the full EPUB file (from `files` store), which inherently contains the high-resolution cover. Therefore, no changes were needed in the reader hook to maintain quality.
+*   **Offloading Strategy**: When offloading a book, we chose to remove the high-res cover from the `covers` store to maximize space savings, as the thumbnail remains in the `books` metadata for library display.
+*   **Restore Logic**: Restoring a book puts the file back. We do not automatically re-extract the high-res cover to the `covers` store upon restore, as the reader uses the file directly. If high-res metadata access is needed in the future, a re-import or explicit extraction step would be required.

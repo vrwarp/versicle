@@ -1,5 +1,6 @@
 import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
+import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
 import type { BookMetadata, SectionMetadata, TTSContent } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
@@ -97,10 +98,26 @@ export async function processEpub(
   const coverUrl = await book.coverUrl();
 
   let coverBlob: Blob | undefined;
+  let thumbnailBlob: Blob | undefined;
+
   if (coverUrl) {
     try {
       const response = await fetch(coverUrl);
       coverBlob = await response.blob();
+
+      // Compress cover for thumbnail
+      if (coverBlob) {
+        try {
+          thumbnailBlob = await imageCompression(coverBlob as File, {
+            maxSizeMB: 0.05, // 50KB
+            maxWidthOrHeight: 300,
+            useWebWorker: true,
+          });
+        } catch (error) {
+          console.warn('Failed to compress cover image, using original:', error);
+          thumbnailBlob = coverBlob;
+        }
+      }
     } catch (error) {
       console.warn('Failed to retrieve cover blob:', error);
     }
@@ -161,7 +178,7 @@ export async function processEpub(
     author: metadata.creator || 'Unknown Author',
     description: metadata.description || '',
     addedAt: Date.now(),
-    coverBlob: coverBlob,
+    coverBlob: thumbnailBlob || coverBlob, // Use thumbnail if available, else original (or undefined)
     fileHash,
     isOffloaded: false,
     fileSize: file.size,
@@ -182,9 +199,14 @@ export async function processEpub(
 
   const db = await getDB();
 
-  const tx = db.transaction(['books', 'files', 'sections', 'tts_content'], 'readwrite');
+  const tx = db.transaction(['books', 'files', 'sections', 'tts_content', 'covers'], 'readwrite');
   await tx.objectStore('books').add(finalBook);
   await tx.objectStore('files').add(file, bookId);
+
+  // Store high-res cover if it exists
+  if (coverBlob) {
+    await tx.objectStore('covers').add(coverBlob, bookId);
+  }
 
   // Store section metadata
   const sectionsStore = tx.objectStore('sections');

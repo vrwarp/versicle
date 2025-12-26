@@ -25,6 +25,13 @@ export interface EpubLibraryDB extends DBSchema {
     value: Blob | ArrayBuffer;
   };
   /**
+   * Store for high-resolution cover images.
+   */
+  covers: {
+    key: string; // bookId
+    value: Blob;
+  };
+  /**
    * Store for generated locations cache.
    */
   locations: {
@@ -128,7 +135,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 11, { // Upgrading to v11
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 12, { // Upgrading to v12
       upgrade(db, oldVersion, _newVersion, transaction) {
         // Migration to v11: Clear old reading history to enforce semantic boundaries
         if (oldVersion < 11) {
@@ -147,6 +154,11 @@ export const initDB = () => {
         // Files store
         if (!db.objectStoreNames.contains('files')) {
           db.createObjectStore('files');
+        }
+
+        // Covers store (New in v12)
+        if (!db.objectStoreNames.contains('covers')) {
+          db.createObjectStore('covers');
         }
 
         // Locations store (New in v4)
