@@ -65,11 +65,7 @@ export const useGenAIStore = create<GenAIState>()(
     }),
     {
       name: 'genai-storage',
-      // SECURITY: Use sessionStorage instead of localStorage.
-      // This ensures that sensitive API keys and logs persist across page reloads (preserving user workflow)
-      // but are cleared when the tab or window is closed. This reduces the risk of long-term exposure
-      // on shared devices compared to permanent localStorage.
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       onRehydrateStorage: () => (state) => {
           state?.init();
       }
