@@ -36,7 +36,7 @@ vi.mock('react-router-dom', () => ({
 }));
 
 // Mock CompassPill to avoid rendering full child logic
-vi.mock('../audio/CompassPill', () => ({
+vi.mock('../ui/CompassPill', () => ({
   CompassPill: ({ variant, onClick, onAnnotationAction }: any) => (
     <div data-testid={`compass-pill-${variant}`} onClick={onClick}>
       {variant}
