@@ -206,11 +206,11 @@ This component acts as the **Orchestrator**. It subscribes to multiple Zustand s
 
 ### Phase 3: Refactor & Relocate (The "Move")
 
--   [ ] **Move `CompassPill`**:
+-   [x] **Move `CompassPill`**:
 
     -   Move `src/components/audio/CompassPill.tsx` -> `src/components/ui/CompassPill.tsx`.
 
--   [ ] **Update Imports**:
+-   [x] **Update Imports**:
 
     -   Update `src/components/reader/ReaderControlBar.tsx`.
 
@@ -218,13 +218,21 @@ This component acts as the **Orchestrator**. It subscribes to multiple Zustand s
 
     -   Update `src/components/audio/CompassPill.test.tsx` imports.
 
--   [ ] **Move Tests**:
+-   [x] **Move Tests**:
 
     -   Move `src/components/audio/CompassPill.test.tsx` -> `src/components/ui/CompassPill.test.tsx`.
 
--   [ ] **Update Test IDs**:
+-   [x] **Update Test IDs**:
 
     -   Ensure data-testids in `CompassPill` (`compass-pill-active`, `compass-pill-annotation`) match integration tests.
+
+### Progress Update (Phase 3)
+- **Refactoring Complete**:
+    - Moved `CompassPill` and its tests from `src/components/audio` to `src/components/ui`, correctly identifying it as a shared UI component rather than audio-specific.
+    - Updated all import references in `ReaderControlBar.tsx`, `AudioReaderHUD.tsx`, and test files.
+- **Verification**:
+    - Unit tests pass: `src/components/ui/CompassPill.test.tsx`, `src/components/reader/ReaderControlBar.test.tsx`.
+    - Integration tests pass: `verification/test_compass_pill.py`, `verification/test_journey_reading.py`.
 
 6\. Verification Checklist
 --------------------------

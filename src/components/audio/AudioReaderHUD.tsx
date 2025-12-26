@@ -4,7 +4,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useShallow } from 'zustand/react/shallow';
-import { CompassPill } from './CompassPill';
+import { CompassPill } from '../ui/CompassPill';
 import { SatelliteFAB } from './SatelliteFAB';
 
 export const AudioReaderHUD: React.FC = () => {

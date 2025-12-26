@@ -3,8 +3,8 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { CompassPill } from '../audio/CompassPill';
-import type { ActionType } from '../audio/CompassPill';
+import { CompassPill } from '../ui/CompassPill';
+import type { ActionType } from '../ui/CompassPill';
 import { useToastStore } from '../../store/useToastStore';
 import { useNavigate } from 'react-router-dom';
 
