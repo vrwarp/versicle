@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { LexiconService } from '../../lib/tts/LexiconService';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import type { LexiconRule } from '../../types/db';
-import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw, CornerDownRight } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
 import { useReaderStore } from '../../store/useReaderStore';
@@ -269,7 +269,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                    {editingRule?.id === rule.id ? (
                        <div className="flex flex-1 items-center gap-2">
                            <div className="flex flex-col gap-1 w-full">
-                               <div className="flex items-center gap-2 w-full">
+                               <div className="flex flex-col gap-2 w-full">
                                     <input
                                         data-testid="lexicon-input-original"
                                         className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -277,16 +277,18 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                         onChange={e => setEditingRule({...editingRule, original: e.target.value})}
                                         placeholder="Original"
                                     />
-                                    <span className="text-gray-500">→</span>
-                                    <input
-                                        data-testid="lexicon-input-replacement"
-                                        className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                        value={editingRule.replacement}
-                                        onChange={e => setEditingRule({...editingRule, replacement: e.target.value})}
-                                        placeholder="Replacement"
-                                    />
+                                    <div className="flex items-center gap-2 w-full">
+                                        <CornerDownRight size={16} className="text-gray-400 shrink-0" />
+                                        <input
+                                            data-testid="lexicon-input-replacement"
+                                            className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                            value={editingRule.replacement}
+                                            onChange={e => setEditingRule({...editingRule, replacement: e.target.value})}
+                                            placeholder="Replacement"
+                                        />
+                                    </div>
                                </div>
-                               <div className="flex items-center justify-between gap-2">
+                               <div className="flex items-center justify-between gap-2 mt-2">
                                    <div className="flex gap-4">
                                         <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                                             <input
@@ -320,13 +322,16 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                        </div>
                    ) : (
                        <>
-                           <div className="flex-1 grid grid-cols-2 gap-4">
-                               <div className="flex items-center gap-2">
-                                   {rule.isRegex && <span data-testid="lexicon-regex-badge" className="text-[10px] uppercase font-bold text-purple-600 border border-purple-200 bg-purple-50 px-1 rounded">Re</span>}
-                                   {rule.applyBeforeGlobal && <span data-testid="lexicon-priority-badge" className="text-[10px] uppercase font-bold text-orange-600 border border-orange-200 bg-orange-50 px-1 rounded">Pre</span>}
-                                   <span className="font-medium text-sm text-gray-900 dark:text-gray-100">{rule.original}</span>
+                           <div className="flex-1 flex flex-col gap-1 min-w-0 py-1">
+                               <div className="flex items-baseline gap-2 flex-wrap">
+                                   {rule.isRegex && <span data-testid="lexicon-regex-badge" className="text-[10px] uppercase font-bold text-purple-600 border border-purple-200 bg-purple-50 px-1 rounded shrink-0">Re</span>}
+                                   {rule.applyBeforeGlobal && <span data-testid="lexicon-priority-badge" className="text-[10px] uppercase font-bold text-orange-600 border border-orange-200 bg-orange-50 px-1 rounded shrink-0">Pre</span>}
+                                   <span className="font-mono text-sm break-all text-gray-900 dark:text-gray-100">{rule.original}</span>
                                </div>
-                               <span className="text-sm text-gray-500 dark:text-gray-400">{rule.replacement}</span>
+                               <div className="flex items-center gap-2 pl-1">
+                                   <CornerDownRight size={14} className="text-gray-400 shrink-0" />
+                                   <span className="font-semibold text-gray-800 dark:text-gray-300 text-sm break-words">{rule.replacement}</span>
+                               </div>
                            </div>
                            <div className="flex gap-2 items-center">
                                <div className="flex flex-col mr-2">
@@ -365,7 +370,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
           {/* Add New */}
           {isAdding ? (
               <div className="flex flex-col gap-2 p-2 border rounded bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-                   <div className="flex items-center gap-2">
+                   <div className="flex flex-col gap-2">
                         <input
                             data-testid="lexicon-input-original"
                             className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
@@ -374,16 +379,18 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                             placeholder="Original"
                             autoFocus
                         />
-                        <span className="text-gray-500">→</span>
-                        <input
-                            data-testid="lexicon-input-replacement"
-                            className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                            value={editingRule?.replacement || ''}
-                            onChange={e => setEditingRule({...editingRule, replacement: e.target.value})}
-                            placeholder="Replacement"
-                        />
+                        <div className="flex items-center gap-2">
+                            <CornerDownRight size={16} className="text-gray-400 shrink-0" />
+                            <input
+                                data-testid="lexicon-input-replacement"
+                                className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                value={editingRule?.replacement || ''}
+                                onChange={e => setEditingRule({...editingRule, replacement: e.target.value})}
+                                placeholder="Replacement"
+                            />
+                        </div>
                    </div>
-                   <div className="flex items-center justify-between gap-2">
+                   <div className="flex items-center justify-between gap-2 mt-2">
                        <div className="flex gap-4">
                            <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                                <input

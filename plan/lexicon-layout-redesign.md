@@ -121,3 +121,22 @@ Robustness: The layout is now immune to content length. Whether the regex is 5 c
 Mobile Compatibility: This pattern is natively responsive. It utilizes the full width of the phone screen for the complex regex pattern, making it easier to tap and read.
 
 Cognitive Clarity: Separating the "Computer Code" (Regex) from the "Human Speech" (Replacement) helps the user switch contexts between debugging patterns and verifying pronunciation.
+
+5. Implementation & Verification Log
+
+**Status**: Completed
+
+**Actions Taken**:
+1.  Modified `LexiconManager.tsx` to switch from `grid-cols-2` to `flex flex-col` for rule display.
+2.  Applied `break-all` to the original text (regex) span to ensure wrapping of long patterns.
+3.  Added `CornerDownRight` icon from `lucide-react` to visually indicate the replacement text.
+4.  Updated the "Edit Mode" and "Add Mode" interfaces to also stack inputs vertically, ensuring UI consistency and better space utilization on mobile.
+5.  Verified the layout using a custom Playwright script (`verification/verify_lexicon_script.py`) which confirmed elements are visible and structure is correct. A screenshot (`verification/lexicon_layout.png`) was captured to visually confirm the fix.
+
+**Deviations**:
+-   The "Edit Mode" inputs were also updated to stack vertically, which was suggested as a "final implementation" goal in section 3.D but was implemented immediately for consistency.
+-   The container for the regex line uses `items-center` which might center the badge vertically if the regex wraps to multiple lines. A review suggestion recommended `items-start` or `items-baseline` to align the badge with the first line. This will be addressed in the final polish.
+
+**Discoveries**:
+-   The `break-all` class is essential for regex patterns as they often lack whitespace.
+-   Vertical stacking significantly improves readability for even moderately long patterns.
