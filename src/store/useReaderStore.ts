@@ -37,6 +37,11 @@ interface ReaderState {
   /** Whether to force the theme font and ignore book styles. */
   shouldForceFont: boolean;
 
+  /** Callback to initiate playback from a specific CFI (registered by ReaderView). */
+  playFromSelection?: (cfi: string) => void;
+  /** Registers the playFromSelection callback. */
+  setPlayFromSelection: (callback?: (cfi: string) => void) => void;
+
   /** Sets the loading state. */
   setIsLoading: (isLoading: boolean) => void;
   /** Sets the ID of the current book. */
@@ -112,6 +117,7 @@ export const useReaderStore = create<ReaderState>()(
       setViewMode: (mode) => set({ viewMode: mode }),
       setImmersiveMode: (enabled) => set({ immersiveMode: enabled }),
       setShouldForceFont: (force) => set({ shouldForceFont: force }),
+      setPlayFromSelection: (callback) => set({ playFromSelection: callback }),
       reset: () => set({
         isLoading: false,
         currentBookId: null,

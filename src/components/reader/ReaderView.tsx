@@ -61,7 +61,8 @@ export const ReaderView: React.FC = () => {
     viewMode,
     shouldForceFont,
     immersiveMode,
-    setImmersiveMode
+    setImmersiveMode,
+    setPlayFromSelection
   } = useReaderStore(useShallow(state => ({
     currentTheme: state.currentTheme,
     customTheme: state.customTheme,
@@ -78,7 +79,8 @@ export const ReaderView: React.FC = () => {
     viewMode: state.viewMode,
     shouldForceFont: state.shouldForceFont,
     immersiveMode: state.immersiveMode,
-    setImmersiveMode: state.setImmersiveMode
+    setImmersiveMode: state.setImmersiveMode,
+    setPlayFromSelection: state.setPlayFromSelection
   })));
 
   // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
@@ -637,8 +639,12 @@ export const ReaderView: React.FC = () => {
           console.error("Error matching CFI for playback", e);
       }
   }, [rendition]);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  void handlePlayFromSelection;
+
+  // Register play callback
+  useEffect(() => {
+      setPlayFromSelection(handlePlayFromSelection);
+      return () => setPlayFromSelection(undefined);
+  }, [handlePlayFromSelection, setPlayFromSelection]);
 
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">

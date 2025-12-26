@@ -112,17 +112,17 @@ export const ReaderControlBar: React.FC = () => {
             case 'play':
                 // Play from selection
                 if (popover.cfiRange) {
-                    const player = AudioPlayerService.getInstance();
-                    const queue = player.getQueue();
-
-                    // Note: Precise CFI targeting requires epub.js context which isn't available globally.
-                    // For now, we rely on the player's current queue or basic playback.
-                    // Future enhancement: Implement robust playFromCfi(cfi) in AudioPlayerService.
-
-                    if (queue.length > 0) {
-                        player.play();
+                    const playFromSelection = useReaderStore.getState().playFromSelection;
+                    if (playFromSelection) {
+                        playFromSelection(popover.cfiRange);
                     } else {
-                        showToast("Audio not ready yet", "error");
+                        // Fallback if reader view not active or function not registered
+                        const player = AudioPlayerService.getInstance();
+                        if (player.getQueue().length > 0) {
+                            player.play();
+                        } else {
+                            showToast("Audio not ready yet", "error");
+                        }
                     }
                     hidePopover();
                 }
