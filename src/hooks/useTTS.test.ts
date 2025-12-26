@@ -97,6 +97,7 @@ describe('useTTS', () => {
         (useTTSStore.getState as any).mockReturnValue({
             loadVoices: mockLoadVoices,
             status: 'playing',
+            isPlaying: true,
             rate: 1.0,
             prerollEnabled: false
         });
@@ -107,6 +108,7 @@ describe('useTTS', () => {
             const state = {
                 loadVoices: mockLoadVoices,
                 status: 'playing',
+                isPlaying: true,
                 rate: 1.0,
                 prerollEnabled: false
             };
