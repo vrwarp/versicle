@@ -62,7 +62,7 @@ describe('UnifiedInputController Tap Logic', () => {
         render(
             <UnifiedInputController
                 rendition={mockRendition}
-                currentChapterTitle="Test Chapter"
+                currentSectionTitle="Test Chapter"
                 onPrev={onPrev}
                 onNext={onNext}
                 onToggleHUD={onToggleHUD}
@@ -97,7 +97,7 @@ describe('UnifiedInputController Tap Logic', () => {
         render(
             <UnifiedInputController
                 rendition={mockRendition}
-                currentChapterTitle="Test Chapter"
+                currentSectionTitle="Test Chapter"
                 onPrev={onPrev}
                 onNext={onNext}
                 onToggleHUD={onToggleHUD}
@@ -113,7 +113,7 @@ describe('UnifiedInputController Tap Logic', () => {
         render(
             <UnifiedInputController
                 rendition={mockRendition}
-                currentChapterTitle="Test Chapter"
+                currentSectionTitle="Test Chapter"
                 onPrev={onPrev}
                 onNext={onNext}
                 onToggleHUD={onToggleHUD}

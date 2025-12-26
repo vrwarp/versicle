@@ -24,10 +24,10 @@ export const ReaderControlBar: React.FC = () => {
         queue: state.queue,
     }));
 
-    const { immersiveMode, currentBookId, currentChapterTitle } = useReaderStore(state => ({
+    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderStore(state => ({
         immersiveMode: state.immersiveMode,
         currentBookId: state.currentBookId,
-        currentChapterTitle: state.currentChapterTitle
+        currentSectionTitle: state.currentSectionTitle
     }));
 
     const books = useLibraryStore(state => state.books);
@@ -145,10 +145,10 @@ export const ReaderControlBar: React.FC = () => {
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
         // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
         // If queue has items, CompassPill uses queue item title.
-        // We can pass `title` as Book Title and `subtitle` as Chapter Title to be explicit.
+        // We can pass `title` as Book Title and `subtitle` as Section Title to be explicit.
         if (queue.length === 0) {
             title = currentBook.title;
-            subtitle = currentChapterTitle || undefined;
+            subtitle = currentSectionTitle || undefined;
             progress = currentBook.progress;
         }
     }

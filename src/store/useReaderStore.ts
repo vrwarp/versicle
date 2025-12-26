@@ -22,8 +22,8 @@ interface ReaderState {
   fontSize: number;
   /** Current Canonical Fragment Identifier (CFI) representing the reading position. */
   currentCfi: string | null;
-  /** Title of the current chapter being read. */
-  currentChapterTitle: string | null;
+  /** Title of the current section being read. */
+  currentSectionTitle: string | null;
   /** ID (href) of the current chapter being read. */
   currentSectionId: string | null;
   /** Reading progress percentage (0-100). */
@@ -60,10 +60,10 @@ interface ReaderState {
    * Updates the current reading location.
    * @param cfi - The new CFI location.
    * @param progress - The new progress percentage.
-   * @param chapterTitle - Optional title of the new chapter.
+   * @param sectionTitle - Optional title of the new section.
    * @param sectionId - Optional ID (href) of the new chapter.
    */
-  updateLocation: (cfi: string, progress: number, chapterTitle?: string, sectionId?: string) => void;
+  updateLocation: (cfi: string, progress: number, sectionTitle?: string, sectionId?: string) => void;
   /** Sets the Table of Contents. */
   setToc: (toc: NavigationItem[]) => void;
   /** Sets the viewing mode. */
@@ -91,7 +91,7 @@ export const useReaderStore = create<ReaderState>()(
       lineHeight: 1.5,
       fontSize: 100,
       currentCfi: null,
-      currentChapterTitle: null,
+      currentSectionTitle: null,
       currentSectionId: null,
       progress: 0,
       toc: [],
@@ -106,11 +106,11 @@ export const useReaderStore = create<ReaderState>()(
       setFontFamily: (fontFamily) => set({ fontFamily }),
       setLineHeight: (lineHeight) => set({ lineHeight }),
       setFontSize: (size) => set({ fontSize: size }),
-      updateLocation: (cfi, progress, chapterTitle, sectionId) =>
+      updateLocation: (cfi, progress, sectionTitle, sectionId) =>
         set((state) => ({
           currentCfi: cfi,
           progress,
-          currentChapterTitle: chapterTitle ?? state.currentChapterTitle,
+          currentSectionTitle: sectionTitle ?? state.currentSectionTitle,
           currentSectionId: sectionId ?? state.currentSectionId
         })),
       setToc: (toc) => set({ toc }),
@@ -122,7 +122,7 @@ export const useReaderStore = create<ReaderState>()(
         isLoading: false,
         currentBookId: null,
         currentCfi: null,
-        currentChapterTitle: null,
+        currentSectionTitle: null,
         currentSectionId: null,
         progress: 0,
         toc: [],

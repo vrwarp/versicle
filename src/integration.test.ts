@@ -216,7 +216,7 @@ describe('Feature Integration Tests', () => {
       const state = useReaderStore.getState();
       expect(state.currentCfi).toBe('cfi1');
       expect(state.progress).toBe(0.5);
-      expect(state.currentChapterTitle).toBe('Chapter 5');
+      expect(state.currentSectionTitle).toBe('Chapter 5');
 
       // Test TOC setting
       const mockToc = [{ id: '1', href: 'chap1.html', label: 'Chapter 1' }];

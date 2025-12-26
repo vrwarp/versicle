@@ -69,7 +69,7 @@ describe('useTTS', () => {
              const state = {
                  currentBookId: 'book1',
                  currentSectionId: 'section1',
-                 currentChapterTitle: 'Chapter 1'
+                 currentSectionTitle: 'Chapter 1'
              };
              return selector(state);
         });
@@ -96,7 +96,23 @@ describe('useTTS', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useTTSStore.getState as any).mockReturnValue({
             loadVoices: mockLoadVoices,
-            status: 'playing'
+            status: 'playing',
+            isPlaying: true,
+            rate: 1.0,
+            prerollEnabled: false
+        });
+
+        // Mock useTTSStore call too to ensure the hook gets the playing status
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (useTTSStore as any).mockImplementation((selector: any) => {
+            const state = {
+                loadVoices: mockLoadVoices,
+                status: 'playing',
+                isPlaying: true,
+                rate: 1.0,
+                prerollEnabled: false
+            };
+            return selector ? selector(state) : state;
         });
 
         renderHook(() => useTTS());

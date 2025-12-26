@@ -38,17 +38,17 @@ export function useSmartTOC(
     setProgress({ current: 0, total: totalItems });
 
     try {
-      const chaptersToProcess: { id: string; text: string }[] = [];
+      const sectionsToProcess: { id: string; text: string }[] = [];
 
-      await collectChapterData(originalToc, book, (count) => {
+      await collectSectionData(originalToc, book, (count) => {
          setProgress((prev) => prev ? { ...prev, current: prev.current + count } : null);
-      }, chaptersToProcess);
+      }, sectionsToProcess);
 
-      if (chaptersToProcess.length === 0) {
-        throw new Error('No readable content found in chapters.');
+      if (sectionsToProcess.length === 0) {
+        throw new Error('No readable content found in sections.');
       }
 
-      const generatedTitles = await genAIService.generateTOCForBatch(chaptersToProcess);
+      const generatedTitles = await genAIService.generateTOCForBatch(sectionsToProcess);
 
       const titleMap = new Map<string, string>();
       generatedTitles.forEach(item => titleMap.set(item.id, item.title));
@@ -90,7 +90,7 @@ function countTocItems(items: NavigationItem[]): number {
   return count;
 }
 
-async function collectChapterData(
+async function collectSectionData(
     items: NavigationItem[],
     book: Book,
     onProgress: (count: number) => void,
@@ -129,7 +129,7 @@ async function collectChapterData(
         onProgress(1);
 
         if (item.subitems && item.subitems.length > 0) {
-            await collectChapterData(item.subitems, book, onProgress, results);
+            await collectSectionData(item.subitems, book, onProgress, results);
         }
     }
 }

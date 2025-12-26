@@ -57,7 +57,7 @@ export const ReaderView: React.FC = () => {
     setIsLoading,
     setCurrentBookId,
     reset,
-    currentChapterTitle,
+    currentSectionTitle,
     viewMode,
     shouldForceFont,
     immersiveMode,
@@ -75,7 +75,7 @@ export const ReaderView: React.FC = () => {
     setIsLoading: state.setIsLoading,
     setCurrentBookId: state.setCurrentBookId,
     reset: state.reset,
-    currentChapterTitle: state.currentChapterTitle,
+    currentSectionTitle: state.currentSectionTitle,
     viewMode: state.viewMode,
     shouldForceFont: state.shouldForceFont,
     immersiveMode: state.immersiveMode,
@@ -163,7 +163,7 @@ export const ReaderView: React.FC = () => {
                      ]).then(([snappedStart, snappedEnd]) => {
                          const range = generateCfiRange(snappedStart, snappedEnd);
                          const type = isScroll ? 'scroll' : 'page';
-                         const label = useReaderStore.getState().currentChapterTitle || undefined;
+                         const label = useReaderStore.getState().currentSectionTitle || undefined;
 
                          dbService.updateReadingHistory(id, range, type, label)
                             .then(() => setHistoryTick(t => t + 1))
@@ -288,7 +288,7 @@ export const ReaderView: React.FC = () => {
                  const range = generateCfiRange(prevStart, prevEnd);
                  const mode = useReaderStore.getState().viewMode;
                  const type = mode === 'scrolled' ? 'scroll' : 'page';
-                 const label = useReaderStore.getState().currentChapterTitle || undefined;
+                 const label = useReaderStore.getState().currentSectionTitle || undefined;
                  dbService.updateReadingHistory(id, range, type, label).catch(console.error);
              }
           }
@@ -681,7 +681,7 @@ export const ReaderView: React.FC = () => {
       {/* Unified Input Controller (Flow Mode) */}
       <UnifiedInputController
           rendition={rendition}
-          currentChapterTitle={currentChapterTitle || ''}
+          currentSectionTitle={currentSectionTitle || ''}
           onPrev={handlePrev}
           onNext={handleNext}
           onToggleHUD={() => setImmersiveMode(!immersiveMode)}
@@ -756,7 +756,7 @@ export const ReaderView: React.FC = () => {
             </Button>
             </div>
             <h1 className="text-sm font-medium truncate max-w-xs text-foreground hidden md:block">
-                {currentChapterTitle || 'Reading'}
+                {currentSectionTitle || 'Reading'}
             </h1>
             <div className="flex items-center gap-1 md:gap-2">
             <Sheet open={audioPanelOpen} onOpenChange={setAudioPanelOpen}>

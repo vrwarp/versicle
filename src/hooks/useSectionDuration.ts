@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
 
-export function useChapterDuration() {
+export function useSectionDuration() {
   const queue = useTTSStore(state => state.queue);
   const index = useTTSStore(state => state.currentIndex);
   const rate = useTTSStore(state => state.rate);

@@ -147,18 +147,18 @@ class GenAIService {
   }
 
   /**
-   * Generates titles for a batch of chapters.
-   * @param chapters Array of objects with id and text.
+   * Generates titles for a batch of sections.
+   * @param sections Array of objects with id and text.
    * @returns Array of objects with id and title.
    */
-  public async generateTOCForBatch(chapters: { id: string, text: string }[]): Promise<{ id: string, title: string }[]> {
-    if (chapters.length === 0) return [];
+  public async generateTOCForBatch(sections: { id: string, text: string }[]): Promise<{ id: string, title: string }[]> {
+    if (sections.length === 0) return [];
 
-    const prompt = `Generate concise chapter titles (max 6 words) for the following chapters.
+    const prompt = `Generate concise section titles (max 6 words) for the following text segments.
     Return an array of objects with 'id' (matching the input) and 'title'.
 
-    Chapters:
-    ${JSON.stringify(chapters)}`;
+    Sections:
+    ${JSON.stringify(sections)}`;
 
     const schema = {
       type: SchemaType.ARRAY,

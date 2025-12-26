@@ -12,7 +12,7 @@ import {
 
 interface UnifiedInputControllerProps {
     rendition: Rendition | null;
-    currentChapterTitle: string;
+    currentSectionTitle: string;
     onPrev: () => void;
     onNext: () => void;
     onToggleHUD: () => void;
@@ -21,7 +21,7 @@ interface UnifiedInputControllerProps {
 
 export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
     rendition,
-    currentChapterTitle,
+    currentSectionTitle,
     onPrev,
     onNext,
     onToggleHUD,
@@ -318,7 +318,7 @@ export const UnifiedInputController: React.FC<UnifiedInputControllerProps> = ({
                          {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                      </div>
                      <div className="text-xl mb-8 max-w-[80%] text-center line-clamp-2">
-                         {currentChapterTitle}
+                         {currentSectionTitle}
                      </div>
                      {batteryLevel !== null && (
                          <div className="flex items-center gap-2 text-lg text-neutral-400">

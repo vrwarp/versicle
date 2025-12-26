@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useShallow } from 'zustand/react/shallow';
-import { useChapterDuration } from '../../hooks/useChapterDuration';
+import { useSectionDuration } from '../../hooks/useSectionDuration';
 import { ChevronsLeft, ChevronsRight, SkipBack, SkipForward, Play, Pause, StickyNote, Mic, Copy, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 
@@ -70,10 +70,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     }
   }, [isEditingNote]);
 
-  // Optimize: Select only currentChapterTitle to prevent re-renders on progress/cfi updates
-  const readerChapterTitle = useReaderStore(state => state.currentChapterTitle);
+  // Optimize: Select only currentSectionTitle to prevent re-renders on progress/cfi updates
+  const readerSectionTitle = useReaderStore(state => state.currentSectionTitle);
 
-  const { timeRemaining, progress: hookProgress } = useChapterDuration();
+  const { timeRemaining, progress: hookProgress } = useSectionDuration();
 
   const progress = overrideProgress !== undefined ? overrideProgress : hookProgress;
 
@@ -122,11 +122,11 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   };
 
   const currentItem = queue[currentIndex];
-  // Title priority: Queue Item Title -> Reader Store Title -> "Chapter X"
-  const chapterTitle = currentItem?.title || readerChapterTitle || `Chapter ${currentIndex + 1}`;
+  // Title priority: Queue Item Title -> Reader Store Title -> "Section X"
+  const sectionTitle = currentItem?.title || readerSectionTitle || `Section ${currentIndex + 1}`;
 
   const displayTitle = title || currentItem?.bookTitle || "Current Book";
-  const displaySubtitle = subtitle || chapterTitle;
+  const displaySubtitle = subtitle || sectionTitle;
 
   // Annotation Mode
   if (variant === 'annotation') {
@@ -334,7 +334,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             aria-label={isPlaying ? "Pause" : "Play"}
         >
              <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center">
-                {chapterTitle}
+                {sectionTitle}
              </div>
              <div className="text-xs font-mono text-muted-foreground">
                 {formatTime(timeRemaining)}

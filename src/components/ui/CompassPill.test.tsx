@@ -24,15 +24,15 @@ vi.mock('../../store/useTTSStore', () => ({
 vi.mock('../../store/useReaderStore', () => ({
     useReaderStore: (selector: any) => {
         const state = {
-            currentChapterTitle: 'Test Chapter'
+            currentSectionTitle: 'Test Chapter'
         };
         return selector ? selector(state) : state;
     }
 }));
 
-// Mock useChapterDuration
-vi.mock('../../hooks/useChapterDuration', () => ({
-    useChapterDuration: () => ({
+// Mock useSectionDuration
+vi.mock('../../hooks/useSectionDuration', () => ({
+    useSectionDuration: () => ({
         timeRemaining: 5, // 5 minutes
         progress: 50
     })

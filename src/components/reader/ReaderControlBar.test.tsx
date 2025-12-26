@@ -65,7 +65,7 @@ describe('ReaderControlBar', () => {
         mockUseReaderStore.mockReturnValue({
             immersiveMode: false,
             currentBookId: null,
-            currentChapterTitle: null,
+            currentSectionTitle: null,
         });
         mockUseLibraryStore.mockReturnValue([]); // books
         mockUseToastStore.mockReturnValue(vi.fn()); // showToast
@@ -90,7 +90,7 @@ describe('ReaderControlBar', () => {
         mockUseReaderStore.mockReturnValue({
             immersiveMode: false,
             currentBookId: '123',
-            currentChapterTitle: 'Chapter 1',
+            currentSectionTitle: 'Chapter 1',
         });
         mockUseLibraryStore.mockReturnValue([{ id: '123', title: 'Book 1' }]);
         render(<ReaderControlBar />);
@@ -101,7 +101,7 @@ describe('ReaderControlBar', () => {
         mockUseReaderStore.mockReturnValue({
             immersiveMode: true,
             currentBookId: '123',
-            currentChapterTitle: 'Chapter 1',
+            currentSectionTitle: 'Chapter 1',
         });
         mockUseLibraryStore.mockReturnValue([{ id: '123', title: 'Book 1' }]);
         render(<ReaderControlBar />);

@@ -50,7 +50,7 @@ describe('UnifiedInputController Immersive Mode', () => {
         render(
             <UnifiedInputController
                 rendition={mockRendition}
-                currentChapterTitle="Test Chapter"
+                currentSectionTitle="Test Chapter"
                 onPrev={onPrev}
                 onNext={onNext}
                 onToggleHUD={onToggleHUD}
@@ -88,7 +88,7 @@ describe('UnifiedInputController Immersive Mode', () => {
          render(
             <UnifiedInputController
                 rendition={mockRendition}
-                currentChapterTitle="Test Chapter"
+                currentSectionTitle="Test Chapter"
                 onPrev={onPrev}
                 onNext={onNext}
                 onToggleHUD={onToggleHUD}
@@ -122,7 +122,7 @@ describe('UnifiedInputController Immersive Mode', () => {
          render(
             <UnifiedInputController
                 rendition={mockRendition}
-                currentChapterTitle="Test Chapter"
+                currentSectionTitle="Test Chapter"
                 onPrev={onPrev}
                 onNext={onNext}
                 onToggleHUD={onToggleHUD}
