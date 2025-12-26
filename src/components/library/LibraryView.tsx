@@ -4,7 +4,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
-import { Grid } from 'react-window';
+import { Grid as VariableSizeGrid } from 'react-window';
 import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
@@ -201,7 +201,7 @@ export const LibraryView: React.FC = () => {
   }, [viewMode, rowCount, books.length]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const GridAny = Grid as any;
+  const GridAny = VariableSizeGrid as any;
 
   return (
     <div
