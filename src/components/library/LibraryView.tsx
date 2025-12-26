@@ -4,7 +4,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
-import { Grid } from 'react-window';
+import { VariableSizeGrid as Grid } from 'react-window';
 import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
@@ -19,7 +19,8 @@ const LIST_ITEM_HEIGHT = 88;
  * Renders a single cell within the virtualized grid of books.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => {
+const GridCell = ({ columnIndex, rowIndex, style, data }: any) => {
+    const { books, columnCount } = data;
     const index = rowIndex * columnCount + columnIndex;
     if (index >= books.length) return <div style={style} />;
     const book = books[index];
@@ -38,7 +39,8 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ListCell = ({ rowIndex, style, books }: any) => {
+const ListCell = ({ rowIndex, style, data }: any) => {
+    const { books } = data;
     const index = rowIndex;
     if (index >= books.length) return <div style={style} />;
     const book = books[index];
@@ -185,6 +187,10 @@ export const LibraryView: React.FC = () => {
   // This version of react-window uses cellProps which are spread into the component props.
   const itemData = React.useMemo(() => ({ books, columnCount }), [books, columnCount]);
 
+  const getColumnWidth = useCallback((_index: number) => {
+      return viewMode === 'list' ? dimensions.width : gridColumnWidth;
+  }, [viewMode, dimensions.width, gridColumnWidth]);
+
   const getRowHeight = useCallback((index: number) => {
       if (viewMode === 'list') {
           if (index === books.length) return 100;
@@ -290,15 +296,16 @@ export const LibraryView: React.FC = () => {
           ) : (
              <GridAny
                 columnCount={viewMode === 'list' ? 1 : columnCount}
-                columnWidth={viewMode === 'list' ? dimensions.width : gridColumnWidth}
+                columnWidth={getColumnWidth}
                 height={dimensions.height || 500}
                 rowCount={viewMode === 'list' ? books.length + 1 : rowCount}
                 rowHeight={getRowHeight}
                 width={viewMode === 'list' ? dimensions.width : gridWidth}
-                cellComponent={viewMode === 'list' ? ListCell : GridCell}
-                cellProps={itemData}
+                itemData={itemData}
                 style={viewMode === 'grid' ? { margin: '0 auto' } : undefined}
-             />
+             >
+                {viewMode === 'list' ? ListCell : GridCell}
+             </GridAny>
           )}
         </section>
       )}

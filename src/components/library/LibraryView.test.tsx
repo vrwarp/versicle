@@ -8,13 +8,13 @@ import { useToastStore } from '../../store/useToastStore';
 // Mock react-window
 vi.mock('react-window', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Grid: ({ cellComponent: Cell, cellProps, columnCount, rowCount }: any) => (
+  VariableSizeGrid: ({ children: Cell, itemData, columnCount, rowCount }: any) => (
     <div data-testid="virtual-grid">
       {Array.from({ length: rowCount }).flatMap((_, r) =>
          Array.from({ length: columnCount }).map((_, c) =>
             <div key={`${r}-${c}`}>
                 {/* Ensure style properties are numbers for calculations */}
-                <Cell columnIndex={c} rowIndex={r} style={{ width: 100, height: 100, left: 0, top: 0 }} {...cellProps} />
+                <Cell columnIndex={c} rowIndex={r} style={{ width: 100, height: 100, left: 0, top: 0 }} data={itemData} />
             </div>
          )
       )}
