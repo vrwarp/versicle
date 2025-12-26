@@ -144,7 +144,7 @@ This component acts as the **Orchestrator**. It subscribes to multiple Zustand s
 
 ### Phase 1: Component Enhancement (In-Place)
 
--   [ ] **Refactor `CompassPill.tsx`**:
+-   [x] **Refactor `CompassPill.tsx`**:
 
     -   Modify `CompassPillProps` to include `variant` ('annotation'), `onAnnotationAction`, and `availableActions`.
 
@@ -164,7 +164,7 @@ This component acts as the **Orchestrator**. It subscribes to multiple Zustand s
 
     -   Add `useEffect` to reset `isEditingNote` to `false` when `variant` changes (e.g., when dismissed).
 
--   [ ] **Create `ReaderControlBar.tsx`**:
+-   [x] **Create `ReaderControlBar.tsx`**:
 
     -   Create file in `src/components/reader/`.
 
@@ -175,6 +175,7 @@ This component acts as the **Orchestrator**. It subscribes to multiple Zustand s
     -   Implement `handleAnnotationAction` to dispatch store updates.
 
     -   Render `<CompassPill>` with derived props.
+    -   *Implementation Note*: Included memoization for `lastReadBook` and correct title resolution for non-TTS active reading.
 
 ### Phase 2: Logic Migration
 
@@ -252,3 +253,19 @@ This component acts as the **Orchestrator**. It subscribes to multiple Zustand s
     -   Toggle Immersive Mode.
 
     -   Verify Pill respects `compact` variant or hides appropriately based on `ReaderControlBar` logic.
+
+### Progress Update (Phase 1)
+- **CompassPill Refactor**:
+  - Implemented `annotation` variant with color swatches and action buttons.
+  - Implemented "Edit Note" mode with proper state management and UI transitions.
+  - Added new props: `onAnnotationAction`, `availableActions`.
+  - Verified backward compatibility with existing usages.
+- **ReaderControlBar Creation**:
+  - Created controller component managing state subscriptions.
+  - Implemented priority logic: Annotation > Active (Audio/Reader) > Summary > Idle.
+  - Implemented action handlers for annotation (color, note, copy, dismiss).
+  - Note: "Play from here" and "Pronounce" actions are currently stubs (toasts).
+- **Verification**:
+  - Added unit tests for `ReaderControlBar` covering all state variants and actions.
+  - Ran `src/components/audio/CompassPill.test.tsx` and `src/components/reader/ReaderControlBar.test.tsx` successfully.
+  - Ran Docker verification suite (`test_journey_reading.py`, `test_compass_pill.py`) to ensure no regressions in existing flows.
