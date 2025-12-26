@@ -4,7 +4,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
-import { VariableSizeGrid as Grid } from 'react-window';
+import { Grid } from 'react-window';
 import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';

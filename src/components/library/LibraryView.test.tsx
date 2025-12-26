@@ -8,7 +8,7 @@ import { useToastStore } from '../../store/useToastStore';
 // Mock react-window
 vi.mock('react-window', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  VariableSizeGrid: ({ children: Cell, itemData, columnCount, rowCount }: any) => (
+  Grid: ({ children: Cell, itemData, columnCount, rowCount }: any) => (
     <div data-testid="virtual-grid">
       {Array.from({ length: rowCount }).flatMap((_, r) =>
          Array.from({ length: columnCount }).map((_, c) =>
