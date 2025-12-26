@@ -13,12 +13,20 @@ import {
 import type { ReadingListEntry } from '../types/db';
 
 interface EditReadingListEntryDialogProps {
+    /** Whether the dialog is open. */
     open: boolean;
+    /** Callback when dialog open state changes. */
     onOpenChange: (open: boolean) => void;
+    /** The entry to edit. Null if no entry selected (though dialog shouldn't be open then). */
     entry: ReadingListEntry | null;
+    /** Callback when the user saves changes. */
     onSave: (entry: ReadingListEntry) => void;
 }
 
+/**
+ * Dialog for editing a single reading list entry.
+ * Allows modifying title, author, status, and rating.
+ */
 export const EditReadingListEntryDialog: React.FC<EditReadingListEntryDialogProps> = ({
     open,
     onOpenChange,

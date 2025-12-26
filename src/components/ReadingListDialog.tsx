@@ -11,6 +11,11 @@ interface ReadingListDialogProps {
     onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * Dialog for managing the user's reading list.
+ * Supports sorting, selection, batch deletion, and CSV export.
+ * Also provides access to individual entry editing.
+ */
 export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOpenChange }) => {
     const [entries, setEntries] = useState<ReadingListEntry[]>([]);
     const [sortField, setSortField] = useState<keyof ReadingListEntry>('lastUpdated');
@@ -31,6 +36,10 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         dbService.getReadingList().then(list => setEntries(list || []));
     };
 
+    /**
+     * Memoized list of sorted entries based on current sort field and direction.
+     * Handles undefined values by placing them at the end.
+     */
     const sortedEntries = useMemo(() => {
         return [...entries].sort((a, b) => {
             const aVal = a[sortField];
@@ -55,6 +64,9 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         }
     };
 
+    /**
+     * Toggles selection state of a single entry.
+     */
     const toggleSelection = (filename: string) => {
         const newSelection = new Set(selectedEntries);
         if (newSelection.has(filename)) {
@@ -65,6 +77,10 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         setSelectedEntries(newSelection);
     };
 
+    /**
+     * Toggles selection of all entries.
+     * If all are selected, deselects all. Otherwise, selects all.
+     */
     const toggleSelectAll = () => {
         if (selectedEntries.size === entries.length) {
             setSelectedEntries(new Set());
@@ -93,6 +109,10 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         }
     };
 
+    /**
+     * Exports selected entries to a CSV file.
+     * Escapes quotes in fields to ensure valid CSV format.
+     */
     const handleExportCSV = () => {
         const entriesToExport = entries.filter(e => selectedEntries.has(e.filename));
         if (entriesToExport.length === 0) return;
