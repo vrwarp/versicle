@@ -12,7 +12,7 @@ import { Button } from '../ui/Button';
 // Grid Configuration
 const CARD_WIDTH = 200; // Minimal width
 const CARD_HEIGHT = 320;
-const GAP = 24;
+const GAP = 12;
 const LIST_ITEM_HEIGHT = 88;
 
 /**
@@ -27,6 +27,8 @@ const GridCell = ({ columnIndex, rowIndex, style, books, columnCount }: any) => 
     return (
         <div style={{
             ...style,
+            left: Number(style.left) + GAP / 2,
+            top: Number(style.top) + GAP / 2,
             width: Number(style.width) - GAP,
             height: Number(style.height) - GAP,
         }}>
@@ -162,7 +164,22 @@ export const LibraryView: React.FC = () => {
   const columnCount = Math.floor((dimensions.width + GAP) / (CARD_WIDTH + GAP)) || 1;
   // Add 1 to rowCount for spacer
   const rowCount = Math.ceil(books.length / columnCount) + 1;
-  const gridColumnWidth = Math.floor(dimensions.width / columnCount);
+
+  // Logic to determine grid width and column width
+  // If columnCount is 1 (e.g. mobile), we allow the single column to stretch to fill the available space.
+  // This ensures the card is centered and substantial on small screens, satisfying the "no horizontal scroll" and "width > 300px" checks if the screen permits.
+  // For multi-column layouts (desktop), we use a fixed column width (CARD_WIDTH + GAP) and center the grid block to avoid awkward stretching.
+
+  let gridWidth: number;
+  let gridColumnWidth: number;
+
+  if (columnCount === 1) {
+      gridWidth = dimensions.width;
+      gridColumnWidth = dimensions.width;
+  } else {
+      gridWidth = Math.min(dimensions.width, columnCount * (CARD_WIDTH + GAP));
+      gridColumnWidth = CARD_WIDTH + GAP;
+  }
 
   // Memoize itemData (cellProps) to prevent unnecessary re-renders of the grid cells.
   // This version of react-window uses cellProps which are spread into the component props.
@@ -264,7 +281,10 @@ export const LibraryView: React.FC = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       ) : (
-        <section className="flex-1 min-h-0 w-full" ref={containerRef}>
+        <section
+          className="flex-1 min-h-0 w-full flex flex-col items-center"
+          ref={containerRef}
+        >
           {books.length === 0 ? (
              <EmptyLibrary onImport={triggerFileUpload} />
           ) : (
@@ -274,9 +294,10 @@ export const LibraryView: React.FC = () => {
                 height={dimensions.height || 500}
                 rowCount={viewMode === 'list' ? books.length + 1 : rowCount}
                 rowHeight={getRowHeight}
-                width={dimensions.width}
+                width={viewMode === 'list' ? dimensions.width : gridWidth}
                 cellComponent={viewMode === 'list' ? ListCell : GridCell}
                 cellProps={itemData}
+                style={viewMode === 'grid' ? { margin: '0 auto' } : undefined}
              />
           )}
         </section>

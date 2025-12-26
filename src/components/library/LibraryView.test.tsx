@@ -13,7 +13,8 @@ vi.mock('react-window', () => ({
       {Array.from({ length: rowCount }).flatMap((_, r) =>
          Array.from({ length: columnCount }).map((_, c) =>
             <div key={`${r}-${c}`}>
-                <Cell columnIndex={c} rowIndex={r} style={{ width: 100, height: 100 }} {...cellProps} />
+                {/* Ensure style properties are numbers for calculations */}
+                <Cell columnIndex={c} rowIndex={r} style={{ width: 100, height: 100, left: 0, top: 0 }} {...cellProps} />
             </div>
          )
       )}
