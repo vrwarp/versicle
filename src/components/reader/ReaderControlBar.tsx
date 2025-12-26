@@ -54,12 +54,20 @@ export const ReaderControlBar: React.FC = () => {
     // Logic:
     let variant: 'annotation' | 'active' | 'summary' | 'compact' | null = null;
 
+    const { isPlaying } = useTTSStore(state => ({ isPlaying: state.isPlaying }));
+
     if (isAnnotationMode) {
         variant = 'annotation';
-    } else if (queue.length > 0 || isReaderActive) {
+    } else if (isReaderActive) {
         variant = immersiveMode ? 'compact' : 'active';
+    } else if (isPlaying) {
+        variant = 'active';
     } else if (lastReadBook) { // Check lastReadBook existence directly
+        // If not playing and not in reader, prefer Summary over a paused queue
         variant = 'summary';
+    } else if (queue.length > 0) {
+        // Fallback: If no last read book (unlikely in Library if we have a queue), but queue exists
+        variant = 'active';
     } else {
         variant = null;
     }
@@ -128,7 +136,7 @@ export const ReaderControlBar: React.FC = () => {
 
     if (variant === 'summary' && lastReadBook) {
         title = lastReadBook.title;
-        subtitle = "Continue reading";
+        subtitle = "Continue Reading";
         progress = lastReadBook.progress;
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
         // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
@@ -156,7 +164,7 @@ export const ReaderControlBar: React.FC = () => {
                     }}
                     onClick={() => {
                         if (variant === 'summary' && lastReadBook) {
-                            navigate(`/reader/${lastReadBook.id}`);
+                            navigate(`/read/${lastReadBook.id}`);
                         }
                     }}
                 />

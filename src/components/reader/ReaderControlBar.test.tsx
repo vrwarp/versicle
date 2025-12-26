@@ -118,7 +118,7 @@ describe('ReaderControlBar', () => {
         mockUseLibraryStore.mockReturnValue([{ id: '1', title: 'Book 1', lastRead: 1000 }]);
         render(<ReaderControlBar />);
         fireEvent.click(screen.getByTestId('compass-pill-summary'));
-        expect(mockUseNavigate).toHaveBeenCalledWith('/reader/1');
+        expect(mockUseNavigate).toHaveBeenCalledWith('/read/1');
     });
 
     it('handles annotation actions', () => {

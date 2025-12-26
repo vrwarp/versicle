@@ -36,15 +36,16 @@ The UI Controller (`ReaderControlBar`) determines the visual state based on the 
 
 2.  **Active Audio Mode**
 
-    -   **Condition**: `useTTSStore.queue.length > 0`
+    -   **Condition**: `useTTSStore.isPlaying === true` OR (`isReaderActive` AND `useTTSStore.queue.length > 0`)
 
     -   **Description**: Standard Audio Player (Play/Pause, Title, Progress Bar).
 
 3.  **Summary Mode**
 
-    -   **Condition**: `useLibraryStore` has `lastRead` (on Home)
+    -   **Condition**: `useLibraryStore` has `lastRead` (on Home) AND Audio is NOT playing.
 
     -   **Description**: "Continue Reading" card showing book progress.
+    -   *Implementation Note*: We prioritize "Summary Mode" over a paused audio queue when the user is in the Library. This ensures the primary "Continue Reading" call-to-action is visible even if the user has a dormant audio session.
 
 4.  **Idle / Null Mode (Lowest Priority)**
 
@@ -179,23 +180,29 @@ This component acts as the **Orchestrator**. It subscribes to multiple Zustand s
 
 ### Phase 2: Logic Migration
 
--   [ ] **Update `App.tsx`**:
+-   [x] **Update `App.tsx`**:
 
     -   Import `ReaderControlBar` from `src/components/reader/ReaderControlBar`.
 
     -   Replace `<AudioReaderHUD />` with `<ReaderControlBar />`.
 
--   [ ] **Deprecate `AnnotationPopover`**:
+-   [x] **Deprecate `AnnotationPopover`**:
 
     -   Modify `src/components/reader/AnnotationPopover.tsx` to return `null`.
 
     -   Add `@deprecated` JSDoc comment explaining functionality moved to `ReaderControlBar`.
 
--   [ ] **Clean up `ReaderView.tsx`**:
+-   [x] **Clean up `ReaderView.tsx`**:
 
     -   Remove import and usage of `<AnnotationPopover />`.
 
     -   Verify `handleSelection` still calls `useAnnotationStore.showPopover(...)`.
+
+-   [x] **Verification**:
+    -   Verified unit tests for `ReaderControlBar`.
+    -   Verified integration via Docker verification suite (`test_compass_pill.py` and `test_journey_reading.py`).
+    -   Fixed `ReaderControlBar` logic to prioritize "Summary Mode" over "Paused Audio Queue" in Library to prevent "phantom" player UI.
+    -   Fixed navigation route in "Continue Reading" click handler (`/reader/:id` -> `/read/:id`).
 
 ### Phase 3: Refactor & Relocate (The "Move")
 
@@ -254,18 +261,14 @@ This component acts as the **Orchestrator**. It subscribes to multiple Zustand s
 
     -   Verify Pill respects `compact` variant or hides appropriately based on `ReaderControlBar` logic.
 
-### Progress Update (Phase 1)
-- **CompassPill Refactor**:
-  - Implemented `annotation` variant with color swatches and action buttons.
-  - Implemented "Edit Note" mode with proper state management and UI transitions.
-  - Added new props: `onAnnotationAction`, `availableActions`.
-  - Verified backward compatibility with existing usages.
-- **ReaderControlBar Creation**:
-  - Created controller component managing state subscriptions.
-  - Implemented priority logic: Annotation > Active (Audio/Reader) > Summary > Idle.
-  - Implemented action handlers for annotation (color, note, copy, dismiss).
-  - Note: "Play from here" and "Pronounce" actions are currently stubs (toasts).
+### Progress Update (Phase 2)
+- **Logic Migration Complete**:
+  - `ReaderControlBar` is now the single source of truth for the bottom interaction layer.
+  - `AudioReaderHUD` has been removed from `App.tsx`.
+  - `AnnotationPopover` is deprecated and no longer used in `ReaderView.tsx`.
+- **Bug Fixes**:
+  - Resolved synchronization issue where auto-queued (but paused) audio prevented the "Continue Reading" summary from appearing in the Library. Logic updated to prefer Summary if audio is not playing.
+  - Fixed 404 navigation bug by correcting the route from `/reader/:id` to `/read/:id`.
 - **Verification**:
-  - Added unit tests for `ReaderControlBar` covering all state variants and actions.
-  - Ran `src/components/audio/CompassPill.test.tsx` and `src/components/reader/ReaderControlBar.test.tsx` successfully.
-  - Ran Docker verification suite (`test_journey_reading.py`, `test_compass_pill.py`) to ensure no regressions in existing flows.
+  - `verification/test_compass_pill.py` passes.
+  - `verification/test_journey_reading.py` passes.

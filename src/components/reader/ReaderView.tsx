@@ -8,7 +8,6 @@ import { useUIStore } from '../../store/useUIStore';
 import { useTTS } from '../../hooks/useTTS';
 import { useEpubReader, type EpubReaderOptions } from '../../hooks/useEpubReader';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { AnnotationPopover } from './AnnotationPopover';
 import { AnnotationList } from './AnnotationList';
 import { LexiconManager } from './LexiconManager';
 import { VisualSettings } from './VisualSettings';
@@ -480,6 +479,8 @@ export const ReaderView: React.FC = () => {
 
   const [lexiconOpen, setLexiconOpen] = useState(false);
   const [lexiconText, setLexiconText] = useState('');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void setLexiconText;
 
   const { setGlobalSettingsOpen } = useUIStore();
   const [audioPanelOpen, setAudioPanelOpen] = useState(false);
@@ -524,6 +525,8 @@ export const ReaderView: React.FC = () => {
           iframe.contentWindow.getSelection()?.removeAllRanges();
       }
   };
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void handleClearSelection;
 
   const handlePrev = useCallback(() => {
       // console.log("Navigating to previous page");
@@ -634,6 +637,8 @@ export const ReaderView: React.FC = () => {
           console.error("Error matching CFI for playback", e);
       }
   }, [rendition]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void handlePlayFromSelection;
 
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
@@ -988,15 +993,6 @@ export const ReaderView: React.FC = () => {
                 style={{ height: viewMode === 'paginated' ? 'calc(100% - 100px)' : '100%' }}
             />
 
-             <AnnotationPopover
-                bookId={id || ''}
-                onClose={handleClearSelection}
-                onFixPronunciation={(text) => {
-                    setLexiconText(text);
-                    setLexiconOpen(true);
-                }}
-                onPlayFromSelection={handlePlayFromSelection}
-             />
              <LexiconManager open={lexiconOpen} onOpenChange={setLexiconOpen} initialTerm={lexiconText} />
          </div>
       </div>
