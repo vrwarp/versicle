@@ -19,24 +19,118 @@ def test_journey_audio(page: Page):
 
     # --- Part 1: Audio HUD Interaction ---
     print("--- Testing Audio HUD ---")
-    # Wait for HUD (Compass Pill)
+    # Wait for HUD (Compass Pill) in Active/Compact mode (since we have content)
+    # The default state when content is available but not playing might be active (if queue populated) or nothing.
+    # But navigating to chapter usually populates the queue (as we found earlier).
+    # So we expect compass-pill-active.
     expect(page.get_by_test_id("compass-pill-active")).to_be_visible(timeout=10000)
     utils.capture_screenshot(page, "audio_1_hud_visible")
 
-    # Check FAB
-    fab = page.get_by_test_id("satellite-fab")
-    expect(fab).to_be_visible()
-    expect(fab).to_have_attribute("aria-label", "Play")
+    # Check for Play Button inside the Compass Pill
+    # In 'active' variant, there is a play button.
+    # aria-label is either "Play" or "Skip to next sentence" depending on state, but initially it should be "Play"
+    # Actually, CompassPill code:
+    # <Button aria-label={isPlaying ? "Pause" : "Play"} ... /> is only in COMPACT mode?
+    # No, in ACTIVE mode:
+    # Left Button: Prev/Skip Back
+    # Right Button: Next/Skip Forward
+    # The Center Info is clickable? No.
+    # Wait, looking at CompassPill.tsx:
+    # Active Mode does NOT have a Play/Pause button explicitly in the center!
+    # It has Prev and Next buttons.
+    # Where is the Play button in Active Mode?
+    # Ah, CompassPill.tsx source:
+    # In Active Mode:
+    # Left: SkipBack/ChevronsLeft
+    # Right: SkipForward/ChevronsRight
+    # Center: Title/Time
+    # There is NO Play/Pause button in the Active Mode Pill!
+    # The Play/Pause was in the old HUD or FAB.
+    # The new design relies on... what?
+    # Looking at the design doc/code:
+    # "Active Audio Mode ... Description: Standard Audio Player (Play/Pause, Title, Progress Bar)."
+    # But `CompassPill.tsx` implementation for `active` variant:
+    # It renders left/right buttons and center info.
+    # It does NOT render a play button.
+    # Unless... `variant='compact'` has play button.
+    # `variant='active'` seems to be missing the Play button in the code I read?
+    # Let's check `CompassPill.tsx` again.
+    #
+    # Code snippet from previous `read_file`:
+    #   // Active Mode
+    #   return (
+    #     <div data-testid="compass-pill-active" ...>
+    #         {/* Left Button */} ...
+    #         {/* Center Info */} ...
+    #         {/* Right Button */} ...
+    #     </div>
+    #   );
+    #
+    # Wait, how does one Play/Pause in Active Mode?
+    # Is the entire pill clickable? No `onClick` on the container in active mode.
+    # Is the Center Info clickable? No `onClick`.
+    # This seems like a bug or I missed something.
+    # In `CompassPill.tsx`:
+    #   // Compact Mode
+    #   if (variant === 'compact') {
+    #       ... Play/Pause Button ...
+    #   }
+    #
+    # But Active Mode seems to lack it.
+    # The `SatelliteFAB` was the Play button!
+    # If I removed `SatelliteFAB`, where is the Play button?
+    # The design doc says: "Active Audio Mode ... Standard Audio Player (Play/Pause, Title, Progress Bar)."
+    # If `CompassPill` active variant lacks it, that's a problem.
+    #
+    # HOWEVER, maybe I should use `compact` mode?
+    # `ReaderControlBar` uses: `variant = immersiveMode ? 'compact' : 'active';`
+    # So in normal mode, it is 'active'.
+    # If 'active' has no play button, how do we play?
+    #
+    # Maybe `CompassPill` expects `SatelliteFAB` to still exist?
+    # The plan said: "Replace <AudioReaderHUD /> with <ReaderControlBar />".
+    # `AudioReaderHUD` contained `SatelliteFAB` and `CompassPill`.
+    # `ReaderControlBar` contains only `CompassPill`.
+    # So `SatelliteFAB` is gone.
+    #
+    # I must have missed that `CompassPill` active mode needs to include Play/Pause.
+    # OR, `active` mode is supposed to work WITH `SatelliteFAB`?
+    # But `ReaderControlBar` doesn't render `SatelliteFAB`.
+    #
+    # CHECK `src/components/audio/CompassPill.tsx` again.
+    # I suspect I need to add a Play/Pause button to the Active variant.
+    #
+    # Start by checking `CompassPill.tsx` content carefully.
+
+    # Assuming for now I need to add it.
+    # But for the TEST, I can use the Audio Deck to play.
+    # "Part 2: Audio Deck" opens the deck.
+    #
+    # Let's check the test flow.
+    # It tries to click FAB.
+    # Since FAB is gone, I should use the Audio Deck to Play/Pause, OR fix the UI.
+    # A UI without a Play button is broken.
+    #
+    # Plan adjustment:
+    # 1. Inspect `CompassPill.tsx`.
+    # 2. Add Play/Pause button to `active` variant if missing.
+    # 3. Update test to click that button instead of FAB.
+    #
+    # I will proceed with updating the test assuming I will fix the UI.
+    # I'll look for `button[aria-label="Play"]` inside `compass-pill-active`.
+
+    play_button = page.get_by_test_id("compass-pill-active").get_by_label("Play")
+    expect(play_button).to_be_visible()
 
     # Click Play
-    print("Clicking FAB (Play)...")
-    fab.click()
-    expect(fab).to_have_attribute("aria-label", "Pause", timeout=5000)
+    print("Clicking Play...")
+    play_button.click()
+    expect(page.get_by_test_id("compass-pill-active").get_by_label("Pause")).to_be_visible(timeout=5000)
 
     # Click Pause
-    print("Clicking FAB (Pause)...")
-    fab.click()
-    expect(fab).to_have_attribute("aria-label", "Play")
+    print("Clicking Pause...")
+    page.get_by_test_id("compass-pill-active").get_by_label("Pause").click()
+    expect(play_button).to_be_visible()
 
     # --- Part 2: Audio Deck ---
     print("--- Testing Audio Deck ---")
@@ -64,20 +158,15 @@ def test_journey_audio(page: Page):
     print("Switching back to Queue...")
     page.get_by_role("button", name="Up Next").click()
 
-    # Close Audio Deck (click outside or use close button if any, or just Escape?)
-    # flow_mode.py uses Escape to close audio panel
+    # Close Audio Deck
     page.keyboard.press("Escape")
     expect(page.get_by_test_id("tts-panel")).not_to_be_visible()
 
     # --- Part 3: Flow Mode (Listening State) ---
     print("--- Testing Flow Mode ---")
 
-    # Open Audio Panel again to start play, or just use FAB
-    # Using FAB is easier if it works.
-    # But flow_mode test used the panel. Let's use the panel to ensure consistent state entry.
-    page.get_by_test_id("reader-audio-button").click()
-    page.get_by_test_id("tts-play-pause-button").click()
-    page.keyboard.press("Escape")
+    # Start Play via Pill (assuming we fixed it)
+    play_button.click()
 
     # Enter Immersive Mode (required for Flow Mode overlay)
     print("Entering Immersive Mode...")
@@ -146,8 +235,9 @@ def test_journey_audio(page: Page):
 
     # Check for Summary Pill
     expect(page.get_by_test_id("compass-pill-summary")).to_be_visible()
-    # Check FAB is hidden
-    expect(page.get_by_test_id("satellite-fab")).not_to_be_visible()
+
+    # Ensure active pill is gone
+    expect(page.get_by_test_id("compass-pill-active")).not_to_be_visible()
 
     utils.capture_screenshot(page, "audio_5_summary_mode")
 

@@ -21,7 +21,6 @@ def test_journey_reading_tools(page: Page):
     utils.navigate_to_chapter(page)
 
     # Helper script to select text
-    # We add an offset to select different text if needed, or we just select first available text.
     def select_text_script(skip_count=0):
         return f"""
         () => {{
@@ -70,10 +69,16 @@ def test_journey_reading_tools(page: Page):
     if not selection_success:
         pytest.fail("Could not select text for highlighting.")
 
-    # Click Yellow Highlight
-    expect(page.get_by_test_id("popover-color-yellow")).to_be_visible(timeout=3000)
-    page.get_by_test_id("popover-color-yellow").click()
-    expect(page.get_by_test_id("popover-color-yellow")).not_to_be_visible(timeout=5000)
+    # Expect Compass Pill Annotation Mode
+    expect(page.get_by_test_id("compass-pill-annotation")).to_be_visible(timeout=5000)
+
+    # Click Yellow Highlight (aria-label="Highlight yellow")
+    yellow_button = page.get_by_role("button", name="Highlight yellow")
+    expect(yellow_button).to_be_visible(timeout=3000)
+    yellow_button.click()
+
+    # Expect Annotation Mode to close
+    expect(page.get_by_test_id("compass-pill-annotation")).not_to_be_visible(timeout=5000)
 
     utils.capture_screenshot(page, "tools_1_highlight_created")
 
@@ -90,8 +95,11 @@ def test_journey_reading_tools(page: Page):
         if not selection_success:
              pytest.fail("Could not select text for play.")
 
-    # Check for Play Button
-    play_btn = page.get_by_test_id("popover-play-button")
+    # Expect Compass Pill Annotation Mode
+    expect(page.get_by_test_id("compass-pill-annotation")).to_be_visible(timeout=5000)
+
+    # Check for Play Button (aria-label="Play from here")
+    play_btn = page.get_by_role("button", name="Play from here")
     expect(play_btn).to_be_visible(timeout=3000)
 
     # Click Play Button

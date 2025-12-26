@@ -4,7 +4,7 @@ from verification import utils
 
 def test_selection_popover_reappearance(page: Page):
     """
-    Test that the selection popover appears correctly after multiple selections,
+    Test that the selection popover (Compass Pill Annotation Mode) appears correctly after multiple selections,
     specifically ensuring that adding a highlight doesn't break subsequent selection events.
     """
     print("Starting Selection Bug Verification...")
@@ -58,12 +58,26 @@ def test_selection_popover_reappearance(page: Page):
         }
     """)
 
-    # Expect popover to appear
-    expect(page.get_by_test_id("popover-color-yellow")).to_be_visible(timeout=5000)
+    # Expect Compass Pill Annotation Mode to appear
+    expect(page.get_by_test_id("compass-pill-annotation")).to_be_visible(timeout=5000)
+
+    # Verify color button (yellow is used to verify action)
+    # The new pill has a button with aria-label="Highlight yellow"
+    # But CompassPill.tsx has: aria-label={`Highlight ${color}`}
+    # And we also have onAnnotationAction('color', color)
+    # The test ID was `popover-color-yellow` in the old popover.
+    # In `CompassPill.tsx`, we haven't explicitly set test IDs for individual colors yet, OR we need to check.
+    # Let's check `CompassPill.tsx` in a moment. But assume standard naming from previous test `test_popover_edge.py`?
+    # No, `test_popover_edge.py` checked `popover-copy-button`.
+    # Let's try finding the color button by aria-label.
+    yellow_button = page.get_by_role("button", name="Highlight yellow")
+    expect(yellow_button).to_be_visible()
 
     # Click highlight (yellow)
-    page.get_by_test_id("popover-color-yellow").click()
-    expect(page.get_by_test_id("popover-color-yellow")).not_to_be_visible(timeout=5000)
+    yellow_button.click()
+
+    # Expect Annotation Mode to disappear
+    expect(page.get_by_test_id("compass-pill-annotation")).not_to_be_visible(timeout=5000)
 
     # 2. Second Selection (Different text)
     print("Step 2: Second Selection")
@@ -97,8 +111,7 @@ def test_selection_popover_reappearance(page: Page):
         }
     """)
 
-    # Expect popover to appear again
-    # This was failing before the fix because epub.js listeners stopped firing
-    expect(page.get_by_test_id("popover-color-yellow")).to_be_visible(timeout=5000)
+    # Expect Compass Pill Annotation Mode to appear again
+    expect(page.get_by_test_id("compass-pill-annotation")).to_be_visible(timeout=5000)
 
     print("Selection Bug Verification Passed!")

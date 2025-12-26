@@ -81,9 +81,13 @@ def test_long_reading_journey(page: Page):
     if not selection_success:
         print("Warning: Could not select text for highlighting.")
     else:
-        expect(page.get_by_test_id("popover-color-yellow")).to_be_visible(timeout=5000)
-        page.get_by_test_id("popover-color-yellow").click()
-        expect(page.get_by_test_id("popover-color-yellow")).not_to_be_visible()
+        # Update: Look for Compass Pill Annotation Mode
+        expect(page.get_by_test_id("compass-pill-annotation")).to_be_visible(timeout=5000)
+
+        # Use aria-label to click color
+        page.get_by_role("button", name="Highlight yellow").click()
+
+        expect(page.get_by_test_id("compass-pill-annotation")).not_to_be_visible()
         # Wait for annotation to be saved
         page.wait_for_timeout(1000)
 
@@ -178,4 +182,4 @@ def test_long_reading_journey(page: Page):
 
     utils.capture_screenshot(page, "long_journey_07_final_check")
 
-    print("Long Reading Journey Completed!")
+    print("Long Reading Journey Passed!")

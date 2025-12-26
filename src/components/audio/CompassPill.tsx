@@ -165,6 +165,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           {(['yellow', 'green', 'blue', 'red'] as const).map((color) => (
             <button
               key={color}
+              data-testid={`popover-color-${color}`}
               className={`w-6 h-6 rounded-full border border-border hover:scale-125 transition-transform`}
               style={{ backgroundColor: color === 'yellow' ? '#fde047' : color === 'green' ? '#86efac' : color === 'blue' ? '#93c5fd' : '#fca5a5' }}
               onClick={() => onAnnotationAction?.('color', color)}
@@ -180,6 +181,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             size="icon"
             className="rounded-full w-9 h-9"
             onClick={() => setIsEditingNote(true)}
+            data-testid="popover-add-note-button"
             aria-label="Add Note"
           >
             <StickyNote size={18} />
@@ -191,6 +193,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
               size="icon"
               className="rounded-full w-9 h-9"
               onClick={() => onAnnotationAction?.('pronounce')}
+              data-testid="popover-fix-pronunciation-button"
               aria-label="Pronounce"
             >
               <Mic size={18} />
@@ -203,6 +206,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
               size="icon"
               className="rounded-full w-9 h-9"
               onClick={() => onAnnotationAction?.('play')}
+              data-testid="popover-play-button"
               aria-label="Play from here"
             >
               <Play size={18} />
@@ -214,6 +218,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             size="icon"
             className="rounded-full w-9 h-9"
             onClick={() => onAnnotationAction?.('copy')}
+            data-testid="popover-copy-button"
             aria-label="Copy text"
           >
             <Copy size={18} />
@@ -226,6 +231,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             size="icon"
             className="rounded-full w-9 h-9 text-muted-foreground hover:text-destructive"
             onClick={() => onAnnotationAction?.('dismiss')}
+            data-testid="popover-close-button"
             aria-label="Dismiss"
           >
             <X size={18} />
@@ -321,7 +327,12 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         </Button>
 
         {/* Center Info */}
-        <div className="flex flex-col items-center justify-center flex-1 px-2 overflow-hidden">
+        <div
+            className="flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform"
+            onClick={handleTogglePlay}
+            role="button"
+            aria-label={isPlaying ? "Pause" : "Play"}
+        >
              <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center">
                 {chapterTitle}
              </div>

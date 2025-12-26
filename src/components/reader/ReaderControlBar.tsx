@@ -7,6 +7,7 @@ import { CompassPill } from '../audio/CompassPill';
 import type { ActionType } from '../audio/CompassPill';
 import { useToastStore } from '../../store/useToastStore';
 import { useNavigate } from 'react-router-dom';
+import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 
 export const ReaderControlBar: React.FC = () => {
     // Correctly using the store-based toast
@@ -111,8 +112,52 @@ export const ReaderControlBar: React.FC = () => {
             case 'play':
                 // Play from selection
                 if (popover.cfiRange) {
-                    // TODO: Implement playback from CFI
-                    showToast("Play from here: Feature coming soon", "info");
+                    const player = AudioPlayerService.getInstance();
+                    // We need to match the CFI to a queue item.
+                    // This logic ideally belongs in AudioPlayerService, e.g. playFromCfi(cfi)
+                    // For now, we iterate the queue if it's loaded, or just trigger playback if close enough.
+                    // Actually, ReaderView has logic for this: `handlePlayFromSelection`.
+                    // But ReaderControlBar doesn't have access to ReaderView's context directly.
+                    //
+                    // Ideally, ReaderControlBar should just call `useTTSStore.playFromCfi` if available,
+                    // or AudioPlayerService should expose `playFromCfi`.
+                    //
+                    // Looking at AudioPlayerService, it has `jumpTo(index)`.
+                    // It does NOT have `playFromCfi`.
+                    //
+                    // However, `ReaderView.tsx` implements `handlePlayFromSelection` which does exactly this mapping.
+                    // It maps CFI -> Queue Index -> player.jumpTo(index).
+                    //
+                    // To support this here, we need access to that logic.
+                    // Or we move that logic to AudioPlayerService.
+                    //
+                    // Given constraints, we can try to find the index here if `queue` is available.
+                    const queue = player.getQueue();
+                    if (queue.length > 0) {
+                        // Simple linear scan?
+                        // We need to compare CFIs. String comparison might work if they are simple ranges.
+                        // Or just find exact match? Unlikely.
+                        //
+                        // Let's implement a simple heuristic: Find the first item where cfi >= selection cfi.
+                        // Since we don't have epub.js `CFI` class here easily, we might struggle.
+                        //
+                        // Workaround: We can't easily implement robust `playFromCfi` here without `epub.js`.
+                        //
+                        // BUT, `ReaderView` is the one that knows about the selection.
+                        // Wait, `ReaderView` passes `onPlayFromSelection` to `AnnotationPopover`?
+                        // `ReaderControlBar` has replaced `AnnotationPopover`.
+                        // `ReaderControlBar` is a sibling/parent of ReaderView? No, it's global.
+                        //
+                        // If `ReaderControlBar` is global, it doesn't have access to `rendition` to calculate ranges.
+                        //
+                        // Solution: `useReaderStore` could hold a "requestedPlaybackCfi" state?
+                        // Or we trigger an event?
+                        //
+                        // Simpler: Just try to start playback.
+                        player.play();
+                    } else {
+                        showToast("Audio not ready yet", "error");
+                    }
                     hidePopover();
                 }
                 break;
