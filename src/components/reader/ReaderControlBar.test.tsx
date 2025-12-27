@@ -36,9 +36,10 @@ vi.mock('react-router-dom', () => ({
 }));
 
 // Mock CompassPill to avoid rendering full child logic
+// We want to capture props passed to it
 vi.mock('../ui/CompassPill', () => ({
-  CompassPill: ({ variant, onClick, onAnnotationAction }: any) => (
-    <div data-testid={`compass-pill-${variant}`} onClick={onClick}>
+  CompassPill: ({ variant, onClick, onAnnotationAction, progress }: any) => (
+    <div data-testid={`compass-pill-${variant}`} data-progress={progress} onClick={onClick}>
       {variant}
       <button onClick={() => onAnnotationAction && onAnnotationAction('color', 'yellow')}>Color</button>
       <button onClick={() => onAnnotationAction && onAnnotationAction('note', 'test note')}>Note</button>
@@ -92,9 +93,12 @@ describe('ReaderControlBar', () => {
             currentBookId: '123',
             currentSectionTitle: 'Chapter 1',
         });
-        mockUseLibraryStore.mockReturnValue([{ id: '123', title: 'Book 1' }]);
+        mockUseLibraryStore.mockReturnValue([{ id: '123', title: 'Book 1', progress: 0.5 }]);
         render(<ReaderControlBar />);
-        expect(screen.getByTestId('compass-pill-active')).toBeInTheDocument();
+        const pill = screen.getByTestId('compass-pill-active');
+        expect(pill).toBeInTheDocument();
+        // Check progress conversion: 0.5 * 100 = 50
+        expect(pill).toHaveAttribute('data-progress', '50');
     });
 
     it('renders compact variant when immersive mode is on', () => {
@@ -103,19 +107,25 @@ describe('ReaderControlBar', () => {
             currentBookId: '123',
             currentSectionTitle: 'Chapter 1',
         });
-        mockUseLibraryStore.mockReturnValue([{ id: '123', title: 'Book 1' }]);
+        mockUseLibraryStore.mockReturnValue([{ id: '123', title: 'Book 1', progress: 0.75 }]);
         render(<ReaderControlBar />);
-        expect(screen.getByTestId('compass-pill-compact')).toBeInTheDocument();
+        const pill = screen.getByTestId('compass-pill-compact');
+        expect(pill).toBeInTheDocument();
+        // Check progress conversion: 0.75 * 100 = 75
+        expect(pill).toHaveAttribute('data-progress', '75');
     });
 
     it('renders summary variant when on home and has last read book', () => {
-        mockUseLibraryStore.mockReturnValue([{ id: '1', title: 'Book 1', lastRead: 1000 }]);
+        mockUseLibraryStore.mockReturnValue([{ id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 }]);
         render(<ReaderControlBar />);
-        expect(screen.getByTestId('compass-pill-summary')).toBeInTheDocument();
+        const pill = screen.getByTestId('compass-pill-summary');
+        expect(pill).toBeInTheDocument();
+        // Check progress conversion: 0.25 * 100 = 25
+        expect(pill).toHaveAttribute('data-progress', '25');
     });
 
     it('navigates to book when clicking summary pill', () => {
-        mockUseLibraryStore.mockReturnValue([{ id: '1', title: 'Book 1', lastRead: 1000 }]);
+        mockUseLibraryStore.mockReturnValue([{ id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 }]);
         render(<ReaderControlBar />);
         fireEvent.click(screen.getByTestId('compass-pill-summary'));
         expect(mockUseNavigate).toHaveBeenCalledWith('/read/1');

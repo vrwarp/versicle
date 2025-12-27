@@ -141,7 +141,8 @@ export const ReaderControlBar: React.FC = () => {
     if (variant === 'summary' && lastReadBook) {
         title = lastReadBook.title;
         subtitle = "Continue Reading";
-        progress = lastReadBook.progress;
+        // Convert progress (0-1) to percentage (0-100)
+        progress = (lastReadBook.progress || 0) * 100;
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
         // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
         // If queue has items, CompassPill uses queue item title.
@@ -149,7 +150,7 @@ export const ReaderControlBar: React.FC = () => {
         if (queue.length === 0) {
             title = currentBook.title;
             subtitle = currentSectionTitle || undefined;
-            progress = currentBook.progress;
+            progress = (currentBook.progress || 0) * 100;
         }
     }
 
