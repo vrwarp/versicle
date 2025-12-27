@@ -155,7 +155,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   *Trade-off*: A crash within 1 second of reading might lose the very last position update.
 *   **`saveTTSState(bookId, queue, currentIndex)`**: Persists the current TTS playlist and position.
     *   *Why*: Allows the user to close the app and resume the audiobook exactly where they left off.
-*   **`offloadBook(id)`**: Deletes the large binary EPUB file to save space but keeps metadata, annotations, and reading progress. Sets `isOffloaded: true`. Deletes the high-res cover but keeps the thumbnail.
+    *   **offloadBook(id)**: Deletes the large binary EPUB file to save space but keeps metadata, annotations, and reading progress. Sets `isOffloaded: true`. Deletes the high-res cover (stored in `covers` store) but keeps the thumbnail (in `books` store).
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 *   **`restoreBook(id, file)`**: Restores an offloaded book. Verifies the file fingerprint matches the original before accepting.
 *   **`updateReadingHistory(bookId, newRange, type)`**: Records reading sessions.
@@ -165,6 +165,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 #### Hardening: Validation & Sanitization (`src/db/validators.ts` & `src/lib/sanitizer.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks from malicious EPUB metadata.
 *   **Logic**:
+    *   **Magic Number Check**: `processEpub` verifies the first 4 bytes of the file match the ZIP signature (`50 4B 03 04`) before attempting to parse.
     *   **`validateBookMetadata`**: Ensures required fields (ID, Title, AddedAt) exist.
     *   **`sanitizeString`**: Delegates to `DOMPurify` (via `src/lib/sanitizer.ts`) to strip all HTML tags from metadata fields (Title, Author), ensuring only plain text remains.
 *   **Trade-off**: Stripping HTML removes formatting in book descriptions, but ensures safety against stored XSS.
@@ -182,10 +183,10 @@ Handles the complex task of importing an EPUB file.
     1.  **Validation**: Checks ZIP headers (magic bytes `50 4B 03 04`) to ensure file validity.
     2.  **Offscreen Rendering**: Uses a hidden `<iframe>` (via `offscreen-renderer.ts`) to render chapters. This ensures that the extracted text and CFIs match *exactly* what the user will see/hear, which is critical for accurate TTS synchronization.
     3.  **Parsing**: Uses `epub.js` to parse the container.
-    4.  **Cover Optimization**: Compresses the cover image to a 50KB/300px thumbnail for the main library view, storing the high-res original separately.
+    *   **Cover Optimization**: Compresses the cover image to a 50KB/300px thumbnail for the `books` store (Library View), while storing the high-resolution original in the separate `covers` object store.
     5.  **Synthetic TOC**: Iterates through the spine to generate a table of contents and calculate character counts (for reading time estimation).
     6.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** based on metadata (filename, title, author) and head/tail file sampling.
-        *   *Refactoring*: Replaced full-file SHA-256 hashing (which was slow and memory-intensive) with this constant-time O(1) check.
+        *   *Refactoring*: Replaced full-file SHA-256 hashing (which was slow and memory-intensive) with this constant-time O(1) check (`generateFileFingerprint` using a "cheap hash").
         *   *Trade-off*: Theoretical risk of collision is negligible for personal library scale, while performance gain is massive.
     7.  **Sanitization**: Uses `DOMPurify` to strip HTML and scripts from metadata fields, and enforces character limits.
     *   *Returns*: `Promise<string>` (New Book ID).
@@ -292,6 +293,7 @@ Manages pronunciation rules.
     *   **Rules**: Supports simple string replacement and **RegExp**.
     *   **Scoping**: Rules can be Global (apply to all books) or Scoped (apply to a specific book ID).
     *   **Order**: Scoped rules take precedence, followed by Global rules.
+    *   **Cache Invalidation**: Uses `getRulesHash` to generate a checksum of active rules. This hash is embedded in the TTS cache key, ensuring that if rules change, previously generated audio is invalidated and re-synthesized.
 
 #### `src/lib/tts/TextSegmenter.ts`
 Splits raw text into natural-sounding sentences.
@@ -325,8 +327,9 @@ Low-level wrapper around the HTML5 `<audio>` element.
 #### `src/lib/tts/providers/`
 Plugin architecture for TTS backends. All providers implement `ITTSProvider`.
 *   **`PiperProvider`**: Runs local WASM models. Use `piper-utils.ts` to manage the Worker.
-    *   **Transactional Download**: Downloads model files to memory first, verifies integrity (by attempting a test synthesis), and only *then* commits them to the Cache API. This prevents corrupted partial downloads.
-    *   **Stitching**: If a sentence is too long for the model, it is split into chunks, synthesized separately, and the resulting WAV blobs are stitched together (rewriting RIFF headers) into a single seamless audio file.
+    *   **Transactional Download**: Downloads model files to memory first, verifies integrity (by attempting a test synthesis with empty input), and only *then* commits them to the Cache API. This prevents corrupted partial downloads.
+    *   **Hardening**: Enforces a 500-character limit per synthesis request to prevent worker OOM/crashes. Uses `TextSegmenter` (with regex fallback) to split long sentences.
+    *   **Stitching**: If a sentence is split, the resulting WAV blobs are stitched together (rewriting RIFF headers) into a single seamless audio file.
 *   **`CloudProvider`**: Adapts Google/OpenAI APIs.
 *   **`LemonFoxProvider`**: Adapts LemonFox.ai API (OpenAI-compatible) for lower cost.
 *   **`CapacitorTTSProvider`**: Wraps `@capacitor-community/text-to-speech` for native mobile playback.
