@@ -648,6 +648,38 @@ export const ReaderView: React.FC = () => {
       return () => setPlayFromSelection(undefined);
   }, [handlePlayFromSelection, setPlayFromSelection]);
 
+  const renderTOCItem = (item: NavigationItem, index: number, level: number = 0, parentId: string = 'toc-item') => {
+      const hasSubitems = item.subitems && item.subitems.length > 0;
+      // "up to three levels" -> 0, 1, 2.
+      // If level is 2, we don't render subitems.
+      const showSubitems = hasSubitems && level < 2;
+
+      const currentId = `${parentId}-${index}`;
+
+      return (
+          <li key={item.id}>
+             <button
+                data-testid={currentId}
+                className={cn(
+                    "text-left w-full text-sm text-muted-foreground hover:text-primary py-1 block truncate",
+                )}
+                style={{ paddingLeft: `${level * 1.0}rem` }}
+                onClick={() => {
+                    rendition?.display(item.href);
+                    setShowToc(false);
+                }}
+             >
+                 {item.label.trim()}
+             </button>
+             {showSubitems && (
+                 <ul className="space-y-1 mt-1">
+                     {item.subitems!.map((subitem, subIndex) => renderTOCItem(subitem, subIndex, level + 1, currentId))}
+                 </ul>
+             )}
+          </li>
+      );
+  }
+
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
       <Dialog
@@ -857,20 +889,7 @@ export const ReaderView: React.FC = () => {
                              </div>
 
                              <ul className="space-y-2">
-                                 {(useSyntheticToc ? syntheticToc : toc).map((item, index) => (
-                                     <li key={item.id}>
-                                         <button
-                                            data-testid={`toc-item-${index}`}
-                                            className="text-left w-full text-sm text-muted-foreground hover:text-primary"
-                                            onClick={() => {
-                                                rendition?.display(item.href);
-                                                setShowToc(false);
-                                            }}
-                                         >
-                                             {item.label}
-                                         </button>
-                                     </li>
-                                 ))}
+                                 {(useSyntheticToc ? syntheticToc : toc).map((item, index) => renderTOCItem(item, index))}
                                  {useSyntheticToc && syntheticToc.length === 0 && (
                                      <li className="text-sm text-muted-foreground">No generated titles available.</li>
                                  )}
