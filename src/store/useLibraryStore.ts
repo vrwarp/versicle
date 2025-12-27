@@ -6,6 +6,8 @@ import { StorageFullError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
 import { processBatchImport } from '../lib/batch-ingestion';
 
+export type SortOption = 'recent' | 'last_read' | 'author' | 'title';
+
 /**
  * State interface for the Library store.
  */
@@ -28,11 +30,18 @@ interface LibraryState {
   error: string | null;
   /** The current view mode of the library. */
   viewMode: 'grid' | 'list';
+  /** The current sort order of the library. */
+  sortOrder: SortOption;
   /**
    * Sets the view mode of the library.
    * @param mode - The new view mode.
    */
   setViewMode: (mode: 'grid' | 'list') => void;
+  /**
+   * Sets the sort order of the library.
+   * @param sort - The new sort order.
+   */
+  setSortOrder: (sort: SortOption) => void;
   /**
    * Fetches all books from the database and updates the store.
    */
@@ -83,8 +92,10 @@ export const useLibraryStore = create<LibraryState>()(
       uploadStatus: '',
       error: null,
       viewMode: 'grid',
+      sortOrder: 'last_read',
 
       setViewMode: (mode) => set({ viewMode: mode }),
+      setSortOrder: (sort) => set({ sortOrder: sort }),
 
       fetchBooks: async () => {
         set({ isLoading: true, error: null });
@@ -225,7 +236,10 @@ export const useLibraryStore = create<LibraryState>()(
     }),
     {
       name: 'library-storage',
-      partialize: (state) => ({ viewMode: state.viewMode }),
+      partialize: (state) => ({
+        viewMode: state.viewMode,
+        sortOrder: state.sortOrder
+      }),
     }
   )
 );

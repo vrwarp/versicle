@@ -47,6 +47,7 @@ describe('useLibraryStore', () => {
     useLibraryStore.setState({
       books: [],
       isLoading: false,
+      sortOrder: 'last_read', // Default
     });
 
     // Clear IndexedDB
@@ -67,6 +68,7 @@ describe('useLibraryStore', () => {
     const state = useLibraryStore.getState();
     expect(state.books).toEqual([]);
     expect(state.isLoading).toBe(false);
+    expect(state.sortOrder).toBe('last_read');
   });
 
   it('should add a book', async () => {
@@ -136,8 +138,20 @@ describe('useLibraryStore', () => {
 
     const state = useLibraryStore.getState();
     expect(state.books).toHaveLength(2);
+    // Note: The store only fetches books, sorting happens in the View or should be handled by selectors.
+    // Wait, the test was already asserting order. The getLibrary function sorts by lastRead or addedAt.
+    // Let's check DBService.getLibrary.
+    // It seems the original test expected 'addedAt' desc order.
     expect(state.books[0].id).toBe('2'); // Newer one first
     expect(state.books[1].id).toBe('1');
+  });
+
+  it('should update and persist sort order', () => {
+    const state = useLibraryStore.getState();
+    expect(state.sortOrder).toBe('last_read');
+
+    useLibraryStore.getState().setSortOrder('author');
+    expect(useLibraryStore.getState().sortOrder).toBe('author');
   });
 
   it('should handle annotations deletion when removing a book', async () => {

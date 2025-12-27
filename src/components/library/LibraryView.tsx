@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
@@ -9,8 +9,6 @@ import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 
-type SortOption = 'recent' | 'last_read' | 'author' | 'title';
-
 /**
  * The main library view component.
  * Displays the user's collection of books in a responsive grid or list and allows importing new books.
@@ -19,13 +17,23 @@ type SortOption = 'recent' | 'last_read' | 'author' | 'title';
  * @returns A React component rendering the library interface.
  */
 export const LibraryView: React.FC = () => {
-  const { books, fetchBooks, isLoading, error, addBook, isImporting, viewMode, setViewMode } = useLibraryStore();
+  const {
+    books,
+    fetchBooks,
+    isLoading,
+    error,
+    addBook,
+    isImporting,
+    viewMode,
+    setViewMode,
+    sortOrder,
+    setSortOrder
+  } = useLibraryStore();
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('recent');
 
   useEffect(() => {
     fetchBooks();
@@ -97,7 +105,7 @@ export const LibraryView: React.FC = () => {
       );
     })
     .sort((a, b) => {
-      switch (sortBy) {
+      switch (sortOrder) {
         case 'recent':
           // Sort by addedAt descending (newest first)
           return (b.addedAt || 0) - (a.addedAt || 0);
@@ -208,8 +216,8 @@ export const LibraryView: React.FC = () => {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className="whitespace-nowrap">Sort by:</span>
           <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as SortOption)}
             className="bg-transparent font-medium text-foreground border-none focus:ring-0 cursor-pointer p-0 pr-8"
             data-testid="sort-select"
           >
