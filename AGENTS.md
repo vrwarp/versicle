@@ -24,5 +24,5 @@ You need to use `sudo` to run docker.
 2. Check that the playwright verification suite succeeds (using the Docker container). Fix issues and repeat until it is true.
 3. Check that the `npm test` succeed. Fix issues and repeat until it is true.
 
-# README.md
-Whenever you update `README.md`, make sure to include as a preamble an explanation for what `Google Jules` is and that `Versicle` is an experimental project implemented almost entirely with `Jules`.
+# Project README.md
+Whenever you update the project `README.md` file, make sure to include as a preamble an explanation for what `Google Jules` is and that `Versicle` is an experimental project implemented almost entirely with `Jules`.
