@@ -92,11 +92,6 @@ export class SearchEngine {
         // Use a global, case-insensitive regex to find all matches
         const regex = new RegExp(escapedQuery, 'gi');
 
-        // SECURITY: Limit regex execution time to prevent ReDoS (Regular Expression Denial of Service)
-        // A complex document or query could cause the regex engine to hang.
-        const startTime = Date.now();
-        const TIME_LIMIT_MS = 500;
-
         const results: SearchResult[] = [];
         const MAX_RESULTS = 50;
 
@@ -106,12 +101,6 @@ export class SearchEngine {
 
             let match;
             while ((match = regex.exec(text)) !== null) {
-                // Check time limit
-                if (Date.now() - startTime > TIME_LIMIT_MS) {
-                     console.warn('Search timed out to prevent ReDoS');
-                     return results;
-                }
-
                 results.push({
                     href: href,
                     excerpt: this.getExcerpt(text, match.index, match[0].length)
