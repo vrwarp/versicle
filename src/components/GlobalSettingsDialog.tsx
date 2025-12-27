@@ -47,6 +47,32 @@ export const GlobalSettingsDialog = () => {
     const [csvImportMessage, setCsvImportMessage] = useState('');
     const [csvImportComplete, setCsvImportComplete] = useState(false);
 
+    // History Management for Global Settings
+    const isHandlingHistory = useRef(false);
+    useEffect(() => {
+        if (isGlobalSettingsOpen) {
+            // Push state when opened
+            window.history.pushState({ globalSettings: true }, '');
+
+            const handlePopState = () => {
+                // If we pop back, close the dialog
+                // Prevent loop if we triggered this by calling history.back()
+                isHandlingHistory.current = true;
+                setGlobalSettingsOpen(false);
+                isHandlingHistory.current = false;
+            };
+
+            window.addEventListener('popstate', handlePopState);
+            return () => {
+                window.removeEventListener('popstate', handlePopState);
+                // If closed via UI (not via popstate), go back to remove the pushed state
+                if (!isHandlingHistory.current) {
+                    window.history.back();
+                }
+            };
+        }
+    }, [isGlobalSettingsOpen, setGlobalSettingsOpen]);
+
     const {
         addBooks,
         fetchBooks,

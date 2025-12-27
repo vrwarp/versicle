@@ -31,6 +31,7 @@ import { useSmartTOC } from '../../hooks/useSmartTOC';
 import { Wand2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Dialog } from '../ui/Dialog';
+import { useSidebarManager } from '../../hooks/useSidebarManager';
 
 /**
  * The main reader interface component.
@@ -467,11 +468,11 @@ export const ReaderView: React.FC = () => {
       };
   }, [rendition, isRenditionReady, id]);
 
+  // Sidebar Manager
+  const { activeSidebar, setSidebar } = useSidebarManager();
 
-  const [showToc, setShowToc] = useState(false);
   const [useSyntheticToc, setUseSyntheticToc] = useState(false);
   const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
-  const [showAnnotations, setShowAnnotations] = useState(false);
 
   // Smart TOC Hook
   const { enhanceTOC, isEnhancing, progress: tocProgress } = useSmartTOC(
@@ -487,10 +488,8 @@ export const ReaderView: React.FC = () => {
   void setLexiconText;
 
   const { setGlobalSettingsOpen } = useUIStore();
-  const [audioPanelOpen, setAudioPanelOpen] = useState(false);
 
   // Search State
-  const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -666,7 +665,7 @@ export const ReaderView: React.FC = () => {
                 style={{ paddingLeft: `${level * 1.0}rem` }}
                 onClick={() => {
                     rendition?.display(item.href);
-                    setShowToc(false);
+                    setSidebar(null);
                 }}
              >
                  {item.label.trim()}
@@ -753,8 +752,8 @@ export const ReaderView: React.FC = () => {
                 size="icon"
                 data-testid="reader-toc-button"
                 aria-label="Table of Contents"
-                onClick={() => { setShowToc(!showToc); setShowAnnotations(false); setShowSearch(false); }}
-                className={cn("rounded-full text-muted-foreground", showToc && "bg-accent text-accent-foreground")}
+                onClick={() => setSidebar(activeSidebar === 'toc' ? null : 'toc')}
+                className={cn("rounded-full text-muted-foreground", activeSidebar === 'toc' && "bg-accent text-accent-foreground")}
             >
                 <List className="w-5 h-5" />
             </Button>
@@ -763,8 +762,8 @@ export const ReaderView: React.FC = () => {
                 size="icon"
                 data-testid="reader-annotations-button"
                 aria-label="Annotations"
-                onClick={() => { setShowAnnotations(!showAnnotations); setShowToc(false); setShowSearch(false); }}
-                className={cn("rounded-full text-muted-foreground", showAnnotations && "bg-accent text-accent-foreground")}
+                onClick={() => setSidebar(activeSidebar === 'annotations' ? null : 'annotations')}
+                className={cn("rounded-full text-muted-foreground", activeSidebar === 'annotations' && "bg-accent text-accent-foreground")}
             >
                 <Highlighter className="w-5 h-5" />
             </Button>
@@ -774,15 +773,13 @@ export const ReaderView: React.FC = () => {
                 data-testid="reader-search-button"
                 aria-label="Search"
                 onClick={() => {
-                    const willOpen = !showSearch;
-                    setShowSearch(willOpen);
-                    setShowToc(false);
-                    setShowAnnotations(false);
+                    const willOpen = activeSidebar !== 'search';
+                    setSidebar(willOpen ? 'search' : null);
                     if (willOpen) {
                         handleCheckIndex();
                     }
                 }}
-                className="rounded-full text-muted-foreground"
+                className={cn("rounded-full text-muted-foreground", activeSidebar === 'search' && "bg-accent text-accent-foreground")}
             >
                     <Search className="w-5 h-5" />
             </Button>
@@ -791,7 +788,7 @@ export const ReaderView: React.FC = () => {
                 {currentSectionTitle || 'Reading'}
             </h1>
             <div className="flex items-center gap-1 md:gap-2">
-            <Sheet open={audioPanelOpen} onOpenChange={setAudioPanelOpen}>
+            <Sheet open={activeSidebar === 'audio'} onOpenChange={(open) => setSidebar(open ? 'audio' : null)}>
                 <SheetTrigger asChild>
                     <Button
                         variant="ghost"
@@ -799,6 +796,7 @@ export const ReaderView: React.FC = () => {
                         data-testid="reader-audio-button"
                         aria-label="Open Audio Deck"
                         className={cn("rounded-full", isPlaying ? "text-primary" : "text-muted-foreground")}
+                        onClick={() => setSidebar('audio')}
                     >
                         <Headphones className="w-5 h-5" />
                     </Button>
@@ -815,7 +813,7 @@ export const ReaderView: React.FC = () => {
             >
                 <Maximize className="w-5 h-5" />
             </Button>
-            <Popover>
+            <Popover open={activeSidebar === 'visual_settings'} onOpenChange={(open) => setSidebar(open ? 'visual_settings' : null)}>
                 <PopoverTrigger asChild>
                     <Button
                         variant="ghost"
@@ -823,6 +821,7 @@ export const ReaderView: React.FC = () => {
                         data-testid="reader-visual-settings-button"
                         aria-label="Visual Settings"
                         className="rounded-full text-muted-foreground"
+                        onClick={() => setSidebar(activeSidebar === 'visual_settings' ? null : 'visual_settings')}
                     >
                         <Type className="w-5 h-5" />
                     </Button>
@@ -846,7 +845,7 @@ export const ReaderView: React.FC = () => {
       {/* Main Content */}
       <div className="flex-1 relative overflow-hidden flex justify-center">
          {/* TOC Sidebar (now includes History) */}
-         {showToc && (
+         {activeSidebar === 'toc' && (
              <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border z-50 absolute inset-y-0 left-0 md:static flex flex-col">
                  <Tabs defaultValue="chapters" className="w-full h-full flex flex-col">
                      <div className="p-4 pb-0">
@@ -912,20 +911,20 @@ export const ReaderView: React.FC = () => {
          )}
 
          {/* Annotations Sidebar */}
-         {showAnnotations && (
+         {activeSidebar === 'annotations' && (
              <div data-testid="reader-annotations-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
                  <div className="p-4 border-b border-border">
                      <h2 className="text-lg font-bold text-foreground">Annotations</h2>
                  </div>
                  <AnnotationList onNavigate={(cfi) => {
                      rendition?.display(cfi);
-                     if (window.innerWidth < 768) setShowAnnotations(false);
+                     if (window.innerWidth < 768) setSidebar(null);
                  }} />
              </div>
          )}
 
          {/* Search Sidebar */}
-         {showSearch && (
+         {activeSidebar === 'search' && (
              <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
                  <div className="p-4 border-b border-border">
                      <div className="flex items-center justify-between mb-2">
@@ -933,7 +932,7 @@ export const ReaderView: React.FC = () => {
                         <button
                             data-testid="search-close-button"
                             aria-label="Close search"
-                            onClick={() => setShowSearch(false)}
+                            onClick={() => setSidebar(null)}
                             className="p-2 hover:bg-border rounded -mr-2"
                         >
                             <X className="w-4 h-4 text-muted-foreground" />
