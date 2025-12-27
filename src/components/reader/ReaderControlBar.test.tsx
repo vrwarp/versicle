@@ -53,23 +53,27 @@ describe('ReaderControlBar', () => {
         vi.clearAllMocks();
 
         // Default store states
-        mockUseAnnotationStore.mockReturnValue({
+        mockUseAnnotationStore.mockImplementation((selector) => selector({
             popover: { visible: false, text: 'selected text', cfiRange: 'cfi' },
             addAnnotation: vi.fn(),
             hidePopover: vi.fn(),
-        });
-        mockUseTTSStore.mockReturnValue({
+        }));
+        mockUseTTSStore.mockImplementation((selector) => selector({
             queue: [],
             isPlaying: false,
             play: vi.fn(),
-        });
-        mockUseReaderStore.mockReturnValue({
+        }));
+        mockUseReaderStore.mockImplementation((selector) => selector({
             immersiveMode: false,
             currentBookId: null,
             currentSectionTitle: null,
-        });
-        mockUseLibraryStore.mockReturnValue([]); // books
-        mockUseToastStore.mockReturnValue(vi.fn()); // showToast
+        }));
+        mockUseLibraryStore.mockImplementation((selector) => selector({
+            books: []
+        }));
+        mockUseToastStore.mockImplementation((selector) => selector({
+            showToast: vi.fn()
+        }));
     });
 
     it('renders nothing when idle (no book, no audio, no annotations)', () => {
@@ -78,22 +82,24 @@ describe('ReaderControlBar', () => {
     });
 
     it('renders annotation variant when popover is visible', () => {
-        mockUseAnnotationStore.mockReturnValue({
+        mockUseAnnotationStore.mockImplementation((selector) => selector({
             popover: { visible: true },
             addAnnotation: vi.fn(),
             hidePopover: vi.fn(),
-        });
+        }));
         render(<ReaderControlBar />);
         expect(screen.getByTestId('compass-pill-annotation')).toBeInTheDocument();
     });
 
     it('renders active variant when currentBookId is present (Reader Active)', () => {
-        mockUseReaderStore.mockReturnValue({
+        mockUseReaderStore.mockImplementation((selector) => selector({
             immersiveMode: false,
             currentBookId: '123',
             currentSectionTitle: 'Chapter 1',
-        });
-        mockUseLibraryStore.mockReturnValue([{ id: '123', title: 'Book 1', progress: 0.5 }]);
+        }));
+        mockUseLibraryStore.mockImplementation((selector) => selector({
+            books: [{ id: '123', title: 'Book 1', progress: 0.5 }]
+        }));
         render(<ReaderControlBar />);
         const pill = screen.getByTestId('compass-pill-active');
         expect(pill).toBeInTheDocument();
@@ -102,12 +108,14 @@ describe('ReaderControlBar', () => {
     });
 
     it('renders compact variant when immersive mode is on', () => {
-        mockUseReaderStore.mockReturnValue({
+        mockUseReaderStore.mockImplementation((selector) => selector({
             immersiveMode: true,
             currentBookId: '123',
             currentSectionTitle: 'Chapter 1',
-        });
-        mockUseLibraryStore.mockReturnValue([{ id: '123', title: 'Book 1', progress: 0.75 }]);
+        }));
+        mockUseLibraryStore.mockImplementation((selector) => selector({
+            books: [{ id: '123', title: 'Book 1', progress: 0.75 }]
+        }));
         render(<ReaderControlBar />);
         const pill = screen.getByTestId('compass-pill-compact');
         expect(pill).toBeInTheDocument();
@@ -116,7 +124,9 @@ describe('ReaderControlBar', () => {
     });
 
     it('renders summary variant when on home and has last read book', () => {
-        mockUseLibraryStore.mockReturnValue([{ id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 }]);
+        mockUseLibraryStore.mockImplementation((selector) => selector({
+            books: [{ id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 }]
+        }));
         render(<ReaderControlBar />);
         const pill = screen.getByTestId('compass-pill-summary');
         expect(pill).toBeInTheDocument();
@@ -125,7 +135,9 @@ describe('ReaderControlBar', () => {
     });
 
     it('navigates to book when clicking summary pill', () => {
-        mockUseLibraryStore.mockReturnValue([{ id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 }]);
+        mockUseLibraryStore.mockImplementation((selector) => selector({
+             books: [{ id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 }]
+        }));
         render(<ReaderControlBar />);
         fireEvent.click(screen.getByTestId('compass-pill-summary'));
         expect(mockUseNavigate).toHaveBeenCalledWith('/read/1');
@@ -136,17 +148,21 @@ describe('ReaderControlBar', () => {
         const hidePopover = vi.fn();
         const showToast = vi.fn();
 
-        mockUseAnnotationStore.mockReturnValue({
+        mockUseAnnotationStore.mockImplementation((selector) => selector({
             popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
             addAnnotation,
             hidePopover,
-        });
-        mockUseReaderStore.mockReturnValue({
+        }));
+        mockUseReaderStore.mockImplementation((selector) => selector({
             immersiveMode: false,
             currentBookId: '123',
-        });
-        mockUseLibraryStore.mockReturnValue([{ id: '123', title: 'Book 1' }]);
-        mockUseToastStore.mockReturnValue(showToast);
+        }));
+        mockUseLibraryStore.mockImplementation((selector) => selector({
+             books: [{ id: '123', title: 'Book 1' }]
+        }));
+        mockUseToastStore.mockImplementation((selector) => selector({
+             showToast
+        }));
 
         render(<ReaderControlBar />);
 

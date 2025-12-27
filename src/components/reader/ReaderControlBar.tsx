@@ -7,6 +7,7 @@ import { CompassPill } from '../ui/CompassPill';
 import type { ActionType } from '../ui/CompassPill';
 import { useToastStore } from '../../store/useToastStore';
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 
 export const ReaderControlBar: React.FC = () => {
     // Correctly using the store-based toast
@@ -14,21 +15,22 @@ export const ReaderControlBar: React.FC = () => {
     const navigate = useNavigate();
 
     // Store Subscriptions
-    const { popover, addAnnotation, hidePopover } = useAnnotationStore(state => ({
+    const { popover, addAnnotation, hidePopover } = useAnnotationStore(useShallow(state => ({
         popover: state.popover,
         addAnnotation: state.addAnnotation,
         hidePopover: state.hidePopover,
-    }));
+    })));
 
-    const { queue } = useTTSStore(state => ({
-        queue: state.queue,
-    }));
+    // Optimization: We only need to know if the queue has items to determine variant,
+    // and if queue is empty to set title/subtitle manually.
+    const hasQueueItems = useTTSStore(state => state.queue.length > 0);
+    const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderStore(state => ({
+    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         currentBookId: state.currentBookId,
         currentSectionTitle: state.currentSectionTitle
-    }));
+    })));
 
     const books = useLibraryStore(state => state.books);
 
@@ -54,8 +56,6 @@ export const ReaderControlBar: React.FC = () => {
     // Logic:
     let variant: 'annotation' | 'active' | 'summary' | 'compact' | null = null;
 
-    const { isPlaying } = useTTSStore(state => ({ isPlaying: state.isPlaying }));
-
     if (isAnnotationMode) {
         variant = 'annotation';
     } else if (isReaderActive) {
@@ -65,7 +65,7 @@ export const ReaderControlBar: React.FC = () => {
     } else if (lastReadBook) { // Check lastReadBook existence directly
         // If not playing and not in reader, prefer Summary over a paused queue
         variant = 'summary';
-    } else if (queue.length > 0) {
+    } else if (hasQueueItems) {
         // Fallback: If no last read book (unlikely in Library if we have a queue), but queue exists
         variant = 'active';
     } else {
@@ -147,7 +147,7 @@ export const ReaderControlBar: React.FC = () => {
         // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
         // If queue has items, CompassPill uses queue item title.
         // We can pass `title` as Book Title and `subtitle` as Section Title to be explicit.
-        if (queue.length === 0) {
+        if (!hasQueueItems) {
             title = currentBook.title;
             subtitle = currentSectionTitle || undefined;
             progress = (currentBook.progress || 0) * 100;
