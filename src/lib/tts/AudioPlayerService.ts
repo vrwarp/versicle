@@ -373,6 +373,11 @@ export class AudioPlayerService {
           if (this.playlistPromise) await this.playlistPromise;
           const index = this.playlist.findIndex(s => s.sectionId === sectionId);
           if (index !== -1) {
+              // If we are already on this section and not autoplaying (e.g. restoring session),
+              // don't reload to preserve currentIndex.
+              if (!autoPlay && index === this.currentSectionIndex && this.queue.length > 0) {
+                  return;
+              }
               await this.loadSectionInternal(index, autoPlay);
           }
       });
