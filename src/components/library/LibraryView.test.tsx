@@ -111,6 +111,50 @@ describe('LibraryView', () => {
         });
     });
 
+    it('sorts books correctly', async () => {
+        useLibraryStore.setState({
+            books: [
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                { id: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200 } as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                { id: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100 } as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                { id: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300 } as any
+            ],
+            viewMode: 'grid'
+        });
+
+        render(<LibraryView />);
+        const sortSelect = screen.getByTestId('sort-select');
+
+        // Default: Recently Added (Newest first) -> 2 (300), 3 (200), 1 (100)
+        let cards = screen.getAllByTestId('book-card');
+        expect(cards[0]).toHaveTextContent('A');
+        expect(cards[1]).toHaveTextContent('C');
+        expect(cards[2]).toHaveTextContent('B');
+
+        // Sort by Title (A-Z) -> 2 (A), 1 (B), 3 (C)
+        fireEvent.change(sortSelect, { target: { value: 'title' } });
+        cards = screen.getAllByTestId('book-card');
+        expect(cards[0]).toHaveTextContent('A');
+        expect(cards[1]).toHaveTextContent('B');
+        expect(cards[2]).toHaveTextContent('C');
+
+        // Sort by Author (A-Z) -> 3 (X), 2 (Y), 1 (Z)
+        fireEvent.change(sortSelect, { target: { value: 'author' } });
+        cards = screen.getAllByTestId('book-card');
+        expect(cards[0]).toHaveTextContent('C'); // Author X
+        expect(cards[1]).toHaveTextContent('A'); // Author Y
+        expect(cards[2]).toHaveTextContent('B'); // Author Z
+
+        // Sort by Last Read (Most recent first) -> 3 (300), 1 (200), 2 (100)
+        fireEvent.change(sortSelect, { target: { value: 'last_read' } });
+        cards = screen.getAllByTestId('book-card');
+        expect(cards[0]).toHaveTextContent('C');
+        expect(cards[1]).toHaveTextContent('B');
+        expect(cards[2]).toHaveTextContent('A');
+    });
+
     it('shows no results message when search returns nothing', async () => {
         useLibraryStore.setState({
             books: [
