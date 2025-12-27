@@ -14,6 +14,15 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   if ('target' in node && node.getAttribute('target') === '_blank') {
     node.setAttribute('rel', 'noopener noreferrer');
   }
+
+  // Security Hardening: Prevent External CSS Injection
+  // Disallow <link> tags that point to external domains
+  if (node.tagName === 'LINK') {
+    const href = node.getAttribute('href');
+    if (href && (href.startsWith('http:') || href.startsWith('https:') || href.startsWith('//'))) {
+      node.remove();
+    }
+  }
 });
 
 export function sanitizeContent(html: string): string {
@@ -28,7 +37,7 @@ export function sanitizeContent(html: string): string {
 
     // Explicitly forbid known XSS vectors that might sneak in
     FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'base'],
-    FORBID_ATTR: ['on*', 'javascript:', 'data:'],
+    FORBID_ATTR: ['on*', 'javascript:', 'data:', 'formaction'],
 
     // Ensure we return a string
     RETURN_DOM: false,
