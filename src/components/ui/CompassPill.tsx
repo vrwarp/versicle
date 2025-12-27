@@ -270,7 +270,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   // Compact Mode
   if (variant === 'compact') {
       return (
-          <div data-testid="compass-pill-compact" className="relative z-40 flex items-center justify-center gap-3 w-auto h-14 px-4 mx-auto transition-all border shadow-lg rounded-full bg-background/80 backdrop-blur-md border-border">
+          <div data-testid="compass-pill-compact" className="relative z-40 flex items-center justify-center gap-1 w-auto h-14 px-2 mx-auto transition-all border shadow-lg rounded-full bg-background/80 backdrop-blur-md border-border">
                 {/* Prev Button */}
                 <Button
                     variant="ghost"
