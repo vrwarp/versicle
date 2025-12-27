@@ -174,7 +174,7 @@ export const LibraryView: React.FC = () => {
               size="icon"
               onClick={() => setGlobalSettingsOpen(true)}
               className="shadow-sm"
-              aria-label="Settings"
+              aria-label="Preferences"
               data-testid="header-settings-button"
             >
               <Settings className="w-4 h-4" />

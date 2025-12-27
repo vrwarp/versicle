@@ -14,7 +14,7 @@ import { VisualSettings } from './VisualSettings';
 import { UnifiedInputController } from './UnifiedInputController';
 import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
-import { Sheet, SheetTrigger } from '../ui/Sheet';
+import { Sheet } from '../ui/Sheet';
 import { Switch } from '../ui/Switch';
 import { Label } from '../ui/Label';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
@@ -789,20 +789,19 @@ export const ReaderView: React.FC = () => {
             </h1>
             <div className="flex items-center gap-1 md:gap-2">
             <Sheet open={activeSidebar === 'audio'} onOpenChange={(open) => setSidebar(open ? 'audio' : null)}>
-                <SheetTrigger asChild>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        data-testid="reader-audio-button"
-                        aria-label="Open Audio Deck"
-                        className={cn("rounded-full", isPlaying ? "text-primary" : "text-muted-foreground")}
-                        onClick={() => setSidebar('audio')}
-                    >
-                        <Headphones className="w-5 h-5" />
-                    </Button>
-                </SheetTrigger>
+                {/* Manual control of opening, so no SheetTrigger needed, but we keep the button */}
                 <UnifiedAudioPanel />
             </Sheet>
+            <Button
+                variant="ghost"
+                size="icon"
+                data-testid="reader-audio-button"
+                aria-label="Open Audio Deck"
+                className={cn("rounded-full", isPlaying ? "text-primary" : "text-muted-foreground")}
+                onClick={() => setSidebar(activeSidebar === 'audio' ? null : 'audio')}
+            >
+                <Headphones className="w-5 h-5" />
+            </Button>
             <Button
                 variant="ghost"
                 size="icon"
@@ -832,7 +831,7 @@ export const ReaderView: React.FC = () => {
                 variant="ghost"
                 size="icon"
                 data-testid="reader-settings-button"
-                aria-label="Settings"
+                aria-label="Preferences"
                 onClick={() => setGlobalSettingsOpen(true)}
                 className="rounded-full text-muted-foreground"
             >

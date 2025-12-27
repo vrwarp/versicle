@@ -362,7 +362,7 @@ export const GlobalSettingsDialog = () => {
 
                 {/* Sidebar */}
                 <div className="w-full sm:w-1/4 bg-muted/30 border-b sm:border-r sm:border-b-0 p-2 sm:p-4 flex flex-row sm:flex-col gap-2 overflow-x-auto sm:overflow-visible items-center sm:items-stretch shrink-0">
-                    <h2 className="text-lg font-semibold mb-4 px-2 hidden sm:block">Settings</h2>
+                    <h2 className="text-lg font-semibold mb-4 px-2 hidden sm:block">Preferences</h2>
                     <Button variant={activeTab === 'general' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('general')}>
                         General
                     </Button>
