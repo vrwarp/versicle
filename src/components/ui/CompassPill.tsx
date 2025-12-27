@@ -270,12 +270,12 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   // Compact Mode
   if (variant === 'compact') {
       return (
-          <div data-testid="compass-pill-compact" className="relative z-40 flex items-center justify-center gap-3 w-auto h-10 px-4 mx-auto transition-all border shadow-lg rounded-full bg-background/80 backdrop-blur-md border-border">
+          <div data-testid="compass-pill-compact" className="relative z-40 flex items-center justify-center gap-1 w-fit h-14 px-2 mx-auto transition-all border shadow-lg rounded-full bg-background/80 backdrop-blur-md border-border">
                 {/* Prev Button */}
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="rounded-full text-primary hover:bg-primary/10 hover:text-primary"
+                    className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
                     onClick={() => isPlaying ? handleSkip('prev') : handleChapterNav('prev')}
                     aria-label="Previous"
                 >
@@ -286,7 +286,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="rounded-full text-primary hover:bg-primary/10 hover:text-primary"
+                    className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
                     onClick={handleTogglePlay}
                     aria-label={isPlaying ? "Pause" : "Play"}
                 >
@@ -297,7 +297,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="rounded-full text-primary hover:bg-primary/10 hover:text-primary"
+                    className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
                     onClick={() => isPlaying ? handleSkip('next') : handleChapterNav('next')}
                     aria-label="Next"
                 >
