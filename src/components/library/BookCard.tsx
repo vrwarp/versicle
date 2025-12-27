@@ -47,6 +47,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
   const { removeBook, offloadBook, restoreBook } = useLibraryStore();
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -162,19 +163,28 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-           <DropdownMenu>
+           <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
              <DropdownMenuTrigger asChild>
-               <button
-                 className={cn(
-                   "rounded-full bg-black/50 text-white hover:bg-black/70 transition-opacity focus:opacity-100 focus-visible:opacity-100 touch-manipulation",
-                   "h-11 w-11 flex items-center justify-center", // Minimum 44px touch target
-                   "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
-                 )}
-                 data-testid="book-menu-trigger"
-                 aria-label="Book actions"
-               >
-                  <MoreVertical className="w-4 h-4" />
-               </button>
+               <div className="h-11 w-11">
+                <button
+                  className={cn(
+                    "rounded-full bg-black/50 text-white hover:bg-black/70 transition-opacity focus:opacity-100 focus-visible:opacity-100 touch-manipulation",
+                    "h-11 w-11 flex items-center justify-center", // Minimum 44px touch target
+                    "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
+                  )}
+                  data-testid="book-menu-trigger"
+                  aria-label="Book actions"
+                  aria-haspopup="true"
+                  aria-expanded={isMenuOpen}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsMenuOpen((prev) => !prev);
+                  }}
+                >
+                    <MoreVertical className="w-4 h-4" />
+                </button>
+               </div>
              </DropdownMenuTrigger>
              <DropdownMenuContent align="end" className="w-48">
                 {!book.isOffloaded ? (
