@@ -49,17 +49,7 @@ class DBService {
         return isValid;
       });
 
-      return validBooks.sort((a, b) => {
-        // Sort by lastRead descending (most recent first)
-        // If lastRead is undefined, it is treated as older than any timestamp
-        const lastReadA = a.lastRead || 0;
-        const lastReadB = b.lastRead || 0;
-        if (lastReadA !== lastReadB) {
-            return lastReadB - lastReadA;
-        }
-        // Fallback to addedAt descending
-        return b.addedAt - a.addedAt;
-      });
+      return validBooks.sort((a, b) => b.addedAt - a.addedAt);
     } catch (error) {
       this.handleError(error);
     }
