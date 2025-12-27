@@ -36,7 +36,7 @@ def test_piper_provider_selection(page: Page):
     ))
 
     # Open settings
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Preferences").click()
 
     # Go to TTS tab (wait for it to appear which confirms dialog is open)
     page.get_by_role("button", name="TTS Engine").click()

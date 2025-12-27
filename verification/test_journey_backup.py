@@ -40,7 +40,7 @@ def test_journey_backup_restore(page: Page):
     # Wait for settings button to be actionable
     page.wait_for_timeout(1000)
 
-    page.click("button[aria-label='Settings']") # Open Global Settings
+    page.click("button[aria-label='Preferences']") # Open Global Settings
     page.get_by_role("button", name="Dictionary").click()
     page.get_by_role("button", name="Manage Rules").click()
     page.get_by_test_id("lexicon-add-rule-btn").click()
@@ -56,7 +56,7 @@ def test_journey_backup_restore(page: Page):
     page.click("data-testid=reader-back-button") # Back to library
 
     # 3. Export Backup
-    page.click("button[aria-label='Settings']")
+    page.click("button[aria-label='Preferences']")
     page.get_by_role("button", name="Data Management").click()
 
     # Setup download listener
@@ -100,7 +100,7 @@ def test_journey_backup_restore(page: Page):
     expect(book_card).not_to_be_visible(timeout=5000)
 
     # 5. Restore Backup
-    page.click("button[aria-label='Settings']")
+    page.click("button[aria-label='Preferences']")
     page.get_by_role("button", name="Data Management").click()
 
     # Handle the file chooser for restore
@@ -148,7 +148,7 @@ def test_journey_full_backup_restore(page: Page):
     expect(book_card).to_be_visible(timeout=5000)
 
     # 2. Export Full Backup
-    page.click("button[aria-label='Settings']") # Header settings
+    page.click("button[aria-label='Preferences']") # Header settings
     page.get_by_role("button", name="Data Management").click()
 
     with page.expect_download() as download_info:
@@ -175,7 +175,7 @@ def test_journey_full_backup_restore(page: Page):
     expect(book_card).not_to_be_visible(timeout=5000)
 
     # 4. Restore Backup
-    page.click("button[aria-label='Settings']")
+    page.click("button[aria-label='Preferences']")
     page.get_by_role("button", name="Data Management").click()
 
     page.once("dialog", lambda dialog: dialog.accept())

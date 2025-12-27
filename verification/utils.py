@@ -31,7 +31,7 @@ def reset_app(page: Page):
     Args:
         page: The Playwright Page object.
     """
-    page.goto("http://localhost:4173", timeout=5000)
+    page.goto("http://localhost:5173", timeout=5000)
     # Clear local storage to ensure clean state
     page.evaluate("localStorage.clear()")
     # Reload to apply cleared storage

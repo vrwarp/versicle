@@ -51,7 +51,7 @@ def test_orphan_repair(page: Page):
 
     # Open Settings
     print("Opening Settings...")
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Preferences").click()
 
     # Go to Data Management Tab
     # Note: Tabs are buttons in the sidebar

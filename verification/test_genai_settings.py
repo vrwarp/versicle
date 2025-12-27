@@ -10,8 +10,8 @@ def test_genai_settings_tab(page: Page):
 
     # 3. Open Settings
     # Try to find the settings button. It might be an icon.
-    # Usually accessible by label "Settings".
-    page.get_by_label("Settings").first.click()
+    # Usually accessible by label "Preferences".
+    page.get_by_label("Preferences").first.click()
 
     # 4. Check for "Generative AI" tab
     genai_tab = page.get_by_role("button", name="Generative AI")
