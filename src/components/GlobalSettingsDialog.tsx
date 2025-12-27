@@ -7,6 +7,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
+import { useHistoryToggle } from '../hooks/useHistoryToggle';
 import { Input } from './ui/Input';
 import { Slider } from './ui/Slider';
 import { Switch } from './ui/Switch';
@@ -33,6 +34,25 @@ import { Trash2, Download, Loader2 } from 'lucide-react';
  */
 export const GlobalSettingsDialog = () => {
     const { isGlobalSettingsOpen, setGlobalSettingsOpen } = useUIStore();
+
+    // Sync with history
+    const [isOpen, setIsOpen] = useHistoryToggle('globalSettings', isGlobalSettingsOpen);
+
+    // Sync local history state with global store
+    useEffect(() => {
+        if (isOpen !== isGlobalSettingsOpen) {
+             // If history hook changes state (e.g. back button), update store
+             setGlobalSettingsOpen(isOpen);
+        }
+    }, [isOpen, isGlobalSettingsOpen, setGlobalSettingsOpen]);
+
+    useEffect(() => {
+        if (isGlobalSettingsOpen !== isOpen) {
+             // If store changes state (e.g. external trigger), update history hook
+             setIsOpen(isGlobalSettingsOpen);
+        }
+    }, [isGlobalSettingsOpen, isOpen, setIsOpen]);
+
     const [activeTab, setActiveTab] = useState('general');
     const [isLexiconOpen, setIsLexiconOpen] = useState(false);
     const [orphanScanResult, setOrphanScanResult] = useState<string | null>(null);
