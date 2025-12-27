@@ -71,7 +71,7 @@ def test_mobile_library_grid_layout(page: Page):
     """
     Verifies that the library grid view on mobile:
     1. Does not have horizontal scrolling.
-    2. Cards take up the full available width (minus gaps/padding).
+    2. Cards have appropriate width for a two-column layout.
     """
     print("Starting Mobile Library Grid Layout Journey...")
 
@@ -98,9 +98,10 @@ def test_mobile_library_grid_layout(page: Page):
     # 3. Check card width
     card_box = book_card.bounding_box()
 
-    # Expected width: 390 (viewport) - 32 (padding) - 24 (gap implied by column calculation) = 334
-    # We allow some tolerance
+    # Expected width: (390 - 32 padding - 24 gap) / 2 = 167px
+    # We allow some tolerance to verify it fits 2 columns (approx 140-180px)
     if card_box:
-        assert card_box['width'] > 300, f"Card width {card_box['width']} is too small. Expected > 300."
+        width = card_box['width']
+        assert 140 <= width < 200, f"Card width {width} is unexpected. Expected between 140 and 200 for 2-column mobile grid."
 
     print("Mobile Library Grid Layout Journey Passed!")
