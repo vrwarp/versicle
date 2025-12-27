@@ -26,20 +26,20 @@
 
 ## Features
 
-### Reading
-*   **Customizable**: Fonts, themes, line height, margins.
+### Reading (The "Reading Room")
+*   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
 *   **Formats**: EPUB, ZIP (Batch Import).
-*   **Search**: Fast, offline full-text search (RegExp based).
+*   **Search**: Fast, offline full-text search (RegExp based) running in a Web Worker.
 *   **Annotations**: Highlights and notes.
 
-### Listening (TTS)
-*   **Text-to-Speech**: Turn any book into an audiobook.
+### Listening (The "Listening Room")
+*   **Text-to-Speech**: Turn any book into an audiobook with the Unified Audio Panel.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service).
 
-### Management
+### Management (The "Engine Room")
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Track status (Read, Reading, Want to Read) and Rating. Export to CSV (Goodreads compatible).
 *   **Backups**:
