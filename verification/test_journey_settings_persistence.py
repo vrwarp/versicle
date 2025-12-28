@@ -22,35 +22,30 @@ def test_settings_persistence(page: Page):
 
     # 2. Toggle "Announce Chapter Titles" (Enable)
     print("Toggling Announce Chapter Titles (Enable)...")
-    # Find the switch
     switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
-
-    # Ensure it's visible
     expect(switch).to_be_visible()
-
-    # Get current state
     is_checked = switch.get_attribute("aria-checked") == "true"
-
-    # Toggle it
     switch.click()
     page.wait_for_timeout(500)
-
-    # Verify it flipped
     expected_state = "false" if is_checked else "true"
     expect(switch).to_have_attribute("aria-checked", expected_state)
 
     utils.capture_screenshot(page, "settings_persistence_1_toggled")
 
-    # 3. Reload
+    # 3. Reload (using goto to clear state history restoration effect)
     print("Reloading...")
-    page.reload()
-    page.wait_for_timeout(2000)
+    # page.reload() restores history state which reopens panels.
+    # We use page.goto(page.url) to simulate a fresh load (like opening link in new tab)
+    # which resets UI state but keeps persisted settings (localStorage/IndexedDB).
+    page.goto(page.url)
+    page.wait_for_timeout(3000)
 
     # 4. Verify Persistence
     print("Verifying Persistence...")
 
     # Open Audio Panel again
     page.get_by_test_id("reader-audio-button").click()
+
     # Switch to Settings
     page.click("button:has-text('Settings')")
 

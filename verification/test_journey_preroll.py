@@ -29,7 +29,6 @@ def test_preroll_journey(page: Page):
 
     # Enable Preroll
     print("Enabling Preroll...")
-    # Find switch in row with text
     preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
 
     # Check current state (aria-checked)
@@ -42,7 +41,12 @@ def test_preroll_journey(page: Page):
 
     # Reload page to verify persistence
     print("Reloading to check persistence...")
-    page.reload()
+    # page.reload() restores history state which reopens panels.
+    # We use page.goto(page.url) to simulate a fresh load.
+    page.goto(page.url)
+
+    # Wait for reload
+    page.wait_for_timeout(2000)
 
     # Navigate back to settings
     page.get_by_test_id("reader-audio-button").click()
