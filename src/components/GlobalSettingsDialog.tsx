@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore } from '../store/useUIStore';
 import { useTTSStore } from '../store/useTTSStore';
 import { useLibraryStore } from '../store/useLibraryStore';
@@ -33,6 +34,28 @@ import { Trash2, Download, Loader2 } from 'lucide-react';
  */
 export const GlobalSettingsDialog = () => {
     const { isGlobalSettingsOpen, setGlobalSettingsOpen } = useUIStore();
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    // Sync Store <-> URL History for Back Button support
+    useEffect(() => {
+        const isOpenInHistory = (location.state as { globalSettingsOpen?: boolean })?.globalSettingsOpen === true;
+        if (isOpenInHistory !== isGlobalSettingsOpen) {
+            setGlobalSettingsOpen(isOpenInHistory);
+        }
+    }, [location.state, setGlobalSettingsOpen]);
+
+    useEffect(() => {
+        const isOpenInHistory = (location.state as { globalSettingsOpen?: boolean })?.globalSettingsOpen === true;
+        if (isGlobalSettingsOpen && !isOpenInHistory) {
+             // Push state
+             navigate('.', { state: { ...location.state, globalSettingsOpen: true }, replace: false });
+        } else if (!isGlobalSettingsOpen && isOpenInHistory) {
+             // Go back to close
+             navigate(-1);
+        }
+    }, [isGlobalSettingsOpen, navigate, location.state]);
+
     const [activeTab, setActiveTab] = useState('general');
     const [isLexiconOpen, setIsLexiconOpen] = useState(false);
     const [orphanScanResult, setOrphanScanResult] = useState<string | null>(null);

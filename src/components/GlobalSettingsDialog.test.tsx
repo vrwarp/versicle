@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
 import { useTTSStore } from '../store/useTTSStore';
 
@@ -64,7 +65,11 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
             voice: { id: 'piper:v1', name: 'Piper Voice 1' }
         });
 
-        render(<GlobalSettingsDialog />);
+        render(
+            <MemoryRouter>
+                <GlobalSettingsDialog />
+            </MemoryRouter>
+        );
 
         // Switch to TTS tab
         fireEvent.click(screen.getByText('TTS Engine'));
@@ -89,7 +94,11 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
             downloadStatus: 'Downloading models...'
         });
 
-        render(<GlobalSettingsDialog />);
+        render(
+            <MemoryRouter>
+                <GlobalSettingsDialog />
+            </MemoryRouter>
+        );
         fireEvent.click(screen.getByText('TTS Engine'));
 
         expect(screen.getByText('Downloading models...')).toBeInTheDocument();
@@ -106,7 +115,11 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
             voice: { id: 'piper:v1', name: 'Piper Voice 1' },
         });
 
-        render(<GlobalSettingsDialog />);
+        render(
+            <MemoryRouter>
+                <GlobalSettingsDialog />
+            </MemoryRouter>
+        );
         fireEvent.click(screen.getByText('TTS Engine'));
 
         const btn = screen.getByText('Download Voice Data');
