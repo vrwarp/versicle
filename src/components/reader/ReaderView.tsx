@@ -742,11 +742,19 @@ export const ReaderView: React.FC = () => {
                 variant="ghost"
                 size="icon"
                 data-testid="reader-back-button"
-                aria-label="Back"
-                onClick={() => navigate('/')}
+                aria-label={showToc || showAnnotations || showSearch ? "Close Side Bar" : "Back"}
+                onClick={() => {
+                    if (showToc || showAnnotations || showSearch) {
+                        setShowToc(false);
+                        setShowAnnotations(false);
+                        setShowSearch(false);
+                    } else {
+                        navigate('/');
+                    }
+                }}
                 className="rounded-full text-muted-foreground"
             >
-                <ArrowLeft className="w-5 h-5" />
+                {showToc || showAnnotations || showSearch ? <X className="w-5 h-5" /> : <ArrowLeft className="w-5 h-5" />}
             </Button>
             <Button
                 variant="ghost"
@@ -930,14 +938,6 @@ export const ReaderView: React.FC = () => {
                  <div className="p-4 border-b border-border">
                      <div className="flex items-center justify-between mb-2">
                         <h2 className="text-lg font-bold text-foreground">Search</h2>
-                        <button
-                            data-testid="search-close-button"
-                            aria-label="Close search"
-                            onClick={() => setShowSearch(false)}
-                            className="p-2 hover:bg-border rounded -mr-2"
-                        >
-                            <X className="w-4 h-4 text-muted-foreground" />
-                        </button>
                      </div>
                      <div className="flex gap-2">
                          <input
