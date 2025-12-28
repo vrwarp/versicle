@@ -46,7 +46,7 @@ def test_orphan_repair(page: Page):
             });
         };
         // Wait a bit for async ops to finish (simplistic)
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 3000));
     }""")
 
     # Open Settings

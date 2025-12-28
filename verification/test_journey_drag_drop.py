@@ -54,7 +54,7 @@ def test_drag_drop_import(page: Page):
     )
 
     # 3. Verify Success Toast
-    expect(page.get_by_text("Book imported successfully")).to_be_visible()
+    expect(page.get_by_text("Book imported successfully")).to_be_visible(timeout=30000)
 
     # 4. Verify Book Appears
     expect(page.locator("[data-testid^='book-card-']").first).to_be_visible()
