@@ -34,6 +34,8 @@ def reset_app(page: Page):
     page.goto("http://localhost:5173", timeout=5000)
     # Clear local storage to ensure clean state
     page.evaluate("localStorage.clear()")
+    # Clear history state to prevent modal persistence
+    page.evaluate("history.replaceState(null, '', location.href)")
     # Reload to apply cleared storage
     page.reload()
     # Wait for app to be ready
