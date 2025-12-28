@@ -91,9 +91,9 @@ def test_search_journey(page: Page):
     first_result.scroll_into_view_if_needed()
     first_result.dispatch_event("click")
 
-    # Close search
+    # Close search (using Back Button which transforms to Close)
     page.wait_for_timeout(500)
-    page.get_by_test_id("search-close-button").dispatch_event("click")
+    page.get_by_test_id("reader-back-button").dispatch_event("click")
 
     utils.capture_screenshot(page, "search_after_nav")
 

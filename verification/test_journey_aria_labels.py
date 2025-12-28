@@ -33,10 +33,12 @@ def test_aria_labels(page: Page):
     print("Verifying Search...")
     page.get_by_label("Search").click()
     expect(page.get_by_label("Search query")).to_be_visible()
-    expect(page.get_by_label("Close search")).to_be_visible()
+    # "Close search" button inside sidebar is removed.
+    # The back button now serves as "Close Side Bar"
+    expect(page.get_by_label("Close Side Bar")).to_be_visible()
 
-    # Close Search
-    page.get_by_label("Close search").click()
+    # Close Search via Back Button (which is now Close Side Bar)
+    page.get_by_label("Close Side Bar").click()
 
     # 3. Audio Panel ARIA Labels
     print("Verifying Audio Panel...")
