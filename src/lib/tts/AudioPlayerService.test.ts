@@ -175,14 +175,14 @@ describe('AudioPlayerService', () => {
 
         // Ensure we are in a playing state
         // @ts-expect-error Access private
-        service.setStatus('playing');
+        await service.setStatus('playing');
 
         expect(playSpy).toHaveBeenCalled();
         playSpy.mockClear();
 
         // Transition to completed
         // @ts-expect-error Access private
-        service.setStatus('completed');
+        await service.setStatus('completed');
 
         expect(playSpy).toHaveBeenCalled();
         expect(forceStopSpy).not.toHaveBeenCalled();

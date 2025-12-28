@@ -166,7 +166,7 @@ export class AudioPlayerService {
               this.playlistPromise = null;
               this.currentSectionIndex = -1;
               this.currentIndex = 0;
-              this.setStatus('stopped');
+              this.setStatus('stopped').catch(console.error);
           }
       }
   }
@@ -235,13 +235,13 @@ export class AudioPlayerService {
   }
 
   private setupProviderListeners() {
-      this.provider.on((event) => {
+      this.provider.on(async (event) => {
           if (event.type === 'start') {
-              this.setStatus('playing');
+              await this.setStatus('playing');
           } else if (event.type === 'end') {
               if (this.isPreviewing) {
                   this.isPreviewing = false;
-                  this.setStatus('stopped');
+                  await this.setStatus('stopped');
                   return;
               }
               this.playNext();
@@ -253,7 +253,7 @@ export class AudioPlayerService {
                if (errorType === 'interrupted' || errorType === 'canceled') return;
 
                console.error("TTS Provider Error", event.error);
-               this.setStatus('stopped');
+               await this.setStatus('stopped');
                this.notifyError("Playback Error: " + (event.error?.message || "Unknown error"));
           } else if (event.type === 'timeupdate') {
                this.syncEngine?.updateTime(event.currentTime);
@@ -446,7 +446,7 @@ export class AudioPlayerService {
       return this.enqueue(async () => {
         await this.stopInternal();
         this.isPreviewing = true;
-        this.setStatus('playing');
+        await this.setStatus('playing');
 
         try {
             const voiceId = this.voiceId || '';
@@ -458,7 +458,7 @@ export class AudioPlayerService {
 
         } catch (e) {
             console.error("Preview error", e);
-            this.setStatus('stopped');
+            await this.setStatus('stopped');
             this.isPreviewing = false;
             this.notifyError(e instanceof Error ? e.message : "Preview error");
         }
@@ -491,7 +491,7 @@ export class AudioPlayerService {
     }
 
     if (this.currentIndex >= this.queue.length) {
-        this.setStatus('stopped');
+        await this.setStatus('stopped');
         this.notifyListeners(null);
         return;
     }
@@ -501,11 +501,11 @@ export class AudioPlayerService {
     if (this.status !== 'playing') {
         const engaged = await this.engageBackgroundMode(item);
         if (!engaged && Capacitor.getPlatform() === 'android') {
-             this.setStatus('stopped');
+             await this.setStatus('stopped');
              this.notifyError("Cannot play in background");
              return;
         }
-        this.setStatus('loading');
+        await this.setStatus('loading');
     }
 
     this.notifyListeners(item.cfi);
@@ -551,7 +551,7 @@ export class AudioPlayerService {
             return this.playInternal();
         }
 
-        this.setStatus('stopped');
+        await this.setStatus('stopped');
         this.notifyError(e instanceof Error ? e.message : "Playback error");
     }
   }
@@ -565,7 +565,7 @@ export class AudioPlayerService {
 
      if (this.status === 'paused') {
          this.provider.resume();
-         this.setStatus('playing');
+         await this.setStatus('playing');
      } else {
          return this.playInternal();
      }
@@ -587,7 +587,7 @@ export class AudioPlayerService {
   pause() {
     return this.enqueue(async () => {
         this.provider.pause();
-        this.setStatus('paused');
+        await this.setStatus('paused');
         await this.savePlaybackState();
     });
   }
@@ -616,7 +616,7 @@ export class AudioPlayerService {
             this.foregroundStopTimer = null;
         }, 1000);
     }
-    this.setStatus('stopped');
+    await this.setStatus('stopped');
     this.notifyListeners(null);
     this.provider.stop();
   }
@@ -626,7 +626,7 @@ export class AudioPlayerService {
         if (this.currentIndex < this.queue.length - 1) {
             this.currentIndex++;
             this.persistQueue();
-            if (this.status === 'paused') this.setStatus('stopped');
+            if (this.status === 'paused') await this.setStatus('stopped');
             await this.playInternal();
         } else {
             await this.stopInternal();
@@ -639,7 +639,7 @@ export class AudioPlayerService {
         if (this.currentIndex > 0) {
             this.currentIndex--;
             this.persistQueue();
-            if (this.status === 'paused') this.setStatus('stopped');
+            if (this.status === 'paused') await this.setStatus('stopped');
             await this.playInternal();
         }
       });
@@ -652,7 +652,7 @@ export class AudioPlayerService {
             await this.stopInternal();
             await this.playInternal();
         } else if (this.status === 'paused') {
-            this.setStatus('stopped');
+            await this.setStatus('stopped');
             await this.stopInternal();
         }
       });
@@ -683,7 +683,7 @@ export class AudioPlayerService {
             await this.stopInternal();
             await this.playInternal();
         } else if (this.status === 'paused') {
-            this.setStatus('stopped');
+            await this.setStatus('stopped');
         }
       });
   }
@@ -714,7 +714,7 @@ export class AudioPlayerService {
                   // End of queue, try to load next chapter
                   const loaded = await this.advanceToNextChapter();
                   if (!loaded) {
-                      this.setStatus('completed');
+                      await this.setStatus('completed');
                       this.notifyListeners(null);
                   }
               }
@@ -722,7 +722,7 @@ export class AudioPlayerService {
       });
   }
 
-  private setStatus(status: TTSStatus) {
+  private async setStatus(status: TTSStatus) {
       // Record TTS Session on Pause/Stop
       const oldStatus = this.status;
       if ((oldStatus === 'playing' || oldStatus === 'loading') && (status === 'paused' || status === 'stopped')) {
@@ -748,9 +748,12 @@ export class AudioPlayerService {
       else if (this.status === status) { /* valid */ }
 
       this.status = status;
-      this.mediaSessionManager.setPlaybackState(
-          status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
-      );
+
+      // Treat 'loading' as 'playing' for MediaSession to prevent native crash
+      // during rapid state transitions
+      const mediaSessionState = (status === 'playing' || status === 'loading') ? 'playing' : (status === 'paused' ? 'paused' : 'none');
+
+      await this.mediaSessionManager.setPlaybackState(mediaSessionState);
 
       if (status === 'playing' || status === 'loading' || status === 'completed') {
           this.backgroundAudio.play(this.backgroundAudioMode);
@@ -865,7 +868,7 @@ export class AudioPlayerService {
                       clearTimeout(this.foregroundStopTimer);
                       this.foregroundStopTimer = null;
                   }
-                  this.setStatus('loading');
+                  await this.setStatus('loading');
               } else {
                   await this.stopInternal();
               }
