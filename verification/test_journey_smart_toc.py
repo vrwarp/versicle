@@ -99,6 +99,7 @@ def test_smart_toc_failure(page):
     expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=20000)
 
     page.get_by_test_id("reader-toc-button").click()
+    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
     page.get_by_label("Generated Titles").click()
 
     page.get_by_role("button", name="Enhance Titles with AI").click()
@@ -130,6 +131,7 @@ def test_smart_toc_failure(page):
         expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=20000)
 
     page.get_by_test_id("reader-toc-button").click()
+    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
     page.get_by_label("Generated Titles").click()
 
     page.get_by_role("button", name="Enhance Titles with AI").click()
