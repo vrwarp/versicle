@@ -133,4 +133,26 @@ def test_journey_reading_tools(page: Page):
 
     utils.capture_screenshot(page, "tools_3_sidebar_check")
 
+    # 5. Verify Sidebar Closing via Back Button (New Feature)
+    print("Verifying Sidebar Back Navigation...")
+    # Annotations sidebar is currently open. Pressing back should close it.
+    page.go_back()
+    expect(page.get_by_test_id("reader-annotations-sidebar")).not_to_be_visible(timeout=2000)
+    # Ensure we are still in the reader
+    expect(page.get_by_test_id("reader-view")).to_be_visible()
+
+    # Test for TOC Sidebar
+    page.get_by_test_id("reader-toc-button").click()
+    expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible(timeout=2000)
+    page.go_back()
+    expect(page.get_by_test_id("reader-toc-sidebar")).not_to_be_visible(timeout=2000)
+    expect(page.get_by_test_id("reader-view")).to_be_visible()
+
+    # Test for Search Sidebar
+    page.get_by_test_id("reader-search-button").click()
+    expect(page.get_by_test_id("reader-search-sidebar")).to_be_visible(timeout=2000)
+    page.go_back()
+    expect(page.get_by_test_id("reader-search-sidebar")).not_to_be_visible(timeout=2000)
+    expect(page.get_by_test_id("reader-view")).to_be_visible()
+
     print("Reading Tools Journey Passed!")
