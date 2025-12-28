@@ -26,18 +26,7 @@ def test_aria_labels(page: Page):
     expect(page.get_by_label("Decrease line height")).to_be_visible()
     expect(page.get_by_label("Increase line height")).to_be_visible()
 
-    # Close Settings (Visual settings is a popover, usually closed by clicking outside or a close button if it exists)
-    # The original test used 'Close' button, assuming one exists or reusing a generic one.
-    # Looking at the code, VisualSettings is a popover.
-    # Let's just click the trigger again to toggle it off or click the body.
-    # For now, preserving original intent if it worked, but "Close" might be ambiguous.
-    # Actually, the original test code had: page.get_by_role("button", name="Close").click()
-    # If VisualSettings has a close button, that's fine. If not, this might fail too.
-    # But I am only fixing the Search part for now.
-
-    # Actually, I should check if VisualSettings has a Close button.
-    # But let's focus on the Search part which definitely broke.
-    # To close a popover in this app, usually clicking outside works.
+    # Close Settings
     page.mouse.click(0, 0)
 
     # 2. Search ARIA Labels
@@ -58,9 +47,8 @@ def test_aria_labels(page: Page):
     page.get_by_label("Open Audio Deck").click()
 
     # Switch to settings tab in Audio Panel
-    # Note: If the audio panel is a sheet, it might cover things.
-    # Just ensuring we can find the settings button.
-    page.get_by_role("tab", name="Settings").click()
+    # Note: UnifiedAudioPanel uses buttons for view switching, not accessible tabs.
+    page.get_by_role("button", name="Settings").click()
 
     # Playback speed slider
     expect(page.get_by_label("Playback speed")).to_be_visible()
