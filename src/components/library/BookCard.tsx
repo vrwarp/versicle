@@ -166,11 +166,14 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
            <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
              <DropdownMenuTrigger asChild>
                <div className="h-11 w-11">
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className={cn(
-                    "rounded-full bg-black/50 text-white hover:bg-black/70 transition-opacity focus:opacity-100 focus-visible:opacity-100 touch-manipulation",
-                    "h-11 w-11 flex items-center justify-center", // Minimum 44px touch target
-                    "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
+                    "rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white transition-opacity",
+                    "h-11 w-11", // Minimum 44px touch target
+                    "opacity-100 md:opacity-0 md:group-hover:opacity-100", // Always visible on mobile
+                    "touch-manipulation"
                   )}
                   data-testid="book-menu-trigger"
                   aria-label="Book actions"
@@ -183,7 +186,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
                   }}
                 >
                     <MoreVertical className="w-4 h-4" />
-                </button>
+                </Button>
                </div>
              </DropdownMenuTrigger>
              <DropdownMenuContent align="end" className="w-48">
