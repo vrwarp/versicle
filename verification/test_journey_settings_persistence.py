@@ -18,7 +18,7 @@ def test_settings_persistence(page: Page):
     page.get_by_test_id("reader-audio-button").click()
 
     # Switch to Settings
-    page.click("button:has-text('Settings')")
+    page.get_by_test_id("audio-panel-settings-button").click()
 
     # 2. Toggle "Announce Chapter Titles" (Enable)
     print("Toggling Announce Chapter Titles (Enable)...")
@@ -52,7 +52,7 @@ def test_settings_persistence(page: Page):
     # Open Audio Panel again
     page.get_by_test_id("reader-audio-button").click()
     # Switch to Settings
-    page.click("button:has-text('Settings')")
+    page.get_by_test_id("audio-panel-settings-button").click()
 
     switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
     expect(switch).to_have_attribute("aria-checked", expected_state)

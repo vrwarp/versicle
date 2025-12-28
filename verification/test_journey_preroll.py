@@ -25,7 +25,7 @@ def test_preroll_journey(page: Page):
 
     # Open Settings
     print("Opening TTS Settings...")
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_test_id("audio-panel-settings-button").click()
 
     # Enable Preroll
     print("Enabling Preroll...")
@@ -46,7 +46,7 @@ def test_preroll_journey(page: Page):
 
     # Navigate back to settings
     page.get_by_test_id("reader-audio-button").click()
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_test_id("audio-panel-settings-button").click()
 
     preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
     expect(preroll_switch).to_have_attribute("aria-checked", "true")
@@ -57,7 +57,7 @@ def test_preroll_journey(page: Page):
 
     # Attempt to verify queue (Optional in headless if flaky)
     # Go back to queue
-    page.get_by_role("button", name="Up Next").click()
+    page.get_by_test_id("audio-panel-queue-button").click()
 
     # Close Audio Deck
     page.keyboard.press("Escape")

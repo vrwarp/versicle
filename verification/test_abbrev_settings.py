@@ -16,7 +16,7 @@ def test_abbrev_settings(page: Page):
 
     # 1. Open Global Settings
     print("Opening Global Settings...")
-    page.click("button[aria-label='Preferences']") # Header settings
+    page.get_by_test_id("reader-settings-button").click()
     expect(page.get_by_role("dialog")).to_be_visible()
 
     # 2. Switch to Dictionary Tab

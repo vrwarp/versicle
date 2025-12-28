@@ -186,6 +186,7 @@ export const UnifiedAudioPanel = () => {
              variant={view === 'queue' ? 'default' : 'ghost'}
              onClick={() => setView('queue')}
              size="sm"
+             data-testid="audio-panel-queue-button"
           >
              Up Next
           </Button>
@@ -193,6 +194,7 @@ export const UnifiedAudioPanel = () => {
              variant={view === 'settings' ? 'default' : 'ghost'}
              onClick={() => setView('settings')}
              size="sm"
+             data-testid="audio-panel-settings-button"
           >
              Settings
           </Button>
