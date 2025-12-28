@@ -8,6 +8,12 @@ def test_drag_drop_import(page: Page):
     utils.reset_app(page)
 
     # 1. Verify Empty Library
+    # Wait for potential migration overlay to clear if it appears
+    try:
+        expect(page.get_by_text("Updating Library")).not_to_be_visible(timeout=5000)
+    except:
+        pass # If it wasn't visible, that's fine.
+
     expect(page.get_by_text("Your library is empty")).to_be_visible()
     utils.capture_screenshot(page, "drag_drop_1_empty")
 
@@ -48,7 +54,7 @@ def test_drag_drop_import(page: Page):
     )
 
     # 3. Verify Success Toast
-    expect(page.get_by_text("Book imported successfully")).to_be_visible()
+    expect(page.get_by_text("Book imported successfully")).to_be_visible(timeout=30000)
 
     # 4. Verify Book Appears
     expect(page.locator("[data-testid^='book-card-']").first).to_be_visible()

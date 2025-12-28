@@ -10,6 +10,8 @@ import { LexiconService } from './LexiconService';
 import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
 import type { SectionMetadata } from '../../types/db';
+import { TextSegmenter } from './TextSegmenter';
+import { useTTSStore } from '../../store/useTTSStore';
 
 const NO_TEXT_MESSAGES = [
     "This chapter appears to be empty.",
@@ -820,6 +822,15 @@ export class AudioPlayerService {
           const newQueue: TTSQueueItem[] = [];
 
           if (ttsContent && ttsContent.sentences.length > 0) {
+              // Dynamic Refinement: Merge segments based on current settings
+              const settings = useTTSStore.getState();
+              const refinedSentences = TextSegmenter.refineSegments(
+                  ttsContent.sentences,
+                  settings.customAbbreviations,
+                  settings.alwaysMerge,
+                  settings.sentenceStarters
+              );
+
               // Add Preroll if enabled
               if (this.prerollEnabled) {
                   const prerollText = this.generatePreroll(title, Math.round(section.characterCount / 5), this.speed);
@@ -833,7 +844,7 @@ export class AudioPlayerService {
                   });
               }
 
-              ttsContent.sentences.forEach(s => {
+              refinedSentences.forEach(s => {
                   newQueue.push({
                       text: s.text,
                       cfi: s.cfi,

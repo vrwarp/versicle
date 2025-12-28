@@ -1,3 +1,6 @@
+import { generateCfiRange, parseCfiRange } from '../cfi-utils';
+import type { SentenceNode } from '../tts';
+
 /**
  * Represents a segment of text (e.g., a sentence) with its location.
  */
@@ -197,5 +200,99 @@ export class TextSegmenter {
             }
         }
         return sentences;
+    }
+
+    /**
+     * Dynamically refines a list of sentences by merging them based on current abbreviation settings.
+     * This allows for reactive segmentation (changing abbreviations without re-ingesting).
+     *
+     * @param sentences - The list of sentences to refine.
+     * @param abbreviations - Current list of abbreviations.
+     * @param alwaysMerge - List of abbreviations that always force a merge.
+     * @param sentenceStarters - List of words that prevent a merge.
+     * @returns A new list of refined (merged) sentences.
+     */
+    public static refineSegments(
+        sentences: SentenceNode[],
+        abbreviations: string[],
+        alwaysMerge: string[],
+        sentenceStarters: string[]
+    ): SentenceNode[] {
+        if (!sentences || sentences.length === 0) return [];
+
+        const merged: SentenceNode[] = [];
+        const abbrSet = new Set(abbreviations.map(s => s.toLowerCase())); // Normalize for case-insensitive check
+        const mergeSet = new Set(alwaysMerge.map(s => s.toLowerCase()));
+        const starterSet = new Set(sentenceStarters); // Starters are usually Case Sensitive (e.g. "He" vs "he")
+
+        for (let i = 0; i < sentences.length; i++) {
+            const current = sentences[i];
+
+            if (merged.length > 0) {
+                const last = merged[merged.length - 1];
+                const lastTextTrimmed = last.text.trim();
+
+                // Check if last segment ends with an abbreviation
+                let isAbbreviation = false;
+                let lastWord = '';
+
+                // Check full segment text first (e.g. for multi-word abbreviations defined by user)
+                if (abbrSet.has(lastTextTrimmed.toLowerCase())) {
+                    isAbbreviation = true;
+                    lastWord = lastTextTrimmed;
+                } else {
+                    // Optimized: Get last word without splitting the whole string
+                    const match = /\S+$/.exec(lastTextTrimmed);
+                    const rawLastWord = match ? match[0] : lastTextTrimmed;
+                    // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
+                    lastWord = rawLastWord.replace(/^['"([<{]+/, '');
+
+                    // Case-insensitive check
+                    if (abbrSet.has(lastWord.toLowerCase())) {
+                        isAbbreviation = true;
+                    }
+                }
+
+                if (isAbbreviation) {
+                    let shouldMerge = false;
+
+                    // Check if the abbreviation (either full text or last word) is in the alwaysMerge list
+                    if (mergeSet.has(lastWord.toLowerCase())) {
+                        shouldMerge = true;
+                    } else {
+                        // Check the next segment (current)
+                        const nextTextTrimmed = current.text.trim();
+                        const match = /^\S+/.exec(nextTextTrimmed);
+                        const nextFirstWord = match ? match[0] : nextTextTrimmed;
+                        const cleanNextWord = nextFirstWord.replace(/[.,!?;:]$/, '');
+
+                        if (!starterSet.has(cleanNextWord)) {
+                            shouldMerge = true;
+                        }
+                    }
+
+                    if (shouldMerge) {
+                        // Merge current into last
+                        last.text += (last.text.endsWith(' ') ? '' : ' ') + current.text;
+
+                        // Merge CFIs
+                        const startCfi = parseCfiRange(last.cfi);
+                        const endCfi = parseCfiRange(current.cfi);
+
+                        if (startCfi && endCfi) {
+                             // We want the range from the START of the first segment to the END of the second segment.
+                             // generateCfiRange takes two points (start and end) and finds the common parent.
+                             last.cfi = generateCfiRange(startCfi.fullStart, endCfi.fullEnd);
+                        }
+
+                        continue;
+                    }
+                }
+            }
+
+            merged.push({ ...current });
+        }
+
+        return merged;
     }
 }

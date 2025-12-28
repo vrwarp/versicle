@@ -38,6 +38,12 @@ def reset_app(page: Page):
     page.reload()
     # Wait for app to be ready
     try:
+        # Wait for potential migration overlay to clear first
+        try:
+            page.wait_for_selector("text=Updating Library", state="detached", timeout=10000)
+        except:
+            pass # Might not have appeared
+
         page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book'), div:has-text('Your library is empty')", timeout=10000)
     except:
         print("Warning: App load state check timed out.")

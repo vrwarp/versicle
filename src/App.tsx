@@ -16,6 +16,8 @@ import { StorageFullError } from './types/errors';
 import { Capacitor } from '@capacitor/core';
 import { ForegroundService, Importance } from '@capawesome-team/capacitor-android-foreground-service';
 import { AudioPlayerService } from './lib/tts/AudioPlayerService';
+import { MigrationService } from './lib/MigrationService';
+import { Progress } from './components/ui/Progress';
 
 /**
  * Main Application component.
@@ -25,6 +27,7 @@ import { AudioPlayerService } from './lib/tts/AudioPlayerService';
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [dbError, setDbError] = useState<unknown>(null);
+  const [migrationProgress, setMigrationProgress] = useState<{ percent: number; message: string } | null>(null);
 
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -80,6 +83,19 @@ function App() {
         // Initialize DB
         await getDB();
 
+        // Check and run migrations if necessary
+        const migrationRequired = await MigrationService.isMigrationRequired();
+        if (migrationRequired) {
+            setMigrationProgress({ percent: 0, message: 'Updating library format...' });
+
+            await MigrationService.migrateLibrary((progress, message) => {
+                 setMigrationProgress({ percent: progress, message });
+            });
+
+            setMigrationProgress(null);
+            useToastStore.getState().showToast('Library update complete.', 'success');
+        }
+
         // Wait for Android init to complete (or fail gracefully)
         await androidInitPromise;
 
@@ -129,6 +145,17 @@ function App() {
   // But if we render, components might fail if DB is truly broken.
   // Given we want to catch "DB fails to open", waiting is safer for this feature.
   if (dbStatus === 'loading') {
+      if (migrationProgress) {
+          return (
+              <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background text-foreground p-8">
+                  <div className="w-full max-w-md space-y-4">
+                      <h2 className="text-xl font-bold text-center">Updating Library</h2>
+                      <p className="text-sm text-center text-muted-foreground">{migrationProgress.message}</p>
+                      <Progress value={migrationProgress.percent} className="h-2" />
+                  </div>
+              </div>
+          );
+      }
       return <div className="min-h-screen flex items-center justify-center bg-background text-foreground">Initializing...</div>;
   }
 

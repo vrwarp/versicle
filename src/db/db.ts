@@ -6,6 +6,13 @@ import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocation
  */
 export interface EpubLibraryDB extends DBSchema {
   /**
+   * Store for application-level metadata and configuration.
+   */
+  app_metadata: {
+    key: string;
+    value: any;
+  };
+  /**
    * Store for book metadata.
    */
   books: {
@@ -142,8 +149,13 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 13, { // Upgrading to v13
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 14, { // Upgrading to v14
       upgrade(db, oldVersion, _newVersion, transaction) {
+        // App Metadata store (New in v14)
+        if (!db.objectStoreNames.contains('app_metadata')) {
+          db.createObjectStore('app_metadata');
+        }
+
         // Migration to v11: Clear old reading history to enforce semantic boundaries
         if (oldVersion < 11) {
              if (db.objectStoreNames.contains('reading_history')) {

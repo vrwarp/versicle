@@ -118,10 +118,12 @@ export const useLibraryStore = create<LibraryState>()(
             error: null
         });
         try {
-          const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+          const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+          // Maximal Splitting: Ingest with empty abbreviations to maximize segments.
+          // Merging will happen dynamically during playback.
           await dbService.addBook(file, {
-              abbreviations: customAbbreviations,
-              alwaysMerge,
+              abbreviations: [],
+              alwaysMerge: [],
               sentenceStarters,
               sanitizationEnabled
           }, (progress, message) => {
@@ -151,12 +153,14 @@ export const useLibraryStore = create<LibraryState>()(
               error: null
           });
           try {
-              const { customAbbreviations, alwaysMerge, sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+              const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+              // Maximal Splitting: Ingest with empty abbreviations to maximize segments.
+              // Merging will happen dynamically during playback.
               await processBatchImport(
                   files,
                   {
-                      abbreviations: customAbbreviations,
-                      alwaysMerge,
+                      abbreviations: [],
+                      alwaysMerge: [],
                       sentenceStarters,
                       sanitizationEnabled
                   },
