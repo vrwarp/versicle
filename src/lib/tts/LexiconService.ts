@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export class LexiconService {
   private static instance: LexiconService;
+  private regexCache = new Map<string, RegExp>();
 
   private constructor() {}
 
@@ -131,21 +132,25 @@ export class LexiconService {
         if (!rule.original || !rule.replacement) continue;
 
         try {
-            let regex: RegExp;
+            const cacheKey = `${rule.id}-${rule.original}-${rule.isRegex}`;
+            let regex = this.regexCache.get(cacheKey);
 
-            if (rule.isRegex) {
-                // Use original string directly as regex
-                regex = new RegExp(rule.original, 'gi');
-            } else {
-                // Escape special regex characters in the original string
-                const escapedOriginal = rule.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            if (!regex) {
+                if (rule.isRegex) {
+                    // Use original string directly as regex
+                    regex = new RegExp(rule.original, 'gi');
+                } else {
+                    // Escape special regex characters in the original string
+                    const escapedOriginal = rule.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-                // Check if start/end are word characters to determine if \b is appropriate
-                const startIsWord = /^\w/.test(rule.original);
-                const endIsWord = /\w$/.test(rule.original);
+                    // Check if start/end are word characters to determine if \b is appropriate
+                    const startIsWord = /^\w/.test(rule.original);
+                    const endIsWord = /\w$/.test(rule.original);
 
-                const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
-                regex = new RegExp(regexStr, 'gi');
+                    const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
+                    regex = new RegExp(regexStr, 'gi');
+                }
+                this.regexCache.set(cacheKey, regex);
             }
 
             processedText = processedText.replace(regex, rule.replacement);
