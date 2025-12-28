@@ -15,9 +15,7 @@ def test_theme_persistence(page: Page):
 
     # 1. Open Visual Settings
     print("Opening Visual Settings...")
-    # Check trigger state
-    if page.get_by_test_id("reader-visual-settings-button").get_attribute("aria-expanded") != "true":
-        page.get_by_test_id("reader-visual-settings-button").click()
+    page.get_by_test_id("reader-visual-settings-button").click()
 
     # 2. Select Dark Theme
     print("Selecting Dark Theme...")
@@ -29,6 +27,9 @@ def test_theme_persistence(page: Page):
     expect(page.locator("html")).to_have_class(re.compile(r".*dark.*"))
 
     # Verify Button Active
+    # Checking for ring class or similar visual indicator
+    # Based on previous tests, we can check if it has ring-2
+    # But evaluating class list is safer
     is_active = dark_btn.evaluate("el => el.classList.contains('ring-2')")
     assert is_active, "Dark theme button should be active"
 
@@ -44,9 +45,7 @@ def test_theme_persistence(page: Page):
     expect(page.locator("html")).to_have_class(re.compile(r".*dark.*"))
 
     # Open settings again to check button state
-    if page.get_by_test_id("reader-visual-settings-button").get_attribute("aria-expanded") != "true":
-        page.get_by_test_id("reader-visual-settings-button").click()
-
+    page.get_by_test_id("reader-visual-settings-button").click()
     dark_btn = page.locator('button[aria-label="Select dark theme"]')
     is_active_reload = dark_btn.evaluate("el => el.classList.contains('ring-2')")
     assert is_active_reload, "Dark theme button should be active after reload"

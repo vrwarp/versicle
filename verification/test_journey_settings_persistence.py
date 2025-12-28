@@ -15,19 +15,17 @@ def test_settings_persistence(page: Page):
 
     # 1. Open Audio Panel
     print("Opening Audio Panel...")
-    # Check trigger state instead of visibility
-    if page.get_by_test_id("reader-audio-button").get_attribute("aria-expanded") != "true":
-        page.get_by_test_id("reader-audio-button").click()
-
-    expect(page.get_by_test_id("tts-panel")).to_be_visible()
+    page.get_by_test_id("reader-audio-button").click()
 
     # Switch to Settings
-    if not page.get_by_text("Voice & Pace").is_visible():
-        page.get_by_role("button", name="Settings").click()
+    page.click("button:has-text('Settings')")
 
     # 2. Toggle "Announce Chapter Titles" (Enable)
     print("Toggling Announce Chapter Titles (Enable)...")
+    # Find the switch
     switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
+
+    # Ensure it's visible
     expect(switch).to_be_visible()
 
     # Get current state
@@ -51,17 +49,12 @@ def test_settings_persistence(page: Page):
     # 4. Verify Persistence
     print("Verifying Persistence...")
 
-    # Ensure Panel Open
-    if page.get_by_test_id("reader-audio-button").get_attribute("aria-expanded") != "true":
-        page.get_by_test_id("reader-audio-button").click()
-    expect(page.get_by_test_id("tts-panel")).to_be_visible()
-
-    # Ensure Settings View
-    if not page.get_by_text("Voice & Pace").is_visible():
-        page.get_by_role("button", name="Settings").click()
+    # Open Audio Panel again
+    page.get_by_test_id("reader-audio-button").click()
+    # Switch to Settings
+    page.click("button:has-text('Settings')")
 
     switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
-    expect(switch).to_be_visible()
     expect(switch).to_have_attribute("aria-checked", expected_state)
 
     utils.capture_screenshot(page, "settings_persistence_2_restored")

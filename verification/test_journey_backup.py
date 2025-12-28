@@ -73,11 +73,13 @@ def test_journey_backup_restore(page: Page):
     page.once("dialog", lambda dialog: dialog.accept())
     page.set_input_files("data-testid=backup-file-input", backup_path)
 
-    # Wait for reload - Increased timeout and explicitly wait
-    # The app navigates to '/' which triggers a reload.
+    # Wait for reload - implicitly wait for dialog to close
+    # The restore logic navigates to '/' which reloads the page.
     print("Waiting for restore and reload...")
-    page.wait_for_timeout(3000)
+    # Wait for dialog to disappear (it closes on navigation)
+    expect(page.get_by_role("dialog")).not_to_be_visible(timeout=15000)
 
+    # Wait for Library to load
     expect(page.get_by_test_id("library-view")).to_be_visible(timeout=10000)
 
     # 6. Verify Restore
@@ -133,7 +135,7 @@ def test_journey_full_backup_restore(page: Page):
 
     # Wait for reload
     print("Waiting for restore and reload...")
-    page.wait_for_timeout(3000)
+    expect(page.get_by_role("dialog")).not_to_be_visible(timeout=15000)
 
     expect(page.get_by_test_id("library-view")).to_be_visible(timeout=10000)
 

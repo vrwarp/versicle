@@ -20,17 +20,16 @@ def test_preroll_journey(page: Page):
 
     # Open TTS Panel
     print("Opening TTS panel...")
-    if page.get_by_test_id("reader-audio-button").get_attribute("aria-expanded") != "true":
-        page.get_by_test_id("reader-audio-button").click()
+    page.get_by_test_id("reader-audio-button").click()
     expect(page.get_by_test_id("tts-panel")).to_be_visible()
 
     # Open Settings
     print("Opening TTS Settings...")
-    if not page.get_by_text("Voice & Pace").is_visible():
-        page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Settings").click()
 
     # Enable Preroll
     print("Enabling Preroll...")
+    # Find switch in row with text
     preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
 
     # Check current state (aria-checked)
@@ -45,18 +44,9 @@ def test_preroll_journey(page: Page):
     print("Reloading to check persistence...")
     page.reload()
 
-    # Wait for reload
-    page.wait_for_timeout(1000)
-
     # Navigate back to settings
-    # Ensure Panel Open
-    if page.get_by_test_id("reader-audio-button").get_attribute("aria-expanded") != "true":
-        page.get_by_test_id("reader-audio-button").click()
-    expect(page.get_by_test_id("tts-panel")).to_be_visible()
-
-    # Ensure Settings View
-    if not page.get_by_text("Voice & Pace").is_visible():
-        page.get_by_role("button", name="Settings").click()
+    page.get_by_test_id("reader-audio-button").click()
+    page.get_by_role("button", name="Settings").click()
 
     preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
     expect(preroll_switch).to_have_attribute("aria-checked", "true")
@@ -67,12 +57,11 @@ def test_preroll_journey(page: Page):
 
     # Attempt to verify queue (Optional in headless if flaky)
     # Go back to queue
-    if page.get_by_role("button", name="Up Next").is_visible():
-        page.get_by_role("button", name="Up Next").click()
+    page.get_by_role("button", name="Up Next").click()
 
     # Close Audio Deck
     page.keyboard.press("Escape")
-    expect(page.get_by_test_id("tts-panel")).not_to_be_visible()
+    expect(page.get_by_role("dialog")).not_to_be_visible()
 
     print("Attempting to verify queue population...")
     # Navigate via TOC to another chapter (e.g. toc-item-4)
