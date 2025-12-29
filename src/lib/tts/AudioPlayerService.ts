@@ -9,7 +9,7 @@ import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { LexiconService } from './LexiconService';
 import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
-import type { SectionMetadata } from '../../types/db';
+import type { SectionMetadata, LexiconRule } from '../../types/db';
 import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
 
@@ -74,6 +74,8 @@ export class AudioPlayerService {
   private currentIndex: number = 0;
   private status: TTSStatus = 'stopped';
   private listeners: PlaybackListener[] = [];
+
+  private activeLexiconRules: LexiconRule[] | null = null;
 
   private speed: number = 1.0;
   private voiceId: string | null = null;
@@ -170,6 +172,9 @@ export class AudioPlayerService {
               this.currentIndex = 0;
               this.setStatus('stopped');
           }
+
+          // Clear cached rules when book changes
+          this.activeLexiconRules = null;
       }
   }
 
@@ -516,7 +521,12 @@ export class AudioPlayerService {
 
     try {
         const voiceId = this.voiceId || '';
-        const rules = await this.lexiconService.getRules(this.currentBookId || undefined);
+
+        // Load and cache rules if not already cached for this session
+        if (!this.activeLexiconRules) {
+            this.activeLexiconRules = await this.lexiconService.getRules(this.currentBookId || undefined);
+        }
+        const rules = this.activeLexiconRules;
 
         const processedText = this.lexiconService.applyLexicon(item.text, rules);
 
@@ -749,6 +759,12 @@ export class AudioPlayerService {
       else if (this.status === status) { /* valid */ }
 
       this.status = status;
+
+      // Clear cached rules on stop or pause to ensure freshness on next session
+      if (status === 'stopped' || status === 'paused') {
+          this.activeLexiconRules = null;
+      }
+
       this.mediaSessionManager.setPlaybackState(
           status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
       );
