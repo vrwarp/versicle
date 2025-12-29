@@ -8,11 +8,15 @@ import type { ActionType } from '../ui/CompassPill';
 import { useToastStore } from '../../store/useToastStore';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
+import { LexiconManager } from './LexiconManager';
 
 export const ReaderControlBar: React.FC = () => {
     // Correctly using the store-based toast
     const showToast = useToastStore(state => state.showToast);
     const navigate = useNavigate();
+
+    const [lexiconOpen, setLexiconOpen] = React.useState(false);
+    const [lexiconText, setLexiconText] = React.useState('');
 
     // Store Subscriptions
     const { popover, addAnnotation, hidePopover } = useAnnotationStore(useShallow(state => ({
@@ -121,9 +125,11 @@ export const ReaderControlBar: React.FC = () => {
                 }
                 break;
             case 'pronounce':
-                // Open Pronunciation Dialog
-                showToast("Pronunciation: Feature coming soon", "info");
-                // hidePopover(); // Keep it open?
+                if (popover.text) {
+                    setLexiconText(popover.text);
+                    setLexiconOpen(true);
+                    hidePopover();
+                }
                 break;
             case 'dismiss':
                 hidePopover();
@@ -155,25 +161,33 @@ export const ReaderControlBar: React.FC = () => {
     }
 
     return (
-        <div className="fixed bottom-6 left-0 right-0 z-50 px-4 pointer-events-none">
-            <div className="pointer-events-auto">
-                <CompassPill
-                    variant={variant}
-                    title={title}
-                    subtitle={subtitle}
-                    progress={progress}
-                    onAnnotationAction={handleAnnotationAction}
-                    availableActions={{
-                        play: true,
-                        pronounce: true
-                    }}
-                    onClick={() => {
-                        if (variant === 'summary' && lastReadBook) {
-                            navigate(`/read/${lastReadBook.id}`);
-                        }
-                    }}
-                />
+        <>
+            <div className="fixed bottom-6 left-0 right-0 z-50 px-4 pointer-events-none">
+                <div className="pointer-events-auto">
+                    <CompassPill
+                        variant={variant}
+                        title={title}
+                        subtitle={subtitle}
+                        progress={progress}
+                        onAnnotationAction={handleAnnotationAction}
+                        availableActions={{
+                            play: true,
+                            pronounce: true
+                        }}
+                        onClick={() => {
+                            if (variant === 'summary' && lastReadBook) {
+                                navigate(`/read/${lastReadBook.id}`);
+                            }
+                        }}
+                    />
+                </div>
             </div>
-        </div>
+
+            <LexiconManager
+                open={lexiconOpen}
+                onOpenChange={setLexiconOpen}
+                initialTerm={lexiconText}
+            />
+        </>
     );
 };
