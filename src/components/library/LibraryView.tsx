@@ -85,7 +85,7 @@ export const LibraryView: React.FC = () => {
        }
 
        addBook(file).then(() => {
-        showToast("Book imported successfully", "success");
+        showToast("Book imported successfully", "success", 5000);
       }).catch((err) => {
         showToast(`Import failed: ${err.message}`, "error");
       });
