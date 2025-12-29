@@ -33,14 +33,14 @@
 *   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
 *   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
 *   **Drag & Drop**: Drag files anywhere to import.
-*   **Search**: Fast, offline full-text search (RegExp based) running in a Web Worker.
+*   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
 *   **Annotations**: Highlights and notes.
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
 *   **Smart Handoff**: Continue listening exactly where you left off, even after app restarts.
 *   **Text-to-Speech**: Turn any book into an audiobook.
-*   **Smart Segmentation**: Natural pausing at sentence boundaries.
+*   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service).
@@ -51,7 +51,7 @@
 *   **Backups**:
     *   **Light**: JSON export of metadata/settings.
     *   **Full**: ZIP archive including all book files.
-*   **Space Saver**: "Offload" books to delete the file but keep your stats, then restore later.
+*   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
 
 ## Setup & Development

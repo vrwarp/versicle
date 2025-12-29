@@ -15,7 +15,7 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
     *   **Why**: To avoid server costs and maintain privacy. Features typically done on a backend (Text-to-Speech segmentation, Full-Text Indexing, File Parsing) are moved to the client.
     *   **How**:
         *   **Search**: Uses a **Web Worker** running a custom `SearchEngine` with **RegExp** scanning to find text in memory.
-        *   **TTS**: Uses client-side logic (`TextSegmenter`) to split text into sentences and caches audio segments locally (`TTSCache`).
+        *   **TTS**: Uses client-side logic (`TextSegmenter`) with JIT refinement to split text into sentences and caches audio segments locally (`TTSCache`).
         *   **Ingestion**: Parses EPUB files directly in the browser using `epub.js` and a custom **Offscreen Renderer** for accurate text extraction.
     *   **Trade-off**: Higher memory and CPU usage on the client device. Large books may take seconds to index for search or parse for ingestion.
 
@@ -183,7 +183,7 @@ Handles the complex task of importing an EPUB file.
     1.  **Validation**: Checks ZIP headers (magic bytes `50 4B 03 04`) to ensure file validity.
     2.  **Offscreen Rendering**: Uses a hidden `<iframe>` (via `offscreen-renderer.ts`) to render chapters. This ensures that the extracted text and CFIs match *exactly* what the user will see/hear, which is critical for accurate TTS synchronization.
     3.  **Parsing**: Uses `epub.js` to parse the container.
-    *   **Cover Optimization**: Compresses the cover image to a 50KB/300px thumbnail for the `books` store (Library View), while storing the high-resolution original in the separate `covers` object store.
+    4.  **Cover Optimization**: Compresses the cover image to a 50KB/300px thumbnail for the `books` store (Library View), while storing the high-resolution original in the separate `covers` object store.
     5.  **Synthetic TOC**: Iterates through the spine to generate a table of contents and calculate character counts (for reading time estimation).
     6.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** based on metadata (filename, title, author) and head/tail file sampling.
         *   *Refactoring*: Replaced full-file SHA-256 hashing (which was slow and memory-intensive) with this constant-time O(1) check (`generateFileFingerprint` using a "cheap hash").
@@ -206,6 +206,8 @@ Implements full-text search off the main thread to prevent UI freezing.
 *   **Logic**: Uses a simple **RegExp** scanning approach over in-memory text.
     *   *Why*: `FlexSearch` (previously used) proved too memory-intensive and complex for typical "find on page" use cases in personal libraries.
     *   *Logic*: Maintains a `Map<BookID, Map<Href, Text>>`. Performs linear scan for matches.
+    *   **Offloading**: If supported, XML parsing is offloaded to the worker to further unblock the main thread.
+    *   **Direct Archive Access**: Attempts to read raw XML from the ZIP archive (via `JSZip` internal logic) to bypass the slow `epub.js` rendering pipeline.
 *   **Communication**: Uses **`comlink`** to proxy method calls to the worker.
 *   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book. Linear scanning is slower than an inverted index for massive corpora but perfectly adequate for single books.
 
@@ -270,7 +272,10 @@ The singleton controller (Orchestrator).
 *   **Goal**: Manage the playback queue, provider selection, and state machine (`playing`, `paused`, `loading`, etc.).
 *   **Logic**:
     *   **Concurrency**: Uses a **Sequential Promise Chain** (`enqueue`) to serialize async operations (play, pause, next). This replaces the previous complex Mutex pattern.
+    *   **Just-In-Time (JIT) Refinement**: Text segmentation (splitting paragraphs into sentences) happens dynamically when a chapter is loaded. This allows user settings (like "Custom Abbreviations") to apply immediately without re-ingesting the book.
     *   **State Persistence**: Persists the queue and position to IndexedDB so playback can resume after an app restart.
+    *   **Prerolls**: Automatically injects "Title - Author" announcements at the start of new sections.
+    *   **Empty Chapter Handling**: If a chapter has no text (e.g., a full-page image), the service injects a "silence" or a placeholder message.
 
 #### `src/lib/tts/MediaSessionManager.ts`
 *   **Goal**: Integrate with OS-level media controls (Lock Screen, Notification Center, Smartwatches).
