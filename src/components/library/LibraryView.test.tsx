@@ -50,16 +50,6 @@ describe('LibraryView', () => {
         });
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
 
-        // Mock IntersectionObserver
-        const observe = vi.fn();
-        const unobserve = vi.fn();
-        const disconnect = vi.fn();
-        class MockIntersectionObserver {
-            observe = observe;
-            unobserve = unobserve;
-            disconnect = disconnect;
-        }
-        window.IntersectionObserver = MockIntersectionObserver as any;
     });
 
     it('renders loading state', () => {
