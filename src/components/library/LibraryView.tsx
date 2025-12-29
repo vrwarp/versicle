@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
@@ -8,6 +8,7 @@ import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search } from
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * The main library view component.
@@ -17,6 +18,7 @@ import { Input } from '../ui/Input';
  * @returns A React component rendering the library interface.
  */
 export const LibraryView: React.FC = () => {
+  // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
   const {
     books,
     fetchBooks,
@@ -28,7 +30,19 @@ export const LibraryView: React.FC = () => {
     setViewMode,
     sortOrder,
     setSortOrder
-  } = useLibraryStore();
+  } = useLibraryStore(useShallow(state => ({
+    books: state.books,
+    fetchBooks: state.fetchBooks,
+    isLoading: state.isLoading,
+    error: state.error,
+    addBook: state.addBook,
+    isImporting: state.isImporting,
+    viewMode: state.viewMode,
+    setViewMode: state.setViewMode,
+    sortOrder: state.sortOrder,
+    setSortOrder: state.setSortOrder
+  })));
+
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,32 +110,35 @@ export const LibraryView: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  const filteredAndSortedBooks = books
-    .filter(book => {
-      const query = searchQuery.toLowerCase();
-      return (
-        (book.title || '').toLowerCase().includes(query) ||
-        (book.author || '').toLowerCase().includes(query)
-      );
-    })
-    .sort((a, b) => {
-      switch (sortOrder) {
-        case 'recent':
-          // Sort by addedAt descending (newest first)
-          return (b.addedAt || 0) - (a.addedAt || 0);
-        case 'last_read':
-          // Sort by lastRead descending (most recently read first)
-          return (b.lastRead || 0) - (a.lastRead || 0);
-        case 'author':
-          // Sort by author ascending (A-Z)
-          return (a.author || '').localeCompare(b.author || '');
-        case 'title':
-          // Sort by title ascending (A-Z)
-          return (a.title || '').localeCompare(b.title || '');
-        default:
-          return 0;
-      }
-    });
+  // OPTIMIZATION: Memoize filtered and sorted books to avoid expensive re-calculation on every render
+  const filteredAndSortedBooks = useMemo(() => {
+    return books
+      .filter(book => {
+        const query = searchQuery.toLowerCase();
+        return (
+          (book.title || '').toLowerCase().includes(query) ||
+          (book.author || '').toLowerCase().includes(query)
+        );
+      })
+      .sort((a, b) => {
+        switch (sortOrder) {
+          case 'recent':
+            // Sort by addedAt descending (newest first)
+            return (b.addedAt || 0) - (a.addedAt || 0);
+          case 'last_read':
+            // Sort by lastRead descending (most recently read first)
+            return (b.lastRead || 0) - (a.lastRead || 0);
+          case 'author':
+            // Sort by author ascending (A-Z)
+            return (a.author || '').localeCompare(b.author || '');
+          case 'title':
+            // Sort by title ascending (A-Z)
+            return (a.title || '').localeCompare(b.title || '');
+          default:
+            return 0;
+        }
+      });
+  }, [books, searchQuery, sortOrder]);
 
   return (
     <div

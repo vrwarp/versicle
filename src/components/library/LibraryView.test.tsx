@@ -196,7 +196,7 @@ describe('LibraryView', () => {
 
         await waitFor(() => {
             expect(mockAddBook).toHaveBeenCalledWith(file);
-            expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('imported successfully'), 'success');
+            expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('imported successfully'), 'success', 5000);
         });
     });
 
