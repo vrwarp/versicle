@@ -60,6 +60,7 @@ export const ReaderView: React.FC = () => {
     setCurrentBookId,
     reset,
     currentSectionTitle,
+    currentSectionId,
     viewMode,
     shouldForceFont,
     immersiveMode,
@@ -78,6 +79,7 @@ export const ReaderView: React.FC = () => {
     setCurrentBookId: state.setCurrentBookId,
     reset: state.reset,
     currentSectionTitle: state.currentSectionTitle,
+    currentSectionId: state.currentSectionId,
     viewMode: state.viewMode,
     shouldForceFont: state.shouldForceFont,
     immersiveMode: state.immersiveMode,
@@ -472,6 +474,41 @@ export const ReaderView: React.FC = () => {
   const [useSyntheticToc, setUseSyntheticToc] = useState(false);
   const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
 
+  // Determine active TOC item based on currentSectionId (href)
+  const activeTocId = useMemo(() => {
+      if (!currentSectionId) return null;
+      let bestMatchId: string | null = null;
+
+      const currentToc = useSyntheticToc ? syntheticToc : toc;
+
+      const traverse = (items: NavigationItem[]): boolean => {
+          for (const item of items) {
+              const itemPath = item.href.split('#')[0];
+              const sectionPath = currentSectionId.split('#')[0];
+
+              if (itemPath === sectionPath) {
+                   // Found a file match.
+                   // If we haven't found a match yet, take this one (likely the parent/chapter start)
+                   if (!bestMatchId) {
+                       bestMatchId = item.id;
+                   }
+                   // If we find an exact match (including hash if any), that's definitely the one
+                   if (item.href === currentSectionId) {
+                       bestMatchId = item.id;
+                       return true;
+                   }
+              }
+              if (item.subitems && item.subitems.length > 0) {
+                  if (traverse(item.subitems)) return true;
+              }
+          }
+          return false;
+      };
+
+      traverse(currentToc);
+      return bestMatchId;
+  }, [toc, syntheticToc, useSyntheticToc, currentSectionId]);
+
   // Smart TOC Hook
   const { enhanceTOC, isEnhancing, progress: tocProgress } = useSmartTOC(
       book,
@@ -652,15 +689,19 @@ export const ReaderView: React.FC = () => {
       const showSubitems = hasSubitems && level < 2;
 
       const currentId = `${parentId}-${index}`;
+      const isActive = item.id === activeTocId;
 
       return (
           <li key={item.id}>
              <button
                 data-testid={currentId}
                 className={cn(
-                    "text-left w-full text-sm text-muted-foreground hover:text-primary py-1 block truncate",
+                    "text-left w-full text-sm py-1 block truncate transition-colors",
+                    isActive ? "text-primary font-medium bg-accent/50 rounded-md px-2 -ml-2" : "text-muted-foreground hover:text-primary"
                 )}
-                style={{ paddingLeft: `${level * 1.0}rem` }}
+                // Add extra padding when active to compensate for the negative margin (-ml-2 = -0.5rem),
+                // ensuring text alignment remains consistent.
+                style={{ paddingLeft: `${level * 1.0 + (isActive ? 0.5 : 0)}rem` }}
                 onClick={() => {
                     rendition?.display(item.href);
                     setSidebar('none');
