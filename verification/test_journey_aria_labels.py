@@ -27,7 +27,7 @@ def test_aria_labels(page: Page):
     expect(page.get_by_label("Increase line height")).to_be_visible()
 
     # Close Settings
-    page.get_by_role("button", name="Close").click()
+    page.get_by_test_id("visual-settings-close-button").click()
 
     # 2. Search ARIA Labels
     print("Verifying Search...")

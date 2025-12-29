@@ -486,7 +486,6 @@ export const ReaderView: React.FC = () => {
   void setLexiconText;
 
   const { setGlobalSettingsOpen } = useUIStore();
-  const [audioPanelOpen, setAudioPanelOpen] = useState(false);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -804,7 +803,7 @@ export const ReaderView: React.FC = () => {
                 {currentSectionTitle || 'Reading'}
             </h1>
             <div className="flex items-center gap-1 md:gap-2">
-            <Sheet open={audioPanelOpen} onOpenChange={setAudioPanelOpen}>
+            <Sheet open={activeSidebar === 'audio-panel'} onOpenChange={(open) => setSidebar(open ? 'audio-panel' : 'none')}>
                 <SheetTrigger asChild>
                     <Button
                         variant="ghost"
@@ -828,7 +827,7 @@ export const ReaderView: React.FC = () => {
             >
                 <Maximize className="w-5 h-5" />
             </Button>
-            <Popover>
+            <Popover open={activeSidebar === 'visual-settings'} onOpenChange={(open) => setSidebar(open ? 'visual-settings' : 'none')}>
                 <PopoverTrigger asChild>
                     <Button
                         variant="ghost"
