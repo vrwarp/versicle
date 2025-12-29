@@ -85,13 +85,6 @@ vi.mock('react-router-dom', () => ({
     Route: ({ element }: any) => <div>{element}</div>,
 }));
 
-vi.mock('./lib/MigrationService', () => ({
-    MigrationService: {
-        isMigrationRequired: vi.fn().mockResolvedValue(false),
-        migrateLibrary: vi.fn(),
-    },
-}));
-
 
 describe('App Capacitor Initialization', () => {
   beforeEach(() => {
