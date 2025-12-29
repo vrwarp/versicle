@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 
-type SidebarType = 'none' | 'toc' | 'annotations' | 'search';
+export type SidebarType = 'none' | 'toc' | 'annotations' | 'search' | 'audio-panel' | 'visual-settings';
 
 export function useSidebarState() {
   const navigate = useNavigate();
