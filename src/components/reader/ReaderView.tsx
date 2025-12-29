@@ -848,7 +848,7 @@ export const ReaderView: React.FC = () => {
             </Button>
             </div>
             <h1 className="text-sm font-medium truncate max-w-xs text-foreground hidden md:block">
-                {currentSectionTitle || 'Reading'}
+                {metadata?.title || currentSectionTitle || 'Reading'}
             </h1>
             <div className="flex items-center gap-1 md:gap-2">
             <Sheet open={activeSidebar === 'audio-panel'} onOpenChange={(open) => setSidebar(open ? 'audio-panel' : 'none')}>
