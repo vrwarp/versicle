@@ -49,6 +49,17 @@ describe('LibraryView', () => {
             value: () => ({ top: 100 })
         });
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+
+        // Mock IntersectionObserver
+        const observe = vi.fn();
+        const unobserve = vi.fn();
+        const disconnect = vi.fn();
+        class MockIntersectionObserver {
+            observe = observe;
+            unobserve = unobserve;
+            disconnect = disconnect;
+        }
+        window.IntersectionObserver = MockIntersectionObserver as any;
     });
 
     it('renders loading state', () => {
@@ -196,7 +207,10 @@ describe('LibraryView', () => {
 
         await waitFor(() => {
             expect(mockAddBook).toHaveBeenCalledWith(file);
-            expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('imported successfully'), 'success');
+        });
+
+        await waitFor(() => {
+             expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('imported successfully'), 'success', 5000);
         });
     });
 

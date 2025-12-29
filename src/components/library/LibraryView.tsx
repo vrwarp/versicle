@@ -8,6 +8,9 @@ import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search } from
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { useIntersectionObserver } from '../../hooks/useIntersectionObserver';
+
+const BOOKS_PER_PAGE = 24;
 
 /**
  * The main library view component.
@@ -34,10 +37,16 @@ export const LibraryView: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(BOOKS_PER_PAGE);
 
   useEffect(() => {
     fetchBooks();
   }, [fetchBooks]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setVisibleCount(BOOKS_PER_PAGE);
+  }, [searchQuery, sortOrder, viewMode]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -122,6 +131,17 @@ export const LibraryView: React.FC = () => {
           return 0;
       }
     });
+
+  const displayedBooks = filteredAndSortedBooks.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredAndSortedBooks.length;
+
+  const { targetRef } = useIntersectionObserver(
+    useCallback(() => {
+      if (hasMore) {
+        setVisibleCount((prev) => prev + BOOKS_PER_PAGE);
+      }
+    }, [hasMore])
+  );
 
   return (
     <div
@@ -262,7 +282,7 @@ export const LibraryView: React.FC = () => {
             <>
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
-                  {filteredAndSortedBooks.map((book) => (
+                  {displayedBooks.map((book) => (
                     <div key={book.id} className="flex justify-center">
                       <BookCard book={book} />
                     </div>
@@ -270,11 +290,15 @@ export const LibraryView: React.FC = () => {
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 w-full">
-                  {filteredAndSortedBooks.map((book) => (
+                  {displayedBooks.map((book) => (
                     <BookListItem key={book.id} book={book} />
                   ))}
                 </div>
               )}
+
+              {/* Sentinel for infinite scroll */}
+              <div ref={targetRef} className="h-4 w-full" />
+
               {/* Spacer for bottom navigation or just breathing room */}
               <div className="h-24" />
             </>
