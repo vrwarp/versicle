@@ -124,7 +124,10 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
         )}
 
         {book.isOffloaded && (
-           <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+           <div
+              className="absolute inset-0 flex items-center justify-center bg-black/20"
+              data-testid="offloaded-overlay"
+           >
                <Cloud className="w-12 h-12 text-white drop-shadow-md" />
            </div>
         )}
