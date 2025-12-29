@@ -246,7 +246,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
       return (
           <div
             data-testid="compass-pill-summary"
-            className={`relative flex flex-col items-center justify-center w-full max-w-sm px-4 py-2 mx-auto overflow-hidden text-center transition-all border shadow-lg h-24 rounded-xl bg-background/80 backdrop-blur-md border-border ${onClick ? 'cursor-pointer hover:bg-background/90' : ''}`}
+            className={`relative flex flex-col items-center justify-center w-full max-w-sm px-4 py-2 mx-auto overflow-hidden text-center transition-all border shadow-lg h-24 rounded-xl pill-background backdrop-blur-md border-border ${onClick ? 'cursor-pointer hover:bg-background/90' : ''}`}
             onClick={onClick}
           >
               <div className="text-xs font-bold truncate w-full opacity-90">
@@ -270,7 +270,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   // Compact Mode
   if (variant === 'compact') {
       return (
-          <div data-testid="compass-pill-compact" className="relative z-40 flex items-center justify-center gap-1 w-fit h-14 px-2 mx-auto transition-all border shadow-lg rounded-full bg-background/80 backdrop-blur-md border-border">
+          <div data-testid="compass-pill-compact" className="relative z-40 flex items-center justify-center gap-1 w-fit h-14 px-2 mx-auto transition-all border shadow-lg rounded-full pill-background backdrop-blur-md border-border">
                 {/* Prev Button */}
                 <Button
                     variant="ghost"
@@ -309,7 +309,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   // Active Mode
   return (
-    <div data-testid="compass-pill-active" className="relative z-40 flex items-center justify-between w-full max-w-md h-14 px-4 mx-auto transition-all border shadow-lg rounded-full bg-background/80 backdrop-blur-md border-border">
+    <div data-testid="compass-pill-active" className="relative z-40 flex items-center justify-between w-full max-w-md h-14 px-4 mx-auto transition-all border shadow-lg rounded-full pill-background backdrop-blur-md border-border">
         {/* Background Progress */}
         <div
             className="absolute inset-y-0 left-0 bg-primary/10 -z-10 transition-all duration-300"
