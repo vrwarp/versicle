@@ -1,5 +1,4 @@
 import { cn } from "../lib/utils";
-import { Check } from "lucide-react";
 
 interface ThemeSelectorProps {
   currentTheme: 'light' | 'dark' | 'sepia';

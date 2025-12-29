@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Tabs, TabsList, TabsTrigger } from "../ui/Tabs"
 import { Label } from "../ui/Label"
 import { Switch } from "../ui/Switch"
-import { cn } from "../../lib/utils"
 import { X, Minus, Plus } from "lucide-react"
 import { ThemeSelector } from "../ThemeSelector";
 

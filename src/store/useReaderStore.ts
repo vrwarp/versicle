@@ -11,7 +11,7 @@ interface ReaderState {
   /** The ID of the currently open book. */
   currentBookId: string | null;
   /** The active visual theme of the reader. */
-  currentTheme: 'light' | 'dark' | 'sepia' | 'custom';
+  currentTheme: 'light' | 'dark' | 'sepia';
   /** Custom theme colors. */
   customTheme: { bg: string; fg: string };
   /** Font family (e.g., 'serif', 'sans-serif'). */
@@ -47,7 +47,7 @@ interface ReaderState {
   /** Sets the ID of the current book. */
   setCurrentBookId: (id: string | null) => void;
   /** Sets the visual theme. */
-  setTheme: (theme: 'light' | 'dark' | 'sepia' | 'custom') => void;
+  setTheme: (theme: 'light' | 'dark' | 'sepia') => void;
   /** Sets the custom theme colors. */
   setCustomTheme: (theme: { bg: string; fg: string }) => void;
   /** Sets the font family. */
