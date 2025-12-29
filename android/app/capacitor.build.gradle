@@ -11,7 +11,6 @@ apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
     implementation project(':capacitor-community-text-to-speech')
     implementation project(':capawesome-team-capacitor-android-battery-optimization')
-    implementation project(':capawesome-team-capacitor-android-foreground-service')
     implementation project(':jofr-capacitor-media-session')
 
 }
