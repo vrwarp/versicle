@@ -17,9 +17,10 @@ interface BookActionMenuProps {
     book: BookMetadata;
     className?: string; // For the trigger button
     variant?: 'list' | 'card';
+    testId?: string;
 }
 
-export const BookActionMenu: React.FC<BookActionMenuProps> = ({ book, className, variant = 'list' }) => {
+export const BookActionMenu: React.FC<BookActionMenuProps> = ({ book, className, variant = 'list', testId }) => {
     const { removeBook, offloadBook, restoreBook } = useLibraryStore();
     const showToast = useToastStore(state => state.showToast);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -109,7 +110,7 @@ export const BookActionMenu: React.FC<BookActionMenuProps> = ({ book, className,
                         variant="ghost"
                         size="icon"
                         className={variant === 'card' ? cardTriggerClass : listTriggerClass}
-                        data-testid={`book-actions-${book.id}`}
+                        data-testid={testId || `book-actions-${book.id}`}
                         aria-label="Book actions"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {

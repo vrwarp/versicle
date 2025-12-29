@@ -130,7 +130,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
         )}
 
         <div className="absolute top-2 right-2 z-10">
-           <BookActionMenu book={book} variant="card" />
+           <BookActionMenu book={book} variant="card" testId="book-menu-trigger" />
         </div>
       </div>
 

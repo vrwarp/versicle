@@ -181,7 +181,7 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book }) => {
                         className="hidden"
                         data-testid={`restore-input-${book.id}`}
                     />
-                    <BookActionMenu book={book} variant="list" />
+                    <BookActionMenu book={book} variant="list" testId={`book-actions-${book.id}`} />
                 </div>
             </div>
         </div>
