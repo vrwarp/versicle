@@ -174,7 +174,7 @@ describe('ReaderView', () => {
       fireEvent.click(visualSettingsBtn);
 
       // Change Theme
-      const darkThemeBtn = await screen.findByLabelText('Select dark theme');
+      const darkThemeBtn = await screen.findByLabelText('Select Dark theme');
       fireEvent.click(darkThemeBtn);
 
       expect(useReaderStore.getState().currentTheme).toBe('dark');

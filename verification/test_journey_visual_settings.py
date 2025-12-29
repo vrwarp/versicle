@@ -32,7 +32,7 @@ def test_visual_settings(page: Page):
 
     # 1. Test Theme Switching
     print("Testing Theme Switching (Sepia)...")
-    sepia_btn = page.locator('button[aria-label="Select sepia theme"]')
+    sepia_btn = page.locator('button[aria-label="Select Sepia theme"]')
     sepia_btn.click()
     page.wait_for_timeout(1000)
     utils.capture_screenshot(page, "visual_settings_02_sepia")
@@ -49,7 +49,7 @@ def test_visual_settings(page: Page):
     assert is_sepia_active, "Sepia button is not active"
 
     print("Testing Theme Switching (Dark)...")
-    dark_btn = page.locator('button[aria-label="Select dark theme"]')
+    dark_btn = page.locator('button[aria-label="Select Dark theme"]')
     dark_btn.click()
     page.wait_for_timeout(1000)
     utils.capture_screenshot(page, "visual_settings_03_dark")

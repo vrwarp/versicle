@@ -309,6 +309,21 @@ export const ReaderView: React.FC = () => {
       };
   }, [reset, hidePopover]);
 
+  const handleClearSelection = useCallback(() => {
+      const iframe = viewerRef.current?.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.getSelection()?.removeAllRanges();
+      }
+  }, []);
+
+  // Clear selection when popover is hidden
+  const popoverVisible = useAnnotationStore(state => state.popover.visible);
+  useEffect(() => {
+      if (!popoverVisible) {
+          handleClearSelection();
+      }
+  }, [popoverVisible, handleClearSelection]);
+
 
   // Use TTS Hook
   useTTS();
@@ -557,14 +572,6 @@ export const ReaderView: React.FC = () => {
       }
   }, [metadata]);
 
-  const handleClearSelection = () => {
-      const iframe = viewerRef.current?.querySelector('iframe');
-      if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.getSelection()?.removeAllRanges();
-      }
-  };
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  void handleClearSelection;
 
   const handlePrev = useCallback(() => {
       // console.log("Navigating to previous page");

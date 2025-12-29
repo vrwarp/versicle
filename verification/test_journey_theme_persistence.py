@@ -19,7 +19,8 @@ def test_theme_persistence(page: Page):
 
     # 2. Select Dark Theme
     print("Selecting Dark Theme...")
-    dark_btn = page.locator('button[aria-label="Select dark theme"]')
+    # New UI uses button with text "Dark" and aria-label "Select Dark theme"
+    dark_btn = page.locator('button[aria-label="Select Dark theme"]')
     dark_btn.click()
     page.wait_for_timeout(1000)
 
@@ -46,7 +47,7 @@ def test_theme_persistence(page: Page):
 
     # Open settings again to check button state
     page.get_by_test_id("reader-visual-settings-button").click()
-    dark_btn = page.locator('button[aria-label="Select dark theme"]')
+    dark_btn = page.locator('button[aria-label="Select Dark theme"]')
     is_active_reload = dark_btn.evaluate("el => el.classList.contains('ring-2')")
     assert is_active_reload, "Dark theme button should be active after reload"
 
