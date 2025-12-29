@@ -39,6 +39,9 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
     # Click "Offload File"
     page.get_by_test_id("menu-offload").click()
 
+    # Confirm Offload
+    page.get_by_test_id("confirm-offload").click()
+
     # 3. Verify Offloaded State
     # The image should have opacity/grayscale class or overlay
     # We can check for the cloud icon overlay.
