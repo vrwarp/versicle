@@ -53,13 +53,23 @@ vi.mock('./lib/tts/AudioPlayerService', () => ({
     }),
   },
 }));
-vi.mock('./store/useToastStore', () => ({
-    useToastStore: {
-        getState: () => ({
-            showToast: vi.fn()
-        })
-    }
-}));
+// Correct mock for useToastStore which is a zustand hook
+vi.mock('./store/useToastStore', () => {
+    // Return a mock hook function
+    const useToastStoreMock = vi.fn((selector) => {
+        const state = {
+            showToast: vi.fn(),
+            isVisible: false,
+            message: '',
+            type: 'info',
+            duration: 3000,
+            hideToast: vi.fn(),
+        };
+        return selector ? selector(state) : state;
+    });
+    // Add non-hook properties if any
+    return { useToastStore: useToastStoreMock };
+});
 
 
 describe('App Capacitor Initialization', () => {

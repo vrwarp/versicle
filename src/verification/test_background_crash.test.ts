@@ -1,9 +1,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
-import { Capacitor } from '@capacitor/core';
 import { dbService } from '../lib/tts/../../db/DBService';
 import { LexiconService } from '../lib/tts/LexiconService';
+import { TextSegmenter } from '../lib/tts/TextSegmenter';
 
 // Mock dependencies BEFORE importing the service
 vi.mock('@capawesome-team/capacitor-android-foreground-service', () => ({
@@ -29,16 +29,6 @@ vi.mock('@capacitor/core', () => {
   };
 });
 
-// Mock MediaSession plugin
-vi.mock('@jofr/capacitor-media-session', () => ({
-    MediaSession: {
-        setActionHandler: vi.fn(),
-        setMetadata: vi.fn(),
-        setPlaybackState: vi.fn(),
-        setPositionState: vi.fn(),
-    }
-}));
-
 // Mock DBService
 vi.mock('../db/DBService', () => ({
   dbService: {
@@ -63,6 +53,13 @@ vi.mock('../lib/tts/LexiconService', () => ({
   },
 }));
 
+// Mock TextSegmenter
+vi.mock('../lib/tts/TextSegmenter', () => ({
+    TextSegmenter: {
+        refineSegments: vi.fn((sentences) => sentences),
+    }
+}));
+
 // Mock WebSpeechProvider and CapacitorTTSProvider
 vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => {
   // Return a class or a constructor function
@@ -81,6 +78,35 @@ vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => {
   }
 });
 
+// Mock navigator.mediaSession
+const mediaSessionMock = {
+    setActionHandler: vi.fn(),
+    playbackState: 'none',
+    metadata: null,
+    setPositionState: vi.fn(),
+};
+vi.stubGlobal('navigator', {
+    mediaSession: mediaSessionMock,
+});
+vi.stubGlobal('MediaMetadata', class { constructor(public init: any) {} });
+
+// Mock useTTSStore to avoid circular dependency issues during initialization
+vi.mock('../store/useTTSStore', () => ({
+  useTTSStore: {
+    getState: () => ({
+      volume: 1,
+      rate: 1,
+      pitch: 1,
+      selectedVoice: 'default',
+      customAbbreviations: [],
+      alwaysMerge: [],
+      sentenceStarters: [],
+    }),
+    subscribe: vi.fn(),
+  },
+}));
+
+
 // Now import the service
 import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 
@@ -89,7 +115,15 @@ describe('AudioPlayerService Background Crash Prevention', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Clear media session mocks
+    mediaSessionMock.setActionHandler.mockClear();
+    mediaSessionMock.setPositionState.mockClear();
+
     service = AudioPlayerService.getInstance();
+  });
+
+  afterEach(() => {
+    // vi.unstubAllGlobals(); // Caution: this might unsettle other things if used globally
   });
 
   it('should NOT call stopForegroundService during autoPlay transition', async () => {

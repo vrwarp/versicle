@@ -1,21 +1,11 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MediaSessionManager } from './MediaSessionManager';
 import { Capacitor } from '@capacitor/core';
-import { MediaSession } from '@jofr/capacitor-media-session';
 
-// Mock Capacitor and MediaSession
+// Mock Capacitor
 vi.mock('@capacitor/core', () => ({
   Capacitor: {
     isNativePlatform: vi.fn(),
-  },
-}));
-
-vi.mock('@jofr/capacitor-media-session', () => ({
-  MediaSession: {
-    setActionHandler: vi.fn(),
-    setMetadata: vi.fn(),
-    setPlaybackState: vi.fn(),
-    setPositionState: vi.fn(),
   },
 }));
 
@@ -54,12 +44,7 @@ describe('MediaSessionManager', () => {
         constructor(public init: any) {}
     });
 
-    // Reset mocks and setup default implementations
     vi.clearAllMocks();
-    (MediaSession.setActionHandler as Mock).mockResolvedValue(undefined);
-    (MediaSession.setMetadata as Mock).mockResolvedValue(undefined);
-    (MediaSession.setPlaybackState as Mock).mockResolvedValue(undefined);
-    (MediaSession.setPositionState as Mock).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -68,7 +53,7 @@ describe('MediaSessionManager', () => {
 
   describe('Web Environment', () => {
       beforeEach(() => {
-          (Capacitor.isNativePlatform as Mock).mockReturnValue(false);
+          (Capacitor.isNativePlatform as any).mockReturnValue(false);
       });
 
       it('sets up action handlers on initialization', () => {
@@ -133,7 +118,7 @@ describe('MediaSessionManager', () => {
         // Should not throw
         manager.setMetadata({ title: 'test', artist: 'test', album: 'test' });
         manager.setPlaybackState('playing');
-        manager.setPositionState({ duration: 100, position: 10 });
+        manager.setPositionState({ duration: 100, position: 10, playbackRate: 1 });
       });
 
       it('sets position state correctly', () => {
@@ -146,80 +131,18 @@ describe('MediaSessionManager', () => {
       });
   });
 
-  describe('Native Environment', () => {
-      beforeEach(() => {
-          (Capacitor.isNativePlatform as Mock).mockReturnValue(true);
-      });
+  // Since we use the same logic for native (Web Standard on Native Webview),
+  // we can add a test to ensure it works even if isNativePlatform returns true,
+  // effectively validating it uses the "Web" logic.
+  describe('Native Environment (using Web Standard)', () => {
+    beforeEach(() => {
+        (Capacitor.isNativePlatform as any).mockReturnValue(true);
+    });
 
-      it('sets up native action handlers on initialization', async () => {
-          new MediaSessionManager(callbacks);
-          // Constructor is async in effect due to async calls but we can't await it directly.
-          // However, the calls are dispatched. We might need to wait a tick.
-          await new Promise(resolve => setTimeout(resolve, 0));
-
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'play' }, callbacks.onPlay);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'pause' }, callbacks.onPause);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'stop' }, callbacks.onStop);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'next' }, callbacks.onNext);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'previous' }, callbacks.onPrev);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekbackward' }, callbacks.onSeekBackward);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekforward' }, callbacks.onSeekForward);
-      });
-
-      it('updates native metadata correctly', async () => {
-          const manager = new MediaSessionManager(callbacks);
-          const metadata = {
-            title: 'Native Title',
-            artist: 'Native Artist',
-            album: 'Native Album',
-            artwork: [{ src: 'native.jpg' }],
-          };
-
-          await manager.setMetadata(metadata);
-
-          expect(MediaSession.setMetadata).toHaveBeenCalledWith({
-              title: 'Native Title',
-              artist: 'Native Artist',
-              album: 'Native Album',
-              artwork: [{ src: 'native.jpg' }]
-          });
-      });
-
-      it('updates native playback state correctly', async () => {
-          const manager = new MediaSessionManager(callbacks);
-
-          await manager.setPlaybackState('playing');
-          expect(MediaSession.setPlaybackState).toHaveBeenCalledWith({
-              playbackState: 'playing',
-          });
-          expect(MediaSession.setPositionState).toHaveBeenCalledWith({
-              playbackRate: 1.0,
-          });
-      });
-
-      it('updates native playback state with object', async () => {
-          const manager = new MediaSessionManager(callbacks);
-
-          await manager.setPlaybackState({ playbackState: 'paused', playbackSpeed: 1.2 });
-          expect(MediaSession.setPlaybackState).toHaveBeenCalledWith({
-              playbackState: 'paused',
-          });
-          expect(MediaSession.setPositionState).toHaveBeenCalledWith({
-              playbackRate: 1.2,
-          });
-      });
-
-      it('updates native position state correctly', async () => {
-          const manager = new MediaSessionManager(callbacks);
-          const state = { duration: 60, playbackRate: 1, position: 30 };
-
-          manager.setPositionState(state);
-
-          expect(MediaSession.setPositionState).toHaveBeenCalledWith({
-              duration: 60,
-              playbackRate: 1,
-              position: 30
-          });
-      });
+    it('uses navigator.mediaSession even on native platform', () => {
+        new MediaSessionManager(callbacks);
+        // It should still call setActionHandler on the navigator.mediaSession mock
+        expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('play', callbacks.onPlay);
+    });
   });
 });

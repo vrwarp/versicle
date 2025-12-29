@@ -1,5 +1,4 @@
 import { Capacitor } from '@capacitor/core';
-import { MediaSession } from '@jofr/capacitor-media-session';
 
 /**
  * Metadata for the Media Session API.
@@ -42,10 +41,9 @@ export interface PlaybackState {
 /**
  * Wrapper for the Media Session API to integrate browser media controls.
  * Allows controlling playback from hardware keys, notification center, or lock screen.
- * Handles both Native (Capacitor) and Web environments.
+ * Uses navigator.mediaSession (Web Standard) for all platforms.
  */
 export class MediaSessionManager {
-  private isNative = Capacitor.isNativePlatform();
   private hasWebMediaSession = typeof navigator !== 'undefined' && 'mediaSession' in navigator;
 
   /**
@@ -60,18 +58,8 @@ export class MediaSessionManager {
   /**
    * Sets up the action handlers for the Media Session API.
    */
-  private async setupActionHandlers() {
-    if (this.isNative) {
-        // NATIVE MODE
-        await this.setNativeActionHandler('play', this.callbacks.onPlay);
-        await this.setNativeActionHandler('pause', this.callbacks.onPause);
-        await this.setNativeActionHandler('stop', this.callbacks.onStop);
-        await this.setNativeActionHandler('next', this.callbacks.onNext);
-        await this.setNativeActionHandler('previous', this.callbacks.onPrev);
-        await this.setNativeActionHandler('seekbackward', this.callbacks.onSeekBackward);
-        await this.setNativeActionHandler('seekforward', this.callbacks.onSeekForward);
-    } else if (this.hasWebMediaSession) {
-        // WEB MODE
+  private setupActionHandlers() {
+    if (this.hasWebMediaSession) {
         const actionHandlers: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [
           ['play', this.callbacks.onPlay],
           ['pause', this.callbacks.onPause],
@@ -97,29 +85,13 @@ export class MediaSessionManager {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async setNativeActionHandler(action: string, handler?: (...args: any[]) => void) {
-      if (handler) {
-          // The types for MediaSessionAction might not perfectly align with string but it works at runtime or needs explicit casting
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await MediaSession.setActionHandler({ action: action as any }, handler);
-      }
-  }
-
   /**
    * Updates the media metadata (Title, Artist, Artwork).
    *
    * @param metadata - The new metadata to display.
    */
   async setMetadata(metadata: MediaSessionMetadata) {
-    if (this.isNative) {
-        await MediaSession.setMetadata({
-            title: metadata.title,
-            artist: metadata.artist,
-            album: metadata.album,
-            artwork: metadata.artwork
-        });
-    } else if (this.hasWebMediaSession) {
+    if (this.hasWebMediaSession) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         navigator.mediaSession.metadata = new (window as any).MediaMetadata({
           title: metadata.title,
@@ -141,18 +113,7 @@ export class MediaSessionManager {
     const position = typeof state === 'string' ? undefined : state.position;
     const duration = typeof state === 'string' ? undefined : state.duration;
 
-    if (this.isNative) {
-        await MediaSession.setPlaybackState({
-            playbackState,
-        });
-        if (playbackSpeed !== undefined || position !== undefined || duration !== undefined) {
-             await MediaSession.setPositionState({
-                 playbackRate: playbackSpeed || 1.0,
-                 position: position,
-                 duration: duration
-             });
-        }
-    } else if (this.hasWebMediaSession) {
+    if (this.hasWebMediaSession) {
         navigator.mediaSession.playbackState = playbackState;
         if (position !== undefined && duration !== undefined && 'setPositionState' in navigator.mediaSession) {
              navigator.mediaSession.setPositionState({
@@ -166,18 +127,11 @@ export class MediaSessionManager {
 
   /**
    * Updates the position state (duration, playback rate, current time).
-   * Kept for backward compatibility with Web implementation usage.
    *
    * @param state - The current position state.
    */
   setPositionState(state: MediaPositionState) {
-    if (this.isNative) {
-        MediaSession.setPositionState({
-            duration: state.duration,
-            playbackRate: state.playbackRate,
-            position: state.position
-        }).catch(e => console.warn("Failed to set native position state", e));
-    } else if (this.hasWebMediaSession && 'setPositionState' in navigator.mediaSession) {
+    if (this.hasWebMediaSession && 'setPositionState' in navigator.mediaSession) {
         try {
             navigator.mediaSession.setPositionState(state);
         } catch (e) {
