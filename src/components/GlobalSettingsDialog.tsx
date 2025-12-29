@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { useTTSStore } from '../store/useTTSStore';
 import { useLibraryStore } from '../store/useLibraryStore';
+import { useReaderStore } from '../store/useReaderStore';
 import { useToastStore } from '../store/useToastStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Modal, ModalContent } from './ui/Modal';
@@ -57,6 +58,10 @@ export const GlobalSettingsDialog = () => {
         uploadStatus
     } = useLibraryStore();
     const showToast = useToastStore(state => state.showToast);
+    const { currentTheme, setTheme } = useReaderStore(useShallow(state => ({
+        currentTheme: state.currentTheme,
+        setTheme: state.setTheme
+    })));
 
     useEffect(() => {
         if (activeTab === 'data') {
@@ -360,6 +365,26 @@ export const GlobalSettingsDialog = () => {
                     {activeTab === 'general' && (
                         <div className="space-y-6">
                             <div>
+                                <h3 className="text-lg font-medium mb-4">Appearance</h3>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Theme</label>
+                                        <Select value={currentTheme} onValueChange={(val: any) => setTheme(val)}>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="light">Light</SelectItem>
+                                                <SelectItem value="dark">Dark</SelectItem>
+                                                <SelectItem value="sepia">Sepia</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-sm text-muted-foreground">
+                                            Choose the application theme.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="border-t pt-6">
                                 <h3 className="text-lg font-medium mb-4">Advanced Import</h3>
                                 <p className="text-sm text-muted-foreground mb-4">
                                     Tools for importing multiple books at once.
