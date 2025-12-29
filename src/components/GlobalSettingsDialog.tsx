@@ -38,6 +38,7 @@ export const GlobalSettingsDialog = () => {
     const [activeTab, setActiveTab] = useState('general');
     const [isLexiconOpen, setIsLexiconOpen] = useState(false);
     const [orphanScanResult, setOrphanScanResult] = useState<string | null>(null);
+    const [isScanning, setIsScanning] = useState(false);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const csvInputRef = useRef<HTMLInputElement>(null);
@@ -232,6 +233,7 @@ export const GlobalSettingsDialog = () => {
     };
 
     const handleRepairDB = async () => {
+        setIsScanning(true);
         setOrphanScanResult('Scanning...');
         try {
             const report = await maintenanceService.scanForOrphans();
@@ -249,6 +251,8 @@ export const GlobalSettingsDialog = () => {
         } catch (e) {
             console.error(e);
             setOrphanScanResult('Error during repair check console.');
+        } finally {
+            setIsScanning(false);
         }
     };
 
@@ -572,6 +576,7 @@ export const GlobalSettingsDialog = () => {
                                                                         variant="destructive"
                                                                         size="icon"
                                                                         title="Delete Voice Data"
+                                                                        aria-label="Delete Voice Data"
                                                                     >
                                                                         <Trash2 className="h-4 w-4" />
                                                                     </Button>
@@ -794,8 +799,15 @@ export const GlobalSettingsDialog = () => {
                                     Tools to keep the database healthy.
                                 </p>
                                 <div className="flex flex-col gap-2">
-                                    <Button onClick={handleRepairDB} variant="outline">
-                                        Check & Repair Database
+                                    <Button onClick={handleRepairDB} variant="outline" disabled={isScanning}>
+                                        {isScanning ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Scanning...
+                                            </>
+                                        ) : (
+                                            "Check & Repair Database"
+                                        )}
                                     </Button>
                                     {orphanScanResult && (
                                         <p className="text-sm text-muted-foreground">{orphanScanResult}</p>
