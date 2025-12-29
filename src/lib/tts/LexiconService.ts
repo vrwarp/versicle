@@ -72,8 +72,8 @@ export class LexiconService {
     const db = await getDB();
     const newRule: LexiconRule = {
       id: rule.id || uuidv4(),
-      original: rule.original,
-      replacement: rule.replacement,
+      original: rule.original.normalize(),
+      replacement: rule.replacement.normalize(),
       isRegex: rule.isRegex,
       bookId: rule.bookId,
       applyBeforeGlobal: rule.applyBeforeGlobal,
@@ -137,7 +137,7 @@ export class LexiconService {
    * @returns The text with replacements applied.
    */
   applyLexicon(text: string, rules: LexiconRule[]): string {
-    let processedText = text;
+    let processedText = text.normalize();
 
     // Rules are applied in the order they are provided.
     // It is expected that the caller provides them in the correct order (e.g. from getRules()).
@@ -145,21 +145,25 @@ export class LexiconService {
     for (const rule of rules) {
         if (!rule.original || !rule.replacement) continue;
 
+        // Ensure rule strings are normalized (though they should be if saved via saveRule)
+        const normalizedOriginal = rule.original.normalize();
+        const normalizedReplacement = rule.replacement.normalize();
+
         try {
-            const cacheKey = `${rule.id}-${rule.original}-${rule.isRegex}`;
+            const cacheKey = `${rule.id}-${normalizedOriginal}-${rule.isRegex}`;
             let regex = this.regexCache.get(cacheKey);
 
             if (!regex) {
                 if (rule.isRegex) {
                     // Use original string directly as regex
-                    regex = new RegExp(rule.original, 'gi');
+                    regex = new RegExp(normalizedOriginal, 'gi');
                 } else {
                     // Escape special regex characters in the original string
-                    const escapedOriginal = rule.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const escapedOriginal = normalizedOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
                     // Check if start/end are word characters to determine if \b is appropriate
-                    const startIsWord = /^\w/.test(rule.original);
-                    const endIsWord = /\w$/.test(rule.original);
+                    const startIsWord = /^\w/.test(normalizedOriginal);
+                    const endIsWord = /\w$/.test(normalizedOriginal);
 
                     const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
                     regex = new RegExp(regexStr, 'gi');
@@ -167,9 +171,9 @@ export class LexiconService {
                 this.regexCache.set(cacheKey, regex);
             }
 
-            processedText = processedText.replace(regex, rule.replacement);
+            processedText = processedText.replace(regex, normalizedReplacement);
         } catch (e) {
-            console.warn(`Invalid regex for lexicon rule: ${rule.original}`, e);
+            console.warn(`Invalid regex for lexicon rule: ${normalizedOriginal}`, e);
         }
     }
 
@@ -188,7 +192,7 @@ export class LexiconService {
 
       // Sort to ensure deterministic order
       const sorted = [...rules].sort((a, b) => a.id.localeCompare(b.id));
-      const data = sorted.map(r => `${r.original}:${r.replacement}`).join('|');
+      const data = sorted.map(r => `${r.original.normalize()}:${r.replacement.normalize()}`).join('|');
 
       const encoder = new TextEncoder();
       const dataBuffer = encoder.encode(data);
