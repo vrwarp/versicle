@@ -2,7 +2,7 @@ import React from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { Button } from '../ui/Button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Library, BookOpen } from 'lucide-react';
 import { FileUploader } from './FileUploader';
 
 /**
@@ -40,28 +40,35 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = () => {
 
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center px-4 max-w-2xl mx-auto">
+      <div className="mb-6 p-6 bg-muted/20 rounded-full animate-in fade-in zoom-in duration-500">
+        <Library className="w-16 h-16 text-muted-foreground/40" />
+      </div>
+
       <h2 className="text-2xl font-bold text-foreground mb-2">Your library is empty</h2>
-      <p className="text-muted-foreground mb-8">
+      <p className="text-muted-foreground mb-8 text-lg">
         Import an EPUB file to start reading, or load our demo book to explore the features.
       </p>
 
-      <div className="w-full max-w-md mb-6">
+      <div className="w-full max-w-md mb-8">
         <FileUploader />
       </div>
 
       <Button
-        variant="link"
+        variant="outline"
         onClick={handleLoadDemo}
         disabled={isImporting}
-        className="text-primary font-medium"
+        className="text-primary font-medium gap-2 h-12 px-6 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all touch-manipulation"
       >
         {isImporting ? (
           <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" />
             Loading...
           </>
         ) : (
-          'Load Demo Book (Alice in Wonderland)'
+          <>
+            <BookOpen className="h-4 w-4" />
+            Load Demo Book (Alice in Wonderland)
+          </>
         )}
       </Button>
     </div>
