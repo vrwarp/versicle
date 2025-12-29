@@ -17,6 +17,20 @@ import { Button } from '../ui/Button';
 import { Progress } from '../ui/Progress';
 
 /**
+ * A wrapper around the trigger button that swallows the onPointerDown event
+ * to prevent the dropdown from intercepting scroll events on touch devices.
+ * It relies on onClick to toggle the menu instead.
+ */
+const SafeDropdownTrigger = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>((props, ref) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { onPointerDown, ...rest } = props;
+    return (
+        <button ref={ref} {...rest} />
+    );
+});
+SafeDropdownTrigger.displayName = "SafeDropdownTrigger";
+
+/**
  * Props for the BookListItem component.
  */
 interface BookListItemProps {
@@ -221,7 +235,7 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book }) => {
                     />
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <button
+                            <SafeDropdownTrigger
                                 className={cn(
                                     "p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors focus:opacity-100 touch-manipulation",
                                     "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
@@ -230,7 +244,7 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book }) => {
                                 data-testid={`book-actions-${book.id}`}
                             >
                                 <MoreVertical className="w-4 h-4" />
-                            </button>
+                            </SafeDropdownTrigger>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48 bg-popover text-popover-foreground border-border">
                             {book.isOffloaded ? (
