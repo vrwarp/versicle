@@ -43,9 +43,16 @@ vi.mock('../ui/CompassPill', () => ({
       {variant}
       <button onClick={() => onAnnotationAction && onAnnotationAction('color', 'yellow')}>Color</button>
       <button onClick={() => onAnnotationAction && onAnnotationAction('note', 'test note')}>Note</button>
+      <button onClick={() => onAnnotationAction && onAnnotationAction('pronounce')}>Pronounce</button>
     </div>
   ),
   ActionType: {}
+}));
+
+vi.mock('./LexiconManager', () => ({
+    LexiconManager: ({ open, initialTerm }: any) => (
+        open ? <div data-testid="lexicon-manager-mock" data-initial-term={initialTerm}>Lexicon Dialog</div> : null
+    )
 }));
 
 describe('ReaderControlBar', () => {
@@ -176,5 +183,24 @@ describe('ReaderControlBar', () => {
             cfiRange: 'cfi'
         });
         expect(hidePopover).toHaveBeenCalled();
+    });
+
+    it('opens lexicon manager on pronounce action', () => {
+         mockUseAnnotationStore.mockImplementation((selector) => selector({
+            popover: { visible: true, text: 'word to pronounce', cfiRange: 'cfi' },
+            addAnnotation: vi.fn(),
+            hidePopover: vi.fn(),
+        }));
+        render(<ReaderControlBar />);
+
+        // Verify LexiconManager is not initially visible
+        expect(screen.queryByTestId('lexicon-manager-mock')).not.toBeInTheDocument();
+
+        // Click pronounce
+        fireEvent.click(screen.getByText('Pronounce'));
+
+        // Verify LexiconManager appears with correct prop
+        expect(screen.getByTestId('lexicon-manager-mock')).toBeInTheDocument();
+        expect(screen.getByTestId('lexicon-manager-mock')).toHaveAttribute('data-initial-term', 'word to pronounce');
     });
 });

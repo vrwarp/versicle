@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
@@ -8,11 +8,15 @@ import type { ActionType } from '../ui/CompassPill';
 import { useToastStore } from '../../store/useToastStore';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
+import { LexiconManager } from './LexiconManager';
 
 export const ReaderControlBar: React.FC = () => {
     // Correctly using the store-based toast
     const showToast = useToastStore(state => state.showToast);
     const navigate = useNavigate();
+
+    const [lexiconOpen, setLexiconOpen] = useState(false);
+    const [lexiconText, setLexiconText] = useState('');
 
     // Store Subscriptions
     const { popover, addAnnotation, hidePopover } = useAnnotationStore(useShallow(state => ({
@@ -122,8 +126,12 @@ export const ReaderControlBar: React.FC = () => {
                 break;
             case 'pronounce':
                 // Open Pronunciation Dialog
-                showToast("Pronunciation: Feature coming soon", "info");
-                // hidePopover(); // Keep it open?
+                if (popover.text) {
+                    setLexiconText(popover.text);
+                    setLexiconOpen(true);
+                } else {
+                    showToast("No text selected", "error");
+                }
                 break;
             case 'dismiss':
                 hidePopover();
@@ -174,6 +182,11 @@ export const ReaderControlBar: React.FC = () => {
                     }}
                 />
             </div>
+            <LexiconManager
+                open={lexiconOpen}
+                onOpenChange={setLexiconOpen}
+                initialTerm={lexiconText}
+            />
         </div>
     );
 };
