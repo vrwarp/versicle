@@ -1,20 +1,12 @@
 import React from 'react';
 import type { BookMetadata } from '../../types/db';
-import { BookOpen, Trash2, MoreVertical, HardDriveDownload, HardDriveUpload } from 'lucide-react';
+import { BookOpen, HardDriveDownload, MoreVertical } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '../ui/DropdownMenu';
 import { cn } from '../../lib/utils';
 import { useReaderStore } from '../../store/useReaderStore';
-import { Dialog } from '../ui/Dialog';
-import { Button } from '../ui/Button';
 import { Progress } from '../ui/Progress';
+import { BookActionMenu } from './BookActionMenu';
 
 /**
  * Props for the BookListItem component.
@@ -54,13 +46,9 @@ const formatDuration = (chars?: number): string => {
  */
 export const BookListItem: React.FC<BookListItemProps> = ({ book }) => {
     const navigate = useNavigate();
-    const { removeBook, offloadBook, restoreBook } = useLibraryStore();
     const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderStore(state => state.setCurrentBookId);
-    const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [coverUrl, setCoverUrl] = React.useState<string | null>(null);
-    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
-    const [isOffloadDialogOpen, setIsOffloadDialogOpen] = React.useState(false);
 
     React.useEffect(() => {
         let url: string | null = null;
@@ -87,49 +75,6 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book }) => {
         }
         setBookId(book.id); // Set the active book ID in the store
         navigate(`/read/${book.id}`);
-    };
-
-    const handleDelete = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setIsDeleteDialogOpen(true);
-    };
-
-    const confirmDelete = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        await removeBook(book.id);
-        showToast(`Deleted "${book.title}"`, 'success');
-        setIsDeleteDialogOpen(false);
-    };
-
-    const handleOffload = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setIsOffloadDialogOpen(true);
-    };
-
-    const confirmOffload = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        await offloadBook(book.id);
-        showToast(`Offloaded "${book.title}"`, 'success');
-        setIsOffloadDialogOpen(false);
-    };
-
-    const triggerRestore = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        fileInputRef.current?.click();
-    };
-
-    const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            try {
-                await restoreBook(book.id, file);
-                showToast(`Restored "${book.title}"`, 'success');
-            } catch (err) {
-                // Error is handled in store, but we can catch here if needed
-                console.error(err);
-            }
-        }
-        if (e.target.value) e.target.value = '';
     };
 
     const progressPercent = book.progress ? Math.round(book.progress * 100) : 0;
@@ -211,89 +156,19 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book }) => {
 
                 {/* Actions */}
                 <div className="flex-none" onClick={(e) => e.stopPropagation()}>
-                    <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleRestoreFile}
-                        accept=".epub"
-                        className="hidden"
-                        data-testid={`restore-input-${book.id}`}
-                    />
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button
-                                className={cn(
-                                    "p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors focus:opacity-100 touch-manipulation",
-                                    "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
-                                )}
-                                aria-label="Book actions"
-                                data-testid={`book-actions-${book.id}`}
-                            >
-                                <MoreVertical className="w-4 h-4" />
-                            </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48 bg-popover text-popover-foreground border-border">
-                            {book.isOffloaded ? (
-                                <DropdownMenuItem onClick={triggerRestore} className="cursor-pointer gap-2">
-                                    <HardDriveUpload className="w-4 h-4" />
-                                    <span>Restore File</span>
-                                </DropdownMenuItem>
-                            ) : (
-                                <DropdownMenuItem onClick={handleOffload} className="cursor-pointer gap-2 text-amber-600 focus:text-amber-700">
-                                    <HardDriveDownload className="w-4 h-4" />
-                                    <span>Offload File</span>
-                                </DropdownMenuItem>
+                    <BookActionMenu book={book}>
+                         <button
+                            className={cn(
+                                "p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors focus:opacity-100 touch-manipulation",
+                                "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
                             )}
-                            <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive cursor-pointer gap-2">
-                                <Trash2 className="w-4 h-4" />
-                                <span>Delete</span>
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                            data-testid={`book-actions-${book.id}`}
+                        >
+                            <MoreVertical className="w-4 h-4" />
+                        </button>
+                    </BookActionMenu>
                 </div>
             </div>
-
-            <Dialog
-                isOpen={isOffloadDialogOpen}
-                onClose={() => setIsOffloadDialogOpen(false)}
-                title="Offload Book"
-                description={`Offload "${book.title}"? This will delete the local file to save space but keep your reading progress and annotations.`}
-                footer={
-                    <>
-                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setIsOffloadDialogOpen(false); }}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="default"
-                            onClick={confirmOffload}
-                            data-testid="confirm-offload"
-                        >
-                            Offload
-                        </Button>
-                    </>
-                }
-            />
-
-            <Dialog
-                isOpen={isDeleteDialogOpen}
-                onClose={() => setIsDeleteDialogOpen(false)}
-                title="Delete Book"
-                description={`Are you sure you want to delete "${book.title}"? This cannot be undone.`}
-                footer={
-                    <>
-                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setIsDeleteDialogOpen(false); }}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={confirmDelete}
-                            data-testid="confirm-delete"
-                        >
-                            Delete
-                        </Button>
-                    </>
-                }
-            />
         </div>
     );
 };

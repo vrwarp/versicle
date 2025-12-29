@@ -1,19 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
-import { MoreVertical, Trash2, CloudOff, Cloud, RefreshCw } from 'lucide-react';
+import { MoreVertical, Cloud } from 'lucide-react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import 'react-lazy-load-image-component/src/effects/blur.css';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../ui/DropdownMenu';
-import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
+import { BookActionMenu } from './BookActionMenu';
 
 /**
  * Props for the BookCard component.
@@ -44,10 +38,8 @@ const formatDuration = (chars?: number): string => {
  */
 export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
   const navigate = useNavigate();
-  const { removeBook, offloadBook, restoreBook } = useLibraryStore();
+  const { restoreBook } = useLibraryStore();
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -78,26 +70,6 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
       e.preventDefault();
       handleCardClick();
     }
-  };
-
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsDeleteDialogOpen(true);
-  };
-
-  const confirmDelete = async () => {
-    await removeBook(book.id);
-    setIsDeleteDialogOpen(false);
-  };
-
-  const handleOffload = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    await offloadBook(book.id);
-  };
-
-  const handleRestoreClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    fileInputRef.current?.click();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -153,7 +125,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
         )}
 
         {book.isOffloaded && (
-           <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+           <div className="absolute inset-0 flex items-center justify-center bg-black/20" data-testid="offloaded-overlay">
                <Cloud className="w-12 h-12 text-white drop-shadow-md" />
            </div>
         )}
@@ -163,73 +135,26 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-           <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-             <DropdownMenuTrigger asChild>
-               <div className="h-11 w-11">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn(
-                    "rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white transition-opacity",
-                    "h-11 w-11", // Minimum 44px touch target
-                    "opacity-100 md:opacity-0 md:group-hover:opacity-100", // Always visible on mobile
-                    "touch-manipulation"
-                  )}
-                  data-testid="book-menu-trigger"
-                  aria-label="Book actions"
-                  aria-haspopup="true"
-                  aria-expanded={isMenuOpen}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsMenuOpen((prev) => !prev);
-                  }}
-                >
-                    <MoreVertical className="w-4 h-4" />
-                </Button>
-               </div>
-             </DropdownMenuTrigger>
-             <DropdownMenuContent align="end" className="w-48">
-                {!book.isOffloaded ? (
-                    <DropdownMenuItem onClick={handleOffload} data-testid="menu-offload" className="cursor-pointer">
-                        <CloudOff className="w-4 h-4 mr-2" />
-                        Offload File
-                    </DropdownMenuItem>
-                ) : (
-                    <DropdownMenuItem onClick={handleRestoreClick} data-testid="menu-restore" className="cursor-pointer">
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Restore File
-                    </DropdownMenuItem>
-                )}
-            <DropdownMenuItem onClick={handleDeleteClick} className="text-destructive focus:text-destructive cursor-pointer" data-testid="menu-delete">
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Book
-                </DropdownMenuItem>
-             </DropdownMenuContent>
-           </DropdownMenu>
+            <BookActionMenu book={book}>
+                <div className="h-11 w-11">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                            "rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white transition-opacity",
+                            "h-11 w-11", // Minimum 44px touch target
+                            "opacity-100 md:opacity-0 md:group-hover:opacity-100", // Always visible on mobile
+                            "touch-manipulation"
+                        )}
+                        data-testid="book-menu-trigger"
+                        // Handlers are now in BookActionMenu
+                    >
+                        <MoreVertical className="w-4 h-4" />
+                    </Button>
+                </div>
+            </BookActionMenu>
         </div>
       </div>
-
-  <Dialog
-    isOpen={isDeleteDialogOpen}
-    onClose={() => setIsDeleteDialogOpen(false)}
-    title="Delete Book"
-    description="Are you sure you want to delete this book completely? This cannot be undone."
-    footer={
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={() => setIsDeleteDialogOpen(false)}>
-          Cancel
-        </Button>
-        <Button
-          variant="destructive"
-          onClick={confirmDelete}
-          data-testid="confirm-delete"
-        >
-          Delete
-        </Button>
-      </div>
-    }
-  />
 
       <div className="p-3 flex flex-col flex-1">
         <h3 data-testid="book-title" className="font-semibold text-foreground line-clamp-2 mb-1" title={book.title}>
