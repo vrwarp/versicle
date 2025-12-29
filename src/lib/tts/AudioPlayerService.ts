@@ -796,7 +796,7 @@ export class AudioPlayerService {
           const ttsContent = await dbService.getTTSContent(this.currentBookId, section.sectionId);
 
           // Determine Title
-          let title = sectionTitle || `Chapter ${sectionIndex + 1}`;
+          let title = sectionTitle || `Section ${sectionIndex + 1}`;
           if (!sectionTitle) {
               const analysis = await dbService.getContentAnalysis(this.currentBookId, section.sectionId);
               if (analysis && analysis.structure.title) {

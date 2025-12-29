@@ -7,22 +7,17 @@ import { sanitizeContent } from '../lib/sanitizer';
 import { runCancellable, CancellationError } from '../lib/cancellable-task-runner';
 
 /**
- * Recursive helper to find a title in the ToC by matching HREF.
+ * Recursive helper to resolve a section title from the Table of Contents (ToC).
+ *
+ * It attempts to find a matching ToC item for the given HREF using the following precedence:
+ * 1. Exact match of the full HREF.
+ * 2. Match of the file path (ignoring fragments/anchors).
+ *
+ * This fallback is necessary because spine items often only contain the file path (e.g., "chapter1.html"),
+ * while ToC items may point to specific anchors (e.g., "chapter1.html#section1").
+ * Matching by file path allows us to associate a generic file with its parent ToC entry (e.g., the Chapter title).
  */
 const findTitleInToc = (toc: NavigationItem[], href: string): string | null => {
-    // Standardize href: remove fragment if it's not essential for matching?
-    // Actually, toc items often have fragments. Spine items usually don't (unless they are part of a file).
-    // The spine item href passed here is typically the file path (e.g. "chapter1.html").
-    // We want to find the ToC item that points to this file.
-    // Logic:
-    // 1. Exact match.
-    // 2. File match (ignoring fragment).
-    // But we prioritize the "best" match. Since we only have the file path from spine,
-    // we should look for a ToC item that points to the file.
-    // If multiple point to the same file (different anchors), we probably want the first one (Chapter title),
-    // or maybe the one corresponding to the start?
-    // Given we only have the spine item href here, we can only reliably match the file.
-
     for (const item of toc) {
         if (item.href === href) return item.label;
 
