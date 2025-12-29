@@ -14,13 +14,28 @@ import { Button } from '../ui/Button';
 
 interface BookActionMenuProps {
     book: BookMetadata;
+    /** The trigger element to be wrapped by the menu trigger (usually an icon button). */
     children: React.ReactNode;
 }
 
+/**
+ * Handle interface for accessing component methods via ref.
+ * Primarily used to trigger the file restoration input from parent components (e.g., BookCard click).
+ */
 export interface BookActionMenuHandle {
+    /** Triggers the hidden file input click to start the restore process. */
     triggerRestore: () => void;
 }
 
+/**
+ * BookActionMenu encapsulates the "More Options" dropdown logic for book items.
+ *
+ * It handles:
+ * - Delete and Offload/Restore actions with confirmation dialogs.
+ * - File input management for restoring offloaded books.
+ * - Custom event handling to prevent menu interaction from interfering with list scrolling/swiping.
+ * - Exposing restoration trigger via ref for card-level interactions.
+ */
 export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuProps>(({ book, children }, ref) => {
     const { removeBook, offloadBook, restoreBook } = useLibraryStore();
     const showToast = useToastStore(state => state.showToast);
@@ -30,6 +45,7 @@ export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuPro
     const [isOffloadDialogOpen, setIsOffloadDialogOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Expose triggerRestore to allow parents (like BookCard) to initiate restore on card click
     useImperativeHandle(ref, () => ({
         triggerRestore: () => {
             fileInputRef.current?.click();
@@ -100,11 +116,13 @@ export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuPro
                 <DropdownMenuTrigger asChild>
                     <div
                         onClick={(e) => {
+                            // Prevent click from bubbling to parent (e.g. opening the book)
                             e.stopPropagation();
                             setOpen((prev) => !prev);
                         }}
                         onPointerDown={(e) => {
-                            // Stop propagation to prevent scrolling/swiping interference
+                            // Stop propagation to prevent scrolling/swiping interference in list views.
+                            // Default Radix DropdownMenuTrigger pointer-down behavior can capture scroll events.
                             e.stopPropagation();
                         }}
                         role="button"
