@@ -4,7 +4,6 @@ import { render } from '@testing-library/react';
 import App from './App';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Capacitor } from '@capacitor/core';
-import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 import { AudioPlayerService } from './lib/tts/AudioPlayerService';
 
 // Mock dependencies
@@ -38,13 +37,6 @@ vi.mock('@capacitor/core', () => ({
     isNativePlatform: vi.fn(),
   },
 }));
-vi.mock('@capawesome-team/capacitor-android-foreground-service', () => ({
-  ForegroundService: {
-    createNotificationChannel: vi.fn().mockResolvedValue(undefined),
-    addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
-  },
-  Importance: { Default: 3 }
-}));
 vi.mock('./lib/tts/AudioPlayerService', () => ({
   AudioPlayerService: {
     getInstance: vi.fn().mockReturnValue({
@@ -53,12 +45,51 @@ vi.mock('./lib/tts/AudioPlayerService', () => ({
     }),
   },
 }));
-vi.mock('./store/useToastStore', () => ({
-    useToastStore: {
-        getState: () => ({
-            showToast: vi.fn()
-        })
-    }
+vi.mock('./store/useToastStore', () => {
+    const showToastMock = vi.fn();
+    const useToastStoreMock = (selector: any) => selector({ showToast: showToastMock });
+    useToastStoreMock.getState = () => ({ showToast: showToastMock });
+    return { useToastStore: useToastStoreMock };
+});
+
+vi.mock('./store/useReaderStore', () => {
+    return {
+        useReaderStore: (selector: any) => selector({
+            immersiveMode: false,
+            currentBookId: null,
+            currentSectionTitle: null,
+        }),
+    };
+});
+
+vi.mock('./store/useLibraryStore', () => ({
+    useLibraryStore: (selector: any) => selector({ books: [] }),
+}));
+
+vi.mock('./store/useAnnotationStore', () => ({
+    useAnnotationStore: (selector: any) => selector({
+        popover: { visible: false },
+        addAnnotation: vi.fn(),
+        hidePopover: vi.fn(),
+    }),
+}));
+
+vi.mock('./store/useTTSStore', () => ({
+    useTTSStore: (selector: any) => selector({ queue: [], isPlaying: false }),
+}));
+
+vi.mock('react-router-dom', () => ({
+    useNavigate: vi.fn(),
+    BrowserRouter: ({ children }: any) => <div>{children}</div>,
+    Routes: ({ children }: any) => <div>{children}</div>,
+    Route: ({ element }: any) => <div>{element}</div>,
+}));
+
+vi.mock('./lib/MigrationService', () => ({
+    MigrationService: {
+        isMigrationRequired: vi.fn().mockResolvedValue(false),
+        migrateLibrary: vi.fn(),
+    },
 }));
 
 
@@ -67,52 +98,12 @@ describe('App Capacitor Initialization', () => {
     vi.clearAllMocks();
   });
 
-  it('should initialize Android ForegroundService when platform is android', async () => {
-    (Capacitor.getPlatform as any).mockReturnValue('android');
-    render(<App />);
-
-    // Wait for effects
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(ForegroundService.createNotificationChannel).toHaveBeenCalledWith({
-      id: 'versicle_tts_channel',
-      name: 'Versicle Playback',
-      description: 'Controls for background reading',
-      importance: 3
-    });
-
-    expect(ForegroundService.addListener).toHaveBeenCalledWith('buttonClicked', expect.any(Function));
-  });
-
-  it('should not initialize Android ForegroundService when platform is web', async () => {
+  it('should not initialize anything specific when platform is web', async () => {
     (Capacitor.getPlatform as any).mockReturnValue('web');
     render(<App />);
 
     // Wait for effects
     await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(ForegroundService.createNotificationChannel).not.toHaveBeenCalled();
-    expect(ForegroundService.addListener).not.toHaveBeenCalled();
-  });
-
-  it('should call AudioPlayerService.pause when notification button is clicked', async () => {
-    (Capacitor.getPlatform as any).mockReturnValue('android');
-    const pauseMock = vi.fn();
-    (AudioPlayerService.getInstance as any).mockReturnValue({ pause: pauseMock });
-
-    let listenerCallback: any;
-    (ForegroundService.addListener as any).mockImplementation((event: string, callback: any) => {
-        listenerCallback = callback;
-        return Promise.resolve({ remove: vi.fn() });
-    });
-
-    render(<App />);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    if (listenerCallback) {
-        await listenerCallback({ buttonId: 101 });
-    }
-
-    expect(pauseMock).toHaveBeenCalled();
+    // No assertions needed as we removed the foreground service calls
   });
 });

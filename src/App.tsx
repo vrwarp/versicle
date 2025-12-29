@@ -13,9 +13,6 @@ import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
-import { Capacitor } from '@capacitor/core';
-import { ForegroundService, Importance } from '@capawesome-team/capacitor-android-foreground-service';
-import { AudioPlayerService } from './lib/tts/AudioPlayerService';
 import { MigrationService } from './lib/MigrationService';
 import { Progress } from './components/ui/Progress';
 
@@ -53,33 +50,6 @@ function App() {
   useEffect(() => {
     const init = async () => {
       try {
-        // Start Android init in parallel if applicable
-        const androidInitPromise = (async () => {
-          if (Capacitor.getPlatform() === 'android') {
-            try {
-              // 1. Setup Notification Channel
-              // This defines how the notification behaves (sound, vibration, visibility).
-              // 'importance: 3' means it shows up but doesn't make a noise (good for media).
-              await ForegroundService.createNotificationChannel({
-                  id: 'versicle_tts_channel',
-                  name: 'Versicle Playback',
-                  description: 'Controls for background reading',
-                  importance: Importance.Default
-              });
-
-              // 2. Listen for "Pause" button clicks on the notification itself
-              await ForegroundService.addListener('buttonClicked', async (event) => {
-                  if (event.buttonId === 101) {
-                      // Map the notification button to our Service logic
-                      AudioPlayerService.getInstance().pause();
-                  }
-              });
-            } catch (error) {
-               console.error('Failed to initialize Android services:', error);
-            }
-          }
-        })();
-
         // Initialize DB
         await getDB();
 
@@ -95,9 +65,6 @@ function App() {
             setMigrationProgress(null);
             useToastStore.getState().showToast('Library update complete.', 'success');
         }
-
-        // Wait for Android init to complete (or fail gracefully)
-        await androidInitPromise;
 
         setDbStatus('ready');
       } catch (err) {

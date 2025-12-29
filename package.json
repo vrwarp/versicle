@@ -19,7 +19,6 @@
     "@capacitor/android": "^6.2.1",
     "@capacitor/core": "^6.2.1",
     "@capawesome-team/capacitor-android-battery-optimization": "^6.0.0",
-    "@capawesome-team/capacitor-android-foreground-service": "^6.2.0",
     "@google/generative-ai": "^0.24.1",
     "@jofr/capacitor-media-session": "^4.0.0",
     "@radix-ui/react-dialog": "^1.1.15",

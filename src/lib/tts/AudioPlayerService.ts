@@ -2,7 +2,6 @@ import type { ITTSProvider, TTSVoice } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { BackgroundAudio, type BackgroundAudioMode } from './BackgroundAudio';
 import { Capacitor } from '@capacitor/core';
-import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { SyncEngine, type AlignmentData } from './SyncEngine';
@@ -94,7 +93,6 @@ export class AudioPlayerService {
   private backgroundAudio: BackgroundAudio;
   private backgroundAudioMode: BackgroundAudioMode = 'silence';
   private lastMetadata: MediaSessionMetadata | null = null;
-  private foregroundStopTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Track last persisted queue to avoid redundant heavy writes
   private lastPersistedQueue: TTSQueueItem[] | null = null;
@@ -179,27 +177,7 @@ export class AudioPlayerService {
   }
 
   private async engageBackgroundMode(item: TTSQueueItem): Promise<boolean> {
-      if (this.foregroundStopTimer) {
-          clearTimeout(this.foregroundStopTimer);
-          this.foregroundStopTimer = null;
-      }
-
-      if (Capacitor.getPlatform() !== 'android') return true;
       try {
-          await ForegroundService.createNotificationChannel({
-              id: 'versicle_tts_channel',
-              name: 'Versicle Playback',
-              description: 'Controls for background reading',
-              importance: 3
-          });
-          await ForegroundService.startForegroundService({
-              id: 1001,
-              title: 'Versicle',
-              body: `Reading: ${item.title || 'Chapter'}`,
-              smallIcon: 'ic_stat_versicle',
-              notificationChannelId: 'versicle_tts_channel',
-              buttons: [{ id: 101, title: 'Pause' }]
-          });
           await this.mediaSessionManager.setMetadata({
               title: item.title || 'Chapter Text',
               artist: 'Versicle',
@@ -613,20 +591,10 @@ export class AudioPlayerService {
   private async stopInternal() {
     await this.savePlaybackState();
 
-    if (this.foregroundStopTimer) {
-        clearTimeout(this.foregroundStopTimer);
-        this.foregroundStopTimer = null;
-    }
-
     if (Capacitor.isNativePlatform()) {
-        // Delay stopping the foreground service to prevent flickering during chapter transitions
-        this.foregroundStopTimer = setTimeout(async () => {
-            try {
-                await ForegroundService.stopForegroundService();
-                await this.mediaSessionManager.setPlaybackState({ playbackState: 'none' });
-            } catch (e) { console.warn(e); }
-            this.foregroundStopTimer = null;
-        }, 1000);
+        try {
+            await this.mediaSessionManager.setPlaybackState({ playbackState: 'none' });
+        } catch (e) { console.warn(e); }
     }
     this.setStatus('stopped');
     this.notifyListeners(null);
@@ -887,10 +855,6 @@ export class AudioPlayerService {
               if (autoPlay) {
                   this.provider.stop();
                   await this.savePlaybackState();
-                  if (this.foregroundStopTimer) {
-                      clearTimeout(this.foregroundStopTimer);
-                      this.foregroundStopTimer = null;
-                  }
                   this.setStatus('loading');
               } else {
                   await this.stopInternal();
