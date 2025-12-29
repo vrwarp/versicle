@@ -115,6 +115,20 @@ export class LexiconService {
   }
 
   /**
+   * Deletes multiple lexicon rules by their IDs.
+   *
+   * @param ids - The array of unique identifiers of the rules to delete.
+   * @returns A Promise that resolves when the rules are deleted.
+   */
+  async deleteRules(ids: string[]): Promise<void> {
+    const db = await getDB();
+    const tx = db.transaction('lexicon', 'readwrite');
+    const store = tx.objectStore('lexicon');
+    await Promise.all(ids.map(id => store.delete(id)));
+    await tx.done;
+  }
+
+  /**
    * Applies the applicable lexicon rules to the provided text.
    * Performs replacement based on string matching or regular expressions.
    *

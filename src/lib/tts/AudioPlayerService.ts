@@ -353,12 +353,12 @@ export class AudioPlayerService {
       return this.enqueue(() => this.loadSectionInternal(sectionIndex, autoPlay));
   }
 
-  public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true) {
+  public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {
       return this.enqueue(async () => {
           if (this.playlistPromise) await this.playlistPromise;
           const index = this.playlist.findIndex(s => s.sectionId === sectionId);
           if (index !== -1) {
-              await this.loadSectionInternal(index, autoPlay);
+              await this.loadSectionInternal(index, autoPlay, sectionTitle);
           }
       });
   }
@@ -788,7 +788,7 @@ export class AudioPlayerService {
       }
   }
 
-  private async loadSectionInternal(sectionIndex: number, autoPlay: boolean): Promise<boolean> {
+  private async loadSectionInternal(sectionIndex: number, autoPlay: boolean, sectionTitle?: string): Promise<boolean> {
       if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
 
       const section = this.playlist[sectionIndex];
@@ -796,10 +796,12 @@ export class AudioPlayerService {
           const ttsContent = await dbService.getTTSContent(this.currentBookId, section.sectionId);
 
           // Determine Title
-          let title = `Chapter ${sectionIndex + 1}`;
-          const analysis = await dbService.getContentAnalysis(this.currentBookId, section.sectionId);
-          if (analysis && analysis.structure.title) {
-              title = analysis.structure.title;
+          let title = sectionTitle || `Section ${sectionIndex + 1}`;
+          if (!sectionTitle) {
+              const analysis = await dbService.getContentAnalysis(this.currentBookId, section.sectionId);
+              if (analysis && analysis.structure.title) {
+                  title = analysis.structure.title;
+              }
           }
 
           const bookMetadata = await dbService.getBookMetadata(this.currentBookId);

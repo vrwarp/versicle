@@ -37,7 +37,8 @@ export const useTTS = () => {
          // If audio is stopped, we assume the user wants the "Play" button to start
          // from the currently visible chapter.
          // We load it without auto-playing.
-         player.loadSectionBySectionId(currentSectionId, false);
+         const currentSectionTitle = useReaderStore.getState().currentSectionTitle;
+         player.loadSectionBySectionId(currentSectionId, false, currentSectionTitle || undefined);
     };
 
     syncQueue();

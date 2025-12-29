@@ -14,6 +14,29 @@ describe('LexiconService', () => {
     service = LexiconService.getInstance();
   });
 
+  describe('deleteRules', () => {
+    it('should delete multiple rules', async () => {
+      const db = {
+        transaction: vi.fn().mockReturnValue({
+          objectStore: vi.fn().mockReturnValue({
+            delete: vi.fn().mockResolvedValue(undefined),
+          }),
+          done: Promise.resolve(),
+        }),
+      };
+      // Mock getDB to return our mock db
+      const { getDB } = await import('../../db/db');
+      vi.mocked(getDB).mockResolvedValue(db as any);
+
+      await service.deleteRules(['1', '2']);
+
+      expect(db.transaction).toHaveBeenCalledWith('lexicon', 'readwrite');
+      const store = db.transaction().objectStore();
+      expect(store.delete).toHaveBeenCalledWith('1');
+      expect(store.delete).toHaveBeenCalledWith('2');
+    });
+  });
+
   describe('applyLexicon', () => {
     it('should replace exact matches with word boundaries by default', () => {
       const rules: LexiconRule[] = [
