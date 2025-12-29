@@ -98,6 +98,8 @@ export class AudioPlayerService {
   // Track last persisted queue to avoid redundant heavy writes
   private lastPersistedQueue: TTSQueueItem[] | null = null;
 
+  private prefixSums: number[] = [0];
+
   private constructor() {
     this.backgroundAudio = new BackgroundAudio();
     this.syncEngine = new SyncEngine();
@@ -200,6 +202,37 @@ export class AudioPlayerService {
       }
   }
 
+  private calculatePrefixSums() {
+      this.prefixSums = new Array(this.queue.length + 1).fill(0);
+      for (let i = 0; i < this.queue.length; i++) {
+          this.prefixSums[i + 1] = this.prefixSums[i] + (this.queue[i].text?.length || 0);
+      }
+  }
+
+  private updateSectionMediaPosition(providerTime: number) {
+      if (!this.queue.length || !this.prefixSums.length) return;
+
+      // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 900.
+      // charsPerSecond = (900 * speed) / 60
+      const charsPerSecond = (900 * this.speed) / 60;
+      if (charsPerSecond === 0) return;
+
+      const totalChars = this.prefixSums[this.queue.length];
+      const totalDuration = totalChars / charsPerSecond; // in seconds
+
+      const elapsedBeforeCurrent = this.prefixSums[this.currentIndex] / charsPerSecond;
+      const currentPosition = elapsedBeforeCurrent + providerTime;
+
+      // Safety check to ensure position doesn't exceed duration due to slight miscalculations or float precision
+      const safeDuration = Math.max(totalDuration, currentPosition);
+
+      this.mediaSessionManager.setPositionState({
+          duration: safeDuration,
+          playbackRate: this.speed,
+          position: currentPosition
+      });
+  }
+
   private async restoreQueue(bookId: string) {
       this.enqueue(async () => {
           try {
@@ -215,6 +248,7 @@ export class AudioPlayerService {
                   // Track restored queue as persisted
                   this.lastPersistedQueue = this.queue;
 
+                  this.calculatePrefixSums();
                   this.updateMediaSessionMetadata();
                   this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
               }
@@ -247,11 +281,7 @@ export class AudioPlayerService {
                this.notifyError("Playback Error: " + (event.error?.message || "Unknown error"));
           } else if (event.type === 'timeupdate') {
                this.syncEngine?.updateTime(event.currentTime);
-               this.mediaSessionManager.setPositionState({
-                   duration: event.duration || 0,
-                   playbackRate: this.speed,
-                   position: event.currentTime
-               });
+               this.updateSectionMediaPosition(event.currentTime);
           } else if (event.type === 'boundary') {
               // Optionally update sync engine or progress
           } else if (event.type === 'meta') {
@@ -278,6 +308,9 @@ export class AudioPlayerService {
               album: item.bookTitle || '',
               artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
           };
+
+          // Always update position when track changes, even if metadata is identical
+          this.updateSectionMediaPosition(0);
 
           if (this.lastMetadata && JSON.stringify(this.lastMetadata) === JSON.stringify(newMetadata)) {
               return;
@@ -381,6 +414,7 @@ export class AudioPlayerService {
     return this.enqueue(async () => {
         if (this.isQueueEqual(items)) {
             this.queue = items;
+            this.calculatePrefixSums();
             this.updateMediaSessionMetadata();
             this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
             this.persistQueue();
@@ -394,6 +428,7 @@ export class AudioPlayerService {
         // Reset persisted tracker since queue changed
         this.lastPersistedQueue = null;
 
+        this.calculatePrefixSums();
         this.updateMediaSessionMetadata();
         this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
         this.persistQueue();
@@ -883,6 +918,7 @@ export class AudioPlayerService {
               this.currentSectionIndex = sectionIndex;
               this.lastPersistedQueue = null; // Reset persisted tracker on new section
 
+              this.calculatePrefixSums();
               this.updateMediaSessionMetadata();
               this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
               this.persistQueue();
