@@ -200,6 +200,25 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
           const text = evt.target?.result as string;
           if (text) {
               const newRules = LexiconCSV.parse(text);
+
+              // Delete existing rules for the current scope before importing
+              let rulesToDelete: LexiconRule[] = [];
+              if (scope === 'global') {
+                  rulesToDelete = await lexiconService.getRules();
+              } else if (currentBookId) {
+                  const all = await lexiconService.getRules(currentBookId);
+                  rulesToDelete = all.filter(r => r.bookId === currentBookId);
+              }
+
+              if (!window.confirm(`${rulesToDelete.length} entries will be replaced with ${newRules.length} new entries. Continue?`)) {
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                  return;
+              }
+
+              if (rulesToDelete.length > 0) {
+                  await lexiconService.deleteRules(rulesToDelete.map(r => r.id));
+              }
+
               for (const r of newRules) {
                   await lexiconService.saveRule({
                       original: r.original,

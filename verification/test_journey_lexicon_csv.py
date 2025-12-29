@@ -34,6 +34,9 @@ def test_journey_lexicon_csv(page: Page):
 
     # 3. Import Sample CSV (using the downloaded file)
     try:
+        # Handle the confirmation dialog
+        page.on("dialog", lambda dialog: dialog.accept())
+
         # Upload the file
         page.locator('input[data-testid="lexicon-import-input"]').set_input_files(download_path)
 
