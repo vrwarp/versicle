@@ -29,16 +29,6 @@ vi.mock('@capacitor/core', () => {
   };
 });
 
-// Mock MediaSession plugin
-vi.mock('@jofr/capacitor-media-session', () => ({
-    MediaSession: {
-        setActionHandler: vi.fn(),
-        setMetadata: vi.fn(),
-        setPlaybackState: vi.fn(),
-        setPositionState: vi.fn(),
-    }
-}));
-
 // Mock DBService
 vi.mock('../db/DBService', () => ({
   dbService: {

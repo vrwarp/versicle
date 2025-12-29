@@ -103,8 +103,6 @@ interface TTSState {
   syncState: (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
 }
 
-const player = AudioPlayerService.getInstance();
-
 /**
  * Zustand store for managing Text-to-Speech configuration and playback state.
  */
@@ -117,32 +115,28 @@ export const useTTSStore = create<TTSState>()(
         // For now, lazy init in loadVoices or actions is okay.
 
         // Subscribe to player updates
-        player.subscribe((status, activeCfi, currentIndex, queue, error, downloadInfo) => {
-            set(() => ({
-                status,
-                // Treat 'loading' as playing to prevent UI flicker (play/pause button)
-                // during transitions between sentences or while buffering.
-                // Treat 'completed' as playing to keep background audio and UI active (immersive mode).
-                isPlaying: status === 'playing' || status === 'loading' || status === 'completed',
-                activeCfi,
-                currentIndex,
-                queue,
-                lastError: error,
-                ...(downloadInfo ? {
-                    downloadProgress: downloadInfo.percent,
-                    downloadStatus: downloadInfo.status,
-                    downloadingVoiceId: downloadInfo.voiceId,
-                    isDownloading: downloadInfo.percent < 100
-                } : {})
-            }));
-
-            // If fallback happened (provider mismatch), we should update our providerId state
-            // But checking provider type from here is hard without exposing it on player.
-            // For now, we rely on the error message or just UI notification.
-            // Ideally, we'd update providerId to 'local' if fallback occurred.
-            // We can infer this if needed, or expose current provider ID in listener.
-            // But 'lastError' is enough for now.
-        });
+        // Defer subscription to avoid circular dependency issues during module initialization
+        setTimeout(() => {
+            AudioPlayerService.getInstance().subscribe((status, activeCfi, currentIndex, queue, error, downloadInfo) => {
+                set(() => ({
+                    status,
+                    // Treat 'loading' as playing to prevent UI flicker (play/pause button)
+                    // during transitions between sentences or while buffering.
+                    // Treat 'completed' as playing to keep background audio and UI active (immersive mode).
+                    isPlaying: status === 'playing' || status === 'loading' || status === 'completed',
+                    activeCfi,
+                    currentIndex,
+                    queue,
+                    lastError: error,
+                    ...(downloadInfo ? {
+                        downloadProgress: downloadInfo.percent,
+                        downloadStatus: downloadInfo.status,
+                        downloadingVoiceId: downloadInfo.voiceId,
+                        isDownloading: downloadInfo.percent < 100
+                    } : {})
+                }));
+            });
+        }, 0);
 
         return {
             isPlaying: false,
@@ -178,16 +172,16 @@ export const useTTSStore = create<TTSState>()(
             sentenceStarters: DEFAULT_SENTENCE_STARTERS,
 
             play: () => {
-                player.play();
+                AudioPlayerService.getInstance().play();
             },
             pause: () => {
-                player.pause();
+                AudioPlayerService.getInstance().pause();
             },
             stop: () => {
-                player.stop();
+                AudioPlayerService.getInstance().stop();
             },
             setRate: (rate) => {
-                player.setSpeed(rate);
+                AudioPlayerService.getInstance().setSpeed(rate);
                 set({ rate });
             },
             setPitch: (pitch) => {
@@ -195,7 +189,7 @@ export const useTTSStore = create<TTSState>()(
             },
             setVoice: (voice) => {
                 if (voice) {
-                    player.setVoice(voice.id);
+                    AudioPlayerService.getInstance().setVoice(voice.id);
                 }
                 set({ voice });
             },
@@ -228,7 +222,7 @@ export const useTTSStore = create<TTSState>()(
                 set({ enableCostWarning: enable });
             },
             setPrerollEnabled: (enable) => {
-                player.setPrerollEnabled(enable);
+                AudioPlayerService.getInstance().setPrerollEnabled(enable);
                 set({ prerollEnabled: enable });
             },
             setSanitizationEnabled: (enable) => {
@@ -236,11 +230,11 @@ export const useTTSStore = create<TTSState>()(
             },
             setBackgroundAudioMode: (mode) => {
                 set({ backgroundAudioMode: mode });
-                player.setBackgroundAudioMode(mode);
+                AudioPlayerService.getInstance().setBackgroundAudioMode(mode);
             },
             setWhiteNoiseVolume: (volume) => {
                 set({ whiteNoiseVolume: volume });
-                player.setBackgroundVolume(volume);
+                AudioPlayerService.getInstance().setBackgroundVolume(volume);
             },
             loadVoices: async () => {
                 // Ensure provider is set on player (in case of fresh load)
@@ -263,6 +257,7 @@ export const useTTSStore = create<TTSState>()(
                         newProvider = new WebSpeechProvider();
                     }
                 }
+                const player = AudioPlayerService.getInstance();
                 await player.setProvider(newProvider);
 
                 await player.init();
@@ -285,24 +280,24 @@ export const useTTSStore = create<TTSState>()(
             downloadVoice: async (voiceId) => {
                 try {
                     set({ isDownloading: true, downloadingVoiceId: voiceId, downloadStatus: 'Starting...' });
-                    await player.downloadVoice(voiceId);
+                    await AudioPlayerService.getInstance().downloadVoice(voiceId);
                     set({ isDownloading: false, downloadStatus: 'Ready', downloadProgress: 100 });
                 } catch (e) {
                     set({ isDownloading: false, downloadStatus: 'Failed', lastError: e instanceof Error ? e.message : 'Download failed' });
                 }
             },
             deleteVoice: async (voiceId) => {
-                await player.deleteVoice(voiceId);
+                await AudioPlayerService.getInstance().deleteVoice(voiceId);
                 set({ isDownloading: false, downloadProgress: 0, downloadStatus: 'Not Downloaded', downloadingVoiceId: null });
             },
             checkVoiceDownloaded: async (voiceId) => {
-                 return await player.isVoiceDownloaded(voiceId);
+                 return await AudioPlayerService.getInstance().isVoiceDownloaded(voiceId);
             },
             jumpTo: (index) => {
-                player.jumpTo(index);
+                AudioPlayerService.getInstance().jumpTo(index);
             },
             seek: (seconds) => {
-                player.seek(seconds);
+                AudioPlayerService.getInstance().seek(seconds);
             },
             clearError: () => {
                 set({ lastError: null });
@@ -338,6 +333,7 @@ export const useTTSStore = create<TTSState>()(
         }),
         onRehydrateStorage: () => (state) => {
             if (state) {
+                const player = AudioPlayerService.getInstance();
                 player.setBackgroundAudioMode(state.backgroundAudioMode);
                 player.setBackgroundVolume(state.whiteNoiseVolume);
                 player.setPrerollEnabled(state.prerollEnabled);

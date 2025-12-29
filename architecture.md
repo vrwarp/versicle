@@ -275,7 +275,7 @@ The singleton controller (Orchestrator).
 #### `src/lib/tts/MediaSessionManager.ts`
 *   **Goal**: Integrate with OS-level media controls (Lock Screen, Notification Center, Smartwatches).
 *   **Logic**:
-    *   **Wraps**: `navigator.mediaSession` (Web) and `@jofr/capacitor-media-session` (Native).
+    *   **Wraps**: `navigator.mediaSession` (Web Standard).
     *   **Responsibility**: Updates metadata (Title, Artist, Artwork) and handles callbacks (Play, Pause, Next, Prev).
 
 #### `src/lib/tts/BackgroundAudio.ts`
