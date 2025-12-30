@@ -826,10 +826,6 @@ export class AudioPlayerService {
           this.activeLexiconRules = null;
       }
 
-      this.mediaSessionManager.setPlaybackState(
-          status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
-      );
-
       if (status === 'playing' || status === 'loading' || status === 'completed') {
           this.backgroundAudio.play(this.backgroundAudioMode);
       } else if (status === 'paused') {
