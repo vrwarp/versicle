@@ -19,19 +19,6 @@ vi.mock('@jofr/capacitor-media-session', () => ({
   },
 }));
 
-// Mock capacitor-blob-writer
-vi.mock('capacitor-blob-writer', () => ({
-  default: vi.fn(),
-}));
-
-vi.mock('@capacitor/filesystem', () => ({
-    Filesystem: {
-        getUri: vi.fn(),
-    },
-    Directory: {
-        Cache: 'CACHE',
-    }
-}));
 
 
 describe('MediaSessionManager', () => {
@@ -163,8 +150,8 @@ describe('MediaSessionManager', () => {
           expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'play' }, callbacks.onPlay);
           expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'pause' }, callbacks.onPause);
           expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'stop' }, callbacks.onStop);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'next' }, callbacks.onNext);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'previous' }, callbacks.onPrev);
+          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'nexttrack' }, callbacks.onNext);
+          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'previoustrack' }, callbacks.onPrev);
           expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekbackward' }, callbacks.onSeekBackward);
           expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekforward' }, callbacks.onSeekForward);
       });
