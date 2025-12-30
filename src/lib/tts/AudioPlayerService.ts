@@ -709,6 +709,12 @@ export class AudioPlayerService {
 
           const wasPlaying = (this.status === 'playing' || this.status === 'loading');
 
+          // Fix: If the approximated index is the same as current (e.g. small seek forward/backward within same sentence),
+          // force advance to next index to avoid "restarting" the current sentence repeatedly, as requested.
+          if (newIndex === this.currentIndex && newIndex < this.queue.length - 1) {
+              newIndex++;
+          }
+
           if (wasPlaying) {
               this.provider.stop();
           }
