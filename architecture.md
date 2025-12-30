@@ -183,7 +183,7 @@ Handles the complex task of importing an EPUB file.
     1.  **Validation**: Checks ZIP headers (magic bytes `50 4B 03 04`) to ensure file validity.
     2.  **Offscreen Rendering**: Uses a hidden `<iframe>` (via `offscreen-renderer.ts`) to render chapters. This ensures that the extracted text and CFIs match *exactly* what the user will see/hear, which is critical for accurate TTS synchronization.
     3.  **Parsing**: Uses `epub.js` to parse the container.
-    4.  **Cover Optimization**: Compresses the cover image to a 50KB/300px thumbnail for the `books` store (Library View), while storing the high-resolution original in the separate `covers` object store.
+    4.  **Cover Optimization**: Uses `browser-image-compression` to generate a 50KB/300px thumbnail for the `books` store, while storing the high-resolution original in the separate `covers` object store.
     5.  **Synthetic TOC**: Iterates through the spine to generate a table of contents and calculate character counts (for reading time estimation).
     6.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** based on metadata (filename, title, author) and head/tail file sampling.
         *   *Refactoring*: Replaced full-file SHA-256 hashing (which was slow and memory-intensive) with this constant-time O(1) check (`generateFileFingerprint` using a "cheap hash").
@@ -235,7 +235,7 @@ Handles interoperability with external reading trackers (Goodreads).
 Handles database health and integrity.
 
 *   **Goal**: Ensure the database is free of orphaned records (files, annotations, lexicon rules) that no longer have a parent book.
-*   **Logic**: Scans all object stores (`files`, `annotations`, `locations`, `lexicon`) and compares IDs against the `books` store.
+*   **Logic**: Scans all object stores (`files`, `annotations`, `locations`, `lexicon`, `covers`, `tts_position`) and compares IDs against the `books` store.
 *   **Trade-off**: `pruneOrphans()` is a destructive operation. If logic is flawed, valid data could be lost. It is designed to be run manually or on specific error conditions.
 
 #### Generative AI (`src/lib/genai/`)
@@ -271,9 +271,10 @@ The singleton controller (Orchestrator).
 
 *   **Goal**: Manage the playback queue, provider selection, and state machine (`playing`, `paused`, `loading`, etc.).
 *   **Logic**:
-    *   **Concurrency**: Uses a **Sequential Promise Chain** (`enqueue`) to serialize async operations (play, pause, next). This replaces the previous complex Mutex pattern.
+    *   **Concurrency**: Uses a **Sequential Promise Chain** (`enqueue`) to serialize async operations (play, pause, next) and prevent race conditions.
     *   **Just-In-Time (JIT) Refinement**: Text segmentation (splitting paragraphs into sentences) happens dynamically when a chapter is loaded. This allows user settings (like "Custom Abbreviations") to apply immediately without re-ingesting the book.
     *   **State Persistence**: Persists the queue and position to IndexedDB so playback can resume after an app restart.
+    *   **Position Tracking**: Uses **Prefix Sums** to map time offsets to sentence indices efficiently, enabling seeking within chapters.
     *   **Prerolls**: Automatically injects "Title - Author" announcements at the start of new sections.
     *   **Empty Chapter Handling**: If a chapter has no text (e.g., a full-page image), the service injects a "silence" or a placeholder message.
 
@@ -332,12 +333,16 @@ Low-level wrapper around the HTML5 `<audio>` element.
 #### `src/lib/tts/providers/`
 Plugin architecture for TTS backends. All providers implement `ITTSProvider`.
 *   **`PiperProvider`**: Runs local WASM models. Use `piper-utils.ts` to manage the Worker.
-    *   **Transactional Download**: Downloads model files to memory first, verifies integrity (by attempting a test synthesis with empty input), and only *then* commits them to the Cache API. This prevents corrupted partial downloads.
+    *   **Transactional Download**: Uses a robust 3-stage process for model downloads:
+        1.  **Staging**: Downloads model and config files to memory first.
+        2.  **Verify**: Commits them to the Cache API ('piper-voices-v1') only after successful download.
+        3.  **Integrity Check**: Attempts a test synthesis with the new files. If it fails, the cache is rolled back.
     *   **Hardening**: Enforces a 500-character limit per synthesis request to prevent worker OOM/crashes. Uses `TextSegmenter` (with regex fallback) to split long sentences.
     *   **Stitching**: If a sentence is split, the resulting WAV blobs are stitched together (rewriting RIFF headers) into a single seamless audio file.
 *   **`CloudProvider`**: Adapts Google/OpenAI APIs.
 *   **`LemonFoxProvider`**: Adapts LemonFox.ai API (OpenAI-compatible) for lower cost.
 *   **`CapacitorTTSProvider`**: Wraps `@capacitor-community/text-to-speech` for native mobile playback.
+    *   **Smart Handoff**: Implements gapless playback by preloading the next utterance while the current one is playing. If the `play()` command for the next sentence matches the preloaded text, it seamlessly adopts the existing native playback promise instead of stopping and restarting.
 *   **`WebSpeechProvider`**: Adapts browser native synthesis.
 
 #### Resilience: `piper-utils.ts` ("Let It Crash")
