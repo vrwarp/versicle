@@ -97,6 +97,19 @@ npm run test
 npx vitest src/lib/ingestion.test.ts
 ```
 
+#### Android Tests (Docker)
+We use Docker to run Android unit tests in a consistent environment.
+
+1.  **Build the Image**:
+    ```bash
+    docker build -t versicle-android -f Dockerfile.android .
+    ```
+
+2.  **Run Tests**:
+    ```bash
+    docker run --rm versicle-android
+    ```
+
 #### Verification Suite (Docker)
 We use Docker to run end-to-end tests in a consistent environment using Playwright.
 
