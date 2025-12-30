@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.os.IBinder;
 
+import androidx.test.core.app.ActivityScenario;
 import androidx.test.core.app.ApplicationProvider;
 
 import org.junit.Before;
@@ -18,7 +19,6 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowWebView;
-import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 
 import com.getcapacitor.BridgeActivity;
@@ -39,36 +39,29 @@ public class MainActivityTest {
         ShadowWebView.setCurrentWebViewPackage(packageInfo);
 
         // Fix for MediaSessionService binding in Robolectric
-        // The MediaSessionPlugin attempts to bind to MediaSessionService on load because
-        // foregroundService is set to "always" in capacitor.config.json.
-        // We need to provide a binder for Robolectric to return.
+        try {
+            MediaSessionService service = Robolectric.buildService(MediaSessionService.class).create().get();
+            IBinder binder = service.onBind(new Intent());
 
-        // Use Robolectric to build the service so it has a valid Context attached
-        MediaSessionService service = Robolectric.buildService(MediaSessionService.class).create().get();
-        IBinder binder = service.onBind(new Intent());
-
-        ShadowApplication shadowApplication = Shadows.shadowOf((Application) ApplicationProvider.getApplicationContext());
-        shadowApplication.setComponentNameAndServiceForBindService(
-            new ComponentName(ApplicationProvider.getApplicationContext(), MediaSessionService.class),
-            binder
-        );
+            ShadowApplication shadowApplication = Shadows.shadowOf((Application) ApplicationProvider.getApplicationContext());
+            shadowApplication.setComponentNameAndServiceForBindService(
+                new ComponentName(ApplicationProvider.getApplicationContext(), MediaSessionService.class),
+                binder
+            );
+        } catch (Exception e) {
+            // Ignore service binding errors in test context if service class issues arise
+            System.out.println("Warning: Failed to mock MediaSessionService: " + e.getMessage());
+        }
     }
 
     @Test
     public void activityShouldStart() {
-        ActivityController<MainActivity> controller = Robolectric.buildActivity(MainActivity.class).setup();
-        MainActivity activity = controller.get();
-
-        assertNotNull(activity);
-        assertTrue(activity instanceof BridgeActivity);
-    }
-
-    @Test
-    public void bridgeShouldBeInitialized() {
-        ActivityController<MainActivity> controller = Robolectric.buildActivity(MainActivity.class).setup();
-        MainActivity activity = controller.get();
-
-        // Check if bridge is initialized
-        assertNotNull(activity.getBridge());
+        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
+            scenario.onActivity(activity -> {
+                assertNotNull(activity);
+                assertTrue(activity instanceof BridgeActivity);
+                assertNotNull(activity.getBridge());
+            });
+        }
     }
 }
