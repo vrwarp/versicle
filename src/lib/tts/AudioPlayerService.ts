@@ -192,10 +192,7 @@ export class AudioPlayerService {
               album: item.bookTitle || '',
               artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
           });
-          await this.mediaSessionManager.setPlaybackState({
-              playbackState: 'playing',
-              playbackSpeed: this.speed
-          });
+          await this.mediaSessionManager.setPlaybackState('playing');
           return true;
       } catch (e) {
           console.error('Background engagement failed', e);
@@ -643,7 +640,7 @@ export class AudioPlayerService {
 
     if (Capacitor.isNativePlatform()) {
         try {
-            await this.mediaSessionManager.setPlaybackState({ playbackState: 'none' });
+            await this.mediaSessionManager.setPlaybackState('none');
         } catch (e) { console.warn(e); }
     }
     this.setStatus('stopped');
