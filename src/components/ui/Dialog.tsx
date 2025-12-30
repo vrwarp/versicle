@@ -32,10 +32,12 @@ export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, descript
 
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalContent className="max-w-md" aria-describedby={description ? descriptionId : undefined}>
+      <ModalContent className="max-w-md" aria-describedby={descriptionId}>
         <ModalHeader>
           <ModalTitle>{title}</ModalTitle>
-          {description && <p id={descriptionId} className="text-sm text-muted-foreground">{description}</p>}
+          <div id={descriptionId} className="text-sm text-muted-foreground">
+             {description || <span className="sr-only">Dialog Content</span>}
+          </div>
         </ModalHeader>
         <div className="mb-6 text-foreground min-w-0">{children}</div>
         {footer && <div className="flex justify-end gap-2">{footer}</div>}

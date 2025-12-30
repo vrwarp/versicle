@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processEpub } from './ingestion';
 import { dbService } from '../db/DBService';
 import imageCompression from 'browser-image-compression';

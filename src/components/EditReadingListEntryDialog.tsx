@@ -40,6 +40,7 @@ export const EditReadingListEntryDialog: React.FC<EditReadingListEntryDialogProp
 
     useEffect(() => {
         if (entry) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTitle(entry.title);
             setAuthor(entry.author);
             setStatus(entry.status || 'to-read');

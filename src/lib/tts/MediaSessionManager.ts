@@ -197,13 +197,17 @@ export class MediaSessionManager {
    *
    * @param state - The current position state.
    */
-  setPositionState(state: MediaPositionState) {
+  async setPositionState(state: MediaPositionState) {
     if (this.isNative) {
-        MediaSession.setPositionState({
-            duration: state.duration,
-            playbackRate: state.playbackRate,
-            position: state.position
-        }).catch(e => console.warn("Failed to set native position state", e));
+        try {
+            await MediaSession.setPositionState({
+                duration: state.duration,
+                playbackRate: state.playbackRate,
+                position: state.position
+            });
+        } catch (e) {
+            console.warn("Failed to set native position state", e);
+        }
     } else if (this.hasWebMediaSession && 'setPositionState' in navigator.mediaSession) {
         try {
             navigator.mediaSession.setPositionState(state);

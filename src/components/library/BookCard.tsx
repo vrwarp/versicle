@@ -42,12 +42,18 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
 
   useEffect(() => {
     let url: string | null = null;
+    let isActive = true;
+
     if (book.coverBlob) {
       url = URL.createObjectURL(book.coverBlob);
-      setCoverUrl(url);
+      if (isActive) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCoverUrl(url);
+      }
     }
 
     return () => {
+      isActive = false;
       if (url) {
         URL.revokeObjectURL(url);
       }

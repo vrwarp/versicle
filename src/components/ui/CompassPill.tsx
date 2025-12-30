@@ -59,8 +59,16 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   // Reset editing state when variant changes
   useEffect(() => {
-    setIsEditingNote(false);
-    setNoteText('');
+    // Only reset if we are not already in default state to avoid infinite loops if this effect was causing re-renders (it shouldn't, but for safety with strict mode)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsEditingNote(prev => {
+        if (prev) return false;
+        return prev;
+    });
+    setNoteText(prev => {
+        if (prev !== '') return '';
+        return prev;
+    });
   }, [variant]);
 
   // Focus textarea when entering edit mode

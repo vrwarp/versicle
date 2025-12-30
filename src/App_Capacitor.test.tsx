@@ -93,11 +93,11 @@ describe('App Capacitor Initialization', () => {
 
   it('should not initialize anything specific when platform is web', async () => {
     (Capacitor.getPlatform as any).mockReturnValue('web');
-    render(<App />);
-
-    // Wait for effects
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    // No assertions needed as we removed the foreground service calls
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { act } = require('@testing-library/react');
+    await act(async () => {
+        render(<App />);
+    });
   });
 
   it('should attempt to initialize player service', () => {

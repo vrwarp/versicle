@@ -13,27 +13,27 @@ const mockUseNavigate = vi.fn();
 
 // Fix paths to be relative to THIS test file (src/components/reader/tests/)
 // Target: src/store/... -> ../../../store/...
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 vi.mock('../../../store/useAnnotationStore', () => ({
   useAnnotationStore: (selector: any) => mockUseAnnotationStore(selector),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 vi.mock('../../../store/useTTSStore', () => ({
   useTTSStore: (selector: any) => mockUseTTSStore(selector),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 vi.mock('../../../store/useReaderStore', () => ({
   useReaderStore: (selector: any) => mockUseReaderStore(selector),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 vi.mock('../../../store/useLibraryStore', () => ({
   useLibraryStore: (selector: any) => mockUseLibraryStore(selector),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 vi.mock('../../../store/useToastStore', () => ({
   useToastStore: (selector: any) => mockUseToastStore(selector),
 }));
@@ -42,14 +42,14 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => mockUseNavigate,
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 vi.mock('zustand/react/shallow', () => ({
   useShallow: (selector: any) => selector
 }));
 
 // Mock LexiconManager (src/components/reader/LexiconManager)
 // Path: ../LexiconManager
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 vi.mock('../LexiconManager', () => ({
   LexiconManager: ({ open, onOpenChange, initialTerm }: any) => (
     open ? (
@@ -63,7 +63,7 @@ vi.mock('../LexiconManager', () => ({
 
 // Mock CompassPill (src/components/ui/CompassPill)
 // Path: ../../ui/CompassPill
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 vi.mock('../../ui/CompassPill', () => ({
   CompassPill: ({ variant, onClick, onAnnotationAction, progress }: any) => (
     <div data-testid={`compass-pill-${variant}`} data-progress={progress} onClick={onClick}>
