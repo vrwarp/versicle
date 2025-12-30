@@ -19,6 +19,21 @@ vi.mock('@jofr/capacitor-media-session', () => ({
   },
 }));
 
+// Mock capacitor-blob-writer
+vi.mock('capacitor-blob-writer', () => ({
+  default: vi.fn(),
+}));
+
+vi.mock('@capacitor/filesystem', () => ({
+    Filesystem: {
+        getUri: vi.fn(),
+    },
+    Directory: {
+        Cache: 'CACHE',
+    }
+}));
+
+
 describe('MediaSessionManager', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mediaSessionMock: any;
@@ -113,18 +128,6 @@ describe('MediaSessionManager', () => {
         expect(mediaSessionMock.playbackState).toBe('paused');
       });
 
-      it('updates playback state with object', () => {
-          const manager = new MediaSessionManager(callbacks);
-          manager.setPlaybackState({ playbackState: 'playing', playbackSpeed: 1.5, position: 10, duration: 100 });
-
-          expect(mediaSessionMock.playbackState).toBe('playing');
-          expect(mediaSessionMock.setPositionState).toHaveBeenCalledWith({
-              duration: 100,
-              playbackRate: 1.5,
-              position: 10
-          });
-      });
-
       it('handles missing mediaSession gracefully', () => {
         vi.stubGlobal('navigator', {}); // No mediaSession
 
@@ -192,21 +195,8 @@ describe('MediaSessionManager', () => {
           expect(MediaSession.setPlaybackState).toHaveBeenCalledWith({
               playbackState: 'playing',
           });
-          expect(MediaSession.setPositionState).toHaveBeenCalledWith({
-              playbackRate: 1.0,
-          });
-      });
-
-      it('updates native playback state with object', async () => {
-          const manager = new MediaSessionManager(callbacks);
-
-          await manager.setPlaybackState({ playbackState: 'paused', playbackSpeed: 1.2 });
-          expect(MediaSession.setPlaybackState).toHaveBeenCalledWith({
-              playbackState: 'paused',
-          });
-          expect(MediaSession.setPositionState).toHaveBeenCalledWith({
-              playbackRate: 1.2,
-          });
+          // This should NOT be called anymore
+          expect(MediaSession.setPositionState).not.toHaveBeenCalled();
       });
 
       it('updates native position state correctly', async () => {

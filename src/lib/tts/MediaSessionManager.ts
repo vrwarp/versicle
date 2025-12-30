@@ -188,32 +188,13 @@ export class MediaSessionManager {
    *
    * @param state - The current playback state or just the string 'playing' | 'paused' | 'none' for compatibility.
    */
-  async setPlaybackState(state: PlaybackState | 'playing' | 'paused' | 'none') {
-    const playbackState = typeof state === 'string' ? state : state.playbackState;
-    const playbackSpeed = typeof state === 'string' ? 1.0 : state.playbackSpeed;
-    const position = typeof state === 'string' ? undefined : state.position;
-    const duration = typeof state === 'string' ? undefined : state.duration;
-
+  async setPlaybackState(playbackState: 'playing' | 'paused' | 'none') {
     if (this.isNative) {
         await MediaSession.setPlaybackState({
             playbackState,
         });
-        if (playbackSpeed !== undefined || position !== undefined || duration !== undefined) {
-             await MediaSession.setPositionState({
-                 playbackRate: playbackSpeed || 1.0,
-                 position: position,
-                 duration: duration
-             });
-        }
     } else if (this.hasWebMediaSession) {
         navigator.mediaSession.playbackState = playbackState;
-        if (position !== undefined && duration !== undefined && 'setPositionState' in navigator.mediaSession) {
-             navigator.mediaSession.setPositionState({
-                duration,
-                playbackRate: playbackSpeed || 1.0,
-                position
-            });
-        }
     }
   }
 
