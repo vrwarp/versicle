@@ -4,6 +4,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { UploadCloud, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { validateZipSignature } from '../../lib/ingestion';
+import { Progress } from '../ui/Progress';
 
 /**
  * A component for uploading EPUB files, ZIP archives, or directories via drag-and-drop or file selection.
@@ -154,24 +155,14 @@ export const FileUploader: React.FC = () => {
             {/* Upload/Processing Progress */}
             <div className="w-full flex flex-col items-center space-y-1">
                 <p className="text-sm text-muted-foreground">{uploadStatus || 'Processing files...'}</p>
-                <div className="w-64 h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                        className="h-full bg-primary/70 transition-all duration-300 ease-out"
-                        style={{ width: `${uploadProgress}%` }}
-                    />
-                </div>
+                <Progress value={uploadProgress} className="w-64" aria-label="Upload progress" />
             </div>
 
             {/* Import Progress (only show if upload is done or if import started) */}
             {(importProgress > 0 || uploadProgress >= 100) && (
                 <div className="w-full flex flex-col items-center space-y-1 mt-2">
                      <p className="text-muted-foreground font-medium">{importStatus || 'Importing books...'}</p>
-                     <div className="w-64 h-2 bg-muted rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-primary transition-all duration-300 ease-out"
-                            style={{ width: `${importProgress}%` }}
-                        />
-                    </div>
+                     <Progress value={importProgress} className="w-64" aria-label="Import progress" />
                 </div>
             )}
         </div>
