@@ -33,6 +33,96 @@ export function parseCfiRange(range: string): CfiRangeData | null {
     return null;
 }
 
+/**
+ * Extracts the parent block-level CFI from a given CFI string.
+ * This handles both range CFIs and point/standard CFIs.
+ *
+ * @param cfi The CFI string (range or standard).
+ * @returns The parent CFI or 'unknown' if extraction fails.
+ */
+export function getParentCfi(cfi: string): string {
+    if (!cfi) return 'unknown';
+
+    // 1. Try parsing as a Range CFI (epubcfi(parent, start, end))
+    const parsed = parseCfiRange(cfi);
+    if (parsed) {
+        return parsed.parent;
+    }
+
+    // 2. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
+    if (cfi.startsWith('epubcfi(')) {
+        try {
+            const content = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+            const parts = content.split('!');
+            const spine = parts[0];
+            const path = parts[1];
+
+            if (path) {
+                // Heuristic: The text node is usually the last component (e.g. /4/2/1:0)
+                // We want the parent block element (e.g. /4/2).
+                const pathParts = path.split('/');
+
+                // Filter empty strings from split
+                const cleanParts = pathParts.filter(p => p.length > 0);
+
+                // Aggressive merging for detection:
+                // Try to keep only the first 2 levels of depth if possible, as citations/tables
+                // are usually within specific blocks.
+                // Or just strip the last part if short.
+                // Actually, strict parent (stripping last) is safer for correctness, but risks splitting formatting.
+                // Let's implement a heuristic: If we have > 2 parts, keep at most the top 2-3 parts?
+                // Example: /4/2/1:0 (Body -> P -> Text) -> /4/2 (P)
+                // Example: /4/2/3/1:0 (Body -> P -> Span -> Text) -> /4/2/3 (Span)
+                // If we strip "Span", we get "P", which is better for grouping "Span" and "Text" siblings.
+
+                // Revised Heuristic:
+                // 1. Remove the text offset part (:0) if present in the last segment.
+                // 2. Remove the last path segment (the leaf node).
+                // 3. If the remaining path has > 2 segments, maybe strip another one to find the "Block"?
+                //    Standard HTML usually: Body / Block / Inline / Text.
+                //    We want "Block".
+
+                if (cleanParts.length > 0) {
+                    cleanParts.pop();
+                }
+
+                // If deep structure (e.g. /Body/Div/P/Span), pop again to reach P?
+                // Ideally we want to merge <span> siblings into their <p> parent.
+                // Length 3: /4/2/3 (Body/Div/P) -> keep.
+                // Length 4: /4/2/3/5 (Body/Div/P/Span) -> Pop 5 to get P.
+                // Let's try to limit depth to 3 segments if it's longer than 3?
+                // No, that assumes fixed structure.
+
+                // Better: Check if the last part is odd (element) or even?
+                // EPUB CFIs: Even numbers are elements, odd are text nodes? No.
+                // Steps are usually even (element children).
+
+                // Let's aggressively strip to ensure we group formatting tags.
+                // If we have >= 3 parts, strip one more.
+                if (cleanParts.length >= 3) {
+                    cleanParts.pop();
+                }
+
+                // If cleanParts is empty after popping, it means the CFI was pointing
+                // to the spine item root or close to it.
+                if (cleanParts.length === 0) {
+                     return `epubcfi(${spine}!)`;
+                }
+
+                return `epubcfi(${spine}!/${cleanParts.join('/')})`;
+            } else {
+                // Just spine item reference
+                return `epubcfi(${spine}!)`;
+            }
+        } catch (e) {
+            console.warn("Failed to extract parent CFI", e);
+        }
+    }
+
+    // Return original if we can't parse it (or 'unknown' based on preference, but original might be safer for grouping)
+    return cfi;
+}
+
 export function generateCfiRange(start: string, end: string): string {
     // Strip epubcfi( and ) if present
     if (start.startsWith('epubcfi(') && start.endsWith(')')) {

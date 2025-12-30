@@ -11,6 +11,10 @@ import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule } from '../../types/db';
 import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
+import { getParentCfi } from '../cfi-utils';
+import { genAIService } from '../genai/GenAIService';
+import { useGenAIStore } from '../../store/useGenAIStore';
+import type { ContentType } from '../../types/content-analysis';
 
 const NO_TEXT_MESSAGES = [
     "This chapter appears to be empty.",
@@ -916,6 +920,74 @@ export class AudioPlayerService {
                   settings.sentenceStarters
               );
 
+              // -----------------------------------------------------------
+              // NEW: Content Type Detection & Filtering
+              // -----------------------------------------------------------
+              const skipTypes = settings.skipContentTypes;
+              const aiStore = useGenAIStore.getState();
+              // Check if service is configured OR if we have a key to configure it JIT
+              const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+
+              let finalSentences = refinedSentences;
+
+              if (canUseGenAI && skipTypes.length > 0) {
+                   try {
+                       // 1. Group segments by Root Node (Parent CFI)
+                       const groups: { rootCfi: string; segments: typeof refinedSentences; fullText: string }[] = [];
+                       let currentGroup: { rootCfi: string; segments: typeof refinedSentences; fullText: string } | null = null;
+
+                       for (const s of refinedSentences) {
+                           const rootCfi = getParentCfi(s.cfi);
+
+                           if (!currentGroup || currentGroup.rootCfi !== rootCfi) {
+                               if (currentGroup) groups.push(currentGroup);
+                               currentGroup = { rootCfi, segments: [], fullText: '' };
+                           }
+
+                           currentGroup.segments.push(s);
+                           currentGroup.fullText += s.text + ' ';
+                       }
+                       if (currentGroup) groups.push(currentGroup);
+
+                       // 2. Prepare samples for AI detection
+                       const nodesToDetect = groups.map(g => ({
+                           rootCfi: g.rootCfi,
+                           sampleText: g.fullText.substring(0, 500) // First 500 chars
+                       }));
+
+                       // 3. Call GenAI
+                       // Ensure service is configured if we have a key
+                       if (!genAIService.isConfigured() && aiStore.apiKey) {
+                            genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
+                       }
+
+                       if (genAIService.isConfigured()) {
+                            const results = await genAIService.detectContentTypes(nodesToDetect, 'gemini-1.5-flash');
+
+                            // 4. Filter out skipped types
+                            const skipRoots = new Set<string>();
+                            results.forEach(r => {
+                                if (skipTypes.includes(r.type as ContentType)) {
+                                    skipRoots.add(r.rootCfi);
+                                }
+                            });
+
+                            // Reconstruct sentences excluding skipped roots
+                            finalSentences = [];
+                            for (const g of groups) {
+                                if (!skipRoots.has(g.rootCfi)) {
+                                    finalSentences.push(...g.segments);
+                                } else {
+                                    console.log(`Skipping content block (Type: ${results.find(r => r.rootCfi === g.rootCfi)?.type})`, g.rootCfi);
+                                }
+                            }
+                       }
+
+                   } catch (e) {
+                       console.warn("Content detection failed, proceeding with all content.", e);
+                   }
+              }
+
               // Add Preroll if enabled
               if (this.prerollEnabled) {
                   const prerollText = this.generatePreroll(title, Math.round(section.characterCount / 5), this.speed);
@@ -930,7 +1002,7 @@ export class AudioPlayerService {
                   });
               }
 
-              refinedSentences.forEach(s => {
+              finalSentences.forEach(s => {
                   newQueue.push({
                       text: s.text,
                       cfi: s.cfi,
