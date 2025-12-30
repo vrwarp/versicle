@@ -14,6 +14,11 @@
     "prepare-piper": "mkdir -p public/piper && cp node_modules/piper-wasm/build/piper_phonemize.js public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.wasm public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.data public/piper/ && cp node_modules/piper-wasm/build/worker/piper_worker.js public/piper/ && node scripts/patch_piper_worker.js",
     "postinstall": "npm run prepare-piper"
   },
+  "overrides": {
+    "@jofr/capacitor-media-session": {
+      "@capacitor/core": "^8.0.0"
+    }
+  },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^6.1.0",
     "@capacitor/android": "^8.0.0",
