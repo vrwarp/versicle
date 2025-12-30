@@ -105,8 +105,8 @@ export function runCancellable<TReturn = void>(
       } catch (err) {
         if (!cancelled) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-            const thrownResult = generator.throw?.(err);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call
+            const thrownResult = (generator as any).throw?.(err);
             if (thrownResult && thrownResult.done) {
                 resolve(thrownResult.value);
             } else {

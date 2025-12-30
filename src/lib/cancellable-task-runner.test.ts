@@ -27,7 +27,8 @@ describe('runCancellable', () => {
 
     it('should resolve yielded promises', async () => {
         let capturedValue: string | undefined;
-        const generatorFn = function* () {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const generatorFn = function* (): Generator<any, void, any> {
             capturedValue = yield Promise.resolve('resolved-value');
         };
 
@@ -39,7 +40,8 @@ describe('runCancellable', () => {
 
     it('should handle yielded non-promises (sync values)', async () => {
         let capturedValue: string | undefined;
-        const generatorFn = function* () {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const generatorFn = function* (): Generator<any, void, any> {
             // yield a string directly
             capturedValue = yield 'sync-value';
         };
@@ -128,6 +130,8 @@ describe('runCancellable', () => {
                 yield new Promise((resolve) => setTimeout(resolve, 20));
             } catch (err) {
                 // Ignore error and continue yielding
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const _ = err;
             }
             yield Promise.resolve('ignoring cancellation');
         };
@@ -144,6 +148,7 @@ describe('runCancellable', () => {
     });
 
     it('should handle errors thrown by generator by rejecting the result promise', async () => {
+        // eslint-disable-next-line require-yield
         const generatorFn = function* () {
              throw new Error('Test error');
         };

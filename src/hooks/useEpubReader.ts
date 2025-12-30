@@ -127,6 +127,7 @@ export function useEpubReader(
   useEffect(() => {
     if (!bookId || !viewerRef.current) return;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const loadBookGenerator = function* (currentBookId: string): Generator<Promise<any> | any, void, any> {
       setIsLoading(true);
       setError(null);
