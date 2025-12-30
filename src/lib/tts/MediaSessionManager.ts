@@ -69,8 +69,8 @@ export class MediaSessionManager {
         await this.setNativeActionHandler('play', this.callbacks.onPlay);
         await this.setNativeActionHandler('pause', this.callbacks.onPause);
         await this.setNativeActionHandler('stop', this.callbacks.onStop);
-        await this.setNativeActionHandler('next', this.callbacks.onNext);
-        await this.setNativeActionHandler('previous', this.callbacks.onPrev);
+        await this.setNativeActionHandler('nexttrack', this.callbacks.onNext);
+        await this.setNativeActionHandler('previoustrack', this.callbacks.onPrev);
         await this.setNativeActionHandler('seekbackward', this.callbacks.onSeekBackward);
         await this.setNativeActionHandler('seekforward', this.callbacks.onSeekForward);
     } else if (this.hasWebMediaSession) {
