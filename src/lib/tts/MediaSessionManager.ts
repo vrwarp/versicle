@@ -1,7 +1,5 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
-import { Filesystem, Directory } from '@capacitor/filesystem';
-import writeBlob from 'capacitor-blob-writer';
 
 /**
  * Metadata for the Media Session API.
@@ -49,7 +47,6 @@ export interface PlaybackState {
 export class MediaSessionManager {
   private isNative = Capacitor.isNativePlatform();
   private hasWebMediaSession = typeof navigator !== 'undefined' && 'mediaSession' in navigator;
-  private artworkCounter = 0;
 
   /**
    * Initializes the MediaSessionManager with the provided callbacks.
@@ -148,39 +145,35 @@ export class MediaSessionManager {
   }
 
   /**
-   * Fetches blob data, writes it to a rolling cache file, and returns the native URI.
+   * Fetches blob data and converts it to a base64 Data URL for native display.
    */
   private async processNativeArtwork(artwork: { src: string; sizes?: string; type?: string }): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
-        const response = await fetch(artwork.src);
-        const blob = await response.blob();
+      const response = await fetch(artwork.src);
+      const blob = await response.blob();
 
-        const filename = `temp_artwork_${this.artworkCounter}.png`;
-        this.artworkCounter = (this.artworkCounter + 1) % 10;
+      const base64 = await this.blobToBase64(blob);
 
-        await writeBlob({
-            path: filename,
-            directory: Directory.Cache,
-            blob: blob,
-            fast_mode: true,
-            recursive: true
-        });
-
-        const uriResult = await Filesystem.getUri({
-            path: filename,
-            directory: Directory.Cache
-        });
-
-        if (uriResult && uriResult.uri) {
-            return {
-                ...artwork,
-                src: uriResult.uri
-            };
-        }
+      return {
+        ...artwork,
+        src: base64
+      };
     } catch (e) {
-        console.error("Error processing native artwork", e);
+      console.error("Error processing native artwork to base64", e);
+      return null;
     }
-    return null;
+  }
+
+  /**
+   * Helper to convert a Blob to a base64 string.
+   */
+  private blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
   /**
