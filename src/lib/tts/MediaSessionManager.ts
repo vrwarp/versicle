@@ -172,10 +172,9 @@ export class MediaSessionManager {
         });
 
         if (uriResult && uriResult.uri) {
-            const convertedSrc = Capacitor.convertFileSrc(uriResult.uri);
             return {
                 ...artwork,
-                src: convertedSrc
+                src: uriResult.uri
             };
         }
     } catch (e) {
