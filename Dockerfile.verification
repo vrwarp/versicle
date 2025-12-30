@@ -5,9 +5,9 @@ FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
 WORKDIR /app
 ENV PATH="/app/node_modules/.bin:${PATH}"
 
-# Install Node.js 20 (matching recommended version in plan)
+# Install Node.js 22 (matching recommended version in plan)
 # The base image might have an older version or none.
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
     node --version && \
     npm --version
