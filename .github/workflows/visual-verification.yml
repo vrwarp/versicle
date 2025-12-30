@@ -1,8 +1,10 @@
 name: Visual Verification
 
 on:
+  push:
+    branches: [ main ]
   pull_request:
-    branches: [ main, capacitor ]
+    branches: [ main ]
 
 jobs:
   verify-screenshots:
