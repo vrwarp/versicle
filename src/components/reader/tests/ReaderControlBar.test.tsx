@@ -76,7 +76,7 @@ vi.mock('../../ui/CompassPill', () => ({
   ActionType: {}
 }));
 
-describe.skip('ReaderControlBar', () => {
+describe('ReaderControlBar', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
