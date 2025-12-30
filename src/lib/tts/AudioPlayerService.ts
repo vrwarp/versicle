@@ -824,10 +824,11 @@ export class AudioPlayerService {
       // Clear cached rules on stop or pause to ensure freshness on next session
       if (status === 'stopped' || status === 'paused') {
           this.activeLexiconRules = null;
-          this.mediaSessionManager.setPlaybackState(
-              status === 'paused' ? 'paused' : 'none'
-          );
       }
+
+      this.mediaSessionManager.setPlaybackState(
+          status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
+      );
 
       if (status === 'playing' || status === 'loading' || status === 'completed') {
           this.backgroundAudio.play(this.backgroundAudioMode);
