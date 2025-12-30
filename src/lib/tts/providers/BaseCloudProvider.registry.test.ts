@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BaseCloudProvider } from './BaseCloudProvider';
-import { CostEstimator, useCostStore } from '../CostEstimator';
 import type { TTSOptions, SpeechSegment } from './types';
+import { CostEstimator } from '../CostEstimator';
 import { TTSCache } from '../TTSCache';
 
 // Mock dependencies
@@ -12,9 +12,6 @@ vi.mock('../CostEstimator', () => {
       getInstance: () => ({
         track: mockTrack
       })
-    },
-    useCostStore: {
-        getState: () => ({ resetSession: vi.fn() })
     }
   };
 });
@@ -35,20 +32,9 @@ vi.mock('../AudioElementPlayer', () => {
     };
 });
 
-// Mock TTSCache
-const mockGet = vi.fn();
-const mockPut = vi.fn();
-const mockGenerateKey = vi.fn((text) => Promise.resolve(`key-${text}`));
-
-vi.mock('../TTSCache', () => {
-  return {
-    TTSCache: class {
-      get = mockGet;
-      put = mockPut;
-      generateKey = mockGenerateKey;
-    }
-  };
-});
+vi.mock('../TTSCache', () => ({
+    TTSCache: vi.fn(function() { return {} })
+}));
 
 // Concrete implementation of BaseCloudProvider for testing
 class TestProvider extends BaseCloudProvider {
@@ -77,10 +63,25 @@ class TestProvider extends BaseCloudProvider {
 
 describe('BaseCloudProvider Request Registry', () => {
   let provider: TestProvider;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let trackSpy: any;
+  let mockGet: any;
+  let mockPut: any;
+  let mockGenerateKey: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockGet = vi.fn();
+    mockPut = vi.fn();
+    mockGenerateKey = vi.fn((text) => Promise.resolve(`key-${text}`));
+
+    (TTSCache as any).mockImplementation(() => ({
+        get: mockGet,
+        put: mockPut,
+        generateKey: mockGenerateKey
+    }));
+
     provider = new TestProvider();
     trackSpy = CostEstimator.getInstance().track;
   });

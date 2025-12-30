@@ -82,6 +82,7 @@ vi.mock('../lib/tts/AudioPlayerService', () => {
                 subscribe: mockSubscribe,
                 setVoice: mockSetVoice,
                 setLocalProviderConfig: mockSetLocalProviderConfig,
+                setSettingsCallback: vi.fn(),
             }))
         }
     };

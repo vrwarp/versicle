@@ -10,7 +10,7 @@ export interface EpubLibraryDB extends DBSchema {
    */
   app_metadata: {
     key: string;
-    value: any;
+    value: unknown;
   };
   /**
    * Store for book metadata.

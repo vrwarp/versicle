@@ -59,8 +59,11 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   // Reset editing state when variant changes
   useEffect(() => {
-    setIsEditingNote(false);
-    setNoteText('');
+    if (variant !== 'annotation') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setIsEditingNote(false);
+        setNoteText('');
+    }
   }, [variant]);
 
   // Focus textarea when entering edit mode

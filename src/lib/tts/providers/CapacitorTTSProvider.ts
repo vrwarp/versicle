@@ -88,7 +88,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
                     this.emit({ type: 'end' });
                 }
             })
-            .catch((e) => {
+            .catch(e => {
                 if (this.activeUtteranceId === myId) {
                     this.emit({ type: 'error', error: e });
                 }
@@ -105,7 +105,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
     try {
         await TextToSpeech.stop();
-    } catch (e) {
+    } catch {
         // Ignore errors if nothing was playing
     }
 
@@ -130,7 +130,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
             this.currentUtteranceFinished = true;
             this.emit({ type: 'end' });
         }
-    }).catch((e) => {
+    }).catch(e => {
         if (this.activeUtteranceId === myId) {
             this.emit({ type: 'error', error: e });
         }

@@ -52,14 +52,20 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadRules();
-      if (initialTerm) {
+      // Only set initial state if opening with a specific term, not on every render
+    }
+  }, [open, loadRules]);
+
+  useEffect(() => {
+      if (open && initialTerm) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setIsAdding(true);
           setEditingRule({ original: initialTerm, replacement: '' });
           setTestInput(initialTerm);
       }
-    }
-  }, [open, loadRules, initialTerm]);
+  }, [open, initialTerm]);
 
   const handleSave = async () => {
     if (!editingRule?.original || !editingRule?.replacement) return;

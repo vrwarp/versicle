@@ -534,7 +534,6 @@ export const ReaderView: React.FC = () => {
 
   const [lexiconOpen, setLexiconOpen] = useState(false);
   const [lexiconText, setLexiconText] = useState('');
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   void setLexiconText;
 
   const { setGlobalSettingsOpen } = useUIStore();

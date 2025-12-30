@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { extractEpubsFromZip, processBatchImport } from './batch-ingestion';
@@ -26,7 +27,7 @@ vi.mock('jszip', () => {
 global.FileReader = class {
     readAsArrayBuffer() {
         // immediately trigger onload with dummy buffer
-        // @ts-ignore
+        // @ts-expect-error: mocking private
         this.onload({ target: { result: new ArrayBuffer(8) } });
     }
 } as any;
@@ -54,7 +55,7 @@ describe('batch-ingestion', () => {
                 forEach: (cb: any) => {
                     Object.keys(files).forEach((key) => {
                         // JSZip forEach callback: (relativePath, file)
-                        // @ts-expect-error Mocking JSZip internals
+                        // @ts-expect-error: mocking private Mocking JSZip internals
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         cb(key, (files as any)[key]);
                     });
@@ -90,9 +91,9 @@ describe('batch-ingestion', () => {
              const originalFileReader = global.FileReader;
              global.FileReader = class {
                  readAsArrayBuffer() {
-                     // @ts-ignore
+                     // @ts-expect-error: mocking private
                      if (this.onprogress) this.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
-                     // @ts-ignore
+                     // @ts-expect-error: mocking private
                      this.onload({ target: { result: new ArrayBuffer(8) } });
                  }
              } as any;
@@ -135,7 +136,7 @@ describe('batch-ingestion', () => {
                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                  forEach: (cb: any) => {
                      Object.keys(files).forEach((key) => {
-                         // @ts-expect-error Mocking JSZip internals
+                         // @ts-expect-error: mocking private Mocking JSZip internals
                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
                          cb(key, (files as any)[key]);
                      });

@@ -21,6 +21,7 @@ vi.mock('../lib/tts/AudioPlayerService', () => {
                 setBackgroundAudioMode: vi.fn(),
                 setBackgroundVolume: vi.fn(),
                 setPrerollEnabled: vi.fn(),
+                setSettingsCallback: vi.fn(),
             }))
         }
     };

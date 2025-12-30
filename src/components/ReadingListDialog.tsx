@@ -23,18 +23,19 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
     const [editEntry, setEditEntry] = useState<ReadingListEntry | null>(null);
 
+    const refreshEntries = () => {
+        dbService.getReadingList().then(list => setEntries(list || []));
+    };
+
     useEffect(() => {
         if (open) {
             refreshEntries();
         } else {
             // Reset selection when closed
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedEntries(new Set());
         }
     }, [open]);
-
-    const refreshEntries = () => {
-        dbService.getReadingList().then(list => setEntries(list || []));
-    };
 
     /**
      * Memoized list of sorted entries based on current sort field and direction.

@@ -2,9 +2,8 @@
 import React from 'react';
 import { render } from '@testing-library/react';
 import App from './App';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it,  beforeEach } from 'vitest';
 import { Capacitor } from '@capacitor/core';
-import { AudioPlayerService } from './lib/tts/AudioPlayerService';
 
 // Mock dependencies
 vi.mock('./db/db', () => ({
@@ -35,14 +34,6 @@ vi.mock('@capacitor/core', () => ({
   Capacitor: {
     getPlatform: vi.fn(),
     isNativePlatform: vi.fn(),
-  },
-}));
-vi.mock('./lib/tts/AudioPlayerService', () => ({
-  AudioPlayerService: {
-    getInstance: vi.fn().mockReturnValue({
-      pause: vi.fn(),
-      subscribe: vi.fn(),
-    }),
   },
 }));
 vi.mock('./store/useToastStore', () => {
