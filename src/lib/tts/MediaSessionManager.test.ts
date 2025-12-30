@@ -128,21 +128,6 @@ describe('MediaSessionManager', () => {
         expect(mediaSessionMock.playbackState).toBe('paused');
       });
 
-      // REMOVED OR UPDATED TEST: This functionality is being removed by the patch
-      /*
-      it('updates playback state with object', () => {
-          const manager = new MediaSessionManager(callbacks);
-          manager.setPlaybackState({ playbackState: 'playing', playbackSpeed: 1.5, position: 10, duration: 100 });
-
-          expect(mediaSessionMock.playbackState).toBe('playing');
-          expect(mediaSessionMock.setPositionState).toHaveBeenCalledWith({
-              duration: 100,
-              playbackRate: 1.5,
-              position: 10
-          });
-      });
-      */
-
       it('handles missing mediaSession gracefully', () => {
         vi.stubGlobal('navigator', {}); // No mediaSession
 
@@ -213,21 +198,6 @@ describe('MediaSessionManager', () => {
           // This should NOT be called anymore
           expect(MediaSession.setPositionState).not.toHaveBeenCalled();
       });
-
-      // REMOVED OR UPDATED TEST: This functionality is being removed by the patch
-      /*
-      it('updates native playback state with object', async () => {
-          const manager = new MediaSessionManager(callbacks);
-
-          await manager.setPlaybackState({ playbackState: 'paused', playbackSpeed: 1.2 });
-          expect(MediaSession.setPlaybackState).toHaveBeenCalledWith({
-              playbackState: 'paused',
-          });
-          expect(MediaSession.setPositionState).toHaveBeenCalledWith({
-              playbackRate: 1.2,
-          });
-      });
-      */
 
       it('updates native position state correctly', async () => {
           const manager = new MediaSessionManager(callbacks);
