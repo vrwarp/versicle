@@ -121,9 +121,10 @@ export class AudioPlayerService {
         onNext: () => this.next(),
         onSeekBackward: () => this.seek(-10),
         onSeekForward: () => this.seek(10),
-        onSeekTo: () => {
-             // Not supporting seekTo for now to keep consistency
-             console.warn("SeekTo not supported");
+        onSeekTo: (details) => {
+             if (details.seekTime !== undefined) {
+                 this.seekTo(details.seekTime);
+             }
         },
     });
 
@@ -209,12 +210,21 @@ export class AudioPlayerService {
       }
   }
 
+  /**
+   * Calculates the processing speed in characters per second based on the current playback speed.
+   * Assumes a base reading rate of 180 words per minute and 5 characters per word.
+   * @returns {number} Characters per second.
+   */
+  private calculateCharsPerSecond(): number {
+      // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 900.
+      // charsPerSecond = (900 * speed) / 60
+      return (900 * this.speed) / 60;
+  }
+
   private updateSectionMediaPosition(providerTime: number) {
       if (!this.queue.length || !this.prefixSums.length) return;
 
-      // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 900.
-      // charsPerSecond = (900 * speed) / 60
-      const charsPerSecond = (900 * this.speed) / 60;
+      const charsPerSecond = this.calculateCharsPerSecond();
       if (charsPerSecond === 0) return;
 
       const totalChars = this.prefixSums[this.queue.length];
@@ -676,6 +686,43 @@ export class AudioPlayerService {
         }
         // If paused or stopped, we just update the speed variable (done above)
         // and the next manual 'play' will use it.
+      });
+  }
+
+  seekTo(time: number) {
+      return this.enqueue(async () => {
+          if (!this.queue.length || !this.prefixSums.length) return;
+
+          const charsPerSecond = this.calculateCharsPerSecond();
+          if (charsPerSecond <= 0) return;
+
+          const targetChars = time * charsPerSecond;
+
+          let newIndex = 0;
+          for (let i = 0; i < this.queue.length; i++) {
+              if (targetChars < this.prefixSums[i + 1]) {
+                  newIndex = i;
+                  break;
+              }
+              newIndex = i;
+          }
+
+          const wasPlaying = (this.status === 'playing' || this.status === 'loading');
+
+          if (wasPlaying) {
+              this.provider.stop();
+          }
+
+          this.currentIndex = newIndex;
+          this.persistQueue();
+
+          if (wasPlaying) {
+              await this.playInternal();
+          } else {
+              this.updateMediaSessionMetadata();
+              this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+              this.updateSectionMediaPosition(0);
+          }
       });
   }
 
