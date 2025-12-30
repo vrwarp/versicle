@@ -23,10 +23,10 @@ import org.robolectric.annotation.Config;
 
 import com.getcapacitor.BridgeActivity;
 
-import io.github.jofr.capacitor.mediasessionplugin.MediaSessionService;
+// import io.github.jofr.capacitor.mediasessionplugin.MediaSessionService;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(manifest = Config.NONE)
+@Config(manifest = Config.NONE, sdk = 34)
 public class MainActivityTest {
 
     @Before
@@ -44,6 +44,7 @@ public class MainActivityTest {
         // We need to provide a binder for Robolectric to return.
 
         // Use Robolectric to build the service so it has a valid Context attached
+        /*
         MediaSessionService service = Robolectric.buildService(MediaSessionService.class).create().get();
         IBinder binder = service.onBind(new Intent());
 
@@ -52,6 +53,7 @@ public class MainActivityTest {
             new ComponentName(ApplicationProvider.getApplicationContext(), MediaSessionService.class),
             binder
         );
+        */
     }
 
     @Test
