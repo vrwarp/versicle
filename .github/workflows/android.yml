@@ -21,4 +21,21 @@ jobs:
       run: docker build -t versicle-android -f Dockerfile.android .
 
     - name: Run Android Tests
-      run: docker run --rm versicle-android
+      run: docker run --name android-tests versicle-android
+
+    - name: Extract Test Reports
+      if: always()
+      run: |
+        docker cp android-tests:/app/android/app/build/reports ./app-reports || true
+        docker cp android-tests:/app/android/build/reports ./build-reports || true
+        docker rm android-tests
+
+    - name: Upload Test Reports
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-test-reports
+        path: |
+          app-reports/
+          build-reports/
+        retention-days: 5
