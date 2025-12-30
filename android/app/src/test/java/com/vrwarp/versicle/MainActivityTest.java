@@ -26,7 +26,7 @@ import com.getcapacitor.BridgeActivity;
 import io.github.jofr.capacitor.mediasessionplugin.MediaSessionService;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(manifest = Config.NONE)
+@Config(manifest = Config.NONE, sdk = 34)
 public class MainActivityTest {
 
     @Before
