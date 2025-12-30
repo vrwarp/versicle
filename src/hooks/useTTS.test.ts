@@ -46,9 +46,25 @@ vi.mock('../store/useTTSStore', () => {
     return { useTTSStore };
 });
 
-vi.mock('../store/useReaderStore', () => ({
-    useReaderStore: vi.fn(),
-}));
+vi.mock('../store/useReaderStore', () => {
+    const mockGetState = vi.fn(() => ({
+        currentBookId: 'book1',
+        currentSectionId: 'section1',
+        currentSectionTitle: 'Chapter 1'
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const useReaderStore = vi.fn((selector?: any) => {
+        const state = mockGetState();
+        return selector ? selector(state) : state;
+    });
+
+    // Attach static methods
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useReaderStore as any).getState = mockGetState;
+
+    return { useReaderStore };
+});
 
 describe('useTTS', () => {
     beforeEach(() => {
@@ -65,13 +81,21 @@ describe('useTTS', () => {
 
         // Setup Reader Store mock
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (useReaderStore.getState as any).mockReturnValue({
+            currentBookId: 'book1',
+            currentSectionId: 'section1',
+            currentSectionTitle: 'Chapter 1'
+        });
+
+        // Ensure selector also works
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useReaderStore as any).mockImplementation((selector: any) => {
              const state = {
                  currentBookId: 'book1',
                  currentSectionId: 'section1',
                  currentSectionTitle: 'Chapter 1'
              };
-             return selector(state);
+             return selector ? selector(state) : state;
         });
     });
 
@@ -87,9 +111,11 @@ describe('useTTS', () => {
     it('should request player to load section by ID when idle', async () => {
         renderHook(() => useTTS());
 
+        // Wait for effect to run, including the 500ms debounce timeout
         await waitFor(() => {
-            expect(mockPlayerInstance.loadSectionBySectionId).toHaveBeenCalledWith('section1', false);
-        });
+            // getState().currentSectionTitle is accessed inside the timeout callback
+            expect(mockPlayerInstance.loadSectionBySectionId).toHaveBeenCalledWith('section1', false, 'Chapter 1');
+        }, { timeout: 1000 });
     });
 
     it('should NOT request player to load section if playing', async () => {
