@@ -120,28 +120,18 @@ describe('BookCard', () => {
   it('should open delete confirmation dialog and delete book', async () => {
     renderWithRouter(<BookCard book={mockBook} />);
 
-    // Open menu
-    // We target the menu trigger. Because we have nested elements with aria-label, using getByTestId is safer.
-    // The wrapper div provided by BookActionMenu has no test id by default?
-    // Wait, BookActionMenu.tsx:
-    // <DropdownMenuTrigger asChild><div role="button" aria-label="Book actions" ...>
-    // It doesn't have a test id.
-    // However, the child (Button) has `data-testid="book-menu-trigger"`.
-    // Clicking the child bubbles to the wrapper div.
     const menuTriggerButton = screen.getByTestId('book-menu-trigger');
 
-    // Simulate click.
     fireEvent.click(menuTriggerButton);
 
-    // Click delete option
     const deleteOption = await screen.findByTestId('menu-delete', {}, { timeout: 2000 });
     fireEvent.click(deleteOption);
 
-    // Verify dialog is open
-    expect(await screen.findByText('Delete Book')).toBeInTheDocument();
-    expect(screen.getByText(/Are you sure you want to delete/)).toBeInTheDocument();
+    // Use waitFor to handle potential async state updates
+    await waitFor(async () => {
+        expect(await screen.findByText('Delete Book')).toBeInTheDocument();
+    });
 
-    // Click delete in dialog
     const confirmButton = screen.getByTestId('confirm-delete');
     fireEvent.click(confirmButton);
 

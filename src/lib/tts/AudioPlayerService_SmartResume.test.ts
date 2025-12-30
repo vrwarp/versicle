@@ -4,6 +4,15 @@ import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { AudioElementPlayer } from './AudioElementPlayer';
 import { dbService } from '../../db/DBService';
 
+// Mock useTTSStore to avoid circular dependency crash
+vi.mock('../../store/useTTSStore', () => ({
+    useTTSStore: {
+        getState: vi.fn(() => ({
+            settings: { customAbbreviations: [], alwaysMerge: [], sentenceStarters: [] }
+        }))
+    }
+}));
+
 // Mock DBService
 vi.mock('../../db/DBService', () => ({
   dbService: {
