@@ -1,5 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import writeBlob from 'capacitor-blob-writer';
 
 /**
  * Metadata for the Media Session API.
@@ -47,6 +49,7 @@ export interface PlaybackState {
 export class MediaSessionManager {
   private isNative = Capacitor.isNativePlatform();
   private hasWebMediaSession = typeof navigator !== 'undefined' && 'mediaSession' in navigator;
+  private artworkCounter = 0;
 
   /**
    * Initializes the MediaSessionManager with the provided callbacks.
@@ -113,11 +116,25 @@ export class MediaSessionManager {
    */
   async setMetadata(metadata: MediaSessionMetadata) {
     if (this.isNative) {
+        let artwork = metadata.artwork;
+
+        // Persist blob artwork to disk for native display
+        if (artwork && artwork.length > 0 && artwork[0].src.startsWith('blob:')) {
+            try {
+                const processedArtwork = await this.processNativeArtwork(artwork[0]);
+                if (processedArtwork) {
+                    artwork = [processedArtwork];
+                }
+            } catch (e) {
+                console.error("Failed to process native artwork", e);
+            }
+        }
+
         await MediaSession.setMetadata({
             title: metadata.title,
             artist: metadata.artist,
             album: metadata.album,
-            artwork: metadata.artwork
+            artwork: artwork
         });
     } else if (this.hasWebMediaSession) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -128,6 +145,43 @@ export class MediaSessionManager {
           artwork: metadata.artwork
         });
     }
+  }
+
+  /**
+   * Fetches blob data, writes it to a rolling cache file, and returns the native URI.
+   */
+  private async processNativeArtwork(artwork: { src: string; sizes?: string; type?: string }): Promise<{ src: string; sizes?: string; type?: string } | null> {
+    try {
+        const response = await fetch(artwork.src);
+        const blob = await response.blob();
+
+        const filename = `temp_artwork_${this.artworkCounter}.png`;
+        this.artworkCounter = (this.artworkCounter + 1) % 10;
+
+        await writeBlob({
+            path: filename,
+            directory: Directory.Cache,
+            blob: blob,
+            fast_mode: true,
+            recursive: true
+        });
+
+        const uriResult = await Filesystem.getUri({
+            path: filename,
+            directory: Directory.Cache
+        });
+
+        if (uriResult && uriResult.uri) {
+            const convertedSrc = Capacitor.convertFileSrc(uriResult.uri);
+            return {
+                ...artwork,
+                src: convertedSrc
+            };
+        }
+    } catch (e) {
+        console.error("Error processing native artwork", e);
+    }
+    return null;
   }
 
   /**
