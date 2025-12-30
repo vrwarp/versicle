@@ -128,10 +128,8 @@ describe('runCancellable', () => {
         const generatorFn = function* () {
             try {
                 yield new Promise((resolve) => setTimeout(resolve, 20));
-            } catch (err) {
+            } catch {
                 // Ignore error and continue yielding
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const _ = err;
             }
             yield Promise.resolve('ignoring cancellation');
         };

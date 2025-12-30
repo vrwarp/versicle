@@ -105,10 +105,8 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
     try {
         await TextToSpeech.stop();
-    } catch (e) {
+    } catch {
         // Ignore errors if nothing was playing
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const _ = e;
     }
 
     let lang = 'en-US';
