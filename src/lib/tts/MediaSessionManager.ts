@@ -1,5 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import writeBlob from 'capacitor-blob-writer';
 
 /**
  * Metadata for the Media Session API.
@@ -12,7 +14,7 @@ export interface MediaSessionMetadata {
   /** The album/collection name. */
   album: string;
   /** Array of artwork images. */
-  artwork?: { src: string; sizes?: string; type?: string }[];
+  artwork?: { src: string | Blob; sizes?: string; type?: string }[];
 }
 
 /**
@@ -47,6 +49,7 @@ export interface PlaybackState {
 export class MediaSessionManager {
   private isNative = Capacitor.isNativePlatform();
   private hasWebMediaSession = typeof navigator !== 'undefined' && 'mediaSession' in navigator;
+  private artworkCounter = 0;
 
   /**
    * Initializes the MediaSessionManager with the provided callbacks.
@@ -106,18 +109,61 @@ export class MediaSessionManager {
       }
   }
 
+  private async processNativeArtwork(blob: Blob): Promise<string> {
+    const filename = `temp_artwork_${this.artworkCounter}.png`;
+    this.artworkCounter = (this.artworkCounter + 1) % 10;
+
+    // Write blob to filesystem
+    await writeBlob({
+        path: filename,
+        directory: Directory.Cache,
+        blob: blob,
+        recursive: true,
+    });
+
+    // Get URI
+    const uriResult = await Filesystem.getUri({
+        path: filename,
+        directory: Directory.Cache
+    });
+
+    // Convert to Capacitor URL
+    return Capacitor.convertFileSrc(uriResult.uri);
+  }
+
   /**
    * Updates the media metadata (Title, Artist, Artwork).
    *
    * @param metadata - The new metadata to display.
    */
   async setMetadata(metadata: MediaSessionMetadata) {
+    let finalArtwork = metadata.artwork;
+
+    if (this.isNative && metadata.artwork) {
+       // Process artwork
+       finalArtwork = await Promise.all(metadata.artwork.map(async (art) => {
+           if (art.src instanceof Blob) {
+               const nativePath = await this.processNativeArtwork(art.src);
+               return { ...art, src: nativePath };
+           }
+           return { ...art, src: art.src as string };
+       }));
+    } else if (metadata.artwork) {
+         // Web Mode: Convert Blobs to ObjectURLs
+         finalArtwork = metadata.artwork.map(art => {
+             if (art.src instanceof Blob) {
+                 return { ...art, src: URL.createObjectURL(art.src) };
+             }
+             return { ...art, src: art.src as string };
+         });
+    }
+
     if (this.isNative) {
         await MediaSession.setMetadata({
             title: metadata.title,
             artist: metadata.artist,
             album: metadata.album,
-            artwork: metadata.artwork
+            artwork: finalArtwork as any
         });
     } else if (this.hasWebMediaSession) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,7 +171,7 @@ export class MediaSessionManager {
           title: metadata.title,
           artist: metadata.artist,
           album: metadata.album,
-          artwork: metadata.artwork
+          artwork: finalArtwork
         });
     }
   }
