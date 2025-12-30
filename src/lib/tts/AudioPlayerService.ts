@@ -210,12 +210,21 @@ export class AudioPlayerService {
       }
   }
 
+  /**
+   * Calculates the processing speed in characters per second based on the current playback speed.
+   * Assumes a base reading rate of 180 words per minute and 5 characters per word.
+   * @returns {number} Characters per second.
+   */
+  private calculateCharsPerSecond(): number {
+      // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 900.
+      // charsPerSecond = (900 * speed) / 60
+      return (900 * this.speed) / 60;
+  }
+
   private updateSectionMediaPosition(providerTime: number) {
       if (!this.queue.length || !this.prefixSums.length) return;
 
-      // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 900.
-      // charsPerSecond = (900 * speed) / 60
-      const charsPerSecond = (900 * this.speed) / 60;
+      const charsPerSecond = this.calculateCharsPerSecond();
       if (charsPerSecond === 0) return;
 
       const totalChars = this.prefixSums[this.queue.length];
@@ -684,7 +693,7 @@ export class AudioPlayerService {
       return this.enqueue(async () => {
           if (!this.queue.length || !this.prefixSums.length) return;
 
-          const charsPerSecond = (900 * this.speed) / 60;
+          const charsPerSecond = this.calculateCharsPerSecond();
           if (charsPerSecond <= 0) return;
 
           const targetChars = time * charsPerSecond;
