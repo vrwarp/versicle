@@ -14,7 +14,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { getParentCfi } from '../cfi-utils';
 import { genAIService } from '../genai/GenAIService';
 import { useGenAIStore } from '../../store/useGenAIStore';
-import type { ContentType } from '../../types/content-analysis';
+import type { ContentType, ContentTypeResult } from '../../types/content-analysis';
 
 const NO_TEXT_MESSAGES = [
     "This chapter appears to be empty.",
