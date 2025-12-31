@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM eclipse-temurin:17-jdk-jammy
+FROM eclipse-temurin:21-jdk-jammy
 
 # 1. Environment Variables
 ENV ANDROID_HOME=/opt/android-sdk
@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Install Node.js 20
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+# 3. Install Node.js 22
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs
 
 # 4. Install Android SDK
@@ -25,8 +25,9 @@ RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
     rm cmdline-tools.zip
 
 # Accept Licenses and Install SDK components
+# Capacitor 7 requires Android 15 (API 35)
 RUN yes | sdkmanager --licenses && \
-    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+    sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
 # 5. Setup Project
 WORKDIR /app
