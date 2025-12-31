@@ -13,6 +13,21 @@ The verification suite is written as playwright tests. All code changes require 
 4. The individual verification tests are located in `verification/test_*.py`.
 5. Timeouts are often caused by bugs or flakiness in the code or the test. It is rarely a performance issue, so increasing the timeout should be a last resort.
 
+# Android Docker Tests
+Use Docker to run Android unit tests in a consistent environment.
+
+1.  Build the Image:
+
+    ```source-shell
+    sudo docker build -t versicle-android -f Dockerfile.android .
+    ```
+
+2.  Run Tests:
+
+    ```source-shell
+    sudo docker run --rm versicle-android
+    ```
+
 # Testing
 Never override PYTHONPATH for running tests because the testing environment does not do that either.
 
