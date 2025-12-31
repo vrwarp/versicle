@@ -126,7 +126,7 @@ describe('runCancellable', () => {
         const generatorFn = function* () {
             try {
                 yield new Promise((resolve) => setTimeout(resolve, 20));
-            } catch (err) {
+            } catch {
                 // Ignore error and continue yielding
             }
             yield Promise.resolve('ignoring cancellation');
@@ -145,6 +145,8 @@ describe('runCancellable', () => {
 
     it('should handle errors thrown by generator by rejecting the result promise', async () => {
         const generatorFn = function* () {
+             // yield to satisfy require-yield
+             yield Promise.resolve();
              throw new Error('Test error');
         };
 

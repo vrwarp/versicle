@@ -11,18 +11,23 @@ vi.mock('../../store/useReaderStore', () => ({
 
 // Mock zustand shallow
 vi.mock('zustand/react/shallow', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useShallow: (selector: any) => selector,
 }));
 
 // Mock Popover components since they depend on Radix Context
 vi.mock('../ui/Popover', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   PopoverContent: ({ children, className }: any) => <div className={className} data-testid="popover-content">{children}</div>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   PopoverClose: ({ children }: any) => <div data-testid="close-button">{children}</div>,
 }));
 
 // Mock Tabs since they depend on Radix Context
 vi.mock('../ui/Tabs', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Tabs: ({ value, onValueChange, children }: any) => (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     <div data-testid="tabs" data-value={value} onClick={(e: any) => {
         if (e.target.dataset.value && e.target.dataset.value !== value) {
             onValueChange(e.target.dataset.value);
@@ -31,7 +36,9 @@ vi.mock('../ui/Tabs', () => ({
         {children}
     </div>
   ),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   TabsList: ({ children }: any) => <div>{children}</div>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   TabsTrigger: ({ value, children }: any) => (
     <button data-value={value} type="button">
         {children}
@@ -49,6 +56,7 @@ describe('VisualSettings', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (useReaderStore as any).mockImplementation((selector: any) => selector({
       currentTheme: 'light',
       setTheme: mockSetTheme,

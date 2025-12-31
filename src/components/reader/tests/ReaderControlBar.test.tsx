@@ -13,28 +13,28 @@ const mockUseNavigate = vi.fn();
 
 // Fix paths to be relative to THIS test file (src/components/reader/tests/)
 // Target: src/store/... -> ../../../store/...
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('../../../store/useAnnotationStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useAnnotationStore: (selector: any) => mockUseAnnotationStore(selector),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('../../../store/useTTSStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useTTSStore: (selector: any) => mockUseTTSStore(selector),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('../../../store/useReaderStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useReaderStore: (selector: any) => mockUseReaderStore(selector),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('../../../store/useLibraryStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useLibraryStore: (selector: any) => mockUseLibraryStore(selector),
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('../../../store/useToastStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useToastStore: (selector: any) => mockUseToastStore(selector),
 }));
 
@@ -42,15 +42,15 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => mockUseNavigate,
 }));
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('zustand/react/shallow', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useShallow: (selector: any) => selector
 }));
 
 // Mock LexiconManager (src/components/reader/LexiconManager)
 // Path: ../LexiconManager
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('../LexiconManager', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   LexiconManager: ({ open, onOpenChange, initialTerm }: any) => (
     open ? (
       <div data-testid="lexicon-manager-mock">
@@ -63,8 +63,8 @@ vi.mock('../LexiconManager', () => ({
 
 // Mock CompassPill (src/components/ui/CompassPill)
 // Path: ../../ui/CompassPill
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('../../ui/CompassPill', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   CompassPill: ({ variant, onClick, onAnnotationAction, progress }: any) => (
     <div data-testid={`compass-pill-${variant}`} data-progress={progress} onClick={onClick}>
       {variant}
