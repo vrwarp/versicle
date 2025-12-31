@@ -57,6 +57,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   // Reset editing state when variant changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsEditingNote(false);
     setNoteText('');
   }, [variant]);

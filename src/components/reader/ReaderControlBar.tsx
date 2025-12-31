@@ -165,6 +165,7 @@ export const ReaderControlBar: React.FC = () => {
             <div className="fixed bottom-6 left-0 right-0 z-50 px-4 pointer-events-none">
                 <div className="pointer-events-auto">
                     <CompassPill
+                        key={variant}
                         variant={variant}
                         title={title}
                         subtitle={subtitle}
@@ -184,6 +185,7 @@ export const ReaderControlBar: React.FC = () => {
             </div>
 
             <LexiconManager
+                key={lexiconOpen ? 'open' : 'closed'}
                 open={lexiconOpen}
                 onOpenChange={setLexiconOpen}
                 initialTerm={lexiconText}

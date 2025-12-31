@@ -59,6 +59,7 @@ export const AudioReaderHUD: React.FC = () => {
                  <div className="mb-4">
                      {showLastRead ? (
                         <CompassPill
+                            key="summary"
                             variant="summary"
                             title={lastReadBook!.title}
                             subtitle="Continue Reading"
@@ -66,7 +67,10 @@ export const AudioReaderHUD: React.FC = () => {
                             onClick={() => navigate(`/read/${lastReadBook!.id}`)}
                         />
                      ) : (
-                        <CompassPill variant={immersiveMode ? 'compact' : (isLibrary ? 'summary' : 'active')} />
+                        <CompassPill
+                            key={immersiveMode ? 'compact' : (isLibrary ? 'summary' : 'active')}
+                            variant={immersiveMode ? 'compact' : (isLibrary ? 'summary' : 'active')}
+                        />
                      )}
                  </div>
              </div>

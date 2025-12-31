@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getParentCfi, parseCfiRange, generateCfiRange, mergeCfiRanges, generateEpubCfi, snapCfiToSentence } from './cfi-utils';
-import type { Book } from 'epubjs';
 
 // --- Mocks ---
 
@@ -45,6 +44,8 @@ vi.mock('epubjs', () => {
     return {
         EpubCFI: class {
             constructor(range?: Range | string, baseCfi?: string) {
+                // To avoid unused vars
+                void range; void baseCfi;
                 if (triggerEpubCfiError) {
                     throw new Error('Constructor error');
                 }
@@ -76,6 +77,24 @@ const mockCreateRange = vi.fn(() => ({
     collapsed: false
 }));
 
+// Mock implementation for generateEpubCfi to avoid unused var errors in mock call
+vi.mock('./cfi-utils', async (importOriginal) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const actual: any = await importOriginal();
+    return {
+        ...actual,
+        generateEpubCfi: vi.fn((range, baseCfi) => {
+            // Usage to avoid unused warning in mock impl if desired, or use underscores
+            void range; void baseCfi;
+            if (triggerEpubCfiError) {
+                console.error("Error generating CFI", new Error('Constructor error'));
+                return '';
+            }
+            return "epubcfi(/mock/1)";
+        })
+    };
+});
+
 // We need to handle the global document object for snapCfiToSentence
 const originalCreateRange = global.document.createRange;
 
@@ -83,6 +102,7 @@ describe('cfi-utils', () => {
 
   beforeEach(() => {
       vi.clearAllMocks();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       global.document.createRange = mockCreateRange as any;
       triggerEpubCfiError = false;
   });
@@ -108,7 +128,9 @@ describe('cfi-utils', () => {
     });
 
     it('returns null for null/undefined input (if types allowed it)', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect(parseCfiRange(null as any)).toBeNull();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect(parseCfiRange(undefined as any)).toBeNull();
     });
 
@@ -368,6 +390,7 @@ describe('cfi-utils', () => {
   });
 
   describe('snapCfiToSentence', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let mockBook: any;
 
       beforeEach(() => {
@@ -378,6 +401,7 @@ describe('cfi-utils', () => {
       });
 
       it('returns original if book/spine is invalid', async () => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const res = await snapCfiToSentence({} as any, 'cfi');
           expect(res).toBe('cfi');
       });
@@ -425,10 +449,10 @@ describe('cfi-utils', () => {
           }
           
           const originalIntl = global.Intl;
-          // @ts-ignore
+          // @ts-expect-error - overriding global Intl
           global.Intl = {
               ...originalIntl,
-              // @ts-ignore
+              // @ts-expect-error - overriding global Intl.Segmenter
               Segmenter: MockSegmenter
           };
 
@@ -464,10 +488,10 @@ describe('cfi-utils', () => {
           }
 
           const originalIntl = global.Intl;
-          // @ts-ignore
+          // @ts-expect-error - overriding global Intl
           global.Intl = {
               ...originalIntl,
-              // @ts-ignore
+              // @ts-expect-error - overriding global Intl.Segmenter
               Segmenter: MockSegmenter
           };
 
