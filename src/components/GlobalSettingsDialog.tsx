@@ -208,6 +208,8 @@ export const GlobalSettingsDialog = () => {
         setModel: setGenAIModel,
         isEnabled: isGenAIEnabled,
         setEnabled: setGenAIEnabled,
+        isContentAnalysisEnabled,
+        setContentAnalysisEnabled,
         logs: genAILogs
     } = useGenAIStore();
 
@@ -674,6 +676,23 @@ export const GlobalSettingsDialog = () => {
                                                     </SelectContent>
                                                 </Select>
                                             </div>
+
+                                    <div className="pt-4 border-t space-y-4">
+                                        <h4 className="text-sm font-medium">Advanced Features</h4>
+                                        <div className="flex items-center justify-between">
+                                            <div className="space-y-0.5">
+                                                <label htmlFor="genai-content-detection" className="text-sm font-medium">Content Type Detection & Filtering</label>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Automatically detects and skips non-narrative content (e.g., tables, citations).
+                                                </p>
+                                            </div>
+                                            <Switch
+                                                id="genai-content-detection"
+                                                checked={isContentAnalysisEnabled}
+                                                onCheckedChange={setContentAnalysisEnabled}
+                                            />
+                                        </div>
+                                    </div>
 
                                             <div className="pt-4 border-t space-y-4">
                                                 <div className="flex items-center justify-between">
