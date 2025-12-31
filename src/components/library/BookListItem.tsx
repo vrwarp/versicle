@@ -44,7 +44,7 @@ const formatDuration = (chars?: number): string => {
  * @param props - Component props.
  * @returns The rendered list item.
  */
-export const BookListItem: React.FC<BookListItemProps> = ({ book }) => {
+export const BookListItem = React.memo(({ book }: BookListItemProps) => {
     const navigate = useNavigate();
     const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderStore(state => state.setCurrentBookId);
@@ -171,4 +171,4 @@ export const BookListItem: React.FC<BookListItemProps> = ({ book }) => {
             </div>
         </div>
     );
-};
+});
