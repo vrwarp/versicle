@@ -23,9 +23,9 @@
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
 *   **AI**: Google Gemini (via `@google/generative-ai`)
-*   **Mobile**: Capacitor (Android)
+*   **Mobile**: Capacitor 7 (Android)
 *   **Workers**: Comlink + Web Workers
-*   **Styling**: Tailwind CSS + Radix UI
+*   **Styling**: Tailwind CSS v4 + Radix UI
 *   **Compression**: browser-image-compression (Covers) + JSZip
 
 ## Features
