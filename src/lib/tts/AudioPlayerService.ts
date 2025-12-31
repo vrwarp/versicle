@@ -895,6 +895,44 @@ export class AudioPlayerService {
       }
   }
 
+  private async triggerNextChapterAnalysis() {
+      if (!this.currentBookId || this.currentSectionIndex === -1) return;
+      const nextIndex = this.currentSectionIndex + 1;
+      if (nextIndex >= this.playlist.length) return;
+
+      const section = this.playlist[nextIndex];
+
+      // Check if GenAI is enabled
+      const aiStore = useGenAIStore.getState();
+      const isContentAnalysisEnabled = aiStore.isContentAnalysisEnabled;
+      if (!isContentAnalysisEnabled) return;
+
+      // Check if already analyzed to avoid unnecessary work
+      const existing = await dbService.getContentAnalysis(this.currentBookId, section.sectionId);
+      if (existing) return;
+
+      try {
+          const ttsContent = await dbService.getTTSContent(this.currentBookId, section.sectionId);
+          if (!ttsContent || ttsContent.sentences.length === 0) return;
+
+          const settings = useTTSStore.getState();
+          const refinedSentences = TextSegmenter.refineSegments(
+              ttsContent.sentences,
+              settings.customAbbreviations,
+              settings.alwaysMerge,
+              settings.sentenceStarters
+          );
+
+          const groups = this.groupSentencesByRoot(refinedSentences);
+
+          await this.getOrDetectContentTypes(this.currentBookId, section.sectionId, groups);
+          console.log("Pre-generated content types for next chapter:", section.sectionId);
+
+      } catch (e) {
+          console.warn("Failed to pre-generate content types", e);
+      }
+  }
+
   private async loadSectionInternal(sectionIndex: number, autoPlay: boolean, sectionTitle?: string): Promise<boolean> {
       if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
 
@@ -1005,6 +1043,9 @@ export class AudioPlayerService {
               this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
               this.persistQueue();
 
+              // Trigger analysis for the next chapter in the background
+              void this.triggerNextChapterAnalysis();
+
               if (autoPlay) {
                    await this.playInternal();
               }
@@ -1084,22 +1125,7 @@ export class AudioPlayerService {
       return null;
   }
 
-  /**
-   * Filters the TTS queue based on content type classification.
-   * Uses GenAI to detect content types (citations, tables, etc.) and removes
-   * segments that match the configured skip types.
-   *
-   * @param sentences The original list of TTS queue items.
-   * @param skipTypes The list of content types to exclude.
-   * @returns A promise resolving to the filtered list of queue items.
-   */
-  private async detectAndFilterContent(sentences: { text: string; cfi: string | null }[], skipTypes: ContentType[]): Promise<{ text: string; cfi: string | null }[]> {
-      if (!this.currentBookId || this.currentSectionIndex === -1) return sentences;
-      
-      const sectionId = this.playlist[this.currentSectionIndex]?.sectionId;
-      if (!sectionId) return sentences;
-
-      // Group sentences by Root Node
+  private groupSentencesByRoot(sentences: { text: string; cfi: string | null }[]) {
       const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
       let currentGroup: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
 
@@ -1115,6 +1141,25 @@ export class AudioPlayerService {
           currentGroup.fullText += s.text + ' ';
       }
       if (currentGroup) groups.push(currentGroup);
+      return groups;
+  }
+
+  /**
+   * Filters the TTS queue based on content type classification.
+   * Uses GenAI to detect content types (citations, tables, etc.) and removes
+   * segments that match the configured skip types.
+   *
+   * @param sentences The original list of TTS queue items.
+   * @param skipTypes The list of content types to exclude.
+   * @returns A promise resolving to the filtered list of queue items.
+   */
+  private async detectAndFilterContent(sentences: { text: string; cfi: string | null }[], skipTypes: ContentType[]): Promise<{ text: string; cfi: string | null }[]> {
+      if (!this.currentBookId || this.currentSectionIndex === -1) return sentences;
+
+      const sectionId = this.playlist[this.currentSectionIndex]?.sectionId;
+      if (!sectionId) return sentences;
+
+      const groups = this.groupSentencesByRoot(sentences);
 
       const detectedTypes = await this.getOrDetectContentTypes(this.currentBookId, sectionId, groups);
 
