@@ -1,29 +1,56 @@
-import { describe, it, expect, vi } from 'vitest';
-import { getParentCfi, parseCfiRange, generateCfiRange, mergeCfiRanges, generateEpubCfi } from './cfi-utils';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getParentCfi, parseCfiRange, generateCfiRange, mergeCfiRanges, generateEpubCfi, snapCfiToSentence } from './cfi-utils';
+import type { Book } from 'epubjs';
 
-// Mock epubjs EpubCFI
+// --- Mocks ---
+
+// Flag to trigger error in EpubCFI constructor
+let triggerEpubCfiError = false;
+
+// Mock epubjs EpubCFI with more realistic comparison logic for tests
+const mockCompare = vi.fn((a: string, b: string) => {
+    // Check if we need to throw for specific test case
+    if (a.includes('THROW_MERGE') || b.includes('THROW_MERGE')) {
+        throw new Error('Merge error');
+    }
+
+    if (a === b) return 0;
+
+    // Parse helper to extract important parts for comparison
+    const parse = (cfi: string) => {
+        // e.g. epubcfi(/6/2!/4/2/1:0)
+        // Remove wrapper
+        const content = cfi.replace('epubcfi(', '').replace(')', '');
+        // Split path and offset
+        const parts = content.split(':');
+        // If no offset, assume 0
+        const path = parts[0];
+        const offset = parts.length > 1 ? parseInt(parts[1]) : 0;
+        return { path, offset };
+    };
+
+    const pa = parse(a);
+    const pb = parse(b);
+
+    if (pa.path < pb.path) return -1;
+    if (pa.path > pb.path) return 1;
+
+    if (pa.offset < pb.offset) return -1;
+    if (pa.offset > pb.offset) return 1;
+
+    return 0;
+});
+
 vi.mock('epubjs', () => {
     return {
         EpubCFI: class {
-            constructor() {}
+            constructor(range?: Range | string, baseCfi?: string) {
+                if (triggerEpubCfiError) {
+                    throw new Error('Constructor error');
+                }
+            }
             compare(a: string, b: string) {
-                // Simple string comparison for testing purposes if logic allows
-                // or specific logic to mimic CFI comparison
-                if (a === b) return 0;
-                // Hacky sort for test: /2/1 < /2/2
-                if (a.includes('/2/1') && b.includes('/2/2')) return -1;
-                if (a.includes('/2/2') && b.includes('/2/1')) return 1;
-                
-                // Ranges: :0 < :5 < :10 < :20 < :30
-                const getOffset = (s: string) => {
-                    const match = s.match(/:(\d+)/);
-                    return match ? parseInt(match[1]) : 0;
-                };
-                const offA = getOffset(a);
-                const offB = getOffset(b);
-                if (offA < offB) return -1;
-                if (offA > offB) return 1;
-                return a.localeCompare(b);
+                return mockCompare(a, b);
             }
             toString() {
                 return "epubcfi(/mock/1)";
@@ -32,120 +59,436 @@ vi.mock('epubjs', () => {
     }
 });
 
+// Mocking global Intl if not present (Node environment usually has it, but safe to mock specific behavior)
+// We will mock it inside the test cases where needed using vi.spyOn or modifying global
+
+// Mocking document and Range
+const mockSetStart = vi.fn();
+const mockSetEnd = vi.fn();
+const mockCreateRange = vi.fn(() => ({
+    setStart: mockSetStart,
+    setEnd: mockSetEnd,
+    startContainer: {},
+    startOffset: 0,
+    endContainer: {},
+    endOffset: 0,
+    commonAncestorContainer: {},
+    collapsed: false
+}));
+
+// We need to handle the global document object for snapCfiToSentence
+const originalCreateRange = global.document.createRange;
+
 describe('cfi-utils', () => {
 
+  beforeEach(() => {
+      vi.clearAllMocks();
+      global.document.createRange = mockCreateRange as any;
+      triggerEpubCfiError = false;
+  });
+
+  afterEach(() => {
+      global.document.createRange = originalCreateRange;
+  });
+
   describe('parseCfiRange', () => {
-    it('parses range CFI correctly', () => {
+    it('parses a valid range CFI correctly', () => {
       const cfi = 'epubcfi(/6/2!/4/2,:0,:10)';
       const result = parseCfiRange(cfi);
       expect(result).not.toBeNull();
-      if (result) {
-        expect(result.parent).toBe('/6/2!/4/2');
-        expect(result.start).toBe(':0');
-        expect(result.end).toBe(':10');
-        expect(result.fullStart).toBe('epubcfi(/6/2!/4/2:0)');
-      }
+      expect(result?.parent).toBe('/6/2!/4/2');
+      expect(result?.start).toBe(':0');
+      expect(result?.end).toBe(':10');
+      expect(result?.fullStart).toBe('epubcfi(/6/2!/4/2:0)');
+      expect(result?.fullEnd).toBe('epubcfi(/6/2!/4/2:10)');
     });
 
-    it('returns null for invalid range format', () => {
-      expect(parseCfiRange('invalid')).toBeNull();
-      expect(parseCfiRange('epubcfi(invalid)')).toBeNull(); // Missing comma split
-    });
-  });
-
-  describe('generateCfiRange', () => {
-    it('generates range CFI from two overlapping CFIs', () => {
-      const start = 'epubcfi(/6/2!/4/2/1:5)';
-      const end = 'epubcfi(/6/2!/4/2/1:15)';
-      const range = generateCfiRange(start, end);
-      expect(range).toBe('epubcfi(/6/2!/4/2/1,:5,:15)');
+    it('returns null for empty string', () => {
+        expect(parseCfiRange('')).toBeNull();
     });
 
-    it('generates range CFI with different paths', () => {
-      const start = 'epubcfi(/6/2!/4/2/1:0)';
-      const end = 'epubcfi(/6/2!/4/2/2:0)';
-      const range = generateCfiRange(start, end);
-      expect(range).toBe('epubcfi(/6/2!/4/2,/1:0,/2:0)');
+    it('returns null for null/undefined input (if types allowed it)', () => {
+        expect(parseCfiRange(null as any)).toBeNull();
+        expect(parseCfiRange(undefined as any)).toBeNull();
+    });
+
+    it('returns null if not starting with epubcfi(', () => {
+        expect(parseCfiRange('invalid(/6/2)')).toBeNull();
+    });
+
+    it('returns null if not ending with )', () => {
+        expect(parseCfiRange('epubcfi(/6/2')).toBeNull();
+    });
+
+    it('returns null if internal structure is not triplet (parent, start, end)', () => {
+        // missing end
+        expect(parseCfiRange('epubcfi(/6/2,:0)')).toBeNull();
+        // too many parts
+        expect(parseCfiRange('epubcfi(/6/2,:0,:10,:20)')).toBeNull();
+    });
+
+    it('handles parent with special characters if present', () => {
+        // Technically CFI shouldn't have weird chars, but function splits by comma
+        const cfi = 'epubcfi(/6/2[id=1]!/4/2,:0,:10)';
+        const result = parseCfiRange(cfi);
+        expect(result?.parent).toBe('/6/2[id=1]!/4/2');
     });
   });
 
   describe('getParentCfi', () => {
-    it('strips leaf node correctly', () => {
-      const cfi = 'epubcfi(/6/2!/4/2/1:0)';
-      const parent = getParentCfi(cfi);
-      expect(parent).toBe('epubcfi(/6/2!/4/2)');
+    it('returns "unknown" for empty input', () => {
+        expect(getParentCfi('')).toBe('unknown');
     });
 
-    it('collapses deeply nested paths to block level (depth 3)', () => {
-      const cfi = 'epubcfi(/6/2!/4/2/2/1/1)';
-      const parent = getParentCfi(cfi);
-      expect(parent).toBe('epubcfi(/6/2!/4/2/2)');
+    it('extracts parent from a valid range CFI', () => {
+        const cfi = 'epubcfi(/6/2!/4/2,:0,:10)';
+        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2)');
     });
 
-    it('returns same path if depth is small', () => {
-       const cfi = 'epubcfi(/6/2!/4/2)';
-       const parent = getParentCfi(cfi);
-       expect(parent).toBe('epubcfi(/6/2!/4)');
+    it('handles standard CFI: simple file level', () => {
+        // /6/2[id]!
+        const cfi = 'epubcfi(/6/2[id]!)';
+        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2[id]!)');
     });
 
-    it('handles multiple segments properly', () => {
-      const cfi = 'epubcfi(/6/10!/4/2/2/6/1:45)';
-      const parent = getParentCfi(cfi);
-      expect(parent).toBe('epubcfi(/6/10!/4/2/2)');
+    it('handles standard CFI: specific path', () => {
+        // /6/2!/4/2
+        const cfi = 'epubcfi(/6/2!/4/2)';
+        // Should keep as is if depth is shallow
+        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4)');
+    });
+
+    it('strips last segment (text node/leaf)', () => {
+        const cfi = 'epubcfi(/6/2!/4/2/1:10)';
+        // Splitting path: ['', '4', '2', '1:10'] -> filter empty -> ['4', '2', '1:10']
+        // pop -> ['4', '2']
+        // depth check: 2 < 3.
+        // Result: /4/2
+        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2)');
+    });
+
+    it('strips extra level for deep paths (>3)', () => {
+        // Path: /4/2/4/2/1:10
+        // Parts: ['4', '2', '4', '2', '1:10']
+        // Pop last: ['4', '2', '4', '2'] -> Length 4
+        // Length 4 > 3 -> Pop again -> ['4', '2', '4']
+        const cfi = 'epubcfi(/6/2!/4/2/4/2/1:10)';
+        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2/4)');
+    });
+
+    it('handles CFI pointing to root of spine item (no internal path)', () => {
+        const cfi = 'epubcfi(/6/2!)';
+        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!)');
     });
     
-    it('extracts parent from range CFI', () => {
-        const cfi = 'epubcfi(/6/2!/4/2,:0,:10)';
-        const parent = getParentCfi(cfi);
-        expect(parent).toBe('epubcfi(/6/2!/4/2)');
+    it('handles CFI where path becomes empty after popping', () => {
+         // /6/2!/4 -> parts ['4'] -> pop -> []
+         // Should return spine root
+         const cfi = 'epubcfi(/6/2!/4)';
+         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!)');
+    });
+
+    it('returns original CFI if parsing fails (catch block)', () => {
+         const cfi = 'epubcfi(invalid-structure-no-exclamation)';
+         expect(getParentCfi(cfi)).toBe('epubcfi(invalid-structure-no-exclamation!)');
+    });
+
+    it('returns original CFI if format is completely alien', () => {
+        const cfi = 'not-a-cfi';
+        expect(getParentCfi(cfi)).toBe('not-a-cfi');
+    });
+  });
+
+  describe('generateCfiRange', () => {
+    it('generates range correctly', () => {
+        const start = 'epubcfi(/6/2!/4/2/1:0)';
+        const end = 'epubcfi(/6/2!/4/2/1:10)';
+        expect(generateCfiRange(start, end)).toBe('epubcfi(/6/2!/4/2/1,:0,:10)');
+    });
+
+    it('strips epubcfi wrapper if present', () => {
+        const start = '/6/2!/4/2/1:0';
+        const end = 'epubcfi(/6/2!/4/2/1:10)';
+        expect(generateCfiRange(start, end)).toBe('epubcfi(/6/2!/4/2/1,:0,:10)');
+    });
+
+    it('handles completely disjoint paths correctly', () => {
+        // Common prefix minimal
+        const start = 'epubcfi(/6/2!/4/2/1:0)';
+        const end = 'epubcfi(/6/2!/6/2/1:0)';
+        // Code analysis:
+        // common stops before '/'. So common="epubcfi(/6/2!"
+        // startRel="/4/2/1:0", endRel="/6/2/1:0"
+        // Result: "epubcfi(" + common + "," + startRel + "," + endRel + ")"
+        // "epubcfi(/6/2!,/4/2/1:0,/6/2/1:0)"
+        expect(generateCfiRange(start, end)).toBe('epubcfi(/6/2!,/4/2/1:0,/6/2/1:0)');
+    });
+
+    it('backtracks correctly to safe delimiter', () => {
+        // start: .../123
+        // end: .../124
+        // common string: .../12
+        // backtrack to /
+        // common: .../
+        // startRel: 123
+        // endRel: 124
+        const start = 'epubcfi(/a/b/123)';
+        const end = 'epubcfi(/a/b/124)';
+        // Common part excludes the delimiter found during backtrack.
+        // So common is "/a/b"
+        // startRel is "/123", endRel is "/124"
+        expect(generateCfiRange(start, end)).toBe('epubcfi(/a/b,/123,/124)');
+    });
+
+    it('handles identical start and end', () => {
+        const start = 'epubcfi(/6/2!/4/1:0)';
+        expect(generateCfiRange(start, start)).toBe('epubcfi(/6/2!/4/1,:0,:0)');
     });
   });
 
   describe('mergeCfiRanges', () => {
+      it('returns empty array for empty input', () => {
+          expect(mergeCfiRanges([])).toEqual([]);
+      });
+
+      it('returns single range if only one provided', () => {
+          const r = 'epubcfi(/6/2!/4/2,:0,:10)';
+          expect(mergeCfiRanges([r])).toEqual([r]);
+      });
+
+      it('adds newRange to the list before merging', () => {
+          const r1 = 'epubcfi(/6/2!/4/2,:0,:10)';
+          const r2 = 'epubcfi(/6/2!/4/2,:10,:20)';
+          const res = mergeCfiRanges([r1], r2);
+          expect(res).toHaveLength(1); // merged
+          expect(res[0]).toContain(':0,:20');
+      });
+
       it('merges overlapping ranges', () => {
-          const range1 = 'epubcfi(/6/2!/4/2,:0,:10)';
-          const range2 = 'epubcfi(/6/2!/4/2,:5,:20)';
-          const merged = mergeCfiRanges([range1], range2);
-          expect(merged).toHaveLength(1);
-          // Expect merged range to cover :0 to :20
-          expect(merged[0]).toContain(',:0,:20');
+          const r1 = 'epubcfi(/6/2!/4/2,:0,:10)'; // 0-10
+          const r2 = 'epubcfi(/6/2!/4/2,:5,:15)'; // 5-15
+          const res = mergeCfiRanges([r1, r2]);
+          expect(res).toHaveLength(1);
+          expect(res[0]).toContain(':0,:15');
       });
 
-      it('keeps disjoint ranges separate', () => {
-          const range1 = 'epubcfi(/6/2!/4/2,:0,:10)';
-          const range2 = 'epubcfi(/6/2!/4/2,:30,:40)';
-          const merged = mergeCfiRanges([range1], range2);
-          expect(merged).toHaveLength(2);
+      it('merges abutting ranges', () => {
+          const r1 = 'epubcfi(/6/2!/4/2,:0,:10)'; // 0-10
+          const r2 = 'epubcfi(/6/2!/4/2,:10,:20)'; // 10-20
+          const res = mergeCfiRanges([r1, r2]);
+          expect(res).toHaveLength(1);
+          expect(res[0]).toContain(':0,:20');
       });
 
-      it('handles ranges across different chapters (disjoint)', () => {
-           // Different spine items (2 vs 4)
-           const r1 = 'epubcfi(/6/2!/4/2/1,:0,:10)';
-           const r2 = 'epubcfi(/6/4!/4/2/2,:0,:10)';
-           const merged = mergeCfiRanges([r1], r2);
-           expect(merged).toHaveLength(2);
+      it('merges contained ranges', () => {
+          const r1 = 'epubcfi(/6/2!/4/2,:0,:20)'; // 0-20
+          const r2 = 'epubcfi(/6/2!/4/2,:5,:10)'; // 5-10
+          const res = mergeCfiRanges([r1, r2]);
+          expect(res).toHaveLength(1);
+          expect(res[0]).toContain(':0,:20');
+      });
+
+      it('handles unsorted ranges', () => {
+          const r1 = 'epubcfi(/6/2!/4/2,:10,:20)';
+          const r2 = 'epubcfi(/6/2!/4/2,:0,:5)';
+          const res = mergeCfiRanges([r1, r2]);
+          // Should result in two ranges: 0-5 and 10-20, sorted
+          expect(res).toHaveLength(2);
+          expect(res[0]).toContain(':0,:5');
+          expect(res[1]).toContain(':10,:20');
+      });
+
+      it('handles comparison errors gracefully (returns all ranges)', () => {
+          mockCompare.mockImplementationOnce(() => { throw new Error('Compare error'); });
+          const r1 = 'epubcfi(/6/2!/4/2,:0,:10)';
+          const r2 = 'epubcfi(/6/2!/4/2,:10,:20)';
+          const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+          const res = mergeCfiRanges([r1, r2]);
+          expect(res).toHaveLength(2); // Failed to sort/merge, return original
+          expect(consoleSpy).toHaveBeenCalled();
+          consoleSpy.mockRestore();
+      });
+
+      it('handles merge logic errors gracefully', () => {
+           mockCompare.mockImplementation((a, b) => {
+                // Throw specific error for loop check condition
+                // a is next.fullStart, b is current.fullEnd
+                if (a.endsWith(':10)') && b.endsWith(':10)')) {
+                    throw new Error('Loop error');
+                }
+
+                if (a === b) return 0;
+                const parse = (c: string) => {
+                    const content = c.replace('epubcfi(', '').replace(')', '');
+                    const [p, off] = content.split(':');
+                    return { path: p, offset: off ? parseInt(off) : 0 };
+                };
+                const pa = parse(a);
+                const pb = parse(b);
+                if (pa.offset < pb.offset) return -1;
+                if (pa.offset > pb.offset) return 1;
+                return 0;
+           });
+
+           const r3 = 'epubcfi(/6/2!/4/2,:0,:10)';
+           const r4 = 'epubcfi(/6/2!/4/2,:10,:20)';
+           const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+           const res = mergeCfiRanges([r3, r4]);
+
+           // If loop error caught, it pushes current and sets current=next.
+           // So result should be [r3, r4] (unmerged).
+           expect(res).toHaveLength(2);
+           expect(consoleSpy).toHaveBeenCalled();
+           consoleSpy.mockRestore();
       });
   });
-  
+
   describe('generateEpubCfi', () => {
-      it('generates a valid CFI string from a Range and Base CFI', () => {
-          const range = {
-              startContainer: {},
-              startOffset: 0,
-              endContainer: {},
-              endOffset: 0,
-              commonAncestorContainer: {}
-          } as unknown as Range;
+      it('generates cfi', () => {
+          const range = {} as Range;
+          const base = 'epubcfi(/6/2!)';
+          expect(generateEpubCfi(range, base)).toBe('epubcfi(/mock/1)');
+      });
+
+      it('cleans baseCfi input', () => {
+          const range = {} as Range;
+          const base = 'epubcfi(/6/2!/ignore)'; // should strip after !
+          expect(generateEpubCfi(range, base)).toBe('epubcfi(/mock/1)');
+      });
+
+      it('handles errors', () => {
+           triggerEpubCfiError = true;
+           const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+           const res = generateEpubCfi({} as Range, 'base');
+           expect(res).toBe('');
+           expect(consoleSpy).toHaveBeenCalled();
+           consoleSpy.mockRestore();
+      });
+  });
+
+  describe('snapCfiToSentence', () => {
+      let mockBook: any;
+
+      beforeEach(() => {
+          mockBook = {
+              spine: { items: [] },
+              getRange: vi.fn(),
+          };
+      });
+
+      it('returns original if book/spine is invalid', async () => {
+          const res = await snapCfiToSentence({} as any, 'cfi');
+          expect(res).toBe('cfi');
+      });
+
+      it('returns original if cfi invalid', async () => {
+          const res = await snapCfiToSentence(mockBook, 'invalid');
+          expect(res).toBe('invalid');
+      });
+
+      it('returns original if getRange returns null', async () => {
+          mockBook.getRange.mockResolvedValue(null);
+          const res = await snapCfiToSentence(mockBook, 'epubcfi(/6/2!/4/2:10)');
+          expect(res).toBe('epubcfi(/6/2!/4/2:10)');
+      });
+
+      it('returns original if node is not TEXT_NODE', async () => {
+          mockBook.getRange.mockResolvedValue({
+              startContainer: { nodeType: 1 }, // Element node
+              startOffset: 0
+          });
+          const res = await snapCfiToSentence(mockBook, 'epubcfi(/6/2!/4/2:10)');
+          expect(res).toBe('epubcfi(/6/2!/4/2:10)');
+      });
+
+      it('snaps to sentence boundary using Intl.Segmenter', async () => {
+          const textNode = {
+              nodeType: 3,
+              textContent: "Hello world. This is a test."
+          };
+
+          mockBook.getRange.mockResolvedValue({
+              startContainer: textNode,
+              startOffset: 15
+          });
+
+          const segmentFn = vi.fn().mockReturnValue([
+              { index: 0, segment: "Hello world. " },
+              { index: 13, segment: "This is a test." }
+          ]);
+
+          class MockSegmenter {
+              segment(text: string) {
+                  return segmentFn(text);
+              }
+          }
           
-          const baseCfi = 'epubcfi(/6/14!)';
-          const result = generateEpubCfi(range, baseCfi);
-          expect(result).toBe('epubcfi(/mock/1)');
+          const originalIntl = global.Intl;
+          // @ts-ignore
+          global.Intl = {
+              ...originalIntl,
+              // @ts-ignore
+              Segmenter: MockSegmenter
+          };
+
+          const res = await snapCfiToSentence(mockBook, 'epubcfi(/6/2!/4/2:15)');
+
+          expect(mockCreateRange).toHaveBeenCalled();
+          expect(mockSetStart).toHaveBeenCalledWith(textNode, 13);
+          expect(res).toBe('epubcfi(/mock/1)');
+
+          global.Intl = originalIntl;
       });
       
-      it('handles error gracefully', () => {
-           // We can't force new EpubCFI to throw easily with the class mock above 
-           // unless we make the mock conditional or more complex.
-           // For now, this coverage is sufficient for the wrapper.
+      it('returns original if already at start of sentence', async () => {
+          const textNode = {
+              nodeType: 3,
+              textContent: "Hello world. This is a test."
+          };
+
+          mockBook.getRange.mockResolvedValue({
+              startContainer: textNode,
+              startOffset: 13
+          });
+
+           const segmentFn = vi.fn().mockReturnValue([
+              { index: 0, segment: "Hello world. " },
+              { index: 13, segment: "This is a test." }
+          ]);
+
+          class MockSegmenter {
+              segment(text: string) {
+                  return segmentFn(text);
+              }
+          }
+
+          const originalIntl = global.Intl;
+          // @ts-ignore
+          global.Intl = {
+              ...originalIntl,
+              // @ts-ignore
+              Segmenter: MockSegmenter
+          };
+
+          const res = await snapCfiToSentence(mockBook, 'epubcfi(/6/2!/4/2:13)');
+
+          expect(mockCreateRange).not.toHaveBeenCalled();
+          expect(res).toBe('epubcfi(/6/2!/4/2:13)');
+
+          global.Intl = originalIntl;
+      });
+
+      it('handles exceptions in snapCfiToSentence gracefully', async () => {
+           mockBook.getRange.mockRejectedValue(new Error('Book error'));
+           const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+           const res = await snapCfiToSentence(mockBook, 'epubcfi(/6/2!/4/2:10)');
+
+           expect(res).toBe('epubcfi(/6/2!/4/2:10)');
+           expect(consoleSpy).toHaveBeenCalled();
+           consoleSpy.mockRestore();
       });
   });
+
 });

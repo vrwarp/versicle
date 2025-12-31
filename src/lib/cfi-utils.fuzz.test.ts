@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeCfiRanges, generateCfiRange } from './cfi-utils';
+import { mergeCfiRanges, generateCfiRange, parseCfiRange, getParentCfi } from './cfi-utils';
 
 describe('cfi-utils Fuzzing', () => {
 
@@ -10,6 +10,16 @@ describe('cfi-utils Fuzzing', () => {
         const step = Math.floor((seed * 9301 + 49297) % 233280);
         const offset = Math.floor(seed % 100);
         return `epubcfi(/6/${step}!/4/2/1:${offset})`;
+    };
+
+    const randomString = (length: number) => {
+        let result = '';
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+[]{}|;:,.<>?';
+        const charactersLength = characters.length;
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        }
+        return result;
     };
 
     it('remains stable under random merges (Idempotency & Associativity)', () => {
@@ -67,5 +77,48 @@ describe('cfi-utils Fuzzing', () => {
 
         // Should remain 50 separate ranges
         expect(result).toHaveLength(50);
+    });
+
+    it('parseCfiRange survives random strings', () => {
+        for(let i=0; i<1000; i++) {
+            const str = randomString(Math.floor(Math.random() * 50));
+            // Should not throw
+            try {
+                const res = parseCfiRange(str);
+                // It's likely null, but strict check is it doesn't crash
+                expect(res === null || typeof res === 'object').toBe(true);
+            } catch (e) {
+                console.error(`Crashed on input: ${str}`);
+                throw e;
+            }
+        }
+    });
+
+    it('getParentCfi survives random strings', () => {
+        for(let i=0; i<1000; i++) {
+             const str = randomString(Math.floor(Math.random() * 50));
+             try {
+                 const res = getParentCfi(str);
+                 expect(typeof res).toBe('string');
+             } catch(e) {
+                 console.error(`Crashed on input: ${str}`);
+                 throw e;
+             }
+        }
+    });
+
+    it('getParentCfi handles deep random paths', () => {
+         for(let i=0; i<100; i++) {
+             let path = 'epubcfi(/6/2!';
+             const depth = Math.floor(Math.random() * 20); // up to 20 levels deep
+             for(let d=0; d<depth; d++) {
+                 path += `/${Math.floor(Math.random() * 10)}`;
+             }
+             path += ')';
+
+             const res = getParentCfi(path);
+             expect(typeof res).toBe('string');
+             // It should potentially strip something but not crash
+         }
     });
 });
