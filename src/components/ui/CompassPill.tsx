@@ -3,7 +3,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
-import { ChevronsLeft, ChevronsRight, SkipBack, SkipForward, Play, Pause, StickyNote, Mic, Copy, X } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 export type ActionType =
@@ -40,14 +40,12 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     isPlaying,
     queue,
     currentIndex,
-    jumpTo,
     play,
     pause
   } = useTTSStore(useShallow(state => ({
       isPlaying: state.isPlaying,
       queue: state.queue,
       currentIndex: state.currentIndex,
-      jumpTo: state.jumpTo,
       play: state.play,
       pause: state.pause
   })));
