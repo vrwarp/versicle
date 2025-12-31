@@ -190,7 +190,9 @@ export class AudioPlayerService {
               title: item.title || 'Chapter Text',
               artist: item.author || 'Versicle',
               album: item.bookTitle || '',
-              artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
+              artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
+              sectionIndex: this.currentSectionIndex,
+              totalSections: this.playlist.length
           });
           await this.mediaSessionManager.setPlaybackState('playing');
           return true;
