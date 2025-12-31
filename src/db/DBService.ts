@@ -1,5 +1,6 @@
 import { getDB } from './db';
 import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition } from '../types/db';
+import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
 import { validateBookMetadata } from './validators';
@@ -920,6 +921,40 @@ class DBService {
     } catch (error) {
       this.handleError(error);
     }
+  }
+
+  /**
+   * Saves content classifications for a section.
+   * Merges with existing analysis if present, or creates a new one.
+   *
+   * @param bookId - The book ID.
+   * @param sectionId - The section ID.
+   * @param classifications - The detected content types.
+   */
+  async saveContentClassifications(bookId: string, sectionId: string, classifications: { rootCfi: string; type: ContentType }[]): Promise<void> {
+      try {
+          const db = await this.getDB();
+          const tx = db.transaction('content_analysis', 'readwrite');
+          const store = tx.objectStore('content_analysis');
+          const id = `${bookId}-${sectionId}`;
+          const existing = await store.get(id);
+
+          const analysis: ContentAnalysis = existing || {
+              id,
+              bookId,
+              sectionId,
+              structure: { footnoteMatches: [] }, // Default empty structure
+              lastAnalyzed: Date.now()
+          };
+
+          analysis.contentTypes = classifications;
+          analysis.lastAnalyzed = Date.now();
+
+          await store.put(analysis);
+          await tx.done;
+      } catch (error) {
+          this.handleError(error);
+      }
   }
 
   /**

@@ -102,9 +102,6 @@ export class AudioPlayerService {
   // Track last persisted queue to avoid redundant heavy writes
   private lastPersistedQueue: TTSQueueItem[] | null = null;
 
-  // Cache for content detection results: Section ID -> Set of Root CFIs to skip
-  private contentDetectionCache = new Map<string, Set<string>>();
-
   private prefixSums: number[] = [0];
 
   private constructor() {
@@ -1041,11 +1038,14 @@ export class AudioPlayerService {
       }
       if (currentGroup) groups.push(currentGroup);
 
-      const cacheKey = `${this.currentBookId}-${sectionId}`;
-      let skipRoots: Set<string> | undefined = this.contentDetectionCache.get(cacheKey);
+      // 1. Check existing classification in DB
+      let contentAnalysis = await dbService.getContentAnalysis(this.currentBookId, sectionId);
 
-      // If not in cache, we need to detect
-      if (!skipRoots) {
+      // If we have stored content types, use them
+      let detectedTypes = contentAnalysis?.contentTypes;
+
+      // 2. If not found, detect with GenAI
+      if (!detectedTypes) {
           const aiStore = useGenAIStore.getState();
           const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
 
@@ -1064,41 +1064,10 @@ export class AudioPlayerService {
                   if (genAIService.isConfigured()) {
                       // Note: Using default model (gemini-1.5-flash) from GenAIService
                       const results = await genAIService.detectContentTypes(nodesToDetect);
+                      detectedTypes = results;
 
-                      skipRoots = new Set<string>();
-
-                      // We store ALL detected types in cache, so we can change skip preferences later without re-fetching?
-                      // Actually, to support reactive settings changes, we should cache the TYPE of each root, not just "skipped".
-                      // For now, let's cache the types.
-                      // Wait, the cache map is defined as Set<string> (CFIs to skip).
-                      // If the user changes settings, we might need to re-evaluate.
-                      // Ideally we'd cache Map<rootCfi, type>.
-                      // But given the simple requirement "store the results", let's store the detected types.
-                      // Let's refactor the cache to store Types.
-
-                      // Refactor Cache Structure on the fly? No, let's just stick to the plan but maybe clear cache if settings change?
-                      // Or better: Store Map<RootCFI, Type> in memory.
-
-                      // For this iteration, let's stick to the simple requirement: Detect and Filter.
-                      // I will cache the skipped roots based on CURRENT settings.
-                      // If settings change, we might need to invalidate this cache.
-                      // But for now, let's just implement the requested logic.
-
-                      const typeMap = new Map<string, ContentType>();
-                      results.forEach(r => typeMap.set(r.rootCfi, r.type));
-
-                      // Populate skipRoots based on current skipTypes
-                      const rootsToSkip = new Set<string>();
-                      groups.forEach(g => {
-                          const type = typeMap.get(g.rootCfi);
-                          if (type && skipTypes.includes(type)) {
-                              rootsToSkip.add(g.rootCfi);
-                          }
-                      });
-                      skipRoots = rootsToSkip;
-
-                      // Update cache
-                      this.contentDetectionCache.set(cacheKey, skipRoots);
+                      // Persist detection results
+                      await dbService.saveContentClassifications(this.currentBookId, sectionId, results);
                   }
               } catch (e) {
                   console.warn("Content detection failed", e);
@@ -1106,18 +1075,32 @@ export class AudioPlayerService {
           }
       }
 
-      // Filter
-      if (skipRoots) {
-          const finalSentences: typeof sentences = [];
-          for (const g of groups) {
-              if (!skipRoots.has(g.rootCfi)) {
-                  finalSentences.push(...g.segments);
-              } else {
-                  console.log(`Skipping content block (Cached/Detected)`, g.rootCfi);
+      // 3. Filter based on detected types and current settings
+      if (detectedTypes && detectedTypes.length > 0) {
+          const typeMap = new Map<string, ContentType>();
+          detectedTypes.forEach(r => typeMap.set(r.rootCfi, r.type));
+
+          const skipRoots = new Set<string>();
+          groups.forEach(g => {
+              const type = typeMap.get(g.rootCfi);
+              if (type && skipTypes.includes(type)) {
+                  skipRoots.add(g.rootCfi);
               }
+          });
+
+          if (skipRoots.size > 0) {
+              const finalSentences: typeof sentences = [];
+              for (const g of groups) {
+                  if (!skipRoots.has(g.rootCfi)) {
+                      finalSentences.push(...g.segments);
+                  } else {
+                      console.log(`Skipping content block (Cached/Detected)`, g.rootCfi);
+                  }
+              }
+              return finalSentences;
           }
-          return finalSentences;
       }
+
 
       return sentences;
   }
