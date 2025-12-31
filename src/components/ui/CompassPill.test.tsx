@@ -13,6 +13,10 @@ vi.mock('lucide-react', () => ({
     SkipForward: () => <span data-testid="icon-skip-forward" />,
     Play: () => <span data-testid="icon-play" />,
     Pause: () => <span data-testid="icon-pause" />,
+    StickyNote: () => <span data-testid="icon-sticky-note" />,
+    Mic: () => <span data-testid="icon-mic" />,
+    Copy: () => <span data-testid="icon-copy" />,
+    X: () => <span data-testid="icon-x" />,
 }));
 
 // Mock useTTSStore
@@ -47,7 +51,7 @@ describe('CompassPill', () => {
         vi.clearAllMocks();
     });
 
-    it('dispatches ArrowLeft event when "prev" button is clicked and not playing', () => {
+    it('dispatches reader:chapter-nav event when "prev" button is clicked and not playing', () => {
         // Setup not playing
         vi.mocked(useTTSStore).mockReturnValue({
              isPlaying: false,
@@ -66,12 +70,12 @@ describe('CompassPill', () => {
         fireEvent.click(prevButton!);
 
         expect(dispatchSpy).toHaveBeenCalled();
-        const event = dispatchSpy.mock.calls[0][0] as KeyboardEvent;
-        expect(event.type).toBe('keydown');
-        expect(event.key).toBe('ArrowLeft');
+        const event = dispatchSpy.mock.calls[0][0] as CustomEvent;
+        expect(event.type).toBe('reader:chapter-nav');
+        expect(event.detail.direction).toBe('prev');
     });
 
-    it('dispatches ArrowRight event when "next" button is clicked and not playing', () => {
+    it('dispatches reader:chapter-nav event when "next" button is clicked and not playing', () => {
          // Setup not playing
          vi.mocked(useTTSStore).mockReturnValue({
              isPlaying: false,
@@ -90,12 +94,12 @@ describe('CompassPill', () => {
         fireEvent.click(nextButton!);
 
         expect(dispatchSpy).toHaveBeenCalled();
-        const event = dispatchSpy.mock.calls[0][0] as KeyboardEvent;
-        expect(event.type).toBe('keydown');
-        expect(event.key).toBe('ArrowRight');
+        const event = dispatchSpy.mock.calls[0][0] as CustomEvent;
+        expect(event.type).toBe('reader:chapter-nav');
+        expect(event.detail.direction).toBe('next');
     });
 
-    it('calls jumpTo when "next" button is clicked and playing', () => {
+    it('dispatches reader:chapter-nav event when "next" button is clicked and playing', () => {
          // Setup playing
          vi.mocked(useTTSStore).mockReturnValue({
              isPlaying: true,
@@ -108,10 +112,21 @@ describe('CompassPill', () => {
 
         render(<CompassPill variant="active" />);
 
-        const nextButton = screen.getByTestId('icon-skip-forward').closest('button');
+        // Should still show chevrons, not skip icons
+        expect(screen.getByTestId('icon-chevrons-right')).toBeInTheDocument();
+        expect(screen.queryByTestId('icon-skip-forward')).not.toBeInTheDocument();
+
+        const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+        const nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
         fireEvent.click(nextButton!);
 
-        expect(mockJumpTo).toHaveBeenCalledWith(6);
+        expect(dispatchSpy).toHaveBeenCalled();
+        const event = dispatchSpy.mock.calls[0][0] as CustomEvent;
+        expect(event.type).toBe('reader:chapter-nav');
+        expect(event.detail.direction).toBe('next');
+
+        // Should NOT call jumpTo
+        expect(mockJumpTo).not.toHaveBeenCalled();
     });
 
     it('renders compact mode correctly', () => {
@@ -162,7 +177,7 @@ describe('CompassPill', () => {
        expect(mockPause).toHaveBeenCalled();
    });
 
-   it('has correct aria-labels in active mode', () => {
+   it('has consistent aria-labels in active mode', () => {
        // Setup not playing
        vi.mocked(useTTSStore).mockReturnValue({
            isPlaying: false,
@@ -175,8 +190,8 @@ describe('CompassPill', () => {
 
        const { rerender } = render(<CompassPill variant="active" />);
 
-       const prevButton = screen.getByTestId('icon-chevrons-left').closest('button');
-       const nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
+       let prevButton = screen.getByTestId('icon-chevrons-left').closest('button');
+       let nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
 
        expect(prevButton).toHaveAttribute('aria-label', 'Previous chapter');
        expect(nextButton).toHaveAttribute('aria-label', 'Next chapter');
@@ -193,10 +208,10 @@ describe('CompassPill', () => {
 
        rerender(<CompassPill variant="active" />);
 
-       const skipBackButton = screen.getByTestId('icon-skip-back').closest('button');
-       const skipForwardButton = screen.getByTestId('icon-skip-forward').closest('button');
+       prevButton = screen.getByTestId('icon-chevrons-left').closest('button');
+       nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
 
-       expect(skipBackButton).toHaveAttribute('aria-label', 'Skip to previous sentence');
-       expect(skipForwardButton).toHaveAttribute('aria-label', 'Skip to next sentence');
+       expect(prevButton).toHaveAttribute('aria-label', 'Previous chapter');
+       expect(nextButton).toHaveAttribute('aria-label', 'Next chapter');
    });
 });

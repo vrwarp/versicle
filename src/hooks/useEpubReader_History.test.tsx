@@ -10,8 +10,43 @@ vi.mock('../db/DBService', () => ({
     getLocations: vi.fn(),
     saveLocations: vi.fn(),
     getReadingHistory: vi.fn(),
+    getReadingHistoryEntry: vi.fn(),
   }
 }));
+
+// Mock cfi-utils to avoid dealing with complex CFI parsing in tests
+vi.mock('../lib/cfi-utils', async (importOriginal) => {
+    const actual = await importOriginal();
+    return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(actual as any),
+        parseCfiRange: vi.fn((range: string) => {
+            if (range === 'range-old') return { fullEnd: 'cfi-old-end', fullStart: 'cfi-old-start' };
+            if (range === 'range-new') return { fullEnd: 'cfi-new-end', fullStart: 'cfi-new-start' };
+            // Original test usage
+            if (range.includes('epubcfi')) return { fullEnd: 'cfi-original-end', fullStart: 'cfi-original-start' };
+            return null;
+        }),
+        sanitizeContent: (html: string) => html,
+        runCancellable: (gen: Generator) => {
+             const iter = gen;
+             const iterate = async (val?: any) => {
+                 const res = iter.next(val);
+                 if (!res.done) {
+                     if (res.value instanceof Promise) {
+                         const result = await res.value;
+                         iterate(result);
+                     } else {
+                         iterate(res.value);
+                     }
+                 }
+             };
+             iterate();
+             return { cancel: () => {} };
+        },
+        CancellationError: class CancellationError extends Error {}
+    };
+});
 
 // Mock epubjs
 vi.mock('epubjs', () => {
@@ -79,7 +114,7 @@ describe('useEpubReader History Integration', () => {
         vi.clearAllMocks();
     });
 
-    it('should resume from the end of the last reading session in history', async () => {
+    it('should fallback to legacy spatial range if sessions are missing', async () => {
         const bookId = 'book-123';
         const fileData = new ArrayBuffer(10);
         const metadata = {
@@ -96,34 +131,74 @@ describe('useEpubReader History Integration', () => {
             file: fileData
         });
 
-        // Mock Reading History
-        // Range from Start to Middle of Chapter
-        // "epubcfi(/6/6!/4/2/1:0),/1:0,/1:100)" represents a range.
         const historyRanges = ['epubcfi(/6/6!/4/2/1:0,/1:0,/1:100)'];
 
+        // Mock getReadingHistoryEntry to return ranges but NO sessions
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getReadingHistory as any).mockResolvedValue(historyRanges);
+        (dbService.getReadingHistoryEntry as any).mockResolvedValue({
+            bookId,
+            readRanges: historyRanges,
+            sessions: [], // Empty sessions
+            lastUpdated: Date.now()
+        });
 
-        // Render the hook
         const { result } = renderHook(() => useEpubReader(bookId, viewerRef, options));
 
         await waitFor(() => {
             expect(result.current.isReady).toBe(true);
         });
 
-        // Get the rendition instance
         const rendition = result.current.rendition;
-
         expect(rendition?.display).toHaveBeenCalled();
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const calledArg = (rendition?.display as any).mock.calls[0][0];
 
-        // It should NOT be the metadata one
-        expect(calledArg).not.toBe(metadata.currentCfi);
+        // Should use fullEnd from range (legacy behavior)
+        expect(calledArg).toBe('cfi-original-end');
+    });
 
-        // It should be related to the history end
-        // We expect it to be the end of the range
-        // Based on generateCfiRange logic, we can construct what the end looks like
-        // or just verify it's different.
+    it('should prefer the last chronological session if available', async () => {
+        const bookId = 'book-session-test';
+
+        // Mock getBook
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (dbService.getBook as any).mockResolvedValue({
+            metadata: { id: bookId, title: 'Session Test', currentCfi: 'metadata-cfi' },
+            file: new ArrayBuffer(10)
+        });
+
+        // range-new is spatially after range-old usually, but here we just use names.
+        // We put range-old LAST in readRanges (simulating spatial sort end)
+        // But we put range-new LAST in sessions (simulating chronological end)
+        const historyEntry = {
+            bookId,
+            readRanges: ['range-new', 'range-old'],
+            sessions: [
+                { cfiRange: 'range-old', timestamp: 1000, type: 'page' },
+                { cfiRange: 'range-new', timestamp: 2000, type: 'page' } // Most recent
+            ],
+            lastUpdated: 2000
+        };
+
+        // Mock getReadingHistoryEntry
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (dbService.getReadingHistoryEntry as any).mockResolvedValue(historyEntry);
+
+        const { result } = renderHook(() => useEpubReader(bookId, viewerRef, options));
+
+        await waitFor(() => {
+            expect(result.current.isReady).toBe(true);
+        });
+
+        const rendition = result.current.rendition;
+        expect(rendition?.display).toHaveBeenCalled();
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const calledArg = (rendition?.display as any).mock.calls[0][0];
+
+        // Should use fullStart from session (new behavior)
+        expect(calledArg).toBe('cfi-new-start');
+        // If it used the old logic, it would pick 'range-old' -> 'cfi-old-end'
     });
 });
