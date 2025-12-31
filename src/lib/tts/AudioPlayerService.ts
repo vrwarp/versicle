@@ -11,6 +11,10 @@ import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule } from '../../types/db';
 import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
+import { getParentCfi } from '../cfi-utils';
+import { genAIService } from '../genai/GenAIService';
+import { useGenAIStore } from '../../store/useGenAIStore';
+import type { ContentType } from '../../types/content-analysis';
 
 const NO_TEXT_MESSAGES = [
     "This chapter appears to be empty.",
@@ -190,9 +194,7 @@ export class AudioPlayerService {
               title: item.title || 'Chapter Text',
               artist: item.author || 'Versicle',
               album: item.bookTitle || '',
-              artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
-              sectionIndex: this.currentSectionIndex,
-              totalSections: this.playlist.length
+              artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
           });
           await this.mediaSessionManager.setPlaybackState('playing');
           return true;
@@ -210,15 +212,14 @@ export class AudioPlayerService {
   }
 
   /**
-   * Calculates the processing speed in characters per second.
+   * Calculates the processing speed in characters per second based on the current playback speed.
    * Assumes a base reading rate of 180 words per minute and 5 characters per word.
-   * Fixed to be independent of speed for true duration calculation.
    * @returns {number} Characters per second.
    */
   private calculateCharsPerSecond(): number {
       // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 900.
-      // charsPerSecond = 900 / 60
-      return 900 / 60;
+      // charsPerSecond = (900 * speed) / 60
+      return (900 * this.speed) / 60;
   }
 
   private updateSectionMediaPosition(providerTime: number) {
@@ -316,9 +317,7 @@ export class AudioPlayerService {
               title: item.title || 'Chapter Text',
               artist: item.author || 'Versicle',
               album: item.bookTitle || '',
-              artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
-              sectionIndex: this.currentSectionIndex,
-              totalSections: this.playlist.length
+              artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
           };
 
           // Always update position when track changes, even if metadata is identical
@@ -934,6 +933,18 @@ export class AudioPlayerService {
                   settings.sentenceStarters
               );
 
+              // -----------------------------------------------------------
+              // Content Type Detection & Filtering
+              // -----------------------------------------------------------
+              const skipTypes = settings.skipContentTypes;
+              
+              let finalSentences: { text: string; cfi: string | null }[] = refinedSentences;
+
+              // Optimize: Don't run detection if nothing to skip
+              if (skipTypes.length > 0) {
+                  finalSentences = await this.detectAndFilterContent(refinedSentences, skipTypes);
+              }
+
               // Add Preroll if enabled
               if (this.prerollEnabled) {
                   const prerollText = this.generatePreroll(title, Math.round(section.characterCount / 5), this.speed);
@@ -948,15 +959,17 @@ export class AudioPlayerService {
                   });
               }
 
-              refinedSentences.forEach(s => {
-                  newQueue.push({
-                      text: s.text,
-                      cfi: s.cfi,
-                      title: title,
-                      bookTitle: bookMetadata?.title,
-                      author: bookMetadata?.author,
-                      coverUrl: coverUrl
-                  });
+              finalSentences.forEach((s) => {
+                  if (s.cfi) {
+                      newQueue.push({
+                          text: s.text,
+                          cfi: s.cfi,
+                          title: title,
+                          bookTitle: bookMetadata?.title,
+                          author: bookMetadata?.author,
+                          coverUrl: coverUrl
+                      });
+                  }
               });
           } else {
               // Empty Chapter Handling
@@ -1015,6 +1028,123 @@ export class AudioPlayerService {
           nextSectionIndex++;
       }
       return false;
+  }
+
+  /**
+   * Retrieves or detects content types for the given text groups.
+   * Checks the database first for persisted classifications. If not found,
+   * invokes the GenAI service to classify the content (if available).
+   *
+   * @param bookId The ID of the book.
+   * @param sectionId The ID of the section.
+   * @param groups The grouped text segments to analyze.
+   * @returns A promise resolving to the list of content types, or null if detection was not possible.
+   */
+  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[]) {
+      // 1. Check existing classification in DB
+      const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+      
+      // If we have stored content types, return them
+      if (contentAnalysis?.contentTypes) {
+          return contentAnalysis.contentTypes;
+      }
+
+      // 2. If not found, detect with GenAI
+      const aiStore = useGenAIStore.getState();
+      const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+      
+      if (!canUseGenAI) {
+          return null;
+      }
+
+      try {
+          const nodesToDetect = groups.map(g => ({
+              rootCfi: g.rootCfi,
+              sampleText: g.fullText.substring(0, 500)
+          }));
+
+          // Ensure service is configured if we have a key
+          if (!genAIService.isConfigured() && aiStore.apiKey) {
+                genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
+          }
+
+          if (genAIService.isConfigured()) {
+              // Note: Using default model (gemini-1.5-flash) from GenAIService
+              const results = await genAIService.detectContentTypes(nodesToDetect);
+
+              // Persist detection results
+              await dbService.saveContentClassifications(bookId, sectionId, results);
+              return results;
+          }
+      } catch (e) {
+          console.warn("Content detection failed", e);
+      }
+      
+      return null;
+  }
+
+  /**
+   * Filters the TTS queue based on content type classification.
+   * Uses GenAI to detect content types (citations, tables, etc.) and removes
+   * segments that match the configured skip types.
+   *
+   * @param sentences The original list of TTS queue items.
+   * @param skipTypes The list of content types to exclude.
+   * @returns A promise resolving to the filtered list of queue items.
+   */
+  private async detectAndFilterContent(sentences: { text: string; cfi: string | null }[], skipTypes: ContentType[]): Promise<{ text: string; cfi: string | null }[]> {
+      if (!this.currentBookId || this.currentSectionIndex === -1) return sentences;
+      
+      const sectionId = this.playlist[this.currentSectionIndex]?.sectionId;
+      if (!sectionId) return sentences;
+
+      // Group sentences by Root Node
+      const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
+      let currentGroup: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
+
+      for (const s of sentences) {
+          const rootCfi = getParentCfi(s.cfi || ''); // Handle null cfi
+
+          if (!currentGroup || currentGroup.rootCfi !== rootCfi) {
+              if (currentGroup) groups.push(currentGroup);
+              currentGroup = { rootCfi, segments: [], fullText: '' };
+          }
+
+          currentGroup.segments.push(s);
+          currentGroup.fullText += s.text + ' ';
+      }
+      if (currentGroup) groups.push(currentGroup);
+
+      const detectedTypes = await this.getOrDetectContentTypes(this.currentBookId, sectionId, groups);
+
+      // 3. Filter based on detected types and current settings
+      if (detectedTypes && detectedTypes.length > 0) {
+          const typeMap = new Map<string, ContentType>();
+          detectedTypes.forEach(r => typeMap.set(r.rootCfi, r.type));
+
+          const skipRoots = new Set<string>();
+          groups.forEach(g => {
+              const type = typeMap.get(g.rootCfi);
+              if (type && skipTypes.includes(type)) {
+                  skipRoots.add(g.rootCfi);
+              }
+          });
+
+          if (skipRoots.size > 0) {
+              const finalSentences: { text: string; cfi: string | null }[] = [];
+              for (const g of groups) {
+                  if (!skipRoots.has(g.rootCfi)) {
+                      finalSentences.push(...g.segments);
+                  } else {
+                      console.log(`Skipping content block (Cached/Detected)`, g.rootCfi);
+                  }
+              }
+              return finalSentences;
+          }
+      }
+
+
+      return sentences;
   }
 
   /**

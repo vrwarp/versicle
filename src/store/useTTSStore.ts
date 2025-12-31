@@ -11,6 +11,7 @@ import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
 import { Capacitor } from '@capacitor/core';
+import type { ContentType } from '../types/content-analysis';
 
 /**
  * State interface for the Text-to-Speech (TTS) store.
@@ -67,6 +68,9 @@ interface TTSState {
   /** Whether to enable text sanitization (remove URLs, page numbers, etc.) */
   sanitizationEnabled: boolean;
 
+  /** Content types to skip during TTS playback */
+  skipContentTypes: ContentType[];
+
   /** Local Provider Settings */
   backgroundAudioMode: 'silence' | 'noise' | 'off';
   whiteNoiseVolume: number;
@@ -88,6 +92,7 @@ interface TTSState {
   setEnableCostWarning: (enable: boolean) => void;
   setPrerollEnabled: (enable: boolean) => void;
   setSanitizationEnabled: (enable: boolean) => void;
+  setSkipContentTypes: (types: ContentType[]) => void;
   loadVoices: () => Promise<void>;
   downloadVoice: (voiceId: string) => Promise<void>;
   deleteVoice: (voiceId: string) => Promise<void>;
@@ -168,6 +173,7 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: true,
             prerollEnabled: false,
             sanitizationEnabled: true,
+            skipContentTypes: ['citation', 'table'],
             backgroundAudioMode: 'silence',
             whiteNoiseVolume: 0.1,
             customAbbreviations: [
@@ -233,6 +239,9 @@ export const useTTSStore = create<TTSState>()(
             },
             setSanitizationEnabled: (enable) => {
                 set({ sanitizationEnabled: enable });
+            },
+            setSkipContentTypes: (types) => {
+                set({ skipContentTypes: types });
             },
             setBackgroundAudioMode: (mode) => {
                 set({ backgroundAudioMode: mode });

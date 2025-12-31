@@ -69,10 +69,9 @@ describe('MediaSessionManager', () => {
     // --- Mocks for Artwork Processing ---
     // Note: We don't need to mock fetch or URL.createObjectURL anymore since we load Image directly from URL string.
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     global.Image = class {
         onload: () => void = () => {};
-        onerror: (err: any) => void = () => {};
+        onerror: (err: unknown) => void = () => {};
         width = 200;
         height = 100;
         _src = '';
@@ -81,7 +80,7 @@ describe('MediaSessionManager', () => {
             setTimeout(() => this.onload(), 10);
         }
         get src() { return this._src; }
-    } as any;
+    } as unknown as typeof Image;
 
     mockGradient = {
         addColorStop: vi.fn(),
@@ -102,7 +101,7 @@ describe('MediaSessionManager', () => {
 
     originalCreateElement = document.createElement.bind(document);
     vi.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
-        if (tagName === 'canvas') return mockCanvas as any;
+        if (tagName === 'canvas') return mockCanvas as unknown as HTMLCanvasElement;
         return originalCreateElement(tagName, options);
     });
   });
