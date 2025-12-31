@@ -584,8 +584,19 @@ export const ReaderView: React.FC = () => {
   // Listen for custom chapter navigation events from CompassPill
   useEffect(() => {
     const handleChapterNav = (e: CustomEvent<{ direction: 'next' | 'prev' }>) => {
-      if (e.detail.direction === 'next') handleNext();
-      else handlePrev();
+      const { status } = useTTSStore.getState();
+      const isTTSActive = status !== 'stopped';
+
+      if (isTTSActive) {
+          if (e.detail.direction === 'next') {
+              AudioPlayerService.getInstance().skipToNextSection();
+          } else {
+              AudioPlayerService.getInstance().skipToPreviousSection();
+          }
+      } else {
+          if (e.detail.direction === 'next') handleNext();
+          else handlePrev();
+      }
     };
 
     window.addEventListener('reader:chapter-nav', handleChapterNav as EventListener);
