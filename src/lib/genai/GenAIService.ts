@@ -178,10 +178,10 @@ class GenAIService {
 
   /**
    * Detects content types for a batch of root nodes.
-   * @param nodes Array of objects with rootCfi and sampleText.
-   * @returns Array of ContentTypeResult.
+   * @param nodes Array of objects with id and sampleText.
+   * @returns Array of objects with id and type.
    */
-  public async detectContentTypes(nodes: { rootCfi: string, sampleText: string }[]): Promise<ContentTypeResult[]> {
+  public async detectContentTypes(nodes: { id: string, sampleText: string }[]): Promise<{ id: string, type: ContentType }[]> {
     if (nodes.length === 0) return [];
 
     const prompt = `Analyze the provided text samples from an EPUB book section and classify them into one of the following types:
@@ -191,7 +191,7 @@ class GenAIService {
     - 'table': Tabular data, charts, or structured lists acting as tables.
     - 'other': Content that does not fit into the above categories.
 
-    Return an array of objects with 'rootCfi' (matching input) and 'type'.
+    Return an array of objects with 'id' (matching input) and 'type'.
 
     Samples:
     ${JSON.stringify(nodes)}`;
@@ -201,14 +201,14 @@ class GenAIService {
       items: {
         type: SchemaType.OBJECT,
         properties: {
-          rootCfi: { type: SchemaType.STRING },
+          id: { type: SchemaType.STRING },
           type: { type: SchemaType.STRING, enum: ['title', 'citation', 'main', 'table', 'other'] },
         },
-        required: ['rootCfi', 'type'],
+        required: ['id', 'type'],
       },
     };
 
-    return this.generateStructured<ContentTypeResult[]>(prompt, schema);
+    return this.generateStructured<{ id: string, type: ContentType }[]>(prompt, schema);
   }
 }
 
