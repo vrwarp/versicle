@@ -169,7 +169,7 @@ export class MediaSessionManager {
       return {
         ...artwork,
         src: base64,
-        type: 'image/png' // Canvas export defaults to PNG usually, unless specified
+        type: 'image/jpeg'
       };
     } catch (e) {
       console.warn("Error processing artwork", e);
@@ -237,7 +237,7 @@ export class MediaSessionManager {
                 }
 
                 // Convert to base64
-                const dataUrl = canvas.toDataURL('image/png');
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                 resolve(dataUrl);
             } catch (e) {
                 reject(e);

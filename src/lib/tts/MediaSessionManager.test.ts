@@ -96,7 +96,7 @@ describe('MediaSessionManager', () => {
         width: 0,
         height: 0,
         getContext: vi.fn(() => mockContext),
-        toDataURL: vi.fn(() => 'data:image/png;base64,mocked'),
+        toDataURL: vi.fn(() => 'data:image/jpeg;base64,mocked'),
     };
 
     originalCreateElement = document.createElement.bind(document);
@@ -144,7 +144,7 @@ describe('MediaSessionManager', () => {
                 artist: 'Test Artist',
                 album: 'Test Album',
                 // Expect processed base64 artwork
-                artwork: [{ src: 'data:image/png;base64,mocked', type: 'image/png' }]
+                artwork: [{ src: 'data:image/jpeg;base64,mocked', type: 'image/jpeg' }]
             })
         }));
       });
@@ -233,7 +233,7 @@ describe('MediaSessionManager', () => {
               artist: 'Native Artist',
               album: 'Native Album',
               // Expect processed base64 artwork
-              artwork: [{ src: 'data:image/png;base64,mocked', type: 'image/png' }]
+              artwork: [{ src: 'data:image/jpeg;base64,mocked', type: 'image/jpeg' }]
           });
       });
 
