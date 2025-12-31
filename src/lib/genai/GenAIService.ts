@@ -83,9 +83,8 @@ class GenAIService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public async generateStructured<T>(prompt: string, schema: any, modelId?: string): Promise<T> {
-    const activeModelId = modelId || this.modelId;
-    this.log('request', 'generateStructured', { prompt, schema, model: activeModelId });
+  public async generateStructured<T>(prompt: string, schema: any): Promise<T> {
+    this.log('request', 'generateStructured', { prompt, schema, model: this.modelId });
 
     // Check for E2E Test Mocks
     if (typeof localStorage !== 'undefined') {
@@ -120,7 +119,7 @@ class GenAIService {
 
     try {
       const model = this.genAI.getGenerativeModel({
-        model: activeModelId,
+        model: this.modelId,
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: schema,
@@ -180,10 +179,9 @@ class GenAIService {
   /**
    * Detects content types for a batch of root nodes.
    * @param nodes Array of objects with rootCfi and sampleText.
-   * @param modelId Optional model ID to use for this request.
    * @returns Array of ContentTypeResult.
    */
-  public async detectContentTypes(nodes: { rootCfi: string, sampleText: string }[], modelId: string = 'gemini-1.5-flash'): Promise<ContentTypeResult[]> {
+  public async detectContentTypes(nodes: { rootCfi: string, sampleText: string }[]): Promise<ContentTypeResult[]> {
     if (nodes.length === 0) return [];
 
     const prompt = `Analyze the provided text samples and classify them into one of the following types:
@@ -191,6 +189,7 @@ class GenAIService {
     - 'citation': Bibliographies, references, footnotes, or legal text.
     - 'main': Standard narrative text, dialogue, or body content.
     - 'table': Tabular data, charts, or structured lists acting as tables.
+    - 'other': Content that does not fit into the above categories.
 
     Return an array of objects with 'rootCfi' (matching input) and 'type'.
 
@@ -203,13 +202,13 @@ class GenAIService {
         type: SchemaType.OBJECT,
         properties: {
           rootCfi: { type: SchemaType.STRING },
-          type: { type: SchemaType.STRING, enum: ['title', 'citation', 'main', 'table'] },
+          type: { type: SchemaType.STRING, enum: ['title', 'citation', 'main', 'table', 'other'] },
         },
         required: ['rootCfi', 'type'],
       },
     };
 
-    return this.generateStructured<ContentTypeResult[]>(prompt, schema, modelId);
+    return this.generateStructured<ContentTypeResult[]>(prompt, schema);
   }
 }
 
