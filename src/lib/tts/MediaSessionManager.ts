@@ -13,6 +13,10 @@ export interface MediaSessionMetadata {
   album: string;
   /** Array of artwork images. */
   artwork?: { src: string; sizes?: string; type?: string }[];
+  /** The index of the current section (0-based). */
+  sectionIndex?: number;
+  /** The total number of sections in the book. */
+  totalSections?: number;
 }
 
 /**
@@ -118,7 +122,7 @@ export class MediaSessionManager {
     if (artwork && artwork.length > 0) {
         try {
             // We process the first artwork item as the primary cover
-            const processedArtwork = await this.processArtwork(artwork[0]);
+            const processedArtwork = await this.processArtwork(artwork[0], metadata.sectionIndex, metadata.totalSections);
             if (processedArtwork) {
                 artwork = [processedArtwork];
             }
@@ -148,10 +152,14 @@ export class MediaSessionManager {
   /**
    * Fetches the artwork, crops it to a square, and converts it to a base64 Data URL.
    */
-  private async processArtwork(artwork: { src: string; sizes?: string; type?: string }): Promise<{ src: string; sizes?: string; type?: string } | null> {
+  private async processArtwork(
+      artwork: { src: string; sizes?: string; type?: string },
+      sectionIndex?: number,
+      totalSections?: number
+  ): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
       // Crop to square and get base64 directly from URL
-      const base64 = await this.cropToSquare(artwork.src);
+      const base64 = await this.cropToSquare(artwork.src, sectionIndex, totalSections);
 
       return {
         ...artwork,
@@ -166,8 +174,9 @@ export class MediaSessionManager {
 
   /**
    * Crops a given image URL to a center square and returns it as a base64 string.
+   * Optionally applies a conic gradient overlay to indicate reading progress.
    */
-  private cropToSquare(src: string): Promise<string> {
+  private cropToSquare(src: string, sectionIndex?: number, totalSections?: number): Promise<string> {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous'; // Needed if the source is external
@@ -194,6 +203,34 @@ export class MediaSessionManager {
 
                 // Draw to canvas
                 ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+
+                // Apply conic gradient overlay if progress info is available
+                if (sectionIndex !== undefined && totalSections !== undefined && totalSections > 0) {
+                    // Check browser support for createConicGradient
+                    if (ctx.createConicGradient) {
+                        const progress = Math.min(Math.max((sectionIndex + 1) / totalSections, 0), 1);
+                        const cx = size / 2;
+                        const cy = size / 2;
+
+                        // Start from top (12 o'clock), so rotate -PI/2
+                        const gradient = ctx.createConicGradient(-Math.PI / 2, cx, cy);
+
+                        const overlayColor = 'rgba(255, 255, 255, 0.4)';
+                        const transparent = 'rgba(0, 0, 0, 0)';
+
+                        gradient.addColorStop(0, overlayColor);
+                        gradient.addColorStop(progress, overlayColor);
+                        // If fully complete, the whole circle is overlayColor.
+                        // If not, transition sharply to transparent.
+                        if (progress < 1) {
+                            gradient.addColorStop(progress, transparent);
+                            gradient.addColorStop(1, transparent);
+                        }
+
+                        ctx.fillStyle = gradient;
+                        ctx.fillRect(0, 0, size, size);
+                    }
+                }
 
                 // Convert to base64
                 const dataUrl = canvas.toDataURL('image/png');
