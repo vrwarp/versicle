@@ -79,17 +79,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   // Helper for chapter navigation
   const handleChapterNav = (direction: 'prev' | 'next') => {
-    // Simulate keyboard event for ReaderTTSController to pick up
-    const key = direction === 'next' ? 'ArrowRight' : 'ArrowLeft';
-    window.dispatchEvent(new KeyboardEvent('keydown', { key }));
-  };
-
-  const handleSkip = (direction: 'prev' | 'next') => {
-      if (direction === 'next') {
-          jumpTo(currentIndex + 1);
-      } else {
-          jumpTo(currentIndex - 1);
-      }
+    // Dispatch custom event for ReaderView to pick up
+    // This ensures we always navigate chapters/pages, regardless of TTS status
+    const event = new CustomEvent('reader:chapter-nav', { detail: { direction } });
+    window.dispatchEvent(event);
   };
 
   const handleTogglePlay = (e: React.MouseEvent) => {
@@ -276,10 +269,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
                     variant="ghost"
                     size="icon"
                     className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-                    onClick={() => isPlaying ? handleSkip('prev') : handleChapterNav('prev')}
+                    onClick={() => handleChapterNav('prev')}
                     aria-label="Previous"
                 >
-                    {isPlaying ? <SkipBack size={16} /> : <ChevronsLeft size={18} />}
+                    <ChevronsLeft size={18} />
                 </Button>
 
                 {/* Play/Pause Button */}
@@ -298,10 +291,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
                     variant="ghost"
                     size="icon"
                     className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-                    onClick={() => isPlaying ? handleSkip('next') : handleChapterNav('next')}
+                    onClick={() => handleChapterNav('next')}
                     aria-label="Next"
                 >
-                     {isPlaying ? <SkipForward size={16} /> : <ChevronsRight size={18} />}
+                     <ChevronsRight size={18} />
                 </Button>
           </div>
       );
@@ -320,10 +313,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         <Button
             variant="ghost"
             className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-            onClick={() => isPlaying ? handleSkip('prev') : handleChapterNav('prev')}
-            aria-label={isPlaying ? "Skip to previous sentence" : "Previous chapter"}
+            onClick={() => handleChapterNav('prev')}
+            aria-label="Previous chapter"
         >
-            {isPlaying ? <SkipBack size={20} /> : <ChevronsLeft size={24} />}
+            <ChevronsLeft size={24} />
         </Button>
 
         {/* Center Info */}
@@ -345,10 +338,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         <Button
             variant="ghost"
             className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-            onClick={() => isPlaying ? handleSkip('next') : handleChapterNav('next')}
-            aria-label={isPlaying ? "Skip to next sentence" : "Next chapter"}
+            onClick={() => handleChapterNav('next')}
+            aria-label="Next chapter"
         >
-             {isPlaying ? <SkipForward size={20} /> : <ChevronsRight size={24} />}
+             <ChevronsRight size={24} />
         </Button>
     </div>
   );
