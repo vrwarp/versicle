@@ -25,6 +25,10 @@ describe('MediaSessionManager', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let callbacks: any;
   let originalCreateElement: typeof document.createElement;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockContext: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockGradient: any;
 
   beforeEach(() => {
     callbacks = {
@@ -79,8 +83,15 @@ describe('MediaSessionManager', () => {
         get src() { return this._src; }
     } as any;
 
-    const mockContext = {
+    mockGradient = {
+        addColorStop: vi.fn(),
+    };
+
+    mockContext = {
         drawImage: vi.fn(),
+        createConicGradient: vi.fn(() => mockGradient),
+        fillStyle: '',
+        fillRect: vi.fn(),
     };
     const mockCanvas = {
         width: 0,
@@ -137,6 +148,24 @@ describe('MediaSessionManager', () => {
                 artwork: [{ src: 'data:image/png;base64,mocked', type: 'image/png' }]
             })
         }));
+      });
+
+      it('applies conic gradient when section index is provided', async () => {
+        const manager = new MediaSessionManager(callbacks);
+        const metadata = {
+          title: 'Test Title',
+          artist: 'Test Artist',
+          album: 'Test Album',
+          artwork: [{ src: 'test.jpg' }],
+          sectionIndex: 0,
+          totalSections: 10
+        };
+
+        await manager.setMetadata(metadata);
+
+        expect(mockContext.createConicGradient).toHaveBeenCalled();
+        expect(mockGradient.addColorStop).toHaveBeenCalled();
+        expect(mockContext.fillRect).toHaveBeenCalled();
       });
 
       it('updates playback state correctly', () => {
