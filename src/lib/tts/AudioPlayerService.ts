@@ -1015,6 +1015,16 @@ export class AudioPlayerService {
       return false;
   }
 
+  /**
+   * Retrieves or detects content types for the given text groups.
+   * Checks the database first for persisted classifications. If not found,
+   * invokes the GenAI service to classify the content (if available).
+   *
+   * @param bookId The ID of the book.
+   * @param sectionId The ID of the section.
+   * @param groups The grouped text segments to analyze.
+   * @returns A promise resolving to the list of content types, or null if detection was not possible.
+   */
   private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: typeof this.queue; fullText: string }[]) {
       // 1. Check existing classification in DB
       const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
@@ -1028,33 +1038,45 @@ export class AudioPlayerService {
       const aiStore = useGenAIStore.getState();
       const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
 
-      if (canUseGenAI) {
-          try {
-              const nodesToDetect = groups.map(g => ({
-                  rootCfi: g.rootCfi,
-                  sampleText: g.fullText.substring(0, 500)
-              }));
-
-              // Ensure service is configured if we have a key
-              if (!genAIService.isConfigured() && aiStore.apiKey) {
-                    genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
-              }
-
-              if (genAIService.isConfigured()) {
-                  // Note: Using default model (gemini-1.5-flash) from GenAIService
-                  const results = await genAIService.detectContentTypes(nodesToDetect);
-
-                  // Persist detection results
-                  await dbService.saveContentClassifications(bookId, sectionId, results);
-                  return results;
-              }
-          } catch (e) {
-              console.warn("Content detection failed", e);
-          }
+      if (!canUseGenAI) {
+          return null;
       }
+
+      try {
+          const nodesToDetect = groups.map(g => ({
+              rootCfi: g.rootCfi,
+              sampleText: g.fullText.substring(0, 500)
+          }));
+
+          // Ensure service is configured if we have a key
+          if (!genAIService.isConfigured() && aiStore.apiKey) {
+                genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
+          }
+
+          if (genAIService.isConfigured()) {
+              // Note: Using default model (gemini-1.5-flash) from GenAIService
+              const results = await genAIService.detectContentTypes(nodesToDetect);
+
+              // Persist detection results
+              await dbService.saveContentClassifications(bookId, sectionId, results);
+              return results;
+          }
+      } catch (e) {
+          console.warn("Content detection failed", e);
+      }
+
       return null;
   }
 
+  /**
+   * Filters the TTS queue based on content type classification.
+   * Uses GenAI to detect content types (citations, tables, etc.) and removes
+   * segments that match the configured skip types.
+   *
+   * @param sentences The original list of TTS queue items.
+   * @param skipTypes The list of content types to exclude.
+   * @returns A promise resolving to the filtered list of queue items.
+   */
   private async detectAndFilterContent(sentences: typeof this.queue, skipTypes: ContentType[]): Promise<typeof this.queue> {
       if (!this.currentBookId || this.currentSectionIndex === -1) return sentences;
 

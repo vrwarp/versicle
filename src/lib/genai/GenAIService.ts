@@ -184,7 +184,7 @@ class GenAIService {
   public async detectContentTypes(nodes: { rootCfi: string, sampleText: string }[]): Promise<ContentTypeResult[]> {
     if (nodes.length === 0) return [];
 
-    const prompt = `Analyze the provided text samples and classify them into one of the following types:
+    const prompt = `Analyze the provided text samples from an EPUB book section and classify them into one of the following types:
     - 'title': Chapter titles, headers, or section headings.
     - 'citation': Bibliographies, references, footnotes, or legal text.
     - 'main': Standard narrative text, dialogue, or body content.
