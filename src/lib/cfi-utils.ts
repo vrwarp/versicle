@@ -46,7 +46,7 @@ export function getParentCfi(cfi: string): string {
     // 1. Try parsing as a Range CFI (epubcfi(parent, start, end))
     const parsed = parseCfiRange(cfi);
     if (parsed) {
-        return parsed.parent;
+        return `epubcfi(${parsed.parent})`;
     }
 
     // 2. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
@@ -73,9 +73,10 @@ export function getParentCfi(cfi: string): string {
 
                 // 2. Aggressively strip deeper nesting (e.g. <span> inside <p>) to group content
                 // at the block level (e.g., <p>, <div>, <blockquote>).
-                // If the path is still deep (>= 3 levels relative to spine item), strip one more level.
-                // Example: /Body/Div/P/Span -> /Body/Div/P
-                if (cleanParts.length >= 3) {
+                // If the path is still deep (> 3 levels relative to spine item), strip one more level.
+                // Example: /Body/Div/P/Span (4 levels) -> /Body/Div/P (3 levels)
+                // /Body/Div/P (3 levels) -> Keep
+                if (cleanParts.length > 3) {
                     cleanParts.pop();
                 }
 
