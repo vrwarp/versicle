@@ -227,18 +227,20 @@ export function useEpubReader(
         // Display at saved location or start
         let startLocation = meta?.currentCfi || undefined;
 
-        // Try to infer better start location from reading history (end of last session)
-        try {
-            const history = yield dbService.getReadingHistory(currentBookId);
-            if (history && history.length > 0) {
-                const lastRange = history[history.length - 1];
-                const parsed = parseCfiRange(lastRange);
-                if (parsed && parsed.fullEnd) {
-                    startLocation = parsed.fullEnd;
+        // If no saved location, try to infer from reading history (end of last session)
+        if (!startLocation) {
+            try {
+                const history = yield dbService.getReadingHistory(currentBookId);
+                if (history && history.length > 0) {
+                    const lastRange = history[history.length - 1];
+                    const parsed = parseCfiRange(lastRange);
+                    if (parsed && parsed.fullEnd) {
+                        startLocation = parsed.fullEnd;
+                    }
                 }
+            } catch (e) {
+                console.error("Failed to load history for start location", e);
             }
-        } catch (e) {
-            console.error("Failed to load history for start location", e);
         }
 
         yield newRendition.display(startLocation);

@@ -79,7 +79,7 @@ describe('useEpubReader History Integration', () => {
         vi.clearAllMocks();
     });
 
-    it('should resume from the end of the last reading session in history', async () => {
+    it('should resume from currentCfi if present', async () => {
         const bookId = 'book-123';
         const fileData = new ArrayBuffer(10);
         const metadata = {
@@ -90,18 +90,14 @@ describe('useEpubReader History Integration', () => {
         };
 
         // Mock getBook to return metadata
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getBook as any).mockResolvedValue({
             metadata,
             file: fileData
         });
 
         // Mock Reading History
-        // Range from Start to Middle of Chapter
-        // "epubcfi(/6/6!/4/2/1:0),/1:0,/1:100)" represents a range.
         const historyRanges = ['epubcfi(/6/6!/4/2/1:0,/1:0,/1:100)'];
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getReadingHistory as any).mockResolvedValue(historyRanges);
 
         // Render the hook
@@ -118,12 +114,44 @@ describe('useEpubReader History Integration', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const calledArg = (rendition?.display as any).mock.calls[0][0];
 
-        // It should NOT be the metadata one
-        expect(calledArg).not.toBe(metadata.currentCfi);
+        // It should be the metadata one
+        expect(calledArg).toBe(metadata.currentCfi);
+    });
+
+    it('should fallback to history if currentCfi is missing', async () => {
+        const bookId = 'book-123-fallback';
+        const fileData = new ArrayBuffer(10);
+        const metadata = {
+            id: bookId,
+            title: 'Test Book',
+            currentCfi: undefined,
+            addedAt: Date.now()
+        };
+
+        // Mock getBook to return metadata
+        (dbService.getBook as any).mockResolvedValue({
+            metadata,
+            file: fileData
+        });
+
+        // Mock Reading History
+        const historyRanges = ['epubcfi(/6/6!/4/2/1:0,/1:0,/1:100)'];
+
+        (dbService.getReadingHistory as any).mockResolvedValue(historyRanges);
+
+        // Render the hook
+        const { result } = renderHook(() => useEpubReader(bookId, viewerRef, options));
+
+        await waitFor(() => {
+            expect(result.current.isReady).toBe(true);
+        });
+
+        const rendition = result.current.rendition;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const calledArg = (rendition?.display as any).mock.calls[0][0];
 
         // It should be related to the history end
-        // We expect it to be the end of the range
-        // Based on generateCfiRange logic, we can construct what the end looks like
-        // or just verify it's different.
+        expect(calledArg).not.toBeUndefined();
+        expect(calledArg).toContain('1:100');
     });
 });
