@@ -1015,6 +1015,46 @@ export class AudioPlayerService {
       return false;
   }
 
+  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: typeof this.queue; fullText: string }[]) {
+      // 1. Check existing classification in DB
+      const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+
+      // If we have stored content types, return them
+      if (contentAnalysis?.contentTypes) {
+          return contentAnalysis.contentTypes;
+      }
+
+      // 2. If not found, detect with GenAI
+      const aiStore = useGenAIStore.getState();
+      const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+
+      if (canUseGenAI) {
+          try {
+              const nodesToDetect = groups.map(g => ({
+                  rootCfi: g.rootCfi,
+                  sampleText: g.fullText.substring(0, 500)
+              }));
+
+              // Ensure service is configured if we have a key
+              if (!genAIService.isConfigured() && aiStore.apiKey) {
+                    genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
+              }
+
+              if (genAIService.isConfigured()) {
+                  // Note: Using default model (gemini-1.5-flash) from GenAIService
+                  const results = await genAIService.detectContentTypes(nodesToDetect);
+
+                  // Persist detection results
+                  await dbService.saveContentClassifications(bookId, sectionId, results);
+                  return results;
+              }
+          } catch (e) {
+              console.warn("Content detection failed", e);
+          }
+      }
+      return null;
+  }
+
   private async detectAndFilterContent(sentences: typeof this.queue, skipTypes: ContentType[]): Promise<typeof this.queue> {
       if (!this.currentBookId || this.currentSectionIndex === -1) return sentences;
 
@@ -1038,42 +1078,7 @@ export class AudioPlayerService {
       }
       if (currentGroup) groups.push(currentGroup);
 
-      // 1. Check existing classification in DB
-      let contentAnalysis = await dbService.getContentAnalysis(this.currentBookId, sectionId);
-
-      // If we have stored content types, use them
-      let detectedTypes = contentAnalysis?.contentTypes;
-
-      // 2. If not found, detect with GenAI
-      if (!detectedTypes) {
-          const aiStore = useGenAIStore.getState();
-          const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
-
-          if (canUseGenAI) {
-              try {
-                  const nodesToDetect = groups.map(g => ({
-                      rootCfi: g.rootCfi,
-                      sampleText: g.fullText.substring(0, 500)
-                  }));
-
-                  // Ensure service is configured if we have a key
-                  if (!genAIService.isConfigured() && aiStore.apiKey) {
-                        genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
-                  }
-
-                  if (genAIService.isConfigured()) {
-                      // Note: Using default model (gemini-1.5-flash) from GenAIService
-                      const results = await genAIService.detectContentTypes(nodesToDetect);
-                      detectedTypes = results;
-
-                      // Persist detection results
-                      await dbService.saveContentClassifications(this.currentBookId, sectionId, results);
-                  }
-              } catch (e) {
-                  console.warn("Content detection failed", e);
-              }
-          }
-      }
+      const detectedTypes = await this.getOrDetectContentTypes(this.currentBookId, sectionId, groups);
 
       // 3. Filter based on detected types and current settings
       if (detectedTypes && detectedTypes.length > 0) {
