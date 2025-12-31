@@ -1,5 +1,37 @@
 @import "tailwindcss";
 
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-surface: var(--surface);
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -120,17 +152,6 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-.pill-background {
-  background-color: rgba(255, 255, 255, 0.75);
-}
-
-.dark .pill-background {
-  background-color: rgba(2, 6, 23, 0.75);
-}
-
-.sepia .pill-background {
-  background-color: rgba(255, 251, 235, 0.75);
-}
 
 .main_layout {
   padding-top: var(--safe-area-inset-top);
