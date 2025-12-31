@@ -936,12 +936,13 @@ export class AudioPlayerService {
               // -----------------------------------------------------------
               // Content Type Detection & Filtering
               // -----------------------------------------------------------
-              const skipTypes = settings.skipContentTypes;
+              const genAISettings = useGenAIStore.getState();
+              const skipTypes = genAISettings.contentFilterSkipTypes;
               
               let finalSentences: { text: string; cfi: string | null }[] = refinedSentences;
 
               // Optimize: Don't run detection if nothing to skip
-              const isContentAnalysisEnabled = useGenAIStore.getState().isContentAnalysisEnabled;
+              const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
               if (skipTypes.length > 0 && isContentAnalysisEnabled) {
                   finalSentences = await this.detectAndFilterContent(refinedSentences, skipTypes);
               }
