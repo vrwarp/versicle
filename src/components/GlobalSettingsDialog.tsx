@@ -15,6 +15,8 @@ import { ThemeSelector } from './ThemeSelector';
 import { useGenAIStore } from '../store/useGenAIStore';
 import { TTSAbbreviationSettings } from './reader/TTSAbbreviationSettings';
 import { LexiconManager } from './reader/LexiconManager';
+import { Checkbox } from './ui/Checkbox';
+import type { ContentType } from '../types/content-analysis';
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
@@ -210,6 +212,8 @@ export const GlobalSettingsDialog = () => {
         setEnabled: setGenAIEnabled,
         isContentAnalysisEnabled,
         setContentAnalysisEnabled,
+        contentFilterSkipTypes,
+        setContentFilterSkipTypes,
         logs: genAILogs
     } = useGenAIStore();
 
@@ -693,6 +697,38 @@ export const GlobalSettingsDialog = () => {
                                             />
                                         </div>
                                     </div>
+
+                                    {isContentAnalysisEnabled && (
+                                        <div className="space-y-3 pl-4 border-l-2 border-muted">
+                                            <h5 className="text-sm font-medium">Skip Content Types</h5>
+                                            <p className="text-xs text-muted-foreground mb-2">
+                                                Select which detected content types should be skipped during playback.
+                                            </p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {(['citation', 'table', 'other', 'title', 'main'] as ContentType[]).map((type) => (
+                                                    <div key={type} className="flex items-center space-x-2">
+                                                        <Checkbox
+                                                            id={`skip-${type}`}
+                                                            checked={contentFilterSkipTypes.includes(type)}
+                                                            onCheckedChange={(checked) => {
+                                                                if (checked) {
+                                                                    setContentFilterSkipTypes([...contentFilterSkipTypes, type]);
+                                                                } else {
+                                                                    setContentFilterSkipTypes(contentFilterSkipTypes.filter(t => t !== type));
+                                                                }
+                                                            }}
+                                                        />
+                                                        <label
+                                                            htmlFor={`skip-${type}`}
+                                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize"
+                                                        >
+                                                            {type}
+                                                        </label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                             <div className="pt-4 border-t space-y-4">
                                                 <div className="flex items-center justify-between">

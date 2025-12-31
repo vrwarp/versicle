@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { genAIService } from '../lib/genai/GenAIService';
 import type { GenAILogEntry } from '../lib/genai/GenAIService';
+import type { ContentType } from '../types/content-analysis';
 
 interface GenAIState {
   apiKey: string;
   model: string;
   isEnabled: boolean;
   isContentAnalysisEnabled: boolean;
+  contentFilterSkipTypes: ContentType[];
   logs: GenAILogEntry[];
   usageStats: {
     totalTokens: number;
@@ -17,6 +19,7 @@ interface GenAIState {
   setModel: (model: string) => void;
   setEnabled: (enabled: boolean) => void;
   setContentAnalysisEnabled: (enabled: boolean) => void;
+  setContentFilterSkipTypes: (types: ContentType[]) => void;
   incrementUsage: (tokens: number) => void;
   addLog: (log: GenAILogEntry) => void;
   init: () => void;
@@ -29,6 +32,7 @@ export const useGenAIStore = create<GenAIState>()(
       model: 'gemini-2.5-flash-lite',
       isEnabled: false,
       isContentAnalysisEnabled: false,
+      contentFilterSkipTypes: ['citation', 'table'],
       logs: [],
       usageStats: {
         totalTokens: 0,
@@ -44,6 +48,7 @@ export const useGenAIStore = create<GenAIState>()(
       },
       setEnabled: (enabled) => set({ isEnabled: enabled }),
       setContentAnalysisEnabled: (enabled) => set({ isContentAnalysisEnabled: enabled }),
+      setContentFilterSkipTypes: (types) => set({ contentFilterSkipTypes: types }),
       incrementUsage: (tokens) =>
         set((state) => ({
           usageStats: {
