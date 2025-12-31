@@ -158,8 +158,13 @@ export class MediaSessionManager {
       totalSections?: number
   ): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
+      let progress: number | undefined;
+      if (sectionIndex !== undefined && totalSections !== undefined && totalSections > 0) {
+          progress = Math.min(Math.max((sectionIndex + 1) / totalSections, 0), 1);
+      }
+
       // Crop to square and get base64 directly from URL
-      const base64 = await this.cropToSquare(artwork.src, sectionIndex, totalSections);
+      const base64 = await this.cropAndOverlayArtwork(artwork.src, progress);
 
       return {
         ...artwork,
@@ -176,7 +181,7 @@ export class MediaSessionManager {
    * Crops a given image URL to a center square and returns it as a base64 string.
    * Optionally applies a conic gradient overlay to indicate reading progress.
    */
-  private cropToSquare(src: string, sectionIndex?: number, totalSections?: number): Promise<string> {
+  private cropAndOverlayArtwork(src: string, progress?: number): Promise<string> {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous'; // Needed if the source is external
@@ -205,10 +210,9 @@ export class MediaSessionManager {
                 ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
 
                 // Apply conic gradient overlay if progress info is available
-                if (sectionIndex !== undefined && totalSections !== undefined && totalSections > 0) {
+                if (progress !== undefined) {
                     // Check browser support for createConicGradient
                     if (ctx.createConicGradient) {
-                        const progress = Math.min(Math.max((sectionIndex + 1) / totalSections, 0), 1);
                         const cx = size / 2;
                         const cy = size / 2;
 
