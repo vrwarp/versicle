@@ -243,7 +243,7 @@ Enhances the reading experience using LLMs (Google Gemini).
 
 *   **Goal**: Provide features like "Smart Table of Contents" generation, summarization, and text analysis.
 *   **Logic**:
-    *   **`GenAIService`**: Singleton wrapper around `@google/generative-ai`. Handles API configuration and request logging.
+    *   **`GenAIService`**: Singleton wrapper around `@google/generative-ai`. Currently configured to use **Gemini 2.5 Flash Lite** for an optimal balance of speed and cost.
     *   **`generateStructured`**: Uses Gemini's JSON schema enforcement to return strictly typed data (e.g., TOC structure).
     *   **Testing**: Supports `localStorage`-based mocking for E2E tests to avoid API costs and flakiness.
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets are sent to Google's servers.
@@ -283,6 +283,7 @@ The singleton controller (Orchestrator).
 *   **Logic**:
     *   **Wraps**: `navigator.mediaSession` (Web) and `@jofr/capacitor-media-session` (Native).
     *   **Responsibility**: Updates metadata (Title, Artist, Artwork) and handles callbacks (Play, Pause, Next, Prev).
+    *   **Capacitor 7**: Includes specific overrides in `package.json` to resolve peer dependency conflicts between the plugin (v4) and Capacitor Core (v7).
 
 #### `src/lib/tts/BackgroundAudio.ts`
 *   **Goal**: Prevent mobile operating systems (iOS/Android) from killing the app or pausing audio when the screen is locked or the app is in the background.
@@ -391,6 +392,16 @@ State is managed using **Zustand** with persistence to `localStorage` for prefer
 #### Theme Synchronization (`src/components/ThemeSynchronizer.tsx`)
 *   **Goal**: Ensure the global UI (Tailwind classes) matches the Reader's theme (Light/Dark/Sepia).
 *   **Logic**: Subscribes to `useReaderStore` and toggles classes on `document.documentElement`.
+
+#### Mobile Integration
+Specific adaptations for the hybrid app environment (Capacitor).
+
+*   **Safe Area Management**:
+    *   **Goal**: Handle notches, dynamic islands, and gesture bars on iOS/Android.
+    *   **Logic**: Uses `@capacitor-community/safe-area` to inject CSS variables (`--safe-area-inset-*`) into the root element. The `.main_layout` class consumes these variables to prevent content occlusion.
+*   **Media Session Override**:
+    *   **Goal**: Ensure native media controls work with Capacitor 7.
+    *   **Logic**: Resolves peer dependency conflicts via `overrides` in `package.json`.
 
 ### Common Types (`src/types/db.ts`)
 *   **`BookMetadata`**: Includes `fileHash`, `isOffloaded`, `coverBlob` (thumbnail), and playback state (`lastPlayedCfi`).
