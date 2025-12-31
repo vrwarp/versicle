@@ -65,28 +65,22 @@ export function getParentCfi(cfi: string): string {
                 // Filter empty strings from split
                 const cleanParts = pathParts.filter(p => p.length > 0);
 
-                // Heuristic: Identify the block-level parent by stripping leaf nodes.
-                // 1. Remove the last segment (typically the text node or inline leaf element).
+                // Heuristic: Collapsing nested structures (Tables, Lists, Blockquotes)
+                // Most standard paragraphs/titles are at depth 2 or 3 (e.g., /Body/Section/P).
+                // Tables/Lists add 2-4 more layers.
+                if (cleanParts.length > 3) {
+                    // Truncate to the 3rd structural level to group the container
+                    return `epubcfi(${spine}!/${cleanParts.slice(0, 3).join('/')})`;
+                }
+
+                // Standard leaf-stripping for shallow paths
                 if (cleanParts.length > 0) {
                     cleanParts.pop();
                 }
 
-                // 2. Aggressively strip deeper nesting (e.g. <span> inside <p>) to group content
-                // at the block level (e.g., <p>, <div>, <blockquote>).
-                // If the path is still deep (> 3 levels relative to spine item), strip one more level.
-                // Example: /Body/Div/P/Span (4 levels) -> /Body/Div/P (3 levels)
-                // /Body/Div/P (3 levels) -> Keep
-                if (cleanParts.length > 3) {
-                    cleanParts.pop();
-                }
-                
-                // If cleanParts is empty after popping, it means the CFI was pointing 
-                // to the spine item root or close to it.
-                if (cleanParts.length === 0) {
-                     return `epubcfi(${spine}!)`;
-                }
-
-                return `epubcfi(${spine}!/${cleanParts.join('/')})`;
+                return cleanParts.length === 0
+                    ? `epubcfi(${spine}!)`
+                    : `epubcfi(${spine}!/${cleanParts.join('/')})`;
             } else {
                 // Just spine item reference
                 return `epubcfi(${spine}!)`;
