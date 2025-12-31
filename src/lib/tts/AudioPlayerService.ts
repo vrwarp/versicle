@@ -925,7 +925,7 @@ export class AudioPlayerService {
               // -----------------------------------------------------------
               const skipTypes = settings.skipContentTypes;
               
-              let finalSentences = refinedSentences;
+              let finalSentences: { text: string; cfi: string | null }[] = refinedSentences;
 
               // Optimize: Don't run detection if nothing to skip
               if (skipTypes.length > 0) {
@@ -946,15 +946,17 @@ export class AudioPlayerService {
                   });
               }
 
-              finalSentences.forEach(s => {
-                  newQueue.push({
-                      text: s.text,
-                      cfi: s.cfi,
-                      title: title,
-                      bookTitle: bookMetadata?.title,
-                      author: bookMetadata?.author,
-                      coverUrl: coverUrl
-                  });
+              finalSentences.forEach((s) => {
+                  if (s.cfi) {
+                      newQueue.push({
+                          text: s.text,
+                          cfi: s.cfi,
+                          title: title,
+                          bookTitle: bookMetadata?.title,
+                          author: bookMetadata?.author,
+                          coverUrl: coverUrl
+                      });
+                  }
               });
           } else {
               // Empty Chapter Handling
@@ -1025,7 +1027,7 @@ export class AudioPlayerService {
    * @param groups The grouped text segments to analyze.
    * @returns A promise resolving to the list of content types, or null if detection was not possible.
    */
-  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: typeof this.queue; fullText: string }[]) {
+  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[]) {
       // 1. Check existing classification in DB
       const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
       
@@ -1077,15 +1079,15 @@ export class AudioPlayerService {
    * @param skipTypes The list of content types to exclude.
    * @returns A promise resolving to the filtered list of queue items.
    */
-  private async detectAndFilterContent(sentences: typeof this.queue, skipTypes: ContentType[]): Promise<typeof this.queue> {
+  private async detectAndFilterContent(sentences: { text: string; cfi: string | null }[], skipTypes: ContentType[]): Promise<{ text: string; cfi: string | null }[]> {
       if (!this.currentBookId || this.currentSectionIndex === -1) return sentences;
       
       const sectionId = this.playlist[this.currentSectionIndex]?.sectionId;
       if (!sectionId) return sentences;
 
       // Group sentences by Root Node
-      const groups: { rootCfi: string; segments: typeof sentences; fullText: string }[] = [];
-      let currentGroup: { rootCfi: string; segments: typeof sentences; fullText: string } | null = null;
+      const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
+      let currentGroup: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
 
       for (const s of sentences) {
           const rootCfi = getParentCfi(s.cfi || ''); // Handle null cfi
@@ -1116,7 +1118,7 @@ export class AudioPlayerService {
           });
 
           if (skipRoots.size > 0) {
-              const finalSentences: typeof sentences = [];
+              const finalSentences: { text: string; cfi: string | null }[] = [];
               for (const g of groups) {
                   if (!skipRoots.has(g.rootCfi)) {
                       finalSentences.push(...g.segments);
