@@ -65,40 +65,16 @@ export function getParentCfi(cfi: string): string {
                 // Filter empty strings from split
                 const cleanParts = pathParts.filter(p => p.length > 0);
 
-                // Aggressive merging for detection:
-                // Try to keep only the first 2 levels of depth if possible, as citations/tables
-                // are usually within specific blocks.
-                // Or just strip the last part if short.
-                // Actually, strict parent (stripping last) is safer for correctness, but risks splitting formatting.
-                // Let's implement a heuristic: If we have > 2 parts, keep at most the top 2-3 parts?
-                // Example: /4/2/1:0 (Body -> P -> Text) -> /4/2 (P)
-                // Example: /4/2/3/1:0 (Body -> P -> Span -> Text) -> /4/2/3 (Span)
-                // If we strip "Span", we get "P", which is better for grouping "Span" and "Text" siblings.
-
-                // Revised Heuristic:
-                // 1. Remove the text offset part (:0) if present in the last segment.
-                // 2. Remove the last path segment (the leaf node).
-                // 3. If the remaining path has > 2 segments, maybe strip another one to find the "Block"?
-                //    Standard HTML usually: Body / Block / Inline / Text.
-                //    We want "Block".
-
+                // Heuristic: Identify the block-level parent by stripping leaf nodes.
+                // 1. Remove the last segment (typically the text node or inline leaf element).
                 if (cleanParts.length > 0) {
                     cleanParts.pop();
                 }
 
-                // If deep structure (e.g. /Body/Div/P/Span), pop again to reach P?
-                // Ideally we want to merge <span> siblings into their <p> parent.
-                // Length 3: /4/2/3 (Body/Div/P) -> keep.
-                // Length 4: /4/2/3/5 (Body/Div/P/Span) -> Pop 5 to get P.
-                // Let's try to limit depth to 3 segments if it's longer than 3?
-                // No, that assumes fixed structure.
-
-                // Better: Check if the last part is odd (element) or even?
-                // EPUB CFIs: Even numbers are elements, odd are text nodes? No.
-                // Steps are usually even (element children).
-
-                // Let's aggressively strip to ensure we group formatting tags.
-                // If we have >= 3 parts, strip one more.
+                // 2. Aggressively strip deeper nesting (e.g. <span> inside <p>) to group content
+                // at the block level (e.g., <p>, <div>, <blockquote>).
+                // If the path is still deep (>= 3 levels relative to spine item), strip one more level.
+                // Example: /Body/Div/P/Span -> /Body/Div/P
                 if (cleanParts.length >= 3) {
                     cleanParts.pop();
                 }
