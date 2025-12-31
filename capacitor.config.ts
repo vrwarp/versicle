@@ -32,13 +32,8 @@ const config: CapacitorConfig = {
       foregroundService: "always"
     },
     SafeArea: {
-      enabled: true,
-      customColorsForSystemBars: true,
-      statusBarColor: '#00000000', // transparent
-      statusBarContent: 'dark',
-      navigationBarColor: '#00000000', // transparent
-      navigationBarContent: 'dark',
-      offset: 0,
+      "detectViewportFitCoverChanges": false,
+      "initialViewportFitCover": false
     }
   },
 };
