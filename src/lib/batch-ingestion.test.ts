@@ -23,12 +23,15 @@ vi.mock('jszip', () => {
 });
 
 // Mock FileReader
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 global.FileReader = class {
     readAsArrayBuffer() {
         // immediately trigger onload with dummy buffer
-        // @ts-ignore
+        // @ts-expect-error Mocking FileReader internals
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.onload({ target: { result: new ArrayBuffer(8) } });
     }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
 
@@ -88,13 +91,15 @@ describe('batch-ingestion', () => {
              // Enhancing global mock for this test:
 
              const originalFileReader = global.FileReader;
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
              global.FileReader = class {
                  readAsArrayBuffer() {
-                     // @ts-ignore
+                     // @ts-expect-error Mocking FileReader internals
                      if (this.onprogress) this.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
-                     // @ts-ignore
+                     // @ts-expect-error Mocking FileReader internals
                      this.onload({ target: { result: new ArrayBuffer(8) } });
                  }
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
              } as any;
 
              mockLoadAsync.mockResolvedValue({

@@ -1,8 +1,6 @@
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Capacitor } from '@capacitor/core';
+import { describe, it, vi, beforeEach } from 'vitest';
 import { dbService } from '../lib/tts/../../db/DBService';
-import { LexiconService } from '../lib/tts/LexiconService';
 
 // Mock dependencies BEFORE importing the service
 
@@ -101,17 +99,23 @@ describe('AudioPlayerService Background Crash Prevention', () => {
     const sectionId2 = 'sec2';
 
     vi.spyOn(dbService, 'getSections').mockResolvedValue([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { sectionId: sectionId1, characterCount: 100 } as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { sectionId: sectionId2, characterCount: 100 } as any
     ]);
 
     vi.spyOn(dbService, 'getTTSContent').mockImplementation(async (bid, sid) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (sid === sectionId1) return { sentences: [{ text: 'Sentence 1', cfi: 'cfi1' }] } as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (sid === sectionId2) return { sentences: [{ text: 'Sentence 2', cfi: 'cfi2' }] } as any;
         return null;
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.spyOn(dbService, 'getBookMetadata').mockResolvedValue({ title: 'Book Title', author: 'Author' } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.spyOn(dbService, 'getContentAnalysis').mockResolvedValue({ structure: { title: 'Chapter Title' } } as any);
 
     // Initialize

@@ -10,6 +10,7 @@ export interface EpubLibraryDB extends DBSchema {
    */
   app_metadata: {
     key: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     value: any;
   };
   /**
