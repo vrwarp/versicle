@@ -33,6 +33,73 @@ export function parseCfiRange(range: string): CfiRangeData | null {
     return null;
 }
 
+/**
+ * Extracts the parent block-level CFI from a given CFI string.
+ * This handles both range CFIs and point/standard CFIs.
+ * 
+ * @param cfi The CFI string (range or standard).
+ * @returns The parent CFI or 'unknown' if extraction fails.
+ */
+export function getParentCfi(cfi: string): string {
+    if (!cfi) return 'unknown';
+
+    // 1. Try parsing as a Range CFI (epubcfi(parent, start, end))
+    const parsed = parseCfiRange(cfi);
+    if (parsed) {
+        return `epubcfi(${parsed.parent})`;
+    }
+
+    // 2. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
+    if (cfi.startsWith('epubcfi(')) {
+        try {
+            const content = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+            const parts = content.split('!');
+            const spine = parts[0];
+            const path = parts[1];
+
+            if (path) {
+                // Heuristic: The text node is usually the last component (e.g. /4/2/1:0)
+                // We want the parent block element (e.g. /4/2).
+                const pathParts = path.split('/');
+                
+                // Filter empty strings from split
+                const cleanParts = pathParts.filter(p => p.length > 0);
+
+                // Heuristic: Identify the block-level parent by stripping leaf nodes.
+                // 1. Remove the last segment (typically the text node or inline leaf element).
+                if (cleanParts.length > 0) {
+                    cleanParts.pop();
+                }
+
+                // 2. Aggressively strip deeper nesting (e.g. <span> inside <p>) to group content
+                // at the block level (e.g., <p>, <div>, <blockquote>).
+                // If the path is still deep (> 3 levels relative to spine item), strip one more level.
+                // Example: /Body/Div/P/Span (4 levels) -> /Body/Div/P (3 levels)
+                // /Body/Div/P (3 levels) -> Keep
+                if (cleanParts.length > 3) {
+                    cleanParts.pop();
+                }
+                
+                // If cleanParts is empty after popping, it means the CFI was pointing 
+                // to the spine item root or close to it.
+                if (cleanParts.length === 0) {
+                     return `epubcfi(${spine}!)`;
+                }
+
+                return `epubcfi(${spine}!/${cleanParts.join('/')})`;
+            } else {
+                // Just spine item reference
+                return `epubcfi(${spine}!)`;
+            }
+        } catch (e) {
+            console.warn("Failed to extract parent CFI", e);
+        }
+    }
+
+    // Return original if we can't parse it (or 'unknown' based on preference, but original might be safer for grouping)
+    return cfi;
+}
+
 export function generateCfiRange(start: string, end: string): string {
     // Strip epubcfi( and ) if present
     if (start.startsWith('epubcfi(') && start.endsWith(')')) {
