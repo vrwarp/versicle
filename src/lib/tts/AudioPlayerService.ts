@@ -104,6 +104,8 @@ export class AudioPlayerService {
 
   private prefixSums: number[] = [0];
 
+  private analysisPromises = new Map<string, Promise<any>>();
+
   private constructor() {
     this.backgroundAudio = new BackgroundAudio();
     this.syncEngine = new SyncEngine();
@@ -1009,6 +1011,7 @@ export class AudioPlayerService {
               if (autoPlay) {
                    await this.playInternal();
               }
+              this.triggerNextChapterAnalysis();
               return true;
           }
       } catch (e) {
@@ -1043,58 +1046,134 @@ export class AudioPlayerService {
    * @returns A promise resolving to the list of content types, or null if detection was not possible.
    */
   private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[]) {
-      // 1. Check existing classification in DB
-      const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
-      
-      // If we have stored content types, return them
-      if (contentAnalysis?.contentTypes) {
-          return contentAnalysis.contentTypes;
+      // Deduplicate concurrent requests for the same section
+      const key = `${bookId}:${sectionId}`;
+      if (this.analysisPromises.has(key)) {
+          return this.analysisPromises.get(key);
       }
 
-      // 2. If not found, detect with GenAI
-      const aiStore = useGenAIStore.getState();
-      const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
-      
-      if (!canUseGenAI) {
+      const promise = (async () => {
+          // 1. Check existing classification in DB
+          const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+
+          // If we have stored content types, return them
+          if (contentAnalysis?.contentTypes) {
+              return contentAnalysis.contentTypes;
+          }
+
+          // 2. If not found, detect with GenAI
+          const aiStore = useGenAIStore.getState();
+          const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+
+          if (!canUseGenAI) {
+              return null;
+          }
+
+          try {
+              const idToCfiMap = new Map<string, string>();
+
+              const nodesToDetect = groups.map((g, index) => {
+                  const id = index.toString();
+                  idToCfiMap.set(id, g.rootCfi);
+                  return {
+                      id,
+                      sampleText: g.fullText.substring(0, 500)
+                  };
+              });
+
+              // Ensure service is configured if we have a key
+              if (!genAIService.isConfigured() && aiStore.apiKey) {
+                    genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
+              }
+
+              if (genAIService.isConfigured()) {
+                  // Note: Using default model (gemini-1.5-flash) from GenAIService
+                  const results = await genAIService.detectContentTypes(nodesToDetect);
+
+                  // Reconstruct the original format for DB persistence
+                  const finalResults = results.map(res => ({
+                      rootCfi: idToCfiMap.get(res.id) || '',
+                      type: res.type
+                  })).filter(r => r.rootCfi !== '');
+
+                  // Persist detection results
+                  await dbService.saveContentClassifications(bookId, sectionId, finalResults);
+                  return finalResults;
+              }
+          } catch (e) {
+              console.warn("Content detection failed", e);
+          }
+
           return null;
-      }
+      })();
 
+      this.analysisPromises.set(key, promise);
       try {
-          const idToCfiMap = new Map<string, string>();
+          return await promise;
+      } finally {
+          this.analysisPromises.delete(key);
+      }
+  }
 
-          const nodesToDetect = groups.map((g, index) => {
-              const id = index.toString();
-              idToCfiMap.set(id, g.rootCfi);
-              return {
-                  id,
-                  sampleText: g.fullText.substring(0, 500)
-              };
-          });
+  private groupSentencesByRoot(sentences: { text: string; cfi: string | null }[]): { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] {
+      const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
+      let currentGroup: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
 
-          // Ensure service is configured if we have a key
-          if (!genAIService.isConfigured() && aiStore.apiKey) {
-                genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
+      for (const s of sentences) {
+          const rootCfi = getParentCfi(s.cfi || ''); // Handle null cfi
+
+          if (!currentGroup || currentGroup.rootCfi !== rootCfi) {
+              if (currentGroup) groups.push(currentGroup);
+              currentGroup = { rootCfi, segments: [], fullText: '' };
           }
 
-          if (genAIService.isConfigured()) {
-              // Note: Using default model (gemini-1.5-flash) from GenAIService
-              const results = await genAIService.detectContentTypes(nodesToDetect);
+          currentGroup.segments.push(s);
+          currentGroup.fullText += s.text + ' ';
+      }
+      if (currentGroup) groups.push(currentGroup);
+      return groups;
+  }
 
-              // Reconstruct the original format for DB persistence
-              const finalResults = results.map(res => ({
-                  rootCfi: idToCfiMap.get(res.id) || '',
-                  type: res.type
-              })).filter(r => r.rootCfi !== '');
-
-              // Persist detection results
-              await dbService.saveContentClassifications(bookId, sectionId, finalResults);
-              return finalResults;
-          }
-      } catch (e) {
-          console.warn("Content detection failed", e);
+  private async triggerNextChapterAnalysis() {
+      const genAISettings = useGenAIStore.getState();
+      if (!genAISettings.isContentAnalysisEnabled || genAISettings.contentFilterSkipTypes.length === 0) {
+          return;
       }
       
-      return null;
+      if (!this.currentBookId || this.currentSectionIndex === -1) return;
+
+      const nextIndex = this.currentSectionIndex + 1;
+      if (nextIndex >= this.playlist.length) return;
+
+      const nextSection = this.playlist[nextIndex];
+      const bookId = this.currentBookId;
+
+      // Fire and forget, but handle errors
+      (async () => {
+          try {
+             // 1. Get Content
+             const ttsContent = await dbService.getTTSContent(bookId, nextSection.sectionId);
+             if (!ttsContent || ttsContent.sentences.length === 0) return;
+
+             // 2. Refine
+              const settings = useTTSStore.getState();
+              const refinedSentences = TextSegmenter.refineSegments(
+                  ttsContent.sentences,
+                  settings.customAbbreviations,
+                  settings.alwaysMerge,
+                  settings.sentenceStarters
+              );
+
+             // 3. Group
+             const groups = this.groupSentencesByRoot(refinedSentences);
+
+             // 4. Detect (will use deduplicated promise if already running)
+             await this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups);
+
+          } catch (e) {
+              console.warn('Background analysis failed', e);
+          }
+      })();
   }
 
   /**
@@ -1113,21 +1192,7 @@ export class AudioPlayerService {
       if (!sectionId) return sentences;
 
       // Group sentences by Root Node
-      const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
-      let currentGroup: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
-
-      for (const s of sentences) {
-          const rootCfi = getParentCfi(s.cfi || ''); // Handle null cfi
-
-          if (!currentGroup || currentGroup.rootCfi !== rootCfi) {
-              if (currentGroup) groups.push(currentGroup);
-              currentGroup = { rootCfi, segments: [], fullText: '' };
-          }
-
-          currentGroup.segments.push(s);
-          currentGroup.fullText += s.text + ' ';
-      }
-      if (currentGroup) groups.push(currentGroup);
+      const groups = this.groupSentencesByRoot(sentences);
 
       const detectedTypes = await this.getOrDetectContentTypes(this.currentBookId, sectionId, groups);
 
