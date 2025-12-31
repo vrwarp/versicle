@@ -42,10 +42,8 @@ def test_piper_provider_selection(page: Page):
     page.get_by_role("button", name="TTS Engine").click()
 
     # Check provider dropdown (initially Web Speech)
-    # Use a more specific locator to avoid matching the Library Sort dropdown in the background
-    # The settings dialog is in a dialog role
-    dialog = page.get_by_role("dialog")
-    select_trigger = dialog.locator('button[role="combobox"]').first
+    # Use specific test-id
+    select_trigger = page.get_by_test_id("tts-provider-select")
 
     expect(select_trigger).to_contain_text("Web Speech (Local)")
 
