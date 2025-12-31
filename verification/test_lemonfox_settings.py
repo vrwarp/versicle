@@ -22,12 +22,7 @@ def test_lemonfox_settings(page: Page):
 
     # Open Provider dropdown
     print("Opening Provider dropdown...")
-    # There might be multiple comboboxes (Silent Audio Type). The first one is Active Provider.
-    # The label is "Active Provider".
-    # Find the SelectTrigger following the label
-    # page.locator("text=Active Provider").locator("..").locator("button[role='combobox']").click()
-    # Or just use the first combobox in the dialog
-    page.locator("button[role='combobox']").first.click()
+    page.get_by_test_id("tts-provider-select").click()
 
     # Select LemonFox.ai
     print("Selecting LemonFox.ai...")

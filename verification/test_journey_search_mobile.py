@@ -51,18 +51,25 @@ def test_search_and_sort_mobile(page: Page):
     # 3. Sorting Functionality
     print("- Testing Sorting Functionality...")
 
-    sort_select = page.get_by_test_id("sort-select")
-    expect(sort_select).to_be_visible()
+    # The sort select is now a Radix UI component, not a native select.
+    # We identify the trigger by test-id.
+    sort_trigger = page.get_by_test_id("sort-select")
+    expect(sort_trigger).to_be_visible()
 
     # Select 'Title'
     print("  - Sorting by Title")
-    sort_select.select_option("title")
-    expect(sort_select).to_have_value("title")
+    sort_trigger.click()
+    # Wait for the dropdown content (Title option) and click it
+    page.get_by_role("option", name="Title").click()
+
+    # Verify selection - Radix Trigger text updates to the selected value
+    expect(sort_trigger).to_contain_text("Title")
     utils.capture_screenshot(page, "search_sort_title")
 
     # Select 'Author'
     print("  - Sorting by Author")
-    sort_select.select_option("author")
-    expect(sort_select).to_have_value("author")
+    sort_trigger.click()
+    page.get_by_role("option", name="Author").click()
+    expect(sort_trigger).to_contain_text("Author")
 
     print("Search and Sort Journey Passed!")
