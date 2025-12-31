@@ -3,7 +3,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
-import { ChevronsLeft, ChevronsRight, SkipBack, SkipForward, Play, Pause, StickyNote, Mic, Copy, X } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 export type ActionType =
@@ -40,14 +40,12 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     isPlaying,
     queue,
     currentIndex,
-    jumpTo,
     play,
     pause
   } = useTTSStore(useShallow(state => ({
       isPlaying: state.isPlaying,
       queue: state.queue,
       currentIndex: state.currentIndex,
-      jumpTo: state.jumpTo,
       play: state.play,
       pause: state.pause
   })));
@@ -79,17 +77,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   // Helper for chapter navigation
   const handleChapterNav = (direction: 'prev' | 'next') => {
-    // Simulate keyboard event for ReaderTTSController to pick up
-    const key = direction === 'next' ? 'ArrowRight' : 'ArrowLeft';
-    window.dispatchEvent(new KeyboardEvent('keydown', { key }));
-  };
-
-  const handleSkip = (direction: 'prev' | 'next') => {
-      if (direction === 'next') {
-          jumpTo(currentIndex + 1);
-      } else {
-          jumpTo(currentIndex - 1);
-      }
+    // Dispatch custom event for ReaderView to handle
+    // We use a custom event because ReaderView (or ReaderTTSController) manages the rendition
+    // and we want to enforce Section navigation regardless of TTS state.
+    window.dispatchEvent(new CustomEvent('reader:chapter-nav', { detail: { direction } }));
   };
 
   const handleTogglePlay = (e: React.MouseEvent) => {
@@ -276,10 +267,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
                     variant="ghost"
                     size="icon"
                     className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-                    onClick={() => isPlaying ? handleSkip('prev') : handleChapterNav('prev')}
-                    aria-label="Previous"
+                    onClick={() => handleChapterNav('prev')}
+                    aria-label="Previous chapter"
                 >
-                    {isPlaying ? <SkipBack size={16} /> : <ChevronsLeft size={18} />}
+                    <ChevronsLeft size={18} />
                 </Button>
 
                 {/* Play/Pause Button */}
@@ -298,10 +289,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
                     variant="ghost"
                     size="icon"
                     className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-                    onClick={() => isPlaying ? handleSkip('next') : handleChapterNav('next')}
-                    aria-label="Next"
+                    onClick={() => handleChapterNav('next')}
+                    aria-label="Next chapter"
                 >
-                     {isPlaying ? <SkipForward size={16} /> : <ChevronsRight size={18} />}
+                     <ChevronsRight size={18} />
                 </Button>
           </div>
       );
@@ -320,10 +311,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         <Button
             variant="ghost"
             className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-            onClick={() => isPlaying ? handleSkip('prev') : handleChapterNav('prev')}
-            aria-label={isPlaying ? "Skip to previous sentence" : "Previous chapter"}
+            onClick={() => handleChapterNav('prev')}
+            aria-label="Previous chapter"
         >
-            {isPlaying ? <SkipBack size={20} /> : <ChevronsLeft size={24} />}
+            <ChevronsLeft size={24} />
         </Button>
 
         {/* Center Info */}
@@ -345,10 +336,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         <Button
             variant="ghost"
             className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-            onClick={() => isPlaying ? handleSkip('next') : handleChapterNav('next')}
-            aria-label={isPlaying ? "Skip to next sentence" : "Next chapter"}
+            onClick={() => handleChapterNav('next')}
+            aria-label="Next chapter"
         >
-             {isPlaying ? <SkipForward size={20} /> : <ChevronsRight size={24} />}
+             <ChevronsRight size={24} />
         </Button>
     </div>
   );

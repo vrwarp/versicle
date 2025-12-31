@@ -581,6 +581,23 @@ export const ReaderView: React.FC = () => {
       rendition?.next();
   }, [rendition]);
 
+  // Handle Custom Chapter Navigation (from CompassPill)
+  useEffect(() => {
+    const handleChapterNav = (e: CustomEvent<{ direction: 'prev' | 'next' }>) => {
+      const { direction } = e.detail;
+      if (direction === 'next') {
+        handleNext();
+      } else {
+        handlePrev();
+      }
+    };
+
+    window.addEventListener('reader:chapter-nav', handleChapterNav as EventListener);
+    return () => {
+      window.removeEventListener('reader:chapter-nav', handleChapterNav as EventListener);
+    };
+  }, [handleNext, handlePrev]);
+
   const scrollToText = (text: string) => {
       const iframe = viewerRef.current?.querySelector('iframe');
       if (iframe && iframe.contentWindow) {
