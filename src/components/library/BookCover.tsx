@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import 'react-lazy-load-image-component/src/effects/blur.css';
 import { cn } from '../../lib/utils';
@@ -6,6 +6,7 @@ import { Cloud, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu, type BookActionMenuHandle } from './BookActionMenu';
 import type { BookMetadata } from '../../types/db';
+import { useObjectUrl } from '../../hooks/useObjectUrl';
 
 interface BookCoverProps {
     book: BookMetadata;
@@ -13,27 +14,7 @@ interface BookCoverProps {
 }
 
 export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, actionMenuRef }) => {
-    const [coverUrl, setCoverUrl] = useState<string | null>(null);
-
-    useEffect(() => {
-        let url: string | null = null;
-        if (book.coverBlob) {
-            url = URL.createObjectURL(book.coverBlob);
-            // We use state to manage the Blob URL lifecycle effectively.
-            // This side effect is necessary to bridge imperative API (URL.createObjectURL) with declarative React rendering.
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setCoverUrl(url);
-        } else {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setCoverUrl(null);
-        }
-
-        return () => {
-            if (url) {
-                URL.revokeObjectURL(url);
-            }
-        };
-    }, [book.coverBlob]);
+    const coverUrl = useObjectUrl(book.coverBlob);
 
     return (
         <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner flex flex-col">

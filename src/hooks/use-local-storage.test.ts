@@ -46,6 +46,8 @@ describe('useLocalStorage', () => {
     localStorage.setItem('test-key', 'invalid-json');
 
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { result } = renderHook(() => useLocalStorage('test-key', 'default'));
 
@@ -53,5 +55,7 @@ describe('useLocalStorage', () => {
     expect(result.current[0]).toBe('default');
 
     consoleSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
   });
 });

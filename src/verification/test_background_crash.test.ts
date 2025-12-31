@@ -35,7 +35,7 @@ vi.mock('@jofr/capacitor-media-session', () => ({
         setActionHandler: vi.fn(),
         setMetadata: vi.fn(),
         setPlaybackState: vi.fn(),
-        setPositionState: vi.fn(),
+        setPositionState: vi.fn().mockResolvedValue(undefined),
     }
 }));
 
@@ -50,6 +50,8 @@ vi.mock('../db/DBService', () => ({
     updatePlaybackState: vi.fn(),
     updateReadingHistory: vi.fn(),
     getSections: vi.fn(),
+    saveTTSPosition: vi.fn(),
+    saveContentClassifications: vi.fn(),
   },
 }));
 

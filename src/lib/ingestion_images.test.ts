@@ -95,10 +95,12 @@ describe('Ingestion Image Optimization', () => {
   });
 
   it('should fallback to original if compression fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     // Setup compression failure
     (imageCompression as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Compression failed'));
 
     const bookId = await processEpub(mockFile);
+    consoleSpy.mockRestore();
 
     const metadata = await dbService.getBookMetadata(bookId);
     const storedCover = await dbService.getCover(bookId);

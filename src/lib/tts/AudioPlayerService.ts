@@ -104,6 +104,7 @@ export class AudioPlayerService {
 
   private prefixSums: number[] = [0];
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private analysisPromises = new Map<string, Promise<any>>();
 
   private constructor() {
@@ -284,8 +285,8 @@ export class AudioPlayerService {
               this.playNext();
           } else if (event.type === 'error') {
                // Handle common interruption errors or real errors
-               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-               const errorType = (event.error as any)?.error || event.error;
+               const errorObj = event.error as unknown as { error?: string, message?: string };
+               const errorType = errorObj?.error || event.error;
                // If it's just an interruption (e.g. from cancel), ignore
                if (errorType === 'interrupted' || errorType === 'canceled') return;
 

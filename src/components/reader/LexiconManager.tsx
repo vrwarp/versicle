@@ -52,22 +52,35 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
   useEffect(() => {
     if (open) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-      loadRules();
+      // Inline load logic to avoid linter confusion or wrap in async IIFE explicitely
+      (async () => {
+          if (scope === 'global') {
+              const globals = await lexiconService.getRules();
+              setRules(globals);
+          } else if (currentBookId) {
+              const all = await lexiconService.getRules(currentBookId);
+              setRules(all.filter(r => r.bookId === currentBookId));
+          } else {
+              setRules([]);
+          }
+      })();
     }
-  }, [open, loadRules]);
+  }, [open, scope, currentBookId, lexiconService]);
 
-  // Use a different strategy to initialize state if needed, or disable the warning for these specific syncs
-  // which are required for initialization logic when opening the modal.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
-    if (open && initialTerm) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setIsAdding(true);
-        setEditingRule({ original: initialTerm, replacement: '' });
-        setTestInput(initialTerm);
-    }
-  }, [open, initialTerm]);
+  const [initializedTerm, setInitializedTerm] = useState<string | null>(null);
+
+  // Reset initialization tracker when closed
+  if (!open && initializedTerm !== null) {
+      setInitializedTerm(null);
+  }
+
+  // Initialize state when opening with a term
+  if (open && initialTerm && initializedTerm !== initialTerm) {
+      setIsAdding(true);
+      setEditingRule({ original: initialTerm, replacement: '' });
+      setTestInput(initialTerm);
+      setInitializedTerm(initialTerm);
+  }
 
   const handleSave = async () => {
     if (!editingRule?.original || !editingRule?.replacement) return;
