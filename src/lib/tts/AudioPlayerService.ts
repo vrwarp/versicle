@@ -1199,7 +1199,7 @@ export class AudioPlayerService {
       // 3. Filter based on detected types and current settings
       if (detectedTypes && detectedTypes.length > 0) {
           const typeMap = new Map<string, ContentType>();
-          detectedTypes.forEach(r => typeMap.set(r.rootCfi, r.type));
+          detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
 
           const skipRoots = new Set<string>();
           groups.forEach(g => {
