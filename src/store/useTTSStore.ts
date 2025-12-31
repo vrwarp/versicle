@@ -11,7 +11,6 @@ import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
 import { Capacitor } from '@capacitor/core';
-import type { ContentType } from '../types/content-analysis';
 
 /**
  * State interface for the Text-to-Speech (TTS) store.
