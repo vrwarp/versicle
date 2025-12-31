@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
 import { BackgroundAudio } from './BackgroundAudio';
+import { dbService } from '../../db/DBService';
+import { genAIService } from '../genai/GenAIService';
 
 // Mock WebSpeechProvider class
 vi.mock('./providers/WebSpeechProvider', () => {
@@ -62,16 +64,18 @@ vi.mock('../../db/DBService', () => ({
     updateReadingHistory: vi.fn(),
     getSections: vi.fn().mockResolvedValue([
         { sectionId: 'sec1', characterCount: 100 },
-        { sectionId: 'sec2', characterCount: 0 } // Empty section
+        { sectionId: 'sec2', characterCount: 0 }, // Empty section
+        { sectionId: 'sec3', characterCount: 100 }
     ]),
     getContentAnalysis: vi.fn().mockResolvedValue({ structure: { title: 'Chapter 1' } }),
     getTTSContent: vi.fn().mockImplementation((bookId, sectionId) => {
         if (sectionId === 'sec2') return Promise.resolve({ sentences: [] });
         return Promise.resolve({
-            sentences: [{ text: "Sentence 1", cfi: "cfi1" }]
+            sentences: [{ text: "Sentence " + sectionId, cfi: "cfi_" + sectionId }]
         });
     }),
     saveTTSPosition: vi.fn(),
+    saveContentClassifications: vi.fn(),
   }
 }));
 vi.mock('./CostEstimator');
@@ -85,6 +89,26 @@ vi.mock('../../store/useTTSStore', () => ({
         sentenceStarters: []
     })
   }
+}));
+
+vi.mock('../../store/useGenAIStore', () => ({
+    useGenAIStore: {
+        getState: vi.fn().mockReturnValue({
+            isContentAnalysisEnabled: true,
+            contentFilterSkipTypes: ['citation'],
+            apiKey: 'test-key'
+        })
+    }
+}));
+
+vi.mock('../genai/GenAIService', () => ({
+    genAIService: {
+        isConfigured: vi.fn().mockReturnValue(true),
+        configure: vi.fn(),
+        detectContentTypes: vi.fn().mockResolvedValue([
+            { id: '0', type: 'text' }
+        ])
+    }
 }));
 
 describe('AudioPlayerService', () => {
@@ -244,5 +268,28 @@ describe('AudioPlayerService', () => {
 
         expect(playSpy).toHaveBeenCalled();
         expect(forceStopSpy).not.toHaveBeenCalled();
+    });
+
+    it('should trigger content analysis for the next chapter', async () => {
+        service.setBookId('book1');
+
+        // Mock getTTSContent to spy on it
+        const getTTSContentSpy = vi.mocked(dbService.getTTSContent);
+
+        // Load section 1 (sec2, empty) -> should trigger analysis for section 2 (sec3)
+        // section index 1 corresponds to sec2
+        // next section is index 2, which is sec3
+
+        await service.loadSection(1, false);
+
+        // Wait for background promise (run in next tick)
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Check if getTTSContent was called for sec3
+        // It's called with 'book1', 'sec3'
+        expect(getTTSContentSpy).toHaveBeenCalledWith('book1', 'sec3');
+
+        // Check if GenAI detection was triggered
+        expect(genAIService.detectContentTypes).toHaveBeenCalled();
     });
 });
