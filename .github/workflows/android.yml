@@ -6,7 +6,6 @@ on:
     paths:
       - 'android/**'
   pull_request:
-    branches: [ "main", "capacitor" ]
     paths:
       - 'android/**'
 
