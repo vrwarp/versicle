@@ -1060,10 +1060,16 @@ export class AudioPlayerService {
       }
 
       try {
-          const nodesToDetect = groups.map(g => ({
-              rootCfi: g.rootCfi,
-              sampleText: g.fullText.substring(0, 500)
-          }));
+          const idToCfiMap = new Map<string, string>();
+
+          const nodesToDetect = groups.map((g, index) => {
+              const id = index.toString();
+              idToCfiMap.set(id, g.rootCfi);
+              return {
+                  id,
+                  sampleText: g.fullText.substring(0, 500)
+              };
+          });
 
           // Ensure service is configured if we have a key
           if (!genAIService.isConfigured() && aiStore.apiKey) {
@@ -1074,9 +1080,15 @@ export class AudioPlayerService {
               // Note: Using default model (gemini-1.5-flash) from GenAIService
               const results = await genAIService.detectContentTypes(nodesToDetect);
 
+              // Reconstruct the original format for DB persistence
+              const finalResults = results.map(res => ({
+                  rootCfi: idToCfiMap.get(res.id) || '',
+                  type: res.type
+              })).filter(r => r.rootCfi !== '');
+
               // Persist detection results
-              await dbService.saveContentClassifications(bookId, sectionId, results);
-              return results;
+              await dbService.saveContentClassifications(bookId, sectionId, finalResults);
+              return finalResults;
           }
       } catch (e) {
           console.warn("Content detection failed", e);
