@@ -7,6 +7,7 @@ interface GenAIState {
   apiKey: string;
   model: string;
   isEnabled: boolean;
+  contentFilteringEnabled: boolean;
   logs: GenAILogEntry[];
   usageStats: {
     totalTokens: number;
@@ -15,6 +16,7 @@ interface GenAIState {
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
   setEnabled: (enabled: boolean) => void;
+  setContentFilteringEnabled: (enabled: boolean) => void;
   incrementUsage: (tokens: number) => void;
   addLog: (log: GenAILogEntry) => void;
   init: () => void;
@@ -26,6 +28,7 @@ export const useGenAIStore = create<GenAIState>()(
       apiKey: '',
       model: 'gemini-2.5-flash-lite',
       isEnabled: false,
+      contentFilteringEnabled: false,
       logs: [],
       usageStats: {
         totalTokens: 0,
@@ -40,6 +43,7 @@ export const useGenAIStore = create<GenAIState>()(
         genAIService.configure(get().apiKey, model);
       },
       setEnabled: (enabled) => set({ isEnabled: enabled }),
+      setContentFilteringEnabled: (enabled) => set({ contentFilteringEnabled: enabled }),
       incrementUsage: (tokens) =>
         set((state) => ({
           usageStats: {

@@ -208,6 +208,8 @@ export const GlobalSettingsDialog = () => {
         setModel: setGenAIModel,
         isEnabled: isGenAIEnabled,
         setEnabled: setGenAIEnabled,
+        contentFilteringEnabled,
+        setContentFilteringEnabled,
         logs: genAILogs
     } = useGenAIStore();
 
@@ -230,7 +232,7 @@ export const GlobalSettingsDialog = () => {
             // Reload
             window.location.reload();
         }
-    };
+        };
 
     const handleRepairDB = async () => {
         setIsScanning(true);
@@ -648,6 +650,20 @@ export const GlobalSettingsDialog = () => {
 
                                     {isGenAIEnabled && (
                                         <>
+                                            <div className="flex items-center justify-between border-b pb-4">
+                                                <div className="space-y-0.5">
+                                                    <label htmlFor="genai-filtering" className="text-sm font-medium">Content Type Detection</label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Automatically filter out non-narrative content (e.g., citations, tables).
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    id="genai-filtering"
+                                                    checked={contentFilteringEnabled}
+                                                    onCheckedChange={setContentFilteringEnabled}
+                                                />
+                                            </div>
+
                                             <div className="space-y-2">
                                                 <label className="text-sm font-medium">Gemini API Key</label>
                                                 <Input
