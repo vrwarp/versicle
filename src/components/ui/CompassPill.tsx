@@ -301,7 +301,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   // Active Mode
   return (
-    <div data-testid="compass-pill-active" className="relative z-40 flex items-center justify-between w-full max-w-md h-14 px-4 mx-auto transition-all border shadow-lg rounded-full bg-background/75 backdrop-blur-md border-border">
+    <div data-testid="compass-pill-active" className="relative z-40 flex items-center justify-between w-full max-w-md h-14 px-4 mx-auto overflow-hidden transition-all border shadow-lg rounded-full bg-background/75 backdrop-blur-md border-border">
         {/* Background Progress */}
         <div
             className="absolute inset-y-0 left-0 bg-primary/10 -z-10 transition-all duration-300"
