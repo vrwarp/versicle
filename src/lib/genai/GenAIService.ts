@@ -1,5 +1,4 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
-import { ContentType, ContentTypeResult } from '../../types/content-analysis';
 
 export interface GenAILogEntry {
   id: string;
@@ -174,41 +173,6 @@ class GenAIService {
     };
 
     return this.generateStructured<{ id: string, title: string }[]>(prompt, schema);
-  }
-
-  /**
-   * Detects content types for a batch of root nodes.
-   * @param nodes Array of objects with rootCfi and sampleText.
-   * @returns Array of ContentTypeResult.
-   */
-  public async detectContentTypes(nodes: { rootCfi: string, sampleText: string }[]): Promise<ContentTypeResult[]> {
-    if (nodes.length === 0) return [];
-
-    const prompt = `Analyze the provided text samples from an EPUB book section and classify them into one of the following types:
-    - 'title': Chapter titles, headers, or section headings.
-    - 'citation': Bibliographies, references, footnotes, or legal text.
-    - 'main': Standard narrative text, dialogue, or body content.
-    - 'table': Tabular data, charts, or structured lists acting as tables.
-    - 'other': Content that does not fit into the above categories.
-
-    Return an array of objects with 'rootCfi' (matching input) and 'type'.
-
-    Samples:
-    ${JSON.stringify(nodes)}`;
-
-    const schema = {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          rootCfi: { type: SchemaType.STRING },
-          type: { type: SchemaType.STRING, enum: ['title', 'citation', 'main', 'table', 'other'] },
-        },
-        required: ['rootCfi', 'type'],
-      },
-    };
-
-    return this.generateStructured<ContentTypeResult[]>(prompt, schema);
   }
 }
 

@@ -1,7 +1,6 @@
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { NavigationItem } from 'epubjs';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
-import type { ContentType } from './content-analysis';
 
 /**
  * Metadata for a book stored in the library.
@@ -68,11 +67,6 @@ export interface ContentAnalysis {
     title?: string;
     footnoteMatches: string[];
   };
-  /** Detected content types for sections (CFI -> Type). */
-  contentTypes?: {
-      rootCfi: string;
-      type: ContentType;
-  }[];
   /** Summary of the section. */
   summary?: string;
   /** Timestamp when the analysis was performed. */
