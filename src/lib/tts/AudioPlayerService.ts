@@ -1017,23 +1017,25 @@ export class AudioPlayerService {
       return false;
   }
 
+  /**
+   * Loads the closest previous section and starts playback from its end.
+   * Used for "rewinding" across chapter boundaries.
+   */
   private async retreatToPreviousChapter(): Promise<boolean> {
       if (!this.currentBookId || this.playlist.length === 0) return false;
 
       let prevSectionIndex = this.currentSectionIndex - 1;
 
       while (prevSectionIndex >= 0) {
-          // Load but do not auto play immediately, because we need to set index to end
-          // Actually loadSectionInternal can handle loading, but we need to override the index
+          // We load the section without autoplaying so we can manually
+          // set the position to the end of the chapter before starting playback.
           const loaded = await this.loadSectionInternal(prevSectionIndex, false);
           if (loaded) {
-              // Set index to the last item
               this.currentIndex = Math.max(0, this.queue.length - 1);
               this.persistQueue();
               this.updateMediaSessionMetadata();
               this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
 
-              // Now play
               await this.playInternal();
               return true;
           }
