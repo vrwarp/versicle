@@ -96,11 +96,16 @@ describe('BookCard', () => {
     expect(progressContainer).toHaveAttribute('aria-label', 'Reading progress: 45%');
   });
 
-  it('should not render progress bar when progress is 0 or undefined', () => {
+  it('should render progress bar when progress is 0', () => {
     const bookWithZeroProgress = { ...mockBook, progress: 0 };
     renderWithRouter(<BookCard book={bookWithZeroProgress} />);
-    expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
 
+    const progressBar = screen.getByTestId('progress-bar');
+    expect(progressBar).toBeInTheDocument();
+    expect(progressBar).toHaveStyle({ width: '0%' });
+  });
+
+  it('should not render progress bar when progress is undefined', () => {
     const bookWithUndefinedProgress = { ...mockBook, progress: undefined };
     renderWithRouter(<BookCard book={bookWithUndefinedProgress} />);
     expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
