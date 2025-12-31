@@ -26,13 +26,12 @@ Versicle is a **local-first**, **privacy-centric** EPUB reader and audiobook pla
     *   **Local**: Use standard OS voices or **Piper** (WASM) for high-quality offline speech.
     *   **Cloud**: Integrate with **Google Gemini**, **OpenAI**, or **LemonFox** for neural voices.
 *   **Pronunciation Lexicon**: Fix mispronounced names or terms with custom regex/replacement rules.
-*   **Smart Content Skipping**: Automatically skip tables, citations, and footnotes using heuristics or GenAI classification.
+*   **JIT Refinement**: Customize sentence segmentation logic (abbreviations, merging) without re-importing books.
 *   **Background Playback**: Keeps playing even when the screen is locked (Android/iOS).
 *   **Media Controls**: Control playback from your headphones or lock screen.
 
 ### 🧠 GenAI Integration (Optional)
 *   **Smart TOC**: Generate a structured Table of Contents for books that lack one.
-*   **Content Classification**: Identify and filter out non-narrative content like tables and indices.
 *   **Note**: Requires a Google Gemini API Key.
 
 ---
