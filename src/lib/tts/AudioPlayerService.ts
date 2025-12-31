@@ -713,8 +713,15 @@ export class AudioPlayerService {
 
           // Fix: If the approximated index is the same as current (e.g. small seek forward/backward within same sentence),
           // force advance to next index to avoid "restarting" the current sentence repeatedly, as requested.
-          if (newIndex === this.currentIndex && newIndex < this.queue.length - 1) {
-              newIndex++;
+          if (newIndex === this.currentIndex) {
+             if (newIndex < this.queue.length - 1) {
+                 newIndex++;
+             } else {
+                 // Edge case: We are at the last sentence and seeking didn't move us.
+                 // Treat this as a request to move to the next chapter.
+                 await this.advanceToNextChapter();
+                 return;
+             }
           }
 
           if (wasPlaying) {
@@ -741,12 +748,18 @@ export class AudioPlayerService {
                   this.currentIndex++;
                   this.persistQueue();
                   await this.playInternal();
+              } else {
+                  // At the end of the chapter, move to next
+                  await this.advanceToNextChapter();
               }
           } else {
               if (this.currentIndex > 0) {
                   this.currentIndex--;
                   this.persistQueue();
                   await this.playInternal();
+              } else {
+                  // At the start of the chapter, move to previous
+                  await this.retreatToPreviousChapter();
               }
           }
       });
@@ -1000,6 +1013,31 @@ export class AudioPlayerService {
           const loaded = await this.loadSectionInternal(nextSectionIndex, true);
           if (loaded) return true;
           nextSectionIndex++;
+      }
+      return false;
+  }
+
+  private async retreatToPreviousChapter(): Promise<boolean> {
+      if (!this.currentBookId || this.playlist.length === 0) return false;
+
+      let prevSectionIndex = this.currentSectionIndex - 1;
+
+      while (prevSectionIndex >= 0) {
+          // Load but do not auto play immediately, because we need to set index to end
+          // Actually loadSectionInternal can handle loading, but we need to override the index
+          const loaded = await this.loadSectionInternal(prevSectionIndex, false);
+          if (loaded) {
+              // Set index to the last item
+              this.currentIndex = Math.max(0, this.queue.length - 1);
+              this.persistQueue();
+              this.updateMediaSessionMetadata();
+              this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+
+              // Now play
+              await this.playInternal();
+              return true;
+          }
+          prevSectionIndex--;
       }
       return false;
   }
