@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
-import { ContentType, ContentTypeResult } from '../../types/content-analysis';
+import type { ContentTypeResult } from '../../types/content-analysis';
 
 export interface GenAILogEntry {
   id: string;
