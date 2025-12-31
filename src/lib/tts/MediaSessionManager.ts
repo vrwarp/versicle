@@ -160,7 +160,7 @@ export class MediaSessionManager {
     try {
       let progress: number | undefined;
       if (sectionIndex !== undefined && totalSections !== undefined && totalSections > 0) {
-          progress = Math.min(Math.max((sectionIndex + 1) / totalSections, 0), 1);
+          progress = Math.min(Math.max(sectionIndex / totalSections, 0), 1);
       }
 
       // Crop to square and get base64 directly from URL
