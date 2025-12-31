@@ -32,6 +32,8 @@ describe('BackupService', () => {
     service = new BackupService();
     vi.clearAllMocks();
     vi.spyOn(window, 'confirm').mockImplementation(() => true);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   describe('createLightBackup', () => {

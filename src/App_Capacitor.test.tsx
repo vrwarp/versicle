@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import App from './App';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Capacitor } from '@capacitor/core';
@@ -93,10 +93,11 @@ describe('App Capacitor Initialization', () => {
 
   it('should not initialize anything specific when platform is web', async () => {
     (Capacitor.getPlatform as any).mockReturnValue('web');
-    render(<App />);
-
-    // Wait for effects
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await act(async () => {
+      render(<App />);
+      // Wait for effects
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     // No assertions needed as we removed the foreground service calls
   });
 

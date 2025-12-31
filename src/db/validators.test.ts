@@ -1,8 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { sanitizeString, getSanitizedBookMetadata } from './validators';
 import type { BookMetadata } from '../types/db';
 
 describe('validators', () => {
+    beforeEach(() => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => {
+        vi.clearAllMocks();
+    });
   describe('sanitizeString', () => {
     it('trims whitespace', () => {
       expect(sanitizeString('  hello  ')).toBe('hello');

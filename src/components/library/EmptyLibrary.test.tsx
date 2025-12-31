@@ -71,6 +71,7 @@ describe('EmptyLibrary', () => {
   });
 
   it('handles demo book loading failure', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (global.fetch as any).mockResolvedValue({
       ok: false,
@@ -82,6 +83,7 @@ describe('EmptyLibrary', () => {
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Failed to load'), 'error');
     });
+    consoleSpy.mockRestore();
   });
 
   it('displays loading spinner when importing', () => {

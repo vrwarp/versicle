@@ -14,6 +14,7 @@ vi.mock('../db/DBService', () => ({
     getLocations: vi.fn().mockResolvedValue(null),
     saveLocations: vi.fn().mockResolvedValue(undefined),
     getReadingHistory: vi.fn().mockResolvedValue([]),
+    getReadingHistoryEntry: vi.fn().mockResolvedValue(undefined),
   },
 }));
 

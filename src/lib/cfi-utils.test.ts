@@ -407,9 +407,11 @@ describe('cfi-utils', () => {
       });
 
       it('returns original if book/spine is invalid', async () => {
+          const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const res = await snapCfiToSentence({} as any, 'cfi');
           expect(res).toBe('cfi');
+          consoleSpy.mockRestore();
       });
 
       it('returns original if cfi invalid', async () => {

@@ -35,6 +35,8 @@ global.FileReader = class {
 describe('batch-ingestion', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(console, 'log').mockImplementation(() => {});
     });
 
     describe('extractEpubsFromZip', () => {

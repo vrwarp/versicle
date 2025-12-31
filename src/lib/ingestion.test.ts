@@ -185,6 +185,7 @@ describe('ingestion', () => {
   });
 
   it('should always sanitize metadata', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const longTitle = 'A'.repeat(600);
 
       vi.resetModules();
@@ -214,5 +215,6 @@ describe('ingestion', () => {
      expect(confirmSpy).not.toHaveBeenCalled();
      expect(book?.title.length).toBe(500);
      expect(book?.title).not.toBe(longTitle);
+     consoleSpy.mockRestore();
    });
 });

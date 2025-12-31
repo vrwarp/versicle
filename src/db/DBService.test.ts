@@ -67,9 +67,12 @@ describe('DBService', () => {
       await db.put('books', invalidBook);
       await db.put('books', validBook);
 
+      // Suppress the expected validation error log for this test
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const library = await dbService.getLibrary();
       expect(library).toHaveLength(1);
       expect(library[0].id).toBe('1');
+      consoleErrorSpy.mockRestore();
     });
   });
 

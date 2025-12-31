@@ -28,7 +28,7 @@ vi.mock('../../../lib/tts/AudioPlayerService', () => ({
 }));
 
 // Mock UI components
-vi.mock('../ui/Dialog', () => ({
+vi.mock('../../ui/Dialog', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Dialog: ({ isOpen, children }: any) => (isOpen ? <div data-testid="lexicon-dialog">{children}</div> : null),
 }));
