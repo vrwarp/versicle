@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
@@ -19,6 +19,29 @@ vi.mock('./EmptyLibrary', () => ({
 // Mock useToastStore
 vi.mock('../../store/useToastStore', () => ({
   useToastStore: vi.fn(),
+}));
+
+// Mock Select components
+vi.mock('../ui/Select', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Select: ({ value, onValueChange, children }: any) => (
+    <select
+      data-testid="sort-select"
+      value={value}
+      onChange={(e) => onValueChange(e.target.value)}
+    >
+      {children}
+    </select>
+  ),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  SelectTrigger: ({ children }: any) => <>{children}</>,
+  SelectValue: () => null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  SelectContent: ({ children }: any) => <>{children}</>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  SelectItem: ({ value, children }: any) => (
+    <option value={value}>{children}</option>
+  ),
 }));
 
 describe('LibraryView', () => {

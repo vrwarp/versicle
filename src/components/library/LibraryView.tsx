@@ -8,6 +8,7 @@ import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search } from
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
 
 /**
@@ -233,17 +234,23 @@ export const LibraryView: React.FC = () => {
           {/* Sort By */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="whitespace-nowrap">Sort by:</span>
-            <select
+            <Select
               value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as SortOption)}
-              className="bg-transparent font-medium text-foreground border-none focus:ring-0 cursor-pointer p-0 pr-8"
-              data-testid="sort-select"
+              onValueChange={(val) => setSortOrder(val as SortOption)}
             >
-              <option value="recent">Recently Added</option>
-              <option value="last_read">Last Read</option>
-              <option value="author">Author</option>
-              <option value="title">Title</option>
-            </select>
+              <SelectTrigger
+                className="w-[180px] bg-transparent border-none focus:ring-0 p-0 h-auto font-medium text-foreground shadow-none justify-end gap-2"
+                data-testid="sort-select"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">Recently Added</SelectItem>
+                <SelectItem value="last_read">Last Read</SelectItem>
+                <SelectItem value="author">Author</SelectItem>
+                <SelectItem value="title">Title</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </header>
