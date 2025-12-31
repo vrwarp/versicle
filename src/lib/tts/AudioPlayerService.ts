@@ -713,8 +713,15 @@ export class AudioPlayerService {
 
           // Fix: If the approximated index is the same as current (e.g. small seek forward/backward within same sentence),
           // force advance to next index to avoid "restarting" the current sentence repeatedly, as requested.
-          if (newIndex === this.currentIndex && newIndex < this.queue.length - 1) {
-              newIndex++;
+          if (newIndex === this.currentIndex) {
+             if (newIndex < this.queue.length - 1) {
+                 newIndex++;
+             } else {
+                 // Edge case: We are at the last sentence and seeking didn't move us.
+                 // Treat this as a request to move to the next chapter.
+                 await this.advanceToNextChapter();
+                 return;
+             }
           }
 
           if (wasPlaying) {
@@ -741,12 +748,18 @@ export class AudioPlayerService {
                   this.currentIndex++;
                   this.persistQueue();
                   await this.playInternal();
+              } else {
+                  // At the end of the chapter, move to next
+                  await this.advanceToNextChapter();
               }
           } else {
               if (this.currentIndex > 0) {
                   this.currentIndex--;
                   this.persistQueue();
                   await this.playInternal();
+              } else {
+                  // At the start of the chapter, move to previous
+                  await this.retreatToPreviousChapter();
               }
           }
       });
@@ -1000,6 +1013,33 @@ export class AudioPlayerService {
           const loaded = await this.loadSectionInternal(nextSectionIndex, true);
           if (loaded) return true;
           nextSectionIndex++;
+      }
+      return false;
+  }
+
+  /**
+   * Loads the closest previous section and starts playback from its end.
+   * Used for "rewinding" across chapter boundaries.
+   */
+  private async retreatToPreviousChapter(): Promise<boolean> {
+      if (!this.currentBookId || this.playlist.length === 0) return false;
+
+      let prevSectionIndex = this.currentSectionIndex - 1;
+
+      while (prevSectionIndex >= 0) {
+          // We load the section without autoplaying so we can manually
+          // set the position to the end of the chapter before starting playback.
+          const loaded = await this.loadSectionInternal(prevSectionIndex, false);
+          if (loaded) {
+              this.currentIndex = Math.max(0, this.queue.length - 1);
+              this.persistQueue();
+              this.updateMediaSessionMetadata();
+              this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+
+              await this.playInternal();
+              return true;
+          }
+          prevSectionIndex--;
       }
       return false;
   }
