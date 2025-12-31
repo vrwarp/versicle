@@ -716,6 +716,13 @@ export class AudioPlayerService {
               newIndex++;
           }
 
+          // Edge Case: If we are targeted at the end of the chapter (and it's the same index as current), move to next chapter
+          if (newIndex === this.queue.length - 1 && newIndex === this.currentIndex) {
+              // Only advance if we were playing or if we want seamless navigation
+               const loaded = await this.advanceToNextChapter();
+               if (loaded) return;
+          }
+
           if (wasPlaying) {
               this.provider.stop();
           }
@@ -740,12 +747,18 @@ export class AudioPlayerService {
                   this.currentIndex++;
                   this.persistQueue();
                   await this.playInternal();
+              } else {
+                  // At the end of queue, try to go to next chapter
+                  await this.advanceToNextChapter();
               }
           } else {
               if (this.currentIndex > 0) {
                   this.currentIndex--;
                   this.persistQueue();
                   await this.playInternal();
+              } else {
+                  // At the start of queue, try to go to previous chapter
+                  await this.retreatToPreviousChapter();
               }
           }
       });
@@ -882,7 +895,7 @@ export class AudioPlayerService {
       }
   }
 
-  private async loadSectionInternal(sectionIndex: number, autoPlay: boolean, sectionTitle?: string): Promise<boolean> {
+  private async loadSectionInternal(sectionIndex: number, autoPlay: boolean, sectionTitle?: string, startAtEnd: boolean = false): Promise<boolean> {
       if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
 
       const section = this.playlist[sectionIndex];
@@ -980,7 +993,7 @@ export class AudioPlayerService {
               }
 
               this.queue = newQueue;
-              this.currentIndex = 0;
+              this.currentIndex = startAtEnd ? newQueue.length - 1 : 0;
               this.currentSectionIndex = sectionIndex;
               this.lastPersistedQueue = null; // Reset persisted tracker on new section
 
@@ -996,6 +1009,19 @@ export class AudioPlayerService {
           }
       } catch (e) {
           console.error("Failed to load section content", e);
+      }
+      return false;
+  }
+
+  private async retreatToPreviousChapter(): Promise<boolean> {
+      if (!this.currentBookId || this.playlist.length === 0) return false;
+
+      let prevSectionIndex = this.currentSectionIndex - 1;
+
+      while (prevSectionIndex >= 0) {
+          const loaded = await this.loadSectionInternal(prevSectionIndex, true, undefined, true); // startAtEnd = true
+          if (loaded) return true;
+          prevSectionIndex--;
       }
       return false;
   }
