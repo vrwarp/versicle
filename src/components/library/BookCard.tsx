@@ -78,7 +78,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
             </p>
         )}
 
-        {book.progress !== undefined && book.progress > 0 && (
+        {book.progress !== undefined && book.progress >= 0 && (
           <div
             className="w-full h-1.5 bg-secondary rounded-full mt-3 overflow-hidden"
             data-testid="progress-container"
