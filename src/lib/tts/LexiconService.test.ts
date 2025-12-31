@@ -26,6 +26,7 @@ describe('LexiconService', () => {
       };
       // Mock getDB to return our mock db
       const { getDB } = await import('../../db/db');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(getDB).mockResolvedValue(db as any);
 
       await service.deleteRules(['1', '2']);

@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlayerService, TTSQueueItem } from './AudioPlayerService';
 import { MockCloudProvider } from './providers/MockCloudProvider';
 
+// Mock useTTSStore to avoid circular dependency crash
+vi.mock('../../store/useTTSStore', () => ({
+    useTTSStore: {
+        getState: vi.fn(() => ({
+            settings: { customAbbreviations: [], alwaysMerge: [], sentenceStarters: [] }
+        }))
+    }
+}));
+
 // Mock DBService
 vi.mock('../../db/DBService', () => ({
   dbService: {

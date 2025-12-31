@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BaseCloudProvider } from './BaseCloudProvider';
-import { CostEstimator, useCostStore } from '../CostEstimator';
+import { CostEstimator } from '../CostEstimator';
 import type { TTSOptions, SpeechSegment } from './types';
-import { TTSCache } from '../TTSCache';
 
 // Mock dependencies
 vi.mock('../CostEstimator', () => {
@@ -77,6 +76,7 @@ class TestProvider extends BaseCloudProvider {
 
 describe('BaseCloudProvider Request Registry', () => {
   let provider: TestProvider;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let trackSpy: any;
 
   beforeEach(() => {

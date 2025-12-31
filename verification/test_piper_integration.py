@@ -42,8 +42,9 @@ def test_piper_provider_selection(page: Page):
     page.get_by_role("button", name="TTS Engine").click()
 
     # Check provider dropdown (initially Web Speech)
-    # Radix UI Select trigger
-    select_trigger = page.locator('button[role="combobox"]').first
+    # Use specific test-id
+    select_trigger = page.get_by_test_id("tts-provider-select")
+
     expect(select_trigger).to_contain_text("Web Speech (Local)")
 
     select_trigger.click()

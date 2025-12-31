@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processEpub } from './ingestion';
 import { dbService } from '../db/DBService';
 import imageCompression from 'browser-image-compression';
@@ -52,6 +52,7 @@ describe('Ingestion Image Optimization', () => {
     (imageCompression as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockThumbnailBlob);
 
     // Clean DB
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = await (dbService as any).getDB();
     await db.clear('books');
     await db.clear('covers');

@@ -46,9 +46,23 @@ vi.mock('../store/useTTSStore', () => {
     return { useTTSStore };
 });
 
-vi.mock('../store/useReaderStore', () => ({
-    useReaderStore: vi.fn(),
-}));
+vi.mock('../store/useReaderStore', () => {
+    const mockGetState = vi.fn(() => ({
+        currentBookId: 'book1',
+        currentSectionId: 'section1',
+        currentSectionTitle: 'Chapter 1'
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const useReaderStore = vi.fn((selector?: any) => {
+        const state = mockGetState();
+        return selector ? selector(state) : state;
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useReaderStore as any).getState = mockGetState;
+
+    return { useReaderStore };
+});
 
 describe('useTTS', () => {
     beforeEach(() => {
@@ -65,13 +79,10 @@ describe('useTTS', () => {
 
         // Setup Reader Store mock
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (useReaderStore as any).mockImplementation((selector: any) => {
-             const state = {
-                 currentBookId: 'book1',
-                 currentSectionId: 'section1',
-                 currentSectionTitle: 'Chapter 1'
-             };
-             return selector(state);
+        (useReaderStore.getState as any).mockReturnValue({
+             currentBookId: 'book1',
+             currentSectionId: 'section1',
+             currentSectionTitle: 'Chapter 1'
         });
     });
 
@@ -88,7 +99,7 @@ describe('useTTS', () => {
         renderHook(() => useTTS());
 
         await waitFor(() => {
-            expect(mockPlayerInstance.loadSectionBySectionId).toHaveBeenCalledWith('section1', false);
+            expect(mockPlayerInstance.loadSectionBySectionId).toHaveBeenCalledWith('section1', false, 'Chapter 1');
         });
     });
 

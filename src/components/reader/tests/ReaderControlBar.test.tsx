@@ -11,23 +11,30 @@ const mockUseLibraryStore = vi.fn();
 const mockUseToastStore = vi.fn();
 const mockUseNavigate = vi.fn();
 
-vi.mock('../../store/useAnnotationStore', () => ({
+// Fix paths to be relative to THIS test file (src/components/reader/tests/)
+// Target: src/store/... -> ../../../store/...
+vi.mock('../../../store/useAnnotationStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useAnnotationStore: (selector: any) => mockUseAnnotationStore(selector),
 }));
 
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('../../../store/useTTSStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useTTSStore: (selector: any) => mockUseTTSStore(selector),
 }));
 
-vi.mock('../../store/useReaderStore', () => ({
+vi.mock('../../../store/useReaderStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useReaderStore: (selector: any) => mockUseReaderStore(selector),
 }));
 
-vi.mock('../../store/useLibraryStore', () => ({
+vi.mock('../../../store/useLibraryStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useLibraryStore: (selector: any) => mockUseLibraryStore(selector),
 }));
 
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('../../../store/useToastStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useToastStore: (selector: any) => mockUseToastStore(selector),
 }));
 
@@ -36,11 +43,14 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('zustand/react/shallow', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useShallow: (selector: any) => selector
 }));
 
-// Mock LexiconManager to verify it is rendered and receives props
+// Mock LexiconManager (src/components/reader/LexiconManager)
+// Path: ../LexiconManager
 vi.mock('../LexiconManager', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   LexiconManager: ({ open, onOpenChange, initialTerm }: any) => (
     open ? (
       <div data-testid="lexicon-manager-mock">
@@ -51,9 +61,10 @@ vi.mock('../LexiconManager', () => ({
   )
 }));
 
-// Mock CompassPill to avoid rendering full child logic
-// We want to capture props passed to it
-vi.mock('../ui/CompassPill', () => ({
+// Mock CompassPill (src/components/ui/CompassPill)
+// Path: ../../ui/CompassPill
+vi.mock('../../ui/CompassPill', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   CompassPill: ({ variant, onClick, onAnnotationAction, progress }: any) => (
     <div data-testid={`compass-pill-${variant}`} data-progress={progress} onClick={onClick}>
       {variant}
@@ -70,25 +81,30 @@ describe('ReaderControlBar', () => {
         vi.clearAllMocks();
 
         // Default store states
-        mockUseAnnotationStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseAnnotationStore.mockImplementation((selector: any) => selector({
             popover: { visible: false, text: 'selected text', cfiRange: 'cfi' },
             addAnnotation: vi.fn(),
             hidePopover: vi.fn(),
         }));
-        mockUseTTSStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseTTSStore.mockImplementation((selector: any) => selector({
             queue: [],
             isPlaying: false,
             play: vi.fn(),
         }));
-        mockUseReaderStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseReaderStore.mockImplementation((selector: any) => selector({
             immersiveMode: false,
             currentBookId: null,
             currentSectionTitle: null,
         }));
-        mockUseLibraryStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseLibraryStore.mockImplementation((selector: any) => selector({
             books: []
         }));
-        mockUseToastStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseToastStore.mockImplementation((selector: any) => selector({
             showToast: vi.fn()
         }));
     });
@@ -99,7 +115,8 @@ describe('ReaderControlBar', () => {
     });
 
     it('renders annotation variant when popover is visible', () => {
-        mockUseAnnotationStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseAnnotationStore.mockImplementation((selector: any) => selector({
             popover: { visible: true },
             addAnnotation: vi.fn(),
             hidePopover: vi.fn(),
@@ -109,12 +126,14 @@ describe('ReaderControlBar', () => {
     });
 
     it('renders active variant when currentBookId is present (Reader Active)', () => {
-        mockUseReaderStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseReaderStore.mockImplementation((selector: any) => selector({
             immersiveMode: false,
             currentBookId: '123',
             currentSectionTitle: 'Chapter 1',
         }));
-        mockUseLibraryStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseLibraryStore.mockImplementation((selector: any) => selector({
             books: [{ id: '123', title: 'Book 1', progress: 0.5 }]
         }));
         render(<ReaderControlBar />);
@@ -125,12 +144,14 @@ describe('ReaderControlBar', () => {
     });
 
     it('renders compact variant when immersive mode is on', () => {
-        mockUseReaderStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseReaderStore.mockImplementation((selector: any) => selector({
             immersiveMode: true,
             currentBookId: '123',
             currentSectionTitle: 'Chapter 1',
         }));
-        mockUseLibraryStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseLibraryStore.mockImplementation((selector: any) => selector({
             books: [{ id: '123', title: 'Book 1', progress: 0.75 }]
         }));
         render(<ReaderControlBar />);
@@ -141,7 +162,8 @@ describe('ReaderControlBar', () => {
     });
 
     it('renders summary variant when on home and has last read book', () => {
-        mockUseLibraryStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseLibraryStore.mockImplementation((selector: any) => selector({
             books: [{ id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 }]
         }));
         render(<ReaderControlBar />);
@@ -152,7 +174,8 @@ describe('ReaderControlBar', () => {
     });
 
     it('navigates to book when clicking summary pill', () => {
-        mockUseLibraryStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseLibraryStore.mockImplementation((selector: any) => selector({
              books: [{ id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 }]
         }));
         render(<ReaderControlBar />);
@@ -165,19 +188,23 @@ describe('ReaderControlBar', () => {
         const hidePopover = vi.fn();
         const showToast = vi.fn();
 
-        mockUseAnnotationStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseAnnotationStore.mockImplementation((selector: any) => selector({
             popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
             addAnnotation,
             hidePopover,
         }));
-        mockUseReaderStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseReaderStore.mockImplementation((selector: any) => selector({
             immersiveMode: false,
             currentBookId: '123',
         }));
-        mockUseLibraryStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseLibraryStore.mockImplementation((selector: any) => selector({
              books: [{ id: '123', title: 'Book 1' }]
         }));
-        mockUseToastStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseToastStore.mockImplementation((selector: any) => selector({
              showToast
         }));
 
@@ -197,7 +224,8 @@ describe('ReaderControlBar', () => {
 
     it('opens LexiconManager when pronounce action is triggered', () => {
         const hidePopover = vi.fn();
-        mockUseAnnotationStore.mockImplementation((selector) => selector({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mockUseAnnotationStore.mockImplementation((selector: any) => selector({
             popover: { visible: true, text: 'Desolate', cfiRange: 'cfi' },
             addAnnotation: vi.fn(),
             hidePopover,

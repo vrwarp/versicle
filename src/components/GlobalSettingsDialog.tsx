@@ -466,7 +466,7 @@ export const GlobalSettingsDialog = () => {
                                         <label className="text-sm font-medium">Active Provider</label>
                                         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                         <Select value={providerId} onValueChange={(val: any) => setProviderId(val)}>
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <SelectTrigger data-testid="tts-provider-select"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="local">Web Speech (Local)</SelectItem>
                                                 <SelectItem value="piper">Piper (High Quality Local)</SelectItem>

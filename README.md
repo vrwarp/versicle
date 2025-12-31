@@ -26,6 +26,7 @@
 *   **Mobile**: Capacitor (Android)
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS + Radix UI
+*   **Compression**: browser-image-compression (Covers) + JSZip
 
 ## Features
 
@@ -38,12 +39,13 @@
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
-*   **Smart Handoff**: Continue listening exactly where you left off, even after app restarts.
+*   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
-*   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service).
+*   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
+*   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
 
 ### Management (The "Engine Room")
 *   **Reading History**: Detailed session tracking with timeline visualization.
@@ -94,6 +96,19 @@ npm run test
 # Run specific test file
 npx vitest src/lib/ingestion.test.ts
 ```
+
+#### Android Tests (Docker)
+We use Docker to run Android unit tests in a consistent environment.
+
+1.  **Build the Image**:
+    ```bash
+    docker build -t versicle-android -f Dockerfile.android .
+    ```
+
+2.  **Run Tests**:
+    ```bash
+    docker run --rm versicle-android
+    ```
 
 #### Verification Suite (Docker)
 We use Docker to run end-to-end tests in a consistent environment using Playwright.

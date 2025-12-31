@@ -30,6 +30,10 @@ const config: CapacitorConfig = {
     },
     MediaSession: {
       foregroundService: "always"
+    },
+    SafeArea: {
+      "detectViewportFitCoverChanges": false,
+      "initialViewportFitCover": false
     }
   },
 };

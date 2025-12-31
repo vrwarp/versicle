@@ -190,7 +190,9 @@ export class AudioPlayerService {
               title: item.title || 'Chapter Text',
               artist: item.author || 'Versicle',
               album: item.bookTitle || '',
-              artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
+              artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
+              sectionIndex: this.currentSectionIndex,
+              totalSections: this.playlist.length
           });
           await this.mediaSessionManager.setPlaybackState('playing');
           return true;
@@ -208,14 +210,15 @@ export class AudioPlayerService {
   }
 
   /**
-   * Calculates the processing speed in characters per second based on the current playback speed.
+   * Calculates the processing speed in characters per second.
    * Assumes a base reading rate of 180 words per minute and 5 characters per word.
+   * Fixed to be independent of speed for true duration calculation.
    * @returns {number} Characters per second.
    */
   private calculateCharsPerSecond(): number {
       // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 900.
-      // charsPerSecond = (900 * speed) / 60
-      return (900 * this.speed) / 60;
+      // charsPerSecond = 900 / 60
+      return 900 / 60;
   }
 
   private updateSectionMediaPosition(providerTime: number) {
@@ -313,7 +316,9 @@ export class AudioPlayerService {
               title: item.title || 'Chapter Text',
               artist: item.author || 'Versicle',
               album: item.bookTitle || '',
-              artwork: item.coverUrl ? [{ src: item.coverUrl }] : []
+              artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
+              sectionIndex: this.currentSectionIndex,
+              totalSections: this.playlist.length
           };
 
           // Always update position when track changes, even if metadata is identical

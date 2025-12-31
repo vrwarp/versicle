@@ -15,10 +15,11 @@
     "postinstall": "npm run prepare-piper"
   },
   "dependencies": {
-    "@capacitor-community/text-to-speech": "^5.1.0",
-    "@capacitor/android": "^6.2.1",
-    "@capacitor/core": "^6.2.1",
-    "@capawesome-team/capacitor-android-battery-optimization": "^6.0.0",
+    "@capacitor-community/safe-area": "^7.0.0",
+    "@capacitor-community/text-to-speech": "^6.1.0",
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capawesome-team/capacitor-android-battery-optimization": "7.0.0",
     "@google/generative-ai": "^0.24.1",
     "@jofr/capacitor-media-session": "^4.0.0",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -53,7 +54,7 @@
     "zustand": "^4.5.7"
   },
   "devDependencies": {
-    "@capacitor/cli": "^6.2.1",
+    "@capacitor/cli": "^7.0.0",
     "@eslint/js": "^9.39.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -82,5 +83,10 @@
     "typescript-eslint": "^8.0.0",
     "vite": "^5.4.21",
     "vitest": "^4.0.15"
+  },
+  "overrides": {
+    "@jofr/capacitor-media-session": {
+      "@capacitor/core": "^7.0.0"
+    }
   }
 }

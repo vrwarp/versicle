@@ -105,7 +105,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
     try {
         await TextToSpeech.stop();
-    } catch (e) {
+    } catch {
         // Ignore errors if nothing was playing
     }
 
