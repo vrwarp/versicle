@@ -236,7 +236,7 @@ export const ReaderView: React.FC = () => {
       isLoading: hookLoading,
       metadata,
       error: hookError
-  } = useEpubReader(id, viewerRef, readerOptions);
+  } = useEpubReader(id, viewerRef as React.RefObject<HTMLElement>, readerOptions);
 
   useEffect(() => {
     metadataRef.current = metadata;

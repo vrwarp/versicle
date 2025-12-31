@@ -23,17 +23,22 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
     const [editEntry, setEditEntry] = useState<ReadingListEntry | null>(null);
 
+    const refreshEntries = () => {
+        dbService.getReadingList().then(list => setEntries(list || []));
+    };
+
     useEffect(() => {
         if (open) {
             refreshEntries();
-        } else {
-            // Reset selection when closed
-            setSelectedEntries(new Set());
         }
     }, [open]);
 
-    const refreshEntries = () => {
-        dbService.getReadingList().then(list => setEntries(list || []));
+    // Wrap the original onOpenChange to reset selection when closing
+    const handleOpenChange = (newOpen: boolean) => {
+        if (!newOpen) {
+            setSelectedEntries(new Set());
+        }
+        onOpenChange(newOpen);
     };
 
     /**
@@ -151,7 +156,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
 
     return (
         <>
-            <Modal open={open} onOpenChange={onOpenChange}>
+            <Modal open={open} onOpenChange={handleOpenChange}>
                 <ModalContent className="max-w-4xl h-[80vh] flex flex-col p-0 overflow-hidden sm:rounded-lg">
                     <div className="flex items-center justify-between p-4 border-b">
                         <div className="flex items-center gap-4 min-h-[2.25rem]">
@@ -307,6 +312,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
             </Modal>
 
             <EditReadingListEntryDialog
+                key={editEntry?.filename ?? 'new'}
                 open={!!editEntry}
                 onOpenChange={(open) => !open && setEditEntry(null)}
                 entry={editEntry}

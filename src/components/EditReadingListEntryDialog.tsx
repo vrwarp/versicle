@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalTitle } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
@@ -33,19 +33,10 @@ export const EditReadingListEntryDialog: React.FC<EditReadingListEntryDialogProp
     entry,
     onSave,
 }) => {
-    const [title, setTitle] = useState('');
-    const [author, setAuthor] = useState('');
-    const [status, setStatus] = useState<'read' | 'currently-reading' | 'to-read'>('to-read');
-    const [rating, setRating] = useState<number | undefined>(undefined);
-
-    useEffect(() => {
-        if (entry) {
-            setTitle(entry.title);
-            setAuthor(entry.author);
-            setStatus(entry.status || 'to-read');
-            setRating(entry.rating);
-        }
-    }, [entry, open]);
+    const [title, setTitle] = useState(entry?.title || '');
+    const [author, setAuthor] = useState(entry?.author || '');
+    const [status, setStatus] = useState<'read' | 'currently-reading' | 'to-read'>(entry?.status || 'to-read');
+    const [rating, setRating] = useState<number | undefined>(entry?.rating);
 
     const handleSave = () => {
         if (!entry) return;

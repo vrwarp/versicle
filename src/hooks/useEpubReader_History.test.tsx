@@ -30,6 +30,7 @@ vi.mock('../lib/cfi-utils', async (importOriginal) => {
         sanitizeContent: (html: string) => html,
         runCancellable: (gen: Generator) => {
              const iter = gen;
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
              const iterate = async (val?: any) => {
                  const res = iter.next(val);
                  if (!res.done) {
