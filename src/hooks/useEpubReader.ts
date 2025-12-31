@@ -229,12 +229,23 @@ export function useEpubReader(
 
         // Try to infer better start location from reading history (end of last session)
         try {
-            const history = yield dbService.getReadingHistory(currentBookId);
-            if (history && history.length > 0) {
-                const lastRange = history[history.length - 1];
-                const parsed = parseCfiRange(lastRange);
-                if (parsed && parsed.fullEnd) {
-                    startLocation = parsed.fullEnd;
+            const entry = yield dbService.getReadingHistoryEntry(currentBookId);
+            if (entry) {
+                // Prefer chronological sessions
+                if (entry.sessions && entry.sessions.length > 0) {
+                    const lastSession = entry.sessions[entry.sessions.length - 1];
+                    const parsed = parseCfiRange(lastSession.cfiRange);
+                    // Use fullStart to resume AT the location
+                    if (parsed && parsed.fullStart) {
+                        startLocation = parsed.fullStart;
+                    }
+                } else if (entry.readRanges && entry.readRanges.length > 0) {
+                     // Fallback to spatial end (legacy behavior)
+                     const lastRange = entry.readRanges[entry.readRanges.length - 1];
+                     const parsed = parseCfiRange(lastRange);
+                     if (parsed && parsed.fullEnd) {
+                         startLocation = parsed.fullEnd;
+                     }
                 }
             }
         } catch (e) {
