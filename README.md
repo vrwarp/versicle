@@ -1,134 +1,111 @@
 # Versicle
 
-> **Note:** **Versicle** is an experimental project implemented almost entirely with **Google Jules**, an advanced AI software engineer agent.
+> "Versicle is an experimental project implemented almost entirely with Google Jules."
 
-**Versicle** is a local-first, privacy-focused EPUB reader and audiobook player. It runs entirely in your browser (or as a mobile app) and gives you complete ownership of your library.
+Versicle is a **local-first**, **privacy-centric** EPUB reader and audiobook player. It runs entirely in your browser (or as a native app via Capacitor) without sending your library data to any server.
 
-## Why Versicle?
+**Core Philosophy**:
+1.  **Ownership**: Your books live on your device.
+2.  **Privacy**: No tracking, no reading analytics.
+3.  **Hybrid**: Seamlessly switch between Reading (visual) and Listening (TTS).
 
-*   **Local-First**: Your books live on your device. No cloud servers, no tracking, no accounts.
-*   **Privacy-Centric**: We don't know what you read. No analytics.
-*   **Hybrid Intelligence**:
-    *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
-    *   **Cloud TTS**: Connect your own API keys (OpenAI, Google) for studio-quality narration.
-    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content and Summaries.
-*   **Data Ownership**: Export your data at any time. Full backups (ZIP) or Metadata (JSON).
+---
 
-## Tech Stack
+## 🚀 Features
 
-*   **Framework**: React 18 + Vite
+### 📚 Library & Reading
+*   **Local-First Storage**: Books are stored in IndexedDB. Works 100% offline.
+*   **EPUB Support**: Robust parsing via `epub.js`.
+*   **Customization**: Fonts, themes (Light/Dark/Sepia), line height, and margins.
+*   **Annotations**: Highlight text and add notes.
+*   **Search**: Full-text search (runs in a Web Worker for speed).
+*   **Smart Offloading**: Save space by removing book files while keeping your metadata, highlights, and reading progress.
+
+### 🎧 Text-to-Speech (Audiobook Mode)
+*   **Hybrid Engines**:
+    *   **Local**: Use standard OS voices or **Piper** (WASM) for high-quality offline speech.
+    *   **Cloud**: Integrate with **Google Gemini**, **OpenAI**, or **LemonFox** for neural voices.
+*   **Pronunciation Lexicon**: Fix mispronounced names or terms with custom regex/replacement rules.
+*   **Smart Content Skipping**: Automatically skip tables, citations, and footnotes using heuristics or GenAI classification.
+*   **Background Playback**: Keeps playing even when the screen is locked (Android/iOS).
+*   **Media Controls**: Control playback from your headphones or lock screen.
+
+### 🧠 GenAI Integration (Optional)
+*   **Smart TOC**: Generate a structured Table of Contents for books that lack one.
+*   **Content Classification**: Identify and filter out non-narrative content like tables and indices.
+*   **Note**: Requires a Google Gemini API Key.
+
+---
+
+## 🛠️ Tech Stack
+
+*   **Framework**: React 19 + Vite 6
 *   **Language**: TypeScript
-*   **State**: Zustand
-*   **Storage**: IndexedDB (via `idb`)
-*   **Parsing**: epub.js + PapaParse (CSV)
-*   **Audio**: Piper (WASM) / Web Speech API
-*   **AI**: Google Gemini (via `@google/generative-ai`)
-*   **Mobile**: Capacitor (Android)
-*   **Workers**: Comlink + Web Workers
-*   **Styling**: Tailwind CSS + Radix UI
-*   **Compression**: browser-image-compression (Covers) + JSZip
+*   **State**: Zustand + IDB (IndexedDB)
+*   **UI**: Tailwind CSS v4 + Lucide React
+*   **Mobile**: Capacitor 7 (Android/iOS)
+*   **TTS**: Piper (WASM) + Web Speech API + Google/OpenAI APIs
 
-## Features
+---
 
-### Reading (The "Reading Room")
-*   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
-*   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
-*   **Drag & Drop**: Drag files anywhere to import.
-*   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
-*   **Annotations**: Highlights and notes.
-
-### Listening (The "Listening Room")
-*   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
-*   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
-*   **Text-to-Speech**: Turn any book into an audiobook.
-*   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
-*   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
-*   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
-*   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
-*   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
-
-### Management (The "Engine Room")
-*   **Reading History**: Detailed session tracking with timeline visualization.
-*   **Reading List**: Track status (Read, Reading, Want to Read) and Rating. Export to CSV (Goodreads compatible).
-*   **Backups**:
-    *   **Light**: JSON export of metadata/settings.
-    *   **Full**: ZIP archive including all book files.
-*   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
-*   **Maintenance**: Built-in tools to scan for and prune orphaned data.
-
-## Setup & Development
+## 🏃‍♂️ Getting Started
 
 ### Prerequisites
-*   Node.js 18+
+*   Node.js 20+
 *   npm
-*   Docker (optional, for verification suite)
 
 ### Installation
 
-1.  Clone the repository.
-2.  Install dependencies (automatically sets up Piper WASM assets):
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/vrwarp/versicle.git
+    cd versicle
+    ```
+
+2.  Install dependencies:
     ```bash
     npm install
     ```
-    *Note: If Piper assets are missing, run `npm run prepare-piper`.*
 
-3.  (Optional) Read `AGENTS.md` for AI assistant guidelines.
+3.  Start the development server:
+    ```bash
+    npm run dev
+    ```
 
-### Running Locally
+4.  Open `http://localhost:5173` in your browser.
 
-```bash
-npm run dev
-```
-
-### Building
+### Building for Production
 
 ```bash
 npm run build
 ```
 
-### Testing
+The output will be in the `dist/` directory.
 
-#### Unit Tests (Vitest)
-```bash
-# Run all tests
-npm run test
+### Mobile Development (Android)
 
-# Run specific test file
-npx vitest src/lib/ingestion.test.ts
-```
-
-#### Android Tests (Docker)
-We use Docker to run Android unit tests in a consistent environment.
-
-1.  **Build the Image**:
+1.  Sync Capacitor:
     ```bash
-    docker build -t versicle-android -f Dockerfile.android .
+    npx cap sync
     ```
 
-2.  **Run Tests**:
+2.  Open Android Studio:
     ```bash
-    docker run --rm versicle-android
+    npx cap open android
     ```
 
-#### Verification Suite (Docker)
-We use Docker to run end-to-end tests in a consistent environment using Playwright.
+---
 
-1.  **Build the Image**:
-    ```bash
-    docker build -t versicle-verification -f Dockerfile.verification .
-    ```
+## 🧪 Testing
 
-2.  **Run All Tests**:
-    ```bash
-    docker run --rm versicle-verification
-    ```
+Versicle uses **Vitest** for unit tests and **Playwright** for end-to-end verification.
 
-3.  **Run Specific Verification Script**:
-    ```bash
-    # Run a specific verification script (e.g., layout test)
-    docker run --rm versicle-verification /app/verification/test_golden_layout.py
-    ```
+*   **Unit Tests**: `npm run test`
+*   **Verification (Headless)**: `npm run verify`
+*   **UI Verification**: `npm run verify:ui`
 
-## Contributing
+---
 
-Please see `architecture.md` for a deep dive into the system design.
+## 📄 License
+
+MIT

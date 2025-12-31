@@ -72,6 +72,7 @@ graph TD
 
     subgraph TTS [TTS Subsystem]
         Segmenter[TextSegmenter]
+        ContentProc[ContentProcessor]
         Lexicon[LexiconService]
         TTSCache[TTSCache]
         Sync[SyncEngine]
@@ -112,6 +113,7 @@ graph TD
 
     APS --> Providers
     APS --> Segmenter
+    APS --> ContentProc
     APS --> Lexicon
     APS --> TTSCache
     APS --> Sync
@@ -119,6 +121,8 @@ graph TD
     APS --> CostEst
     APS --> BG
     APS --> MediaSession
+
+    ContentProc --> GenAI
 
     Piper --> PiperUtils
 
@@ -235,13 +239,13 @@ Handles interoperability with external reading trackers (Goodreads).
 Handles database health and integrity.
 
 *   **Goal**: Ensure the database is free of orphaned records (files, annotations, lexicon rules) that no longer have a parent book.
-*   **Logic**: Scans all object stores (`files`, `annotations`, `locations`, `lexicon`, `covers`, `tts_position`) and compares IDs against the `books` store.
+*   **Logic**: Scans all object stores (`files`, `annotations`, `locations`, `lexicon`, `covers`, `tts_position`, `content_analysis`) and compares IDs against the `books` store.
 *   **Trade-off**: `pruneOrphans()` is a destructive operation. If logic is flawed, valid data could be lost. It is designed to be run manually or on specific error conditions.
 
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs (Google Gemini).
 
-*   **Goal**: Provide features like "Smart Table of Contents" generation, summarization, and text analysis.
+*   **Goal**: Provide features like "Smart Table of Contents" generation, summarization, and content classification.
 *   **Logic**:
     *   **`GenAIService`**: Singleton wrapper around `@google/generative-ai`. Handles API configuration and request logging.
     *   **`generateStructured`**: Uses Gemini's JSON schema enforcement to return strictly typed data (e.g., TOC structure).
@@ -273,10 +277,20 @@ The singleton controller (Orchestrator).
 *   **Logic**:
     *   **Concurrency**: Uses a **Sequential Promise Chain** (`enqueue`) to serialize async operations (play, pause, next) and prevent race conditions.
     *   **Just-In-Time (JIT) Refinement**: Text segmentation (splitting paragraphs into sentences) happens dynamically when a chapter is loaded. This allows user settings (like "Custom Abbreviations") to apply immediately without re-ingesting the book.
+    *   **Content Processing**: Integrates `ContentProcessor` to filter out skipped content types (tables, citations) before they reach the queue.
     *   **State Persistence**: Persists the queue and position to IndexedDB so playback can resume after an app restart.
     *   **Position Tracking**: Uses **Prefix Sums** to map time offsets to sentence indices efficiently, enabling seeking within chapters.
     *   **Prerolls**: Automatically injects "Title - Author" announcements at the start of new sections.
     *   **Empty Chapter Handling**: If a chapter has no text (e.g., a full-page image), the service injects a "silence" or a placeholder message.
+
+#### `src/lib/tts/ContentProcessor.ts`
+*   **Goal**: Filter unwanted content from the audio stream to improve listening experience.
+*   **Logic**:
+    *   **Pipeline**: Accepts raw segments from `TextSegmenter` and filters them based on user preferences (`skipContentTypes`).
+    *   **Classification**: Uses a hybrid approach:
+        1.  **Heuristics**: Fast, regex-based rules for common patterns (e.g., page numbers).
+        2.  **GenAI**: Uses `GenAIService` (if enabled) to classify complex segments (Tables, Citations, Footers).
+*   **Trade-off**: GenAI classification adds latency to chapter loading and incurs API costs.
 
 #### `src/lib/tts/MediaSessionManager.ts`
 *   **Goal**: Integrate with OS-level media controls (Lock Screen, Notification Center, Smartwatches).
@@ -377,7 +391,7 @@ State is managed using **Zustand** with persistence to `localStorage` for prefer
     *   *Persisted*: `currentTheme`, `fontFamily`, `fontSize`, `lineHeight`, `viewMode`, `gestureMode`.
     *   *Transient*: `currentBookId`, `currentCfi` (location is synced to IDB, transient copy here for UI), `toc`.
 *   **`useTTSStore`**: Manages TTS configuration and acts as the reactive bridge to `AudioPlayerService`.
-    *   *Persisted*: `voice`, `rate`, `pitch`, `apiKeys`, `providerId`, `customAbbreviations`.
+    *   *Persisted*: `voice`, `rate`, `pitch`, `apiKeys`, `providerId`, `customAbbreviations`, `skipContentTypes`.
     *   *Transient*: `isPlaying`, `queue`, `currentIndex`, `activeCfi` (synced via subscription to `AudioPlayerService`).
     *   *Interaction*: Subscribes to `AudioPlayerService` events to update the UI.
 *   **`useGenAIStore`**: Manages AI settings (API key, model) and usage logs.
@@ -396,3 +410,4 @@ State is managed using **Zustand** with persistence to `localStorage` for prefer
 *   **`BookMetadata`**: Includes `fileHash`, `isOffloaded`, `coverBlob` (thumbnail), and playback state (`lastPlayedCfi`).
 *   **`Annotation`**: Stores highlights (`cfiRange`, `color`) and notes.
 *   **`LexiconRule`**: Regex or string replacement rules for TTS pronunciation.
+*   **`ContentAnalysis`**: Stores GenAI-derived classifications for text segments.
