@@ -941,7 +941,8 @@ export class AudioPlayerService {
               let finalSentences: { text: string; cfi: string | null }[] = refinedSentences;
 
               // Optimize: Don't run detection if nothing to skip
-              if (skipTypes.length > 0) {
+              const isContentAnalysisEnabled = useGenAIStore.getState().isContentAnalysisEnabled;
+              if (skipTypes.length > 0 && isContentAnalysisEnabled) {
                   finalSentences = await this.detectAndFilterContent(refinedSentences, skipTypes);
               }
 
