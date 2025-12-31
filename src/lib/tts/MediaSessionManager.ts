@@ -112,21 +112,25 @@ export class MediaSessionManager {
    * @param metadata - The new metadata to display.
    */
   async setMetadata(metadata: MediaSessionMetadata) {
-    if (this.isNative) {
-        let artwork = metadata.artwork;
+    let artwork = metadata.artwork;
 
-        // Persist blob artwork to disk for native display
-        if (artwork && artwork.length > 0 && artwork[0].src.startsWith('blob:')) {
-            try {
-                const processedArtwork = await this.processNativeArtwork(artwork[0]);
-                if (processedArtwork) {
-                    artwork = [processedArtwork];
-                }
-            } catch (e) {
-                console.error("Failed to process native artwork", e);
+    // Process artwork (fetch, crop to square, convert to base64) for both Native and Web
+    if (artwork && artwork.length > 0) {
+        try {
+            // We process the first artwork item as the primary cover
+            const processedArtwork = await this.processArtwork(artwork[0]);
+            if (processedArtwork) {
+                artwork = [processedArtwork];
             }
+        } catch (e) {
+            console.warn("Failed to process artwork", e);
+            // Fallback: leave artwork as is (or maybe empty if it was blob and we are native?)
+            // If processing failed but we are native, blob: URL won't work in native layer usually,
+            // but we might not have a choice.
         }
+    }
 
+    if (this.isNative) {
         await MediaSession.setMetadata({
             title: metadata.title,
             artist: metadata.artist,
@@ -139,40 +143,84 @@ export class MediaSessionManager {
           title: metadata.title,
           artist: metadata.artist,
           album: metadata.album,
-          artwork: metadata.artwork
+          artwork: artwork
         });
     }
   }
 
   /**
-   * Fetches blob data and converts it to a base64 Data URL for native display.
+   * Fetches the artwork, crops it to a square, and converts it to a base64 Data URL.
    */
-  private async processNativeArtwork(artwork: { src: string; sizes?: string; type?: string }): Promise<{ src: string; sizes?: string; type?: string } | null> {
+  private async processArtwork(artwork: { src: string; sizes?: string; type?: string }): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
+      // 1. Fetch the image to get a Blob (works for blob: URLs and http URLs if CORS allows)
       const response = await fetch(artwork.src);
       const blob = await response.blob();
 
-      const base64 = await this.blobToBase64(blob);
+      // 2. Crop to square and get base64
+      const base64 = await this.cropToSquare(blob);
 
       return {
         ...artwork,
-        src: base64
+        src: base64,
+        type: 'image/png' // Canvas export defaults to PNG usually, unless specified
       };
     } catch (e) {
-      console.error("Error processing native artwork to base64", e);
+      console.warn("Error processing artwork", e);
       return null;
     }
   }
 
   /**
-   * Helper to convert a Blob to a base64 string.
+   * Crops a given image Blob to a center square and returns it as a base64 string.
    */
-  private blobToBase64(blob: Blob): Promise<string> {
+  private cropToSquare(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
+        const img = new Image();
+        const url = URL.createObjectURL(blob);
+
+        img.onload = () => {
+            try {
+                // Determine crop dimensions (min side)
+                const size = Math.min(img.width, img.height);
+
+                // Create canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    reject(new Error("Could not get canvas context"));
+                    return;
+                }
+
+                // Calculate source rectangle for center crop
+                const sx = (img.width - size) / 2;
+                const sy = (img.height - size) / 2;
+
+                // Draw to canvas
+                ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+
+                // Convert to base64
+                const dataUrl = canvas.toDataURL('image/png');
+                resolve(dataUrl);
+            } catch (e) {
+                reject(e);
+            } finally {
+                URL.revokeObjectURL(url);
+            }
+        };
+
+        img.onerror = (err) => {
+             URL.revokeObjectURL(url);
+             // If image load fails, we can't process it.
+             // We reject so the caller handles it.
+             // Note: onerror argument is Event, not Error, usually.
+             reject(new Error("Failed to load image for cropping"));
+        };
+
+        img.src = url;
     });
   }
 

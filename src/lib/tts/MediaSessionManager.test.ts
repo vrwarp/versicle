@@ -19,13 +19,12 @@ vi.mock('@jofr/capacitor-media-session', () => ({
   },
 }));
 
-
-
 describe('MediaSessionManager', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mediaSessionMock: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let callbacks: any;
+  let originalCreateElement: typeof document.createElement;
 
   beforeEach(() => {
     callbacks = {
@@ -62,9 +61,48 @@ describe('MediaSessionManager', () => {
     (MediaSession.setMetadata as Mock).mockResolvedValue(undefined);
     (MediaSession.setPlaybackState as Mock).mockResolvedValue(undefined);
     (MediaSession.setPositionState as Mock).mockResolvedValue(undefined);
+
+    // --- Mocks for Artwork Processing ---
+    global.fetch = vi.fn().mockResolvedValue({
+        blob: () => Promise.resolve(new Blob(['mock data'])),
+    });
+
+    global.URL.createObjectURL = vi.fn(() => 'blob:url');
+    global.URL.revokeObjectURL = vi.fn();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    global.Image = class {
+        onload: () => void = () => {};
+        onerror: (err: any) => void = () => {};
+        width = 200;
+        height = 100;
+        _src = '';
+        set src(value: string) {
+            this._src = value;
+            setTimeout(() => this.onload(), 10);
+        }
+        get src() { return this._src; }
+    } as any;
+
+    const mockContext = {
+        drawImage: vi.fn(),
+    };
+    const mockCanvas = {
+        width: 0,
+        height: 0,
+        getContext: vi.fn(() => mockContext),
+        toDataURL: vi.fn(() => 'data:image/png;base64,mocked'),
+    };
+
+    originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
+        if (tagName === 'canvas') return mockCanvas as any;
+        return originalCreateElement(tagName, options);
+    });
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -84,7 +122,7 @@ describe('MediaSessionManager', () => {
         expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('seekforward', callbacks.onSeekForward);
       });
 
-      it('updates metadata correctly', () => {
+      it('updates metadata correctly with artwork processing', async () => {
         const manager = new MediaSessionManager(callbacks);
         const metadata = {
           title: 'Test Title',
@@ -93,14 +131,15 @@ describe('MediaSessionManager', () => {
           artwork: [{ src: 'test.jpg' }],
         };
 
-        manager.setMetadata(metadata);
+        await manager.setMetadata(metadata);
 
         expect(mediaSessionMock.metadata).toEqual(expect.objectContaining({
             init: expect.objectContaining({
                 title: 'Test Title',
                 artist: 'Test Artist',
                 album: 'Test Album',
-                artwork: [{ src: 'test.jpg' }]
+                // Expect processed base64 artwork
+                artwork: [{ src: 'data:image/png;base64,mocked', type: 'image/png' }]
             })
         }));
       });
@@ -115,13 +154,13 @@ describe('MediaSessionManager', () => {
         expect(mediaSessionMock.playbackState).toBe('paused');
       });
 
-      it('handles missing mediaSession gracefully', () => {
+      it('handles missing mediaSession gracefully', async () => {
         vi.stubGlobal('navigator', {}); // No mediaSession
 
         const manager = new MediaSessionManager(callbacks);
 
         // Should not throw
-        manager.setMetadata({ title: 'test', artist: 'test', album: 'test' });
+        await manager.setMetadata({ title: 'test', artist: 'test', album: 'test' });
         manager.setPlaybackState('playing');
         manager.setPositionState({ duration: 100, position: 10 });
       });
@@ -144,7 +183,6 @@ describe('MediaSessionManager', () => {
       it('sets up native action handlers on initialization', async () => {
           new MediaSessionManager(callbacks);
           // Constructor is async in effect due to async calls but we can't await it directly.
-          // However, the calls are dispatched. We might need to wait a tick.
           await new Promise(resolve => setTimeout(resolve, 0));
 
           expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'play' }, callbacks.onPlay);
@@ -156,7 +194,7 @@ describe('MediaSessionManager', () => {
           expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekforward' }, callbacks.onSeekForward);
       });
 
-      it('updates native metadata correctly', async () => {
+      it('updates native metadata correctly with artwork processing', async () => {
           const manager = new MediaSessionManager(callbacks);
           const metadata = {
             title: 'Native Title',
@@ -171,7 +209,8 @@ describe('MediaSessionManager', () => {
               title: 'Native Title',
               artist: 'Native Artist',
               album: 'Native Album',
-              artwork: [{ src: 'native.jpg' }]
+              // Expect processed base64 artwork
+              artwork: [{ src: 'data:image/png;base64,mocked', type: 'image/png' }]
           });
       });
 
