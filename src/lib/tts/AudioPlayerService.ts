@@ -104,6 +104,9 @@ export class AudioPlayerService {
 
   private prefixSums: number[] = [0];
 
+  // Request deduplication for content analysis
+  private analysisPromises = new Map<string, Promise<ContentTypeResult[] | null>>();
+
   private constructor() {
     this.backgroundAudio = new BackgroundAudio();
     this.syncEngine = new SyncEngine();
@@ -1082,47 +1085,63 @@ export class AudioPlayerService {
    * @param groups The grouped text segments to analyze.
    * @returns A promise resolving to the list of content types, or null if detection was not possible.
    */
-  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[]) {
-      // 1. Check existing classification in DB
-      const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
-      
-      // If we have stored content types, return them
-      if (contentAnalysis?.contentTypes) {
-          return contentAnalysis.contentTypes;
+  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[]): Promise<ContentTypeResult[] | null> {
+      const key = `${bookId}:${sectionId}`;
+
+      if (this.analysisPromises.has(key)) {
+          return this.analysisPromises.get(key)!;
       }
 
-      // 2. If not found, detect with GenAI
-      const aiStore = useGenAIStore.getState();
-      const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
-      
-      if (!canUseGenAI) {
+      const promise = (async () => {
+          // 1. Check existing classification in DB
+          const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+
+          // If we have stored content types, return them
+          if (contentAnalysis?.contentTypes) {
+              return contentAnalysis.contentTypes;
+          }
+
+          // 2. If not found, detect with GenAI
+          const aiStore = useGenAIStore.getState();
+          const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+
+          if (!canUseGenAI) {
+              return null;
+          }
+
+          try {
+              const nodesToDetect = groups.map(g => ({
+                  rootCfi: g.rootCfi,
+                  sampleText: g.fullText.substring(0, 500)
+              }));
+
+              // Ensure service is configured if we have a key
+              if (!genAIService.isConfigured() && aiStore.apiKey) {
+                    genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
+              }
+
+              if (genAIService.isConfigured()) {
+                  // Note: Using default model (gemini-1.5-flash) from GenAIService
+                  const results = await genAIService.detectContentTypes(nodesToDetect);
+
+                  // Persist detection results
+                  await dbService.saveContentClassifications(bookId, sectionId, results);
+                  return results;
+              }
+          } catch (e) {
+              console.warn("Content detection failed", e);
+          }
+
           return null;
-      }
+      })();
+
+      this.analysisPromises.set(key, promise);
 
       try {
-          const nodesToDetect = groups.map(g => ({
-              rootCfi: g.rootCfi,
-              sampleText: g.fullText.substring(0, 500)
-          }));
-
-          // Ensure service is configured if we have a key
-          if (!genAIService.isConfigured() && aiStore.apiKey) {
-                genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
-          }
-
-          if (genAIService.isConfigured()) {
-              // Note: Using default model (gemini-1.5-flash) from GenAIService
-              const results = await genAIService.detectContentTypes(nodesToDetect);
-
-              // Persist detection results
-              await dbService.saveContentClassifications(bookId, sectionId, results);
-              return results;
-          }
-      } catch (e) {
-          console.warn("Content detection failed", e);
+          return await promise;
+      } finally {
+          this.analysisPromises.delete(key);
       }
-      
-      return null;
   }
 
   private groupSentencesByRoot(sentences: { text: string; cfi: string | null }[]) {
