@@ -124,9 +124,6 @@ export class MediaSessionManager {
             }
         } catch (e) {
             console.warn("Failed to process artwork", e);
-            // Fallback: leave artwork as is (or maybe empty if it was blob and we are native?)
-            // If processing failed but we are native, blob: URL won't work in native layer usually,
-            // but we might not have a choice.
         }
     }
 
@@ -153,12 +150,8 @@ export class MediaSessionManager {
    */
   private async processArtwork(artwork: { src: string; sizes?: string; type?: string }): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
-      // 1. Fetch the image to get a Blob (works for blob: URLs and http URLs if CORS allows)
-      const response = await fetch(artwork.src);
-      const blob = await response.blob();
-
-      // 2. Crop to square and get base64
-      const base64 = await this.cropToSquare(blob);
+      // Crop to square and get base64 directly from URL
+      const base64 = await this.cropToSquare(artwork.src);
 
       return {
         ...artwork,
@@ -172,12 +165,12 @@ export class MediaSessionManager {
   }
 
   /**
-   * Crops a given image Blob to a center square and returns it as a base64 string.
+   * Crops a given image URL to a center square and returns it as a base64 string.
    */
-  private cropToSquare(blob: Blob): Promise<string> {
+  private cropToSquare(src: string): Promise<string> {
     return new Promise((resolve, reject) => {
         const img = new Image();
-        const url = URL.createObjectURL(blob);
+        img.crossOrigin = 'Anonymous'; // Needed if the source is external
 
         img.onload = () => {
             try {
@@ -207,20 +200,15 @@ export class MediaSessionManager {
                 resolve(dataUrl);
             } catch (e) {
                 reject(e);
-            } finally {
-                URL.revokeObjectURL(url);
             }
         };
 
-        img.onerror = (err) => {
-             URL.revokeObjectURL(url);
+        img.onerror = () => {
              // If image load fails, we can't process it.
-             // We reject so the caller handles it.
-             // Note: onerror argument is Event, not Error, usually.
              reject(new Error("Failed to load image for cropping"));
         };
 
-        img.src = url;
+        img.src = src;
     });
   }
 

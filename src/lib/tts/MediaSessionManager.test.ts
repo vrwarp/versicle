@@ -63,12 +63,7 @@ describe('MediaSessionManager', () => {
     (MediaSession.setPositionState as Mock).mockResolvedValue(undefined);
 
     // --- Mocks for Artwork Processing ---
-    global.fetch = vi.fn().mockResolvedValue({
-        blob: () => Promise.resolve(new Blob(['mock data'])),
-    });
-
-    global.URL.createObjectURL = vi.fn(() => 'blob:url');
-    global.URL.revokeObjectURL = vi.fn();
+    // Note: We don't need to mock fetch or URL.createObjectURL anymore since we load Image directly from URL string.
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     global.Image = class {
