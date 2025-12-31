@@ -414,6 +414,22 @@ export class AudioPlayerService {
       });
   }
 
+  public async skipToNextSection(): Promise<boolean> {
+      return this.advanceToNextChapter();
+  }
+
+  public async skipToPreviousSection(): Promise<boolean> {
+      if (!this.currentBookId || this.playlist.length === 0) return false;
+      let prevSectionIndex = this.currentSectionIndex - 1;
+      while (prevSectionIndex >= 0) {
+          // Load and play from start
+          const loaded = await this.loadSectionInternal(prevSectionIndex, true);
+          if (loaded) return true;
+          prevSectionIndex--;
+      }
+      return false;
+  }
+
   private isQueueEqual(newItems: TTSQueueItem[]): boolean {
       if (this.queue.length !== newItems.length) return false;
       for (let i = 0; i < this.queue.length; i++) {
