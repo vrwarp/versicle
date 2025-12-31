@@ -9,7 +9,7 @@ import type { BookMetadata } from '../../types/db';
 
 interface BookCoverProps {
     book: BookMetadata;
-    actionMenuRef: React.RefObject<BookActionMenuHandle>;
+    actionMenuRef: React.RefObject<BookActionMenuHandle | null>;
 }
 
 export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, actionMenuRef }) => {
