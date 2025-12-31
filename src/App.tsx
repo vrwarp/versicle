@@ -105,7 +105,7 @@ function App() {
       <GlobalSettingsDialog />
       <ToastContainer />
       <ReaderControlBar />
-      <div className="min-h-screen bg-background text-foreground">
+      <div className="min-h-screen bg-background text-foreground main_layout">
         <Routes>
           <Route path="/" element={
             <ErrorBoundary>
