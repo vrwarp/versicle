@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
@@ -15,6 +15,21 @@ vi.mock('../../store/useLibraryStore', () => ({
 vi.mock('../../store/useToastStore', () => ({
   useToastStore: vi.fn(() => vi.fn()),
 }));
+
+// Mock Dialog to fix accessibility warnings
+vi.mock('../ui/Dialog', () => {
+    return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Dialog: ({ isOpen, children, title, description, footer }: any) => isOpen ? (
+            <div role="dialog">
+                {title && <h1>{title}</h1>}
+                {description && <p>{description}</p>}
+                {children}
+                {footer}
+            </div>
+        ) : null,
+    };
+});
 
 describe('BookCard', () => {
   const mockBook: BookMetadata = {
@@ -122,10 +137,16 @@ describe('BookCard', () => {
 
     const menuTriggerButton = screen.getByTestId('book-menu-trigger');
 
-    fireEvent.click(menuTriggerButton);
+    // Use act for interactions that update state (like opening menu)
+    await act(async () => {
+      fireEvent.click(menuTriggerButton);
+    });
 
     const deleteOption = await screen.findByTestId('menu-delete', {}, { timeout: 2000 });
-    fireEvent.click(deleteOption);
+
+    await act(async () => {
+      fireEvent.click(deleteOption);
+    });
 
     // Use waitFor to handle potential async state updates
     await waitFor(async () => {
@@ -133,7 +154,10 @@ describe('BookCard', () => {
     });
 
     const confirmButton = screen.getByTestId('confirm-delete');
-    fireEvent.click(confirmButton);
+
+    await act(async () => {
+      fireEvent.click(confirmButton);
+    });
 
     expect(mockRemoveBook).toHaveBeenCalledWith(mockBook.id);
   });

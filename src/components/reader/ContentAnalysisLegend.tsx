@@ -29,7 +29,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     if (!rendition || !isDebugModeEnabled) return;
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const handleSelected = (cfiRange: string, _contents: any) => {
+    const handleSelected = (cfiRange: string, _contents: unknown) => {
         setCfiInput(cfiRange);
 
         // Get text content
@@ -79,7 +79,6 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
               // This is the main window selection, but reader is in iframe
 
               // We need to access the iframe's selection
-              // @ts-ignore
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const contents = (rendition as any).getContents();
               if (contents && contents.length > 0) {
@@ -98,7 +97,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                const sel = contentWin.getSelection();
                                sel.removeAllRanges();
                                sel.addRange(range);
-                           } catch (err) {
+                           } catch {
                                // Ignore mismatch errors
                            }
                        }

@@ -546,7 +546,7 @@ export const ReaderView: React.FC = () => {
     applyHighlights();
 
     // Re-apply on section change or debug toggle
-  }, [rendition, isRenditionReady, isDebugModeEnabled, id, currentSectionId]);
+  }, [rendition, isRenditionReady, isDebugModeEnabled, id, currentSectionId, book]);
 
   // Reading History Highlights
   useEffect(() => {
