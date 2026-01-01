@@ -395,7 +395,18 @@ export function useEpubReader(
                 if (!selection || selection.isCollapsed) return;
 
                 setTimeout(() => {
-                    const range = selection.getRangeAt(0);
+                    // Re-check selection existence after delay to handle race conditions
+                    // where a click event might have cleared it.
+                    if (selection.rangeCount === 0 || selection.isCollapsed) return;
+
+                    let range;
+                    try {
+                        range = selection.getRangeAt(0);
+                    } catch (e) {
+                        // Handle IndexSizeError if selection was cleared
+                        return;
+                    }
+
                     if (!range) return;
                     const cfi = contents.cfiFromRange(range);
                     if (cfi && optionsRef.current.onSelection) {
