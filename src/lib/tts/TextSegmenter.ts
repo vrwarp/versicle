@@ -114,20 +114,29 @@ export class TextSegmenter {
                 let isAbbreviation = false;
                 let lastWord = '';
 
-                if (this.abbreviations.has(lastTextTrimmed)) {
+                // Try checking the last word
+                const oneWordMatch = /\S+$/.exec(lastTextTrimmed);
+                const rawLastWord = oneWordMatch ? oneWordMatch[0] : lastTextTrimmed;
+                // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
+                const cleanLastWord = rawLastWord.replace(/^['"([<{]+/, '');
+
+                if (this.abbreviations.has(cleanLastWord)) {
                     isAbbreviation = true;
-                    lastWord = lastTextTrimmed;
+                    lastWord = cleanLastWord;
                 } else {
-                    // Optimized: Get last word without splitting the whole string
-                    const match = /\S+$/.exec(lastTextTrimmed);
-                    const rawLastWord = match ? match[0] : lastTextTrimmed;
+                    // Try checking the last two words
+                    // Capture last two whitespace-separated tokens
+                    // (?: ... ) is non-capturing group
+                    const twoWordsMatch = /(?:\S+\s+)\S+$/.exec(lastTextTrimmed);
+                    if (twoWordsMatch) {
+                        const rawLastTwo = twoWordsMatch[0];
+                        // Remove leading punctuation from the phrase (e.g. "(et al." -> "et al.")
+                        const cleanLastTwo = rawLastTwo.replace(/^['"([<{]+/, '');
 
-                    // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
-                    lastWord = rawLastWord.replace(/^['"([<{]+/, '');
-
-                    if (this.abbreviations.has(lastWord)) {
-                        isAbbreviation = true;
-                        // lastWord is already set correctly
+                        if (this.abbreviations.has(cleanLastTwo)) {
+                            isAbbreviation = true;
+                            lastWord = cleanLastTwo;
+                        }
                     }
                 }
 
@@ -237,20 +246,29 @@ export class TextSegmenter {
                 let isAbbreviation = false;
                 let lastWord = '';
 
-                // Check full segment text first (e.g. for multi-word abbreviations defined by user)
-                if (abbrSet.has(lastTextTrimmed.toLowerCase())) {
-                    isAbbreviation = true;
-                    lastWord = lastTextTrimmed;
-                } else {
-                    // Optimized: Get last word without splitting the whole string
-                    const match = /\S+$/.exec(lastTextTrimmed);
-                    const rawLastWord = match ? match[0] : lastTextTrimmed;
-                    // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
-                    lastWord = rawLastWord.replace(/^['"([<{]+/, '');
+                // Try checking the last word
+                const oneWordMatch = /\S+$/.exec(lastTextTrimmed);
+                const rawLastWord = oneWordMatch ? oneWordMatch[0] : lastTextTrimmed;
+                // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
+                const cleanLastWord = rawLastWord.replace(/^['"([<{]+/, '');
 
-                    // Case-insensitive check
-                    if (abbrSet.has(lastWord.toLowerCase())) {
-                        isAbbreviation = true;
+                if (abbrSet.has(cleanLastWord.toLowerCase())) {
+                    isAbbreviation = true;
+                    lastWord = cleanLastWord;
+                } else {
+                    // Try checking the last two words
+                    // Capture last two whitespace-separated tokens
+                    // (?: ... ) is non-capturing group
+                    const twoWordsMatch = /(?:\S+\s+)\S+$/.exec(lastTextTrimmed);
+                    if (twoWordsMatch) {
+                        const rawLastTwo = twoWordsMatch[0];
+                        // Remove leading punctuation from the phrase (e.g. "(et al." -> "et al.")
+                        const cleanLastTwo = rawLastTwo.replace(/^['"([<{]+/, '');
+
+                        if (abbrSet.has(cleanLastTwo.toLowerCase())) {
+                            isAbbreviation = true;
+                            lastWord = cleanLastTwo;
+                        }
                     }
                 }
 
