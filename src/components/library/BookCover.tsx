@@ -6,21 +6,27 @@ import { Cloud, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu, type BookActionMenuHandle } from './BookActionMenu';
 import type { BookMetadata } from '../../types/db';
-import { useObjectUrl } from '../../hooks/useObjectUrl';
-
 interface BookCoverProps {
     book: BookMetadata;
     actionMenuRef: React.RefObject<BookActionMenuHandle | null>;
 }
 
 export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, actionMenuRef }) => {
-    const coverUrl = useObjectUrl(book.coverBlob);
+    // We assume the service worker handles /__versicle__/covers/:id
+    // But we only want to try loading it if we know we have a cover (book.coverBlob exists)
+    // or if we have a remote coverUrl.
+    // Ideally, we shouldn't rely on 'book.coverBlob' existence check for the URL construction
+    // if we want to support pure URL based fetching, but for now, the pattern replaces useObjectUrl(blob).
+
+    // If book.coverUrl is set (external URL), use it.
+    // Otherwise, if we have a blob (local), use the SW route.
+    const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
 
     return (
         <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner flex flex-col">
-            {coverUrl ? (
+            {displayUrl ? (
                 <LazyLoadImage
-                    src={coverUrl}
+                    src={displayUrl}
                     alt={`Cover of ${book.title}`}
                     effect="blur"
                     wrapperClassName="w-full h-full !block"
