@@ -872,15 +872,6 @@ export const ReaderView: React.FC = () => {
   const showAnnotations = activeSidebar === 'annotations';
   const showSearch = activeSidebar === 'search';
 
-  if (isCheckingProcessing) {
-      // Return a minimal loading state to avoid flashing content
-      return (
-          <div className="flex flex-col h-screen bg-background items-center justify-center">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
-      );
-  }
-
   if (isReprocessing && id) {
       return (
           <ReprocessingInterstitial
@@ -893,6 +884,11 @@ export const ReaderView: React.FC = () => {
 
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
+      {isCheckingProcessing && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+      )}
       <Dialog
         isOpen={showImportJumpDialog}
         onClose={handleJumpCancel}
