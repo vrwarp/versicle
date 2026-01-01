@@ -28,12 +28,14 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
   useEffect(() => {
     if (!rendition || !isDebugModeEnabled) return;
 
-    const handleSelected = (cfiRange: string, contents: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handleSelected = (cfiRange: string, _contents: any) => {
         setCfiInput(cfiRange);
 
         // Get text content
         try {
-            const range = rendition.getRange(cfiRange);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const range = (rendition as any).getRange(cfiRange);
             if (range) {
                 setMergedContent(range.toString());
             }
@@ -45,7 +47,8 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     rendition.on('selected', handleSelected);
 
     return () => {
-        rendition.off('selected', handleSelected);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (rendition as any).off('selected', handleSelected);
     };
   }, [rendition, isDebugModeEnabled]);
 
@@ -61,7 +64,8 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
 
           // Try to select it visually
           // getting range from cfi
-          const range = rendition.getRange(newCfi);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const range = (rendition as any).getRange(newCfi);
           if (range) {
               setMergedContent(range.toString());
 
@@ -72,13 +76,16 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
               // and maybe add a temporary annotation.
 
               // Select in DOM
-              const selection = document.getSelection(); // This is the main window selection, but reader is in iframe
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              const _selection = document.getSelection(); // This is the main window selection, but reader is in iframe
 
               // We need to access the iframe's selection
               // @ts-ignore
-              const contents = rendition.getContents();
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const contents = (rendition as any).getContents();
               if (contents && contents.length > 0) {
                   // Iterate through contents to find where the range belongs (or just try all)
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   contents.forEach((content: any) => {
                        const contentDoc = content.document;
                        const contentWin = content.window;
