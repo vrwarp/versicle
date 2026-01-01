@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { useShallow } from 'zustand/react/shallow';
 import { X, Copy, ChevronRight, ChevronDown } from 'lucide-react';
@@ -6,6 +6,9 @@ import { TYPE_COLORS } from '../../types/content-analysis';
 import type { ContentType } from '../../types/content-analysis';
 import type { Rendition } from 'epubjs';
 import { useToastStore } from '../../store/useToastStore';
+import { dbService } from '../../db/DBService';
+import type { TableImage } from '../../types/db';
+import { useReaderStore } from '../../store/useReaderStore';
 
 interface ContentAnalysisLegendProps {
   rendition?: Rendition | null;
@@ -23,6 +26,75 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
   const [mergedContent, setMergedContent] = useState('');
   const [isExpanded, setIsExpanded] = useState(true);
   const showToast = useToastStore(state => state.showToast);
+
+  // Table Images Carousel State
+  const [tableImages, setTableImages] = useState<TableImage[]>([]);
+
+  // Use a ref to track generated URLs so we can clean them up without state updates on unmount
+  const generatedUrls = useRef<Record<string, string>>({});
+  // State for rendering
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+
+  const currentBookId = useReaderStore(state => state.currentBookId);
+
+  // Helper to clear URLs
+  const clearUrls = () => {
+      Object.values(generatedUrls.current).forEach(url => URL.revokeObjectURL(url));
+      generatedUrls.current = {};
+      setImageUrls({});
+  };
+
+  // Load Table Images and Manage Blob URLs
+  useEffect(() => {
+      if (!isDebugModeEnabled || !currentBookId) {
+          setTableImages([]);
+          clearUrls();
+          return;
+      }
+
+      let isMounted = true;
+
+      const loadTables = async () => {
+          try {
+              const images = await dbService.getTableImages(currentBookId);
+              if (isMounted && images) {
+                  setTableImages(images);
+
+                  // Clear old
+                  Object.values(generatedUrls.current).forEach(url => URL.revokeObjectURL(url));
+                  generatedUrls.current = {};
+
+                  // Generate new
+                  const newUrls: Record<string, string> = {};
+                  images.forEach(img => {
+                      const url = URL.createObjectURL(img.imageBlob);
+                      newUrls[img.id] = url;
+                      generatedUrls.current[img.id] = url;
+                  });
+
+                  setImageUrls(newUrls);
+              }
+          } catch (e) {
+              console.error("Failed to load table images for debug", e);
+          }
+      };
+      loadTables();
+
+      return () => {
+          isMounted = false;
+      };
+  }, [isDebugModeEnabled, currentBookId]);
+
+  // Cleanup URLs on unmount
+  useEffect(() => {
+      return () => {
+          // Cleanup directly from ref without setting state
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+          Object.values(generatedUrls.current).forEach(url => URL.revokeObjectURL(url));
+          generatedUrls.current = {};
+      };
+  }, []);
+
 
   // Listen for selection changes in the reader
   useEffect(() => {
@@ -124,10 +196,15 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
       });
   };
 
+  const jumpToTable = (cfi: string) => {
+      rendition?.display(cfi);
+      setCfiInput(cfi);
+  };
+
   if (!isDebugModeEnabled) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 z-50 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg p-3 text-xs w-64 max-h-[80vh] overflow-y-auto flex flex-col gap-3 transition-all duration-300">
+    <div className="fixed bottom-20 left-4 z-50 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg p-3 text-xs w-72 max-h-[80vh] overflow-y-auto flex flex-col gap-3 transition-all duration-300">
       <div className="flex items-center justify-between border-b pb-2">
         <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -183,6 +260,40 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                     </div>
                 </div>
             </div>
+
+            {/* Table Images Carousel */}
+            {tableImages.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t">
+                    <div className="text-[10px] uppercase text-muted-foreground font-bold mb-1">
+                        Table Images ({tableImages.length})
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
+                        {tableImages.map((img) => imageUrls[img.id] ? (
+                            <div key={img.id} className="snap-start shrink-0 w-24 flex flex-col gap-1">
+                                <div className="aspect-video bg-muted rounded overflow-hidden relative group">
+                                    <img
+                                        src={imageUrls[img.id]}
+                                        alt="Table snapshot"
+                                        className="w-full h-full object-cover"
+                                    />
+                                    <button
+                                        onClick={() => jumpToTable(img.cfi)}
+                                        className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white font-bold transition-opacity"
+                                    >
+                                        JUMP
+                                    </button>
+                                </div>
+                                <div className="text-[9px] font-mono truncate text-muted-foreground" title={img.cfi}>
+                                    {img.cfi}
+                                </div>
+                                <div className="text-[9px] text-muted-foreground">
+                                    {(img.imageBlob.size / 1024).toFixed(1)} KB
+                                </div>
+                            </div>
+                        ) : null)}
+                    </div>
+                </div>
+            )}
 
             {/* Legend */}
             <div className="space-y-1.5 pt-2 border-t">

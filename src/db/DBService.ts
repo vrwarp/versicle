@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition, TableImage } from '../types/db';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
@@ -184,7 +184,7 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'covers'], 'readwrite');
+      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'covers', 'table_images'], 'readwrite');
 
       await Promise.all([
           tx.objectStore('books').delete(id),
@@ -229,6 +229,15 @@ class DBService {
       while (ttsContentCursor) {
         await ttsContentCursor.delete();
         ttsContentCursor = await ttsContentCursor.continue();
+      }
+
+      // Delete table images
+      const tableStore = tx.objectStore('table_images');
+      const tableIndex = tableStore.index('by_bookId');
+      let tableCursor = await tableIndex.openCursor(IDBKeyRange.only(id));
+      while (tableCursor) {
+        await tableCursor.delete();
+        tableCursor = await tableCursor.continue();
       }
 
       await tx.done;
@@ -1021,6 +1030,23 @@ class DBService {
     } catch (error) {
       this.handleError(error);
     }
+  }
+
+  // --- Table Images Operations ---
+
+  /**
+   * Retrieves all table images for a book.
+   *
+   * @param bookId - The book ID.
+   * @returns A Promise resolving to an array of TableImage objects.
+   */
+  async getTableImages(bookId: string): Promise<TableImage[]> {
+      try {
+          const db = await this.getDB();
+          return await db.getAllFromIndex('table_images', 'by_bookId', bookId);
+      } catch (error) {
+          this.handleError(error);
+      }
   }
 
   /**

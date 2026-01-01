@@ -158,42 +158,53 @@ We will add a horizontal carousel to the debug panel that specifically queries t
 
 -   It will perform a range query or filtered fetch from the `table_images` store using the `by_bookId` index, filtering for CFIs that belong to the current section's href.
 
-6\. Detailed Implementation Tasks
+6\. Implementation Notes
 ---------------------------------
 
-### T1: Type Definition & Database Migration
+### Done: Type Definition & Database Migration
 
--   Update `src/types/db.ts` with the `TableImage` interface and the `tablesProcessed` flag in `BookMetadata`.
+-   Updated `src/types/db.ts` with the `TableImage` interface and the `tablesProcessed` flag in `BookMetadata`.
 
--   Update `src/db/db.ts` to version `15`.
+-   Updated `src/db/db.ts` to version `15`.
 
--   Implement the `upgrade` logic to create the `table_images` object store and index.
+-   Implemented the `upgrade` logic to create the `table_images` object store and index.
 
-### T2: Offscreen Capture Logic
+### Done: Offscreen Capture Logic
 
--   Modify `ProcessedChapter` in `src/lib/offscreen-renderer.ts`.
+-   Modified `ProcessedChapter` in `src/lib/offscreen-renderer.ts`.
 
--   Integrate `snapdom` into the loop with the specified WebP settings.
+-   Integrated `snapdom` into the loop with the specified WebP settings.
 
-### T3: Transaction Logic
+### Done: Transaction Logic
 
--   Update `src/lib/ingestion.ts` to handle the storage of `table_images`.
+-   Updated `src/lib/ingestion.ts` to handle the storage of `table_images`.
 
-### T4: Interstitial UI Component
+### Done: Interstitial UI Component
 
--   Create `src/components/reader/ReprocessingInterstitial.tsx`.
+-   Created `src/components/reader/ReprocessingInterstitial.tsx`.
 
--   Logic to manage the `extractContentOffscreen` lifecycle specifically for enhancement.
+-   Implemented logic to fetch book file directly from `files` store using `dbService.getBookFile`.
 
-### T5: Debug Carousel Integration
+-   Implemented logic to manage the `extractContentOffscreen` lifecycle specifically for enhancement.
 
--   Modify the Gen AI store or component to fetch table images.
+-   Added logic to mark book as processed even on cancel to prevent repeated prompts.
 
--   Implement the UI in the Gen AI debug drawer with a "Table Preview" section.
+### Done: Debug Carousel Integration
 
-### T6: Cleanup Logic
+-   Modified `ContentAnalysisLegend` to fetch table images.
 
--   Update the book deletion logic in `src/lib/MaintenanceService.ts` or the library view to clean up `table_images` entries.
+-   Implemented the UI in the Gen AI debug drawer with a "Table Preview" section using a scrollable carousel.
+
+-   Implemented correct lifecycle management for Object URLs to prevent memory leaks.
+
+### Done: Cleanup Logic
+
+-   Updated `DBService.deleteBook` to clean up `table_images` entries.
+
+### Deviations
+
+-   **Reprocessing File Retrieval**: The original plan implied using `getBook` which returns both metadata and file, but types suggested `BookMetadata` doesn't have `file`. Used `dbService.getBookFile` in `ReprocessingInterstitial` to correctly fetch the binary data.
+-   **Cancel Behavior**: To improve UX and prevent nagging, cancelling the reprocessing interstitial now marks the book as `tablesProcessed: true` (skipping table generation) so the user is not prompted again.
 
 7\. Optimization & Constraints
 ------------------------------

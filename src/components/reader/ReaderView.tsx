@@ -35,6 +35,8 @@ import { useSidebarState } from '../../hooks/useSidebarState';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { ContentAnalysisLegend } from './ContentAnalysisLegend';
 import { TYPE_COLORS } from '../../types/content-analysis';
+import { ReprocessingInterstitial } from './ReprocessingInterstitial';
+import { Loader2 } from 'lucide-react';
 
 /**
  * The main reader interface component.
@@ -112,6 +114,34 @@ export const ReaderView: React.FC = () => {
   const [importJumpTarget, setImportJumpTarget] = useState(0);
   const hasPromptedForImport = useRef(false);
   const metadataRef = useRef(null as unknown); // Will hold metadata
+
+  // --- Reprocessing Logic ---
+  const [isReprocessing, setIsReprocessing] = useState(false);
+  const [isCheckingProcessing, setIsCheckingProcessing] = useState(true);
+
+  useEffect(() => {
+      const checkProcessing = async () => {
+          if (!id) return;
+          setIsCheckingProcessing(true); // Reset to checking state on ID change
+          setIsReprocessing(false);      // Reset reprocessing state
+          try {
+              const meta = await dbService.getBookMetadata(id);
+              if (meta) {
+                  // If undefined or false, trigger reprocessing
+                  if (meta.tablesProcessed === undefined || meta.tablesProcessed === false) {
+                      setIsReprocessing(true);
+                  } else {
+                      setIsReprocessing(false);
+                  }
+              }
+          } catch (e) {
+              console.error("Failed to check processing status", e);
+          } finally {
+              setIsCheckingProcessing(false);
+          }
+      };
+      checkProcessing();
+  }, [id]);
 
   // --- Setup useEpubReader Hook ---
 
@@ -841,6 +871,25 @@ export const ReaderView: React.FC = () => {
   const showToc = activeSidebar === 'toc';
   const showAnnotations = activeSidebar === 'annotations';
   const showSearch = activeSidebar === 'search';
+
+  if (isCheckingProcessing) {
+      // Return a minimal loading state to avoid flashing content
+      return (
+          <div className="flex flex-col h-screen bg-background items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+      );
+  }
+
+  if (isReprocessing && id) {
+      return (
+          <ReprocessingInterstitial
+             bookId={id}
+             onComplete={() => setIsReprocessing(false)}
+             onCancel={() => setIsReprocessing(false)}
+          />
+      );
+  }
 
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">

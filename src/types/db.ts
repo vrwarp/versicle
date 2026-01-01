@@ -51,6 +51,8 @@ export interface BookMetadata {
   totalChars?: number;
   /** Status of AI analysis for the book. */
   aiAnalysisStatus?: 'none' | 'partial' | 'complete';
+  /** Whether tables have been processed and snapped for this book. */
+  tablesProcessed?: boolean;
 }
 
 /**
@@ -280,4 +282,18 @@ export interface TTSContent {
      */
     cfi: string;
   }[];
+}
+
+/**
+ * Represents a snapped image of a table.
+ */
+export interface TableImage {
+  /** Unique identifier: `${bookId}-${cfi}` */
+  id: string;
+  /** The ID of the book. */
+  bookId: string;
+  /** The CFI of the table element. */
+  cfi: string;
+  /** The webp image blob. */
+  imageBlob: Blob;
 }

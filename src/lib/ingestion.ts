@@ -2,7 +2,7 @@ import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { BookMetadata, SectionMetadata, TTSContent } from '../types/db';
+import type { BookMetadata, SectionMetadata, TTSContent, TableImage } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
@@ -133,6 +133,7 @@ export async function processEpub(
   const syntheticToc: NavigationItem[] = [];
   const sections: SectionMetadata[] = [];
   const ttsContentBatches: TTSContent[] = [];
+  const tableImages: TableImage[] = [];
   let totalChars = 0;
 
   chapters.forEach((chapter, i) => {
@@ -162,6 +163,18 @@ export async function processEpub(
               sentences: chapter.sentences
           });
       }
+
+      // Collect Table Images
+      if (chapter.tables) {
+          chapter.tables.forEach(table => {
+              tableImages.push({
+                  id: `${bookId}-${table.cfi}`,
+                  bookId,
+                  cfi: table.cfi,
+                  imageBlob: table.imageBlob
+              });
+          });
+      }
   });
 
   // Calculate fingerprint
@@ -184,6 +197,7 @@ export async function processEpub(
     fileSize: file.size,
     syntheticToc,
     totalChars, // Store the calculated total characters
+    tablesProcessed: true // Flag set for new books
   };
 
   const check = getSanitizedBookMetadata(candidateBook);
@@ -199,7 +213,7 @@ export async function processEpub(
 
   const db = await getDB();
 
-  const tx = db.transaction(['books', 'files', 'sections', 'tts_content', 'covers'], 'readwrite');
+  const tx = db.transaction(['books', 'files', 'sections', 'tts_content', 'covers', 'table_images'], 'readwrite');
   await tx.objectStore('books').add(finalBook);
   await tx.objectStore('files').add(file, bookId);
 
@@ -218,6 +232,12 @@ export async function processEpub(
   const ttsStore = tx.objectStore('tts_content');
   for (const batch of ttsContentBatches) {
       await ttsStore.add(batch);
+  }
+
+  // Store Table Images
+  const tableStore = tx.objectStore('table_images');
+  for (const table of tableImages) {
+      await tableStore.add(table);
   }
 
   await tx.done;
