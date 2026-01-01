@@ -1190,7 +1190,7 @@ export const ReaderView: React.FC = () => {
       </div>
 
       {/* Content Analysis Debug Legend */}
-      <ContentAnalysisLegend />
+      <ContentAnalysisLegend rendition={rendition} />
 
     </div>
   );
