@@ -119,6 +119,8 @@ graph TD
     APS --> CostEst
     APS --> BG
     APS --> MediaSession
+    APS --> GenAI
+    APS --> GenAIStore
 
     Piper --> PiperUtils
 
@@ -241,10 +243,11 @@ Handles database health and integrity.
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs (Google Gemini).
 
-*   **Goal**: Provide features like "Smart Table of Contents" generation, summarization, and text analysis.
+*   **Goal**: Provide features like "Smart Table of Contents" generation, summarization, and content classification.
 *   **Logic**:
     *   **`GenAIService`**: Singleton wrapper around `@google/generative-ai`. Currently configured to use **Gemini 2.5 Flash Lite** for an optimal balance of speed and cost.
-    *   **`generateStructured`**: Uses Gemini's JSON schema enforcement to return strictly typed data (e.g., TOC structure).
+    *   **`generateStructured`**: Uses Gemini's JSON schema enforcement to return strictly typed data (e.g., Content Type classification).
+    *   **Content Detection**: Analyzes text samples to classify them as `citation`, `table`, `main`, etc.
     *   **Testing**: Supports `localStorage`-based mocking for E2E tests to avoid API costs and flakiness.
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets are sent to Google's servers.
 
@@ -272,11 +275,12 @@ The singleton controller (Orchestrator).
 *   **Goal**: Manage the playback queue, provider selection, and state machine (`playing`, `paused`, `loading`, etc.).
 *   **Logic**:
     *   **Concurrency**: Uses a **Sequential Promise Chain** (`enqueue`) to serialize async operations (play, pause, next) and prevent race conditions.
-    *   **Just-In-Time (JIT) Refinement**: Text segmentation (splitting paragraphs into sentences) happens dynamically when a chapter is loaded. This allows user settings (like "Custom Abbreviations") to apply immediately without re-ingesting the book.
+    *   **Just-In-Time (JIT) Refinement**: Text segmentation happens dynamically when a chapter is loaded. This allows user settings (like "Custom Abbreviations") to apply immediately without re-ingesting the book.
+    *   **Content Filtering**: Integrates with `GenAIService` to detect and filter out non-narrative content (e.g., citations, tables, footnotes) based on user preferences in `useGenAIStore`.
+    *   **Background Analysis**: Implements a speculative execution strategy (`triggerNextChapterAnalysis`) that pre-analyzes the next chapter for content types while the current one is playing, ensuring seamless transitions.
     *   **State Persistence**: Persists the queue and position to IndexedDB so playback can resume after an app restart.
     *   **Position Tracking**: Uses **Prefix Sums** to map time offsets to sentence indices efficiently, enabling seeking within chapters.
     *   **Prerolls**: Automatically injects "Title - Author" announcements at the start of new sections.
-    *   **Empty Chapter Handling**: If a chapter has no text (e.g., a full-page image), the service injects a "silence" or a placeholder message.
 
 #### `src/lib/tts/MediaSessionManager.ts`
 *   **Goal**: Integrate with OS-level media controls (Lock Screen, Notification Center, Smartwatches).
@@ -309,6 +313,7 @@ Splits raw text into natural-sounding sentences.
 *   **Hardening**:
     *   **Abbreviation Handling**: Merges splits caused by common abbreviations (e.g., "Mr.", "Dr.") using a whitelist.
     *   **Sentence Starters**: Checks if the next segment starts with a lowercase letter (indicating a false split).
+    *   **Merge by Length**: Implements a `mergeByLength` heuristic (default 36 chars) to combine very short fragments (like "No.") with adjacent sentences for better flow.
 
 #### `src/lib/tts/TTSCache.ts`
 Persists synthesized audio to IndexedDB.

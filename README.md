@@ -22,7 +22,7 @@
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
-*   **AI**: Google Gemini (via `@google/generative-ai`)
+*   **AI**: Google Gemini 2.5 Flash Lite (via `@google/generative-ai`)
 *   **Mobile**: Capacitor 7 (Android)
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
@@ -42,6 +42,7 @@
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
+*   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
