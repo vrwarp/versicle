@@ -199,14 +199,10 @@ export async function processEpub(
 
   const db = await getDB();
 
-  const tx = db.transaction(['books', 'files', 'sections', 'tts_content', 'covers'], 'readwrite');
+  // 'covers' removed
+  const tx = db.transaction(['books', 'files', 'sections', 'tts_content'], 'readwrite');
   await tx.objectStore('books').add(finalBook);
   await tx.objectStore('files').add(file, bookId);
-
-  // Store high-res cover if it exists
-  if (coverBlob) {
-    await tx.objectStore('covers').add(coverBlob, bookId);
-  }
 
   // Store section metadata
   const sectionsStore = tx.objectStore('sections');

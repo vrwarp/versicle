@@ -126,21 +126,6 @@ class DBService {
   }
 
   /**
-   * Retrieves the high-resolution cover image for a specific book.
-   *
-   * @param id - The unique identifier of the book.
-   * @returns A Promise resolving to the cover Blob or undefined.
-   */
-  async getCover(id: string): Promise<Blob | undefined> {
-      try {
-          const db = await this.getDB();
-          return await db.get('covers', id);
-      } catch (error) {
-          this.handleError(error);
-      }
-  }
-
-  /**
    * Retrieves all sections for a book, ordered by playOrder.
    *
    * @param bookId - The book ID.
@@ -184,12 +169,11 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'covers'], 'readwrite');
+      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content'], 'readwrite');
 
       await Promise.all([
           tx.objectStore('books').delete(id),
           tx.objectStore('files').delete(id),
-          tx.objectStore('covers').delete(id),
           tx.objectStore('locations').delete(id),
           tx.objectStore('tts_queue').delete(id),
           tx.objectStore('tts_position').delete(id),
@@ -246,7 +230,7 @@ class DBService {
   async offloadBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'covers'], 'readwrite');
+      const tx = db.transaction(['books', 'files'], 'readwrite');
       const bookStore = tx.objectStore('books');
       const book = await bookStore.get(id);
 
@@ -269,9 +253,6 @@ class DBService {
       book.isOffloaded = true;
       await bookStore.put(book);
       await tx.objectStore('files').delete(id);
-
-      // Delete high-res cover; metadata thumbnail remains.
-      await tx.objectStore('covers').delete(id);
 
       await tx.done;
     } catch (error) {
