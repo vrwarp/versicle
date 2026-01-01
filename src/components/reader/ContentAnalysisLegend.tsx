@@ -76,8 +76,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
               // and maybe add a temporary annotation.
 
               // Select in DOM
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const _selection = document.getSelection(); // This is the main window selection, but reader is in iframe
+              // This is the main window selection, but reader is in iframe
 
               // We need to access the iframe's selection
               // @ts-ignore
