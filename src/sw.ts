@@ -1,8 +1,9 @@
+/// <reference lib="webworker" />
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
 import { clientsClaim } from 'workbox-core'
 import { openDB } from 'idb';
 
-declare let self: ServiceWorkerGlobalScope
+declare const self: ServiceWorkerGlobalScope
 
 cleanupOutdatedCaches()
 

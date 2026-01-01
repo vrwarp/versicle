@@ -97,7 +97,6 @@ export class AudioPlayerService {
   private backgroundAudio: BackgroundAudio;
   private backgroundAudioMode: BackgroundAudioMode = 'silence';
   private lastMetadata: MediaSessionMetadata | null = null;
-  private currentCoverUrl: string | null = null;
 
   // Track last persisted queue to avoid redundant heavy writes
   private lastPersistedQueue: TTSQueueItem[] | null = null;
