@@ -53,21 +53,15 @@ describe('TextSegmenter.mergeByLength', () => {
             createNode('Three four five.'), // 16 chars
             createNode('Six.')
         ];
-        // min 10
-        // "One." (4)
-        // "One. Two." (9) -> Still < 10
-        // "One. Two. Three four five." (25) -> Push
-        // "Six." (4) -> End -> Merge back into previous
+        // Expected Logic:
+        // 1. "One." (len 4) -> Buffer
+        // 2. "One. Two." (len 9) < 10 -> Buffer
+        // 3. "One. Two. Three four five." (len 25) >= 10 -> Push to results
+        // 4. "Six." (len 4) < 10 -> Buffer
+        // End: "Six." is too short, so it merges backward into the last result.
+        // Final Result: "One. Two. Three four five. Six."
 
         const result = TextSegmenter.mergeByLength(sentences, 10);
-
-        // Wait, let's trace the loop logic carefully.
-        // i=0: buffer="One."
-        // i=1: buffer < 10? Yes. buffer="One. Two."
-        // i=2: buffer < 10? Yes (9 < 10). buffer="One. Two. Three four five."
-        // i=3: buffer < 10? No (25 >= 10). push buffer. buffer="Six."
-        // End loop.
-        // buffer="Six." (4 < 10). Merge back into last pushed.
 
         expect(result).toHaveLength(1);
         expect(result[0].text).toBe('One. Two. Three four five. Six.');
@@ -79,12 +73,10 @@ describe('TextSegmenter.mergeByLength', () => {
             createNode('Short.'),
             createNode('Second long sentence.')
         ];
-        // min 10
-        // i=0: buffer="First..."
-        // i=1: buffer < 10? No. Push "First...". buffer="Short."
-        // i=2: buffer < 10? Yes. buffer="Short. Second..."
-        // End.
-        // Push buffer "Short. Second..."
+        // Expected Logic:
+        // 1. "First long sentence." (len > 10) -> Push to results
+        // 2. "Short." (len < 10) -> Buffer
+        // 3. "Short. Second long sentence." (len > 10) -> Push to results
 
         const result = TextSegmenter.mergeByLength(sentences, 10);
         expect(result).toHaveLength(2);
