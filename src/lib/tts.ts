@@ -1,4 +1,4 @@
-import { TextSegmenter } from './tts/TextSegmenter';
+import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './tts/TextSegmenter';
 import { Sanitizer } from './tts/processors/Sanitizer';
 
 /**
@@ -39,19 +39,15 @@ export const extractSentencesFromNode = (
     cfiGenerator: (range: Range) => string | null,
     options: ExtractionOptions = {}
 ): SentenceNode[] => {
-    const sentences: SentenceNode[] = [];
+    // Collect raw sentences first
+    const rawSentences: SentenceNode[] = [];
     const doc = rootNode.ownerDocument || (rootNode as Document);
 
     // Default sanitization to true if not specified
     const sanitizationEnabled = options.sanitizationEnabled !== undefined ? options.sanitizationEnabled : true;
 
     // Initialize segmenter
-    const segmenter = new TextSegmenter(
-        'en',
-        options.abbreviations || [],
-        options.alwaysMerge,
-        options.sentenceStarters
-    );
+    const segmenter = new TextSegmenter('en');
 
     let textBuffer = '';
     let textNodes: { node: Node, length: number }[] = [];
@@ -126,7 +122,7 @@ export const extractSentencesFromNode = (
                  try {
                     const cfi = cfiGenerator(range);
                     if (cfi) {
-                        sentences.push({
+                        rawSentences.push({
                             text: processedText.trim(),
                             cfi: cfi
                         });
@@ -176,5 +172,11 @@ export const extractSentencesFromNode = (
     traverse(rootNode);
     flushBuffer();
 
-    return sentences;
+    // Now refine segments using the options provided
+    return TextSegmenter.refineSegments(
+        rawSentences,
+        options.abbreviations || [],
+        options.alwaysMerge || DEFAULT_ALWAYS_MERGE,
+        options.sentenceStarters || DEFAULT_SENTENCE_STARTERS
+    );
 };

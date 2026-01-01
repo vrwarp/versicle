@@ -41,34 +41,15 @@ export const DEFAULT_SENTENCE_STARTERS = [
  */
 export class TextSegmenter {
     private segmenter: Intl.Segmenter | undefined;
-    private abbreviations: Set<string>;
-    private alwaysMerge: Set<string>;
-    private sentenceStarters: Set<string>;
 
     /**
      * Initializes the TextSegmenter.
      *
      * @param locale - The locale for Intl.Segmenter (default 'en').
-     * @param abbreviations - List of abbreviations to consider for merging.
-     * @param alwaysMerge - List of words that always force a merge (e.g., titles).
-     * @param sentenceStarters - List of words that definitely start a new sentence.
      */
-    constructor(
-        locale: string = 'en',
-        abbreviations: string[] = [],
-        alwaysMerge: string[] = DEFAULT_ALWAYS_MERGE,
-        sentenceStarters: string[] = DEFAULT_SENTENCE_STARTERS
-    ) {
+    constructor(locale: string = 'en') {
         if (typeof Intl !== 'undefined' && Intl.Segmenter) {
             this.segmenter = new Intl.Segmenter(locale, { granularity: 'sentence' });
-        }
-        this.abbreviations = new Set(abbreviations.map(s => s.normalize('NFKD')));
-        this.alwaysMerge = new Set(alwaysMerge.map(s => s.normalize('NFKD')));
-        this.sentenceStarters = new Set(sentenceStarters.map(s => s.normalize('NFKD')));
-
-        // Ensure alwaysMerge items are also in abbreviations so they trigger the merge logic
-        for (const item of this.alwaysMerge) {
-            this.abbreviations.add(item);
         }
     }
 
@@ -83,99 +64,14 @@ export class TextSegmenter {
         const normalizedText = text.normalize('NFKD');
 
         if (this.segmenter) {
-            const rawSegments = Array.from(this.segmenter.segment(normalizedText)).map(s => ({
+            return Array.from(this.segmenter.segment(normalizedText)).map(s => ({
                 text: s.segment,
                 index: s.index,
                 length: s.segment.length
             }));
-            return this.postProcess(rawSegments);
         }
 
         return this.fallbackSegment(normalizedText);
-    }
-
-    /**
-     * Post-processes raw segments to merge incorrectly split sentences (e.g., due to abbreviations).
-     *
-     * @param segments - The raw segments from Intl.Segmenter.
-     * @returns The refined list of segments.
-     */
-    private postProcess(segments: TextSegment[]): TextSegment[] {
-        const merged: TextSegment[] = [];
-
-        for (let i = 0; i < segments.length; i++) {
-            const current = segments[i];
-
-            if (merged.length > 0) {
-                const last = merged[merged.length - 1];
-                const lastTextTrimmed = last.text.trim();
-
-                // Check if last segment ends with an abbreviation
-                let isAbbreviation = false;
-                let lastWord = '';
-
-                // Try checking the last word
-                const oneWordMatch = /\S+$/.exec(lastTextTrimmed);
-                const rawLastWord = oneWordMatch ? oneWordMatch[0] : lastTextTrimmed;
-                // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
-                const cleanLastWord = rawLastWord.replace(/^['"([<{]+/, '');
-
-                if (this.abbreviations.has(cleanLastWord)) {
-                    isAbbreviation = true;
-                    lastWord = cleanLastWord;
-                } else {
-                    // Try checking the last two words
-                    // Capture last two whitespace-separated tokens
-                    // (?: ... ) is non-capturing group
-                    const twoWordsMatch = /(?:\S+\s+)\S+$/.exec(lastTextTrimmed);
-                    if (twoWordsMatch) {
-                        const rawLastTwo = twoWordsMatch[0];
-                        // Remove leading punctuation from the phrase (e.g. "(et al." -> "et al.")
-                        const cleanLastTwo = rawLastTwo.replace(/^['"([<{]+/, '');
-
-                        if (this.abbreviations.has(cleanLastTwo)) {
-                            isAbbreviation = true;
-                            lastWord = cleanLastTwo;
-                        }
-                    }
-                }
-
-                if (isAbbreviation) {
-                    let shouldMerge = false;
-
-                    if (this.alwaysMerge.has(lastWord)) {
-                        shouldMerge = true;
-                    } else {
-                        // Check the next segment (current) to see if it looks like a new sentence
-                        const nextTextTrimmed = current.text.trim();
-                        // Optimized: Get first word without splitting the whole string
-                        const match = /^\S+/.exec(nextTextTrimmed);
-                        const nextFirstWord = match ? match[0] : nextTextTrimmed;
-
-                        // Remove trailing punctuation from the word (e.g. "He," -> "He")
-                        const cleanNextWord = nextFirstWord.replace(/[.,!?;:]$/, '');
-
-                        if (!this.sentenceStarters.has(cleanNextWord)) {
-                            shouldMerge = true;
-                        }
-                    }
-
-                    if (shouldMerge) {
-                        // Merge current into last
-                        last.text += current.text;
-                        last.length += current.length;
-                        // We don't change last.index
-                        continue;
-                    }
-                }
-            }
-
-            // If not merged, push as new segment
-            // We need to copy it to avoid reference issues if we modify it later
-            merged.push({ ...current });
-        }
-
-        return merged;
     }
 
     /**

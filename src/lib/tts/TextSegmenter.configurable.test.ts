@@ -1,65 +1,63 @@
 import { describe, it, expect } from 'vitest';
 import { TextSegmenter } from './TextSegmenter';
+import type { SentenceNode } from '../tts';
 
 describe('TextSegmenter with Custom Abbreviations', () => {
-  it('splits unknown abbreviations by default (depending on Intl.Segmenter)', () => {
-    const segmenter = new TextSegmenter();
-    // Using a made-up abbreviation that Intl.Segmenter likely splits
-    // "Abc. Def."
-    const text = "Abc. Def.";
-    segmenter.segment(text);
+  const createSentences = (text: string): SentenceNode[] => {
+      const segmenter = new TextSegmenter();
+      return segmenter.segment(text).map(s => ({ text: s.text, cfi: 'cfi' }));
+  };
 
-    // If Intl.Segmenter sees "Abc." as a sentence end.
-    // We assume it does for this test.
-    // If it doesn't, we need a better example.
-    // Let's try "Fig. 1."
-
-    // Actually, let's verify if it splits first.
-    // If it doesn't split, we can't test "fixing" it.
-
-    // Based on typical behavior:
-    // "Gen." might be known. "Abc." is likely not.
-  });
-
-  it('merges segments when abbreviation is provided', () => {
+  it('merges segments when abbreviation is provided via refineSegments', () => {
     // "MyAbbrev." is definitely not standard.
-    // Note: We use "Smith" (Proper Noun) instead of "It" (Pronoun) because
-    // the segmenter heuristic prevents merging if the next word is a common sentence starter (like "It").
     const text = "This is MyAbbrev. Smith is here.";
 
-    // First, verify it splits without custom abbrev
-    const segmenterDefault = new TextSegmenter();
-    const segmentsDefault = segmenterDefault.segment(text);
-    // Likely 2 segments: "This is MyAbbrev. ", "Smith is here."
+    const raw = createSentences(text);
 
     // If it splits:
-    if (segmentsDefault.length > 1) {
+    if (raw.length > 1) {
         // Now test with custom abbrev
-        const segmenterCustom = new TextSegmenter('en', ['MyAbbrev.']);
-        const segmentsCustom = segmenterCustom.segment(text);
+        const refined = TextSegmenter.refineSegments(
+            raw,
+            ['MyAbbrev.'],
+            [], // alwaysMerge
+            [] // sentenceStarters
+        );
 
-        expect(segmentsCustom).toHaveLength(1);
-        expect(segmentsCustom[0].text).toBe("This is MyAbbrev. Smith is here.");
-    } else {
-        console.warn("Intl.Segmenter didn't split the test sentence. Skipping merge test.");
+        expect(refined).toHaveLength(1);
+        expect(refined[0].text).toBe("This is MyAbbrev. Smith is here.");
     }
   });
 
-  it('respects passed abbreviations', () => {
-      const segmenter = new TextSegmenter('en', ['Dr.', 'Prof.']);
+  it('respects passed abbreviations in refineSegments', () => {
       const text = "Dr. No is a movie.";
-      const segments = segmenter.segment(text);
-      expect(segments).toHaveLength(1);
-      expect(segments[0].text).toBe("Dr. No is a movie.");
+      const raw = createSentences(text);
+
+      const refined = TextSegmenter.refineSegments(
+          raw,
+          ['Dr.', 'Prof.'],
+          [],
+          [] // Empty sentenceStarters ensures 'No' doesn't block merge
+      );
+
+      expect(refined).toHaveLength(1);
+      expect(refined[0].text).toBe("Dr. No is a movie.");
   });
 
-  it('disables sentence starter heuristic when empty list passed', () => {
+  it('disables sentence starter heuristic when empty list passed to refineSegments', () => {
       // By default "Dr." + "He" splits because "He" is a starter.
       // If we pass empty sentenceStarters, it should merge (because "Dr." is an abbreviation).
-      const segmenter = new TextSegmenter('en', ['Dr.'], [], []);
       const text = "I visited the Dr. He was nice.";
-      const segments = segmenter.segment(text);
-      expect(segments).toHaveLength(1);
-      expect(segments[0].text.trim()).toBe("I visited the Dr. He was nice.");
+      const raw = createSentences(text);
+
+      const refined = TextSegmenter.refineSegments(
+          raw,
+          ['Dr.'],
+          [],
+          [] // Empty starters -> always merge if abbreviation found
+      );
+
+      expect(refined).toHaveLength(1);
+      expect(refined[0].text.trim()).toBe("I visited the Dr. He was nice.");
   });
 });

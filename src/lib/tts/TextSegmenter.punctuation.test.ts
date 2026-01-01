@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { TextSegmenter, DEFAULT_ALWAYS_MERGE } from './TextSegmenter';
+import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './TextSegmenter';
+import type { SentenceNode } from '../tts';
 
 describe('TextSegmenter - Punctuation Handling', () => {
     // Common abbreviations
-    const commonAbbreviations = ['Dr.', 'St.', 'Gov.', 'Capt.', 'Lt.', 'Col.', 'Maj.', 'Rev.', 'Sgt.'];
+    const commonAbbreviations = ['Dr.', 'St.', 'Gov.', 'Capt.', 'Lt.', 'Col.', 'Maj.', 'Rev.', 'Sgt.', 'Mr.', 'Mrs.', 'Ms.', 'Prof.'];
 
     // Christian literature abbreviations (Bible books, titles, etc.)
     const christianAbbreviations = [
@@ -16,35 +17,45 @@ describe('TextSegmenter - Punctuation Handling', () => {
     ];
 
     const allAbbreviations = [...commonAbbreviations, ...christianAbbreviations];
-    const segmenter = new TextSegmenter('en', allAbbreviations, DEFAULT_ALWAYS_MERGE);
+
+    // Helper to simulate raw segmentation
+    const createSentences = (text: string): SentenceNode[] => {
+        const segmenter = new TextSegmenter();
+        return segmenter.segment(text).map(s => ({ text: s.text, cfi: 'cfi' }));
+    };
+
+    const refine = (text: string) => {
+        const raw = createSentences(text);
+        return TextSegmenter.refineSegments(raw, allAbbreviations, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS);
+    };
 
     describe('General Punctuation Cases', () => {
         it('should handle "Mr." inside parentheses', () => {
             const text = 'I met (Mr. Smith) yesterday.';
-            const segments = segmenter.segment(text);
-            expect(segments).toHaveLength(1);
-            expect(segments[0].text).toBe('I met (Mr. Smith) yesterday.');
+            const refined = refine(text);
+            expect(refined).toHaveLength(1);
+            expect(refined[0].text).toBe('I met (Mr. Smith) yesterday.');
         });
 
         it('should handle "Mrs." inside brackets', () => {
             const text = 'I saw [Mrs. Robinson] today.';
-            const segments = segmenter.segment(text);
-            expect(segments).toHaveLength(1);
-            expect(segments[0].text).toBe('I saw [Mrs. Robinson] today.');
+            const refined = refine(text);
+            expect(refined).toHaveLength(1);
+            expect(refined[0].text).toBe('I saw [Mrs. Robinson] today.');
         });
 
         it('should handle "Ms." inside double quotes', () => {
             const text = 'He called "Ms. Jones" clearly.';
-            const segments = segmenter.segment(text);
-            expect(segments).toHaveLength(1);
-            expect(segments[0].text).toBe('He called "Ms. Jones" clearly.');
+            const refined = refine(text);
+            expect(refined).toHaveLength(1);
+            expect(refined[0].text).toBe('He called "Ms. Jones" clearly.');
         });
 
         it('should handle "Prof." inside single quotes', () => {
             const text = "It was 'Prof. X' entering.";
-            const segments = segmenter.segment(text);
-            expect(segments).toHaveLength(1);
-            expect(segments[0].text).toBe("It was 'Prof. X' entering.");
+            const refined = refine(text);
+            expect(refined).toHaveLength(1);
+            expect(refined[0].text).toBe("It was 'Prof. X' entering.");
         });
     });
 
@@ -52,16 +63,16 @@ describe('TextSegmenter - Punctuation Handling', () => {
         christianAbbreviations.forEach(abbr => {
             it(`should handle "${abbr}" inside parentheses`, () => {
                 const text = `Ref (${abbr} 1:1) is valid.`;
-                const segments = segmenter.segment(text);
-                expect(segments).toHaveLength(1);
-                expect(segments[0].text).toBe(text);
+                const refined = refine(text);
+                expect(refined).toHaveLength(1);
+                expect(refined[0].text).toBe(text);
             });
 
             it(`should handle "${abbr}" inside brackets`, () => {
                 const text = `See [${abbr} 2:3] for details.`;
-                const segments = segmenter.segment(text);
-                expect(segments).toHaveLength(1);
-                expect(segments[0].text).toBe(text);
+                const refined = refine(text);
+                expect(refined).toHaveLength(1);
+                expect(refined[0].text).toBe(text);
             });
         });
     });
