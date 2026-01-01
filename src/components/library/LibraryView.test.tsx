@@ -44,13 +44,10 @@ vi.mock('../ui/Select', () => ({
   ),
 }));
 
-// Mock react-window FixedSizeList
-// The previous test failure "Element type is invalid" might be because of default export vs named export
-// or because react-window is not working in JSDOM environment without mocks.
-// Since we used default export in implementation: import { FixedSizeList as List } from 'react-window'
+// Mock react-window List
 vi.mock('react-window', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    FixedSizeList: ({ children, itemCount }: any) => (
+    List: ({ children, itemCount }: any) => (
         <div data-testid="virtual-list">
             {Array.from({ length: itemCount }).map((_, index) => (
                 <div key={index}>

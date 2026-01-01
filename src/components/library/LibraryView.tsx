@@ -10,7 +10,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
-import { FixedSizeList as List } from 'react-window';
+import { List } from 'react-window';
 import { useWindowSize } from '../../hooks/useWindowSize';
 
 /**

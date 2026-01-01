@@ -8,9 +8,6 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 const renderLog = vi.fn();
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const MockList = React.memo((props: any) => {
-    // If props change, this renders.
-    // If props are equal, it might NOT render (if parent doesn't force it? But parent re-renders).
-    // React.memo only prevents render if props are shallowly equal.
     renderLog(props.itemCount);
     // Render at least one row to test children
     return <div data-testid="mock-list">
@@ -19,8 +16,9 @@ const MockList = React.memo((props: any) => {
 });
 
 vi.mock('react-window', () => ({
+    // Update mock to match usage of named import 'List'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    FixedSizeList: (props: any) => <MockList {...props} />
+    List: (props: any) => <MockList {...props} />
 }));
 
 // Mock useWindowSize
