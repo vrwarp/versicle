@@ -22,19 +22,32 @@ interface StringListManagerProps {
     importHeader: string;
     /** Filename for export. */
     exportFilename: string;
+    /** Optional validation function for new items. Returns error message or null. */
+    validateItem?: (item: string) => string | null;
 }
 
 /**
  * A generic component to manage a list of strings (add, remove, reset, import/export).
  */
 const StringListManager: React.FC<StringListManagerProps> = ({
-    title, description, items, onItemsChange, defaults, placeholder, importHeader, exportFilename
+    title, description, items, onItemsChange, defaults, placeholder, importHeader, exportFilename, validateItem
 }) => {
     const [newItem, setNewItem] = useState('');
+    const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleAdd = () => {
+        setError(null);
         if (!newItem.trim()) return;
+
+        if (validateItem) {
+            const validationError = validateItem(newItem.trim());
+            if (validationError) {
+                setError(validationError);
+                return;
+            }
+        }
+
         if (items.includes(newItem.trim())) {
             setNewItem('');
             return;
@@ -49,6 +62,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
     };
 
     const handleReset = () => {
+        setError(null);
         onItemsChange(defaults);
     };
 
@@ -73,6 +87,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
     };
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setError(null);
         const file = event.target.files?.[0];
         if (!file) return;
 
@@ -86,6 +101,23 @@ const StringListManager: React.FC<StringListManagerProps> = ({
             if (lines.length === 0) {
                 alert('No items found in file.');
                 return;
+            }
+
+            if (validateItem) {
+                const invalidItems = lines.filter(item => validateItem(item) !== null);
+                if (invalidItems.length > 0) {
+                    alert(`Skipping ${invalidItems.length} invalid items (e.g. too long).`);
+                    // Optionally filter them out or stop
+                    // Let's filter them out for better UX
+                    const validLines = lines.filter(item => validateItem(item) === null);
+                     if (window.confirm(`This will replace your current list with ${validLines.length} valid entries from the file (${invalidItems.length} invalid skipped). Are you sure?`)) {
+                        onItemsChange(validLines);
+                    }
+                    if (fileInputRef.current) {
+                        fileInputRef.current.value = '';
+                    }
+                    return;
+                }
             }
 
             if (window.confirm(`This will replace your current list with ${lines.length} entries from the file. Are you sure?`)) {
@@ -108,23 +140,29 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                     {description}
                 </p>
 
-                <div className="flex gap-2 mb-2">
-                    <input
-                        type="text"
-                        value={newItem}
-                        onChange={(e) => setNewItem(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                        placeholder={placeholder}
-                        className="flex-1 text-xs p-1 border rounded bg-background text-foreground border-border"
-                    />
-                    <button
-                        onClick={handleAdd}
-                        disabled={!newItem.trim()}
-                        className="p-1 bg-primary text-background rounded hover:opacity-90 disabled:opacity-50"
-                        aria-label={`Add to ${title}`}
-                    >
-                        <Plus className="w-4 h-4" />
-                    </button>
+                <div className="flex flex-col gap-1 mb-2">
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={newItem}
+                            onChange={(e) => {
+                                setNewItem(e.target.value);
+                                setError(null);
+                            }}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                            placeholder={placeholder}
+                            className={`flex-1 text-xs p-1 border rounded bg-background text-foreground ${error ? 'border-red-500' : 'border-border'}`}
+                        />
+                        <button
+                            onClick={handleAdd}
+                            disabled={!newItem.trim()}
+                            className="p-1 bg-primary text-background rounded hover:opacity-90 disabled:opacity-50"
+                            aria-label={`Add to ${title}`}
+                        >
+                            <Plus className="w-4 h-4" />
+                        </button>
+                    </div>
+                    {error && <span className="text-[10px] text-red-500">{error}</span>}
                 </div>
 
                 <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 border border-border rounded bg-muted/20 mb-2">
@@ -210,6 +248,14 @@ export const TTSAbbreviationSettings: React.FC = () => {
         'e.g.', 'i.e.'
     ];
 
+    const validateAbbreviation = (item: string) => {
+        // Allow max 2 words
+        if (item.trim().split(/\s+/).length > 2) {
+            return "Abbreviations cannot exceed 2 words.";
+        }
+        return null;
+    };
+
     return (
         <div className="space-y-4">
             <StringListManager
@@ -221,6 +267,7 @@ export const TTSAbbreviationSettings: React.FC = () => {
                 placeholder="e.g. Dr."
                 importHeader="Abbreviation"
                 exportFilename="abbreviations.csv"
+                validateItem={validateAbbreviation}
             />
 
             <StringListManager
@@ -232,6 +279,7 @@ export const TTSAbbreviationSettings: React.FC = () => {
                 placeholder="e.g. Mr."
                 importHeader="AlwaysMerge"
                 exportFilename="always_merge.csv"
+                validateItem={validateAbbreviation}
             />
 
             <StringListManager
