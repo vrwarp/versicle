@@ -1,17 +1,15 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
-import { BackgroundAudio, type BackgroundAudioMode } from './BackgroundAudio';
-import { Capacitor } from '@capacitor/core';
-import { SyncEngine, type AlignmentData } from './SyncEngine';
+import type { BackgroundAudioMode } from './BackgroundAudio';
+import { SyncEngine } from './SyncEngine';
 import { LexiconService } from './LexiconService';
 import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule } from '../../types/db';
 import { TaskSequencer } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
-import { TTSProviderManager, type TTSProviderEvents } from './TTSProviderManager';
-import { PlatformIntegration, type PlatformEvents } from './PlatformIntegration';
-import { useTTSStore } from '../../store/useTTSStore';
-import { useGenAIStore } from '../../store/useGenAIStore';
+import { TTSProviderManager } from './TTSProviderManager';
+import { PlatformIntegration } from './PlatformIntegration';
+import { Capacitor } from '@capacitor/core';
 
 /**
  * Defines the possible states of the TTS playback.

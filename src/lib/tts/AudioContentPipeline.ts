@@ -133,8 +133,14 @@ export class AudioContentPipeline {
 
       if (sentences.length > 0) {
           const settings = useTTSStore.getState();
+          // Fix TS2345: Map strict object type to SentenceNode compatible type
+          // refineSegments expects SentenceNode[] which has string, but dbService allows string | null.
+          const inputSentences = sentences
+            .filter(s => s.cfi !== null)
+            .map(s => ({ text: s.text, cfi: s.cfi as string }));
+
           const refinedSentences = TextSegmenter.refineSegments(
-              sentences,
+              inputSentences,
               settings.customAbbreviations,
               settings.alwaysMerge,
               settings.sentenceStarters,
@@ -145,7 +151,10 @@ export class AudioContentPipeline {
           const skipTypes = genAISettings.contentFilterSkipTypes;
           const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
 
-          let finalSentences = refinedSentences;
+          // refinedSentences is SentenceNode[], which has cfi: string
+          // finalSentences needs to be { text: string; cfi: string | null }[]
+          // Since SentenceNode is compatible with this (string is assignable to string | null), we can cast or map.
+          let finalSentences: { text: string; cfi: string | null }[] = refinedSentences;
 
           if (skipTypes.length > 0 && isContentAnalysisEnabled) {
               finalSentences = await this.detectAndFilterContent(bookId, section.sectionId, refinedSentences, skipTypes);
@@ -321,8 +330,13 @@ export class AudioContentPipeline {
              if (!ttsContent || ttsContent.sentences.length === 0) return;
 
               const settings = useTTSStore.getState();
+              // Fix TS2322: Map strict object type to SentenceNode compatible type
+              const inputSentences = ttsContent.sentences
+                .filter(s => s.cfi !== null)
+                .map(s => ({ text: s.text, cfi: s.cfi as string }));
+
               const refinedSentences = TextSegmenter.refineSegments(
-                  ttsContent.sentences,
+                  inputSentences,
                   settings.customAbbreviations,
                   settings.alwaysMerge,
                   settings.sentenceStarters,
