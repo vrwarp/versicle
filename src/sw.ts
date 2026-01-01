@@ -1,22 +1,16 @@
 /// <reference lib="webworker" />
 import { getDB } from './db/db';
 
-import { precacheAndRoute } from 'workbox-precaching';
+import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
+import { clientsClaim } from 'workbox-core';
 
 declare let self: ServiceWorkerGlobalScope;
 
+cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
 
-// A simple pass-through for assets or standard caching could be added here
-// For now, we only implement the cover interception.
-
-self.addEventListener('install', () => {
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
-});
+self.skipWaiting();
+clientsClaim();
 
 self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('/__versicle_assets__/covers/')) {
