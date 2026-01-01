@@ -11,8 +11,8 @@ vi.mock('lucide-react', () => ({
     ChevronsRight: () => <span data-testid="icon-chevrons-right" />,
     SkipBack: () => <span data-testid="icon-skip-back" />,
     SkipForward: () => <span data-testid="icon-skip-forward" />,
-    Play: () => <span data-testid="icon-play" />,
-    Pause: () => <span data-testid="icon-pause" />,
+    Play: (props: any) => <span data-testid={props['data-testid'] || "icon-play"} />,
+    Pause: (props: any) => <span data-testid={props['data-testid'] || "icon-pause"} />,
     StickyNote: () => <span data-testid="icon-sticky-note" />,
     Mic: () => <span data-testid="icon-mic" />,
     Copy: () => <span data-testid="icon-copy" />,
@@ -214,4 +214,38 @@ describe('CompassPill', () => {
        expect(prevButton).toHaveAttribute('aria-label', 'Previous chapter');
        expect(nextButton).toHaveAttribute('aria-label', 'Next chapter');
    });
+
+    it('shows playback indicator in active mode', () => {
+       // Paused state
+       vi.mocked(useTTSStore).mockReturnValue({
+           isPlaying: false,
+           queue: [{ title: 'Item 1' }],
+           currentIndex: 0,
+           jumpTo: mockJumpTo,
+           play: mockPlay,
+           pause: mockPause
+       } as any);
+
+       const { rerender } = render(<CompassPill variant="active" />);
+
+       // Should show Play icon
+       expect(screen.getByTestId('active-play-icon')).toBeInTheDocument();
+       expect(screen.queryByTestId('active-pause-icon')).not.toBeInTheDocument();
+
+       // Playing state
+       vi.mocked(useTTSStore).mockReturnValue({
+           isPlaying: true,
+           queue: [{ title: 'Item 1' }],
+           currentIndex: 0,
+           jumpTo: mockJumpTo,
+           play: mockPlay,
+           pause: mockPause
+       } as any);
+
+       rerender(<CompassPill variant="active" />);
+
+       // Should show Pause icon
+       expect(screen.getByTestId('active-pause-icon')).toBeInTheDocument();
+       expect(screen.queryByTestId('active-play-icon')).not.toBeInTheDocument();
+    });
 });

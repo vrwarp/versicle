@@ -320,13 +320,18 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
         {/* Center Info */}
         <div
-            className="flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform"
+            className="flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform group"
             onClick={handleTogglePlay}
             role="button"
             aria-label={isPlaying ? "Pause" : "Play"}
         >
-             <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center">
-                {sectionTitle}
+             <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center flex items-center justify-center gap-1.5">
+                {isPlaying ? (
+                   <Pause size={10} className="fill-current opacity-70" data-testid="active-pause-icon" />
+                ) : (
+                   <Play size={10} className="fill-current opacity-70 ml-0.5" data-testid="active-play-icon" />
+                )}
+                <span className="truncate">{sectionTitle}</span>
              </div>
              <div className="text-xs font-mono text-muted-foreground">
                 {formatTime(timeRemaining)}
