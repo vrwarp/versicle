@@ -58,7 +58,7 @@ describe('BookCard', () => {
     renderWithRouter(<BookCard book={mockBook} />);
 
     const img = screen.getByRole('img');
-    expect(img).toHaveAttribute('src', 'blob:mock-url');
+    expect(img).toHaveAttribute('src', '/__versicle_assets__/covers/1');
     expect(img).toHaveAttribute('alt', 'Cover of Test Title');
   });
 
@@ -70,15 +70,6 @@ describe('BookCard', () => {
     expect(screen.getByText('Aa')).toBeInTheDocument();
   });
 
-  it('should clean up object URL on unmount', () => {
-    const { unmount } = renderWithRouter(<BookCard book={mockBook} />);
-
-    expect(global.URL.createObjectURL).toHaveBeenCalledWith(mockBook.coverBlob);
-
-    unmount();
-
-    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
-  });
 
   it('should render progress bar when progress > 0', () => {
     const bookWithProgress = { ...mockBook, progress: 0.45 };

@@ -48,25 +48,11 @@ export const BookListItem = React.memo(({ book }: BookListItemProps) => {
     const navigate = useNavigate();
     const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderStore(state => state.setCurrentBookId);
-    const [coverUrl, setCoverUrl] = React.useState<string | null>(null);
 
-    React.useEffect(() => {
-        let url: string | null = null;
-        if (book.coverBlob) {
-            url = URL.createObjectURL(book.coverBlob);
-            setCoverUrl(url);
-        } else {
-            setCoverUrl(null);
-        }
-
-        return () => {
-            if (url) {
-                URL.revokeObjectURL(url);
-            }
-        };
-    }, [book.coverBlob]);
-
-    const displayUrl = coverUrl || book.coverUrl;
+    // Use the Service Worker URL pattern to fetch the cover directly from IDB
+    const displayUrl = book.coverBlob
+        ? `/__versicle_assets__/covers/${book.id}`
+        : book.coverUrl;
 
     const handleOpen = () => {
         if (book.isOffloaded) {

@@ -6,15 +6,14 @@ import { Cloud, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu, type BookActionMenuHandle } from './BookActionMenu';
 import type { BookMetadata } from '../../types/db';
-import { useObjectUrl } from '../../hooks/useObjectUrl';
-
 interface BookCoverProps {
     book: BookMetadata;
     actionMenuRef: React.RefObject<BookActionMenuHandle | null>;
 }
 
 export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, actionMenuRef }) => {
-    const coverUrl = useObjectUrl(book.coverBlob);
+    // Use the Service Worker URL pattern to fetch the cover directly from IDB
+    const coverUrl = book.coverBlob ? `/__versicle_assets__/covers/${book.id}` : null;
 
     return (
         <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner flex flex-col">
