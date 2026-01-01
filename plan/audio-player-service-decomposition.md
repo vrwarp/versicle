@@ -139,3 +139,65 @@ The current `AudioPlayerService.ts` is a monolithic service (~1,000 lines) manag
 -   **Parallel Development**: Developers can work on the AI filtering pipeline independently from the Audio Element player.
 
 -   **Error Boundaries**: A failure in `MediaSession` metadata update will no longer crash the main playback sequence.
+
+7\. Implementation Status (Update)
+----------------------------------
+
+Completed decomposition of `AudioPlayerService` into the planned sub-modules.
+
+### Created Files:
+
+1.  **`src/lib/tts/TaskSequencer.ts`**: Implemented `TaskSequencer` class to manage async task serialization. Replaced `pendingPromise`.
+    -   Verified with `src/lib/tts/TaskSequencer.test.ts`.
+
+2.  **`src/lib/tts/AudioContentPipeline.ts`**: Implemented `AudioContentPipeline` class.
+    -   Moved logic for:
+        -   Fetching section content from DB.
+        -   Refining segments via `TextSegmenter`.
+        -   Content Type Detection & Filtering via `GenAIService`.
+        -   Preroll generation logic remains in `AudioPlayerService` (but pipeline handles structure).
+        -   Triggering next chapter analysis.
+    -   Verified with `src/lib/tts/AudioContentPipeline.test.ts`.
+
+3.  **`src/lib/tts/PlaybackStateManager.ts`**: Implemented `PlaybackStateManager` class.
+    -   Manages `queue`, `currentIndex`, `currentSectionIndex`.
+    -   Calculates `prefixSums`, duration, and current position.
+    -   Handles persistence logic (delegating DB calls).
+    -   Verified with `src/lib/tts/PlaybackStateManager.test.ts`.
+
+4.  **`src/lib/tts/TTSProviderManager.ts`**: Implemented `TTSProviderManager` class.
+    -   Manages `ITTSProvider` lifecycle (init, play, pause, stop).
+    -   Handles "Cloud -> Local" fallback.
+    -   Normalizes events (start, end, error, timeupdate, etc.).
+    -   Verified with `src/lib/tts/TTSProviderManager.test.ts`.
+
+5.  **`src/lib/tts/PlatformIntegration.ts`**: Implemented `PlatformIntegration` class.
+    -   Wraps `MediaSessionManager` and `BackgroundAudio`.
+    -   Provides clean API for `updateMediaSession`, `setPlaybackState`, `setBackgroundAudioMode`.
+    -   Verified with `src/lib/tts/PlatformIntegration.test.ts`.
+
+6.  **`src/lib/tts/AudioPlayerService.ts`**: Refactored to act as a coordinator.
+    -   Injects sub-modules in constructor (Dependency Injection).
+    -   Delegates logic to sub-modules.
+    -   Maintains high-level control flow (Play/Pause/Next/Prev/Seek).
+    -   Verified with existing `src/lib/tts/AudioPlayerService*.test.ts`.
+
+### Discoveries & Deviations:
+
+-   **Preroll Logic**: The `generatePreroll` method was kept in `AudioPlayerService` (or duplicated/moved partially) because it relies on simple string manipulation, but `AudioContentPipeline` prepares the queue structure. The actual text generation is simple enough.
+-   **Cover URL**: `AudioContentPipeline` was updated to accept `coverUrl` as an argument to avoid managing Blob URL lifecycles (which have side effects) within the pure pipeline. `AudioPlayerService` manages the revocation.
+-   **Fallback Error Handling**: `TTSProviderManager` was updated to emit a specific error type/message when falling back, allowing `AudioPlayerService` to log it or notify if needed, although the fallback itself is handled internally by the manager.
+-   **Concurrency Tests**: `AudioPlayerService_Concurrency.test.ts` required updates because direct access to private properties like `currentIndex` is no longer valid; state is now inside `stateManager`.
+
+### Verification:
+
+-   Run `npm test src/lib/tts/AudioPlayerService.test.ts` -> PASSED
+-   Run `npm test src/lib/tts/AudioPlayerService_Concurrency.test.ts` -> PASSED
+-   Run `npm test src/lib/tts/AudioPlayerService_MediaSession.test.ts` -> PASSED
+-   Run `npm test src/lib/tts/AudioPlayerService_Resume.test.ts` -> PASSED
+-   Run `npm test src/lib/tts/AudioPlayerService_Critical.test.ts` -> PASSED
+-   Run `npm test src/lib/tts/TaskSequencer.test.ts` -> PASSED
+-   Run `npm test src/lib/tts/PlaybackStateManager.test.ts` -> PASSED
+-   Run `npm test src/lib/tts/TTSProviderManager.test.ts` -> PASSED
+-   Run `npm test src/lib/tts/AudioContentPipeline.test.ts` -> PASSED
+-   Run `npm test src/lib/tts/PlatformIntegration.test.ts` -> PASSED

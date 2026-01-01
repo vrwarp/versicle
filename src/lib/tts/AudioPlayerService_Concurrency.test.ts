@@ -107,8 +107,17 @@ describe('AudioPlayerService Concurrency', () => {
     // Only the last one should have completed successfully.
     // However, depending on timing, the first ones might have started but been aborted.
     // The key is that the final state should reflect the last call.
+    // Note: With the new decomposition, `currentIndex` is managed by `stateManager`.
+    // We should access it via `service['stateManager'].getCurrentIndex()` or `service.getQueue()` logic.
+    // But since it's private, we'll use the public accessor logic or expect to update the test.
+    // Or we access the private property stateManager.
 
-    expect(service['currentIndex']).toBe(2);
+    // service['currentIndex'] is gone. It is now service['stateManager'].getCurrentIndex()
+    // But for the test we are using service['property'] string access which is now invalid.
+
+    // Let's assume we need to update the test to access stateManager
+
+    expect(service['stateManager'].getCurrentIndex()).toBe(2);
     expect(service['status']).toBe('playing');
 
     const calls = playSpy.mock.calls;

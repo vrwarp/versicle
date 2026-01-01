@@ -246,7 +246,7 @@ describe('AudioPlayerService', () => {
         // Wait for async fallback logic
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Falling back"));
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("falling back"));
 
         // Verify listener got error notification
         const errorCalls = listener.mock.calls.filter(args => args[4] && args[4].includes("Cloud voice failed"));
