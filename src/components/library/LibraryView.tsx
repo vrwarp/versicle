@@ -10,6 +10,9 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
+import { DeleteBookDialog } from './DeleteBookDialog';
+import { OffloadBookDialog } from './OffloadBookDialog';
+import type { BookMetadata } from '../../types/db';
 
 /**
  * The main library view component.
@@ -26,6 +29,7 @@ export const LibraryView: React.FC = () => {
     isLoading,
     error,
     addBook,
+    restoreBook,
     isImporting,
     viewMode,
     setViewMode,
@@ -37,6 +41,7 @@ export const LibraryView: React.FC = () => {
     isLoading: state.isLoading,
     error: state.error,
     addBook: state.addBook,
+    restoreBook: state.restoreBook,
     isImporting: state.isImporting,
     viewMode: state.viewMode,
     setViewMode: state.setViewMode,
@@ -47,8 +52,17 @@ export const LibraryView: React.FC = () => {
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const restoreFileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Modal State Coordination
+  const [activeModal, setActiveModal] = useState<{
+    type: 'delete' | 'offload';
+    book: BookMetadata;
+  } | null>(null);
+
+  const [bookToRestore, setBookToRestore] = useState<BookMetadata | null>(null);
 
   useEffect(() => {
     fetchBooks();
@@ -65,6 +79,22 @@ export const LibraryView: React.FC = () => {
     // Reset input so same file can be selected again if needed
     if (e.target.value) {
       e.target.value = '';
+    }
+  };
+
+  const handleRestoreFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0] && bookToRestore) {
+        restoreBook(bookToRestore.id, e.target.files[0]).then(() => {
+            showToast(`Restored "${bookToRestore.title}"`, 'success');
+        }).catch((err) => {
+            console.error("Restore failed", err);
+            showToast("Failed to restore book", "error");
+        }).finally(() => {
+            setBookToRestore(null);
+        });
+    }
+    if (e.target.value) {
+        e.target.value = '';
     }
   };
 
@@ -110,6 +140,25 @@ export const LibraryView: React.FC = () => {
   const triggerFileUpload = () => {
     fileInputRef.current?.click();
   };
+
+  // Action Handlers
+  const handleDelete = useCallback((book: BookMetadata) => {
+    setActiveModal({ type: 'delete', book });
+  }, []);
+
+  const handleOffload = useCallback((book: BookMetadata) => {
+    setActiveModal({ type: 'offload', book });
+  }, []);
+
+  const handleRestore = useCallback((book: BookMetadata) => {
+    setBookToRestore(book);
+    // Use setTimeout to ensure state is updated before click if needed, though usually not strictly necessary for simple refs
+    // But direct click is fine.
+    // However, we need to ensure restoreFileInputRef is available.
+    requestAnimationFrame(() => {
+        restoreFileInputRef.current?.click();
+    });
+  }, []);
 
   // OPTIMIZATION: Memoize filtered and sorted books to avoid expensive re-calculation on every render
   const filteredAndSortedBooks = useMemo(() => {
@@ -159,6 +208,15 @@ export const LibraryView: React.FC = () => {
         data-testid="hidden-file-input"
       />
 
+       <input
+        type="file"
+        ref={restoreFileInputRef}
+        onChange={handleRestoreFileSelect}
+        accept=".epub"
+        className="hidden"
+        data-testid="restore-file-input"
+      />
+
       {/* Drag Overlay */}
       {dragActive && (
         <div className="absolute inset-4 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center border-4 border-primary border-dashed rounded-xl transition-all duration-200 pointer-events-none">
@@ -168,6 +226,18 @@ export const LibraryView: React.FC = () => {
             </div>
         </div>
       )}
+
+      {/* Shared Modals */}
+      <DeleteBookDialog
+        isOpen={activeModal?.type === 'delete'}
+        book={activeModal?.book || null}
+        onClose={() => setActiveModal(null)}
+      />
+      <OffloadBookDialog
+        isOpen={activeModal?.type === 'offload'}
+        book={activeModal?.book || null}
+        onClose={() => setActiveModal(null)}
+      />
 
       <header className="mb-6 flex flex-col gap-4">
         {/* Top Row: Title and Actions */}
@@ -288,14 +358,25 @@ export const LibraryView: React.FC = () => {
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
                   {filteredAndSortedBooks.map((book) => (
                     <div key={book.id} className="flex justify-center">
-                      <BookCard book={book} />
+                      <BookCard
+                        book={book}
+                        onDelete={handleDelete}
+                        onOffload={handleOffload}
+                        onRestore={handleRestore}
+                      />
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 w-full">
                   {filteredAndSortedBooks.map((book) => (
-                    <BookListItem key={book.id} book={book} />
+                    <BookListItem
+                        key={book.id}
+                        book={book}
+                        onDelete={handleDelete}
+                        onOffload={handleOffload}
+                        onRestore={handleRestore}
+                    />
                   ))}
                 </div>
               )}

@@ -4,14 +4,16 @@ import 'react-lazy-load-image-component/src/effects/blur.css';
 import { cn } from '../../lib/utils';
 import { Cloud, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { BookActionMenu, type BookActionMenuHandle } from './BookActionMenu';
+import { BookActionMenu } from './BookActionMenu';
 import type { BookMetadata } from '../../types/db';
 interface BookCoverProps {
     book: BookMetadata;
-    actionMenuRef: React.RefObject<BookActionMenuHandle | null>;
+    onDelete: (book: BookMetadata) => void;
+    onOffload: (book: BookMetadata) => void;
+    onRestore: (book: BookMetadata) => void;
 }
 
-export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, actionMenuRef }) => {
+export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete, onOffload, onRestore }) => {
     // We assume the service worker handles /__versicle__/covers/:id
     // But we only want to try loading it if we know we have a cover (book.coverBlob exists)
     // or if we have a remote coverUrl.
@@ -53,7 +55,12 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, actionMen
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
             >
-                <BookActionMenu book={book} ref={actionMenuRef}>
+                <BookActionMenu
+                    book={book}
+                    onDelete={() => onDelete(book)}
+                    onOffload={() => onOffload(book)}
+                    onRestore={() => onRestore(book)}
+                >
                     <div className="h-11 w-11">
                         <Button
                             variant="ghost"
