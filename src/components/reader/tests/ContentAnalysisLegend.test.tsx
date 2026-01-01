@@ -29,7 +29,7 @@ describe('ContentAnalysisLegend', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (useGenAIStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector: any) =>
+    (useGenAIStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector: (state: unknown) => unknown) =>
       selector({
         isDebugModeEnabled: true,
         setDebugModeEnabled: mockSetDebugModeEnabled,
@@ -38,24 +38,27 @@ describe('ContentAnalysisLegend', () => {
   });
 
   it('renders nothing when debug mode is disabled', () => {
-    (useGenAIStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector: any) =>
+    (useGenAIStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector: (state: unknown) => unknown) =>
         selector({
           isDebugModeEnabled: false,
           setDebugModeEnabled: mockSetDebugModeEnabled,
         })
       );
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     render(<ContentAnalysisLegend rendition={mockRendition as any} />);
     expect(screen.queryByText('Debug Panel')).toBeNull();
   });
 
   it('renders correctly when debug mode is enabled', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     render(<ContentAnalysisLegend rendition={mockRendition as any} />);
     expect(screen.getByText('Debug Panel')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('epubcfi(...)')).toBeInTheDocument();
   });
 
   it('toggles expansion', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     render(<ContentAnalysisLegend rendition={mockRendition as any} />);
 
     // Initially expanded
@@ -73,10 +76,12 @@ describe('ContentAnalysisLegend', () => {
   });
 
   it('updates CFI input on selection', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     render(<ContentAnalysisLegend rendition={mockRendition as any} />);
 
     // Simulate selection event
-    const onSelected = mockRendition.on.mock.calls.find(call => call[0] === 'selected')[1];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const onSelected = mockRendition.on.mock.calls.find((call: any[]) => call[0] === 'selected')[1];
 
     mockRendition.getRange.mockReturnValue({ toString: () => 'Selected Text' });
 
@@ -90,6 +95,7 @@ describe('ContentAnalysisLegend', () => {
   });
 
   it('updates rendition on manual CFI input', async () => {
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
      render(<ContentAnalysisLegend rendition={mockRendition as any} />);
      const input = screen.getByPlaceholderText('epubcfi(...)');
 

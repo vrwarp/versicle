@@ -32,7 +32,7 @@ describe('Normalization (NFKD)', () => {
         put: vi.fn(),
       };
       const { getDB } = await import('../../db/db');
-      vi.mocked(getDB).mockResolvedValue(db as any);
+      vi.mocked(getDB).mockResolvedValue(db as unknown as IDBDatabase);
 
       const nbsp = '\u00A0';
       const rule = {
@@ -107,7 +107,7 @@ describe('Normalization (NFKD)', () => {
       // The text has a standard space: "Mr . Smith"
       // If the constructor normalizes the input abbreviation `Mr<nbsp>.` to `Mr<space>.`,
       // then it should match the text "Mr .".
-      const text = "Mr . Smith";
+      // const text = "Mr . Smith";
 
       // Initialize segmenter with the weird abbreviation
       const segmenter = new TextSegmenter('en', [abbrWithNbsp]);
@@ -146,6 +146,7 @@ describe('Normalization (NFKD)', () => {
         ];
 
         const refined = TextSegmenter.refineSegments(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             sentences as any,
             [],
             [],
@@ -169,6 +170,7 @@ describe('Normalization (NFKD)', () => {
 
         // Pass abbreviation with nbsp
         const refined = TextSegmenter.refineSegments(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             sentences as any,
             [abbrWithNbsp], // ["Mr ."]
             [abbrWithNbsp], // always merge

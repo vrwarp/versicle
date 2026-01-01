@@ -4,6 +4,23 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
 import { useTTSStore } from '../store/useTTSStore';
 
+// Mock Radix UI Dialog to avoid title warnings
+vi.mock('./ui/Dialog', () => {
+    return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Dialog: ({ isOpen, children }: any) => isOpen ? <div role="dialog">{children}</div> : null,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
+        DialogContent: ({ children, className, title, description, footer }: any) => (
+            <div>
+                {title && <h1>{title}</h1>}
+                {description && <p>{description}</p>}
+                {children}
+                {footer}
+            </div>
+        )
+    };
+});
+
 // Mock useUIStore
 vi.mock('../store/useUIStore', () => ({
     useUIStore: () => ({

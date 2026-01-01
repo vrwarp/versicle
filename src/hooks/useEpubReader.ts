@@ -402,7 +402,7 @@ export function useEpubReader(
                     let range;
                     try {
                         range = selection.getRangeAt(0);
-                    } catch (e) {
+                    } catch {
                         // Handle IndexSizeError if selection was cleared
                         return;
                     }
