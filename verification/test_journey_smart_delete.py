@@ -54,10 +54,13 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
 
     # 5. Restore Book (Success Case)
     print("Restoring book...")
-    # Click the card to trigger restore (since it's offloaded)
-    # The file input should be triggered. We need to set input files on the specific input for this book.
-    restore_input = page.locator(f"data-testid=restore-input-{book_card.get_attribute('data-testid').replace('book-card-', '')}")
-    restore_input.set_input_files(demo_epub_path)
+    # Trigger the restore flow by clicking the card (which is offloaded)
+    # This sets the internal state (bookToRestore) and opens the file chooser
+    with page.expect_file_chooser() as fc_info:
+        book_card.click()
+
+    file_chooser = fc_info.value
+    file_chooser.set_files(demo_epub_path)
 
     # Wait for restore to complete (loader or just state change)
     # The overlay should disappear
