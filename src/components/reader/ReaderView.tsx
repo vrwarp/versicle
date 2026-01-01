@@ -504,8 +504,9 @@ export const ReaderView: React.FC = () => {
                             // @ts-expect-error annotations is not typed fully
                             rendition.annotations.add('highlight', item.rootCfi, {}, null, 'debug-analysis-highlight', {
                                 fill: color,
-                                "fill-opacity": "0.3",
-                                "mix-blend-mode": "multiply"
+                                backgroundColor: color,
+                                fillOpacity: '1',
+                                mixBlendMode: 'multiply'
                             });
                             addedDebugHighlights.current.add(item.rootCfi);
                         } catch (e) {
