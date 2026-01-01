@@ -57,6 +57,8 @@ interface TTSState {
   alwaysMerge: string[];
   /** Words that indicate a new sentence start (preventing merge) */
   sentenceStarters: string[];
+  /** Minimum sentence length (in characters) to enforce by merging short sentences */
+  minSentenceLength: number;
 
   /** Whether to show cost warning dialogs */
   enableCostWarning: boolean;
@@ -85,6 +87,7 @@ interface TTSState {
   setCustomAbbreviations: (abbrevs: string[]) => void;
   setAlwaysMerge: (words: string[]) => void;
   setSentenceStarters: (words: string[]) => void;
+  setMinSentenceLength: (length: number) => void;
   setEnableCostWarning: (enable: boolean) => void;
   setPrerollEnabled: (enable: boolean) => void;
   setSanitizationEnabled: (enable: boolean) => void;
@@ -176,6 +179,7 @@ export const useTTSStore = create<TTSState>()(
             ],
             alwaysMerge: DEFAULT_ALWAYS_MERGE,
             sentenceStarters: DEFAULT_SENTENCE_STARTERS,
+            minSentenceLength: 0,
 
             play: () => {
                 player.play();
@@ -223,6 +227,9 @@ export const useTTSStore = create<TTSState>()(
             },
             setSentenceStarters: (words) => {
                 set({ sentenceStarters: words });
+            },
+            setMinSentenceLength: (length) => {
+                set({ minSentenceLength: length });
             },
             setEnableCostWarning: (enable) => {
                 set({ enableCostWarning: enable });
@@ -330,6 +337,7 @@ export const useTTSStore = create<TTSState>()(
             customAbbreviations: state.customAbbreviations,
             alwaysMerge: state.alwaysMerge,
             sentenceStarters: state.sentenceStarters,
+            minSentenceLength: state.minSentenceLength,
             enableCostWarning: state.enableCostWarning,
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,

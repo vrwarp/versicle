@@ -953,7 +953,8 @@ export class AudioPlayerService {
                   ttsContent.sentences,
                   settings.customAbbreviations,
                   settings.alwaysMerge,
-                  settings.sentenceStarters
+                  settings.sentenceStarters,
+                  settings.minSentenceLength
               );
 
               // -----------------------------------------------------------
@@ -1182,7 +1183,8 @@ export class AudioPlayerService {
                   ttsContent.sentences,
                   settings.customAbbreviations,
                   settings.alwaysMerge,
-                  settings.sentenceStarters
+                  settings.sentenceStarters,
+                  settings.minSentenceLength
               );
 
              // 3. Group

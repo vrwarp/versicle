@@ -211,13 +211,15 @@ export class TextSegmenter {
      * @param abbreviations - Current list of abbreviations.
      * @param alwaysMerge - List of abbreviations that always force a merge.
      * @param sentenceStarters - List of words that prevent a merge.
+     * @param minSentenceLength - Minimum characters for a sentence (optional).
      * @returns A new list of refined (merged) sentences.
      */
     public static refineSegments(
         sentences: SentenceNode[],
         abbreviations: string[],
         alwaysMerge: string[],
-        sentenceStarters: string[]
+        sentenceStarters: string[],
+        minSentenceLength: number = 0
     ): SentenceNode[] {
         if (!sentences || sentences.length === 0) return [];
 
@@ -294,6 +296,55 @@ export class TextSegmenter {
             merged.push(current);
         }
 
-        return merged;
+        if (minSentenceLength <= 0) {
+            return merged;
+        }
+
+        // Second pass: Merge by length
+        const lengthMerged: SentenceNode[] = [];
+        let buffer: SentenceNode | null = null;
+
+        for (let i = 0; i < merged.length; i++) {
+            const current = merged[i];
+
+            if (!buffer) {
+                buffer = { ...current };
+                continue;
+            }
+
+            // Check if buffer is too short
+            if (buffer.text.length < minSentenceLength) {
+                // Merge current into buffer
+                buffer.text += (buffer.text.endsWith(' ') ? '' : ' ') + current.text;
+
+                // Merge CFIs
+                const startCfi = parseCfiRange(buffer.cfi);
+                const endCfi = parseCfiRange(current.cfi);
+                if (startCfi && endCfi) {
+                    buffer.cfi = generateCfiRange(startCfi.fullStart, endCfi.fullEnd);
+                }
+            } else {
+                lengthMerged.push(buffer);
+                buffer = { ...current };
+            }
+        }
+
+        if (buffer) {
+            // Handle last item: if it's still short, try to merge it BACK into the last pushed item
+            if (buffer.text.length < minSentenceLength && lengthMerged.length > 0) {
+                const last = lengthMerged[lengthMerged.length - 1];
+                last.text += (last.text.endsWith(' ') ? '' : ' ') + buffer.text;
+
+                const startCfi = parseCfiRange(last.cfi);
+                const endCfi = parseCfiRange(buffer.cfi);
+                if (startCfi && endCfi) {
+                    last.cfi = generateCfiRange(startCfi.fullStart, endCfi.fullEnd);
+                }
+            } else {
+                lengthMerged.push(buffer);
+            }
+        }
+
+        return lengthMerged;
     }
 }
