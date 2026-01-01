@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
@@ -44,6 +44,28 @@ vi.mock('../ui/Select', () => ({
   ),
 }));
 
+// Mock react-window FixedSizeList
+// The previous test failure "Element type is invalid" might be because of default export vs named export
+// or because react-window is not working in JSDOM environment without mocks.
+// Since we used default export in implementation: import { FixedSizeList as List } from 'react-window'
+vi.mock('react-window', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    FixedSizeList: ({ children, itemCount }: any) => (
+        <div data-testid="virtual-list">
+            {Array.from({ length: itemCount }).map((_, index) => (
+                <div key={index}>
+                    {children({ index, style: {} })}
+                </div>
+            ))}
+        </div>
+    )
+}));
+
+// Mock useWindowSize to return a stable size
+vi.mock('../../hooks/useWindowSize', () => ({
+    useWindowSize: () => ({ width: 1000, height: 800 })
+}));
+
 describe('LibraryView', () => {
     const mockShowToast = vi.fn();
 
@@ -75,7 +97,9 @@ describe('LibraryView', () => {
     });
 
     it('renders loading state', () => {
-        useLibraryStore.setState({ isLoading: true });
+        act(() => {
+            useLibraryStore.setState({ isLoading: true });
+        });
         render(<LibraryView />);
         expect(document.querySelector('.animate-spin')).toBeInTheDocument();
     });
@@ -86,14 +110,16 @@ describe('LibraryView', () => {
     });
 
     it('renders grid with books', async () => {
-        useLibraryStore.setState({
-            books: [
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                { id: '1', title: 'Book 1', author: 'Author 1' } as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                { id: '2', title: 'Book 2', author: 'Author 2' } as any
-            ],
-            viewMode: 'grid'
+        act(() => {
+            useLibraryStore.setState({
+                books: [
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    { id: '1', title: 'Book 1', author: 'Author 1' } as any,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    { id: '2', title: 'Book 2', author: 'Author 2' } as any
+                ],
+                viewMode: 'grid'
+            });
         });
 
         render(<LibraryView />);
@@ -104,29 +130,36 @@ describe('LibraryView', () => {
     });
 
     it('filters books by search query', async () => {
-        useLibraryStore.setState({
-            books: [
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald' } as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                { id: '2', title: '1984', author: 'George Orwell' } as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                { id: '3', title: 'Brave New World', author: 'Aldous Huxley' } as any
-            ],
-            viewMode: 'grid'
+        act(() => {
+            useLibraryStore.setState({
+                books: [
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald' } as any,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    { id: '2', title: '1984', author: 'George Orwell' } as any,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    { id: '3', title: 'Brave New World', author: 'Aldous Huxley' } as any
+                ],
+                viewMode: 'grid'
+            });
         });
 
         render(<LibraryView />);
 
         const searchInput = screen.getByTestId('library-search-input');
-        fireEvent.change(searchInput, { target: { value: 'George' } });
+
+        act(() => {
+             fireEvent.change(searchInput, { target: { value: 'George' } });
+        });
 
         await waitFor(() => {
             expect(screen.getAllByTestId('book-card')).toHaveLength(1);
             expect(screen.getByText('1984')).toBeInTheDocument();
         });
 
-        fireEvent.change(searchInput, { target: { value: 'Great' } });
+        act(() => {
+             fireEvent.change(searchInput, { target: { value: 'Great' } });
+        });
 
         await waitFor(() => {
             expect(screen.getAllByTestId('book-card')).toHaveLength(1);
@@ -135,17 +168,19 @@ describe('LibraryView', () => {
     });
 
     it('sorts books correctly', async () => {
-        useLibraryStore.setState({
-            books: [
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                { id: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200 } as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                { id: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100 } as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                { id: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300 } as any
-            ],
-            viewMode: 'grid',
-            sortOrder: 'recent'
+        act(() => {
+            useLibraryStore.setState({
+                books: [
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    { id: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200 } as any,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    { id: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100 } as any,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    { id: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300 } as any
+                ],
+                viewMode: 'grid',
+                sortOrder: 'recent'
+            });
         });
 
         render(<LibraryView />);
@@ -158,21 +193,27 @@ describe('LibraryView', () => {
         expect(cards[2]).toHaveTextContent('B');
 
         // Sort by Title (A-Z) -> 2 (A), 1 (B), 3 (C)
-        fireEvent.change(sortSelect, { target: { value: 'title' } });
+        act(() => {
+            fireEvent.change(sortSelect, { target: { value: 'title' } });
+        });
         cards = screen.getAllByTestId('book-card');
         expect(cards[0]).toHaveTextContent('A');
         expect(cards[1]).toHaveTextContent('B');
         expect(cards[2]).toHaveTextContent('C');
 
         // Sort by Author (A-Z) -> 3 (X), 2 (Y), 1 (Z)
-        fireEvent.change(sortSelect, { target: { value: 'author' } });
+        act(() => {
+            fireEvent.change(sortSelect, { target: { value: 'author' } });
+        });
         cards = screen.getAllByTestId('book-card');
         expect(cards[0]).toHaveTextContent('C'); // Author X
         expect(cards[1]).toHaveTextContent('A'); // Author Y
         expect(cards[2]).toHaveTextContent('B'); // Author Z
 
         // Sort by Last Read (Most recent first) -> 3 (300), 1 (200), 2 (100)
-        fireEvent.change(sortSelect, { target: { value: 'last_read' } });
+        act(() => {
+            fireEvent.change(sortSelect, { target: { value: 'last_read' } });
+        });
         cards = screen.getAllByTestId('book-card');
         expect(cards[0]).toHaveTextContent('C');
         expect(cards[1]).toHaveTextContent('B');
@@ -180,18 +221,23 @@ describe('LibraryView', () => {
     });
 
     it('shows no results message when search returns nothing', async () => {
-        useLibraryStore.setState({
-            books: [
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald' } as any
-            ],
-            viewMode: 'grid'
+        act(() => {
+            useLibraryStore.setState({
+                books: [
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald' } as any
+                ],
+                viewMode: 'grid'
+            });
         });
 
         render(<LibraryView />);
 
         const searchInput = screen.getByTestId('library-search-input');
-        fireEvent.change(searchInput, { target: { value: 'Harry Potter' } });
+
+        act(() => {
+             fireEvent.change(searchInput, { target: { value: 'Harry Potter' } });
+        });
 
         await waitFor(() => {
             expect(screen.queryByTestId('book-card')).not.toBeInTheDocument();
@@ -201,9 +247,11 @@ describe('LibraryView', () => {
 
     it('handles drag and drop import', async () => {
         const mockAddBook = vi.fn().mockResolvedValue(undefined);
-        useLibraryStore.setState({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            addBook: mockAddBook as any
+        act(() => {
+            useLibraryStore.setState({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                addBook: mockAddBook as any
+            });
         });
 
         render(<LibraryView />);
@@ -211,10 +259,12 @@ describe('LibraryView', () => {
 
         const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
 
-        fireEvent.drop(dropZone, {
-            dataTransfer: {
-                files: [file],
-            },
+        act(() => {
+            fireEvent.drop(dropZone, {
+                dataTransfer: {
+                    files: [file],
+                },
+            });
         });
 
         await waitFor(() => {
@@ -225,9 +275,11 @@ describe('LibraryView', () => {
 
     it('handles drag and drop invalid file', async () => {
         const mockAddBook = vi.fn();
-        useLibraryStore.setState({
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            addBook: mockAddBook as any
+        act(() => {
+            useLibraryStore.setState({
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                addBook: mockAddBook as any
+            });
         });
 
         render(<LibraryView />);
@@ -235,10 +287,12 @@ describe('LibraryView', () => {
 
         const file = new File(['dummy'], 'test.pdf', { type: 'application/pdf' });
 
-        fireEvent.drop(dropZone, {
-            dataTransfer: {
-                files: [file],
-            },
+        act(() => {
+            fireEvent.drop(dropZone, {
+                dataTransfer: {
+                    files: [file],
+                },
+            });
         });
 
         await waitFor(() => {

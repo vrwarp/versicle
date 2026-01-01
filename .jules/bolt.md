@@ -1,9 +1,3 @@
-## 2024-05-22 - Search Indexing Offloading
-- **Bottleneck:** Parsing XHTML chapters for search indexing on the Main Thread (`DOMParser`) caused frame drops during initial book load.
-- **Solution:** Offloaded XML string parsing to `search.worker.ts`.
-- **Learning:** `DOMParser` is available in Web Worker context in modern Capacitor/WebView environments. Sending raw XML strings via Comlink is efficient enough.
-
-## 2024-05-23 - Library Import Rendering Optimization
-- **Bottleneck:** `BookListItem` was re-rendering for every book in the library during file imports because `LibraryView` re-renders on every progress tick (0-100%).
-- **Solution:** Wrapped `BookListItem` in `React.memo`.
-- **Learning:** Even simple list items can become a bottleneck when the parent component has high-frequency state updates (like a progress bar). Always memoize list items in views with active progress indicators.
+## 2025-05-23 - [Virtualization & Prop Stability]
+**Learning:** When implementing virtualization with `react-window`, if the item renderer (e.g., `GridRow`) is defined inline within the component, it is re-created on every render. This causes the virtualized list to re-render unnecessarily because the `children` prop changes.
+**Action:** Always wrap the item renderer in `useCallback` or move it outside the component if possible. If it depends on state (like `filteredAndSortedBooks`), `useCallback` is the correct approach.

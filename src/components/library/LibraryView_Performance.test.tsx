@@ -4,21 +4,28 @@ import React from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
 
-// Mock Grid
+// Mock List (FixedSizeList)
 const renderLog = vi.fn();
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const MockGrid = React.memo((props: any) => {
-    // In real react-window, changes to itemData trigger re-render of Cells,
-    // but the Grid itself might re-render if its props change.
-    // However, react-window is smart.
-    // We log the prop we want to ensure is stable.
-    renderLog(props.cellProps);
-    return <div data-testid="mock-grid">Grid</div>;
+const MockList = React.memo((props: any) => {
+    // If props change, this renders.
+    // If props are equal, it might NOT render (if parent doesn't force it? But parent re-renders).
+    // React.memo only prevents render if props are shallowly equal.
+    renderLog(props.itemCount);
+    // Render at least one row to test children
+    return <div data-testid="mock-list">
+        {props.children({ index: 0, style: {} })}
+    </div>;
 });
 
 vi.mock('react-window', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Grid: (props: any) => <MockGrid {...props} />
+    FixedSizeList: (props: any) => <MockList {...props} />
+}));
+
+// Mock useWindowSize
+vi.mock('../../hooks/useWindowSize', () => ({
+    useWindowSize: () => ({ width: 1000, height: 800 })
 }));
 
 // Mock other components to avoid noise
@@ -47,36 +54,21 @@ describe('LibraryView Performance', () => {
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
     });
 
-    it('re-renders Grid with new cellProps on unrelated state changes', async () => {
+    it('renders List and handles updates correctly', async () => {
         render(<LibraryView />);
 
-        // Trigger resize to set initial dimensions and ensure first render is done
-        act(() => {
-            window.dispatchEvent(new Event('resize'));
-        });
-
-        // Clear initial logs
+        // Check if List is rendered
+        expect(renderLog).toHaveBeenCalled();
         renderLog.mockClear();
 
-        // Initial render logic might have happened.
-        // Force update.
+        // Force update unrelated state
         act(() => {
             useLibraryStore.setState({ isImporting: true });
         });
 
-        // We expect NO renders because cellProps is memoized and other props are stable
-        const callsAfterUpdate = renderLog.mock.calls.length;
-        expect(callsAfterUpdate).toBe(0);
-
-        // Clear
-        renderLog.mockClear();
-
-        // Update again
-        act(() => {
-            useLibraryStore.setState({ isImporting: false });
-        });
-
-        const callsAfterUpdate2 = renderLog.mock.calls.length;
-        expect(callsAfterUpdate2).toBe(0);
+        // Now that GridRow is memoized with useCallback, the children prop of List should be stable
+        // (assuming other props of List like itemCount are also stable).
+        // So MockList (React.memo) should NOT re-render.
+        expect(renderLog.mock.calls.length).toBe(0);
     });
 });

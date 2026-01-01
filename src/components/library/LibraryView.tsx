@@ -10,6 +10,8 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
+import { FixedSizeList as List } from 'react-window';
+import { useWindowSize } from '../../hooks/useWindowSize';
 
 /**
  * The main library view component.
@@ -49,6 +51,13 @@ export const LibraryView: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Use window size for virtualization
+  const { width, height } = useWindowSize();
+  // Adjust container width based on padding (container class has px-4 = 1rem left + 1rem right = 32px)
+  // Max-width 7xl is 80rem (1280px).
+  const containerPadding = 32;
+  const effectiveWidth = Math.min(width, 1280) - containerPadding;
 
   useEffect(() => {
     fetchBooks();
@@ -140,6 +149,38 @@ export const LibraryView: React.FC = () => {
         }
       });
   }, [books, searchQuery, sortOrder]);
+
+  // Calculate grid dimensions
+  // Minimum item width: 140px (mobile) to 200px (sm+), plus gap of 24px (gap-6)
+  const minItemWidth = width >= 640 ? 200 : 140;
+  const gap = 24;
+
+  const columnCount = Math.max(1, Math.floor((effectiveWidth + gap) / (minItemWidth + gap)));
+  const rowCount = Math.ceil(filteredAndSortedBooks.length / columnCount);
+
+  // Grid Item Renderer for react-window
+  // OPTIMIZATION: Memoize the row renderer to prevent unnecessary re-renders of the List
+  const GridRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
+    const startIndex = index * columnCount;
+    const rowBooks = filteredAndSortedBooks.slice(startIndex, startIndex + columnCount);
+
+    // We can't use 'gap-6' directly because react-window uses absolute positioning or block layout.
+    // But since we are rendering a ROW, we can use flex/grid inside the row.
+    // The style prop gives us the top/height/width.
+    return (
+      <div style={{ ...style, width: '100%' }} className="flex gap-6">
+        {rowBooks.map(book => (
+            <div key={book.id} className="flex-1 min-w-0 flex justify-center" style={{ maxWidth: `${100/columnCount}%` }}>
+                <BookCard book={book} />
+            </div>
+        ))}
+        {/* Fill empty spots to maintain alignment if last row is incomplete */}
+        {Array.from({ length: columnCount - rowBooks.length }).map((_, i) => (
+             <div key={`empty-${i}`} className="flex-1 min-w-0" />
+        ))}
+      </div>
+    );
+  }, [columnCount, filteredAndSortedBooks]);
 
   return (
     <div
@@ -268,7 +309,7 @@ export const LibraryView: React.FC = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       ) : (
-        <section className="flex-1 w-full">
+        <section className="flex-1 w-full h-[calc(100vh-200px)]">
           {books.length === 0 ? (
              <EmptyLibrary onImport={triggerFileUpload} />
           ) : filteredAndSortedBooks.length === 0 ? (
@@ -285,13 +326,16 @@ export const LibraryView: React.FC = () => {
           ) : (
             <>
               {viewMode === 'grid' ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
-                  {filteredAndSortedBooks.map((book) => (
-                    <div key={book.id} className="flex justify-center">
-                      <BookCard book={book} />
-                    </div>
-                  ))}
-                </div>
+                // OPTIMIZATION: Virtualized Grid using FixedSizeList
+                <List
+                    height={height - 200} // Approximate available height
+                    itemCount={rowCount}
+                    itemSize={350} // Approximate height of a book card row + gap
+                    width="100%"
+                    className="no-scrollbar"
+                >
+                    {GridRow}
+                </List>
               ) : (
                 <div className="flex flex-col gap-2 w-full">
                   {filteredAndSortedBooks.map((book) => (
@@ -299,8 +343,8 @@ export const LibraryView: React.FC = () => {
                   ))}
                 </div>
               )}
-              {/* Spacer for bottom navigation or just breathing room */}
-              <div className="h-24" />
+              {/* Spacer not needed in virtual list, but kept for list view consistency if needed */}
+              {viewMode === 'list' && <div className="h-24" />}
             </>
           )}
         </section>
