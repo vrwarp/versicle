@@ -10,6 +10,7 @@ interface GenAIState {
   isEnabled: boolean;
   isContentAnalysisEnabled: boolean;
   contentFilterSkipTypes: ContentType[];
+  isDebugModeEnabled: boolean;
   logs: GenAILogEntry[];
   usageStats: {
     totalTokens: number;
@@ -20,6 +21,7 @@ interface GenAIState {
   setEnabled: (enabled: boolean) => void;
   setContentAnalysisEnabled: (enabled: boolean) => void;
   setContentFilterSkipTypes: (types: ContentType[]) => void;
+  setDebugModeEnabled: (enabled: boolean) => void;
   incrementUsage: (tokens: number) => void;
   addLog: (log: GenAILogEntry) => void;
   init: () => void;
@@ -33,6 +35,7 @@ export const useGenAIStore = create<GenAIState>()(
       isEnabled: false,
       isContentAnalysisEnabled: false,
       contentFilterSkipTypes: ['citation', 'table'],
+      isDebugModeEnabled: false,
       logs: [],
       usageStats: {
         totalTokens: 0,
@@ -49,6 +52,7 @@ export const useGenAIStore = create<GenAIState>()(
       setEnabled: (enabled) => set({ isEnabled: enabled }),
       setContentAnalysisEnabled: (enabled) => set({ isContentAnalysisEnabled: enabled }),
       setContentFilterSkipTypes: (types) => set({ contentFilterSkipTypes: types }),
+      setDebugModeEnabled: (enabled) => set({ isDebugModeEnabled: enabled }),
       incrementUsage: (tokens) =>
         set((state) => ({
           usageStats: {
@@ -75,6 +79,11 @@ export const useGenAIStore = create<GenAIState>()(
     {
       name: 'genai-storage',
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        ...state,
+        // Don't persist logs for size
+        logs: [],
+      }),
       onRehydrateStorage: () => (state) => {
           state?.init();
       }

@@ -214,7 +214,9 @@ export const GlobalSettingsDialog = () => {
         setContentAnalysisEnabled,
         contentFilterSkipTypes,
         setContentFilterSkipTypes,
-        logs: genAILogs
+        logs: genAILogs,
+        isDebugModeEnabled,
+        setDebugModeEnabled
     } = useGenAIStore();
 
     const handleClearAllData = async () => {
@@ -727,6 +729,22 @@ export const GlobalSettingsDialog = () => {
                                                         </label>
                                                     </div>
                                                 ))}
+                                            </div>
+
+                                            <div className="pt-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="space-y-0.5">
+                                                        <label htmlFor="genai-debug" className="text-sm font-medium">Enable Content Analysis Debugging</label>
+                                                        <p className="text-xs text-muted-foreground">
+                                                            Highlights content based on its detected type in the reader.
+                                                        </p>
+                                                    </div>
+                                                    <Switch
+                                                        id="genai-debug"
+                                                        checked={isDebugModeEnabled}
+                                                        onCheckedChange={setDebugModeEnabled}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
                                     )}

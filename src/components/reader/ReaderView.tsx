@@ -32,6 +32,9 @@ import { Wand2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Dialog } from '../ui/Dialog';
 import { useSidebarState } from '../../hooks/useSidebarState';
+import { useGenAIStore } from '../../store/useGenAIStore';
+import { ContentAnalysisLegend } from './ContentAnalysisLegend';
+import { TYPE_COLORS } from '../../types/content-analysis';
 
 /**
  * The main reader interface component.
@@ -91,6 +94,7 @@ export const ReaderView: React.FC = () => {
   const isPlaying = useTTSStore(state => state.isPlaying);
   const lastError = useTTSStore(state => state.lastError);
   const clearError = useTTSStore(state => state.clearError);
+  const isDebugModeEnabled = useGenAIStore(state => state.isDebugModeEnabled);
 
   const {
     annotations,
@@ -454,6 +458,71 @@ export const ReaderView: React.FC = () => {
           clearError(); // Clear immediately so it doesn't persist in TTS store
       }
   }, [lastError, showToast, clearError]);
+
+  // Apply content analysis debug highlights
+  const addedDebugHighlights = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!rendition || !isRenditionReady) return;
+
+    if (!isDebugModeEnabled) {
+        // Clear if disabled
+        addedDebugHighlights.current.forEach(cfi => {
+            try {
+                // @ts-expect-error annotations is not typed fully
+                rendition.annotations.remove(cfi, 'highlight');
+            } catch (e) {
+                console.warn("Failed to remove debug highlight", e);
+            }
+        });
+        addedDebugHighlights.current.clear();
+        return;
+    }
+
+    const applyHighlights = async () => {
+        try {
+            if (currentSectionId === undefined || !book) return;
+
+            // Resolve the current section's index to fetch specific analysis data.
+            // This avoids loading analysis for the entire book.
+            // currentSectionId is checked above, but TS might not infer it for the argument
+            const section = book.spine.get(currentSectionId!);
+            if (!section) return;
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const analysis = await dbService.getContentAnalysis(id!, String(section.index));
+            if (!analysis) return;
+
+            if (analysis.contentTypes) {
+                analysis.contentTypes.forEach((item) => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    if (addedDebugHighlights.current.has(item.rootCfi)) return;
+
+                    const color = TYPE_COLORS[item.type];
+                    if (color) {
+                        try {
+                            // @ts-expect-error annotations is not typed fully
+                            rendition.annotations.add('highlight', item.rootCfi, {}, null, 'debug-analysis-highlight', {
+                                fill: color,
+                                "fill-opacity": "0.3",
+                                "mix-blend-mode": "multiply"
+                            });
+                            addedDebugHighlights.current.add(item.rootCfi);
+                        } catch (e) {
+                             console.warn("Failed to add debug highlight", e);
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            console.error("Failed to apply debug highlights", e);
+        }
+    };
+
+    applyHighlights();
+
+    // Re-apply on section change or debug toggle
+  }, [rendition, isRenditionReady, isDebugModeEnabled, id, currentSectionId]);
 
   // Reading History Highlights
   useEffect(() => {
@@ -1095,6 +1164,9 @@ export const ReaderView: React.FC = () => {
              <LexiconManager open={lexiconOpen} onOpenChange={setLexiconOpen} initialTerm={lexiconText} />
          </div>
       </div>
+
+      {/* Content Analysis Debug Legend */}
+      <ContentAnalysisLegend />
 
     </div>
   );
