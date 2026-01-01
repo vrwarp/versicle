@@ -35,14 +35,6 @@ const formatDuration = (chars?: number): string => {
  */
 export const BookCard: React.FC<BookCardProps> = React.memo(({ book, onDelete, onOffload, onRestore }) => {
   const navigate = useNavigate();
-  // We keep the ref to pass it to BookCover -> BookActionMenu, but we could technically bypass it if we updated BookCover too.
-  // However, BookCard relies on the click handler to trigger restore.
-  // Since BookCard click triggers restore if offloaded, it can now just call onRestore(book).
-  // But wait, BookCover contains the BookActionMenu.
-  // The BookActionMenu is the visual trigger (three dots).
-  // The BookCard click on the CARD itself triggers navigation or restore.
-  // If we just call onRestore(book), we don't need the menu ref anymore!
-  // BUT: BookCover renders BookActionMenu. We need to pass the callbacks to BookCover so it can pass them to BookActionMenu.
 
   const handleCardClick = () => {
     if (book.isOffloaded) {
