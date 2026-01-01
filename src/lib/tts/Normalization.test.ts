@@ -102,32 +102,40 @@ describe('Normalization (NFKD)', () => {
 
     it('should normalize abbreviations and alwaysMerge lists in constructor', () => {
       const nbsp = '\u00A0';
-      const abbr = `Mr${nbsp}.`; // Mr . with nbsp
-      const segmenter = new TextSegmenter('en', [abbr]);
+      const abbrWithNbsp = `Mr${nbsp}.`; // "Mr ." (with nbsp)
 
-      // Access private property or test behavior
-      // Testing behavior:
-      const text = `Mr . Smith`; // space 0x20
-      // If abbr was normalized to "Mr .", it should match "Mr . "
-      // But wait, "Mr." usually doesn't have a space inside.
-      // Let's use a multi-word abbreviation.
+      // The text has a standard space: "Mr . Smith"
+      // If the constructor normalizes the input abbreviation `Mr<nbsp>.` to `Mr<space>.`,
+      // then it should match the text "Mr .".
+      const text = "Mr . Smith";
 
-      const multiWordAbbr = `e.${nbsp}g.`; // e. g. with nbsp
-      const segmenter2 = new TextSegmenter('en', [multiWordAbbr]);
+      // Initialize segmenter with the weird abbreviation
+      const segmenter = new TextSegmenter('en', [abbrWithNbsp]);
 
-      const text2 = "e. g. example."; // with normal space
-      // If normalized, "e. g." (nbsp) -> "e. g." (space)
-      // text2 -> "e. g. example."
-      // "e. g." should be detected as abbreviation.
+      // If normalization works, "Mr ." should be treated as an abbreviation.
+      // Since it's an abbreviation, it might merge with the next word if logic permits,
+      // OR specifically avoid splitting if it's considered part of the sentence structure.
+      // However, `TextSegmenter.segment` uses postProcess which checks `this.abbreviations`.
 
-      // "e. g." is at the end of a segment?
-      // Intl.Segmenter might split "e." and "g."?
-      // "e. g. example." -> "e.", "g.", "example."?
-      // If "e." is segment, last word is "e."
-      // If "e. g." is treated as one thing?
+      // We need to inspect the private `abbreviations` set or verify behavior.
+      // Let's verify via behavior: `segment` calls `postProcess`.
+      // If "Mr ." is recognized as an abbreviation, it might trigger merge logic.
+      // But standard merge logic requires "Mr ." to be the *end* of a segment.
+      // "Mr . Smith" -> likely one segment "Mr . Smith" if Intl.Segmenter sees "Mr." as end?
+      // Actually "Mr . " is unlikely to be split by Intl.Segmenter as a sentence boundary unless it sees "." as end.
 
-      // Let's stick to simple behavior:
-      // TextSegmenter.refineSegments uses abbreviations.
+      // Let's test `postProcess` logic indirectly via `segment`.
+      // If we force a split, `postProcess` should merge it back IF it matches an abbreviation.
+
+      // To simulate a split we can't easily control Intl.Segmenter.
+      // Instead, let's just inspect the private property by casting to any,
+      // which is cleaner for a unit test verifying internal state initialization.
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const abbreviations = (segmenter as any).abbreviations as Set<string>;
+
+      expect(abbreviations.has('Mr .')).toBe(true); // Should contain normalized version (space)
+      expect(abbreviations.has(abbrWithNbsp)).toBe(false); // Should NOT contain nbsp version (unless normalized string equals original, which it doesn't)
     });
 
     it('should normalize text in refineSegments', () => {
