@@ -4,32 +4,23 @@ import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { BookCard } from './BookCard';
 import type { BookMetadata } from '../../types/db';
-import { useLibraryStore } from '../../store/useLibraryStore';
 
-// Mock useLibraryStore
-vi.mock('../../store/useLibraryStore', () => ({
-  useLibraryStore: vi.fn(),
-}));
-
-// Mock useToastStore - BookActionMenu uses it
-vi.mock('../../store/useToastStore', () => ({
-  useToastStore: vi.fn(() => vi.fn()),
-}));
-
-// Mock Dialog to fix accessibility warnings
-vi.mock('../ui/Dialog', () => {
-    return {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        Dialog: ({ isOpen, children, title, description, footer }: any) => isOpen ? (
-            <div role="dialog">
-                {title && <h1>{title}</h1>}
-                {description && <p>{description}</p>}
+// Mock BookActionMenu
+vi.mock('./BookActionMenu', () => ({
+    BookActionMenu: ({ children, onDelete, onOffload, onRestore, book }: any) => (
+        <div data-testid="mock-book-action-menu">
+            {/* Simulate the trigger wrapper behavior without invalid nesting */}
+            <div data-testid="menu-wrapper" onClick={(e) => e.stopPropagation()}>
                 {children}
-                {footer}
             </div>
-        ) : null,
-    };
-});
+
+            {/* Mocked menu items (usually hidden, but visible for test) */}
+            <button data-testid="menu-delete" onClick={(e) => { e.stopPropagation(); onDelete(); }}>Delete</button>
+            <button data-testid="menu-offload" onClick={(e) => { e.stopPropagation(); onOffload(); }}>Offload</button>
+            <button data-testid="menu-restore" onClick={(e) => { e.stopPropagation(); onRestore(); }}>Restore</button>
+        </div>
+    )
+}));
 
 describe('BookCard', () => {
   const mockBook: BookMetadata = {
@@ -41,36 +32,41 @@ describe('BookCard', () => {
     coverBlob: new Blob(['mock-image'], { type: 'image/jpeg' }),
   };
 
-  const mockRemoveBook = vi.fn();
-  const mockOffloadBook = vi.fn();
-  const mockRestoreBook = vi.fn();
+  const mockOnDelete = vi.fn();
+  const mockOnOffload = vi.fn();
+  const mockOnRestore = vi.fn();
 
   beforeEach(() => {
     // Mock URL.createObjectURL and revokeObjectURL
     global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
     global.URL.revokeObjectURL = vi.fn();
-
-    // Setup store mock
-    (useLibraryStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      removeBook: mockRemoveBook,
-      offloadBook: mockOffloadBook,
-      restoreBook: mockRestoreBook,
-    });
+    vi.clearAllMocks();
   });
 
   const renderWithRouter = (ui: React.ReactElement) => {
     return render(<BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{ui}</BrowserRouter>);
   };
 
+  const renderCard = (book = mockBook) => {
+    return renderWithRouter(
+      <BookCard
+        book={book}
+        onDelete={mockOnDelete}
+        onOffload={mockOnOffload}
+        onRestore={mockOnRestore}
+      />
+    );
+  };
+
   it('should render book info', () => {
-    renderWithRouter(<BookCard book={mockBook} />);
+    renderCard();
 
     expect(screen.getByText('Test Title')).toBeInTheDocument();
     expect(screen.getByText('Test Author')).toBeInTheDocument();
   });
 
   it('should render cover image if blob is present', () => {
-    renderWithRouter(<BookCard book={mockBook} />);
+    renderCard();
 
     const img = screen.getByRole('img');
     expect(img).toHaveAttribute('src', 'blob:mock-url');
@@ -79,14 +75,14 @@ describe('BookCard', () => {
 
   it('should render placeholder if no cover blob', () => {
     const bookWithoutCover = { ...mockBook, coverBlob: undefined };
-    renderWithRouter(<BookCard book={bookWithoutCover} />);
+    renderCard(bookWithoutCover);
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.getByText('Aa')).toBeInTheDocument();
   });
 
   it('should clean up object URL on unmount', () => {
-    const { unmount } = renderWithRouter(<BookCard book={mockBook} />);
+    const { unmount } = renderCard();
 
     expect(global.URL.createObjectURL).toHaveBeenCalledWith(mockBook.coverBlob);
 
@@ -97,7 +93,7 @@ describe('BookCard', () => {
 
   it('should render progress bar when progress > 0', () => {
     const bookWithProgress = { ...mockBook, progress: 0.45 };
-    renderWithRouter(<BookCard book={bookWithProgress} />);
+    renderCard(bookWithProgress);
 
     const progressBar = screen.getByTestId('progress-bar');
     expect(progressBar).toBeInTheDocument();
@@ -113,52 +109,33 @@ describe('BookCard', () => {
 
   it('should not render progress bar when progress is 0 or undefined', () => {
     const bookWithZeroProgress = { ...mockBook, progress: 0 };
-    renderWithRouter(<BookCard book={bookWithZeroProgress} />);
+    renderCard(bookWithZeroProgress);
     expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
 
     const bookWithUndefinedProgress = { ...mockBook, progress: undefined };
-    renderWithRouter(<BookCard book={bookWithUndefinedProgress} />);
+    renderCard(bookWithUndefinedProgress);
     expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
   });
 
   it('should have accessibility attributes', () => {
-    renderWithRouter(<BookCard book={mockBook} />);
+    renderCard();
 
     const card = screen.getByTestId(`book-card-${mockBook.id}`);
     expect(card).toHaveAttribute('role', 'button');
     expect(card).toHaveAttribute('tabIndex', '0');
 
-    const menuButton = screen.getAllByLabelText('Book actions')[0];
-    expect(menuButton).toBeInTheDocument();
+    expect(screen.getByTestId('mock-book-action-menu')).toBeInTheDocument();
   });
 
-  it('should open delete confirmation dialog and delete book', async () => {
-    renderWithRouter(<BookCard book={mockBook} />);
+  it('should trigger onDelete when delete menu item is clicked', async () => {
+    renderCard();
 
-    const menuTriggerButton = screen.getByTestId('book-menu-trigger');
-
-    // Use act for interactions that update state (like opening menu)
-    await act(async () => {
-      fireEvent.click(menuTriggerButton);
-    });
-
-    const deleteOption = await screen.findByTestId('menu-delete', {}, { timeout: 2000 });
+    const deleteButton = screen.getByTestId('menu-delete');
 
     await act(async () => {
-      fireEvent.click(deleteOption);
+      fireEvent.click(deleteButton);
     });
 
-    // Use waitFor to handle potential async state updates
-    await waitFor(async () => {
-        expect(await screen.findByText('Delete Book')).toBeInTheDocument();
-    });
-
-    const confirmButton = screen.getByTestId('confirm-delete');
-
-    await act(async () => {
-      fireEvent.click(confirmButton);
-    });
-
-    expect(mockRemoveBook).toHaveBeenCalledWith(mockBook.id);
+    expect(mockOnDelete).toHaveBeenCalledWith(mockBook);
   });
 });

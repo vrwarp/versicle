@@ -33,12 +33,25 @@ describe('BookListItem', () => {
         isOffloaded: false,
     };
 
-    it('renders book details correctly', () => {
-        render(
+    const mockOnDelete = vi.fn();
+    const mockOnOffload = vi.fn();
+    const mockOnRestore = vi.fn();
+
+    const renderItem = (book = mockBook) => {
+        return render(
             <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                <BookListItem book={mockBook} style={{}} />
+                <BookListItem
+                    book={book}
+                    onDelete={mockOnDelete}
+                    onOffload={mockOnOffload}
+                    onRestore={mockOnRestore}
+                />
             </MemoryRouter>
         );
+    };
+
+    it('renders book details correctly', () => {
+        renderItem();
 
         expect(screen.getByText('Test Book')).toBeInTheDocument();
         expect(screen.getByText('Test Author')).toBeInTheDocument();
@@ -48,11 +61,7 @@ describe('BookListItem', () => {
 
     it('handles missing file size gracefully', () => {
         const bookWithoutSize = { ...mockBook, fileSize: undefined };
-        render(
-            <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                <BookListItem book={bookWithoutSize} style={{}} />
-            </MemoryRouter>
-        );
+        renderItem(bookWithoutSize);
 
         expect(screen.getByText('Test Book')).toBeInTheDocument();
         expect(screen.queryByText(/MB/)).not.toBeInTheDocument();
@@ -60,11 +69,7 @@ describe('BookListItem', () => {
 
     it('shows offloaded status', () => {
         const offloadedBook = { ...mockBook, isOffloaded: true };
-        render(
-            <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                <BookListItem book={offloadedBook} style={{}} />
-            </MemoryRouter>
-        );
+        renderItem(offloadedBook);
 
         expect(screen.getByText('(Offloaded)')).toBeInTheDocument();
     });
