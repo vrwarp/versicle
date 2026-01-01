@@ -3,7 +3,6 @@ import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionMa
 import { Capacitor } from '@capacitor/core';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
 import type { TTSQueueItem } from './AudioPlayerService';
-import type { SectionMetadata } from '../../types/db';
 
 export interface PlatformHandlers {
     onPlay: () => void;

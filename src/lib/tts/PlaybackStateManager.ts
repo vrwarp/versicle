@@ -149,9 +149,9 @@ export class PlaybackStateManager {
     persist(bookId: string) {
         if (bookId) {
             if (this.lastPersistedQueue === this.queue) {
-                dbService.saveTTSPosition(bookId, this.currentIndex, this.currentSectionIndex).catch(console.error);
+                dbService.saveTTSPosition(bookId, this.currentIndex, this.currentSectionIndex);
             } else {
-                dbService.saveTTSState(bookId, this.queue, this.currentIndex, this.currentSectionIndex).catch(console.error);
+                dbService.saveTTSState(bookId, this.queue, this.currentIndex, this.currentSectionIndex);
                 this.lastPersistedQueue = this.queue;
             }
         }

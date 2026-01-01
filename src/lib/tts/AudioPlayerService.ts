@@ -10,8 +10,6 @@ import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
 import type { BackgroundAudioMode } from './BackgroundAudio';
 import { Capacitor } from '@capacitor/core';
-import { WebSpeechProvider } from './providers/WebSpeechProvider';
-import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 
 /**
  * Defines the possible states of the TTS playback.
@@ -155,7 +153,8 @@ export class AudioPlayerService {
               // Optionally update sync engine or progress
           } else if (event.type === 'meta') {
               if (event.alignment && this.syncEngine) {
-                   const alignmentData: AlignmentData[] = event.alignment.map(tp => ({
+                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                   const alignmentData: AlignmentData[] = event.alignment.map((tp: any) => ({
                        time: tp.timeSeconds,
                        textOffset: tp.charIndex,
                        type: (tp.type as 'word' | 'sentence') || 'word'

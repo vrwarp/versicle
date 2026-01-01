@@ -1,8 +1,9 @@
-import type { ITTSProvider, TTSVoice, TTSProviderEvent } from './providers/types';
+import type { ITTSProvider, TTSVoice, TTSEvent } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { Capacitor } from '@capacitor/core';
 
+export type TTSProviderEvent = TTSEvent;
 export type ProviderEventType = TTSProviderEvent['type'];
 
 export class TTSProviderManager {
