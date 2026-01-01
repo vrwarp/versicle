@@ -17,7 +17,7 @@ export interface ProcessedChapter {
  * This ensures that the extracted text and CFIs match exactly what the user sees during playback.
  */
 export async function extractContentOffscreen(
-  file: File | ArrayBuffer,
+  file: File | Blob | ArrayBuffer,
   options: ExtractionOptions = {},
   onProgress?: (progress: number, message: string) => void
 ): Promise<ProcessedChapter[]> {

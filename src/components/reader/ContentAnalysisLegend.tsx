@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { useShallow } from 'zustand/react/shallow';
 import { X, Copy, ChevronRight, ChevronDown } from 'lucide-react';

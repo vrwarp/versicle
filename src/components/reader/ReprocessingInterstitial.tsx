@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { dbService } from '../../db/DBService';
 import { extractContentOffscreen } from '../../lib/offscreen-renderer';
-import type { BookMetadata, TableImage } from '../../types/db';
+import type { TableImage } from '../../types/db';
 import { getDB } from '../../db/db';
 
 interface ReprocessingInterstitialProps {
