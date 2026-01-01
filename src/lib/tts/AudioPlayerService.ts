@@ -11,7 +11,7 @@ import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule } from '../../types/db';
 import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
-import { getParentCfi } from '../cfi-utils';
+import { getParentCfi, generateCfiRange, parseCfiRange } from '../cfi-utils';
 import { genAIService } from '../genai/GenAIService';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import type { ContentType } from '../../types/content-analysis';
@@ -1131,20 +1131,42 @@ export class AudioPlayerService {
 
   private groupSentencesByRoot(sentences: { text: string; cfi: string | null }[]): { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] {
       const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
-      let currentGroup: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
+      let currentGroup: { parentCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
+
+      const finalizeGroup = (group: { segments: { text: string; cfi: string | null }[]; fullText: string }) => {
+          const first = group.segments[0].cfi || '';
+          const last = group.segments[group.segments.length - 1].cfi || '';
+
+          // Convert to Range CFI: epubcfi(common,start,end)
+          const rootCfi = generateCfiRange(
+              parseCfiRange(first)?.fullStart || first,
+              parseCfiRange(last)?.fullEnd || last
+          );
+
+          groups.push({
+              rootCfi,
+              segments: group.segments,
+              fullText: group.fullText
+          });
+      };
 
       for (const s of sentences) {
-          const rootCfi = getParentCfi(s.cfi || ''); // Handle null cfi
+          const parentCfi = getParentCfi(s.cfi || ''); // Handle null cfi
 
-          if (!currentGroup || currentGroup.rootCfi !== rootCfi) {
-              if (currentGroup) groups.push(currentGroup);
-              currentGroup = { rootCfi, segments: [], fullText: '' };
+          if (!currentGroup || currentGroup.parentCfi !== parentCfi) {
+              if (currentGroup) {
+                  finalizeGroup(currentGroup);
+              }
+              currentGroup = { parentCfi, segments: [], fullText: '' };
           }
 
           currentGroup.segments.push(s);
           currentGroup.fullText += s.text + ' ';
       }
-      if (currentGroup) groups.push(currentGroup);
+
+      if (currentGroup) {
+          finalizeGroup(currentGroup);
+      }
       return groups;
   }
 

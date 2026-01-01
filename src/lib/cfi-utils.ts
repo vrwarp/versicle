@@ -65,14 +65,6 @@ export function getParentCfi(cfi: string): string {
                 // Filter empty strings from split
                 const cleanParts = pathParts.filter(p => p.length > 0);
 
-                // Heuristic: Collapsing nested structures (Tables, Lists, Blockquotes)
-                // Most standard paragraphs/titles are at depth 2 or 3 (e.g., /Body/Section/P).
-                // Tables/Lists add 2-4 more layers.
-                if (cleanParts.length > 3) {
-                    // Truncate to the 3rd structural level to group the container
-                    return `epubcfi(${spine}!/${cleanParts.slice(0, 3).join('/')})`;
-                }
-
                 // Standard leaf-stripping for shallow paths
                 if (cleanParts.length > 0) {
                     cleanParts.pop();
