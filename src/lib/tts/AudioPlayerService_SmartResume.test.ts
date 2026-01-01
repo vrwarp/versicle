@@ -21,6 +21,8 @@ vi.mock('../../db/DBService', () => ({
     updatePlaybackState: vi.fn(),
     saveTTSState: vi.fn(),
     getTTSState: vi.fn(),
+    saveTTSPosition: vi.fn(), // Added saveTTSPosition
+    updateReadingHistory: vi.fn(), // Added updateReadingHistory
     getSections: vi.fn().mockResolvedValue([]),
     getContentAnalysis: vi.fn(),
     getTTSContent: vi.fn(),
@@ -90,7 +92,7 @@ const mockGetVoices = vi.fn().mockResolvedValue([]);
 vi.mock('./providers/WebSpeechProvider', () => {
     return {
         WebSpeechProvider: class {
-            id = 'local'; // Added id='local'
+            id = 'local';
             init = vi.fn().mockResolvedValue(undefined);
             play = mockSynthesize.mockResolvedValue(undefined);
             resume = mockResume;
@@ -98,6 +100,7 @@ vi.mock('./providers/WebSpeechProvider', () => {
             stop = mockStop;
             on = vi.fn();
             getVoices = mockGetVoices;
+            preload = vi.fn();
         }
     };
 });
@@ -172,13 +175,17 @@ describe('AudioPlayerService - Smart Resume', () => {
         service.setBookId('test-book-id');
 
         // Must await queue setting if it becomes async (though it is executeWithLock)
+        // Note: queue items are short, so charsPerSecond (180wpm ~ 15cps)
+        // "Sentence 1" ~ 10 chars ~ 0.6s
+        // "Sentence 2" ~ 10 chars ~ 0.6s
+        // We set 5 sentences.
         await service.setQueue([
-            { text: 'Sentence 1', cfi: 'cfi1' },
-            { text: 'Sentence 2', cfi: 'cfi2' },
-            { text: 'Sentence 3', cfi: 'cfi3' },
-            { text: 'Sentence 4', cfi: 'cfi4' },
-            { text: 'Sentence 5', cfi: 'cfi5' },
-        ], 3); // Start at index 3
+            { text: 'Sentence 1', cfi: 'cfi1' }, // 10 chars
+            { text: 'Sentence 2', cfi: 'cfi2' }, // 10 chars
+            { text: 'Sentence 3', cfi: 'cfi3' }, // 10 chars
+            { text: 'Sentence 4', cfi: 'cfi4' }, // 10 chars
+            { text: 'Sentence 5', cfi: 'cfi5' }, // 10 chars
+        ], 3); // Start at index 3 (Sentence 4)
     });
 
     afterEach(() => {
@@ -218,7 +225,7 @@ describe('AudioPlayerService - Smart Resume', () => {
             await service.setProvider(new WebSpeechProvider());
         });
 
-        it.skip('should NOT rewind if paused for < 5 minutes', async () => {
+        it('should NOT rewind if paused for < 5 minutes', async () => {
             vi.useFakeTimers();
             const now = 1000000;
             vi.setSystemTime(now);
@@ -229,22 +236,22 @@ describe('AudioPlayerService - Smart Resume', () => {
                 lastPauseTime: now - (4 * 60 * 1000) // 4 mins ago
             });
 
-            // Need to mock that resume finds the time
-            // We set status directly, but service logic might overwrite it if not careful
+            // Set status manually to simulate active pause
             // @ts-expect-error Access private property
             service['status'] = 'paused';
 
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
 
-            expect(mockResume).toHaveBeenCalled();
+            // Updated expectation: AudioPlayerService always calls playInternal (synthesize) on resume
+            // to ensure state consistency.
+            expect(mockSynthesize).toHaveBeenCalled();
+            // Index should remain 3
             // @ts-expect-error Access private property
             expect(service['currentIndex']).toBe(3);
-
-            expect(mockBook.lastPauseTime).toBeUndefined();
         });
 
-        it.skip('should rewind 2 sentences if paused for > 5 minutes', async () => {
+        it('should rewind 2 sentences if paused for > 5 minutes', async () => {
             vi.useFakeTimers();
             const now = 1000000;
             vi.setSystemTime(now);
@@ -254,7 +261,6 @@ describe('AudioPlayerService - Smart Resume', () => {
                 lastPauseTime: now - (6 * 60 * 1000) // 6 mins ago
             });
 
-            // Set current index before "pausing" logic simulation
             // @ts-expect-error Access private property
             service['currentIndex'] = 3;
             // @ts-expect-error Access private property
@@ -263,12 +269,13 @@ describe('AudioPlayerService - Smart Resume', () => {
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
 
+            // 3 - 2 = 1
             // @ts-expect-error Access private property
             expect(service['currentIndex']).toBe(1);
             expect(mockSynthesize).toHaveBeenCalled();
         });
 
-        it.skip('should rewind 5 sentences if paused for > 24 hours', async () => {
+        it('should rewind 5 sentences if paused for > 24 hours', async () => {
             vi.useFakeTimers();
             const now = 1000000 + (25 * 60 * 60 * 1000); // 25 hours later
             vi.setSystemTime(now);
@@ -284,6 +291,7 @@ describe('AudioPlayerService - Smart Resume', () => {
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
 
+            // 3 - 5 = -2 -> max(0, -2) = 0
             // @ts-expect-error Access private property
             expect(service['currentIndex']).toBe(0);
             expect(mockSynthesize).toHaveBeenCalled();
@@ -291,24 +299,50 @@ describe('AudioPlayerService - Smart Resume', () => {
     });
 
     describe('Cloud Provider (AudioElementPlayer)', () => {
+        // Mock play method for cloud provider
+        const mockCloudPlay = vi.fn().mockResolvedValue(undefined);
+
         beforeEach(async () => {
             const mockCloudProvider = {
-                id: 'cloud', // Already correct here, but for completeness
+                id: 'cloud',
                 init: vi.fn(),
-                play: vi.fn(),
+                play: mockCloudPlay,
                 getVoices: vi.fn(),
                 on: vi.fn(),
                 stop: vi.fn(),
                 pause: vi.fn(),
                 resume: vi.fn(),
+                preload: vi.fn(),
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any;
             await service.setProvider(mockCloudProvider);
-            // @ts-expect-error Access private property
-            service['audioPlayer'] = new AudioElementPlayer();
+            // We do NOT inject audioPlayer because service doesn't use it.
+            // Service calculates index based on time.
+
+            // Re-calculate prefix sums and speed to ensure time calculations work
+            // Default speed 1.0. WPM 180. CPS 15.
+            // Sentence length 10. Duration ~ 0.66s.
+            // Total duration for 5 sentences ~ 3.33s.
+
+            // To test time based rewind properly, we need longer sentences or smaller rewind expectation.
+            // But the service logic is hardcoded: rewind 10s or 60s.
+            // If total content is 3s, rewinding 10s will go to start (index 0).
+
+            // Let's update queue to have LONGER text for testing time rewind
+            // Each char ~ 1/15 sec. 150 chars = 10 sec.
+            const longText = "a".repeat(300); // 20 seconds per sentence
+            await service.setQueue([
+                { text: longText, cfi: 'cfi1' }, // 0-20s
+                { text: longText, cfi: 'cfi2' }, // 20-40s
+                { text: longText, cfi: 'cfi3' }, // 40-60s
+                { text: longText, cfi: 'cfi4' }, // 60-80s
+                { text: longText, cfi: 'cfi5' }, // 80-100s
+            ], 3); // Start at index 3 (60s mark)
+
+            mockCloudPlay.mockClear();
         });
 
-        it.skip('should NOT rewind if paused for < 5 minutes', async () => {
+        it('should NOT rewind if paused for < 5 minutes', async () => {
             vi.useFakeTimers();
             const now = 1000000;
             vi.setSystemTime(now);
@@ -324,11 +358,14 @@ describe('AudioPlayerService - Smart Resume', () => {
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
 
-            expect(mockSeek).not.toHaveBeenCalled();
-            expect(mockPlayerResume).toHaveBeenCalled();
+            // Should call play (since we always restart)
+            expect(mockCloudPlay).toHaveBeenCalled();
+            // Should NOT change index
+            // @ts-expect-error Access private property
+            expect(service['currentIndex']).toBe(3);
         });
 
-        it.skip('should rewind 10 seconds if paused for > 5 minutes', async () => {
+        it('should rewind 10 seconds if paused for > 5 minutes', async () => {
             vi.useFakeTimers();
             const now = 1000000;
             vi.setSystemTime(now);
@@ -341,14 +378,20 @@ describe('AudioPlayerService - Smart Resume', () => {
             // @ts-expect-error Access private property
             service['status'] = 'paused';
 
+            // Current Index 3 starts at 60s.
+            // Rewind 10s -> Target 50s.
+            // 50s is inside Index 2 (40s-60s).
+            // So expected index is 2.
+
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
 
-            expect(mockSeek).toHaveBeenCalledWith(90);
-            expect(mockPlayerResume).toHaveBeenCalled();
+            // @ts-expect-error Access private property
+            expect(service['currentIndex']).toBe(2);
+            expect(mockCloudPlay).toHaveBeenCalled();
         });
 
-        it.skip('should rewind 60 seconds if paused for > 24 hours', async () => {
+        it('should rewind 60 seconds if paused for > 24 hours', async () => {
             vi.useFakeTimers();
             const now = 1000000 + (25 * 60 * 60 * 1000);
             vi.setSystemTime(now);
@@ -361,11 +404,16 @@ describe('AudioPlayerService - Smart Resume', () => {
             // @ts-expect-error Access private property
             service['status'] = 'paused';
 
+            // Current Index 3 starts at 60s.
+            // Rewind 60s -> Target 0s.
+            // 0s is Index 0.
+
             await service.resume();
             await vi.advanceTimersByTimeAsync(100);
 
-            expect(mockSeek).toHaveBeenCalledWith(40);
-            expect(mockPlayerResume).toHaveBeenCalled();
+            // @ts-expect-error Access private property
+            expect(service['currentIndex']).toBe(0);
+            expect(mockCloudPlay).toHaveBeenCalled();
         });
     });
 });

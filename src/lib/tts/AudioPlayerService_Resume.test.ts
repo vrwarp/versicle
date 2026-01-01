@@ -70,7 +70,7 @@ vi.mock('../../db/DBService', () => ({
   }
 }));
 
-describe.skip('AudioPlayerService - Resume Speed Bug', () => {
+describe('AudioPlayerService - Resume Speed Bug', () => {
     let service: AudioPlayerService;
 
     beforeEach(() => {

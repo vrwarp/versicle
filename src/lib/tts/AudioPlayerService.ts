@@ -627,12 +627,73 @@ export class AudioPlayerService {
   private async resumeInternal(): Promise<void> {
      this.sessionRestored = true;
 
-     if (this.status === 'paused') {
-         this.provider.resume();
-         this.setStatus('playing');
-     } else {
-         return this.playInternal();
+     // Smart Resume: Check if we should rewind based on pause duration
+     let shouldRewind = false;
+     if (this.currentBookId) {
+         try {
+             const meta = await dbService.getBookMetadata(this.currentBookId);
+             const lastPauseTime = meta?.lastPauseTime;
+
+             if (lastPauseTime) {
+                 const elapsedMs = Date.now() - lastPauseTime;
+                 const elapsedMinutes = elapsedMs / 1000 / 60;
+                 const elapsedHours = elapsedMinutes / 60;
+
+                 if (elapsedMinutes > 5) {
+                     shouldRewind = true;
+                     if (this.provider.id === 'local') {
+                         // Sentence-based rewind (Local)
+                         const rewindCount = elapsedHours > 24 ? 5 : 2;
+                         const newIndex = Math.max(0, this.currentIndex - rewindCount);
+                         if (newIndex !== this.currentIndex) {
+                             this.currentIndex = newIndex;
+                             this.persistQueue();
+                         }
+                     } else {
+                         // Time-based rewind (Cloud)
+                         // Since AudioPlayerService manages position via sentence index,
+                         // we calculate the approximate time of the current sentence start,
+                         // subtract the rewind amount, and seek to that time.
+                         const rewindSeconds = elapsedHours > 24 ? 60 : 10;
+                         const charsPerSecond = this.calculateCharsPerSecond();
+
+                         if (charsPerSecond > 0 && this.prefixSums.length > this.currentIndex) {
+                             const currentStartTime = this.prefixSums[this.currentIndex] / charsPerSecond;
+                             const targetTime = Math.max(0, currentStartTime - rewindSeconds);
+
+                             // Calculate new index from target time
+                             let newIndex = 0;
+                             for (let i = 0; i < this.queue.length; i++) {
+                                 const itemEndTime = this.prefixSums[i + 1] / charsPerSecond;
+                                 if (targetTime < itemEndTime) {
+                                     newIndex = i;
+                                     break;
+                                 }
+                                 newIndex = i;
+                             }
+
+                             if (newIndex !== this.currentIndex) {
+                                 this.currentIndex = newIndex;
+                                 this.persistQueue();
+                             }
+                         }
+                     }
+                 }
+             }
+         } catch (e) {
+             console.warn("Failed to process smart resume", e);
+         }
      }
+
+     // Always restart the sentence (playInternal) to ensure correct state/speed/rewind
+     // This also handles cases where speed changed while paused
+     // We must set status to stopped briefly to ensure playInternal starts fresh if needed
+     if (this.status === 'paused') {
+         // Reset to stopped so playInternal knows to start
+         this.status = 'stopped';
+     }
+
+     return this.playInternal();
   }
 
   private async savePlaybackState() {

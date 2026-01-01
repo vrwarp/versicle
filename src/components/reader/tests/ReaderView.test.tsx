@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ReaderView } from '../ReaderView';
 import { useReaderStore } from '../../../store/useReaderStore';
 import { useTTSStore } from '../../../store/useTTSStore';
@@ -38,6 +38,15 @@ vi.mock('../../../lib/search', () => ({
     }
 }));
 
+// Mock UnifiedInputController to isolate ReaderView testing
+vi.mock('../UnifiedInputController', () => ({
+    UnifiedInputController: ({ onPrev, onNext }: { onPrev: () => void, onNext: () => void }) => (
+        <div data-testid="unified-input-controller">
+            <button data-testid="mock-prev" onClick={onPrev}>Prev</button>
+            <button data-testid="mock-next" onClick={onNext}>Next</button>
+        </div>
+    )
+}));
 
 describe('ReaderView', () => {
   const mockRenderTo = vi.fn();
@@ -80,6 +89,9 @@ describe('ReaderView', () => {
             register: vi.fn(),
             deregister: vi.fn()
           }
+        },
+        manager: {
+            container: { clientWidth: 1000 }
         }
       }),
       ready: Promise.resolve(),
@@ -109,12 +121,18 @@ describe('ReaderView', () => {
       updateLocation: vi.fn(),
       setIsLoading: (isLoading) => useReaderStore.setState({ isLoading }),
       setCurrentBookId: (id) => useReaderStore.setState({ currentBookId: id }),
+      viewMode: 'paginated', // Default for tests
+      immersiveMode: true, // Needed for input controller to listen
     });
 
     useTTSStore.setState({
         isPlaying: false,
         activeCfi: null
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   const renderComponent = (id = 'test-book-id') => {
@@ -137,25 +155,30 @@ describe('ReaderView', () => {
     });
   });
 
-  // Navigation buttons are currently hidden or part of gesture overlay, so this test fails looking for labels
-  it.skip('handles navigation (next/prev)', async () => {
+  it('handles navigation (next/prev) via UnifiedInputController', async () => {
     renderComponent();
 
     await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
 
-    const nextBtn = screen.getByLabelText('Next Page');
-    const prevBtn = screen.getByLabelText('Previous Page');
-
-    fireEvent.click(nextBtn);
-    expect(mockNext).toHaveBeenCalled();
+    // Click mock buttons exposed by UnifiedInputController mock
+    const prevBtn = screen.getByTestId('mock-prev');
+    const nextBtn = screen.getByTestId('mock-next');
 
     fireEvent.click(prevBtn);
     expect(mockPrev).toHaveBeenCalled();
+
+    fireEvent.click(nextBtn);
+    expect(mockNext).toHaveBeenCalled();
   });
 
   it('toggles TOC', async () => {
     renderComponent();
     await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+
+    // Reset immersive mode to false so header buttons are visible
+    act(() => {
+        useReaderStore.setState({ immersiveMode: false });
+    });
 
     const tocBtn = screen.getByLabelText('Table of Contents');
     fireEvent.click(tocBtn);
@@ -168,6 +191,11 @@ describe('ReaderView', () => {
   it('updates settings', async () => {
       renderComponent();
       await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+
+      // Reset immersive mode to false so header buttons are visible
+      act(() => {
+          useReaderStore.setState({ immersiveMode: false });
+      });
 
       // Open Visual Settings (Theme, Font, etc.)
       const visualSettingsBtn = screen.getByLabelText('Visual Settings');
