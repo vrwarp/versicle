@@ -169,13 +169,11 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      // 'covers' removed
       const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content'], 'readwrite');
 
       await Promise.all([
           tx.objectStore('books').delete(id),
           tx.objectStore('files').delete(id),
-          // tx.objectStore('covers').delete(id), // Removed
           tx.objectStore('locations').delete(id),
           tx.objectStore('tts_queue').delete(id),
           tx.objectStore('tts_position').delete(id),
@@ -232,7 +230,6 @@ class DBService {
   async offloadBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      // 'covers' removed
       const tx = db.transaction(['books', 'files'], 'readwrite');
       const bookStore = tx.objectStore('books');
       const book = await bookStore.get(id);
@@ -256,9 +253,6 @@ class DBService {
       book.isOffloaded = true;
       await bookStore.put(book);
       await tx.objectStore('files').delete(id);
-
-      // Delete high-res cover; metadata thumbnail remains.
-      // await tx.objectStore('covers').delete(id); // Removed
 
       await tx.done;
     } catch (error) {

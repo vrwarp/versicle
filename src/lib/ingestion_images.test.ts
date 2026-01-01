@@ -55,7 +55,6 @@ describe('Ingestion Image Optimization', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = await (dbService as any).getDB();
     await db.clear('books');
-    // await db.clear('covers'); // Removed
   });
 
   it('should store thumbnail in books store', async () => {

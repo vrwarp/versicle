@@ -245,7 +245,6 @@ export const GlobalSettingsDialog = () => {
             await db.clear('tts_cache');
             await db.clear('lexicon');
             await db.clear('locations');
-            // await db.clear('covers'); // Removed
 
             // Clear LocalStorage
             localStorage.clear();
@@ -260,7 +259,7 @@ export const GlobalSettingsDialog = () => {
         setOrphanScanResult('Scanning...');
         try {
             const report = await maintenanceService.scanForOrphans();
-            const total = report.files + report.annotations + report.locations + report.lexicon + report.tts_position; // removed covers
+            const total = report.files + report.annotations + report.locations + report.lexicon + report.tts_position;
             if (total > 0) {
                 if (confirm(`Found orphans:\n- Files: ${report.files}\n- Annotations: ${report.annotations}\n- Locations: ${report.locations}\n- Lexicon: ${report.lexicon}\n- TTS Pos: ${report.tts_position}\n\nDelete them?`)) {
                     await maintenanceService.pruneOrphans();
