@@ -10,8 +10,6 @@ vi.mock('@radix-ui/react-dialog', () => {
         Root: ({ open, onOpenChange, children }: any) => {
             return open ? (
                 <div data-testid="radix-root">
-                    {/* Expose onOpenChange to children via a custom attribute or context if needed,
-                        but here we just render children. To test Close, we need to manually trigger onOpenChange. */}
                     <button
                         data-testid="mock-overlay-close"
                         onClick={() => onOpenChange(false)}
@@ -29,24 +27,6 @@ vi.mock('@radix-ui/react-dialog', () => {
         Title: ({ children }: any) => <h1>{children}</h1>,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Description: ({ children, id }: any) => <p id={id}>{children}</p>,
-        // In the real implementation, Close triggers onOpenChange(false) on Root.
-        // In this mock, we can't easily access the parent Root's props without context.
-        // However, Modal.tsx puts Close *inside* Content.
-        // The Root mock above renders children.
-        // We can make the Root mock provide a context or just attach the handler to the window for testing? No.
-
-        // Simpler approach for the test:
-        // Verification of "onClose" being called relies on "onOpenChange" being triggered.
-        // We can verify that our `Dialog` passes the correct `onOpenChange` handler to `Root`.
-
-        // But to make `fireEvent.click(closeButton)` work, we need `Close` to call `onOpenChange`.
-        // Since we can't easily link them in a simple mock, we will trust Radix's internal wiring
-        // and instead verify that `Dialog` wires `onOpenChange` to `onClose`.
-
-        // Wait, if we mock `Root`, we intercept the `onOpenChange`.
-        // We can render a hidden button in Root that triggers it (as done above with `mock-overlay-close`).
-        // Then we click that button in the test to simulate a close event (like clicking overlay or ESC).
-
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Close: ({ children }: any) => <button>{children}</button>,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

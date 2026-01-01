@@ -5,7 +5,7 @@ import { GlobalSettingsDialog } from './GlobalSettingsDialog';
 import { useTTSStore } from '../store/useTTSStore';
 
 // Mock Radix UI Dialog to avoid title warnings
-vi.mock('../ui/Dialog', () => {
+vi.mock('./ui/Dialog', () => {
     return {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Dialog: ({ isOpen, children }: any) => isOpen ? <div role="dialog">{children}</div> : null,
