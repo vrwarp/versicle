@@ -490,19 +490,37 @@ export const ReaderView: React.FC = () => {
             if (!section) return;
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const analysis = await dbService.getContentAnalysis(id!, String(section.index));
+            const analysis = await dbService.getContentAnalysis(id!, section.href);
             if (!analysis) return;
 
             if (analysis.contentTypes) {
-                analysis.contentTypes.forEach((item) => {
+                const items = analysis.contentTypes;
+                for (let i = 0; i < items.length; i++) {
+                    const item = items[i];
+                    // Skip if already added
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    if (addedDebugHighlights.current.has(item.rootCfi)) return;
+                    if (addedDebugHighlights.current.has(item.rootCfi)) continue;
+
+                    let highlightCfi = item.rootCfi;
+
+                    // Try to build a range if there is a next item
+                    if (i < items.length - 1) {
+                        const nextItem = items[i+1];
+                        try {
+                            highlightCfi = generateCfiRange(item.rootCfi, nextItem.rootCfi);
+                        } catch (e) {
+                            console.warn("Failed to generate range for debug highlight", e);
+                        }
+                    } else {
+                        // Last item.
+                        // We default to rootCfi which should be valid enough.
+                    }
 
                     const color = TYPE_COLORS[item.type];
                     if (color) {
                         try {
                             // @ts-expect-error annotations is not typed fully
-                            rendition.annotations.add('highlight', item.rootCfi, {}, null, 'debug-analysis-highlight', {
+                            rendition.annotations.add('highlight', highlightCfi, {}, null, 'debug-analysis-highlight', {
                                 fill: color,
                                 backgroundColor: color,
                                 fillOpacity: '1',
@@ -513,7 +531,7 @@ export const ReaderView: React.FC = () => {
                              console.warn("Failed to add debug highlight", e);
                         }
                     }
-                });
+                }
             }
         } catch (e) {
             console.error("Failed to apply debug highlights", e);
