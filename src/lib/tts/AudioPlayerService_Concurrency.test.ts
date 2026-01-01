@@ -17,11 +17,11 @@ vi.mock('../../db/DBService', () => ({
     getBookMetadata: vi.fn().mockResolvedValue({}),
     updatePlaybackState: vi.fn().mockResolvedValue(undefined),
     getTTSState: vi.fn().mockResolvedValue(null),
-    saveTTSState: vi.fn(),
+    saveTTSState: vi.fn().mockResolvedValue(undefined),
     getSections: vi.fn().mockResolvedValue([]),
     getContentAnalysis: vi.fn(),
     getTTSContent: vi.fn(),
-    updateReadingHistory: vi.fn(),
+    updateReadingHistory: vi.fn().mockResolvedValue(undefined),
   }
 }));
 
@@ -108,7 +108,9 @@ describe('AudioPlayerService Concurrency', () => {
     // However, depending on timing, the first ones might have started but been aborted.
     // The key is that the final state should reflect the last call.
 
-    expect(service['currentIndex']).toBe(2);
+    // @ts-expect-error accessing private stateManager
+    expect(service['stateManager'].getCurrentIndex()).toBe(2);
+    // @ts-expect-error accessing private status
     expect(service['status']).toBe('playing');
 
     const calls = playSpy.mock.calls;

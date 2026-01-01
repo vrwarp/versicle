@@ -60,8 +60,8 @@ vi.mock('../../db/DBService', () => ({
     }),
     updatePlaybackState: vi.fn().mockResolvedValue(undefined),
     getTTSState: vi.fn().mockResolvedValue(null),
-    saveTTSState: vi.fn(),
-    updateReadingHistory: vi.fn(),
+    saveTTSState: vi.fn().mockResolvedValue(undefined).mockResolvedValue(undefined),
+    updateReadingHistory: vi.fn().mockResolvedValue(undefined).mockResolvedValue(undefined),
     getSections: vi.fn().mockResolvedValue([
         { sectionId: 'sec1', characterCount: 100 },
         { sectionId: 'sec2', characterCount: 0 }, // Empty section
@@ -74,8 +74,8 @@ vi.mock('../../db/DBService', () => ({
             sentences: [{ text: "Sentence " + sectionId, cfi: "cfi_" + sectionId }]
         });
     }),
-    saveTTSPosition: vi.fn(),
-    saveContentClassifications: vi.fn(),
+    saveTTSPosition: vi.fn().mockResolvedValue(undefined).mockResolvedValue(undefined),
+    saveContentClassifications: vi.fn().mockResolvedValue(undefined),
   }
 }));
 vi.mock('./CostEstimator');
@@ -115,8 +115,8 @@ describe('AudioPlayerService', () => {
     let service: AudioPlayerService;
 
     beforeEach(() => {
-        vi.spyOn(console, 'error').mockImplementation(() => {});
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        // vi.spyOn(console, 'error').mockImplementation(() => {});
+        // vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         // Reset singleton
         // @ts-expect-error Resetting singleton for testing
@@ -246,7 +246,7 @@ describe('AudioPlayerService', () => {
         // Wait for async fallback logic
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Falling back"));
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Cloud/Custom TTS error"), expect.any(Error));
 
         // Verify listener got error notification
         const errorCalls = listener.mock.calls.filter(args => args[4] && args[4].includes("Cloud voice failed"));
@@ -288,8 +288,10 @@ describe('AudioPlayerService', () => {
         // Wait for background promise (run in next tick)
         await new Promise(resolve => setTimeout(resolve, 10));
 
+        // Wait slightly more for fire-and-forget promise
+        await new Promise(resolve => setTimeout(resolve, 10));
+
         // Check if getTTSContent was called for sec3
-        // It's called with 'book1', 'sec3'
         expect(getTTSContentSpy).toHaveBeenCalledWith('book1', 'sec3');
 
         // Check if GenAI detection was triggered

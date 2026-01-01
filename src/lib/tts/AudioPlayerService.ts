@@ -1,33 +1,17 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
-import { WebSpeechProvider } from './providers/WebSpeechProvider';
-import { BackgroundAudio, type BackgroundAudioMode } from './BackgroundAudio';
-import { Capacitor } from '@capacitor/core';
-import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
-import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { SyncEngine, type AlignmentData } from './SyncEngine';
 import { LexiconService } from './LexiconService';
-import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule } from '../../types/db';
-import { TextSegmenter } from './TextSegmenter';
-import { useTTSStore } from '../../store/useTTSStore';
-import { getParentCfi } from '../cfi-utils';
-import { genAIService } from '../genai/GenAIService';
-import { useGenAIStore } from '../../store/useGenAIStore';
-import type { ContentType } from '../../types/content-analysis';
-
-const NO_TEXT_MESSAGES = [
-    "This chapter appears to be empty.",
-    "There is no text to read here.",
-    "This page contains only images or formatting.",
-    "Silence fills this chapter.",
-    "Moving on, as this section has no content.",
-    "No words found on this page.",
-    "This section is blank.",
-    "Skipping this empty section.",
-    "Nothing to read here.",
-    "This part of the book is silent."
-];
+import { TaskSequencer } from './TaskSequencer';
+import { AudioContentPipeline } from './AudioContentPipeline';
+import { PlaybackStateManager } from './PlaybackStateManager';
+import { TTSProviderManager } from './TTSProviderManager';
+import { PlatformIntegration } from './PlatformIntegration';
+import type { BackgroundAudioMode } from './BackgroundAudio';
+import { Capacitor } from '@capacitor/core';
+import { WebSpeechProvider } from './providers/WebSpeechProvider';
+import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 
 /**
  * Defines the possible states of the TTS playback.
@@ -69,58 +53,41 @@ type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentInd
  */
 export class AudioPlayerService {
   private static instance: AudioPlayerService;
-  private provider: ITTSProvider;
+
+  // Components
+  private taskSequencer: TaskSequencer;
+  private pipeline: AudioContentPipeline;
+  private stateManager: PlaybackStateManager;
+  private providerManager: TTSProviderManager;
+  private platformIntegration: PlatformIntegration;
   private syncEngine: SyncEngine | null = null;
-  private mediaSessionManager: MediaSessionManager;
   private lexiconService: LexiconService;
-  private queue: TTSQueueItem[] = [];
-  private currentIndex: number = 0;
+
   private status: TTSStatus = 'stopped';
   private listeners: PlaybackListener[] = [];
 
-  private activeLexiconRules: LexiconRule[] | null = null;
-
-  private speed: number = 1.0;
-  private voiceId: string | null = null;
-
+  // State
   private currentBookId: string | null = null;
   private playlist: SectionMetadata[] = [];
   private playlistPromise: Promise<void> | null = null;
-  private currentSectionIndex: number = -1;
   private sessionRestored: boolean = false;
   private prerollEnabled: boolean = false;
   private isPreviewing: boolean = false;
 
-  private pendingPromise: Promise<void> = Promise.resolve();
-  private isDestroyed = false;
-
-  private backgroundAudio: BackgroundAudio;
-  private backgroundAudioMode: BackgroundAudioMode = 'silence';
-  private lastMetadata: MediaSessionMetadata | null = null;
+  private voiceId: string | null = null;
+  private activeLexiconRules: LexiconRule[] | null = null;
+  private speed: number = 1.0;
   private currentCoverUrl: string | null = null;
 
-  // Track last persisted queue to avoid redundant heavy writes
-  private lastPersistedQueue: TTSQueueItem[] | null = null;
-
-  private prefixSums: number[] = [0];
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private analysisPromises = new Map<string, Promise<any>>();
-
   private constructor() {
-    this.backgroundAudio = new BackgroundAudio();
+    this.taskSequencer = new TaskSequencer();
+    this.pipeline = new AudioContentPipeline();
+    this.stateManager = new PlaybackStateManager();
+    this.providerManager = new TTSProviderManager();
     this.syncEngine = new SyncEngine();
-
-    if (Capacitor.isNativePlatform()) {
-        this.provider = new CapacitorTTSProvider();
-    } else {
-        this.provider = new WebSpeechProvider();
-    }
-
-    this.setupProviderListeners();
-
     this.lexiconService = LexiconService.getInstance();
-    this.mediaSessionManager = new MediaSessionManager({
+
+    this.platformIntegration = new PlatformIntegration({
         onPlay: () => this.resume(),
         onPause: () => this.pause(),
         onStop: () => this.stop(),
@@ -128,12 +95,11 @@ export class AudioPlayerService {
         onNext: () => this.next(),
         onSeekBackward: () => this.seek(-10),
         onSeekForward: () => this.seek(10),
-        onSeekTo: (details) => {
-             if (details.seekTime !== undefined) {
-                 this.seekTo(details.seekTime);
-             }
-        },
+        onSeekTo: (time) => this.seekTo(time),
     });
+
+    this.setupProviderListeners();
+    this.setupStateListeners();
 
     this.syncEngine.setOnHighlight(() => {
         // No action currently
@@ -147,135 +113,8 @@ export class AudioPlayerService {
     return AudioPlayerService.instance;
   }
 
-  private async enqueue<T>(task: () => Promise<T>): Promise<T | void> {
-    const resultPromise = this.pendingPromise.then(async () => {
-      if (this.isDestroyed) return;
-      try {
-        return await task();
-      } catch (err) {
-        console.error("Audio task failed safely:", err);
-      }
-    });
-
-    this.pendingPromise = resultPromise.then(() => {}).catch(() => {});
-    return resultPromise;
-  }
-
-  setBookId(bookId: string | null) {
-      if (this.currentBookId !== bookId) {
-          if (this.currentCoverUrl) {
-              URL.revokeObjectURL(this.currentCoverUrl);
-              this.currentCoverUrl = null;
-          }
-          this.currentBookId = bookId;
-          this.sessionRestored = false;
-          // Clear tracked state when book changes
-          this.lastPersistedQueue = null;
-
-          if (bookId) {
-              this.playlistPromise = dbService.getSections(bookId).then(sections => {
-                  this.playlist = sections;
-                  this.restoreQueue(bookId);
-              }).catch(e => console.error("Failed to load playlist", e));
-          } else {
-              this.queue = [];
-              this.playlist = [];
-              this.playlistPromise = null;
-              this.currentSectionIndex = -1;
-              this.currentIndex = 0;
-              this.setStatus('stopped');
-          }
-
-          // Clear cached rules when book changes
-          this.activeLexiconRules = null;
-      }
-  }
-
-  private async engageBackgroundMode(item: TTSQueueItem): Promise<boolean> {
-      try {
-          await this.mediaSessionManager.setMetadata({
-              title: item.title || 'Chapter Text',
-              artist: item.author || 'Versicle',
-              album: item.bookTitle || '',
-              artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
-              sectionIndex: this.currentSectionIndex,
-              totalSections: this.playlist.length
-          });
-          await this.mediaSessionManager.setPlaybackState('playing');
-          return true;
-      } catch (e) {
-          console.error('Background engagement failed', e);
-          return false;
-      }
-  }
-
-  private calculatePrefixSums() {
-      this.prefixSums = new Array(this.queue.length + 1).fill(0);
-      for (let i = 0; i < this.queue.length; i++) {
-          this.prefixSums[i + 1] = this.prefixSums[i] + (this.queue[i].text?.length || 0);
-      }
-  }
-
-  /**
-   * Calculates the processing speed in characters per second based on the current playback speed.
-   * Assumes a base reading rate of 180 words per minute and 5 characters per word.
-   * @returns {number} Characters per second.
-   */
-  private calculateCharsPerSecond(): number {
-      // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 900.
-      // charsPerSecond = (900 * speed) / 60
-      return (900 * this.speed) / 60;
-  }
-
-  private updateSectionMediaPosition(providerTime: number) {
-      if (!this.queue.length || !this.prefixSums.length) return;
-
-      const charsPerSecond = this.calculateCharsPerSecond();
-      if (charsPerSecond === 0) return;
-
-      const totalChars = this.prefixSums[this.queue.length];
-      const totalDuration = totalChars / charsPerSecond; // in seconds
-
-      const elapsedBeforeCurrent = this.prefixSums[this.currentIndex] / charsPerSecond;
-      const currentPosition = elapsedBeforeCurrent + providerTime;
-
-      // Safety check to ensure position doesn't exceed duration due to slight miscalculations or float precision
-      const safeDuration = Math.max(totalDuration, currentPosition);
-
-      this.mediaSessionManager.setPositionState({
-          duration: safeDuration,
-          playbackRate: this.speed,
-          position: currentPosition
-      });
-  }
-
-  private async restoreQueue(bookId: string) {
-      this.enqueue(async () => {
-          try {
-              const state = await dbService.getTTSState(bookId);
-              if (this.currentBookId !== bookId) return;
-
-              if (state && state.queue && state.queue.length > 0) {
-                  await this.stopInternal();
-                  this.queue = state.queue;
-                  this.currentIndex = state.currentIndex || 0;
-                  this.currentSectionIndex = state.sectionIndex ?? -1;
-
-                  // Track restored queue as persisted
-                  this.lastPersistedQueue = this.queue;
-
-                  this.calculatePrefixSums();
-                  this.updateMediaSessionMetadata();
-                  this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
-              }
-          } catch (e) {
-              console.error("Failed to restore TTS queue", e);
-          }
-      });
-  }
-
   private setupProviderListeners() {
-      this.provider.on((event) => {
+      this.providerManager.on((event) => {
           if (event.type === 'start') {
               this.setStatus('playing');
           } else if (event.type === 'end') {
@@ -286,18 +125,32 @@ export class AudioPlayerService {
               }
               this.playNext();
           } else if (event.type === 'error') {
-               // Handle common interruption errors or real errors
                const errorObj = event.error as unknown as { error?: string, message?: string };
                const errorType = errorObj?.error || event.error;
-               // If it's just an interruption (e.g. from cancel), ignore
+
                if (errorType === 'interrupted' || errorType === 'canceled') return;
 
                console.error("TTS Provider Error", event.error);
                this.setStatus('stopped');
-               this.notifyError("Playback Error: " + (event.error?.message || "Unknown error"));
+
+               let message = "Unknown error";
+               if (typeof event.error === 'string') {
+                   message = event.error;
+               } else if (event.error && typeof event.error === 'object') {
+                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                   message = (event.error as any).message || JSON.stringify(event.error);
+               }
+
+               this.notifyError("Playback Error: " + message);
           } else if (event.type === 'timeupdate') {
                this.syncEngine?.updateTime(event.currentTime);
-               this.updateSectionMediaPosition(event.currentTime);
+               this.stateManager.setSpeed(this.speed);
+               const position = this.stateManager.getCurrentPosition(event.currentTime);
+               const duration = this.stateManager.getDuration();
+               // Safety: position <= duration check handled inside updatePositionState? No, do it here or inside platform
+               const safeDuration = Math.max(duration, position);
+               this.platformIntegration.updatePositionState(safeDuration, position, this.speed);
+
           } else if (event.type === 'boundary') {
               // Optionally update sync engine or progress
           } else if (event.type === 'meta') {
@@ -315,39 +168,80 @@ export class AudioPlayerService {
       });
   }
 
-  private updateMediaSessionMetadata() {
-      if (this.queue[this.currentIndex]) {
-          const item = this.queue[this.currentIndex];
-          const newMetadata: MediaSessionMetadata = {
-              title: item.title || 'Chapter Text',
-              artist: item.author || 'Versicle',
-              album: item.bookTitle || '',
-              artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
-              sectionIndex: this.currentSectionIndex,
-              totalSections: this.playlist.length
-          };
+  private setupStateListeners() {
+      // When internal state changes (e.g. index updates), notify external listeners
+      this.stateManager.subscribe(() => {
+         // This is a bit redundant if we notify manually, but good for reactivity
+         // We handle explicit notifications in methods like next(), prev(), so maybe this is unused for now.
+         // Or we can use it to sync UI.
+      });
+  }
 
-          // Always update position when track changes, even if metadata is identical
-          this.updateSectionMediaPosition(0);
+  private notifyListeners(activeCfi: string | null) {
+      this.listeners.forEach(l => l(this.status, activeCfi, this.stateManager.getCurrentIndex(), this.stateManager.getQueue(), null));
+  }
 
-          if (this.lastMetadata && JSON.stringify(this.lastMetadata) === JSON.stringify(newMetadata)) {
-              return;
+  private notifyError(message: string) {
+      this.listeners.forEach(l => l(this.status, this.stateManager.getCurrentItem()?.cfi || null, this.stateManager.getCurrentIndex(), this.stateManager.getQueue(), message));
+  }
+
+  private notifyDownloadProgress(voiceId: string, percent: number, status: string) {
+      this.listeners.forEach(l => l(this.status, this.stateManager.getCurrentItem()?.cfi || null, this.stateManager.getCurrentIndex(), this.stateManager.getQueue(), null, { voiceId, percent, status }));
+  }
+
+  setBookId(bookId: string | null) {
+      if (this.currentBookId !== bookId) {
+          if (this.currentCoverUrl) {
+              URL.revokeObjectURL(this.currentCoverUrl);
+              this.currentCoverUrl = null;
+          }
+          this.currentBookId = bookId;
+          this.sessionRestored = false;
+
+          if (bookId) {
+              this.playlistPromise = dbService.getSections(bookId).then(sections => {
+                  this.playlist = sections;
+                  this.restoreQueue(bookId);
+              }).catch(e => console.error("Failed to load playlist", e));
+          } else {
+              this.stateManager.reset();
+              this.playlist = [];
+              this.playlistPromise = null;
+              this.setStatus('stopped');
           }
 
-          this.mediaSessionManager.setMetadata(newMetadata);
-          this.lastMetadata = newMetadata;
+          this.activeLexiconRules = null;
       }
+  }
+
+  private async restoreQueue(bookId: string) {
+      this.taskSequencer.enqueue(async () => {
+          try {
+              const state = await dbService.getTTSState(bookId);
+              if (this.currentBookId !== bookId) return;
+
+              if (state && state.queue && state.queue.length > 0) {
+                  await this.stopInternal();
+                  this.stateManager.setQueue(state.queue, state.currentIndex || 0, state.sectionIndex ?? -1);
+
+                  const item = this.stateManager.getCurrentItem();
+                  if (item) {
+                      this.platformIntegration.updateMediaMetadata(item, this.stateManager.getCurrentSectionIndex(), this.playlist.length);
+                      this.notifyListeners(item.cfi || null);
+                  }
+              }
+          } catch (e) {
+              console.error("Failed to restore TTS queue", e);
+          }
+      });
   }
 
   public setBackgroundAudioMode(mode: BackgroundAudioMode) {
-      this.backgroundAudioMode = mode;
-      if (this.status === 'playing' || this.status === 'loading') {
-          this.backgroundAudio.play(mode);
-      }
+      this.platformIntegration.setBackgroundAudioMode(mode, this.status === 'playing' || this.status === 'loading');
   }
 
   public setBackgroundVolume(volume: number) {
-      this.backgroundAudio.setVolume(volume);
+      this.platformIntegration.setBackgroundVolume(volume);
   }
 
   public setPrerollEnabled(enabled: boolean) {
@@ -355,62 +249,42 @@ export class AudioPlayerService {
   }
 
   public setProvider(provider: ITTSProvider) {
-      return this.enqueue(async () => {
+      return this.taskSequencer.enqueue(async () => {
         await this.stopInternal();
-        this.provider = provider;
-        this.setupProviderListeners();
+        await this.providerManager.setProvider(provider);
       });
   }
 
   async init() {
-    await this.provider.init();
+    await this.providerManager.init();
   }
 
   async getVoices(): Promise<TTSVoice[]> {
-    return this.provider.getVoices();
+    return this.providerManager.getVoices();
   }
 
   async downloadVoice(voiceId: string): Promise<void> {
-      if (this.provider.id === 'piper') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const piper = this.provider as any;
-          if (typeof piper.downloadVoice === 'function') {
-              await piper.downloadVoice(voiceId);
-          }
-      }
+      await this.providerManager.downloadVoice(voiceId);
   }
 
   async deleteVoice(voiceId: string): Promise<void> {
-      if (this.provider.id === 'piper') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const piper = this.provider as any;
-          if (typeof piper.deleteVoice === 'function') {
-              await piper.deleteVoice(voiceId);
-          }
-      }
+      await this.providerManager.deleteVoice(voiceId);
   }
 
   async isVoiceDownloaded(voiceId: string): Promise<boolean> {
-       if (this.provider.id === 'piper') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const piper = this.provider as any;
-           if (typeof piper.isVoiceDownloaded === 'function') {
-              return await piper.isVoiceDownloaded(voiceId);
-          }
-       }
-       return true;
+       return await this.providerManager.isVoiceDownloaded(voiceId);
   }
 
   public getQueue(): TTSQueueItem[] {
-      return this.queue;
+      return this.stateManager.getQueue();
   }
 
   public loadSection(sectionIndex: number, autoPlay: boolean = true) {
-      return this.enqueue(() => this.loadSectionInternal(sectionIndex, autoPlay));
+      return this.taskSequencer.enqueue(() => this.loadSectionInternal(sectionIndex, autoPlay));
   }
 
   public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {
-      return this.enqueue(async () => {
+      return this.taskSequencer.enqueue(async () => {
           if (this.playlistPromise) await this.playlistPromise;
           const index = this.playlist.findIndex(s => s.sectionId === sectionId);
           if (index !== -1) {
@@ -425,9 +299,8 @@ export class AudioPlayerService {
 
   public async skipToPreviousSection(): Promise<boolean> {
       if (!this.currentBookId || this.playlist.length === 0) return false;
-      let prevSectionIndex = this.currentSectionIndex - 1;
+      let prevSectionIndex = this.stateManager.getCurrentSectionIndex() - 1;
       while (prevSectionIndex >= 0) {
-          // Load and play from start
           const loaded = await this.loadSectionInternal(prevSectionIndex, true);
           if (loaded) return true;
           prevSectionIndex--;
@@ -435,86 +308,71 @@ export class AudioPlayerService {
       return false;
   }
 
-  private isQueueEqual(newItems: TTSQueueItem[]): boolean {
-      if (this.queue.length !== newItems.length) return false;
-      for (let i = 0; i < this.queue.length; i++) {
-          if (this.queue[i].text !== newItems[i].text) return false;
-          if (this.queue[i].cfi !== newItems[i].cfi) return false;
-      }
-      return true;
-  }
-
   setQueue(items: TTSQueueItem[], startIndex: number = 0) {
-    return this.enqueue(async () => {
-        if (this.isQueueEqual(items)) {
-            this.queue = items;
-            this.calculatePrefixSums();
-            this.updateMediaSessionMetadata();
-            this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
-            this.persistQueue();
-            return;
+    return this.taskSequencer.enqueue(async () => {
+        // Quick equality check
+        const currentQueue = this.stateManager.getQueue();
+        if (currentQueue.length === items.length && items.every((val, index) => val.text === currentQueue[index].text && val.cfi === currentQueue[index].cfi)) {
+             this.stateManager.setQueue(items, 0, this.stateManager.getCurrentSectionIndex()); // Just refreshes logic?
+             // Actually original logic was: if queue equal, just set it and return.
+             // But we might need to reset currentIndex if it's different? Original kept currentIndex if equal??
+             // No, original: if equal, set queue (which is same), calc prefix sums, update metadata, notify, persist.
+             // It did NOT change currentIndex.
+
+             // Wait, original: `if (this.isQueueEqual(items)) { this.queue = items; ... return; }`
+             // It did NOT change currentIndex.
+
+             // But here `startIndex` is passed. If startIndex is different, we should jump?
+             // Original `setQueue` didn't take `startIndex` in signature shown in my read_file output?
+             // Ah, `setQueue(items: TTSQueueItem[], startIndex: number = 0)` YES it did.
+
+             // Let's assume consumer knows what they are doing.
+             // If queue is equal, we might still want to jump to startIndex if provided?
+             // Original code ignored startIndex if queue was equal. I will replicate that behavior.
+
+             this.stateManager.setQueue(items, this.stateManager.getCurrentIndex(), this.stateManager.getCurrentSectionIndex());
+             const item = this.stateManager.getCurrentItem();
+             if (item) {
+                 this.platformIntegration.updateMediaMetadata(item, this.stateManager.getCurrentSectionIndex(), this.playlist.length);
+                 this.notifyListeners(item.cfi || null);
+             }
+             this.stateManager.persist(this.currentBookId || '');
+             return;
         }
 
         await this.stopInternal();
-        this.queue = items;
-        this.currentIndex = startIndex;
+        this.stateManager.setQueue(items, startIndex, this.stateManager.getCurrentSectionIndex());
 
-        // Reset persisted tracker since queue changed
-        this.lastPersistedQueue = null;
-
-        this.calculatePrefixSums();
-        this.updateMediaSessionMetadata();
-        this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
-        this.persistQueue();
+        const item = this.stateManager.getCurrentItem();
+        if (item) {
+            this.platformIntegration.updateMediaMetadata(item, this.stateManager.getCurrentSectionIndex(), this.playlist.length);
+            this.notifyListeners(item.cfi || null);
+        }
+        this.stateManager.persist(this.currentBookId || '');
     });
   }
 
-  private persistQueue() {
-      if (this.currentBookId) {
-          // Optimization: If queue has not changed since last persist,
-          // only update the position (currentIndex/sectionIndex).
-          // This avoids serializing and writing the entire queue array to IndexedDB repeatedly.
-          if (this.lastPersistedQueue === this.queue) {
-              dbService.saveTTSPosition(this.currentBookId, this.currentIndex, this.currentSectionIndex);
-          } else {
-              dbService.saveTTSState(this.currentBookId, this.queue, this.currentIndex, this.currentSectionIndex);
-              this.lastPersistedQueue = this.queue;
-          }
-      }
-  }
-
-  public generatePreroll(chapterTitle: string, wordCount: number, speed: number = 1.0): string {
-      const WORDS_PER_MINUTE = 180;
-      const adjustedWpm = WORDS_PER_MINUTE * speed;
-      const minutes = Math.max(1, Math.round(wordCount / adjustedWpm));
-      return `${chapterTitle}. Estimated reading time: ${minutes} minute${minutes === 1 ? '' : 's'}.`;
-  }
-
   jumpTo(index: number) {
-      return this.enqueue(async () => {
-          if (index >= 0 && index < this.queue.length) {
-              await this.stopInternal();
-              this.currentIndex = index;
-              this.persistQueue();
+      return this.taskSequencer.enqueue(async () => {
+          if (this.stateManager.jumpTo(index)) {
+              await this.stopInternal(); // Stop current playback
+              this.stateManager.persist(this.currentBookId || '');
               await this.playInternal();
           }
       });
   }
 
   async preview(text: string): Promise<void> {
-      return this.enqueue(async () => {
+      return this.taskSequencer.enqueue(async () => {
         await this.stopInternal();
         this.isPreviewing = true;
         this.setStatus('playing');
 
         try {
-            const voiceId = this.voiceId || '';
-
-            await this.provider.play(text, {
-                voiceId,
+            await this.providerManager.play(text, {
+                voiceId: this.voiceId || '',
                 speed: this.speed
             });
-
         } catch (e) {
             console.error("Preview error", e);
             this.setStatus('stopped');
@@ -525,7 +383,7 @@ export class AudioPlayerService {
   }
 
   async play(): Promise<void> {
-    return this.enqueue(() => this.playInternal());
+    return this.taskSequencer.enqueue(() => this.playInternal());
   }
 
   private async playInternal(): Promise<void> {
@@ -538,9 +396,11 @@ export class AudioPlayerService {
         try {
             const book = await dbService.getBookMetadata(this.currentBookId);
             if (book) {
-                if (book.lastPlayedCfi && this.currentIndex === 0) {
-                     const index = this.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
-                     if (index >= 0) this.currentIndex = index;
+                if (book.lastPlayedCfi && this.stateManager.getCurrentIndex() === 0) {
+                     // Try to find index of lastPlayedCfi
+                     const queue = this.stateManager.getQueue();
+                     const index = queue.findIndex(item => item.cfi === book.lastPlayedCfi);
+                     if (index >= 0) this.stateManager.jumpTo(index);
                 }
                 if (book.lastPauseTime) return this.resumeInternal();
             }
@@ -549,16 +409,19 @@ export class AudioPlayerService {
         }
     }
 
-    if (this.currentIndex >= this.queue.length) {
+    const item = this.stateManager.getCurrentItem();
+    if (!item) {
         this.setStatus('stopped');
         this.notifyListeners(null);
         return;
     }
 
-    const item = this.queue[this.currentIndex];
-
     if (this.status !== 'playing') {
-        const engaged = await this.engageBackgroundMode(item);
+        const engaged = await this.platformIntegration.engageBackgroundMode(
+            item,
+            this.stateManager.getCurrentSectionIndex(),
+            this.playlist.length
+        );
         if (!engaged && Capacitor.getPlatform() === 'android') {
              this.setStatus('stopped');
              this.notifyError("Cannot play in background");
@@ -567,68 +430,53 @@ export class AudioPlayerService {
         this.setStatus('loading');
     }
 
-    this.notifyListeners(item.cfi);
-    this.updateMediaSessionMetadata();
-    this.persistQueue();
+    this.notifyListeners(item.cfi || null);
+    this.platformIntegration.updateMediaMetadata(item, this.stateManager.getCurrentSectionIndex(), this.playlist.length);
+    this.stateManager.persist(this.currentBookId || '');
 
     try {
         const voiceId = this.voiceId || '';
 
-        // Load and cache rules if not already cached for this session
         if (!this.activeLexiconRules) {
             this.activeLexiconRules = await this.lexiconService.getRules(this.currentBookId || undefined);
         }
         const rules = this.activeLexiconRules;
-
         const processedText = this.lexiconService.applyLexicon(item.text, rules);
 
-        await this.provider.play(processedText, {
+        await this.providerManager.play(processedText, {
             voiceId,
             speed: this.speed
         });
 
-        if (this.currentIndex < this.queue.length - 1) {
-             const nextItem = this.queue[this.currentIndex + 1];
+        // Preload next
+        const queue = this.stateManager.getQueue();
+        const currentIndex = this.stateManager.getCurrentIndex();
+        if (currentIndex < queue.length - 1) {
+             const nextItem = queue[currentIndex + 1];
              const nextProcessed = this.lexiconService.applyLexicon(nextItem.text, rules);
-             this.provider.preload(nextProcessed, {
+             this.providerManager.preload(nextProcessed, {
                  voiceId,
                  speed: this.speed
              });
         }
 
     } catch (e) {
+        // Provider manager handles fallback, but if it throws up here, it's fatal
         console.error("Play error", e);
-
-        if (this.provider.id !== 'local') {
-            const errorMessage = e instanceof Error ? e.message : "Cloud TTS error";
-            this.notifyError(`Cloud voice failed (${errorMessage}). Switching to local backup.`);
-            console.warn("Falling back to local provider...");
-
-             await this.stopInternal();
-            if (Capacitor.isNativePlatform()) {
-                this.provider = new CapacitorTTSProvider();
-            } else {
-                this.provider = new WebSpeechProvider();
-            }
-            this.setupProviderListeners();
-            await this.init();
-            return this.playInternal();
-        }
-
         this.setStatus('stopped');
         this.notifyError(e instanceof Error ? e.message : "Playback error");
     }
   }
 
   async resume(): Promise<void> {
-     return this.enqueue(() => this.resumeInternal());
+     return this.taskSequencer.enqueue(() => this.resumeInternal());
   }
 
   private async resumeInternal(): Promise<void> {
      this.sessionRestored = true;
 
      if (this.status === 'paused') {
-         this.provider.resume();
+         this.providerManager.resume();
          this.setStatus('playing');
      } else {
          return this.playInternal();
@@ -637,7 +485,7 @@ export class AudioPlayerService {
 
   private async savePlaybackState() {
       if (!this.currentBookId) return;
-      const currentItem = this.queue[this.currentIndex];
+      const currentItem = this.stateManager.getCurrentItem();
       const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
       const isPaused = this.status === 'paused';
       const lastPauseTime = isPaused ? Date.now() : null;
@@ -649,37 +497,30 @@ export class AudioPlayerService {
   }
 
   pause() {
-    return this.enqueue(async () => {
-        this.provider.pause();
+    return this.taskSequencer.enqueue(async () => {
+        this.providerManager.pause();
         this.setStatus('paused');
         await this.savePlaybackState();
     });
   }
 
   stop() {
-      return this.enqueue(async () => {
+      return this.taskSequencer.enqueue(async () => {
           await this.stopInternal();
       });
   }
 
   private async stopInternal() {
     await this.savePlaybackState();
-
-    if (Capacitor.isNativePlatform()) {
-        try {
-            await this.mediaSessionManager.setPlaybackState('none');
-        } catch (e) { console.warn(e); }
-    }
     this.setStatus('stopped');
     this.notifyListeners(null);
-    this.provider.stop();
+    this.providerManager.stop();
   }
 
   next() {
-      return this.enqueue(async () => {
-        if (this.currentIndex < this.queue.length - 1) {
-            this.currentIndex++;
-            this.persistQueue();
+      return this.taskSequencer.enqueue(async () => {
+        if (this.stateManager.next()) {
+            this.stateManager.persist(this.currentBookId || '');
             if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal();
         } else {
@@ -689,10 +530,9 @@ export class AudioPlayerService {
   }
 
   prev() {
-      return this.enqueue(async () => {
-        if (this.currentIndex > 0) {
-            this.currentIndex--;
-            this.persistQueue();
+      return this.taskSequencer.enqueue(async () => {
+        if (this.stateManager.prev()) {
+            this.stateManager.persist(this.currentBookId || '');
             if (this.status === 'paused') this.setStatus('stopped');
             await this.playInternal();
         }
@@ -701,86 +541,80 @@ export class AudioPlayerService {
 
   setSpeed(speed: number) {
       this.speed = speed;
-      return this.enqueue(async () => {
-        // If we are currently active, restart the current sentence with new speed
-        // WITHOUT triggering setStatus('stopped') / mediaState 'none'
+      this.stateManager.setSpeed(speed);
+      return this.taskSequencer.enqueue(async () => {
         if (this.status === 'playing' || this.status === 'loading') {
-            this.provider.stop();
+            this.providerManager.stop();
             await this.playInternal();
         }
-        // If paused or stopped, we just update the speed variable (done above)
-        // and the next manual 'play' will use it.
       });
   }
 
   seekTo(time: number) {
-      return this.enqueue(async () => {
-          if (!this.queue.length || !this.prefixSums.length) return;
+      return this.taskSequencer.enqueue(async () => {
+          const newIndex = this.stateManager.calculateTargetIndexForTime(time);
+          const currentIndex = this.stateManager.getCurrentIndex();
 
-          const charsPerSecond = this.calculateCharsPerSecond();
-          if (charsPerSecond <= 0) return;
-
-          const targetChars = time * charsPerSecond;
-
-          let newIndex = 0;
-          for (let i = 0; i < this.queue.length; i++) {
-              if (targetChars < this.prefixSums[i + 1]) {
-                  newIndex = i;
-                  break;
-              }
-              newIndex = i;
-          }
-
-          const wasPlaying = (this.status === 'playing' || this.status === 'loading');
-
-          // Fix: If the approximated index is the same as current (e.g. small seek forward/backward within same sentence),
-          // force advance to next index to avoid "restarting" the current sentence repeatedly, as requested.
+          // Fix: Avoid restarting current sentence if index didn't change,
+          // unless it's the last sentence where we might want to go to next chapter.
+          // Original logic:
+          /*
           if (newIndex === this.currentIndex) {
              if (newIndex < this.queue.length - 1) {
                  newIndex++;
              } else {
-                 // Edge case: We are at the last sentence and seeking didn't move us.
-                 // Treat this as a request to move to the next chapter.
                  await this.advanceToNextChapter();
                  return;
              }
           }
+          */
 
-          if (wasPlaying) {
-              this.provider.stop();
+          let adjustedIndex = newIndex;
+          if (adjustedIndex === currentIndex) {
+              if (this.stateManager.hasNext()) {
+                  adjustedIndex++;
+              } else {
+                  await this.advanceToNextChapter();
+                  return;
+              }
           }
 
-          this.currentIndex = newIndex;
-          this.persistQueue();
+          const wasPlaying = (this.status === 'playing' || this.status === 'loading');
+
+          if (wasPlaying) {
+              this.providerManager.stop();
+          }
+
+          this.stateManager.jumpTo(adjustedIndex);
+          this.stateManager.persist(this.currentBookId || '');
 
           if (wasPlaying) {
               await this.playInternal();
           } else {
-              this.updateMediaSessionMetadata();
-              this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
-              this.updateSectionMediaPosition(0);
+              const item = this.stateManager.getCurrentItem();
+              if (item) {
+                 this.platformIntegration.updateMediaMetadata(item, this.stateManager.getCurrentSectionIndex(), this.playlist.length);
+                 this.notifyListeners(item.cfi || null);
+                 this.platformIntegration.updatePositionState(this.stateManager.getDuration(), 0, this.speed);
+              }
           }
       });
   }
 
   seek(offset: number) {
-      return this.enqueue(async () => {
+      return this.taskSequencer.enqueue(async () => {
           if (offset > 0) {
-              if (this.currentIndex < this.queue.length - 1) {
-                  this.currentIndex++;
-                  this.persistQueue();
+              if (this.stateManager.next()) {
+                  this.stateManager.persist(this.currentBookId || '');
                   await this.playInternal();
               } else {
-                  // At the end of the chapter, move to next
                   await this.advanceToNextChapter();
               }
           } else {
-              if (this.currentIndex > 0) {
-                  this.currentIndex--;
-                  this.persistQueue();
+              if (this.stateManager.prev()) {
+                  this.stateManager.persist(this.currentBookId || '');
                   await this.playInternal();
               } else {
-                  // At the start of the chapter, move to previous
                   await this.retreatToPreviousChapter();
               }
           }
@@ -789,38 +623,33 @@ export class AudioPlayerService {
 
   setVoice(voiceId: string) {
       this.voiceId = voiceId;
-      return this.enqueue(async () => {
+      return this.taskSequencer.enqueue(async () => {
         if (this.status === 'playing' || this.status === 'loading') {
-            this.provider.stop();
+            this.providerManager.stop();
             await this.playInternal();
         }
       });
   }
 
   private playNext() {
-      // Execute within the operation lock to prevent race conditions with user actions (pause, stop)
-      this.enqueue(async () => {
+      this.taskSequencer.enqueue(async () => {
           if (this.status !== 'stopped') {
-              // Update Reading History:
-              // The current item (this.queue[this.currentIndex]) has finished playing.
-              // We mark its CFI range as "read" in the database.
-              // This is used to track reading coverage (percent read) and potential sync with visual reader.
               if (this.currentBookId) {
-                  const item = this.queue[this.currentIndex];
-                  // Only track if it's a valid content item (not a preroll)
+                  const item = this.stateManager.getCurrentItem();
                   if (item && item.cfi && !item.isPreroll) {
                       dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, true).catch(console.error);
                   }
               }
 
-              // Advance to next item
-              if (this.currentIndex < this.queue.length - 1) {
-                  this.backgroundAudio.play(this.backgroundAudioMode);
-                  this.currentIndex++;
-                  this.persistQueue(); // Persist state so we can resume later
-                  await this.playInternal(); // Start playing the next item
+              if (this.stateManager.next()) {
+                  this.platformIntegration.setBackgroundAudioMode(this.platformIntegration['backgroundAudioMode'], true); // Hack access or add getter?
+                  // Wait, platform integration handles background audio on setStatus.
+                  // But playNext needs to ensure audio is playing?
+                  // `this.backgroundAudio.play` was called in original.
+                  // `setStatus` calls it.
+                  this.stateManager.persist(this.currentBookId || '');
+                  await this.playInternal();
               } else {
-                  // End of queue, try to load next chapter
                   const loaded = await this.advanceToNextChapter();
                   if (!loaded) {
                       this.setStatus('completed');
@@ -832,51 +661,27 @@ export class AudioPlayerService {
   }
 
   private setStatus(status: TTSStatus) {
-      // Record TTS Session on Pause/Stop
       const oldStatus = this.status;
+      // Record history on pause/stop
       if ((oldStatus === 'playing' || oldStatus === 'loading') && (status === 'paused' || status === 'stopped')) {
-           if (this.currentBookId && this.queue[this.currentIndex]) {
-               const item = this.queue[this.currentIndex];
+           if (this.currentBookId) {
+               const item = this.stateManager.getCurrentItem();
                if (item && item.cfi && !item.isPreroll) {
                    dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, false).catch(console.error);
                }
            }
       }
 
-      // State transition validation (placeholder logic for now)
-      if (this.status === 'stopped' && status === 'playing') { /* valid */ }
-      else if (this.status === 'stopped' && status === 'loading') { /* valid */ }
-      else if (this.status === 'loading' && status === 'playing') { /* valid */ }
-      else if (this.status === 'loading' && status === 'stopped') { /* valid */ }
-      else if (this.status === 'playing' && status === 'paused') { /* valid */ }
-      else if (this.status === 'paused' && status === 'playing') { /* valid */ }
-      else if (this.status === 'paused' && status === 'loading') { /* valid */ }
-      else if (this.status === 'playing' && status === 'stopped') { /* valid */ }
-      else if (this.status === 'paused' && status === 'stopped') { /* valid */ }
-      else if (status === 'completed') { /* valid */ }
-      else if (this.status === status) { /* valid */ }
-
       this.status = status;
-
-      // Clear cached rules on stop or pause to ensure freshness on next session
       if (status === 'stopped' || status === 'paused') {
           this.activeLexiconRules = null;
       }
 
-      this.mediaSessionManager.setPlaybackState(
-          status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
-      );
+      this.platformIntegration.setPlaybackState(status);
 
-      if (status === 'playing' || status === 'loading' || status === 'completed') {
-          this.backgroundAudio.play(this.backgroundAudioMode);
-      } else if (status === 'paused') {
-          this.backgroundAudio.stopWithDebounce(500);
-      } else {
-          this.backgroundAudio.forceStop();
-      }
-
-      const currentCfi = (this.queue[this.currentIndex] && (status === 'playing' || status === 'loading' || status === 'paused'))
-        ? this.queue[this.currentIndex].cfi
+      const currentItem = this.stateManager.getCurrentItem();
+      const currentCfi = (currentItem && (status === 'playing' || status === 'loading' || status === 'paused'))
+        ? currentItem.cfi
         : null;
 
       this.notifyListeners(currentCfi);
@@ -884,158 +689,96 @@ export class AudioPlayerService {
 
   subscribe(listener: PlaybackListener) {
     this.listeners.push(listener);
-    const currentCfi = this.queue[this.currentIndex]?.cfi || null;
+    const currentItem = this.stateManager.getCurrentItem();
+    const currentCfi = currentItem?.cfi || null;
     setTimeout(() => {
-        listener(this.status, currentCfi, this.currentIndex, this.queue, null);
+        listener(this.status, currentCfi, this.stateManager.getCurrentIndex(), this.stateManager.getQueue(), null);
     }, 0);
     return () => {
       this.listeners = this.listeners.filter(l => l !== listener);
     };
   }
 
-  private notifyListeners(activeCfi: string | null) {
-      this.listeners.forEach(l => l(this.status, activeCfi, this.currentIndex, this.queue, null));
-  }
-
-  private notifyError(message: string) {
-      this.listeners.forEach(l => l(this.status, this.queue[this.currentIndex]?.cfi || null, this.currentIndex, this.queue, message));
-  }
-
-  private notifyDownloadProgress(voiceId: string, percent: number, status: string) {
-      this.listeners.forEach(l => l(this.status, this.queue[this.currentIndex]?.cfi || null, this.currentIndex, this.queue, null, { voiceId, percent, status }));
-  }
-
-  /**
-   * OPTIONAL: Samsung Mitigation
-   * Checks if the app is restricted and prompts the user.
-   */
   public async checkBatteryOptimization() {
-      if (Capacitor.getPlatform() === 'android') {
-          const isEnabled = await BatteryOptimization.isBatteryOptimizationEnabled();
-          if (isEnabled.enabled) {
-              // TODO: Prompt user to disable optimization
-          }
-      }
+      await this.platformIntegration.checkBatteryOptimization();
   }
 
   private async loadSectionInternal(sectionIndex: number, autoPlay: boolean, sectionTitle?: string): Promise<boolean> {
       if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
-
       const section = this.playlist[sectionIndex];
-      try {
-          const ttsContent = await dbService.getTTSContent(this.currentBookId, section.sectionId);
 
-          // Determine Title
-          let title = sectionTitle || `Section ${sectionIndex + 1}`;
-          if (!sectionTitle) {
-              const analysis = await dbService.getContentAnalysis(this.currentBookId, section.sectionId);
-              if (analysis && analysis.structure.title) {
-                  title = analysis.structure.title;
-              }
-          }
+      try {
+          // Resolve cover URL only if needed. Pipeline doesn't manage ObjectURL lifecycle.
+          // Original logic managed it here.
+          // Let's keep managing it here or pass it down.
+          // Pipeline returns generic items.
+
+          // Re-implement cover logic here or in pipeline?
+          // Pipeline doesn't have access to `this.currentCoverUrl` state.
+          // So we should handle the coverUrl *after* receiving items from pipeline or pass it in.
+          // Let's pass it in? No, pipeline generates the queue items.
+          // I will let pipeline generate items with *undefined* coverUrl if it's not a string in DB.
+          // And then I patch them here.
+
+          const newQueue = await this.pipeline.loadSection(
+              this.currentBookId,
+              section,
+              sectionTitle,
+              this.prerollEnabled,
+              this.speed
+          );
+
+          // Handle Cover URL
+          // We need bookMetadata to get the cover blob if not url.
+          // Pipeline already fetched metadata but didn't return it.
+          // Optimally, pipeline should return { queue, coverBlob? }.
+          // Or we just fetch metadata again? It's indexeddb, cheap enough.
 
           const bookMetadata = await dbService.getBookMetadata(this.currentBookId);
-
           let coverUrl = bookMetadata?.coverUrl;
           if (!coverUrl && bookMetadata?.coverBlob) {
-              if (!this.currentCoverUrl) {
+               if (!this.currentCoverUrl) {
                   this.currentCoverUrl = URL.createObjectURL(bookMetadata.coverBlob);
-              }
-              coverUrl = this.currentCoverUrl;
+               }
+               coverUrl = this.currentCoverUrl;
           }
 
-          const newQueue: TTSQueueItem[] = [];
-
-          if (ttsContent && ttsContent.sentences.length > 0) {
-              // Dynamic Refinement: Merge segments based on current settings
-              const settings = useTTSStore.getState();
-              const refinedSentences = TextSegmenter.refineSegments(
-                  ttsContent.sentences,
-                  settings.customAbbreviations,
-                  settings.alwaysMerge,
-                  settings.sentenceStarters,
-                  settings.minSentenceLength
-              );
-
-              // -----------------------------------------------------------
-              // Content Type Detection & Filtering
-              // -----------------------------------------------------------
-              const genAISettings = useGenAIStore.getState();
-              const skipTypes = genAISettings.contentFilterSkipTypes;
-              
-              let finalSentences: { text: string; cfi: string | null }[] = refinedSentences;
-
-              // Optimize: Don't run detection if nothing to skip
-              const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
-              if (skipTypes.length > 0 && isContentAnalysisEnabled) {
-                  finalSentences = await this.detectAndFilterContent(refinedSentences, skipTypes);
-              }
-
-              // Add Preroll if enabled
-              if (this.prerollEnabled) {
-                  const prerollText = this.generatePreroll(title, Math.round(section.characterCount / 5), this.speed);
-                  newQueue.push({
-                      text: prerollText,
-                      cfi: null,
-                      isPreroll: true,
-                      title: title,
-                      bookTitle: bookMetadata?.title,
-                      author: bookMetadata?.author,
-                      coverUrl: coverUrl
-                  });
-              }
-
-              finalSentences.forEach((s) => {
-                  if (s.cfi) {
-                      newQueue.push({
-                          text: s.text,
-                          cfi: s.cfi,
-                          title: title,
-                          bookTitle: bookMetadata?.title,
-                          author: bookMetadata?.author,
-                          coverUrl: coverUrl
-                      });
-                  }
-              });
-          } else {
-              // Empty Chapter Handling
-              const randomMessage = NO_TEXT_MESSAGES[Math.floor(Math.random() * NO_TEXT_MESSAGES.length)];
-              newQueue.push({
-                  text: randomMessage,
-                  cfi: null,
-                  isPreroll: true,
-                  title: title,
-                  bookTitle: bookMetadata?.title,
-                  author: bookMetadata?.author,
-                  coverUrl: coverUrl
-              });
+          if (coverUrl) {
+              newQueue.forEach(item => item.coverUrl = coverUrl);
           }
 
           if (newQueue.length > 0) {
               if (autoPlay) {
-                  this.provider.stop();
+                  this.providerManager.stop();
                   await this.savePlaybackState();
                   this.setStatus('loading');
               } else {
                   await this.stopInternal();
               }
 
-              this.queue = newQueue;
-              this.currentIndex = 0;
-              this.currentSectionIndex = sectionIndex;
-              this.lastPersistedQueue = null; // Reset persisted tracker on new section
+              this.stateManager.setQueue(newQueue, 0, sectionIndex);
 
-              this.calculatePrefixSums();
-              this.updateMediaSessionMetadata();
-              this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
-              this.persistQueue();
+              const item = this.stateManager.getCurrentItem();
+              if (item) {
+                  this.platformIntegration.updateMediaMetadata(item, sectionIndex, this.playlist.length);
+                  this.notifyListeners(item.cfi || null);
+              }
+              this.stateManager.persist(this.currentBookId);
 
               if (autoPlay) {
                    await this.playInternal();
               }
-              this.triggerNextChapterAnalysis();
+
+              // Trigger next chapter analysis
+              const nextIndex = sectionIndex + 1;
+              if (nextIndex < this.playlist.length) {
+                  this.pipeline.triggerNextChapterAnalysis(this.currentBookId, this.playlist[nextIndex]);
+              } else {
+                  console.log("Not triggering next analysis", nextIndex, this.playlist.length);
+              }
               return true;
           }
+
       } catch (e) {
           console.error("Failed to load section content", e);
       }
@@ -1044,10 +787,8 @@ export class AudioPlayerService {
 
   private async advanceToNextChapter(): Promise<boolean> {
       if (!this.currentBookId || this.playlist.length === 0) return false;
-
-      let nextSectionIndex = this.currentSectionIndex + 1;
-
-      if (this.currentSectionIndex === -1) nextSectionIndex = 0;
+      let nextSectionIndex = this.stateManager.getCurrentSectionIndex() + 1;
+      if (this.stateManager.getCurrentSectionIndex() === -1) nextSectionIndex = 0;
 
       while (nextSectionIndex < this.playlist.length) {
           const loaded = await this.loadSectionInternal(nextSectionIndex, true);
@@ -1057,216 +798,21 @@ export class AudioPlayerService {
       return false;
   }
 
-  /**
-   * Retrieves or detects content types for the given text groups.
-   * Checks the database first for persisted classifications. If not found,
-   * invokes the GenAI service to classify the content (if available).
-   *
-   * @param bookId The ID of the book.
-   * @param sectionId The ID of the section.
-   * @param groups The grouped text segments to analyze.
-   * @returns A promise resolving to the list of content types, or null if detection was not possible.
-   */
-  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[]) {
-      // Deduplicate concurrent requests for the same section
-      const key = `${bookId}:${sectionId}`;
-      if (this.analysisPromises.has(key)) {
-          return this.analysisPromises.get(key);
-      }
-
-      const promise = (async () => {
-          // 1. Check existing classification in DB
-          const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
-
-          // If we have stored content types, return them
-          if (contentAnalysis?.contentTypes) {
-              return contentAnalysis.contentTypes;
-          }
-
-          // 2. If not found, detect with GenAI
-          const aiStore = useGenAIStore.getState();
-          const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
-
-          if (!canUseGenAI) {
-              return null;
-          }
-
-          try {
-              const idToCfiMap = new Map<string, string>();
-
-              const nodesToDetect = groups.map((g, index) => {
-                  const id = index.toString();
-                  idToCfiMap.set(id, g.rootCfi);
-                  return {
-                      id,
-                      sampleText: g.fullText.substring(0, 500)
-                  };
-              });
-
-              // Ensure service is configured if we have a key
-              if (!genAIService.isConfigured() && aiStore.apiKey) {
-                    genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
-              }
-
-              if (genAIService.isConfigured()) {
-                  // Note: Using default model (gemini-1.5-flash) from GenAIService
-                  const results = await genAIService.detectContentTypes(nodesToDetect);
-
-                  // Reconstruct the original format for DB persistence
-                  const finalResults = results.map(res => ({
-                      rootCfi: idToCfiMap.get(res.id) || '',
-                      type: res.type
-                  })).filter(r => r.rootCfi !== '');
-
-                  // Persist detection results
-                  await dbService.saveContentClassifications(bookId, sectionId, finalResults);
-                  return finalResults;
-              }
-          } catch (e) {
-              console.warn("Content detection failed", e);
-          }
-
-          return null;
-      })();
-
-      this.analysisPromises.set(key, promise);
-      try {
-          return await promise;
-      } finally {
-          this.analysisPromises.delete(key);
-      }
-  }
-
-  private groupSentencesByRoot(sentences: { text: string; cfi: string | null }[]): { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] {
-      const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
-      let currentGroup: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
-
-      for (const s of sentences) {
-          const rootCfi = getParentCfi(s.cfi || ''); // Handle null cfi
-
-          if (!currentGroup || currentGroup.rootCfi !== rootCfi) {
-              if (currentGroup) groups.push(currentGroup);
-              currentGroup = { rootCfi, segments: [], fullText: '' };
-          }
-
-          currentGroup.segments.push(s);
-          currentGroup.fullText += s.text + ' ';
-      }
-      if (currentGroup) groups.push(currentGroup);
-      return groups;
-  }
-
-  private async triggerNextChapterAnalysis() {
-      const genAISettings = useGenAIStore.getState();
-      if (!genAISettings.isContentAnalysisEnabled || genAISettings.contentFilterSkipTypes.length === 0) {
-          return;
-      }
-      
-      if (!this.currentBookId || this.currentSectionIndex === -1) return;
-
-      const nextIndex = this.currentSectionIndex + 1;
-      if (nextIndex >= this.playlist.length) return;
-
-      const nextSection = this.playlist[nextIndex];
-      const bookId = this.currentBookId;
-
-      // Fire and forget, but handle errors
-      (async () => {
-          try {
-             // 1. Get Content
-             const ttsContent = await dbService.getTTSContent(bookId, nextSection.sectionId);
-             if (!ttsContent || ttsContent.sentences.length === 0) return;
-
-             // 2. Refine
-              const settings = useTTSStore.getState();
-              const refinedSentences = TextSegmenter.refineSegments(
-                  ttsContent.sentences,
-                  settings.customAbbreviations,
-                  settings.alwaysMerge,
-                  settings.sentenceStarters,
-                  settings.minSentenceLength
-              );
-
-             // 3. Group
-             const groups = this.groupSentencesByRoot(refinedSentences);
-
-             // 4. Detect (will use deduplicated promise if already running)
-             await this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups);
-
-          } catch (e) {
-              console.warn('Background analysis failed', e);
-          }
-      })();
-  }
-
-  /**
-   * Filters the TTS queue based on content type classification.
-   * Uses GenAI to detect content types (citations, tables, etc.) and removes
-   * segments that match the configured skip types.
-   *
-   * @param sentences The original list of TTS queue items.
-   * @param skipTypes The list of content types to exclude.
-   * @returns A promise resolving to the filtered list of queue items.
-   */
-  private async detectAndFilterContent(sentences: { text: string; cfi: string | null }[], skipTypes: ContentType[]): Promise<{ text: string; cfi: string | null }[]> {
-      if (!this.currentBookId || this.currentSectionIndex === -1) return sentences;
-      
-      const sectionId = this.playlist[this.currentSectionIndex]?.sectionId;
-      if (!sectionId) return sentences;
-
-      // Group sentences by Root Node
-      const groups = this.groupSentencesByRoot(sentences);
-
-      const detectedTypes = await this.getOrDetectContentTypes(this.currentBookId, sectionId, groups);
-
-      // 3. Filter based on detected types and current settings
-      if (detectedTypes && detectedTypes.length > 0) {
-          const typeMap = new Map<string, ContentType>();
-          detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
-
-          const skipRoots = new Set<string>();
-          groups.forEach(g => {
-              const type = typeMap.get(g.rootCfi);
-              if (type && skipTypes.includes(type)) {
-                  skipRoots.add(g.rootCfi);
-              }
-          });
-
-          if (skipRoots.size > 0) {
-              const finalSentences: { text: string; cfi: string | null }[] = [];
-              for (const g of groups) {
-                  if (!skipRoots.has(g.rootCfi)) {
-                      finalSentences.push(...g.segments);
-                  } else {
-                      console.log(`Skipping content block (Cached/Detected)`, g.rootCfi);
-                  }
-              }
-              return finalSentences;
-          }
-      }
-
-
-      return sentences;
-  }
-
-  /**
-   * Loads the closest previous section and starts playback from its end.
-   * Used for "rewinding" across chapter boundaries.
-   */
   private async retreatToPreviousChapter(): Promise<boolean> {
       if (!this.currentBookId || this.playlist.length === 0) return false;
-
-      let prevSectionIndex = this.currentSectionIndex - 1;
+      let prevSectionIndex = this.stateManager.getCurrentSectionIndex() - 1;
 
       while (prevSectionIndex >= 0) {
-          // We load the section without autoplaying so we can manually
-          // set the position to the end of the chapter before starting playback.
           const loaded = await this.loadSectionInternal(prevSectionIndex, false);
           if (loaded) {
-              this.currentIndex = Math.max(0, this.queue.length - 1);
-              this.persistQueue();
-              this.updateMediaSessionMetadata();
-              this.notifyListeners(this.queue[this.currentIndex]?.cfi || null);
+              this.stateManager.moveToEnd();
+              this.stateManager.persist(this.currentBookId);
+
+              const item = this.stateManager.getCurrentItem();
+              if (item) {
+                  this.platformIntegration.updateMediaMetadata(item, prevSectionIndex, this.playlist.length);
+                  this.notifyListeners(item.cfi || null);
+              }
 
               await this.playInternal();
               return true;
