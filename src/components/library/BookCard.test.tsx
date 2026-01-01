@@ -37,9 +37,6 @@ describe('BookCard', () => {
   const mockOnRestore = vi.fn();
 
   beforeEach(() => {
-    // Mock URL.createObjectURL and revokeObjectURL
-    global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
-    global.URL.revokeObjectURL = vi.fn();
     vi.clearAllMocks();
   });
 
@@ -69,7 +66,7 @@ describe('BookCard', () => {
     renderCard();
 
     const img = screen.getByRole('img');
-    expect(img).toHaveAttribute('src', 'blob:mock-url');
+    expect(img).toHaveAttribute('src', `/__versicle__/covers/${mockBook.id}`);
     expect(img).toHaveAttribute('alt', 'Cover of Test Title');
   });
 
@@ -79,16 +76,6 @@ describe('BookCard', () => {
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.getByText('Aa')).toBeInTheDocument();
-  });
-
-  it('should clean up object URL on unmount', () => {
-    const { unmount } = renderCard();
-
-    expect(global.URL.createObjectURL).toHaveBeenCalledWith(mockBook.coverBlob);
-
-    unmount();
-
-    expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
   });
 
   it('should render progress bar when progress > 0', () => {

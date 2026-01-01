@@ -97,7 +97,6 @@ export class AudioPlayerService {
   private backgroundAudio: BackgroundAudio;
   private backgroundAudioMode: BackgroundAudioMode = 'silence';
   private lastMetadata: MediaSessionMetadata | null = null;
-  private currentCoverUrl: string | null = null;
 
   // Track last persisted queue to avoid redundant heavy writes
   private lastPersistedQueue: TTSQueueItem[] | null = null;
@@ -163,10 +162,6 @@ export class AudioPlayerService {
 
   setBookId(bookId: string | null) {
       if (this.currentBookId !== bookId) {
-          if (this.currentCoverUrl) {
-              URL.revokeObjectURL(this.currentCoverUrl);
-              this.currentCoverUrl = null;
-          }
           this.currentBookId = bookId;
           this.sessionRestored = false;
           // Clear tracked state when book changes
@@ -939,13 +934,7 @@ export class AudioPlayerService {
 
           const bookMetadata = await dbService.getBookMetadata(this.currentBookId);
 
-          let coverUrl = bookMetadata?.coverUrl;
-          if (!coverUrl && bookMetadata?.coverBlob) {
-              if (!this.currentCoverUrl) {
-                  this.currentCoverUrl = URL.createObjectURL(bookMetadata.coverBlob);
-              }
-              coverUrl = this.currentCoverUrl;
-          }
+          const coverUrl = bookMetadata?.coverUrl || (bookMetadata?.coverBlob ? `/__versicle__/covers/${this.currentBookId}` : undefined);
 
           const newQueue: TTSQueueItem[] = [];
 

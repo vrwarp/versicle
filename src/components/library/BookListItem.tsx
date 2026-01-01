@@ -51,25 +51,8 @@ export const BookListItem = React.memo(({ book, onDelete, onOffload, onRestore }
     const navigate = useNavigate();
     const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderStore(state => state.setCurrentBookId);
-    const [coverUrl, setCoverUrl] = React.useState<string | null>(null);
 
-    React.useEffect(() => {
-        let url: string | null = null;
-        if (book.coverBlob) {
-            url = URL.createObjectURL(book.coverBlob);
-            setCoverUrl(url);
-        } else {
-            setCoverUrl(null);
-        }
-
-        return () => {
-            if (url) {
-                URL.revokeObjectURL(url);
-            }
-        };
-    }, [book.coverBlob]);
-
-    const displayUrl = coverUrl || book.coverUrl;
+    const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
 
     const handleOpen = () => {
         if (book.isOffloaded) {
