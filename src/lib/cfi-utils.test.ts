@@ -272,6 +272,19 @@ describe('cfi-utils', () => {
         const start = 'epubcfi(/6/2!/4/1:0)';
         expect(generateCfiRange(start, start)).toBe('epubcfi(/6/2!/4/1,:0,:0)');
     });
+
+    it('handles 1 vs 11 scenario (delimiter alignment)', () => {
+        // start: /2/1:0
+        // end: /2/11:0
+        // mismatch at '1' (end[4]) vs ':' (start[4])
+        // backtrack should skip '1' (start[3]) which is not delimiter
+        // should stop at '/' (start[2])
+        const start = 'epubcfi(/2/1:0)';
+        const end = 'epubcfi(/2/11:0)';
+        const res = generateCfiRange(start, end);
+        // Expect common prefix ending at /2
+        expect(res).toBe('epubcfi(/2,/1:0,/11:0)');
+    });
   });
 
   describe('mergeCfiRanges', () => {
@@ -314,6 +327,23 @@ describe('cfi-utils', () => {
           const res = mergeCfiRanges([r1, r2]);
           expect(res).toHaveLength(1);
           expect(res[0]).toContain(':0,:20');
+      });
+
+      it('includes point CFIs in merge (as range)', () => {
+          const p = 'epubcfi(/6/2!/4/2:5)'; // point at 5
+          const res = mergeCfiRanges([p]);
+          expect(res).toHaveLength(1);
+          // generateCfiRange converts point P into P,P -> parent,startRel,startRel
+          // /6/2!/4/2:5 -> /6/2!/4/2,:5,:5
+          expect(res[0]).toContain(':5,:5');
+      });
+
+      it('merges point CFI into overlapping range', () => {
+          const r = 'epubcfi(/6/2!/4/2,:0,:10)';
+          const p = 'epubcfi(/6/2!/4/2:5)'; // Inside
+          const res = mergeCfiRanges([r, p]);
+          expect(res).toHaveLength(1);
+          expect(res[0]).toContain(':0,:10');
       });
 
       it('handles unsorted ranges', () => {
