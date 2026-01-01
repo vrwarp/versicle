@@ -14,6 +14,9 @@ import { BookActionMenu } from './BookActionMenu';
 interface BookListItemProps {
     /** The metadata of the book to display. */
     book: BookMetadata;
+    onDelete: (book: BookMetadata) => void;
+    onOffload: (book: BookMetadata) => void;
+    onRestore: (book: BookMetadata) => void;
 }
 
 const formatFileSize = (bytes?: number): string => {
@@ -44,7 +47,7 @@ const formatDuration = (chars?: number): string => {
  * @param props - Component props.
  * @returns The rendered list item.
  */
-export const BookListItem = React.memo(({ book }: BookListItemProps) => {
+export const BookListItem = React.memo(({ book, onDelete, onOffload, onRestore }: BookListItemProps) => {
     const navigate = useNavigate();
     const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderStore(state => state.setCurrentBookId);
@@ -156,7 +159,12 @@ export const BookListItem = React.memo(({ book }: BookListItemProps) => {
 
                 {/* Actions */}
                 <div className="flex-none" onClick={(e) => e.stopPropagation()}>
-                    <BookActionMenu book={book}>
+                    <BookActionMenu
+                        book={book}
+                        onDelete={() => onDelete(book)}
+                        onOffload={() => onOffload(book)}
+                        onRestore={() => onRestore(book)}
+                    >
                          <button
                             className={cn(
                                 "p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors focus:opacity-100 touch-manipulation",
