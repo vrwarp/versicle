@@ -631,6 +631,28 @@ export const GlobalSettingsDialog = () => {
                                             />
                                         </div>
                                     )}
+
+                                    <div className="pt-4 border-t space-y-4">
+                                        <h4 className="text-sm font-medium">Text Processing</h4>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between">
+                                                <div className="space-y-0.5">
+                                                    <label className="text-sm font-medium">Minimum Sentence Length</label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Sentences shorter than this will be merged with adjacent ones.
+                                                    </p>
+                                                </div>
+                                                <span className="text-sm text-muted-foreground">{minSentenceLength} chars</span>
+                                            </div>
+                                            <Slider
+                                                value={[minSentenceLength]}
+                                                min={0}
+                                                max={120}
+                                                step={6}
+                                                onValueChange={(vals) => setMinSentenceLength(vals[0])}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
