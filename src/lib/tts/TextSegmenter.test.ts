@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { TextSegmenter } from './TextSegmenter';
+import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './TextSegmenter';
+import type { SentenceNode } from '../tts';
 
 describe('TextSegmenter', () => {
   it('segments simple sentences correctly using Intl.Segmenter', () => {
@@ -13,26 +14,37 @@ describe('TextSegmenter', () => {
     expect(segments[1].text).toBe("This is a test.");
   });
 
-  it('handles abbreviations like Mr. Smith correctly', () => {
-    const segmenter = new TextSegmenter('en', ['Mr.']);
+  it('splits abbreviations like Mr. Smith in raw segmentation', () => {
+    const segmenter = new TextSegmenter('en');
     const text = "Mr. Smith went to Washington.";
     const segments = segmenter.segment(text);
 
-    expect(segments).toHaveLength(1);
-    expect(segments[0].text).toBe("Mr. Smith went to Washington.");
+    // Raw segmentation splits at "Mr."
+    expect(segments.length).toBeGreaterThan(1);
+    expect(segments[0].text.trim()).toBe("Mr.");
+  });
+
+  it('can refine abbreviations via refineSegments', () => {
+    // Construct sentences simulating raw split (space attached to first segment)
+    const sentences: SentenceNode[] = [
+      { text: "Mr. ", cfi: "cfi1" },
+      { text: "Smith went to Washington.", cfi: "cfi2" }
+    ];
+
+    const refined = TextSegmenter.refineSegments(
+      sentences,
+      ['Mr.'],
+      DEFAULT_ALWAYS_MERGE,
+      DEFAULT_SENTENCE_STARTERS
+    );
+
+    expect(refined).toHaveLength(1);
+    expect(refined[0].text).toBe("Mr. Smith went to Washington.");
   });
 
   it('handles empty input', () => {
     const segmenter = new TextSegmenter();
     expect(segmenter.segment("")).toHaveLength(0);
-  });
-
-  it('merges default ALWAYS_MERGE titles even if abbreviations list is empty', () => {
-    const segmenter = new TextSegmenter();
-    const text = "Mr. Smith went home.";
-    const segments = segmenter.segment(text);
-    expect(segments).toHaveLength(1);
-    expect(segments[0].text).toBe("Mr. Smith went home.");
   });
 
   describe('Fallback behavior', () => {
