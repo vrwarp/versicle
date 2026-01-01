@@ -62,9 +62,9 @@ export class TextSegmenter {
         if (typeof Intl !== 'undefined' && Intl.Segmenter) {
             this.segmenter = new Intl.Segmenter(locale, { granularity: 'sentence' });
         }
-        this.abbreviations = new Set(abbreviations.map(s => s.normalize()));
-        this.alwaysMerge = new Set(alwaysMerge.map(s => s.normalize()));
-        this.sentenceStarters = new Set(sentenceStarters.map(s => s.normalize()));
+        this.abbreviations = new Set(abbreviations.map(s => s.normalize('NFKD')));
+        this.alwaysMerge = new Set(alwaysMerge.map(s => s.normalize('NFKD')));
+        this.sentenceStarters = new Set(sentenceStarters.map(s => s.normalize('NFKD')));
 
         // Ensure alwaysMerge items are also in abbreviations so they trigger the merge logic
         for (const item of this.alwaysMerge) {
@@ -80,7 +80,7 @@ export class TextSegmenter {
      */
     segment(text: string): TextSegment[] {
         if (!text) return [];
-        const normalizedText = text.normalize();
+        const normalizedText = text.normalize('NFKD');
 
         if (this.segmenter) {
             const rawSegments = Array.from(this.segmenter.segment(normalizedText)).map(s => ({
@@ -222,12 +222,12 @@ export class TextSegmenter {
         if (!sentences || sentences.length === 0) return [];
 
         const merged: SentenceNode[] = [];
-        const abbrSet = new Set(abbreviations.map(s => s.normalize().toLowerCase())); // Normalize for case-insensitive check
-        const mergeSet = new Set(alwaysMerge.map(s => s.normalize().toLowerCase()));
-        const starterSet = new Set(sentenceStarters.map(s => s.normalize())); // Starters are usually Case Sensitive (e.g. "He" vs "he")
+        const abbrSet = new Set(abbreviations.map(s => s.normalize('NFKD').toLowerCase())); // Normalize for case-insensitive check
+        const mergeSet = new Set(alwaysMerge.map(s => s.normalize('NFKD').toLowerCase()));
+        const starterSet = new Set(sentenceStarters.map(s => s.normalize('NFKD'))); // Starters are usually Case Sensitive (e.g. "He" vs "he")
 
         for (let i = 0; i < sentences.length; i++) {
-            const current = { ...sentences[i], text: sentences[i].text.normalize() };
+            const current = { ...sentences[i], text: sentences[i].text.normalize('NFKD') };
 
             if (merged.length > 0) {
                 const last = merged[merged.length - 1];
