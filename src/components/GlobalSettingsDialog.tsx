@@ -646,8 +646,8 @@ export const GlobalSettingsDialog = () => {
                                             <Slider
                                                 value={[minSentenceLength]}
                                                 min={0}
-                                                max={200}
-                                                step={5}
+                                                max={120}
+                                                step={6}
                                                 onValueChange={(vals) => setMinSentenceLength(vals[0])}
                                             />
                                         </div>

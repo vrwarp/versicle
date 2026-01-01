@@ -300,12 +300,24 @@ export class TextSegmenter {
             return merged;
         }
 
-        // Second pass: Merge by length
+        return this.mergeByLength(merged, minSentenceLength);
+    }
+
+    /**
+     * Merges sentences that are shorter than the minimum length with adjacent sentences.
+     *
+     * @param sentences - The list of sentences to merge.
+     * @param minLength - The minimum character length.
+     * @returns A new list of merged sentences.
+     */
+    public static mergeByLength(sentences: SentenceNode[], minLength: number): SentenceNode[] {
+        if (!sentences || sentences.length === 0) return [];
+
         const lengthMerged: SentenceNode[] = [];
         let buffer: SentenceNode | null = null;
 
-        for (let i = 0; i < merged.length; i++) {
-            const current = merged[i];
+        for (let i = 0; i < sentences.length; i++) {
+            const current = sentences[i];
 
             if (!buffer) {
                 buffer = { ...current };
@@ -313,7 +325,7 @@ export class TextSegmenter {
             }
 
             // Check if buffer is too short
-            if (buffer.text.length < minSentenceLength) {
+            if (buffer.text.length < minLength) {
                 // Merge current into buffer
                 buffer.text += (buffer.text.endsWith(' ') ? '' : ' ') + current.text;
 
@@ -331,7 +343,7 @@ export class TextSegmenter {
 
         if (buffer) {
             // Handle last item: if it's still short, try to merge it BACK into the last pushed item
-            if (buffer.text.length < minSentenceLength && lengthMerged.length > 0) {
+            if (buffer.text.length < minLength && lengthMerged.length > 0) {
                 const last = lengthMerged[lengthMerged.length - 1];
                 last.text += (last.text.endsWith(' ') ? '' : ' ') + buffer.text;
 

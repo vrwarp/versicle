@@ -179,7 +179,7 @@ export const useTTSStore = create<TTSState>()(
             ],
             alwaysMerge: DEFAULT_ALWAYS_MERGE,
             sentenceStarters: DEFAULT_SENTENCE_STARTERS,
-            minSentenceLength: 0,
+            minSentenceLength: 36,
 
             play: () => {
                 player.play();
