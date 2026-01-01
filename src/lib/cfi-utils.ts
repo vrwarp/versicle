@@ -112,7 +112,8 @@ export function generateCfiRange(start: string, end: string): string {
     while (i > 0) {
         const char = start[i];
         // If remainder starts with separator, it's a good split point
-        if (['/', '!', ':'].includes(char)) {
+        // AND both strings are identical at this point (part of common prefix)
+        if (['/', '!', ':'].includes(char) && start[i] === end[i]) {
              break;
         }
         i--;
@@ -139,7 +140,24 @@ export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
     const parsedRanges: CfiRangeData[] = [];
 
     for (const r of allRanges) {
-        const p = parseCfiRange(r);
+        let p = parseCfiRange(r);
+        if (!p) {
+            // Try parsing as point CFI (no commas)
+            // e.g. epubcfi(/6/14!/4/2/1:0)
+            if (r.startsWith('epubcfi(') && r.endsWith(')') && !r.includes(',')) {
+                const raw = r.slice(8, -1);
+                p = {
+                    parent: '', // Unused in merge logic
+                    start: '',  // Unused
+                    end: '',    // Unused
+                    rawStart: raw,
+                    rawEnd: raw,
+                    fullStart: r,
+                    fullEnd: r
+                };
+            }
+        }
+
         if (p) {
             parsedRanges.push(p);
         }
