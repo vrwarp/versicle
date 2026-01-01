@@ -481,16 +481,12 @@ export const ReaderView: React.FC = () => {
 
     const applyHighlights = async () => {
         try {
-            // Check if we have current section index
-            if (currentSectionId === undefined) return;
+            if (currentSectionId === undefined || !book) return;
 
-            // We need to resolve section index from ID or location.
-            // Simplest is to fetch all analysis for the book and find ones that match current view?
-            // No, that's too heavy.
-            // We should use the current section index.
-            // book.spine.get(currentSectionId).index
-            if (!book || !currentSectionId) return;
-            const section = book.spine.get(currentSectionId);
+            // Resolve the current section's index to fetch specific analysis data.
+            // This avoids loading analysis for the entire book.
+            // currentSectionId is checked above, but TS might not infer it for the argument
+            const section = book.spine.get(currentSectionId!);
             if (!section) return;
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
