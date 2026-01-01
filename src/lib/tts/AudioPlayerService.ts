@@ -170,9 +170,7 @@ export class AudioPlayerService {
   private setupStateListeners() {
       // When internal state changes (e.g. index updates), notify external listeners
       this.stateManager.subscribe(() => {
-         // This is a bit redundant if we notify manually, but good for reactivity
-         // We handle explicit notifications in methods like next(), prev(), so maybe this is unused for now.
-         // Or we can use it to sync UI.
+         // Potential future use: sync UI or other components on state change
       });
   }
 
@@ -312,23 +310,7 @@ export class AudioPlayerService {
         // Quick equality check
         const currentQueue = this.stateManager.getQueue();
         if (currentQueue.length === items.length && items.every((val, index) => val.text === currentQueue[index].text && val.cfi === currentQueue[index].cfi)) {
-             this.stateManager.setQueue(items, 0, this.stateManager.getCurrentSectionIndex()); // Just refreshes logic?
-             // Actually original logic was: if queue equal, just set it and return.
-             // But we might need to reset currentIndex if it's different? Original kept currentIndex if equal??
-             // No, original: if equal, set queue (which is same), calc prefix sums, update metadata, notify, persist.
-             // It did NOT change currentIndex.
-
-             // Wait, original: `if (this.isQueueEqual(items)) { this.queue = items; ... return; }`
-             // It did NOT change currentIndex.
-
-             // But here `startIndex` is passed. If startIndex is different, we should jump?
-             // Original `setQueue` didn't take `startIndex` in signature shown in my read_file output?
-             // Ah, `setQueue(items: TTSQueueItem[], startIndex: number = 0)` YES it did.
-
-             // Let's assume consumer knows what they are doing.
-             // If queue is equal, we might still want to jump to startIndex if provided?
-             // Original code ignored startIndex if queue was equal. I will replicate that behavior.
-
+             // If queue is identical, preserve current index (ignoring startIndex) to match original behavior
              this.stateManager.setQueue(items, this.stateManager.getCurrentIndex(), this.stateManager.getCurrentSectionIndex());
              const item = this.stateManager.getCurrentItem();
              if (item) {
@@ -554,20 +536,8 @@ export class AudioPlayerService {
           const newIndex = this.stateManager.calculateTargetIndexForTime(time);
           const currentIndex = this.stateManager.getCurrentIndex();
 
-          // Fix: Avoid restarting current sentence if index didn't change,
+          // Avoid restarting current sentence if index didn't change,
           // unless it's the last sentence where we might want to go to next chapter.
-          // Original logic:
-          /*
-          if (newIndex === this.currentIndex) {
-             if (newIndex < this.queue.length - 1) {
-                 newIndex++;
-             } else {
-                 await this.advanceToNextChapter();
-                 return;
-             }
-          }
-          */
-
           let adjustedIndex = newIndex;
           if (adjustedIndex === currentIndex) {
               if (this.stateManager.hasNext()) {
@@ -641,11 +611,8 @@ export class AudioPlayerService {
               }
 
               if (this.stateManager.next()) {
-                  this.platformIntegration.setBackgroundAudioMode(this.platformIntegration['backgroundAudioMode'], true); // Hack access or add getter?
-                  // Wait, platform integration handles background audio on setStatus.
-                  // But playNext needs to ensure audio is playing?
-                  // `this.backgroundAudio.play` was called in original.
-                  // `setStatus` calls it.
+                  // Ensure background audio is active
+                  this.platformIntegration.setBackgroundAudioMode(this.platformIntegration['backgroundAudioMode'], true);
                   this.stateManager.persist(this.currentBookId || '');
                   await this.playInternal();
               } else {
@@ -707,18 +674,6 @@ export class AudioPlayerService {
       const section = this.playlist[sectionIndex];
 
       try {
-          // Resolve cover URL only if needed. Pipeline doesn't manage ObjectURL lifecycle.
-          // Original logic managed it here.
-          // Let's keep managing it here or pass it down.
-          // Pipeline returns generic items.
-
-          // Re-implement cover logic here or in pipeline?
-          // Pipeline doesn't have access to `this.currentCoverUrl` state.
-          // So we should handle the coverUrl *after* receiving items from pipeline or pass it in.
-          // Let's pass it in? No, pipeline generates the queue items.
-          // I will let pipeline generate items with *undefined* coverUrl if it's not a string in DB.
-          // And then I patch them here.
-
           const newQueue = await this.pipeline.loadSection(
               this.currentBookId,
               section,
@@ -727,12 +682,7 @@ export class AudioPlayerService {
               this.speed
           );
 
-          // Handle Cover URL
-          // We need bookMetadata to get the cover blob if not url.
-          // Pipeline already fetched metadata but didn't return it.
-          // Optimally, pipeline should return { queue, coverBlob? }.
-          // Or we just fetch metadata again? It's indexeddb, cheap enough.
-
+          // Generate cover URL if needed. This side effect is managed here to ensure proper lifecycle control.
           const bookMetadata = await dbService.getBookMetadata(this.currentBookId);
           let coverUrl = bookMetadata?.coverUrl;
           if (!coverUrl && bookMetadata?.coverBlob) {

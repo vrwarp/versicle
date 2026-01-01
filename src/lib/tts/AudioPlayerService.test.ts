@@ -115,8 +115,8 @@ describe('AudioPlayerService', () => {
     let service: AudioPlayerService;
 
     beforeEach(() => {
-        // vi.spyOn(console, 'error').mockImplementation(() => {});
-        // vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         // Reset singleton
         // @ts-expect-error Resetting singleton for testing

@@ -9,8 +9,6 @@ export class TaskSequencer {
         return await task();
       } catch (err) {
         console.error("Audio task failed safely:", err);
-        // We re-throw or return undefined? Original swallowed error but logged it.
-        // Returning undefined (void) implicitly.
       }
     });
 

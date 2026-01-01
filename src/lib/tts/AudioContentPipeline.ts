@@ -44,22 +44,7 @@ export class AudioContentPipeline {
             }
         }
 
-        let coverUrl = bookMetadata?.coverUrl;
-        if (!coverUrl && bookMetadata?.coverBlob) {
-            // Note: URL.createObjectURL management is the responsibility of the consumer or a separate manager.
-            // But AudioPlayerService manages it. Here we just assume we might need it.
-            // Actually, AudioContentPipeline shouldn't create ObjectURLs if it doesn't own them.
-            // Let's defer this logic. The original code did:
-            // if (!this.currentCoverUrl) this.currentCoverUrl = URL.createObjectURL(bookMetadata.coverBlob);
-            // coverUrl = this.currentCoverUrl;
-
-            // To be pure, we should return the Blob, or expect the caller to handle this.
-            // BUT, for now, to minimize refactor risk, we can accept an optional currentCoverUrl or callback.
-            // Ideally, we pass the blob or URL.
-            // Let's leave coverUrl undefined here if it's not a string, and let the caller handle the blob->url conversion
-            // OR we can pass it in.
-            // In the refactor, let's assume the caller resolves the cover URL.
-        }
+        // Note: Blob-based cover URL generation is handled by AudioPlayerService to manage lifecycle.
 
         const newQueue: TTSQueueItem[] = [];
 
