@@ -495,22 +495,35 @@ export const ReaderView: React.FC = () => {
             if (!section) return;
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const analysis = await dbService.getContentAnalysis(id!, String(section.index));
+            const analysis = await dbService.getContentAnalysis(id!, section.href);
             if (!analysis) return;
 
             if (analysis.contentTypes) {
+                const getDebugColor = (type: string): string => {
+                    switch (type) {
+                        case 'main': return 'green';
+                        case 'title': return 'blue';
+                        case 'citation': return 'yellow';
+                        case 'table': return 'red';
+                        case 'other': return 'gray';
+                        default: return 'yellow';
+                    }
+                };
+
                 analysis.contentTypes.forEach((item) => {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     if (addedDebugHighlights.current.has(item.rootCfi)) return;
 
-                    const color = TYPE_COLORS[item.type];
-                    if (color) {
+                    const solidColor = getDebugColor(item.type);
+                    const rgbaColor = TYPE_COLORS[item.type];
+
+                    if (solidColor) {
                         try {
                             // @ts-expect-error annotations is not typed fully
                             rendition.annotations.add('highlight', item.rootCfi, {}, null, 'debug-analysis-highlight', {
-                                fill: color,
-                                backgroundColor: color,
-                                fillOpacity: '1',
+                                fill: solidColor,
+                                backgroundColor: rgbaColor,
+                                fillOpacity: '0.3',
                                 mixBlendMode: 'multiply'
                             });
                             addedDebugHighlights.current.add(item.rootCfi);
