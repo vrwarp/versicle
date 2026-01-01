@@ -268,9 +268,23 @@ describe('cfi-utils', () => {
         expect(generateCfiRange(start, end)).toBe('epubcfi(/a/b,/123,/124)');
     });
 
+    it('normalizes common path when start is a prefix of end and ends at step boundary', () => {
+        // As reported:
+        // Start: /6/28!/4/2
+        // End: /6/28!/4/2/8
+        // Common prefix: /6/28!/4/2
+        // Should be: epubcfi(/6/28!/4/2,,/8)
+        const start = 'epubcfi(/6/28!/4/2)';
+        const end = 'epubcfi(/6/28!/4/2/8)';
+
+        const result = generateCfiRange(start, end);
+        expect(result).toBe('epubcfi(/6/28!/4/2,,/8)');
+    });
+
     it('handles identical start and end', () => {
         const start = 'epubcfi(/6/2!/4/1:0)';
-        expect(generateCfiRange(start, start)).toBe('epubcfi(/6/2!/4/1,:0,:0)');
+        // Canonical behavior: Common path is full path, relative parts are empty
+        expect(generateCfiRange(start, start)).toBe('epubcfi(/6/2!/4/1:0,,)');
     });
 
     it('handles 1 vs 11 scenario (delimiter alignment)', () => {
@@ -334,8 +348,9 @@ describe('cfi-utils', () => {
           const res = mergeCfiRanges([p]);
           expect(res).toHaveLength(1);
           // generateCfiRange converts point P into P,P -> parent,startRel,startRel
-          // /6/2!/4/2:5 -> /6/2!/4/2,:5,:5
-          expect(res[0]).toContain(':5,:5');
+          // /6/2!/4/2:5 -> /6/2!/4/2,:5,:5 (Old)
+          // /6/2!/4/2:5 -> /6/2!/4/2:5,,   (Canonical)
+          expect(res[0]).toBe('epubcfi(/6/2!/4/2:5,,)');
       });
 
       it('merges point CFI into overlapping range', () => {
