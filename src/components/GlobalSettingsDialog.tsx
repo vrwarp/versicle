@@ -171,7 +171,8 @@ export const GlobalSettingsDialog = () => {
         backgroundAudioMode, setBackgroundAudioMode,
         whiteNoiseVolume, setWhiteNoiseVolume,
         voice, voices, setVoice,
-        downloadVoice, deleteVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded
+        downloadVoice, deleteVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded,
+        minSentenceLength, setMinSentenceLength
     } = useTTSStore(useShallow(state => ({
         // Optimization: Use shallow selector to avoid re-renders on activeCfi/progress updates during playback
         providerId: state.providerId,
@@ -190,9 +191,7 @@ export const GlobalSettingsDialog = () => {
         downloadProgress: state.downloadProgress,
         downloadStatus: state.downloadStatus,
         isDownloading: state.isDownloading,
-        checkVoiceDownloaded: state.checkVoiceDownloaded,
-        minSentenceLength: state.minSentenceLength,
-        setMinSentenceLength: state.setMinSentenceLength
+        checkVoiceDownloaded: state.checkVoiceDownloaded
     })));
 
     const [isVoiceReady, setIsVoiceReady] = useState(false);
@@ -630,28 +629,6 @@ export const GlobalSettingsDialog = () => {
                                             />
                                         </div>
                                     )}
-
-                                    <div className="pt-4 border-t space-y-4">
-                                        <h4 className="text-sm font-medium">Text Processing</h4>
-                                        <div className="space-y-2">
-                                            <div className="flex justify-between">
-                                                <div className="space-y-0.5">
-                                                    <label className="text-sm font-medium">Minimum Sentence Length</label>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Sentences shorter than this will be merged with adjacent ones.
-                                                    </p>
-                                                </div>
-                                                <span className="text-sm text-muted-foreground">{minSentenceLength} chars</span>
-                                            </div>
-                                            <Slider
-                                                value={[minSentenceLength]}
-                                                min={0}
-                                                max={120}
-                                                step={6}
-                                                onValueChange={(vals) => setMinSentenceLength(vals[0])}
-                                            />
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                         </div>
