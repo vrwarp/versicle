@@ -14,18 +14,18 @@ precacheAndRoute(self.__WB_MANIFEST)
 
 const COVERS_ENDPOINT_PREFIX = '/__versicle__/covers/';
 const DB_NAME = 'EpubLibraryDB';
-const COVERS_STORE = 'covers';
+const BOOKS_STORE = 'books';
 
 // Helper to open DB - we can't easily share code with src/db/db.ts
 // because of module resolution in SW, so we keep it simple.
 // We assume the DB is already created by the main thread.
 async function getCoverFromDB(bookId: string): Promise<Blob | undefined> {
     const db = await openDB(DB_NAME); // Open with whatever version is current
-    if (!db.objectStoreNames.contains(COVERS_STORE)) {
+    if (!db.objectStoreNames.contains(BOOKS_STORE)) {
         return undefined;
     }
-    const cover = await db.get(COVERS_STORE, bookId);
-    return cover;
+    const book = await db.get(BOOKS_STORE, bookId);
+    return book.coverBlob;
 }
 
 self.addEventListener('fetch', (event) => {
