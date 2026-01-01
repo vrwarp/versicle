@@ -1099,7 +1099,7 @@ export class AudioPlayerService {
                   idToCfiMap.set(id, g.rootCfi);
                   return {
                       id,
-                      sampleText: g.fullText.substring(0, 500)
+                      sampleText: g.fullText.substring(0, 200)
                   };
               });
 

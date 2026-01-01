@@ -186,7 +186,7 @@ class GenAIService {
 
     const prompt = `Analyze the provided text samples from an EPUB book section and classify them into one of the following types:
     - 'title': Chapter titles, headers, or section headings.
-    - 'footnote': Bibliographies, references, footnotes, or legal text.
+    - 'footnote': Bibliographies, footnotes, or end of page references.
     - 'main': Standard narrative text, dialogue, or body content.
     - 'table': Tabular data, charts, or structured lists acting as tables.
     - 'other': Content that does not fit into the above categories.
