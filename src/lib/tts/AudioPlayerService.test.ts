@@ -95,7 +95,7 @@ vi.mock('../../store/useGenAIStore', () => ({
     useGenAIStore: {
         getState: vi.fn().mockReturnValue({
             isContentAnalysisEnabled: true,
-            contentFilterSkipTypes: ['citation'],
+            contentFilterSkipTypes: ['footnote'],
             apiKey: 'test-key'
         })
     }
