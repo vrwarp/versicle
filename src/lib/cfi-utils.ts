@@ -58,22 +58,13 @@ export function getParentCfi(cfi: string): string {
             const path = parts[1];
 
             if (path) {
-                // Heuristic: The text node is usually the last component (e.g. /4/2/1:0)
-                // We want the parent block element (e.g. /4/2).
                 const pathParts = path.split('/');
                 
                 // Filter empty strings from split
                 const cleanParts = pathParts.filter(p => p.length > 0);
 
-                // Heuristic: Collapsing nested structures (Tables, Lists, Blockquotes)
-                // Most standard paragraphs/titles are at depth 2 or 3 (e.g., /Body/Section/P).
-                // Tables/Lists add 2-4 more layers.
-                if (cleanParts.length > 3) {
-                    // Truncate to the 3rd structural level to group the container
-                    return `epubcfi(${spine}!/${cleanParts.slice(0, 3).join('/')})`;
-                }
-
-                // Standard leaf-stripping for shallow paths
+                // Instead of level-3 truncation, just remove the leaf component
+                // which is the text node (e.g., "1:0")
                 if (cleanParts.length > 0) {
                     cleanParts.pop();
                 }

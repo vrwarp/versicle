@@ -11,7 +11,7 @@ import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule } from '../../types/db';
 import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
-import { getParentCfi } from '../cfi-utils';
+import { getParentCfi, generateCfiRange } from '../cfi-utils';
 import { genAIService } from '../genai/GenAIService';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import type { ContentType } from '../../types/content-analysis';
@@ -1131,20 +1131,45 @@ export class AudioPlayerService {
 
   private groupSentencesByRoot(sentences: { text: string; cfi: string | null }[]): { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] {
       const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
-      let currentGroup: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
+
+      // Use parentCfi for tracking the current group context
+      let currentGroup: { rootCfi: string; parentCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
 
       for (const s of sentences) {
-          const rootCfi = getParentCfi(s.cfi || ''); // Handle null cfi
+          const parentCfi = getParentCfi(s.cfi || ''); // Handle null cfi
 
-          if (!currentGroup || currentGroup.rootCfi !== rootCfi) {
-              if (currentGroup) groups.push(currentGroup);
-              currentGroup = { rootCfi, segments: [], fullText: '' };
+          if (!currentGroup || currentGroup.parentCfi !== parentCfi) {
+              if (currentGroup) {
+                  // Finalize the previous group by generating a true range CFI
+                  if (currentGroup.segments.length > 0) {
+                      const startCfi = currentGroup.segments[0].cfi;
+                      const endCfi = currentGroup.segments[currentGroup.segments.length - 1].cfi;
+                      // Fallback to parentCfi if segment CFIs are missing (shouldn't happen for valid content)
+                      if (startCfi && endCfi) {
+                         currentGroup.rootCfi = generateCfiRange(startCfi, endCfi);
+                      }
+                  }
+                  groups.push(currentGroup);
+              }
+              // Initialize new group. rootCfi will be updated on close, initial value is parentCfi as placeholder
+              currentGroup = { rootCfi: parentCfi, parentCfi, segments: [], fullText: '' };
           }
 
           currentGroup.segments.push(s);
           currentGroup.fullText += s.text + ' ';
       }
-      if (currentGroup) groups.push(currentGroup);
+
+      if (currentGroup) {
+          if (currentGroup.segments.length > 0) {
+              const startCfi = currentGroup.segments[0].cfi;
+              const endCfi = currentGroup.segments[currentGroup.segments.length - 1].cfi;
+              if (startCfi && endCfi) {
+                   currentGroup.rootCfi = generateCfiRange(startCfi, endCfi);
+              }
+          }
+          groups.push(currentGroup);
+      }
+
       return groups;
   }
 
