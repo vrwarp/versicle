@@ -191,7 +191,9 @@ export const GlobalSettingsDialog = () => {
         downloadProgress: state.downloadProgress,
         downloadStatus: state.downloadStatus,
         isDownloading: state.isDownloading,
-        checkVoiceDownloaded: state.checkVoiceDownloaded
+        checkVoiceDownloaded: state.checkVoiceDownloaded,
+        minSentenceLength: state.minSentenceLength,
+        setMinSentenceLength: state.setMinSentenceLength
     })));
 
     const [isVoiceReady, setIsVoiceReady] = useState(false);
