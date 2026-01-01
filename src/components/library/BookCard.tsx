@@ -1,7 +1,6 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
-import type { BookActionMenuHandle } from './BookActionMenu';
 import { BookCover } from './BookCover';
 
 /**
@@ -10,6 +9,9 @@ import { BookCover } from './BookCover';
 interface BookCardProps {
   /** The metadata of the book to display. */
   book: BookMetadata;
+  onDelete: (book: BookMetadata) => void;
+  onOffload: (book: BookMetadata) => void;
+  onRestore: (book: BookMetadata) => void;
 }
 
 const formatDuration = (chars?: number): string => {
@@ -31,14 +33,13 @@ const formatDuration = (chars?: number): string => {
  * @param props - Component props containing the book metadata.
  * @returns A React component rendering the book card.
  */
-export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
+export const BookCard: React.FC<BookCardProps> = React.memo(({ book, onDelete, onOffload, onRestore }) => {
   const navigate = useNavigate();
-  const actionMenuRef = useRef<BookActionMenuHandle>(null);
 
   const handleCardClick = () => {
     if (book.isOffloaded) {
-      // Trigger restore via ActionMenu
-      actionMenuRef.current?.triggerRestore();
+      // Trigger restore
+      onRestore(book);
     } else {
       navigate(`/read/${book.id}`);
     }
@@ -62,7 +63,12 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book }) => {
       data-testid={`book-card-${book.id}`}
       className="group flex flex-col bg-card text-card-foreground rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-border h-full cursor-pointer relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full"
     >
-      <BookCover book={book} actionMenuRef={actionMenuRef} />
+      <BookCover
+        book={book}
+        onDelete={onDelete}
+        onOffload={onOffload}
+        onRestore={onRestore}
+      />
 
       <div className="p-3 flex flex-col flex-1">
         <h3 data-testid="book-title" className="font-semibold text-foreground line-clamp-2 mb-1" title={book.title}>

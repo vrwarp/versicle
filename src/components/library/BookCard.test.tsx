@@ -1,20 +1,9 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { BookCard } from './BookCard';
 import type { BookMetadata } from '../../types/db';
-import { useLibraryStore } from '../../store/useLibraryStore';
-
-// Mock useLibraryStore
-vi.mock('../../store/useLibraryStore', () => ({
-  useLibraryStore: vi.fn(),
-}));
-
-// Mock useToastStore - BookActionMenu uses it
-vi.mock('../../store/useToastStore', () => ({
-  useToastStore: vi.fn(() => vi.fn()),
-}));
 
 describe('BookCard', () => {
   const mockBook: BookMetadata = {
@@ -26,36 +15,37 @@ describe('BookCard', () => {
     coverBlob: new Blob(['mock-image'], { type: 'image/jpeg' }),
   };
 
-  const mockRemoveBook = vi.fn();
-  const mockOffloadBook = vi.fn();
-  const mockRestoreBook = vi.fn();
+  const mockOnDelete = vi.fn();
+  const mockOnOffload = vi.fn();
+  const mockOnRestore = vi.fn();
 
   beforeEach(() => {
     // Mock URL.createObjectURL and revokeObjectURL
     global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
     global.URL.revokeObjectURL = vi.fn();
-
-    // Setup store mock
-    (useLibraryStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-      removeBook: mockRemoveBook,
-      offloadBook: mockOffloadBook,
-      restoreBook: mockRestoreBook,
-    });
+    vi.clearAllMocks();
   });
 
   const renderWithRouter = (ui: React.ReactElement) => {
     return render(<BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{ui}</BrowserRouter>);
   };
 
+  const defaultProps = {
+      book: mockBook,
+      onDelete: mockOnDelete,
+      onOffload: mockOnOffload,
+      onRestore: mockOnRestore
+  };
+
   it('should render book info', () => {
-    renderWithRouter(<BookCard book={mockBook} />);
+    renderWithRouter(<BookCard {...defaultProps} />);
 
     expect(screen.getByText('Test Title')).toBeInTheDocument();
     expect(screen.getByText('Test Author')).toBeInTheDocument();
   });
 
   it('should render cover image if blob is present', () => {
-    renderWithRouter(<BookCard book={mockBook} />);
+    renderWithRouter(<BookCard {...defaultProps} />);
 
     const img = screen.getByRole('img');
     expect(img).toHaveAttribute('src', 'blob:mock-url');
@@ -64,14 +54,14 @@ describe('BookCard', () => {
 
   it('should render placeholder if no cover blob', () => {
     const bookWithoutCover = { ...mockBook, coverBlob: undefined };
-    renderWithRouter(<BookCard book={bookWithoutCover} />);
+    renderWithRouter(<BookCard {...defaultProps} book={bookWithoutCover} />);
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(screen.getByText('Aa')).toBeInTheDocument();
   });
 
   it('should clean up object URL on unmount', () => {
-    const { unmount } = renderWithRouter(<BookCard book={mockBook} />);
+    const { unmount } = renderWithRouter(<BookCard {...defaultProps} />);
 
     expect(global.URL.createObjectURL).toHaveBeenCalledWith(mockBook.coverBlob);
 
@@ -82,7 +72,7 @@ describe('BookCard', () => {
 
   it('should render progress bar when progress > 0', () => {
     const bookWithProgress = { ...mockBook, progress: 0.45 };
-    renderWithRouter(<BookCard book={bookWithProgress} />);
+    renderWithRouter(<BookCard {...defaultProps} book={bookWithProgress} />);
 
     const progressBar = screen.getByTestId('progress-bar');
     expect(progressBar).toBeInTheDocument();
@@ -98,16 +88,16 @@ describe('BookCard', () => {
 
   it('should not render progress bar when progress is 0 or undefined', () => {
     const bookWithZeroProgress = { ...mockBook, progress: 0 };
-    renderWithRouter(<BookCard book={bookWithZeroProgress} />);
+    renderWithRouter(<BookCard {...defaultProps} book={bookWithZeroProgress} />);
     expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
 
     const bookWithUndefinedProgress = { ...mockBook, progress: undefined };
-    renderWithRouter(<BookCard book={bookWithUndefinedProgress} />);
+    renderWithRouter(<BookCard {...defaultProps} book={bookWithUndefinedProgress} />);
     expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
   });
 
   it('should have accessibility attributes', () => {
-    renderWithRouter(<BookCard book={mockBook} />);
+    renderWithRouter(<BookCard {...defaultProps} />);
 
     const card = screen.getByTestId(`book-card-${mockBook.id}`);
     expect(card).toHaveAttribute('role', 'button');
@@ -117,24 +107,38 @@ describe('BookCard', () => {
     expect(menuButton).toBeInTheDocument();
   });
 
-  it('should open delete confirmation dialog and delete book', async () => {
-    renderWithRouter(<BookCard book={mockBook} />);
+  it('should call onDelete when delete action is clicked', async () => {
+    renderWithRouter(<BookCard {...defaultProps} />);
 
     const menuTriggerButton = screen.getByTestId('book-menu-trigger');
-
     fireEvent.click(menuTriggerButton);
 
     const deleteOption = await screen.findByTestId('menu-delete', {}, { timeout: 2000 });
     fireEvent.click(deleteOption);
 
-    // Use waitFor to handle potential async state updates
-    await waitFor(async () => {
-        expect(await screen.findByText('Delete Book')).toBeInTheDocument();
-    });
+    expect(mockOnDelete).toHaveBeenCalledWith(mockBook);
+  });
 
-    const confirmButton = screen.getByTestId('confirm-delete');
-    fireEvent.click(confirmButton);
+  it('should call onRestore when restore action is clicked for offloaded book', async () => {
+      const offloadedBook = { ...mockBook, isOffloaded: true };
+      renderWithRouter(<BookCard {...defaultProps} book={offloadedBook} />);
 
-    expect(mockRemoveBook).toHaveBeenCalledWith(mockBook.id);
+      const menuTriggerButton = screen.getByTestId('book-menu-trigger');
+      fireEvent.click(menuTriggerButton);
+
+      const restoreOption = await screen.findByTestId('menu-restore', {}, { timeout: 2000 });
+      fireEvent.click(restoreOption);
+
+      expect(mockOnRestore).toHaveBeenCalledWith(offloadedBook);
+  });
+
+  it('should call onRestore when offloaded card is clicked directly', () => {
+      const offloadedBook = { ...mockBook, isOffloaded: true };
+      renderWithRouter(<BookCard {...defaultProps} book={offloadedBook} />);
+
+      const card = screen.getByTestId(`book-card-${mockBook.id}`);
+      fireEvent.click(card);
+
+      expect(mockOnRestore).toHaveBeenCalledWith(offloadedBook);
   });
 });
