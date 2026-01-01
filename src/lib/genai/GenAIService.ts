@@ -184,17 +184,26 @@ class GenAIService {
   public async detectContentTypes(nodes: { id: string, sampleText: string }[]): Promise<{ id: string, type: ContentType }[]> {
     if (nodes.length === 0) return [];
 
-    const prompt = `Analyze the provided text samples from an EPUB book section and classify them into one of the following types:
-    - 'title': Chapter titles, headers, or section headings.
-    - 'footnote': Bibliographies, footnotes, or end of page references.
-    - 'main': Standard narrative text, dialogue, or body content.
-    - 'table': Tabular data, charts, or structured lists acting as tables.
-    - 'other': Content that does not fit into the above categories.
+    const prompt = `Analyze the provided text samples from an EPUB book section and classify them into exactly one of the types defined below.
 
-    Return an array of objects with 'id' (matching input) and 'type'.
+### Categories & Strict Criteria:
+1. **'title'**: Structural headers. Includes chapter titles, sub-headings (e.g., "Psalm 16", "Introductory Matters"), or bolded section markers that introduce a new topic.
+2. **'footnote'**: Reference or Citation data.
+   - **Crucial:** Any text that provides bibliographic info (Author, Book Title, Publisher, Year) or begins with a citation number (e.g., "1 Bruce K. Waltke...") MUST be classified as 'footnote'.
+   - Do NOT classify bibliographies as 'other'.
+3. **'main'**: Narrative body text. Standard prose, paragraphs of analysis, and block quotes of Scripture or other authors that form the primary discussion.
+4. **'table'**: Relational data. Structured lists where specific data points are mapped across columns (e.g., a list mapping a Psalm number to a New Testament reference).
+5. **'other'**: Technical artifacts. Use only for CSS remnants, encoding errors, or solitary metadata that serves no editorial purpose.
 
-    Samples:
-    ${JSON.stringify(nodes)}`;
+### Logic Constraints:
+- **Priority 1:** If it looks like a bibliography or a source citation, it is a 'footnote'.
+- **Priority 2:** If it is a short, isolated line introducing a new section, it is a 'title'.
+- **Constraint:** Do not allow the absence of "bottom-of-page" positioning to influence your choice. EPUB text is reflowable; function defines the type, not location.
+
+Return an array of objects with 'id' (matching input) and 'type'.
+
+Samples:
+${JSON.stringify(nodes)}`;
 
     const schema = {
       type: SchemaType.ARRAY,
