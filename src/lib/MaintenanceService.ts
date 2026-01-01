@@ -14,7 +14,6 @@ export class MaintenanceService {
     annotations: number;
     locations: number;
     lexicon: number;
-    covers: number;
     tts_position: number;
   }> {
     const db = await getDB();
@@ -33,10 +32,6 @@ export class MaintenanceService {
     const locationKeys = await db.getAllKeys('locations');
     const orphanedLocations = locationKeys.filter((k) => !bookIds.has(k.toString()));
 
-    // Check covers
-    const coverKeys = await db.getAllKeys('covers');
-    const orphanedCovers = coverKeys.filter((k) => !bookIds.has(k.toString()));
-
     // Check TTS positions
     const ttsPositionKeys = await db.getAllKeys('tts_position');
     const orphanedTTSPositions = ttsPositionKeys.filter((k) => !bookIds.has(k.toString()));
@@ -53,7 +48,6 @@ export class MaintenanceService {
       annotations: orphanedAnnotations.length,
       locations: orphanedLocations.length,
       lexicon: orphanedLexicon.length,
-      covers: orphanedCovers.length,
       tts_position: orphanedTTSPositions.length,
     };
   }
@@ -69,7 +63,7 @@ export class MaintenanceService {
     const bookIds = new Set(books.map((k) => k.toString()));
 
     const tx = db.transaction(
-      ['files', 'annotations', 'locations', 'lexicon', 'covers', 'tts_position'],
+      ['files', 'annotations', 'locations', 'lexicon', 'tts_position'],
       'readwrite'
     );
 
@@ -98,15 +92,6 @@ export class MaintenanceService {
     for (const key of locationKeys) {
       if (!bookIds.has(key.toString())) {
         await locationsStore.delete(key);
-      }
-    }
-
-    // Prune covers
-    const coversStore = tx.objectStore('covers');
-    const coverKeys = await coversStore.getAllKeys();
-    for (const key of coverKeys) {
-      if (!bookIds.has(key.toString())) {
-        await coversStore.delete(key);
       }
     }
 

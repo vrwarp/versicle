@@ -33,13 +33,6 @@ export interface EpubLibraryDB extends DBSchema {
     value: Blob | ArrayBuffer;
   };
   /**
-   * Store for high-resolution cover images.
-   */
-  covers: {
-    key: string; // bookId
-    value: Blob;
-  };
-  /**
    * Store for generated locations cache.
    */
   locations: {
@@ -150,7 +143,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 14, { // Upgrading to v14
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 15, { // Upgrading to v15
       upgrade(db, oldVersion, _newVersion, transaction) {
         // App Metadata store (New in v14)
         if (!db.objectStoreNames.contains('app_metadata')) {
@@ -176,10 +169,10 @@ export const initDB = () => {
           db.createObjectStore('files');
         }
 
-        // Covers store (New in v12)
-        if (!db.objectStoreNames.contains('covers')) {
-          db.createObjectStore('covers');
-        }
+        // Migration to v15: Remove covers store (unused)
+        // We do not delete the store to avoid type errors in the upgrade callback
+        // as 'covers' is no longer in the EpubLibraryDB interface.
+        // It will remain as an orphaned store for existing users.
 
         // Locations store (New in v4)
         if (!db.objectStoreNames.contains('locations')) {
