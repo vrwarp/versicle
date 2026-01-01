@@ -1201,7 +1201,7 @@ export class AudioPlayerService {
 
   /**
    * Filters the TTS queue based on content type classification.
-   * Uses GenAI to detect content types (citations, tables, etc.) and removes
+   * Uses GenAI to detect content types (footnotes, tables, etc.) and removes
    * segments that match the configured skip types.
    *
    * @param sentences The original list of TTS queue items.

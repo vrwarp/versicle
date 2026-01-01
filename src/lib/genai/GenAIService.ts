@@ -186,7 +186,7 @@ class GenAIService {
 
     const prompt = `Analyze the provided text samples from an EPUB book section and classify them into one of the following types:
     - 'title': Chapter titles, headers, or section headings.
-    - 'citation': Bibliographies, references, footnotes, or legal text.
+    - 'footnote': Bibliographies, references, footnotes, or legal text.
     - 'main': Standard narrative text, dialogue, or body content.
     - 'table': Tabular data, charts, or structured lists acting as tables.
     - 'other': Content that does not fit into the above categories.
@@ -202,7 +202,7 @@ class GenAIService {
         type: SchemaType.OBJECT,
         properties: {
           id: { type: SchemaType.STRING },
-          type: { type: SchemaType.STRING, enum: ['title', 'citation', 'main', 'table', 'other'] },
+          type: { type: SchemaType.STRING, enum: ['title', 'footnote', 'main', 'table', 'other'] },
         },
         required: ['id', 'type'],
       },

@@ -34,7 +34,7 @@ export const useGenAIStore = create<GenAIState>()(
       model: 'gemini-2.5-flash-lite',
       isEnabled: false,
       isContentAnalysisEnabled: false,
-      contentFilterSkipTypes: ['citation', 'table'],
+      contentFilterSkipTypes: ['footnote', 'table'],
       isDebugModeEnabled: false,
       logs: [],
       usageStats: {

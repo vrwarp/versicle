@@ -972,6 +972,20 @@ class DBService {
       }
   }
 
+  /**
+   * Clears the entire content analysis cache.
+   *
+   * @returns A Promise that resolves when the cache is cleared.
+   */
+  async clearContentAnalysis(): Promise<void> {
+    try {
+      const db = await this.getDB();
+      await db.clear('content_analysis');
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
   // --- Lexicon ---
   // Adding minimal support for lexicon to match removeBook requirements,
   // full service migration for LexiconManager can be done later or added here if needed.

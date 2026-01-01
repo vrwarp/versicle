@@ -165,6 +165,18 @@ export const GlobalSettingsDialog = () => {
         e.target.value = '';
     };
 
+    const handleClearContentAnalysis = async () => {
+        if (confirm("Are you sure you want to clear the Content Analysis cache? This will force re-analysis of content.")) {
+            try {
+                await dbService.clearContentAnalysis();
+                showToast("Content Analysis cache cleared.", "success");
+            } catch (e) {
+                console.error("Failed to clear content analysis cache", e);
+                showToast("Failed to clear cache.", "error");
+            }
+        }
+    };
+
     const {
         providerId, setProviderId,
         apiKeys, setApiKey,
@@ -715,7 +727,7 @@ export const GlobalSettingsDialog = () => {
                                             <div className="space-y-0.5">
                                                 <label htmlFor="genai-content-detection" className="text-sm font-medium">Content Type Detection & Filtering</label>
                                                 <p className="text-xs text-muted-foreground">
-                                                    Automatically detects and skips non-narrative content (e.g., tables, citations).
+                                                    Automatically detects and skips non-narrative content (e.g., tables, footnotes).
                                                 </p>
                                             </div>
                                             <Switch
@@ -733,7 +745,7 @@ export const GlobalSettingsDialog = () => {
                                                 Select which detected content types should be skipped during playback.
                                             </p>
                                             <div className="grid grid-cols-2 gap-2">
-                                                {(['citation', 'table', 'other', 'title', 'main'] as ContentType[]).map((type) => (
+                                                {(['footnote', 'table', 'other', 'title', 'main'] as ContentType[]).map((type) => (
                                                     <div key={type} className="flex items-center space-x-2">
                                                         <Checkbox
                                                             id={`skip-${type}`}
@@ -770,6 +782,12 @@ export const GlobalSettingsDialog = () => {
                                                         onCheckedChange={setDebugModeEnabled}
                                                     />
                                                 </div>
+                                            </div>
+
+                                            <div className="pt-2">
+                                                <Button variant="outline" size="sm" onClick={handleClearContentAnalysis}>
+                                                    Clear Content Analysis Cache
+                                                </Button>
                                             </div>
                                         </div>
                                     )}
