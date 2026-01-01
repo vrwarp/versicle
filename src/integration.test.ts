@@ -19,30 +19,40 @@ vi.mock('./lib/offscreen-renderer', () => ({
   })
 }));
 
-// Mock epub.js but preserve behavior for ingestion (metadata)
-// while mocking behavior for Reader (rendering)
+// Mock ingestion processEpub to avoid heavy epub.js parsing in JSDOM
+vi.mock('./lib/ingestion', () => ({
+    processEpub: vi.fn(async (file: File) => {
+        // Simulate what processEpub does: writes to DB and returns ID
+        const db = await getDB();
+        const bookId = 'mock-book-id';
+
+        await db.put('books', {
+            id: bookId,
+            title: "Alice's Adventures in Wonderland",
+            author: "Lewis Carroll",
+            description: "Mock description",
+            addedAt: Date.now(),
+            coverBlob: new Blob(['mock-cover'], { type: 'image/jpeg' }),
+            fileHash: 'mock-hash'
+        });
+
+        // Store file
+        if (file.arrayBuffer) {
+             const buffer = await file.arrayBuffer();
+             await db.put('files', buffer, bookId);
+        }
+
+        return bookId;
+    })
+}));
+
+// Mock epub.js for ReaderView simulation
 vi.mock('epubjs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('epubjs')>();
   return {
     ...actual,
     default: vi.fn((data, options) => {
       const book = actual.default(data, options);
-
-      // Enhance the book object with necessary mocks for ingestion
-      book.ready = Promise.resolve();
-      book.loaded = {
-          metadata: Promise.resolve({ title: "Alice's Adventures in Wonderland", creator: "Lewis Carroll" }),
-          navigation: Promise.resolve({ toc: [] }),
-          spine: Promise.resolve(),
-          cover: Promise.resolve('blob:mock-cover')
-      };
-      book.archive = {
-          createUrl: vi.fn().mockResolvedValue('blob:mock-url'),
-          revokeUrl: vi.fn(),
-          getBlob: vi.fn().mockResolvedValue(new Blob(['mock-blob'])),
-      };
-      book.coverUrl = vi.fn().mockResolvedValue('blob:mock-cover');
-      book.opened = Promise.resolve();
 
       // Spy/Mock renderTo
       book.renderTo = vi.fn().mockReturnValue({
@@ -112,8 +122,7 @@ describe('Feature Integration Tests', () => {
     vi.restoreAllMocks();
   });
 
-  // Skipped due to JSDOM/epub.js timeout issues with real file parsing
-  it.skip('should add a book, list it, and delete it (Library Management)', async () => {
+  it('should add a book, list it, and delete it (Library Management)', async () => {
     const store = useLibraryStore.getState();
 
     // 1. Add Book
