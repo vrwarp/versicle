@@ -72,8 +72,8 @@ export class LexiconService {
     const db = await getDB();
     const newRule: LexiconRule = {
       id: rule.id || uuidv4(),
-      original: rule.original.normalize(),
-      replacement: rule.replacement.normalize(),
+      original: rule.original.normalize('NFKD'),
+      replacement: rule.replacement.normalize('NFKD'),
       isRegex: rule.isRegex,
       bookId: rule.bookId,
       applyBeforeGlobal: rule.applyBeforeGlobal,
@@ -137,7 +137,7 @@ export class LexiconService {
    * @returns The text with replacements applied.
    */
   applyLexicon(text: string, rules: LexiconRule[]): string {
-    let processedText = text.normalize();
+    let processedText = text.normalize('NFKD');
 
     // Rules are applied in the order they are provided.
     // It is expected that the caller provides them in the correct order (e.g. from getRules()).
@@ -146,8 +146,8 @@ export class LexiconService {
         if (!rule.original || !rule.replacement) continue;
 
         // Ensure rule strings are normalized (though they should be if saved via saveRule)
-        const normalizedOriginal = rule.original.normalize();
-        const normalizedReplacement = rule.replacement.normalize();
+        const normalizedOriginal = rule.original.normalize('NFKD');
+        const normalizedReplacement = rule.replacement.normalize('NFKD');
 
         try {
             const cacheKey = `${rule.id}-${normalizedOriginal}-${rule.isRegex}`;
@@ -192,7 +192,7 @@ export class LexiconService {
 
       // Sort to ensure deterministic order
       const sorted = [...rules].sort((a, b) => a.id.localeCompare(b.id));
-      const data = sorted.map(r => `${r.original.normalize()}:${r.replacement.normalize()}`).join('|');
+      const data = sorted.map(r => `${r.original.normalize('NFKD')}:${r.replacement.normalize('NFKD')}`).join('|');
 
       const encoder = new TextEncoder();
       const dataBuffer = encoder.encode(data);
