@@ -213,7 +213,12 @@ export const ReaderView: React.FC = () => {
     onBookLoaded: (_book) => {
          // Indexing is now deferred until search is opened
     },
-    onClick: () => hidePopover(),
+    onClick: (e: MouseEvent) => {
+        const selection = e.view?.getSelection();
+        if (!selection || selection.isCollapsed) {
+            hidePopover();
+        }
+    },
     onError: (msg) => {
         console.error("Reader Error:", msg);
     }
