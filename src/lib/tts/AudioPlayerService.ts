@@ -528,6 +528,11 @@ export class AudioPlayerService {
     return this.enqueue(() => this.playInternal());
   }
 
+  /**
+   * Internal playback logic.
+   * @param force If true, forces a full restart/re-synthesis of the current item, even if paused.
+   *              Used when settings (speed/voice) change while paused, requiring a fresh audio generation.
+   */
   private async playInternal(force: boolean = false): Promise<void> {
     if (this.status === 'paused' && !force) {
         return this.resumeInternal();
