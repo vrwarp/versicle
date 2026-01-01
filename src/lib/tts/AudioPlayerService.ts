@@ -528,8 +528,13 @@ export class AudioPlayerService {
     return this.enqueue(() => this.playInternal());
   }
 
-  private async playInternal(): Promise<void> {
-    if (this.status === 'paused') {
+  /**
+   * Internal playback logic.
+   * @param force If true, forces a full restart/re-synthesis of the current item, even if paused.
+   *              Used when settings (speed/voice) change while paused, requiring a fresh audio generation.
+   */
+  private async playInternal(force: boolean = false): Promise<void> {
+    if (this.status === 'paused' && !force) {
         return this.resumeInternal();
     }
 
@@ -627,12 +632,10 @@ export class AudioPlayerService {
   private async resumeInternal(): Promise<void> {
      this.sessionRestored = true;
 
-     if (this.status === 'paused') {
-         this.provider.resume();
-         this.setStatus('playing');
-     } else {
-         return this.playInternal();
-     }
+     // Always restart the sentence (playInternal) to ensure correct state/speed
+     // This also handles cases where speed changed while paused.
+     // We pass force=true to bypass the 'paused' check in playInternal.
+     return this.playInternal(true);
   }
 
   private async savePlaybackState() {
