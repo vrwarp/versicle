@@ -1,7 +1,6 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
-import type { BookActionMenuHandle } from './BookActionMenu';
 import { BookCover } from './BookCover';
 
 /**
