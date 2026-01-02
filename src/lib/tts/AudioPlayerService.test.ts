@@ -268,7 +268,8 @@ describe('AudioPlayerService', () => {
         const onCall = mockCloudProvider.on.mock.calls[0];
         const providerListener = onCall[0];
 
-        // Trigger play
+        // Trigger play. We capture the promise but don't await it immediately
+        // because we want to inject the error event while it's "running".
         const playPromise = service.play();
 
         // Emit error event to trigger TTSProviderManager's fallback logic.
