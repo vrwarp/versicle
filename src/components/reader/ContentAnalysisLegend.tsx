@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { useShallow } from 'zustand/react/shallow';
-import { X, Copy, ChevronRight, ChevronDown } from 'lucide-react';
+import { X, Copy, ChevronRight, ChevronDown, RotateCcw, Loader2 } from 'lucide-react';
 import { TYPE_COLORS } from '../../types/content-analysis';
 import type { ContentType } from '../../types/content-analysis';
 import type { Rendition } from 'epubjs';
@@ -9,6 +9,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { dbService } from '../../db/DBService';
 import type { TableImage } from '../../types/db';
 import { useReaderStore } from '../../store/useReaderStore';
+import { reprocessBook } from '../../lib/ingestion';
 
 interface ContentAnalysisLegendProps {
   rendition?: Rendition | null;
@@ -29,6 +30,9 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
 
   // Table Images Carousel State
   const [tableImages, setTableImages] = useState<TableImage[]>([]);
+
+  // Reprocessing State
+  const [isReprocessing, setIsReprocessing] = useState(false);
 
   // Use a ref to track generated URLs so we can clean them up without state updates on unmount
   const generatedUrls = useRef<Record<string, string>>({});
@@ -201,6 +205,37 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
       setCfiInput(cfi);
   };
 
+  const handleReprocess = async () => {
+      if (!currentBookId) return;
+
+      if (!confirm("Are you sure you want to reprocess this book? This will re-extract all text and tables from the source file. Your reading progress and annotations will be preserved.")) {
+          return;
+      }
+
+      setIsReprocessing(true);
+      try {
+          const fileData = await dbService.getBookFile(currentBookId);
+          if (!fileData) {
+              throw new Error("Source file not found (book might be offloaded).");
+          }
+
+          const file = fileData instanceof Blob ? fileData : new Blob([fileData]);
+          await reprocessBook(currentBookId, file, {}, (p, msg) => {
+               // Optional: could update a progress indicator here if we had one in the debug panel
+               console.log(`Reprocessing: ${p}% - ${msg}`);
+          });
+
+          showToast("Book reprocessed successfully. Reloading...", "success");
+          // Reload to reflect changes
+          setTimeout(() => window.location.reload(), 1500);
+
+      } catch (e) {
+          console.error("Reprocessing failed", e);
+          showToast(`Reprocessing failed: ${e instanceof Error ? e.message : 'Unknown error'}`, "error");
+          setIsReprocessing(false);
+      }
+  };
+
   if (!isDebugModeEnabled) return null;
 
   return (
@@ -294,6 +329,28 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                     </div>
                 </div>
             )}
+
+            {/* Actions */}
+            <div className="space-y-1.5 pt-2 border-t">
+                <div className="text-[10px] uppercase text-muted-foreground font-bold mb-1">Actions</div>
+                <button
+                    onClick={handleReprocess}
+                    disabled={isReprocessing || !currentBookId}
+                    className="w-full flex items-center justify-center gap-2 p-2 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 border border-destructive/20 transition-colors"
+                >
+                    {isReprocessing ? (
+                        <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Reprocessing...
+                        </>
+                    ) : (
+                        <>
+                            <RotateCcw className="h-3 w-3" />
+                            Reprocess Book
+                        </>
+                    )}
+                </button>
+            </div>
 
             {/* Legend */}
             <div className="space-y-1.5 pt-2 border-t">

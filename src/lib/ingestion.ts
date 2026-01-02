@@ -244,3 +244,115 @@ export async function processEpub(
 
   return bookId;
 }
+
+/**
+ * Reprocesses an existing book's content (text, tables, TTS segments) from its source file.
+ * Preserves metadata, reading progress, and annotations.
+ *
+ * @param bookId - The ID of the book to reprocess.
+ * @param file - The source file (Blob or File).
+ * @param ttsOptions - Configuration options for TTS sentence extraction.
+ * @param onProgress - Callback for progress updates.
+ * @returns A Promise that resolves when reprocessing is complete.
+ */
+export async function reprocessBook(
+  bookId: string,
+  file: Blob | File,
+  ttsOptions?: ExtractionOptions,
+  onProgress?: (progress: number, message: string) => void
+): Promise<void> {
+  // 1. Offscreen Extraction (Slow pass)
+  const chapters = await extractContentOffscreen(file, ttsOptions, onProgress);
+
+  // 2. Prepare new data
+  const syntheticToc: NavigationItem[] = [];
+  const sections: SectionMetadata[] = [];
+  const ttsContentBatches: TTSContent[] = [];
+  const tableImages: TableImage[] = [];
+  let totalChars = 0;
+
+  chapters.forEach((chapter, i) => {
+      // Synthetic TOC
+      syntheticToc.push({
+          id: `syn-toc-${i}`,
+          href: chapter.href,
+          label: chapter.title || `Chapter ${i+1}`
+      });
+
+      // Section Metadata
+      sections.push({
+          id: `${bookId}-${chapter.href}`,
+          bookId,
+          sectionId: chapter.href,
+          characterCount: chapter.textContent.length,
+          playOrder: i
+      });
+      totalChars += chapter.textContent.length;
+
+      // TTS Content
+      if (chapter.sentences.length > 0) {
+          ttsContentBatches.push({
+              id: `${bookId}-${chapter.href}`,
+              bookId,
+              sectionId: chapter.href,
+              sentences: chapter.sentences
+          });
+      }
+
+      // Collect Table Images
+      if (chapter.tables) {
+          chapter.tables.forEach(table => {
+              tableImages.push({
+                  id: `${bookId}-${table.cfi}`,
+                  bookId,
+                  cfi: table.cfi,
+                  imageBlob: table.imageBlob
+              });
+          });
+      }
+  });
+
+  // 3. Database Transaction
+  const db = await getDB();
+  const tx = db.transaction(['books', 'sections', 'tts_content', 'table_images'], 'readwrite');
+
+  // Helper to delete items by index
+  const deleteByIndex = async (storeName: string, indexName: string, key: IDBValidKey) => {
+      const store = tx.objectStore(storeName);
+      const index = store.index(indexName);
+      let cursor = await index.openCursor(IDBKeyRange.only(key));
+      while (cursor) {
+          await cursor.delete();
+          cursor = await cursor.continue();
+      }
+  };
+
+  // Delete old data
+  await deleteByIndex('sections', 'by_bookId', bookId);
+  await deleteByIndex('tts_content', 'by_bookId', bookId);
+  await deleteByIndex('table_images', 'by_bookId', bookId);
+
+  // Add new data
+  const sectionsStore = tx.objectStore('sections');
+  for (const section of sections) await sectionsStore.add(section);
+
+  const ttsStore = tx.objectStore('tts_content');
+  for (const batch of ttsContentBatches) await ttsStore.add(batch);
+
+  const tableStore = tx.objectStore('table_images');
+  for (const table of tableImages) await tableStore.add(table);
+
+  // Update Book Metadata
+  const bookStore = tx.objectStore('books');
+  const book = await bookStore.get(bookId);
+  if (book) {
+      book.syntheticToc = syntheticToc;
+      book.totalChars = totalChars;
+      book.tablesProcessed = true;
+      // We do NOT update fileHash here as we assume the file content is the same source,
+      // or if it changed, the user is explicitly overriding it.
+      await bookStore.put(book);
+  }
+
+  await tx.done;
+}
