@@ -8,10 +8,25 @@ import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
 
+/**
+ * Manages the transformation of raw book content into a playable TTS queue.
+ * Handles content fetching, GenAI-based filtering (tables, footnotes), and text segmentation.
+ */
 export class AudioContentPipeline {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private analysisPromises = new Map<string, Promise<any>>();
 
+    /**
+     * Loads a section, processes its text, and returns a playable queue.
+     *
+     * @param {string} bookId The ID of the book.
+     * @param {SectionMetadata} section The section metadata.
+     * @param {number} sectionIndex The index of the section in the playlist.
+     * @param {boolean} prerollEnabled Whether to add a preroll announcement.
+     * @param {number} speed The current playback speed (used for preroll duration estimation).
+     * @param {string} [sectionTitle] Optional override for the section title.
+     * @returns {Promise<TTSQueueItem[] | null>} The processed queue or null on failure.
+     */
     async loadSection(
         bookId: string,
         section: SectionMetadata,
@@ -122,6 +137,14 @@ export class AudioContentPipeline {
         }
     }
 
+    /**
+     * Generates a spoken preroll message estimating the reading time.
+     *
+     * @param {string} chapterTitle The title of the chapter.
+     * @param {number} wordCount The word count of the chapter.
+     * @param {number} [speed=1.0] The playback speed.
+     * @returns {string} The formatted string.
+     */
     generatePreroll(chapterTitle: string, wordCount: number, speed: number = 1.0): string {
         const WORDS_PER_MINUTE = 180;
         const adjustedWpm = WORDS_PER_MINUTE * speed;
@@ -129,6 +152,13 @@ export class AudioContentPipeline {
         return `${chapterTitle}. Estimated reading time: ${minutes} minute${minutes === 1 ? '' : 's'}.`;
     }
 
+    /**
+     * Triggers a background GenAI analysis for the *next* chapter to prepare content filtering data.
+     *
+     * @param {string} bookId The book ID.
+     * @param {number} currentSectionIndex The current section index.
+     * @param {SectionMetadata[]} playlist The full playlist of sections.
+     */
     async triggerNextChapterAnalysis(bookId: string, currentSectionIndex: number, playlist: SectionMetadata[]) {
         const genAISettings = useGenAIStore.getState();
         if (!genAISettings.isContentAnalysisEnabled || genAISettings.contentFilterSkipTypes.length === 0) {
@@ -161,6 +191,15 @@ export class AudioContentPipeline {
         })();
     }
 
+    /**
+     * Filters out sentences belonging to unwanted content types (e.g., tables, footnotes).
+     *
+     * @param {string} bookId The book ID.
+     * @param {{ text: string; cfi: string }[]} sentences The raw sentences.
+     * @param {ContentType[]} skipTypes The content types to filter out.
+     * @param {string} sectionId The section ID.
+     * @returns {Promise<{ text: string; cfi: string }[]>} The filtered list of sentences.
+     */
     private async detectAndFilterContent(bookId: string, sentences: { text: string; cfi: string }[], skipTypes: ContentType[], sectionId: string): Promise<{ text: string; cfi: string }[]> {
         if (!bookId || !sectionId) return sentences;
 
@@ -198,6 +237,9 @@ export class AudioContentPipeline {
         return sentences;
     }
 
+    /**
+     * Retrieves cached content classifications from DB or triggers GenAI detection if missing.
+     */
     private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[]) {
         // Deduplicate concurrent requests for the same section
         const key = `${bookId}:${sectionId}`;
@@ -268,6 +310,10 @@ export class AudioContentPipeline {
         }
     }
 
+    /**
+     * Groups individual text segments by their common semantic root element using CFI structure.
+     * This allows the GenAI to classify logical blocks (tables, asides) rather than fragmented sentences.
+     */
     private groupSentencesByRoot(sentences: { text: string; cfi: string }[]): { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] {
         const groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] = [];
         let currentGroup: { parentCfi: string; segments: { text: string; cfi: string }[]; fullText: string } | null = null;

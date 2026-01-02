@@ -4,21 +4,59 @@ import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { Capacitor } from '@capacitor/core';
 import type { AlignmentData } from './SyncEngine';
 
+/**
+ * Interface defining the events emitted by the TTSProviderManager.
+ */
 export interface TTSProviderEvents {
+    /** Triggered when playback starts. */
     onStart: () => void;
+    /** Triggered when playback completes successfully. */
     onEnd: () => void;
+    /**
+     * Triggered when an error occurs during playback.
+     * @param error The error object or message.
+     */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onError: (error: any) => void;
+    /**
+     * Triggered periodically during playback with the current timestamp.
+     * @param currentTime The current playback position in seconds.
+     */
     onTimeUpdate: (currentTime: number) => void;
+    /**
+     * Triggered when a word or sentence boundary is reached.
+     * @param charIndex The character index of the boundary.
+     */
     onBoundary: (charIndex: number) => void;
+    /**
+     * Triggered when alignment metadata is available.
+     * @param alignment The alignment data.
+     */
     onMeta: (alignment: AlignmentData[]) => void;
+    /**
+     * Triggered during voice download progress.
+     * @param voiceId The ID of the voice being downloaded.
+     * @param percent The progress percentage (0-100).
+     * @param status A status message.
+     */
     onDownloadProgress: (voiceId: string, percent: number, status: string) => void;
 }
 
+/**
+ * Manages the lifecycle and selection of Text-to-Speech providers.
+ * Handles initialization, platform detection (Native vs Web), error recovery (Cloud -> Local fallback),
+ * and event normalization across different providers.
+ */
 export class TTSProviderManager {
     private provider: ITTSProvider;
     private events: TTSProviderEvents;
 
+    /**
+     * Creates a new TTSProviderManager.
+     * Automatically selects the appropriate provider based on the platform.
+     *
+     * @param {TTSProviderEvents} events Callback handlers for provider events.
+     */
     constructor(events: TTSProviderEvents) {
         this.events = events;
         if (Capacitor.isNativePlatform()) {
@@ -84,10 +122,21 @@ export class TTSProviderManager {
          await this.provider.init();
     }
 
+    /**
+     * Initializes the underlying TTS provider.
+     */
     async init() {
         await this.provider.init();
     }
 
+    /**
+     * Starts playback of the given text.
+     *
+     * @param {string} text The text to speak.
+     * @param {object} options Playback options.
+     * @param {string} options.voiceId The ID of the voice to use.
+     * @param {number} options.speed The playback speed factor.
+     */
     async play(text: string, options: { voiceId: string, speed: number }) {
         try {
             return await this.provider.play(text, options);
@@ -112,28 +161,52 @@ export class TTSProviderManager {
         }
     }
 
+    /**
+     * Pauses the current playback.
+     */
     pause() {
         this.provider.pause();
     }
 
+    /**
+     * Stops the current playback.
+     */
     stop() {
         this.provider.stop();
     }
 
+    /**
+     * Retrieves the list of available voices.
+     * @returns {Promise<TTSVoice[]>} A promise resolving to an array of voices.
+     */
     async getVoices(): Promise<TTSVoice[]> {
         return this.provider.getVoices();
     }
 
+    /**
+     * Preloads audio for the given text to reduce latency.
+     *
+     * @param {string} text The text to preload.
+     * @param {object} options Playback options.
+     */
     preload(text: string, options: { voiceId: string, speed: number }) {
         this.provider.preload(text, options);
     }
 
+    /**
+     * Explicitly sets the provider instance.
+     *
+     * @param {ITTSProvider} provider The new provider to use.
+     */
     setProvider(provider: ITTSProvider) {
          this.provider.stop();
          this.provider = provider;
          this.setupProviderListeners();
     }
 
+    /**
+     * Gets the ID of the current provider.
+     */
     get providerId() {
         return this.provider.id;
     }
