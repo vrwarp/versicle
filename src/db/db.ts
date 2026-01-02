@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata, ContentAnalysis, ReadingHistoryEntry, ReadingListEntry, TTSContent, TTSPosition } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata, ContentAnalysis, ReadingHistoryEntry, ReadingListEntry, TTSContent, TTSPosition, TableImage } from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -131,6 +131,16 @@ export interface EpubLibraryDB extends DBSchema {
       by_bookId: string;
     };
   };
+  /**
+   * Store for table image snapshots.
+   */
+  table_images: {
+    key: string; // id: `${bookId}-${cfi}`
+    value: TableImage;
+    indexes: {
+      by_bookId: string;
+    };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
@@ -235,6 +245,12 @@ export const initDB = () => {
         if (!db.objectStoreNames.contains('tts_content')) {
           const ttsContentStore = db.createObjectStore('tts_content', { keyPath: 'id' });
           ttsContentStore.createIndex('by_bookId', 'bookId', { unique: false });
+        }
+
+        // Table Images store (New in v15)
+        if (!db.objectStoreNames.contains('table_images')) {
+          const tableStore = db.createObjectStore('table_images', { keyPath: 'id' });
+          tableStore.createIndex('by_bookId', 'bookId', { unique: false });
         }
       },
     });

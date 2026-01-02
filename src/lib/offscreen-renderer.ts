@@ -1,12 +1,15 @@
 import ePub from 'epubjs';
+import { snapdom } from '@zumer/snapdom';
 import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from './tts';
 import { sanitizeContent } from './sanitizer';
+import type { TableImage } from '../types/db';
 
 export interface ProcessedChapter {
   href: string;
   sentences: SentenceNode[];
   textContent: string;
   title?: string;
+  tables?: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[]; // sectionId is contextually known by ProcessedChapter.href
 }
 
 /**
@@ -14,7 +17,7 @@ export interface ProcessedChapter {
  * This ensures that the extracted text and CFIs match exactly what the user sees during playback.
  */
 export async function extractContentOffscreen(
-  file: File | ArrayBuffer,
+  file: File | Blob | ArrayBuffer,
   options: ExtractionOptions = {},
   onProgress?: (progress: number, message: string) => void
 ): Promise<ProcessedChapter[]> {
@@ -88,6 +91,7 @@ export async function extractContentOffscreen(
       // Let's verify we have contents.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const contents = (rendition.getContents() as any[])[0];
+      const capturedTables: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[] = [];
 
       if (contents && contents.document && contents.document.body) {
           const doc = contents.document;
@@ -117,11 +121,37 @@ export async function extractContentOffscreen(
               return contents.cfiFromRange(range);
           }, options);
 
+          // Table Capture
+          const tables = doc.querySelectorAll('table');
+          for (const table of tables) {
+              try {
+                  const range = doc.createRange();
+                  range.selectNode(table);
+                  const cfi = contents.cfiFromRange(range);
+
+                  const blob = await snapdom.toBlob(table, {
+                      type: 'webp',
+                      quality: 0.1,
+                      scale: 0.5,
+                  });
+
+                  if (blob) {
+                      capturedTables.push({
+                          cfi: cfi,
+                          imageBlob: blob
+                      });
+                  }
+              } catch (e) {
+                  console.warn('Failed to snap table', e);
+              }
+          }
+
           results.push({
               href: item.href,
               sentences,
               textContent: body.textContent || '',
-              title
+              title,
+              tables: capturedTables
           });
       }
 
