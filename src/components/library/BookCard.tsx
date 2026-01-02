@@ -1,5 +1,4 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
 import { BookCover } from './BookCover';
 
@@ -9,6 +8,7 @@ import { BookCover } from './BookCover';
 interface BookCardProps {
   /** The metadata of the book to display. */
   book: BookMetadata;
+  onOpen: (book: BookMetadata) => void;
   onDelete: (book: BookMetadata) => void;
   onOffload: (book: BookMetadata) => void;
   onRestore: (book: BookMetadata) => void;
@@ -33,14 +33,13 @@ const formatDuration = (chars?: number): string => {
  * @param props - Component props containing the book metadata.
  * @returns A React component rendering the book card.
  */
-export const BookCard: React.FC<BookCardProps> = React.memo(({ book, onDelete, onOffload, onRestore }) => {
-  const navigate = useNavigate();
+export const BookCard: React.FC<BookCardProps> = React.memo(({ book, onOpen, onDelete, onOffload, onRestore }) => {
 
   const handleCardClick = () => {
     if (book.isOffloaded) {
       onRestore(book);
     } else {
-      navigate(`/read/${book.id}`);
+      onOpen(book);
     }
   };
 

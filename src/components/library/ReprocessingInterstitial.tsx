@@ -5,18 +5,25 @@ import { extractContentOffscreen } from '../../lib/offscreen-renderer';
 import type { TableImage } from '../../types/db';
 import { getDB } from '../../db/db';
 import { CURRENT_BOOK_VERSION } from '../../lib/constants';
+import { Dialog } from '../ui/Dialog';
 
 interface ReprocessingInterstitialProps {
-  bookId: string;
+  isOpen: boolean;
+  bookId: string | null;
   onComplete: () => void;
+  onClose: () => void;
 }
 
-export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> = ({ bookId, onComplete }) => {
+export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> = ({ isOpen, bookId, onComplete, onClose }) => {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Initializing...');
 
   useEffect(() => {
+    if (!isOpen || !bookId) return;
+
     let isCancelled = false;
+    setProgress(0);
+    setStatus('Initializing...');
 
     const process = async () => {
       try {
@@ -41,9 +48,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
 
         const file = fileData instanceof Blob ? fileData : new Blob([fileData]);
 
-        // Process only for tables (though extractContentOffscreen does full pass, we just need tables)
-        // We can ignore the text extraction parts if we wanted to optimize, but offscreen-renderer does both.
-        // For now, we reuse the existing function.
+        if (isCancelled) return;
 
         setStatus('Scanning for complex tables...');
         const chapters = await extractContentOffscreen(file, {}, (p, msg) => {
@@ -100,7 +105,9 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
         console.error('Reprocessing failed', err);
         // On error, we might just want to let the user proceed without tables?
         // Or show an error state. For now, proceeding is safer to avoid lockout.
-        onComplete();
+        if (!isCancelled) {
+            onComplete();
+        }
       }
     };
 
@@ -109,22 +116,17 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
     return () => {
       isCancelled = true;
     };
-  }, [bookId, onComplete]);
+  }, [isOpen, bookId, onComplete]);
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-zinc-950/90 backdrop-blur-sm">
-      <div className="w-full max-w-md p-6 bg-white dark:bg-zinc-900 rounded-lg shadow-xl border border-zinc-200 dark:border-zinc-800 text-center space-y-6">
-
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-            Enhancing Book Layout
-          </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Generating optimized images for complex tables. This only happens once per book.
-          </p>
-        </div>
-
-        <div className="relative flex items-center justify-center py-8">
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Enhancing Book Layout"
+      description="Generating optimized images for complex tables. This only happens once per book."
+    >
+      <div className="flex flex-col items-center justify-center py-4 space-y-6">
+        <div className="relative flex items-center justify-center py-4">
              <div className="absolute inset-0 flex items-center justify-center">
                  <Loader2 className="w-16 h-16 text-blue-500 animate-spin opacity-20" />
              </div>
@@ -133,10 +135,10 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
              </div>
         </div>
 
-        <p className="text-xs font-mono text-zinc-400 dark:text-zinc-500 animate-pulse">
+        <p className="text-xs font-mono text-zinc-400 dark:text-zinc-500 animate-pulse text-center">
             {status}
         </p>
       </div>
-    </div>
+    </Dialog>
   );
 };

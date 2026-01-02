@@ -35,9 +35,6 @@ import { useSidebarState } from '../../hooks/useSidebarState';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { ContentAnalysisLegend } from './ContentAnalysisLegend';
 import { TYPE_COLORS } from '../../types/content-analysis';
-import { ReprocessingInterstitial } from './ReprocessingInterstitial';
-import { Loader2 } from 'lucide-react';
-import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 
 /**
  * The main reader interface component.
@@ -115,35 +112,6 @@ export const ReaderView: React.FC = () => {
   const [importJumpTarget, setImportJumpTarget] = useState(0);
   const hasPromptedForImport = useRef(false);
   const metadataRef = useRef(null as unknown); // Will hold metadata
-
-  // --- Reprocessing Logic ---
-  const [isReprocessing, setIsReprocessing] = useState(false);
-  const [isCheckingProcessing, setIsCheckingProcessing] = useState(true);
-
-  useEffect(() => {
-      const checkProcessing = async () => {
-          if (!id) return;
-          setIsCheckingProcessing(true); // Reset to checking state on ID change
-          setIsReprocessing(false);      // Reset reprocessing state
-          try {
-              const meta = await dbService.getBookMetadata(id);
-              if (meta) {
-                  const effectiveVersion = meta.version ?? 0;
-
-                  if (effectiveVersion < CURRENT_BOOK_VERSION) {
-                      setIsReprocessing(true);
-                  } else {
-                      setIsReprocessing(false);
-                  }
-              }
-          } catch (e) {
-              console.error("Failed to check processing status", e);
-          } finally {
-              setIsCheckingProcessing(false);
-          }
-      };
-      checkProcessing();
-  }, [id]);
 
   // --- Setup useEpubReader Hook ---
 
@@ -613,7 +581,7 @@ export const ReaderView: React.FC = () => {
 
               if (itemPath === sectionPath) {
                    // Found a file match.
-                   // If we haven't found a match yet, take this one (likely the parent/chapter start)
+                   // If we have not found a match yet, take this one (likely the parent/chapter start)
                    if (!bestMatchId) {
                        bestMatchId = item.id;
                    }
@@ -859,22 +827,8 @@ export const ReaderView: React.FC = () => {
   const showAnnotations = activeSidebar === 'annotations';
   const showSearch = activeSidebar === 'search';
 
-  if (isReprocessing && id) {
-      return (
-          <ReprocessingInterstitial
-             bookId={id}
-             onComplete={() => setIsReprocessing(false)}
-          />
-      );
-  }
-
   return (
     <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
-      {isCheckingProcessing && (
-          <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
-      )}
       <Dialog
         isOpen={showImportJumpDialog}
         onClose={handleJumpCancel}
