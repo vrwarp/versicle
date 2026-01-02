@@ -36,11 +36,30 @@ export const DEFAULT_SENTENCE_STARTERS = [
 ];
 
 // Pre-compiled regexes for performance
+
+// Matches the last sequence of non-whitespace characters in a string.
+// Used to identify the last word of a sentence segment to check for abbreviations.
 const RE_LAST_WORD = /\S+$/;
+
+// Matches the last two whitespace-separated words in a string.
+// Used to identify multi-word abbreviations like "et al." at the end of a segment.
 const RE_LAST_TWO_WORDS = /(?:\S+\s+)\S+$/;
+
+// Matches the first sequence of non-whitespace characters in a string.
+// Used to identify the first word of the next segment to check against sentence starters.
 const RE_FIRST_WORD = /^\S+/;
+
+// Matches common opening punctuation marks (quotes, brackets, etc.) at the start of a string.
+// Used to strip punctuation before checking if a word is a sentence starter.
 const RE_LEADING_PUNCTUATION = /^['"([<{]+/;
+
+// Matches sentence-ending punctuation marks (.,!?;:) at the end of a string.
+// Used to clean the next word before checking if it's a starter.
 const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
+
+// Fallback sentence splitting regex.
+// Captures sequences of characters ending with sentence-ending punctuation (.!?).
+// Used when Intl.Segmenter is not available.
 const RE_SENTENCE_FALLBACK = /([^.!?]+[.!?]+)/g;
 
 /**
