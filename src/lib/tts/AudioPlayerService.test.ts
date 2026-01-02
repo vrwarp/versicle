@@ -309,7 +309,7 @@ describe('AudioPlayerService', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let groupSentencesByRoot: (sentences: any[]) => any[];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let detectAndFilterContent: (sentences: any[], skipTypes: any[]) => Promise<any[]>;
+        let detectAndFilterContent: (sentences: any[], skipTypes: any[], sectionId?: string) => Promise<any[]>;
 
         beforeEach(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -393,7 +393,8 @@ describe('AudioPlayerService', () => {
                 { id: '2', type: 'footnote' } // Skip this one
             ]);
 
-            const filtered = await detectAndFilterContent(sentences, ['footnote']);
+            // Pass explicit sectionId to bypass state dependency
+            const filtered = await detectAndFilterContent(sentences, ['footnote'], 'sec1');
 
             // Should preserve "Narrative" and "Interruption"
             // Should remove "Footnote"
