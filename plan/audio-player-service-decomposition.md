@@ -139,3 +139,37 @@ The current `AudioPlayerService.ts` is a monolithic service (~1,000 lines) manag
 -   **Parallel Development**: Developers can work on the AI filtering pipeline independently from the Audio Element player.
 
 -   **Error Boundaries**: A failure in `MediaSession` metadata update will no longer crash the main playback sequence.
+
+7\. Implementation Summary & Deviations
+---------------------------------------
+
+### Completed Work
+The decomposition of `AudioPlayerService` into the five proposed components has been successfully completed.
+- `TaskSequencer`: Implemented for robust async locking.
+- `AudioContentPipeline`: Handles section loading, AI filtering, and text refinement.
+- `PlaybackStateManager`: Manages the queue, indices, and position calculations.
+- `TTSProviderManager`: Wraps providers and handles error events.
+- `PlatformIntegration`: Manages `MediaSession` and `BackgroundAudio`.
+
+`AudioPlayerService` now acts as a facade, coordinating these components.
+
+### Discoveries & Deviations
+
+1.  **Circular Dependencies**:
+    - **Issue**: Importing `TTSQueueItem` and `TTSStatus` from `AudioPlayerService` into sub-modules created circular dependencies during the build.
+    - **Resolution**: These type definitions remain exported from `AudioPlayerService.ts`, but sub-modules avoid importing them where possible or local interfaces were adjusted. In the final build, `TTSQueueItem`, `TTSStatus`, and `DownloadInfo` are defined in `AudioPlayerService.ts` and exported for consumers.
+
+2.  **Error Handling & Fallback**:
+    - **Original Plan**: Handle fallback logic inside `AudioPlayerService` catch blocks or `TTSProviderManager`.
+    - **Implementation**: The fallback mechanism relies on the `TTSProviderManager` emitting an `onError` event with a specific type (`'fallback'`). `AudioPlayerService` listens for this event to trigger a retry (`playInternal`), rather than solely relying on catching promise rejections from `play()`. This required careful mocking in tests (manually triggering the error listener).
+
+3.  **Queue Optimization**:
+    - **Implementation**: `setQueue` includes an optimization to check if the new queue is identical to the current one. If so, it updates the state manager's indices and persists state without stopping playback or resetting the media session, improving continuity.
+
+4.  **Testing Strategy**:
+    - **Private Property Access**: Some existing tests relied on accessing private properties of `AudioPlayerService` (e.g., `currentIndex`). These were updated to access the state via the new sub-components (e.g., `service['stateManager'].currentIndex`) or through public methods where available.
+    - **Mocking**: `AudioContentPipeline` testing required extensive mocking of `DBService` and `GenAIService` to verify content filtering and structure detection.
+
+5.  **Platform Integration Access**:
+    - **Issue**: `AudioPlayerService` needed to read the current background audio mode to pass it back during certain transitions.
+    - **Resolution**: Added `getBackgroundAudioMode()` to `PlatformIntegration` to avoid unsafe private property access.
