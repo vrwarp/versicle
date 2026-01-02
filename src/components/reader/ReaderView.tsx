@@ -524,7 +524,7 @@ export const ReaderView: React.FC = () => {
             const section = book.spine.get(currentSectionId!);
             if (!section) return;
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             const analysis = await dbService.getContentAnalysis(id!, section.href);
             if (!analysis) return;
 
@@ -533,7 +533,7 @@ export const ReaderView: React.FC = () => {
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
                     // Skip if already added
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
                     if (addedDebugHighlights.current.has(item.rootCfi)) continue;
 
                     let highlightCfi = item.rootCfi;
@@ -877,7 +877,6 @@ export const ReaderView: React.FC = () => {
           <ReprocessingInterstitial
              bookId={id}
              onComplete={() => setIsReprocessing(false)}
-             onCancel={() => setIsReprocessing(false)}
           />
       );
   }
