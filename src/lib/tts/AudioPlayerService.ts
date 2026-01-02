@@ -10,10 +10,37 @@ import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
-import type { TTSQueueItem, TTSStatus } from './AudioPlayerService';
-import type { DownloadInfo } from './AudioPlayerService';
 
-export type { TTSQueueItem, TTSStatus, DownloadInfo };
+/**
+ * Defines the possible states of the TTS playback.
+ */
+export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
+
+/**
+ * Represents a single item in the TTS playback queue.
+ */
+export interface TTSQueueItem {
+    /** The text content to be spoken. */
+    text: string;
+    /** The Canonical Fragment Identifier (CFI) for the location in the book. */
+    cfi: string | null;
+    /** Optional chapter title. */
+    title?: string;
+    /** Optional author name. */
+    author?: string;
+    /** Optional book title. */
+    bookTitle?: string;
+    /** Optional cover image URL. */
+    coverUrl?: string;
+    /** Indicates if this item is a pre-roll announcement. */
+    isPreroll?: boolean;
+}
+
+export interface DownloadInfo {
+    voiceId: string;
+    percent: number;
+    status: string;
+}
 
 type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null, downloadInfo?: DownloadInfo) => void;
 
