@@ -3,8 +3,9 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
-import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { cn } from '../../lib/utils';
 
 export type ActionType =
   | 'color'      // Payload: 'yellow' | 'green' | 'blue' | 'red'
@@ -38,17 +39,21 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 }) => {
   const {
     isPlaying,
+    status,
     queue,
     currentIndex,
     play,
     pause
   } = useTTSStore(useShallow(state => ({
       isPlaying: state.isPlaying,
+      status: state.status,
       queue: state.queue,
       currentIndex: state.currentIndex,
       play: state.play,
       pause: state.pause
   })));
+
+  const isLoading = status === 'loading';
 
   // Internal state for note editing
   const [isEditingNote, setIsEditingNote] = useState(false);
@@ -278,11 +283,20 @@ export const CompassPill: React.FC<CompassPillProps> = ({
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
+                    className={cn(
+                        "h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation",
+                        isLoading && "cursor-wait"
+                    )}
                     onClick={handleTogglePlay}
-                    aria-label={isPlaying ? "Pause" : "Play"}
+                    aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
                 >
-                    {isPlaying ? <Pause size={20} className="fill-current" /> : <Play size={20} className="fill-current ml-0.5" />}
+                    {isLoading ? (
+                        <Loader2 size={20} className="animate-spin" />
+                    ) : isPlaying ? (
+                        <Pause size={20} className="fill-current" />
+                    ) : (
+                        <Play size={20} className="fill-current ml-0.5" />
+                    )}
                 </Button>
 
                 {/* Next Button */}
@@ -320,13 +334,18 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
         {/* Center Info */}
         <div
-            className="flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform group"
+            className={cn(
+                "flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform group",
+                isLoading && "cursor-wait"
+            )}
             onClick={handleTogglePlay}
             role="button"
-            aria-label={isPlaying ? "Pause" : "Play"}
+            aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
         >
              <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center flex items-center justify-center gap-1.5">
-                {isPlaying ? (
+                {isLoading ? (
+                   <Loader2 size={10} className="animate-spin opacity-70" data-testid="active-loader-icon" />
+                ) : isPlaying ? (
                    <Pause size={10} className="fill-current opacity-70" data-testid="active-pause-icon" />
                 ) : (
                    <Play size={10} className="fill-current opacity-70 ml-0.5" data-testid="active-play-icon" />
