@@ -256,41 +256,14 @@ describe('AudioPlayerService', () => {
         vi.spyOn(service, 'play');
         const consoleSpy = vi.spyOn(console, 'warn');
 
-        // We also need to trigger the ERROR event on the provider, because TTSProviderManager
-        // listens to events, it doesn't just catch errors from `play()`.
-        // Wait, the `play()` method in AudioPlayerService catches errors.
-        // But the `TTSProviderManager` logic says:
-        // if (this.provider.id !== 'local') ... switchToLocalProvider() ... events.onError()
-        // And AudioPlayerService listens to `onError`.
-
-        // However, `play()` in AudioPlayerService calls `providerManager.play()`.
-        // If `providerManager.play()` throws, AudioPlayerService catches it in `playInternal` catch block.
-        // It then logs "Play error".
-        // IT DOES NOT switch provider in the catch block of `playInternal` anymore in the new code!
-        // The old code did. The new code relies on `onError` event from `TTSProviderManager`.
-
-        // So `TTSProviderManager.play()` should probably NOT throw if it's handling fallback?
-        // Or `AudioPlayerService` should handle the error from `play()` by checking if provider manager switched?
-
-        // Actually, if `provider.play()` throws (e.g. HTTP error), `TTSProviderManager` just returns that promise.
-        // So `AudioPlayerService` catches it.
-        // BUT `TTSProviderManager` sets up listeners. Does `play` failure trigger an error event?
-        // Usually providers emit 'error' event on playback failure, OR the promise rejects.
-
-        // If the promise rejects, we are in the catch block of `AudioPlayerService.playInternal`.
-        // The current implementation of `playInternal` catch block just stops and notifies error.
-
-        // FIX: `TTSProviderManager.play` should probably catch errors and emit onError if it wants to handle fallback?
-        // OR `AudioPlayerService.playInternal` needs to handle fallback again.
-
-        // The plan said: "If cloud provider emits ERROR, verify that local provider's init() is called immediately."
-        // This implies event-based error handling.
-
-        // So my mock provider should emit an error event instead of just rejecting the promise,
-        // OR `TTSProviderManager` should wrap the play call.
-
-        // Let's assume the provider emits an error event when `play` fails.
-        // So we need to capture the listener passed to `mockCloudProvider.on`.
+        // We simulate a cloud provider error to verify the fallback mechanism.
+        // The TTSProviderManager is designed to listen for error events from the provider.
+        // Upon receiving an error (and if not local), it attempts to switch to the local provider.
+        //
+        // NOTE: AudioPlayerService does NOT handle fallback in its catch block for `play()`.
+        // Instead, it relies on the `onError` callback from TTSProviderManager.
+        // Therefore, we must manually trigger the error event on the provider listener
+        // to exercise this specific path, rather than just rejecting the play() promise.
 
         const onCall = mockCloudProvider.on.mock.calls[0];
         const providerListener = onCall[0];
@@ -298,10 +271,10 @@ describe('AudioPlayerService', () => {
         // Trigger play
         const playPromise = service.play();
 
-        // Emit error event
+        // Emit error event to trigger TTSProviderManager's fallback logic
         providerListener({ type: 'error', error: new Error("API Quota Exceeded") });
 
-        // Wait for async logic
+        // Wait for async logic (fallback provider init and re-play)
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Falling back"));
@@ -402,10 +375,9 @@ describe('AudioPlayerService', () => {
     });
 
     describe('Grouping Logic', () => {
-        // Access private method helper via the content pipeline
-        // The methods are now in AudioContentPipeline, which is private in AudioPlayerService
-        // But we can test AudioContentPipeline separately (already done).
-        // If we want to test them here via AudioPlayerService, we need to access `service.contentPipeline`.
+        // We access the content pipeline instance attached to the service to verify
+        // low-level grouping behavior. Ideally, these tests would live in AudioContentPipeline.test.ts,
+        // but they are preserved here to ensure integration context or legacy coverage.
 
         let contentPipeline: any;
 
