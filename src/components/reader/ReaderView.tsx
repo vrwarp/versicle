@@ -536,20 +536,7 @@ export const ReaderView: React.FC = () => {
                     // Skip if already added
                     if (addedDebugHighlights.current.has(item.rootCfi)) continue;
 
-                    let highlightCfi = item.rootCfi;
-
-                    // Try to build a range if there is a next item
-                    if (i < items.length - 1) {
-                        const nextItem = items[i+1];
-                        try {
-                            highlightCfi = generateCfiRange(item.rootCfi, nextItem.rootCfi);
-                        } catch (e) {
-                            console.warn("Failed to generate range for debug highlight", e);
-                        }
-                    } else {
-                        // Last item.
-                        // We default to rootCfi which should be valid enough.
-                    }
+                    const highlightCfi = item.rootCfi;
 
                     const color = TYPE_COLORS[item.type];
                     if (color) {
