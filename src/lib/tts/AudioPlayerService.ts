@@ -11,7 +11,7 @@ import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule } from '../../types/db';
 import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
-import { getParentCfi } from '../cfi-utils';
+import { getParentCfi, generateCfiRange, parseCfiRange } from '../cfi-utils';
 import { genAIService } from '../genai/GenAIService';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import type { ContentType } from '../../types/content-analysis';
@@ -939,29 +939,29 @@ export class AudioPlayerService {
           const newQueue: TTSQueueItem[] = [];
 
           if (ttsContent && ttsContent.sentences.length > 0) {
+              // -----------------------------------------------------------
+              // Content Type Detection & Filtering (on RAW sentences)
+              // -----------------------------------------------------------
+              const genAISettings = useGenAIStore.getState();
+              const skipTypes = genAISettings.contentFilterSkipTypes;
+              const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
+
+              let workingSentences = ttsContent.sentences;
+
+              // Optimize: Don't run detection if nothing to skip
+              if (skipTypes.length > 0 && isContentAnalysisEnabled) {
+                  workingSentences = await this.detectAndFilterContent(workingSentences, skipTypes, section.sectionId);
+              }
+
               // Dynamic Refinement: Merge segments based on current settings
               const settings = useTTSStore.getState();
-              const refinedSentences = TextSegmenter.refineSegments(
-                  ttsContent.sentences,
+              const finalSentences = TextSegmenter.refineSegments(
+                  workingSentences,
                   settings.customAbbreviations,
                   settings.alwaysMerge,
                   settings.sentenceStarters,
                   settings.minSentenceLength
               );
-
-              // -----------------------------------------------------------
-              // Content Type Detection & Filtering
-              // -----------------------------------------------------------
-              const genAISettings = useGenAIStore.getState();
-              const skipTypes = genAISettings.contentFilterSkipTypes;
-              
-              let finalSentences: { text: string; cfi: string | null }[] = refinedSentences;
-
-              // Optimize: Don't run detection if nothing to skip
-              const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
-              if (skipTypes.length > 0 && isContentAnalysisEnabled) {
-                  finalSentences = await this.detectAndFilterContent(refinedSentences, skipTypes);
-              }
 
               // Add Preroll if enabled
               if (this.prerollEnabled) {
@@ -1059,7 +1059,7 @@ export class AudioPlayerService {
    * @param groups The grouped text segments to analyze.
    * @returns A promise resolving to the list of content types, or null if detection was not possible.
    */
-  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[]) {
+  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[]) {
       // Deduplicate concurrent requests for the same section
       const key = `${bookId}:${sectionId}`;
       if (this.analysisPromises.has(key)) {
@@ -1129,22 +1129,44 @@ export class AudioPlayerService {
       }
   }
 
-  private groupSentencesByRoot(sentences: { text: string; cfi: string | null }[]): { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] {
-      const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
-      let currentGroup: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
+  private groupSentencesByRoot(sentences: { text: string; cfi: string }[]): { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] {
+      const groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] = [];
+      let currentGroup: { parentCfi: string; segments: { text: string; cfi: string }[]; fullText: string } | null = null;
+
+      const finalizeGroup = (group: { segments: { text: string; cfi: string }[]; fullText: string }) => {
+          const first = group.segments[0].cfi;
+          const last = group.segments[group.segments.length - 1].cfi;
+
+          // Convert to Range CFI: epubcfi(common,start,end)
+          const rootCfi = generateCfiRange(
+              parseCfiRange(first)?.fullStart || first,
+              parseCfiRange(last)?.fullEnd || last
+          );
+
+          groups.push({
+              rootCfi,
+              segments: group.segments,
+              fullText: group.fullText
+          });
+      };
 
       for (const s of sentences) {
-          const rootCfi = getParentCfi(s.cfi || ''); // Handle null cfi
+          const parentCfi = getParentCfi(s.cfi);
 
-          if (!currentGroup || currentGroup.rootCfi !== rootCfi) {
-              if (currentGroup) groups.push(currentGroup);
-              currentGroup = { rootCfi, segments: [], fullText: '' };
+          if (!currentGroup || currentGroup.parentCfi !== parentCfi) {
+              if (currentGroup) {
+                  finalizeGroup(currentGroup);
+              }
+              currentGroup = { parentCfi, segments: [], fullText: '' };
           }
 
           currentGroup.segments.push(s);
           currentGroup.fullText += s.text + ' ';
       }
-      if (currentGroup) groups.push(currentGroup);
+
+      if (currentGroup) {
+          finalizeGroup(currentGroup);
+      }
       return groups;
   }
 
@@ -1169,18 +1191,8 @@ export class AudioPlayerService {
              const ttsContent = await dbService.getTTSContent(bookId, nextSection.sectionId);
              if (!ttsContent || ttsContent.sentences.length === 0) return;
 
-             // 2. Refine
-              const settings = useTTSStore.getState();
-              const refinedSentences = TextSegmenter.refineSegments(
-                  ttsContent.sentences,
-                  settings.customAbbreviations,
-                  settings.alwaysMerge,
-                  settings.sentenceStarters,
-                  settings.minSentenceLength
-              );
-
-             // 3. Group
-             const groups = this.groupSentencesByRoot(refinedSentences);
+             // 3. Group (Using raw sentences to ensure correct parent mapping)
+             const groups = this.groupSentencesByRoot(ttsContent.sentences);
 
              // 4. Detect (will use deduplicated promise if already running)
              await this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups);
@@ -1198,12 +1210,15 @@ export class AudioPlayerService {
    *
    * @param sentences The original list of TTS queue items.
    * @param skipTypes The list of content types to exclude.
+   * @param sectionIdOptional Explicit section ID (required if called before section load completes)
    * @returns A promise resolving to the filtered list of queue items.
    */
-  private async detectAndFilterContent(sentences: { text: string; cfi: string | null }[], skipTypes: ContentType[]): Promise<{ text: string; cfi: string | null }[]> {
-      if (!this.currentBookId || this.currentSectionIndex === -1) return sentences;
+  private async detectAndFilterContent(sentences: { text: string; cfi: string }[], skipTypes: ContentType[], sectionIdOptional?: string): Promise<{ text: string; cfi: string }[]> {
+      if (!this.currentBookId) return sentences;
       
-      const sectionId = this.playlist[this.currentSectionIndex]?.sectionId;
+      // Use explicit sectionId if provided, otherwise fall back to current state (legacy/safety)
+      const sectionId = sectionIdOptional || this.playlist[this.currentSectionIndex]?.sectionId;
+
       if (!sectionId) return sentences;
 
       // Group sentences by Root Node
@@ -1225,7 +1240,7 @@ export class AudioPlayerService {
           });
 
           if (skipRoots.size > 0) {
-              const finalSentences: { text: string; cfi: string | null }[] = [];
+              const finalSentences: { text: string; cfi: string }[] = [];
               for (const g of groups) {
                   if (!skipRoots.has(g.rootCfi)) {
                       finalSentences.push(...g.segments);
