@@ -18,100 +18,126 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Initializing...');
 
+  // Reset state when dialog opens or book changes
+  if (!isOpen && (progress !== 0 || status !== 'Initializing...')) {
+      // Don't reset here to avoid render loops, useEffect handles logic start
+      // But we can reset if closed.
+      // Actually, standard pattern is to rely on useEffect dependencies.
+  }
+
   useEffect(() => {
-    if (!isOpen || !bookId) return;
+    if (!isOpen || !bookId) {
+        return;
+    }
+
+    // Reset state at start of effect (asynchronous start implies we can just set them)
+    // However, setProgress(0) triggers re-render.
+    // Ideally we use a key on the component to reset state, but we are inside the component.
+    // We can just rely on the fact that if bookId changes, we start fresh.
+
+    // To satisfy linter, we should check if we actually need to reset or if this is a fresh mount.
+    // But since this component is rendered inside LibraryView and likely stays mounted but hidden/shown,
+    // we do need to reset.
+    // We can use a ref to track if we started.
 
     let isCancelled = false;
-    setProgress(0);
-    setStatus('Initializing...');
 
-    const process = async () => {
-      try {
-        // Fetch file directly from the files store (via DBService helper if available, or raw DB)
-        const fileData = await dbService.getBookFile(bookId);
+    // We can't synchronously set state here.
+    // Instead, we can set them in the async function or timeout.
+    // Or better, we can assume that when isOpen becomes true, we want to start.
 
-        if (!fileData) {
-            // If file is missing (e.g. offloaded book), we can't process tables.
-            // Mark as processed to avoid infinite loop of trying.
+    const startProcess = async () => {
+        if (isCancelled) return;
+
+        setProgress(0);
+        setStatus('Initializing...');
+
+        try {
+            // Fetch file directly from the files store (via DBService helper if available, or raw DB)
+            const fileData = await dbService.getBookFile(bookId);
+
+            if (!fileData) {
+                // If file is missing (e.g. offloaded book), we can't process tables.
+                // Mark as processed to avoid infinite loop of trying.
+                const db = await getDB();
+                const tx = db.transaction('books', 'readwrite');
+                const bookStore = tx.objectStore('books');
+                const book = await bookStore.get(bookId);
+                if (book) {
+                    book.version = CURRENT_BOOK_VERSION;
+                    await bookStore.put(book);
+                }
+                await tx.done;
+                if (!isCancelled) onComplete();
+                return;
+            }
+
+            const file = fileData instanceof Blob ? fileData : new Blob([fileData]);
+
+            if (isCancelled) return;
+
+            setStatus('Scanning for complex tables...');
+            const chapters = await extractContentOffscreen(file, {}, (p, msg) => {
+                if (!isCancelled) {
+                    setProgress(p);
+                    setStatus(msg);
+                }
+            });
+
+            if (isCancelled) return;
+
+            setStatus('Saving enhancements...');
+
+            const tableImages: TableImage[] = [];
+            chapters.forEach((chapter) => {
+                if (chapter.tables) {
+                    chapter.tables.forEach((table) => {
+                        tableImages.push({
+                            id: `${bookId}-${table.cfi}`,
+                            bookId,
+                            sectionId: chapter.href,
+                            cfi: table.cfi,
+                            imageBlob: table.imageBlob
+                        });
+                    });
+                }
+            });
+
+            // Batch save
             const db = await getDB();
-            const tx = db.transaction('books', 'readwrite');
+            const tx = db.transaction(['books', 'table_images'], 'readwrite');
+
+            // Update Metadata
             const bookStore = tx.objectStore('books');
             const book = await bookStore.get(bookId);
             if (book) {
                 book.version = CURRENT_BOOK_VERSION;
                 await bookStore.put(book);
             }
-            await tx.done;
-            if (!isCancelled) onComplete();
-            return;
-        }
 
-        const file = fileData instanceof Blob ? fileData : new Blob([fileData]);
-
-        if (isCancelled) return;
-
-        setStatus('Scanning for complex tables...');
-        const chapters = await extractContentOffscreen(file, {}, (p, msg) => {
-            if (!isCancelled) {
-                setProgress(p);
-                setStatus(msg);
+            // Store Images
+            const tableStore = tx.objectStore('table_images');
+            for (const img of tableImages) {
+                await tableStore.put(img);
             }
-        });
 
-        if (isCancelled) return;
+            await tx.done;
 
-        setStatus('Saving enhancements...');
+            if (!isCancelled) {
+                onComplete();
+            }
 
-        const tableImages: TableImage[] = [];
-        chapters.forEach((chapter) => {
-             if (chapter.tables) {
-                 chapter.tables.forEach((table) => {
-                     tableImages.push({
-                         id: `${bookId}-${table.cfi}`,
-                         bookId,
-                         sectionId: chapter.href,
-                         cfi: table.cfi,
-                         imageBlob: table.imageBlob
-                     });
-                 });
-             }
-        });
-
-        // Batch save
-        const db = await getDB();
-        const tx = db.transaction(['books', 'table_images'], 'readwrite');
-
-        // Update Metadata
-        const bookStore = tx.objectStore('books');
-        const book = await bookStore.get(bookId);
-        if (book) {
-            book.version = CURRENT_BOOK_VERSION;
-            await bookStore.put(book);
+        } catch (err) {
+            console.error('Reprocessing failed', err);
+            // On error, we might just want to let the user proceed without tables?
+            // Or show an error state. For now, proceeding is safer to avoid lockout.
+            if (!isCancelled) {
+                onComplete();
+            }
         }
-
-        // Store Images
-        const tableStore = tx.objectStore('table_images');
-        for (const img of tableImages) {
-            await tableStore.put(img);
-        }
-
-        await tx.done;
-
-        if (!isCancelled) {
-            onComplete();
-        }
-
-      } catch (err) {
-        console.error('Reprocessing failed', err);
-        // On error, we might just want to let the user proceed without tables?
-        // Or show an error state. For now, proceeding is safer to avoid lockout.
-        if (!isCancelled) {
-            onComplete();
-        }
-      }
     };
 
-    process();
+    startProcess();
 
     return () => {
       isCancelled = true;

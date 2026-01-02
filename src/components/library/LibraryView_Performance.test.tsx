@@ -3,6 +3,7 @@ import { render, act } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { MemoryRouter } from 'react-router-dom';
 
 // Mock Grid
 const renderLog = vi.fn();
@@ -48,7 +49,11 @@ describe('LibraryView Performance', () => {
     });
 
     it('re-renders Grid with new cellProps on unrelated state changes', async () => {
-        render(<LibraryView />);
+        render(
+            <MemoryRouter>
+                <LibraryView />
+            </MemoryRouter>
+        );
 
         // Trigger resize to set initial dimensions and ensure first render is done
         act(() => {
