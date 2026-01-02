@@ -131,8 +131,8 @@ export async function extractContentOffscreen(
 
                   const blob = await snapdom.toBlob(table, {
                       type: 'webp',
-                      quality: 0.5,
-                      scale: 0.5,
+                      quality: 0.1,
+                      scale: 0.34,
                   });
 
                   if (blob) {
