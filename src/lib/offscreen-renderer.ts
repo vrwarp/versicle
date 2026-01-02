@@ -9,7 +9,7 @@ export interface ProcessedChapter {
   sentences: SentenceNode[];
   textContent: string;
   title?: string;
-  tables?: Omit<TableImage, 'bookId' | 'id'>[]; // bookId and id are added later
+  tables?: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[]; // bookId, id, and sectionId are added later
 }
 
 /**

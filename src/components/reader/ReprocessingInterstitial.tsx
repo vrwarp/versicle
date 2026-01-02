@@ -63,6 +63,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
                      tableImages.push({
                          id: `${bookId}-${table.cfi}`,
                          bookId,
+                         sectionId: chapter.href,
                          cfi: table.cfi,
                          imageBlob: table.imageBlob
                      });
