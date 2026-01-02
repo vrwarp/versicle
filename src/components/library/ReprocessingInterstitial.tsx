@@ -18,33 +18,12 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Initializing...');
 
-  // Reset state when dialog opens or book changes
-  if (!isOpen && (progress !== 0 || status !== 'Initializing...')) {
-      // Don't reset here to avoid render loops, useEffect handles logic start
-      // But we can reset if closed.
-      // Actually, standard pattern is to rely on useEffect dependencies.
-  }
-
   useEffect(() => {
     if (!isOpen || !bookId) {
         return;
     }
 
-    // Reset state at start of effect (asynchronous start implies we can just set them)
-    // However, setProgress(0) triggers re-render.
-    // Ideally we use a key on the component to reset state, but we are inside the component.
-    // We can just rely on the fact that if bookId changes, we start fresh.
-
-    // To satisfy linter, we should check if we actually need to reset or if this is a fresh mount.
-    // But since this component is rendered inside LibraryView and likely stays mounted but hidden/shown,
-    // we do need to reset.
-    // We can use a ref to track if we started.
-
     let isCancelled = false;
-
-    // We can't synchronously set state here.
-    // Instead, we can set them in the async function or timeout.
-    // Or better, we can assume that when isOpen becomes true, we want to start.
 
     const startProcess = async () => {
         if (isCancelled) return;
