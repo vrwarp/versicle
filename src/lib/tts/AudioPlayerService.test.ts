@@ -306,10 +306,8 @@ describe('AudioPlayerService', () => {
 
     describe('Grouping Logic', () => {
         // Access private method helper
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let groupSentencesByRoot: (sentences: any[]) => any[];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let detectAndFilterContent: (sentences: any[], skipTypes: any[], sectionId?: string) => Promise<any[]>;
+        let groupSentencesByRoot: (sentences: unknown[]) => { rootCfi: string; segments: unknown[] }[];
+        let detectAndFilterContent: (sentences: unknown[], skipTypes: string[], sectionId?: string) => Promise<{ text: string }[]>;
 
         beforeEach(() => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -381,13 +379,17 @@ describe('AudioPlayerService', () => {
             ];
 
             // Set current state for detection
-            (service as any).currentBookId = 'book1';
-            (service as any).currentSectionIndex = 0;
-            (service as any).playlist = [{ sectionId: 'sec1' }];
+            // @ts-expect-error Access private
+            service.currentBookId = 'book1';
+            // @ts-expect-error Access private
+            service.currentSectionIndex = 0;
+            // @ts-expect-error Access private
+            service.playlist = [{ sectionId: 'sec1' }];
 
             // Mock GenAI response
             // IDs correspond to indices: '0', '1', '2'
-            (genAIService.detectContentTypes as any).mockResolvedValue([
+            // @ts-expect-error Mock implementation
+            genAIService.detectContentTypes.mockResolvedValue([
                 { id: '0', type: 'narrative' },
                 { id: '1', type: 'narrative' },
                 { id: '2', type: 'footnote' } // Skip this one

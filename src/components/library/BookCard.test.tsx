@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
@@ -7,7 +7,7 @@ import type { BookMetadata } from '../../types/db';
 
 // Mock BookActionMenu
 vi.mock('./BookActionMenu', () => ({
-    BookActionMenu: ({ children, onDelete, onOffload, onRestore, book }: any) => (
+    BookActionMenu: ({ children, onDelete, onOffload, onRestore }: { children: React.ReactNode, onDelete: () => void, onOffload: () => void, onRestore: () => void, book: unknown }) => (
         <div data-testid="mock-book-action-menu">
             {/* Simulate the trigger wrapper behavior without invalid nesting */}
             <div data-testid="menu-wrapper" onClick={(e) => e.stopPropagation()}>
