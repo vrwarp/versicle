@@ -9,7 +9,7 @@ export interface ProcessedChapter {
   sentences: SentenceNode[];
   textContent: string;
   title?: string;
-  tables?: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[]; // bookId, id, and sectionId are added later
+  tables?: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[]; // sectionId is contextually known by ProcessedChapter.href
 }
 
 /**
@@ -91,7 +91,7 @@ export async function extractContentOffscreen(
       // Let's verify we have contents.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const contents = (rendition.getContents() as any[])[0];
-      const capturedTables: Omit<TableImage, 'bookId' | 'id'>[] = [];
+      const capturedTables: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[] = [];
 
       if (contents && contents.document && contents.document.body) {
           const doc = contents.document;

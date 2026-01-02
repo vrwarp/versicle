@@ -76,7 +76,9 @@ export async function validateZipSignature(file: File): Promise<boolean> {
  */
 export async function reprocessBook(bookId: string): Promise<void> {
   const db = await getDB();
-  const file = await db.getFrom('files', bookId);
+  // Use .get() instead of .getFrom() as IDBPDatabase doesn't have getFrom.
+  // (Assuming 'files' store returns a Blob or ArrayBuffer)
+  const file = await db.get('files', bookId);
 
   if (!file) {
     throw new Error(`Book source file not found for ID: ${bookId}`);
