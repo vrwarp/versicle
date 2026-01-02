@@ -170,6 +170,7 @@ export async function processEpub(
               tableImages.push({
                   id: `${bookId}-${table.cfi}`,
                   bookId,
+                  sectionId: chapter.href,
                   cfi: table.cfi,
                   imageBlob: table.imageBlob
               });
