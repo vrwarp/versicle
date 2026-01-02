@@ -200,9 +200,11 @@ describe('cfi-utils', () => {
 
     it('does not truncate very deep paths (e.g. tables)', () => {
          // Path: /4/2/48/2/2/2/2/2 (Length 8)
-         // New behavior: preserve full parent path
+         // Behavior Change: We NOW snap to depth 4 if path is > 4
          const cfi = 'epubcfi(/6/38!/4/2/48/2/2/2/2/2)';
-         expect(getParentCfi(cfi)).toBe('epubcfi(/6/38!/4/2/48/2/2/2/2)');
+         // Parts: 4, 2, 48, 2, 2, 2, 2, 2. Length 8.
+         // Snap to 4: 4, 2, 48, 2.
+         expect(getParentCfi(cfi)).toBe('epubcfi(/6/38!/4/2/48/2)');
     });
 
     it('handles CFI pointing to root of spine item (no internal path)', () => {
