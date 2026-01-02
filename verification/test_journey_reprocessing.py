@@ -3,7 +3,7 @@ import os
 import shutil
 import time
 from playwright.sync_api import sync_playwright, expect
-from utils import ensure_library_with_book, capture_screenshot, reset_app
+from verification.utils import ensure_library_with_book, capture_screenshot, reset_app
 
 def verify_reprocessing_interstitial():
     with sync_playwright() as p:
