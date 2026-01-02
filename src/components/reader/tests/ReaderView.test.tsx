@@ -14,7 +14,7 @@ vi.mock('../../../db/db', () => ({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get: vi.fn((store, id) => {
       if (store === 'files') return Promise.resolve(new ArrayBuffer(10));
-      if (store === 'books') return Promise.resolve({ title: 'Test Book', tablesProcessed: true });
+      if (store === 'books') return Promise.resolve({ title: 'Test Book', version: 1 });
       return Promise.resolve(null);
     }),
     getAllFromIndex: vi.fn(() => Promise.resolve([])), // Mock annotations fetch

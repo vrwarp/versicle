@@ -37,6 +37,7 @@ import { ContentAnalysisLegend } from './ContentAnalysisLegend';
 import { TYPE_COLORS } from '../../types/content-analysis';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
 import { Loader2 } from 'lucide-react';
+import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 
 /**
  * The main reader interface component.
@@ -125,10 +126,15 @@ export const ReaderView: React.FC = () => {
           setIsCheckingProcessing(true); // Reset to checking state on ID change
           setIsReprocessing(false);      // Reset reprocessing state
           try {
-              const meta = await dbService.getBookMetadata(id);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const meta = await dbService.getBookMetadata(id) as any;
               if (meta) {
-                  // If undefined or false, trigger reprocessing
-                  if (meta.tablesProcessed === undefined || meta.tablesProcessed === false) {
+                  // Determine effective version.
+                  // If 'version' is present, use it.
+                  // If missing, check 'tablesProcessed' (legacy flag). If true -> 1, else -> 0.
+                  const effectiveVersion = meta.version ?? (meta.tablesProcessed ? 1 : 0);
+
+                  if (effectiveVersion < CURRENT_BOOK_VERSION) {
                       setIsReprocessing(true);
                   } else {
                       setIsReprocessing(false);

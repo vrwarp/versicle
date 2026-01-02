@@ -4,6 +4,7 @@ import { dbService } from '../../db/DBService';
 import { extractContentOffscreen } from '../../lib/offscreen-renderer';
 import type { TableImage } from '../../types/db';
 import { getDB } from '../../db/db';
+import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 
 interface ReprocessingInterstitialProps {
   bookId: string;
@@ -30,7 +31,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
             const bookStore = tx.objectStore('books');
             const book = await bookStore.get(bookId);
             if (book) {
-                book.tablesProcessed = true;
+                book.version = CURRENT_BOOK_VERSION;
                 await bookStore.put(book);
             }
             await tx.done;
@@ -79,7 +80,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
         const bookStore = tx.objectStore('books');
         const book = await bookStore.get(bookId);
         if (book) {
-            book.tablesProcessed = true;
+            book.version = CURRENT_BOOK_VERSION;
             await bookStore.put(book);
         }
 
