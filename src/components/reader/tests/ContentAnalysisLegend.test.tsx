@@ -10,6 +10,8 @@ vi.mock('lucide-react', () => ({
   Copy: () => <span data-testid="icon-copy" />,
   ChevronRight: () => <span data-testid="icon-chevron-right" />,
   ChevronDown: () => <span data-testid="icon-chevron-down" />,
+  RotateCcw: () => <span data-testid="icon-rotate-ccw" />,
+  Loader2: () => <span data-testid="icon-loader2" />,
 }));
 
 // Mock Store
