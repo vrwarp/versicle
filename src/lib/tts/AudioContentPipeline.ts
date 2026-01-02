@@ -27,7 +27,7 @@ export class AudioContentPipeline {
             let title = sectionTitle || `Section ${sectionIndex + 1}`;
             if (!sectionTitle) {
                 const analysis = await dbService.getContentAnalysis(bookId, section.sectionId);
-                if (analysis && analysis.structure.title) {
+                if (analysis && analysis.structure && analysis.structure.title) {
                     title = analysis.structure.title;
                 }
             }

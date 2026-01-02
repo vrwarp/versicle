@@ -121,6 +121,26 @@ describe('AudioContentPipeline', () => {
              // The pipeline uses `generateCfiRange` to create the rootCfi for grouping.
              // For a single-item group like s2, the range logic typically results in a self-referencing range.
              // We mock dbService to return a matching result so the pipeline sees 'table' for s2's group.
+             (dbService.getContentAnalysis as any).mockResolvedValue({
+                contentTypes: [
+                    { rootCfi: 'epubcfi(/2/2/4:0,,)', type: 'table' } // Matching s2 group
+                ]
+            });
+
+            // Mock store settings to enable filtering
+            (useGenAIStore.getState as any).mockReturnValue({
+                contentFilterSkipTypes: ['table'],
+                isContentAnalysisEnabled: true,
+                apiKey: 'test-key'
+            });
+
+            // Execute loadSection
+            // The pipeline calls detectAndFilterContent internally
+            const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
+
+            // Expect result to contain only s1 ('Keep me'), s2 should be filtered out
+            expect(result).toHaveLength(1);
+            expect(result![0].text).toBe('Keep me');
         });
     });
 });
