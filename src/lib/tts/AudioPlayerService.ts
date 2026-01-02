@@ -1151,9 +1151,25 @@ export class AudioPlayerService {
       };
 
       for (const s of sentences) {
-          const parentCfi = getParentCfi(s.cfi);
+          const fullCfi = s.cfi || '';
+          const parentCfi = getParentCfi(fullCfi);
 
-          if (!currentGroup || currentGroup.parentCfi !== parentCfi) {
+          // Helper to check if the current group already "contains" this new parent
+          const currentParentBase = currentGroup ? currentGroup.parentCfi.replace(/\)$/, '') : '';
+          const newParentBase = parentCfi.replace(/\)$/, '');
+
+          // Check if one path is a prefix of the other, confirming they belong to the same branch.
+          // We verify that the prefix match is followed by a separator or is the end of string
+          // to avoid false positives (e.g. "/1" matching "/10").
+          const isDescendant = currentGroup && newParentBase.startsWith(currentParentBase) &&
+              (newParentBase.length === currentParentBase.length || ['/', '!', ':'].includes(newParentBase[currentParentBase.length]));
+
+          const isAncestor = currentGroup && currentParentBase.startsWith(newParentBase) &&
+              (currentParentBase.length === newParentBase.length || ['/', '!', ':'].includes(currentParentBase[newParentBase.length]));
+
+          const isInternalNode = isDescendant || isAncestor;
+
+          if (!currentGroup || !isInternalNode) {
               if (currentGroup) {
                   finalizeGroup(currentGroup);
               }
