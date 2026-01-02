@@ -317,8 +317,10 @@ export async function reprocessBook(
   const tx = db.transaction(['books', 'sections', 'tts_content', 'table_images'], 'readwrite');
 
   // Helper to delete items by index
-  const deleteByIndex = async (storeName: string, indexName: string, key: IDBValidKey) => {
-      const store = tx.objectStore(storeName);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const deleteByIndex = async (storeName: any, indexName: string, key: IDBValidKey) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const store = tx.objectStore(storeName) as any;
       const index = store.index(indexName);
       let cursor = await index.openCursor(IDBKeyRange.only(key));
       while (cursor) {
