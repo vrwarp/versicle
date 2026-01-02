@@ -1,5 +1,5 @@
 import ePub from 'epubjs';
-import snapdom from 'snapdom';
+import { snapdom } from '@zumer/snapdom';
 import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from './tts';
 import { sanitizeContent } from './sanitizer';
 import type { TableImage } from '../types/db';
@@ -129,8 +129,8 @@ export async function extractContentOffscreen(
                   range.selectNode(table);
                   const cfi = contents.cfiFromRange(range);
 
-                  const blob = await snapdom(table, {
-                      format: 'webp',
+                  const blob = await snapdom.toBlob(table, {
+                      type: 'webp',
                       quality: 0.5,
                       scale: 0.5,
                   });

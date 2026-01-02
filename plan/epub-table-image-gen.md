@@ -6,7 +6,7 @@ Design Document: EPUB Table Image Ingestion
 
 EPUB files often contain complex HTML tables that are difficult to render consistently across different devices, especially in a mobile-first, reflowable environment. By capturing these tables as images during the ingestion phase, we can provide a stable, high-performance visual representation that bypasses CSS layout issues.
 
-This plan details the integration of `zumerlab/snapdom` into the `Versicle` ingestion pipeline to generate WebP versions of tables with specific optimization parameters (0.5 quality, 0.5 scale).
+This plan details the integration of `@zumer/snapdom` into the `Versicle` ingestion pipeline to generate WebP versions of tables with specific optimization parameters (0.5 quality, 0.5 scale).
 
 2\. Goals
 ---------
@@ -28,7 +28,7 @@ This plan details the integration of `zumerlab/snapdom` into the `Versicle` inge
 
 ### 3.1 Dependencies
 
--   **Library**: `snapdom`
+-   **Library**: `@zumer/snapdom`
 
 -   **Purpose**: To take "snapshots" of DOM elements and export them as image blobs.
 
@@ -66,11 +66,11 @@ The `extractContentOffscreen` function currently renders the book spine items on
 
 3.  **Snapdom Integration**:
 
-    -   Call `snapdom` on the table element.
+    -   Call `snapdom.toBlob` on the table element.
 
     -   **Settings**:
 
-        -   `format`: `'webp'`
+        -   `type`: `'webp'`
 
         -   `quality`: `0.5`
 
@@ -173,7 +173,7 @@ We will add a horizontal carousel to the debug panel that specifically queries t
 
 -   Modified `ProcessedChapter` in `src/lib/offscreen-renderer.ts`.
 
--   Integrated `snapdom` into the loop with the specified WebP settings.
+-   Integrated `@zumer/snapdom` into the loop with the specified WebP settings.
 
 ### Done: Transaction Logic
 
@@ -205,6 +205,7 @@ We will add a horizontal carousel to the debug panel that specifically queries t
 
 -   **Reprocessing File Retrieval**: The original plan implied using `getBook` which returns both metadata and file, but types suggested `BookMetadata` doesn't have `file`. Used `dbService.getBookFile` in `ReprocessingInterstitial` to correctly fetch the binary data.
 -   **Cancel Behavior**: To improve UX and prevent nagging, cancelling the reprocessing interstitial now marks the book as `tablesProcessed: true` (skipping table generation) so the user is not prompted again.
+-   **Dependency Change**: Switched from `snapdom` to `@zumer/snapdom` as `snapdom` was incorrect.
 
 7\. Optimization & Constraints
 ------------------------------
