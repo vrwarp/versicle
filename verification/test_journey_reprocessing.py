@@ -12,37 +12,11 @@ def verify_reprocessing_interstitial():
         page = context.new_page()
 
         try:
-            # 1. Reset app
-            page.goto("http://localhost:5173")
+            # 1. Reset app using utility
+            reset_app(page)
 
-            # Explicitly clear IDB to ensure a clean slate for this test
-            page.evaluate("""
-                async () => {
-                    const dbs = await window.indexedDB.databases();
-                    for (const db of dbs) {
-                        await new Promise((resolve, reject) => {
-                            const req = window.indexedDB.deleteDatabase(db.name);
-                            req.onsuccess = resolve;
-                            req.onerror = reject;
-                            req.onblocked = resolve;
-                        });
-                    }
-                    localStorage.clear();
-                }
-            """)
-            page.reload()
-
-            # 2. Load Demo Book
-            # We implement a robust version of ensure_library_with_book inline to be sure
-            # Wait for empty state or existing book
-            try:
-                page.wait_for_selector("button:has-text('Load Demo Book')", timeout=5000)
-                page.get_by_role("button", name="Load Demo Book").click()
-                page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
-            except:
-                # Maybe already loaded?
-                if page.get_by_text("Alice's Adventures in Wonderland").count() == 0:
-                     raise Exception("Could not load demo book")
+            # 2. Ensure we have the demo book using utility
+            ensure_library_with_book(page)
 
             # 3. Find the book ID and downgrade version
             book_title = "Alice's Adventures in Wonderland"
