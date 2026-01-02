@@ -53,9 +53,13 @@ export class AudioPlayerService {
     private static instance: AudioPlayerService;
 
     // Components
+    // TaskSequencer ensures async operations are executed serially to prevent race conditions.
     private taskSequencer = new TaskSequencer();
+    // AudioContentPipeline handles loading content, GenAI filtering, and text refinement.
     private contentPipeline = new AudioContentPipeline();
+    // PlaybackStateManager manages the queue, current index, and position calculations.
     private stateManager = new PlaybackStateManager();
+
     private providerManager: TTSProviderManager;
     private platformIntegration: PlatformIntegration;
     private syncEngine: SyncEngine | null = null;
@@ -325,14 +329,9 @@ export class AudioPlayerService {
     setQueue(items: TTSQueueItem[], startIndex: number = 0) {
         return this.enqueue(async () => {
             if (this.isQueueEqual(items)) {
-                // If queue is same, maybe we just updated state?
-                // But playInternal might rely on stateManager having the queue.
-                // Assuming setQueue implies replacing whatever we have.
-                // If equal, no need to stop?
-                // Original logic: just update queue ref and metadata.
-                // But here we might not have sectionIndex info if called externally?
-                // Usually setQueue is called for the SAME section.
-                // But let's assume sectionIndex is current.
+                // Optimization: If the new queue is identical to the current one,
+                // we skip the heavy stop/reset logic. We update the state manager with the new start index
+                // and persist the state, but maintain continuity if possible.
 
                 this.stateManager.setQueue(items, startIndex, this.stateManager.currentSectionIndex);
                 this.updateMediaSessionMetadata();
@@ -341,10 +340,10 @@ export class AudioPlayerService {
                 return;
             }
 
+            // If the queue has changed, we must stop playback and fully reset the state.
             await this.stopInternal();
-            // Note: setQueue from external might not provide sectionIndex correctly if it's not tracked.
-            // But usually this method is used for syncing.
-            // We'll use currentSectionIndex.
+
+            // Note: setQueue is often called for the current section. We assume `currentSectionIndex` remains valid.
             this.stateManager.setQueue(items, startIndex, this.stateManager.currentSectionIndex);
 
             this.updateMediaSessionMetadata();

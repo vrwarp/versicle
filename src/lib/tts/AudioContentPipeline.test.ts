@@ -83,6 +83,8 @@ describe('AudioContentPipeline', () => {
 
              const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
 
+             // If the chapter is empty, the pipeline should return a single queue item
+             // which is a "Preroll" (informational message) stating the chapter is empty.
              expect(result).toHaveLength(1);
              expect(result![0].isPreroll).toBe(true);
         });

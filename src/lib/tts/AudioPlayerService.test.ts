@@ -271,7 +271,9 @@ describe('AudioPlayerService', () => {
         // Trigger play
         const playPromise = service.play();
 
-        // Emit error event to trigger TTSProviderManager's fallback logic
+        // Emit error event to trigger TTSProviderManager's fallback logic.
+        // The manager catches this, checks if it's a fallback-able error, and initiates the switch.
+        // It then emits a 'fallback' error type to AudioPlayerService, which triggers a retry (playInternal).
         providerListener({ type: 'error', error: new Error("API Quota Exceeded") });
 
         // Wait for async logic (fallback provider init and re-play)
