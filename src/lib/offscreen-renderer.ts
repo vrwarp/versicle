@@ -9,7 +9,7 @@ export interface ProcessedChapter {
   sentences: SentenceNode[];
   textContent: string;
   title?: string;
-  tables?: Omit<TableImage, 'bookId' | 'id'>[]; // bookId and id are added later
+  tables?: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[]; // bookId, id, and sectionId are added later
 }
 
 /**
@@ -131,7 +131,7 @@ export async function extractContentOffscreen(
 
                   const blob = await snapdom.toBlob(table, {
                       type: 'webp',
-                      quality: 0.5,
+                      quality: 0.1,
                       scale: 0.5,
                   });
 

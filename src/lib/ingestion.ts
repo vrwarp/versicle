@@ -170,6 +170,7 @@ export async function processEpub(
               tableImages.push({
                   id: `${bookId}-${table.cfi}`,
                   bookId,
+                  sectionId: chapter.href,
                   cfi: table.cfi,
                   imageBlob: table.imageBlob,
                   sectionId: table.sectionId || chapter.href,
@@ -214,14 +215,9 @@ export async function processEpub(
 
   const db = await getDB();
 
-  const tx = db.transaction(['books', 'files', 'sections', 'tts_content', 'covers', 'table_images'], 'readwrite');
+  const tx = db.transaction(['books', 'files', 'sections', 'tts_content', 'table_images'], 'readwrite');
   await tx.objectStore('books').add(finalBook);
   await tx.objectStore('files').add(file, bookId);
-
-  // Store high-res cover if it exists
-  if (coverBlob) {
-    await tx.objectStore('covers').add(coverBlob, bookId);
-  }
 
   // Store section metadata
   const sectionsStore = tx.objectStore('sections');
