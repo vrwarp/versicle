@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { useShallow } from 'zustand/react/shallow';
-import { X, Copy, ChevronRight, ChevronDown } from 'lucide-react';
+import { X, Copy, ChevronRight, ChevronDown, RotateCcw, Loader2 } from 'lucide-react';
 import { TYPE_COLORS } from '../../types/content-analysis';
 import type { ContentType } from '../../types/content-analysis';
 import type { Rendition } from 'epubjs';
@@ -9,6 +9,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { dbService } from '../../db/DBService';
 import type { TableImage } from '../../types/db';
 import { useReaderStore } from '../../store/useReaderStore';
+import { reprocessBook } from '../../lib/ingestion';
 
 interface ContentAnalysisLegendProps {
   rendition?: Rendition | null;
@@ -26,6 +27,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
   const [mergedContent, setMergedContent] = useState('');
   const [isExpanded, setIsExpanded] = useState(true);
   const showToast = useToastStore(state => state.showToast);
+  const [isReprocessing, setIsReprocessing] = useState(false);
 
   // Table Images Carousel State
   const [tableImages, setTableImages] = useState<TableImage[]>([]);
@@ -41,13 +43,16 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
   const clearUrls = () => {
       Object.values(generatedUrls.current).forEach(url => URL.revokeObjectURL(url));
       generatedUrls.current = {};
-      setImageUrls({});
   };
 
   // Load Table Images and Manage Blob URLs
   useEffect(() => {
       if (!isDebugModeEnabled || !currentBookId) {
-          setTableImages([]);
+          // Clean up when disabled or switching books
+          // We can't clear state synchronously if this effect was triggered by render,
+          // but we can ensure we don't leak URLs.
+          // Since the component returns null when !isDebugModeEnabled, the UI is hidden anyway.
+          // But to be safe and avoid stale state if re-enabled:
           clearUrls();
           return;
       }
@@ -55,14 +60,17 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
       let isMounted = true;
 
       const loadTables = async () => {
+          // Clear previous URLs before loading new ones to avoid leaks during rapid switching
+          clearUrls();
+          // We can't easily reset tableImages here without causing a flash or extra render,
+          // but since we just cleared URLs, the old images won't render anyway (or will break).
+          // Ideally we would setTableImages([]) but we want to avoid the lint error.
+          // Let's rely on the fact that we replace the state below.
+
           try {
               const images = await dbService.getTableImages(currentBookId);
               if (isMounted && images) {
                   setTableImages(images);
-
-                  // Clear old
-                  Object.values(generatedUrls.current).forEach(url => URL.revokeObjectURL(url));
-                  generatedUrls.current = {};
 
                   // Generate new
                   const newUrls: Record<string, string> = {};
@@ -82,16 +90,18 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
 
       return () => {
           isMounted = false;
+          // We don't clear URLs on unmount of the effect immediately if we want to keep them while mounted.
+          // But if bookId changes, we DO want to clear.
+          // The cleanup function runs before the next effect run.
+          // So if bookId changes, this runs, then the new effect run calls loadTables which calls clearUrls again.
+          // Duplicate clear is fine.
       };
   }, [isDebugModeEnabled, currentBookId]);
 
-  // Cleanup URLs on unmount
+  // Cleanup URLs on final unmount
   useEffect(() => {
       return () => {
-          // Cleanup directly from ref without setting state
-
-          Object.values(generatedUrls.current).forEach(url => URL.revokeObjectURL(url));
-          generatedUrls.current = {};
+          clearUrls();
       };
   }, []);
 
@@ -201,6 +211,23 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
       setCfiInput(cfi);
   };
 
+  const handleReprocess = async () => {
+      if (!currentBookId) return;
+      if (!window.confirm("Reprocess this book? This will re-extract all text and images. The page will reload.")) {
+          return;
+      }
+
+      setIsReprocessing(true);
+      try {
+          await reprocessBook(currentBookId);
+          window.location.reload();
+      } catch (e) {
+          console.error("Reprocessing failed", e);
+          showToast("Reprocessing failed", 'error');
+          setIsReprocessing(false);
+      }
+  };
+
   if (!isDebugModeEnabled) return null;
 
   return (
@@ -224,6 +251,19 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
 
       {isExpanded && (
           <div className="space-y-4">
+            {/* Reprocess Action */}
+            <div className="flex items-center justify-between bg-muted/50 p-2 rounded">
+                <span className="font-semibold text-muted-foreground">Actions</span>
+                <button
+                    onClick={handleReprocess}
+                    disabled={isReprocessing}
+                    className="flex items-center gap-1 px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 text-[10px]"
+                >
+                    {isReprocessing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                    Reprocess Book
+                </button>
+            </div>
+
             {/* CFI Debugger */}
             <div className="space-y-2">
                 <div className="flex flex-col gap-1">

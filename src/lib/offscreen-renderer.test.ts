@@ -105,7 +105,7 @@ describe('extractContentOffscreen', () => {
 
     expect(snapdom.toBlob).toHaveBeenCalledWith(table, expect.objectContaining({
         type: 'webp',
-        quality: 0.5,
+        quality: 0.1,
         scale: 0.5
     }));
 

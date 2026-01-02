@@ -69,6 +69,125 @@ export async function validateZipSignature(file: File): Promise<boolean> {
 }
 
 /**
+ * Reprocesses an existing book by re-extracting content from the source file.
+ * This is useful for updating books after parser improvements.
+ *
+ * @param bookId - The ID of the book to reprocess.
+ */
+export async function reprocessBook(bookId: string): Promise<void> {
+  const db = await getDB();
+  // Use .get() instead of .getFrom() as IDBPDatabase doesn't have getFrom.
+  // (Assuming 'files' store returns a Blob or ArrayBuffer)
+  const file = await db.get('files', bookId);
+
+  if (!file) {
+    throw new Error(`Book source file not found for ID: ${bookId}`);
+  }
+
+  // Treat as blob if it's an ArrayBuffer (though it should be stored as Blob usually, or we cast it)
+  const fileBlob = file instanceof Blob ? file : new Blob([file]);
+
+  // Extract content
+  const chapters = await extractContentOffscreen(fileBlob, {});
+
+  // Prepare data (similar to processEpub)
+  const syntheticToc: NavigationItem[] = [];
+  const sections: SectionMetadata[] = [];
+  const ttsContentBatches: TTSContent[] = [];
+  const tableImages: TableImage[] = [];
+  let totalChars = 0;
+
+  chapters.forEach((chapter, i) => {
+      // Synthetic TOC
+      syntheticToc.push({
+          id: `syn-toc-${i}`,
+          href: chapter.href,
+          label: chapter.title || `Chapter ${i+1}`
+      });
+
+      // Section Metadata
+      sections.push({
+          id: `${bookId}-${chapter.href}`,
+          bookId,
+          sectionId: chapter.href,
+          characterCount: chapter.textContent.length,
+          playOrder: i
+      });
+      totalChars += chapter.textContent.length;
+
+      // TTS Content
+      if (chapter.sentences.length > 0) {
+          ttsContentBatches.push({
+              id: `${bookId}-${chapter.href}`,
+              bookId,
+              sectionId: chapter.href,
+              sentences: chapter.sentences
+          });
+      }
+
+      // Collect Table Images
+      if (chapter.tables) {
+          chapter.tables.forEach(table => {
+              tableImages.push({
+                  id: `${bookId}-${table.cfi}`,
+                  bookId,
+                  sectionId: chapter.href,
+                  cfi: table.cfi,
+                  imageBlob: table.imageBlob
+              });
+          });
+      }
+  });
+
+  // Transaction
+  const tx = db.transaction(['books', 'sections', 'tts_content', 'table_images'], 'readwrite');
+
+  // Helper to delete by index
+  const deleteByIndex = async (storeName: 'sections' | 'tts_content' | 'table_images') => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const store = tx.objectStore(storeName) as any;
+      const index = store.index('by_bookId');
+      const keys = await index.getAllKeys(bookId);
+      for (const key of keys) {
+          await store.delete(key);
+      }
+  };
+
+  await deleteByIndex('sections');
+  await deleteByIndex('tts_content');
+  await deleteByIndex('table_images');
+
+  // Update Book Metadata
+  const bookStore = tx.objectStore('books');
+  const book = await bookStore.get(bookId);
+  if (book) {
+      book.totalChars = totalChars;
+      book.syntheticToc = syntheticToc;
+      book.tablesProcessed = true;
+      // We don't update title/author as user might have edited them
+      await bookStore.put(book);
+  }
+
+  // Insert new data
+  const sectionsStore = tx.objectStore('sections');
+  for (const section of sections) {
+    await sectionsStore.add(section);
+  }
+
+  const ttsStore = tx.objectStore('tts_content');
+  for (const batch of ttsContentBatches) {
+      await ttsStore.add(batch);
+  }
+
+  const tableStore = tx.objectStore('table_images');
+  for (const table of tableImages) {
+      await tableStore.add(table);
+  }
+
+  await tx.done;
+}
+
+/**
  * Processes an EPUB file, extracting metadata and cover image, and storing it in the database.
  *
  * @param file - The EPUB file object to process.
