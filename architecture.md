@@ -9,7 +9,7 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
 1.  **Local-First & Offline-Capable**:
     *   **Why**: To provide zero-latency access, total privacy (no reading analytics sent to a server), and true ownership of data. Users should be able to read their books without an internet connection or fear of service shutdown.
     *   **How**: All data—books, annotations, progress, and settings—is stored in **IndexedDB** via the `idb` wrapper. The app is a PWA that functions completely offline.
-    *   **Trade-off**: Data is bound to the device. Syncing across devices requires manual backup/restore (JSON/ZIP export), as there is no central sync server. Storage is limited by the browser's quota (though usually generous).
+    *   **Trade-off**: Data is bound to the device. Syncing across devices requires manual backup/restore (JSON/ZIP export), as there is no central sync server. Storage is limited by the browser's quota.
 
 2.  **Heavy Client-Side Logic**:
     *   **Why**: To avoid server costs and maintain privacy. Features typically done on a backend (Text-to-Speech segmentation, Full-Text Indexing, File Parsing) are moved to the client.
@@ -390,7 +390,10 @@ State is managed using **Zustand** with persistence to `localStorage` for prefer
     *   *Persisted*: `apiKey`, `model`, `isEnabled`, `logs`, `usageStats`.
 *   **`useUIStore`**: Manages global UI state (e.g., `isGlobalSettingsOpen`). Transient.
 *   **`useToastStore`**: Manages global ephemeral notifications (Success/Error feedback). Transient.
-*   **Reading List**: The reading list is managed directly via `DBService` and `ReadingListDialog` using a direct-to-DB pattern, rather than a global Zustand store, to ensure data consistency.
+*   **`useLibraryStore`**: Manages library UI state (e.g., active modal, book to restore, import progress). Transient.
+    *   *Note*: The actual book data is managed via `DBService` and `react-query` or similar patterns in components, not a global store, to ensure consistency.
+*   **`useAnnotationStore`**: Manages annotation UI state (e.g., active color, creation mode).
+    *   *Transient*: Annotations are persisted to IDB, but the "creating" state is transient.
 
 ### UI Layer
 
