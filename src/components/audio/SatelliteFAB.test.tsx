@@ -3,13 +3,13 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { SatelliteFAB } from './SatelliteFAB';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { useTTSStore } from '../../store/useTTSStore';
+import { useTTSStore, TTSStore } from '../../store/useTTSStore';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({
-    Play: (props: any) => <span data-testid="icon-play" />,
-    Pause: (props: any) => <span data-testid="icon-pause" />,
-    Loader2: (props: any) => <span data-testid="icon-loader" className={props.className} />,
+    Play: () => <span data-testid="icon-play" />,
+    Pause: () => <span data-testid="icon-pause" />,
+    Loader2: ({ className }: { className?: string }) => <span data-testid="icon-loader" className={className} />,
 }));
 
 // Mock useTTSStore
@@ -19,7 +19,7 @@ vi.mock('../../store/useTTSStore', () => ({
 
 // Mock zustand shallow
 vi.mock('zustand/react/shallow', () => ({
-    useShallow: (selector: any) => selector
+    useShallow: (selector: (state: unknown) => unknown) => selector
 }));
 
 describe('SatelliteFAB', () => {
@@ -36,7 +36,7 @@ describe('SatelliteFAB', () => {
             status: 'stopped',
             play: mockPlay,
             pause: mockPause
-        } as any);
+        } as unknown as TTSStore);
 
         render(<SatelliteFAB />);
         expect(screen.getByTestId('icon-play')).toBeInTheDocument();
@@ -50,7 +50,7 @@ describe('SatelliteFAB', () => {
             status: 'playing',
             play: mockPlay,
             pause: mockPause
-        } as any);
+        } as unknown as TTSStore);
 
         render(<SatelliteFAB />);
         expect(screen.getByTestId('icon-pause')).toBeInTheDocument();
@@ -64,7 +64,7 @@ describe('SatelliteFAB', () => {
             status: 'loading',
             play: mockPlay,
             pause: mockPause
-        } as any);
+        } as unknown as TTSStore);
 
         render(<SatelliteFAB />);
         expect(screen.getByTestId('icon-loader')).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe('SatelliteFAB', () => {
             status: 'loading',
             play: mockPlay,
             pause: mockPause
-        } as any);
+        } as unknown as TTSStore);
 
         render(<SatelliteFAB />);
         const button = screen.getByTestId('satellite-fab');
