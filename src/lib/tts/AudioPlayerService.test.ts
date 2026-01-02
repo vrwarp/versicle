@@ -256,14 +256,9 @@ describe('AudioPlayerService', () => {
         vi.spyOn(service, 'play');
         const consoleSpy = vi.spyOn(console, 'warn');
 
-        // We simulate a cloud provider error to verify the fallback mechanism.
-        // The TTSProviderManager is designed to listen for error events from the provider.
-        // Upon receiving an error (and if not local), it attempts to switch to the local provider.
-        //
-        // NOTE: AudioPlayerService does NOT handle fallback in its catch block for `play()`.
-        // Instead, it relies on the `onError` callback from TTSProviderManager.
-        // Therefore, we must manually trigger the error event on the provider listener
-        // to exercise this specific path, rather than just rejecting the play() promise.
+        // Verify fallback mechanism: TTSProviderManager listens for provider errors and switches to local.
+        // AudioPlayerService relies on the 'onError' callback from the manager to trigger a retry.
+        // We manually emit an error on the provider listener to simulate this flow, bypassing simple promise rejection.
 
         const onCall = mockCloudProvider.on.mock.calls[0];
         const providerListener = onCall[0];
@@ -273,8 +268,6 @@ describe('AudioPlayerService', () => {
         const playPromise = service.play();
 
         // Emit error event to trigger TTSProviderManager's fallback logic.
-        // The manager catches this, checks if it's a fallback-able error, and initiates the switch.
-        // It then emits a 'fallback' error type to AudioPlayerService, which triggers a retry (playInternal).
         providerListener({ type: 'error', error: new Error("API Quota Exceeded") });
 
         // Wait for async logic (fallback provider init and re-play)
