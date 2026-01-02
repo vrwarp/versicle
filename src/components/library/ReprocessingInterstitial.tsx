@@ -122,8 +122,8 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
     <Dialog
       isOpen={isOpen}
       onClose={onClose}
-      title="Enhancing Book Layout"
-      description="Generating optimized images for complex tables. This only happens once per book."
+      title="Optimizing Book Content"
+      description="We are updating this book to the latest version. This ensures the best reading experience and only happens once."
     >
       <div className="flex flex-col items-center justify-center py-4 space-y-6">
         <div className="relative flex items-center justify-center py-4">
