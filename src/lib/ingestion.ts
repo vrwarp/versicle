@@ -6,6 +6,7 @@ import type { BookMetadata, SectionMetadata, TTSContent, TableImage } from '../t
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
+import { CURRENT_BOOK_VERSION } from './constants';
 
 function cheapHash(buffer: ArrayBuffer): string {
   const view = new Uint8Array(buffer);
@@ -163,7 +164,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
   if (book) {
       book.totalChars = totalChars;
       book.syntheticToc = syntheticToc;
-      book.tablesProcessed = true;
+      book.version = CURRENT_BOOK_VERSION;
       // We don't update title/author as user might have edited them
       await bookStore.put(book);
   }
@@ -317,7 +318,7 @@ export async function processEpub(
     fileSize: file.size,
     syntheticToc,
     totalChars, // Store the calculated total characters
-    tablesProcessed: true // Flag set for new books
+    version: CURRENT_BOOK_VERSION // Set version for new books
   };
 
   const check = getSanitizedBookMetadata(candidateBook);
