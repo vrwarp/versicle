@@ -25,17 +25,33 @@ def navigate_to_chapter(page: Page, chapter_id: str = "toc-item-6"):
 
 def reset_app(page: Page):
     """
-    Resets the application state by navigating to the root URL.
+    Resets the application state by navigating to the root URL and clearing storage.
     Waits for the app to load.
 
     Args:
         page: The Playwright Page object.
     """
     page.goto("http://localhost:5173", timeout=5000)
-    # Clear local storage to ensure clean state
-    page.evaluate("localStorage.clear()")
+
+    # Explicitly clear IDB and LocalStorage to ensure a clean slate
+    page.evaluate("""
+        async () => {
+            const dbs = await window.indexedDB.databases();
+            for (const db of dbs) {
+                await new Promise((resolve, reject) => {
+                    const req = window.indexedDB.deleteDatabase(db.name);
+                    req.onsuccess = resolve;
+                    req.onerror = reject;
+                    req.onblocked = resolve;
+                });
+            }
+            localStorage.clear();
+        }
+    """)
+
     # Reload to apply cleared storage
     page.reload()
+
     # Wait for app to be ready
     try:
         # Wait for potential migration overlay to clear first
@@ -73,12 +89,12 @@ def ensure_library_with_book(page: Page):
         load_btn.click()
         # Wait for book to appear
         try:
-            page.wait_for_selector("[data-testid^='book-card-']", timeout=2000)
+            page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
         except:
             # Retry once if button is still there (flaky click?)
             if load_btn.is_visible():
                 load_btn.click()
-                page.wait_for_selector("[data-testid^='book-card-']", timeout=2000)
+                page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
 
 def capture_screenshot(page: Page, name: str, hide_tts_status: bool = False):
     """

@@ -37,6 +37,7 @@ import { ContentAnalysisLegend } from './ContentAnalysisLegend';
 import { TYPE_COLORS } from '../../types/content-analysis';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
 import { Loader2 } from 'lucide-react';
+import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 
 /**
  * The main reader interface component.
@@ -127,8 +128,9 @@ export const ReaderView: React.FC = () => {
           try {
               const meta = await dbService.getBookMetadata(id);
               if (meta) {
-                  // If undefined or false, trigger reprocessing
-                  if (meta.tablesProcessed === undefined || meta.tablesProcessed === false) {
+                  const effectiveVersion = meta.version ?? 0;
+
+                  if (effectiveVersion < CURRENT_BOOK_VERSION) {
                       setIsReprocessing(true);
                   } else {
                       setIsReprocessing(false);

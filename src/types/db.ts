@@ -51,8 +51,11 @@ export interface BookMetadata {
   totalChars?: number;
   /** Status of AI analysis for the book. */
   aiAnalysisStatus?: 'none' | 'partial' | 'complete';
-  /** Whether tables have been processed and snapped for this book. */
-  tablesProcessed?: boolean;
+  /**
+   * The version of the ingestion pipeline used for this book.
+   * Used to trigger reprocessing when the pipeline is updated.
+   */
+  version?: number;
 }
 
 /**
