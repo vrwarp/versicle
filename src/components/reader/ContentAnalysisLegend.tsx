@@ -89,7 +89,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
   useEffect(() => {
       return () => {
           // Cleanup directly from ref without setting state
-          // eslint-disable-next-line react-hooks/exhaustive-deps
+
           Object.values(generatedUrls.current).forEach(url => URL.revokeObjectURL(url));
           generatedUrls.current = {};
       };

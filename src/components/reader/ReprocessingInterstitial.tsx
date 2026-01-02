@@ -8,10 +8,9 @@ import { getDB } from '../../db/db';
 interface ReprocessingInterstitialProps {
   bookId: string;
   onComplete: () => void;
-  onCancel: () => void;
 }
 
-export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> = ({ bookId, onComplete, onCancel }) => {
+export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> = ({ bookId, onComplete }) => {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Initializing...');
 
@@ -110,25 +109,6 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
     };
   }, [bookId, onComplete]);
 
-  const handleCancel = async () => {
-      try {
-          // Mark as processed to prevent repeated prompts
-          const db = await getDB();
-          const tx = db.transaction('books', 'readwrite');
-          const bookStore = tx.objectStore('books');
-          const book = await bookStore.get(bookId);
-          if (book) {
-              book.tablesProcessed = true;
-              await bookStore.put(book);
-          }
-          await tx.done;
-      } catch (e) {
-          console.error("Failed to mark book as processed on cancel", e);
-      } finally {
-          onCancel();
-      }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-zinc-950/90 backdrop-blur-sm">
       <div className="w-full max-w-md p-6 bg-white dark:bg-zinc-900 rounded-lg shadow-xl border border-zinc-200 dark:border-zinc-800 text-center space-y-6">
@@ -154,13 +134,6 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
         <p className="text-xs font-mono text-zinc-400 dark:text-zinc-500 animate-pulse">
             {status}
         </p>
-
-        <button
-          onClick={handleCancel}
-          className="px-4 py-2 text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
-        >
-          Cancel and Read Anyway
-        </button>
       </div>
     </div>
   );
