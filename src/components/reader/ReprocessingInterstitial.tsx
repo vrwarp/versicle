@@ -64,7 +64,8 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
                          id: `${bookId}-${table.cfi}`,
                          bookId,
                          cfi: table.cfi,
-                         imageBlob: table.imageBlob
+                         imageBlob: table.imageBlob,
+                         sectionId: table.sectionId || chapter.href,
                      });
                  });
              }

@@ -138,7 +138,8 @@ export async function extractContentOffscreen(
                   if (blob) {
                       capturedTables.push({
                           cfi: cfi,
-                          imageBlob: blob
+                          imageBlob: blob,
+                          sectionId: item.href,
                       });
                   }
               } catch (e) {

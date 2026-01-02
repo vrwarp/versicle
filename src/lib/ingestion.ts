@@ -171,7 +171,8 @@ export async function processEpub(
                   id: `${bookId}-${table.cfi}`,
                   bookId,
                   cfi: table.cfi,
-                  imageBlob: table.imageBlob
+                  imageBlob: table.imageBlob,
+                  sectionId: table.sectionId || chapter.href,
               });
           });
       }
@@ -306,7 +307,8 @@ export async function reprocessBook(
                   id: `${bookId}-${table.cfi}`,
                   bookId,
                   cfi: table.cfi,
-                  imageBlob: table.imageBlob
+                  imageBlob: table.imageBlob,
+                  sectionId: table.sectionId || chapter.href,
               });
           });
       }

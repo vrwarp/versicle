@@ -292,6 +292,8 @@ export interface TableImage {
   id: string;
   /** The ID of the book. */
   bookId: string;
+  /** The section ID (href) containing the table. */
+  sectionId: string;
   /** The CFI of the table element. */
   cfi: string;
   /** The webp image blob. */
