@@ -41,32 +41,32 @@ export const DEFAULT_SENTENCE_STARTERS = [
 // \S+ = one or more non-whitespace characters
 // $ = end of string
 // Used to identify the last word of a sentence segment to check for abbreviations.
-const RE_LAST_WORD = /\S+$/;
+export const RE_LAST_WORD = /\S+$/;
 
 // Matches the last two whitespace-separated words in a string.
 // (?:...) = non-capturing group for the first word and its trailing space
 // \S+\s+ = one or more non-whitespace chars followed by one or more whitespace chars
 // \S+$ = the final word (non-whitespace) at the end of the string
 // Used to identify multi-word abbreviations like "et al." at the end of a segment.
-const RE_LAST_TWO_WORDS = /(?:\S+\s+)\S+$/;
+export const RE_LAST_TWO_WORDS = /(?:\S+\s+)\S+$/;
 
 // Matches the first sequence of non-whitespace characters in a string.
 // ^ = start of string
 // \S+ = one or more non-whitespace characters
 // Used to identify the first word of the next segment to check against sentence starters.
-const RE_FIRST_WORD = /^\S+/;
+export const RE_FIRST_WORD = /^\S+/;
 
 // Matches common opening punctuation marks (quotes, brackets, etc.) at the start of a string.
 // ^ = start of string
 // ['"([<{]+ = one or more characters from the set of opening punctuation
 // Used to strip punctuation before checking if a word is a sentence starter.
-const RE_LEADING_PUNCTUATION = /^['"([<{]+/;
+export const RE_LEADING_PUNCTUATION = /^['"([<{]+/;
 
 // Matches sentence-ending punctuation marks (.,!?;:) at the end of a string.
 // [.,!?;:] = character class containing common sentence delimiters
 // $ = end of string
 // Used to clean the next word before checking if it's a starter.
-const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
+export const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
 
 // Fallback sentence splitting regex.
 // Captures sequences of characters ending with sentence-ending punctuation (.!?).
@@ -75,7 +75,7 @@ const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
 //   [.!?]+ = one or more sentence-ending punctuation characters
 // /g = global flag to find all matches
 // Used when Intl.Segmenter is not available.
-const RE_SENTENCE_FALLBACK = /([^.!?]+[.!?]+)/g;
+export const RE_SENTENCE_FALLBACK = /([^.!?]+[.!?]+)/g;
 
 /**
  * Robust text segmentation utility using Intl.Segmenter with fallback and post-processing.
