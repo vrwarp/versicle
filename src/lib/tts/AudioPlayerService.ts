@@ -1059,7 +1059,7 @@ export class AudioPlayerService {
    * @param groups The grouped text segments to analyze.
    * @returns A promise resolving to the list of content types, or null if detection was not possible.
    */
-  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[]) {
+  private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[]) {
       // Deduplicate concurrent requests for the same section
       const key = `${bookId}:${sectionId}`;
       if (this.analysisPromises.has(key)) {
@@ -1129,13 +1129,13 @@ export class AudioPlayerService {
       }
   }
 
-  private groupSentencesByRoot(sentences: { text: string; cfi: string | null }[]): { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] {
-      const groups: { rootCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string }[] = [];
-      let currentGroup: { parentCfi: string; segments: { text: string; cfi: string | null }[]; fullText: string } | null = null;
+  private groupSentencesByRoot(sentences: { text: string; cfi: string }[]): { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] {
+      const groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] = [];
+      let currentGroup: { parentCfi: string; segments: { text: string; cfi: string }[]; fullText: string } | null = null;
 
-      const finalizeGroup = (group: { segments: { text: string; cfi: string | null }[]; fullText: string }) => {
-          const first = group.segments[0].cfi || '';
-          const last = group.segments[group.segments.length - 1].cfi || '';
+      const finalizeGroup = (group: { segments: { text: string; cfi: string }[]; fullText: string }) => {
+          const first = group.segments[0].cfi;
+          const last = group.segments[group.segments.length - 1].cfi;
 
           // Convert to Range CFI: epubcfi(common,start,end)
           const rootCfi = generateCfiRange(
@@ -1151,7 +1151,7 @@ export class AudioPlayerService {
       };
 
       for (const s of sentences) {
-          const parentCfi = getParentCfi(s.cfi || ''); // Handle null cfi
+          const parentCfi = getParentCfi(s.cfi);
 
           if (!currentGroup || currentGroup.parentCfi !== parentCfi) {
               if (currentGroup) {
@@ -1213,7 +1213,7 @@ export class AudioPlayerService {
    * @param sectionIdOptional Explicit section ID (required if called before section load completes)
    * @returns A promise resolving to the filtered list of queue items.
    */
-  private async detectAndFilterContent(sentences: { text: string; cfi: string | null }[], skipTypes: ContentType[], sectionIdOptional?: string): Promise<{ text: string; cfi: string | null }[]> {
+  private async detectAndFilterContent(sentences: { text: string; cfi: string }[], skipTypes: ContentType[], sectionIdOptional?: string): Promise<{ text: string; cfi: string }[]> {
       if (!this.currentBookId) return sentences;
       
       // Use explicit sectionId if provided, otherwise fall back to current state (legacy/safety)
@@ -1240,7 +1240,7 @@ export class AudioPlayerService {
           });
 
           if (skipRoots.size > 0) {
-              const finalSentences: { text: string; cfi: string | null }[] = [];
+              const finalSentences: { text: string; cfi: string }[] = [];
               for (const g of groups) {
                   if (!skipRoots.has(g.rootCfi)) {
                       finalSentences.push(...g.segments);
