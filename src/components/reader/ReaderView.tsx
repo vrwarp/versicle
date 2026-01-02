@@ -126,13 +126,9 @@ export const ReaderView: React.FC = () => {
           setIsCheckingProcessing(true); // Reset to checking state on ID change
           setIsReprocessing(false);      // Reset reprocessing state
           try {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const meta = await dbService.getBookMetadata(id) as any;
+              const meta = await dbService.getBookMetadata(id);
               if (meta) {
-                  // Determine effective version.
-                  // If 'version' is present, use it.
-                  // If missing, check 'tablesProcessed' (legacy flag). If true -> 1, else -> 0.
-                  const effectiveVersion = meta.version ?? (meta.tablesProcessed ? 1 : 0);
+                  const effectiveVersion = meta.version ?? 0;
 
                   if (effectiveVersion < CURRENT_BOOK_VERSION) {
                       setIsReprocessing(true);
