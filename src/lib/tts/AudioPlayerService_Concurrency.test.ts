@@ -108,7 +108,9 @@ describe('AudioPlayerService Concurrency', () => {
     // However, depending on timing, the first ones might have started but been aborted.
     // The key is that the final state should reflect the last call.
 
-    expect(service['currentIndex']).toBe(2);
+    // Access state via stateManager
+    // @ts-expect-error Accessing private property
+    expect(service['stateManager'].currentIndex).toBe(2);
     expect(service['status']).toBe('playing');
 
     const calls = playSpy.mock.calls;
