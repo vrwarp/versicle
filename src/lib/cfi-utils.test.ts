@@ -189,19 +189,22 @@ describe('cfi-utils', () => {
         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2)');
     });
 
-    it('truncates deep paths (>3 segments) to 3 segments', () => {
+    it('does not truncate deep paths (previously heuristic)', () => {
         // Path: /4/2/4/2/1:10
         // Parts: ['4', '2', '4', '2', '1:10'] (Length 5)
-        // Truncate to 3: ['4', '2', '4']
+        // Truncate to: ['4', '2', '4', '2']
+        // New behavior: should preserve full path (minus leaf)
         const cfi = 'epubcfi(/6/2!/4/2/4/2/1:10)';
-        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2/4)');
+        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2/4/2)');
     });
 
-    it('truncates very deep paths (e.g. tables) to 3 segments', () => {
+    it('does not truncate very deep paths (e.g. tables)', () => {
          // Path: /4/2/48/2/2/2/2/2 (Length 8)
-         // Truncate to 3: /4/2/48
+         // Behavior Change: We NOW snap to depth 4 if path is > 4
          const cfi = 'epubcfi(/6/38!/4/2/48/2/2/2/2/2)';
-         expect(getParentCfi(cfi)).toBe('epubcfi(/6/38!/4/2/48)');
+         // Parts: 4, 2, 48, 2, 2, 2, 2, 2. Length 8.
+         // Snap to 4: 4, 2, 48, 2.
+         expect(getParentCfi(cfi)).toBe('epubcfi(/6/38!/4/2/48/2)');
     });
 
     it('handles CFI pointing to root of spine item (no internal path)', () => {

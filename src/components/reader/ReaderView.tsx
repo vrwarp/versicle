@@ -524,7 +524,6 @@ export const ReaderView: React.FC = () => {
             const section = book.spine.get(currentSectionId!);
             if (!section) return;
 
-
             const analysis = await dbService.getContentAnalysis(id!, section.href);
             if (!analysis) return;
 
@@ -533,7 +532,6 @@ export const ReaderView: React.FC = () => {
                 for (let i = 0; i < items.length; i++) {
                     const item = items[i];
                     // Skip if already added
-
                     if (addedDebugHighlights.current.has(item.rootCfi)) continue;
 
                     let highlightCfi = item.rootCfi;

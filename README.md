@@ -16,7 +16,7 @@
 
 ## Tech Stack
 
-*   **Framework**: React 18 + Vite
+*   **Framework**: React 19 + Vite 7
 *   **Language**: TypeScript
 *   **State**: Zustand
 *   **Storage**: IndexedDB (via `idb`)
@@ -60,7 +60,7 @@
 ## Setup & Development
 
 ### Prerequisites
-*   Node.js 18+
+*   Node.js 20+
 *   npm
 *   Docker (optional, for verification suite)
 

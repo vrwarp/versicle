@@ -3,6 +3,7 @@ import { AudioPlayerService } from './AudioPlayerService';
 import { BackgroundAudio } from './BackgroundAudio';
 import { dbService } from '../../db/DBService';
 import { genAIService } from '../genai/GenAIService';
+import * as cfiUtils from '../cfi-utils';
 
 // Mock WebSpeechProvider class
 vi.mock('./providers/WebSpeechProvider', () => {
@@ -86,7 +87,8 @@ vi.mock('../../store/useTTSStore', () => ({
     getState: vi.fn().mockReturnValue({
         customAbbreviations: [],
         alwaysMerge: [],
-        sentenceStarters: []
+        sentenceStarters: [],
+        minSentenceLength: 0
     })
   }
 }));
@@ -108,6 +110,12 @@ vi.mock('../genai/GenAIService', () => ({
         detectContentTypes: vi.fn().mockResolvedValue([
             { id: '0', type: 'text' }
         ])
+    }
+}));
+
+vi.mock('./TextSegmenter', () => ({
+    TextSegmenter: {
+        refineSegments: vi.fn((segments) => segments)
     }
 }));
 
@@ -294,5 +302,107 @@ describe('AudioPlayerService', () => {
 
         // Check if GenAI detection was triggered
         expect(genAIService.detectContentTypes).toHaveBeenCalled();
+    });
+
+    describe('Grouping Logic', () => {
+        // Access private method helper
+        let groupSentencesByRoot: (sentences: unknown[]) => { rootCfi: string; segments: unknown[] }[];
+        let detectAndFilterContent: (sentences: unknown[], skipTypes: string[], sectionId?: string) => Promise<{ text: string }[]>;
+
+        beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            groupSentencesByRoot = (service as any).groupSentencesByRoot.bind(service);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            detectAndFilterContent = (service as any).detectAndFilterContent.bind(service);
+
+            // Spy on cfi utils
+            vi.spyOn(cfiUtils, 'getParentCfi');
+            vi.spyOn(cfiUtils, 'generateCfiRange');
+        });
+
+        it('groups sentences by parent and generates Range CFIs for rootCfi', () => {
+            const sentences = [
+                { text: "A", cfi: "epubcfi(/6/14!/4/2/1:0)" },
+                { text: "B", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Same parent /4/2
+                { text: "C", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // New parent /4/4
+            ];
+
+            const groups = groupSentencesByRoot(sentences);
+
+            expect(groups).toHaveLength(2);
+
+            // Group 1: Parent /6/14!/4/2
+            expect(groups[0].segments).toHaveLength(2);
+            // Expected: Range spanning 1:0 to 3:0
+            // Since actual implementation of generateCfiRange in environment is used:
+            const expectedRange1 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/2/1:0)", "epubcfi(/6/14!/4/2/3:0)");
+            expect(groups[0].rootCfi).toBe(expectedRange1);
+
+            // Group 2: Parent /6/14!/4/4
+            expect(groups[1].segments).toHaveLength(1);
+            const expectedRange2 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/4/1:0)", "epubcfi(/6/14!/4/4/1:0)");
+            expect(groups[1].rootCfi).toBe(expectedRange2);
+        });
+
+        it('generates unique rootCfi for adjacent groups sharing same parent (Map Collision Fix)', () => {
+            // Scenario: Groups separated by an intervening different parent
+            // P1 (Parent A)
+            // P2 (Parent B)
+            // P3 (Parent A)
+
+            const sentences = [
+                { text: "A1", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Parent A
+                { text: "B1", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // Parent B
+                { text: "A2", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Parent A again
+            ];
+
+            const groups = groupSentencesByRoot(sentences);
+
+            expect(groups).toHaveLength(3);
+
+            // Group 1: A1
+            const root1 = groups[0].rootCfi;
+            // Group 3: A2
+            const root3 = groups[2].rootCfi;
+
+            // Verify they have different root CFIs despite sharing parent "/6/14!/4/2"
+            expect(root1).not.toBe(root3);
+            expect(groups[0].rootCfi).toContain('1:0');
+            expect(groups[2].rootCfi).toContain('3:0');
+        });
+
+        it('detectAndFilterContent handles colliding parents correctly', async () => {
+            const sentences = [
+                { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Group 1 (Parent A)
+                { text: "Interruption", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // Group 2 (Parent B)
+                { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Group 3 (Parent A)
+            ];
+
+            // Set current state for detection
+            // @ts-expect-error Access private
+            service.currentBookId = 'book1';
+            // @ts-expect-error Access private
+            service.currentSectionIndex = 0;
+            // @ts-expect-error Access private
+            service.playlist = [{ sectionId: 'sec1' }];
+
+            // Mock GenAI response
+            // IDs correspond to indices: '0', '1', '2'
+            // @ts-expect-error Mock implementation
+            genAIService.detectContentTypes.mockResolvedValue([
+                { id: '0', type: 'narrative' },
+                { id: '1', type: 'narrative' },
+                { id: '2', type: 'footnote' } // Skip this one
+            ]);
+
+            // Pass explicit sectionId to bypass state dependency
+            const filtered = await detectAndFilterContent(sentences, ['footnote'], 'sec1');
+
+            // Should preserve "Narrative" and "Interruption"
+            // Should remove "Footnote"
+            expect(filtered).toHaveLength(2);
+            expect(filtered[0].text).toBe("Narrative");
+            expect(filtered[1].text).toBe("Interruption");
+        });
     });
 });
