@@ -23,11 +23,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
         return;
     }
 
-    let isCancelled = false;
-
     const startProcess = async () => {
-        if (isCancelled) return;
-
         setProgress(0);
         setStatus('Initializing...');
 
@@ -47,23 +43,17 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
                     await bookStore.put(book);
                 }
                 await tx.done;
-                if (!isCancelled) onComplete();
+                onComplete();
                 return;
             }
 
             const file = fileData instanceof Blob ? fileData : new Blob([fileData]);
 
-            if (isCancelled) return;
-
             setStatus('Scanning for complex tables...');
             const chapters = await extractContentOffscreen(file, {}, (p, msg) => {
-                if (!isCancelled) {
-                    setProgress(p);
-                    setStatus(msg);
-                }
+                setProgress(p);
+                setStatus(msg);
             });
-
-            if (isCancelled) return;
 
             setStatus('Saving enhancements...');
 
@@ -102,25 +92,17 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
 
             await tx.done;
 
-            if (!isCancelled) {
-                onComplete();
-            }
+            onComplete();
 
         } catch (err) {
             console.error('Reprocessing failed', err);
             // On error, we might just want to let the user proceed without tables?
             // Or show an error state. For now, proceeding is safer to avoid lockout.
-            if (!isCancelled) {
-                onComplete();
-            }
+            onComplete();
         }
     };
 
     startProcess();
-
-    return () => {
-      isCancelled = true;
-    };
   }, [isOpen, bookId, onComplete]);
 
   return (
