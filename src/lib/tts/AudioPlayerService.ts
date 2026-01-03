@@ -7,7 +7,7 @@ import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule } from '../../types/db';
 import { TaskSequencer } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { PlaybackStateManager, type PlaybackStateSnapshot } from './PlaybackStateManager';
+import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
 
