@@ -644,13 +644,30 @@ export class AudioPlayerService {
         if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
 
         const section = this.playlist[sectionIndex];
+        const currentBookId = this.currentBookId;
+        const currentSectionId = section.sectionId;
+
+        // Callback for async mask updates
+        const onMaskFound = (mask: Set<number>) => {
+            this.enqueue(async () => {
+                // Verify validity before applying
+                if (this.currentBookId !== currentBookId) return;
+
+                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
+                if (activeSection && activeSection.sectionId === currentSectionId) {
+                    this.stateManager.applySkippedMask(mask, currentSectionId);
+                }
+            });
+        };
+
         const newQueue = await this.contentPipeline.loadSection(
             this.currentBookId,
             section,
             sectionIndex,
             this.prerollEnabled,
             this.speed,
-            sectionTitle
+            sectionTitle,
+            onMaskFound
         );
 
         if (newQueue && newQueue.length > 0) {
@@ -669,41 +686,11 @@ export class AudioPlayerService {
                 await this.playInternal();
             }
 
-            // Trigger background analysis for current and next chapter
-            this.runBackgroundFiltering(this.currentBookId, section.sectionId);
             this.contentPipeline.triggerNextChapterAnalysis(this.currentBookId, sectionIndex, this.playlist);
             return true;
         }
 
         return false;
-    }
-
-    private async runBackgroundFiltering(bookId: string, sectionId: string) {
-        // Run asynchronously
-        try {
-            const genAISettings = (await import('../../store/useGenAIStore')).useGenAIStore.getState();
-            if (!genAISettings.isContentAnalysisEnabled || genAISettings.contentFilterSkipTypes.length === 0) {
-                return;
-            }
-
-            const skipTypes = genAISettings.contentFilterSkipTypes;
-            const mask = await this.contentPipeline.detectContentSkipMask(bookId, sectionId, skipTypes);
-
-            if (mask.size > 0) {
-                // Verify we are still on the same book and section before applying
-                if (this.currentBookId === bookId) {
-                     // Check section index match?
-                     // Ideally we check sectionId. But stateManager tracks sectionIndex.
-                     // Let's check playlist[currentSectionIndex].sectionId
-                     const currentSection = this.playlist[this.stateManager.currentSectionIndex];
-                     if (currentSection && currentSection.sectionId === sectionId) {
-                         this.stateManager.applySkippedMask(mask, sectionId);
-                     }
-                }
-            }
-        } catch (e) {
-            console.warn("Background filtering failed", e);
-        }
     }
 
     private async advanceToNextChapter(): Promise<boolean> {

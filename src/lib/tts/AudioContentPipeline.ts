@@ -25,6 +25,7 @@ export class AudioContentPipeline {
      * @param {boolean} prerollEnabled Whether to add a preroll announcement.
      * @param {number} speed The current playback speed (used for preroll duration estimation).
      * @param {string} [sectionTitle] Optional override for the section title.
+     * @param {(mask: Set<number>) => void} [onMaskFound] Callback to report skipped indices found during background analysis.
      * @returns {Promise<TTSQueueItem[] | null>} The processed queue or null on failure.
      */
     async loadSection(
@@ -33,7 +34,8 @@ export class AudioContentPipeline {
         sectionIndex: number,
         prerollEnabled: boolean,
         speed: number,
-        sectionTitle?: string
+        sectionTitle?: string,
+        onMaskFound?: (mask: Set<number>) => void
     ): Promise<TTSQueueItem[] | null> {
         try {
             const ttsContent = await dbService.getTTSContent(bookId, section.sectionId);
@@ -67,18 +69,28 @@ export class AudioContentPipeline {
 
             if (ttsContent && ttsContent.sentences.length > 0) {
                 // -----------------------------------------------------------
-                // Content Type Detection & Filtering (on RAW sentences)
+                // Background Analysis (Async)
                 // -----------------------------------------------------------
                 const genAISettings = useGenAIStore.getState();
                 const skipTypes = genAISettings.contentFilterSkipTypes;
                 const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
 
+                if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
+                    // Trigger background detection
+                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes)
+                        .then(mask => {
+                            if (mask && mask.size > 0) {
+                                onMaskFound(mask);
+                            }
+                        })
+                        .catch(err => console.warn("Background mask detection failed", err));
+                }
+
                 let workingSentences = ttsContent.sentences;
 
-                // Optimize: Don't run detection if nothing to skip
-                if (skipTypes.length > 0 && isContentAnalysisEnabled) {
-                    workingSentences = await this.detectAndFilterContent(bookId, workingSentences, skipTypes, section.sectionId);
-                }
+                // Note: detectAndFilterContent (blocking) is skipped here in favor of async masking
+                // unless we want to support a "Strict/Blocking" mode in future.
+                // For now, we proceed with all sentences and let the mask handle skipping.
 
                 // Dynamic Refinement: Merge segments based on current settings
                 const settings = useTTSStore.getState();
@@ -260,6 +272,7 @@ export class AudioContentPipeline {
      * @param {string} sectionId The section ID.
      * @returns {Promise<{ text: string; cfi: string; sourceIndices?: number[] }[]>} The filtered list of sentences.
      */
+    // @ts-expect-error - Kept for legacy compatibility/testing if needed, though unused in async flow
     private async detectAndFilterContent(bookId: string, sentences: { text: string; cfi: string; sourceIndices?: number[] }[], skipTypes: ContentType[], sectionId: string): Promise<{ text: string; cfi: string; sourceIndices?: number[] }[]> {
         // Updated to use the new method logic essentially, but this is for the "Initial Load" path
         // if we decide to block load (which we generally don't for async, but might for testing or synchronous modes).
