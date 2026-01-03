@@ -26,6 +26,10 @@ vi.mock('./components/reader/ReaderControlBar', () => ({
   ReaderControlBar: () => <div data-testid="reader-control-bar">Control Bar</div>
 }));
 
+vi.mock('./components/reader/ReaderView', () => ({
+  ReaderView: () => <div>Reader View</div>
+}));
+
 vi.mock('./components/library/LibraryView', () => ({
   LibraryView: () => <div>Library View</div>
 }));
@@ -123,13 +127,15 @@ describe('App Service Worker Wait', () => {
     expect(screen.getByText('Initializing...')).toBeInTheDocument();
 
     // Fast-forward timers to exhaust retries
-    // 10 retries * 100ms = 1000ms
-    // We need to advance enough times to cover the recursion.
-    // Each tick of the promise chain might need resolution.
-    // Advancing in loop ensures promise ticks are processed between timer ticks.
-    for (let i = 0; i < 15; i++) {
-        await vi.advanceTimersByTimeAsync(100);
+    // Exponential backoff: 5, 10, 20, 40, 80, 160, 320, 640. Sum = 1275ms.
+    // We need to advance enough times to cover the loop.
+    let delay = 5;
+    for (let i = 0; i < 8; i++) {
+        await vi.advanceTimersByTimeAsync(delay);
+        delay *= 2;
     }
+    // Advance a bit more to ensure rejection
+    await vi.advanceTimersByTimeAsync(100);
 
     // Switch to real timers before waitFor so it doesn't hang
     vi.useRealTimers();
@@ -161,15 +167,17 @@ describe('App Service Worker Wait', () => {
     // Initially no controller
     expect(screen.getByText('Initializing...')).toBeInTheDocument();
 
-    // Make controller appear after some time (e.g., 300ms = 3rd retry)
+    // Make controller appear after some time (e.g., 5 + 10 + 20 = 35ms, attempt 3)
     // We update the local variable, which the getter will return
     setTimeout(() => {
         controllerValue = { postMessage: vi.fn() };
-    }, 300);
+    }, 35);
 
-    for (let i = 0; i < 15; i++) {
-        await vi.advanceTimersByTimeAsync(100);
-    }
+    // Advance enough to trigger the timeout callback
+    await vi.advanceTimersByTimeAsync(5); // 1st wait
+    await vi.advanceTimersByTimeAsync(10); // 2nd wait
+    await vi.advanceTimersByTimeAsync(20); // 3rd wait triggers controller check
+    await vi.advanceTimersByTimeAsync(40); // safety buffer
 
     // Switch to real timers before waitFor so it doesn't hang
     vi.useRealTimers();

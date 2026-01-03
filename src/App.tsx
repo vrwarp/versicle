@@ -32,19 +32,17 @@ function App() {
         try {
           await navigator.serviceWorker.ready;
 
-          // Poll for controller
-          await new Promise<void>((resolve, reject) => {
-             const checkController = (count: number) => {
-               if (navigator.serviceWorker.controller) {
-                 resolve();
-               } else if (count > 10) {
-                 reject(new Error(`Controller still not ready after ${count} attempts`));
-               } else {
-                 setTimeout(() => checkController(count + 1), 100);
-               }
-             };
-             checkController(1);
-          });
+          // Poll for controller with exponential backoff
+          let attempt = 0;
+          let delay = 5;
+          while (!navigator.serviceWorker.controller) {
+            if (attempt >= 8) {
+              throw new Error(`Controller still not ready after ${attempt} attempts`);
+            }
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+            attempt++;
+          }
 
         } catch (e) {
           console.error('Service Worker wait failed:', e);
