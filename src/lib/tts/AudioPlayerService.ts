@@ -218,7 +218,7 @@ export class AudioPlayerService {
 
                 if (state && state.queue && state.queue.length > 0) {
                     await this.stopInternal();
-                    this.stateManager.restoreQueue(state.queue, state.currentIndex || 0, state.sectionIndex ?? -1);
+                    this.stateManager.setQueue(state.queue, state.currentIndex || 0, state.sectionIndex ?? -1);
                     // Subscription handles metadata and listeners
                 }
             } catch (e) {
@@ -319,14 +319,14 @@ export class AudioPlayerService {
     setQueue(items: TTSQueueItem[], startIndex: number = 0) {
         return this.enqueue(async () => {
             if (this.stateManager.isIdenticalTo(items)) {
-                this.stateManager.restoreQueue(items, startIndex, this.stateManager.currentSectionIndex);
+                this.stateManager.setQueue(items, startIndex, this.stateManager.currentSectionIndex);
                 // persist and notify are automatic.
                 return;
             }
 
             await this.stopInternal();
 
-            this.stateManager.restoreQueue(items, startIndex, this.stateManager.currentSectionIndex);
+            this.stateManager.setQueue(items, startIndex, this.stateManager.currentSectionIndex);
             // persist and notify automatic.
         });
     }
@@ -679,7 +679,7 @@ export class AudioPlayerService {
                 await this.stopInternal();
             }
 
-            this.stateManager.loadNewQueue(newQueue, sectionIndex);
+            this.stateManager.setQueue(newQueue, 0, sectionIndex);
             // Automatic persist and notify.
 
             if (autoPlay) {

@@ -55,27 +55,6 @@ export class PlaybackStateManager {
     }
 
     /**
-     * Loads a new queue for a section, starting playback from the beginning.
-     *
-     * @param {TTSQueueItem[]} items The new queue items.
-     * @param {number} sectionIndex The index of the current section in the book.
-     */
-    loadNewQueue(items: TTSQueueItem[], sectionIndex: number) {
-        this.updateQueueState(items, 0, sectionIndex);
-    }
-
-    /**
-     * Restores a queue state (e.g. from persistence), setting specific indices.
-     *
-     * @param {TTSQueueItem[]} items The queue items.
-     * @param {number} currentIndex The index to resume playback from.
-     * @param {number} sectionIndex The index of the current section.
-     */
-    restoreQueue(items: TTSQueueItem[], currentIndex: number, sectionIndex: number) {
-        this.updateQueueState(items, currentIndex, sectionIndex);
-    }
-
-    /**
      * Updates the playback queue and current position indices.
      * Recalculates prefix sums for progress tracking.
      *
@@ -83,7 +62,7 @@ export class PlaybackStateManager {
      * @param {number} startIndex The index to start playback from.
      * @param {number} sectionIndex The index of the current section in the book.
      */
-    private updateQueueState(items: TTSQueueItem[], startIndex: number, sectionIndex: number) {
+    setQueue(items: TTSQueueItem[], startIndex: number, sectionIndex: number) {
         this._queue = items;
         this._currentIndex = startIndex;
         this._currentSectionIndex = sectionIndex;

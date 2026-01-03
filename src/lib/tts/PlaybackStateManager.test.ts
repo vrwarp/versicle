@@ -24,7 +24,7 @@ describe('PlaybackStateManager', () => {
             { text: 'Hello', cfi: '1' },
             { text: 'World', cfi: '2' }
         ];
-        manager.loadNewQueue(items, 0);
+        manager.setQueue(items, 0, 0);
 
         expect(manager.queue).toEqual(items);
         expect(manager.currentIndex).toBe(0);
@@ -35,7 +35,7 @@ describe('PlaybackStateManager', () => {
 
     it('should reset state correctly', () => {
         const items = [{ text: 'Hello', cfi: '1' }];
-        manager.loadNewQueue(items, 0);
+        manager.setQueue(items, 0, 0);
         manager.reset();
 
         expect(manager.queue).toEqual([]);
@@ -45,16 +45,22 @@ describe('PlaybackStateManager', () => {
 
     it('should handle book ID changes', () => {
         const items = [{ text: 'Hello', cfi: '1' }];
-        manager.loadNewQueue(items, 0);
+        manager.setQueue(items, 0, 0);
 
         manager.setBookId('book2');
 
-        expect(manager.queue).toEqual(items);
+        expect(manager.queue).toEqual(items); // Does NOT reset queue on ID change alone unless it was null?
+        // Wait, setBookId calls reset() if bookId is falsey.
+        // It does NOT clear queue if bookId changes to another string,
+        // BUT AudioPlayerService usually clears it.
+        // PlaybackStateManager just tracks ID.
+        // But logic: if (currentBookId !== bookId) { ... lastPersistedQueue = null; if (!bookId) reset(); }
+        // So queue persists.
     });
 
     it('should check if queue is identical', () => {
         const items = [{ text: 'Hello', cfi: '1' }];
-        manager.loadNewQueue(items, 0);
+        manager.setQueue(items, 0, 0);
 
         expect(manager.isIdenticalTo(items)).toBe(true);
         expect(manager.isIdenticalTo([{ text: 'Hello', cfi: '2' }])).toBe(false);
@@ -62,7 +68,7 @@ describe('PlaybackStateManager', () => {
 
     it('should return current item', () => {
         const items = [{ text: 'Hello', cfi: '1' }, { text: 'World', cfi: '2' }];
-        manager.restoreQueue(items, 1, 0);
+        manager.setQueue(items, 1, 0);
 
         expect(manager.getCurrentItem()).toEqual(items[1]);
     });
@@ -70,7 +76,7 @@ describe('PlaybackStateManager', () => {
     describe('Navigation', () => {
         it('should report hasNext/hasPrev correctly', () => {
             const items = [{ text: '1', cfi: 'a' }, { text: '2', cfi: 'b' }, { text: '3', cfi: 'c' }];
-            manager.restoreQueue(items, 1, 0); // Middle
+            manager.setQueue(items, 1, 0); // Middle
 
             expect(manager.hasNext()).toBe(true);
             expect(manager.hasPrev()).toBe(true);
@@ -86,7 +92,7 @@ describe('PlaybackStateManager', () => {
 
         it('should navigate next', () => {
             const items = [{ text: '1', cfi: 'a' }, { text: '2', cfi: 'b' }];
-            manager.loadNewQueue(items, 0);
+            manager.setQueue(items, 0, 0);
 
             expect(manager.next()).toBe(true);
             expect(manager.currentIndex).toBe(1);
@@ -95,7 +101,7 @@ describe('PlaybackStateManager', () => {
 
         it('should navigate prev', () => {
             const items = [{ text: '1', cfi: 'a' }, { text: '2', cfi: 'b' }];
-            manager.restoreQueue(items, 1, 0);
+            manager.setQueue(items, 1, 0);
 
             expect(manager.prev()).toBe(true);
             expect(manager.currentIndex).toBe(0);
@@ -108,7 +114,7 @@ describe('PlaybackStateManager', () => {
                 { text: '2', cfi: 'b' },
                 { text: '3', cfi: 'c' }
             ];
-            manager.restoreQueue(items, 1, 0); // Start at middle item
+            manager.setQueue(items, 1, 0); // Start at middle item
 
             expect(manager.jumpTo(0)).toBe(true);
             expect(manager.currentIndex).toBe(0);
@@ -125,7 +131,7 @@ describe('PlaybackStateManager', () => {
                 { text: '1', cfi: 'a' },
                 { text: '2', cfi: 'b' }
             ];
-            manager.loadNewQueue(items, 0);
+            manager.setQueue(items, 0, 0);
 
             manager.jumpToEnd();
             expect(manager.currentIndex).toBe(1);
@@ -142,7 +148,7 @@ describe('PlaybackStateManager', () => {
                 { text: 'abcde', cfi: '1' }, // 5 chars
                 { text: 'fghij', cfi: '2' }   // 5 chars
             ];
-            manager.loadNewQueue(items, 0);
+            manager.setQueue(items, 0, 0);
 
             // Total 10 chars. 15 chars/sec.
             // Item 1 ends at 5/15 = 0.33s.
@@ -157,7 +163,7 @@ describe('PlaybackStateManager', () => {
                 { text: 'abcde', cfi: '1' }, // 5 chars
                 { text: 'fghij', cfi: '2' }   // 5 chars
             ];
-            manager.restoreQueue(items, 1, 0); // At item 2
+            manager.setQueue(items, 1, 0); // At item 2
 
             // Start of item 2 is 5 chars. 5/15 = 0.333s.
             // providerTime = 0.1s.
@@ -172,14 +178,14 @@ describe('PlaybackStateManager', () => {
                 { text: 'abcde', cfi: '1' }, // 5 chars
                 { text: 'fghij', cfi: '2' }   // 5 chars
             ];
-            manager.loadNewQueue(items, 0);
+            manager.setQueue(items, 0, 0);
 
             // 10 chars / 15 cps = 0.666s
             expect(manager.getTotalDuration()).toBeCloseTo(0.666, 2);
         });
 
         it('should handle zero duration gracefully', () => {
-             manager.loadNewQueue([], 0);
+             manager.setQueue([], 0, 0);
              expect(manager.getTotalDuration()).toBe(0);
              expect(manager.getCurrentPosition(1)).toBe(0);
         });
@@ -189,7 +195,7 @@ describe('PlaybackStateManager', () => {
         it('should persist queue correctly', () => {
             const items = [{ text: 'Hello', cfi: '1' }, { text: 'World', cfi: '2' }];
             manager.setBookId('book1');
-            manager.restoreQueue(items, 0, 1);
+            manager.setQueue(items, 0, 1);
 
             // setQueue automatically persists
             expect(dbService.saveTTSState).toHaveBeenCalledWith('book1', items, 0, 1);
@@ -198,7 +204,7 @@ describe('PlaybackStateManager', () => {
         it('should save playback state', async () => {
              const items = [{ text: 'Hello', cfi: 'cfi1' }];
             manager.setBookId('book1');
-            manager.loadNewQueue(items, 0);
+            manager.setQueue(items, 0, 0);
 
              await manager.savePlaybackState('paused');
 
@@ -207,7 +213,7 @@ describe('PlaybackStateManager', () => {
 
         it('should not persist if bookId is not set', () => {
              const items = [{ text: 'Hello', cfi: '1' }];
-            manager.restoreQueue(items, 0, 1); // No book ID set
+            manager.setQueue(items, 0, 1); // No book ID set
 
              expect(dbService.saveTTSState).not.toHaveBeenCalled();
         });
@@ -219,7 +225,7 @@ describe('PlaybackStateManager', () => {
             manager.subscribe(listener);
 
             const items = [{ text: 'Hello', cfi: '1' }, { text: 'World', cfi: '2' }];
-            manager.loadNewQueue(items, 0);
+            manager.setQueue(items, 0, 0);
 
             expect(listener).toHaveBeenCalledWith(expect.objectContaining({
                 queue: items,
@@ -232,7 +238,7 @@ describe('PlaybackStateManager', () => {
             manager.subscribe(listener);
 
              const items = [{ text: 'Hello', cfi: '1' }];
-            manager.loadNewQueue(items, 0); // 1 call
+            manager.setQueue(items, 0, 0); // 1 call
 
             manager.next(); // fails
 
@@ -245,7 +251,7 @@ describe('PlaybackStateManager', () => {
             const unsubscribe = manager.subscribe(listener);
 
              unsubscribe();
-            manager.loadNewQueue([], 0);
+            manager.setQueue([], 0, 0);
 
              expect(listener).not.toHaveBeenCalled();
         });
