@@ -7,6 +7,7 @@ import { getParentCfi, generateCfiRange, parseCfiRange } from '../cfi-utils';
 import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
+import type { SentenceNode } from '../tts';
 
 /**
  * Manages the transformation of raw book content into a playable TTS queue.
@@ -75,9 +76,11 @@ export class AudioContentPipeline {
                 const skipTypes = genAISettings.contentFilterSkipTypes;
                 const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
 
+                let workingSentences = ttsContent.sentences;
+
                 if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
                     // Trigger background detection
-                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes)
+                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
                         .then(mask => {
                             if (mask && mask.size > 0) {
                                 onMaskFound(mask);
@@ -85,8 +88,6 @@ export class AudioContentPipeline {
                         })
                         .catch(err => console.warn("Background mask detection failed", err));
                 }
-
-                let workingSentences = ttsContent.sentences;
 
                 // Note: detectAndFilterContent (blocking) is skipped here in favor of async masking
                 // unless we want to support a "Strict/Blocking" mode in future.
@@ -213,21 +214,27 @@ export class AudioContentPipeline {
      * @param {string} bookId The book ID.
      * @param {string} sectionId The section ID.
      * @param {ContentType[]} skipTypes The content types to filter out.
+     * @param {SentenceNode[]} [sentences] The raw sentences to analyze. If not provided, they will be fetched from DB.
      * @returns {Promise<Set<number>>} A Set of raw sentence indices to skip.
      */
-    async detectContentSkipMask(bookId: string, sectionId: string, skipTypes: ContentType[]): Promise<Set<number>> {
+    async detectContentSkipMask(bookId: string, sectionId: string, skipTypes: ContentType[], sentences?: SentenceNode[]): Promise<Set<number>> {
         const indicesToSkip = new Set<number>();
 
         try {
-            const ttsContent = await dbService.getTTSContent(bookId, sectionId);
-            if (!ttsContent || ttsContent.sentences.length === 0) return indicesToSkip;
+            let targetSentences = sentences;
+            if (!targetSentences) {
+                const ttsContent = await dbService.getTTSContent(bookId, sectionId);
+                targetSentences = ttsContent?.sentences || [];
+            }
+
+            if (targetSentences.length === 0) return indicesToSkip;
 
              // Fetch Table CFIs for Grouping
             const tableImages = await dbService.getTableImages(bookId);
             const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
             // Group sentences by Root Node
-            const groups = this.groupSentencesByRoot(ttsContent.sentences, tableCfis);
+            const groups = this.groupSentencesByRoot(targetSentences, tableCfis);
             const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
             if (detectedTypes && detectedTypes.length > 0) {
@@ -279,7 +286,7 @@ export class AudioContentPipeline {
         // However, the new plan favors "Async Masking", so this method might be deprecated or used differently.
         // But for compatibility with existing code that calls it (if any), we keep it working.
 
-        const mask = await this.detectContentSkipMask(bookId, sectionId, skipTypes);
+        const mask = await this.detectContentSkipMask(bookId, sectionId, skipTypes, sentences);
         if (mask.size === 0) return sentences;
 
         return sentences.filter(s => {
