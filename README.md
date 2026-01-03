@@ -11,7 +11,7 @@
 *   **Hybrid Intelligence**:
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google) for studio-quality narration.
-    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content and Summaries.
+    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content and filter content.
 *   **Data Ownership**: Export your data at any time. Full backups (ZIP) or Metadata (JSON).
 
 ## Tech Stack
@@ -37,6 +37,7 @@
 *   **Drag & Drop**: Drag files anywhere to import.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
 *   **Annotations**: Highlights and notes.
+*   **Table Snapshots**: Complex tables are captured as images for better readability and preservation.
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
