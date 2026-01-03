@@ -26,6 +26,7 @@ vi.mock('@capacitor/core', () => ({
 
 describe('PlatformIntegration', () => {
     let platform: PlatformIntegration;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let events: any;
 
     beforeEach(() => {
@@ -48,27 +49,35 @@ describe('PlatformIntegration', () => {
 
     it('should update background audio mode', () => {
         platform.setBackgroundAudioMode('noise', true);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).backgroundAudio.play).toHaveBeenCalledWith('noise');
     });
 
     it('should update playback state', () => {
         platform.updatePlaybackState('playing');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).mediaSessionManager.setPlaybackState).toHaveBeenCalledWith('playing');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).backgroundAudio.play).toHaveBeenCalled();
 
         platform.updatePlaybackState('paused');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).mediaSessionManager.setPlaybackState).toHaveBeenCalledWith('paused');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).backgroundAudio.stopWithDebounce).toHaveBeenCalled();
     });
 
     it('should update metadata only when changed', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const metadata = { title: 'Test' } as any;
         platform.updateMetadata(metadata);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).mediaSessionManager.setMetadata).toHaveBeenCalledWith(metadata);
 
         // Call again with same metadata
         vi.clearAllMocks();
         platform.updateMetadata(metadata);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).mediaSessionManager.setMetadata).not.toHaveBeenCalled();
     });
 });

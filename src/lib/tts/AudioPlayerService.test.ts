@@ -260,7 +260,7 @@ describe('AudioPlayerService', () => {
         const providerListener = onCall[0];
 
         // Trigger play.
-        const playPromise = service.play();
+        void service.play();
 
         // Emit error event to trigger TTSProviderManager's fallback logic.
         providerListener({ type: 'error', error: new Error("API Quota Exceeded") });
@@ -318,9 +318,11 @@ describe('AudioPlayerService', () => {
         // low-level grouping behavior. Ideally, these tests would live in AudioContentPipeline.test.ts,
         // but they are preserved here to ensure integration context or legacy coverage.
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let contentPipeline: any;
 
         beforeEach(() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             contentPipeline = (service as any).contentPipeline;
 
             // Spy on cfi utils

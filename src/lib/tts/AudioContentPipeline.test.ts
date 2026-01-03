@@ -1,10 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { dbService } from '../../db/DBService';
-import { useTTSStore } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
-import { genAIService } from '../genai/GenAIService';
-import { TextSegmenter } from './TextSegmenter';
 
 vi.mock('../../db/DBService', () => ({
     dbService: {
@@ -62,12 +59,16 @@ describe('AudioContentPipeline', () => {
 
     describe('loadSection', () => {
         it('should load and process TTS content successfully', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockSection = { sectionId: 's1', characterCount: 500 } as any;
             const mockSentences = [{ text: 'Hello world', cfi: 'cfi1' }];
             const mockMetadata = { title: 'Test Book', author: 'Test Author' };
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getTTSContent as any).mockResolvedValue({ sentences: mockSentences });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getBookMetadata as any).mockResolvedValue(mockMetadata);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getContentAnalysis as any).mockResolvedValue(null);
 
             const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
@@ -78,8 +79,11 @@ describe('AudioContentPipeline', () => {
         });
 
         it('should handle empty chapters gracefully', async () => {
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
              const mockSection = { sectionId: 's1', characterCount: 0 } as any;
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
              (dbService.getTTSContent as any).mockResolvedValue({ sentences: [] });
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
              (dbService.getBookMetadata as any).mockResolvedValue({});
 
              const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
@@ -91,9 +95,12 @@ describe('AudioContentPipeline', () => {
         });
 
          it('should generate preroll when enabled', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockSection = { sectionId: 's1', characterCount: 500 } as any;
             const mockSentences = [{ text: 'Hello', cfi: 'cfi1' }];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getTTSContent as any).mockResolvedValue({ sentences: mockSentences });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getBookMetadata as any).mockResolvedValue({});
 
             const result = await pipeline.loadSection('book1', mockSection, 0, true, 1.0);
@@ -107,6 +114,7 @@ describe('AudioContentPipeline', () => {
 
     describe('Content Filtering', () => {
          it('should skip filtered content types when enabled', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockSection = { sectionId: 's1', characterCount: 500 } as any;
 
             // Setup two sentences that will be treated as separate groups by groupSentencesByRoot.
@@ -116,12 +124,14 @@ describe('AudioContentPipeline', () => {
              const s1 = { text: 'Keep me', cfi: 'epubcfi(/2/2/2:0)' };
              const s2 = { text: 'Skip me', cfi: 'epubcfi(/2/2/4:0)' };
 
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
              (dbService.getTTSContent as any).mockResolvedValue({ sentences: [s1, s2] });
 
              // Mock content analysis results to classify s2 as a 'table'.
              // The pipeline uses `generateCfiRange` to create the rootCfi for grouping.
              // For a single-item group like s2, the range logic typically results in a self-referencing range.
              // We mock dbService to return a matching result so the pipeline sees 'table' for s2's group.
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
              (dbService.getContentAnalysis as any).mockResolvedValue({
                 contentTypes: [
                     { rootCfi: 'epubcfi(/2/2/4:0,,)', type: 'table' } // Matching s2 group
@@ -129,6 +139,7 @@ describe('AudioContentPipeline', () => {
             });
 
             // Mock store settings to enable filtering
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (useGenAIStore.getState as any).mockReturnValue({
                 contentFilterSkipTypes: ['table'],
                 isContentAnalysisEnabled: true,

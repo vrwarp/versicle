@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlaybackStateManager } from './PlaybackStateManager';
 import { dbService } from '../../db/DBService';
-import type { TTSQueueItem } from './AudioPlayerService';
 
 vi.mock('../../db/DBService', () => ({
     dbService: {
