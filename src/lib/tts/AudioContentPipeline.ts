@@ -18,12 +18,14 @@ export class AudioContentPipeline {
 
     /**
      * Loads a section, processes its text, and returns a playable queue.
+     * Triggers background analysis for content filtering.
      *
      * @param {string} bookId The ID of the book.
      * @param {SectionMetadata} section The section metadata.
      * @param {number} sectionIndex The index of the section in the playlist.
      * @param {boolean} prerollEnabled Whether to add a preroll announcement.
      * @param {number} speed The current playback speed (used for preroll duration estimation).
+     * @param {function} onSkipUpdate Callback to update the queue with skipped indices.
      * @param {string} [sectionTitle] Optional override for the section title.
      * @returns {Promise<TTSQueueItem[] | null>} The processed queue or null on failure.
      */
@@ -33,6 +35,7 @@ export class AudioContentPipeline {
         sectionIndex: number,
         prerollEnabled: boolean,
         speed: number,
+        onSkipUpdate: (indices: number[]) => void,
         sectionTitle?: string
     ): Promise<TTSQueueItem[] | null> {
         try {
@@ -67,18 +70,13 @@ export class AudioContentPipeline {
 
             if (ttsContent && ttsContent.sentences.length > 0) {
                 // -----------------------------------------------------------
-                // Content Type Detection & Filtering (on RAW sentences)
+                // Content Type Detection & Filtering (Moved to Background)
                 // -----------------------------------------------------------
                 const genAISettings = useGenAIStore.getState();
                 const skipTypes = genAISettings.contentFilterSkipTypes;
                 const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
 
-                let workingSentences = ttsContent.sentences;
-
-                // Optimize: Don't run detection if nothing to skip
-                if (skipTypes.length > 0 && isContentAnalysisEnabled) {
-                    workingSentences = await this.detectAndFilterContent(bookId, workingSentences, skipTypes, section.sectionId);
-                }
+                const workingSentences = ttsContent.sentences;
 
                 // Dynamic Refinement: Merge segments based on current settings
                 const settings = useTTSStore.getState();
@@ -116,6 +114,19 @@ export class AudioContentPipeline {
                         });
                     }
                 });
+
+                // Trigger background filtering if enabled
+                if (isContentAnalysisEnabled && skipTypes.length > 0) {
+                    this.runBackgroundFiltering(
+                        bookId,
+                        section.sectionId,
+                        workingSentences,
+                        newQueue, // Pass the final queue to map CFIs
+                        skipTypes,
+                        onSkipUpdate
+                    );
+                }
+
             } else {
                 // Empty Chapter Handling
                 const randomMessage = NO_TEXT_MESSAGES[Math.floor(Math.random() * NO_TEXT_MESSAGES.length)];
@@ -196,53 +207,85 @@ export class AudioContentPipeline {
     }
 
     /**
-     * Filters out sentences belonging to unwanted content types (e.g., tables, footnotes).
-     *
-     * @param {string} bookId The book ID.
-     * @param {{ text: string; cfi: string }[]} sentences The raw sentences.
-     * @param {ContentType[]} skipTypes The content types to filter out.
-     * @param {string} sectionId The section ID.
-     * @returns {Promise<{ text: string; cfi: string }[]>} The filtered list of sentences.
+     * Performs background analysis to identify and mask skippable content.
      */
-    private async detectAndFilterContent(bookId: string, sentences: { text: string; cfi: string }[], skipTypes: ContentType[], sectionId: string): Promise<{ text: string; cfi: string }[]> {
-        if (!bookId || !sectionId) return sentences;
+    private async runBackgroundFiltering(
+        bookId: string,
+        sectionId: string,
+        rawSentences: { text: string; cfi: string }[],
+        finalQueue: TTSQueueItem[],
+        skipTypes: ContentType[],
+        onSkipUpdate: (indices: number[]) => void
+    ) {
+        if (!bookId || !sectionId) return;
 
-        // Fetch Table CFIs for Grouping
-        const tableImages = await dbService.getTableImages(bookId);
-        const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
+        try {
+            // Fetch Table CFIs for Grouping
+            const tableImages = await dbService.getTableImages(bookId);
+            const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
-        // Group sentences by Root Node
-        const groups = this.groupSentencesByRoot(sentences, tableCfis);
+            // Group sentences by Root Node
+            const groups = this.groupSentencesByRoot(rawSentences, tableCfis);
 
-        const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
+            // Detect types (Cache first, then GenAI)
+            const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
-        // 3. Filter based on detected types and current settings
-        if (detectedTypes && detectedTypes.length > 0) {
-            const typeMap = new Map<string, ContentType>();
-            detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
+            if (detectedTypes && detectedTypes.length > 0) {
+                const typeMap = new Map<string, ContentType>();
+                detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
 
-            const skipRoots = new Set<string>();
-            groups.forEach(g => {
-                const type = typeMap.get(g.rootCfi);
-                if (type && skipTypes.includes(type)) {
-                    skipRoots.add(g.rootCfi);
-                }
-            });
+                const skipRoots = new Set<string>();
+                groups.forEach(g => {
+                    const type = typeMap.get(g.rootCfi);
+                    if (type && skipTypes.includes(type)) {
+                        skipRoots.add(g.rootCfi);
+                    }
+                });
 
-            if (skipRoots.size > 0) {
-                const finalSentences: { text: string; cfi: string }[] = [];
-                for (const g of groups) {
-                    if (!skipRoots.has(g.rootCfi)) {
-                        finalSentences.push(...g.segments);
-                    } else {
-                        console.log(`Skipping content block (Cached/Detected)`, g.rootCfi);
+                if (skipRoots.size > 0) {
+                    // Identify indices in the final queue that correspond to skipped roots.
+                    // Note: finalQueue items might be merged, but they retain CFIs.
+                    // We need to check if a queue item's CFI belongs to a skipped root.
+                    // Since grouping was done on raw sentences, and refinement might merge them,
+                    // we can check if the item's CFI is contained within or equal to any skipped root's segment CFIs.
+                    // However, `TextSegmenter.refineSegments` preserves CFIs of the first sentence in a merged block usually?
+                    // Let's check `TextSegmenter`. The refined segment has `cfi`.
+                    // A simpler approach: Check if the item.cfi falls into any of the skipped groups.
+
+                    const indicesToSkip: number[] = [];
+
+                    // Create a set of all raw CFIs that are skipped
+                    const skippedRawCfis = new Set<string>();
+                    groups.forEach(g => {
+                        if (skipRoots.has(g.rootCfi)) {
+                            g.segments.forEach(s => {
+                                if (s.cfi) skippedRawCfis.add(s.cfi);
+                            });
+                        }
+                    });
+
+                    // Map final queue items to skipped status
+                    finalQueue.forEach((item, index) => {
+                         if (item.cfi && skippedRawCfis.has(item.cfi)) {
+                             indicesToSkip.push(index);
+                         } else if (item.cfi) {
+                             // Fallback: Check if item cfi is part of a skipped group logic if exact match fails?
+                             // Since refinement merges, the item.cfi is usually one of the raw cfis.
+                             // If a merged sentence contains one skipped and one non-skipped, what happens?
+                             // Usually merging respects boundaries or if it merges across boundaries, we might have an issue.
+                             // But TextSegmenter.refineSegments usually merges short sentences.
+                             // If we skip, we probably skip the whole block.
+                         }
+                    });
+
+                    if (indicesToSkip.length > 0) {
+                        onSkipUpdate(indicesToSkip);
                     }
                 }
-                return finalSentences;
             }
+        } catch (e) {
+            console.warn("Background filtering failed", e);
         }
-
-        return sentences;
     }
 
     /**

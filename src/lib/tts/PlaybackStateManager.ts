@@ -64,7 +64,28 @@ export class PlaybackStateManager {
     private calculatePrefixSums() {
         this.prefixSums = new Array(this.queue.length + 1).fill(0);
         for (let i = 0; i < this.queue.length; i++) {
-            this.prefixSums[i + 1] = this.prefixSums[i] + (this.queue[i].text?.length || 0);
+            const length = this.queue[i].isSkipped ? 0 : (this.queue[i].text?.length || 0);
+            this.prefixSums[i + 1] = this.prefixSums[i] + length;
+        }
+    }
+
+    /**
+     * Marks specific indices in the queue as skipped.
+     * Triggers a recalculation of prefix sums.
+     *
+     * @param {number[]} indices The indices to skip.
+     */
+    markIndicesAsSkipped(indices: number[]) {
+        let changed = false;
+        indices.forEach(index => {
+            if (this.queue[index] && !this.queue[index].isSkipped) {
+                this.queue[index].isSkipped = true;
+                changed = true;
+            }
+        });
+        if (changed) {
+            this.calculatePrefixSums();
+            this.lastPersistedQueue = null;
         }
     }
 
@@ -77,25 +98,35 @@ export class PlaybackStateManager {
     }
 
     hasNext(): boolean {
-        return this.currentIndex < this.queue.length - 1;
+        for (let i = this.currentIndex + 1; i < this.queue.length; i++) {
+            if (!this.queue[i].isSkipped) return true;
+        }
+        return false;
     }
 
     hasPrev(): boolean {
-        return this.currentIndex > 0;
+        for (let i = this.currentIndex - 1; i >= 0; i--) {
+            if (!this.queue[i].isSkipped) return true;
+        }
+        return false;
     }
 
     next(): boolean {
-        if (this.hasNext()) {
-            this.currentIndex++;
-            return true;
+        for (let i = this.currentIndex + 1; i < this.queue.length; i++) {
+            if (!this.queue[i].isSkipped) {
+                this.currentIndex = i;
+                return true;
+            }
         }
         return false;
     }
 
     prev(): boolean {
-        if (this.hasPrev()) {
-            this.currentIndex--;
-            return true;
+        for (let i = this.currentIndex - 1; i >= 0; i--) {
+            if (!this.queue[i].isSkipped) {
+                this.currentIndex = i;
+                return true;
+            }
         }
         return false;
     }

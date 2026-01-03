@@ -34,6 +34,8 @@ export interface TTSQueueItem {
     coverUrl?: string;
     /** Indicates if this item is a pre-roll announcement. */
     isPreroll?: boolean;
+    /** Indicates if this item should be skipped during playback. */
+    isSkipped?: boolean;
 }
 
 export interface DownloadInfo {
@@ -689,12 +691,29 @@ export class AudioPlayerService {
         if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
 
         const section = this.playlist[sectionIndex];
+
+        const onSkipUpdate = (indices: number[]) => {
+            this.enqueue(async () => {
+                // Check if we are still in the same section
+                if (this.stateManager.currentSectionIndex === sectionIndex && this.currentBookId) {
+                     this.stateManager.markIndicesAsSkipped(indices);
+                     this.stateManager.persistQueue();
+                     // We might need to update listeners because duration/progress changed?
+                     // Yes, duration definitely changed.
+                     this.updateMediaSessionMetadata();
+                     this.updateSectionMediaPosition(0); // This might be abrupt but syncs the UI
+                     this.notifyListeners(this.stateManager.getCurrentItem()?.cfi || null);
+                }
+            });
+        };
+
         const newQueue = await this.contentPipeline.loadSection(
             this.currentBookId,
             section,
             sectionIndex,
             this.prerollEnabled,
             this.speed,
+            onSkipUpdate,
             sectionTitle
         );
 
