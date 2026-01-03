@@ -14,7 +14,7 @@ interface ReprocessingInterstitialProps {
   onClose: () => void;
 }
 
-export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> = ({ isOpen, bookId, onComplete, onClose }) => {
+export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> = ({ isOpen, bookId, onComplete }) => {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Initializing...');
 
@@ -126,7 +126,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
   return (
     <Dialog
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={() => {}} // Disable closing
       title="Optimizing Book Content"
       description="We are updating this book to the latest version. This ensures the best reading experience and only happens once."
     >
