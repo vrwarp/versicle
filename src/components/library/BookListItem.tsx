@@ -147,15 +147,15 @@ export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onR
                         onOffload={() => onOffload(book)}
                         onRestore={() => onRestore(book)}
                     >
-                         <button
+                         <div
                             className={cn(
-                                "p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors focus:opacity-100 touch-manipulation",
+                                "p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors focus:opacity-100 touch-manipulation cursor-pointer",
                                 "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
                             )}
                             data-testid={`book-actions-${book.id}`}
                         >
                             <MoreVertical className="w-4 h-4" />
-                        </button>
+                        </div>
                     </BookActionMenu>
                 </div>
             </div>

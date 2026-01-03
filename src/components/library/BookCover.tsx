@@ -65,6 +65,7 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
                         <Button
                             variant="ghost"
                             size="icon"
+                            asChild
                             className={cn(
                                 "rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white transition-opacity",
                                 "h-11 w-11", // Minimum 44px touch target
@@ -73,7 +74,9 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
                             )}
                             data-testid="book-menu-trigger"
                         >
-                            <MoreVertical className="w-4 h-4" />
+                            <span>
+                                <MoreVertical className="w-4 h-4" />
+                            </span>
                         </Button>
                     </div>
                 </BookActionMenu>
