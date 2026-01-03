@@ -1,7 +1,6 @@
 import React from 'react';
 import type { BookMetadata } from '../../types/db';
 import { BookOpen, HardDriveDownload, MoreVertical } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useToastStore } from '../../store/useToastStore';
 import { cn } from '../../lib/utils';
 import { useReaderStore } from '../../store/useReaderStore';
@@ -14,6 +13,7 @@ import { BookActionMenu } from './BookActionMenu';
 interface BookListItemProps {
     /** The metadata of the book to display. */
     book: BookMetadata;
+    onOpen: (book: BookMetadata) => void;
     onDelete: (book: BookMetadata) => void;
     onOffload: (book: BookMetadata) => void;
     onRestore: (book: BookMetadata) => void;
@@ -47,8 +47,7 @@ const formatDuration = (chars?: number): string => {
  * @param props - Component props.
  * @returns The rendered list item.
  */
-export const BookListItem = React.memo(({ book, onDelete, onOffload, onRestore }: BookListItemProps) => {
-    const navigate = useNavigate();
+export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onRestore }: BookListItemProps) => {
     const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderStore(state => state.setCurrentBookId);
 
@@ -60,7 +59,7 @@ export const BookListItem = React.memo(({ book, onDelete, onOffload, onRestore }
             return;
         }
         setBookId(book.id); // Set the active book ID in the store
-        navigate(`/read/${book.id}`);
+        onOpen(book);
     };
 
     const progressPercent = book.progress ? Math.round(book.progress * 100) : 0;

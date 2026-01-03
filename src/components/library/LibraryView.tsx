@@ -13,6 +13,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { DeleteBookDialog } from './DeleteBookDialog';
 import { OffloadBookDialog } from './OffloadBookDialog';
 import type { BookMetadata } from '../../types/db';
+import { ReprocessingInterstitial } from './ReprocessingInterstitial';
+import { CURRENT_BOOK_VERSION } from '../../lib/constants';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * The main library view component.
@@ -55,6 +58,7 @@ export const LibraryView: React.FC = () => {
   const restoreFileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
 
   // Modal State Coordination
   const [activeModal, setActiveModal] = useState<{
@@ -63,10 +67,20 @@ export const LibraryView: React.FC = () => {
   } | null>(null);
 
   const [bookToRestore, setBookToRestore] = useState<BookMetadata | null>(null);
+  const [reprocessingBookId, setReprocessingBookId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBooks();
   }, [fetchBooks]);
+
+  const handleBookOpen = useCallback((book: BookMetadata) => {
+    const effectiveVersion = book.version ?? 0;
+    if (effectiveVersion < CURRENT_BOOK_VERSION) {
+        setReprocessingBookId(book.id);
+    } else {
+        navigate(`/read/${book.id}`);
+    }
+  }, [navigate]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -238,6 +252,16 @@ export const LibraryView: React.FC = () => {
         book={activeModal?.book || null}
         onClose={() => setActiveModal(null)}
       />
+      <ReprocessingInterstitial
+        isOpen={!!reprocessingBookId}
+        bookId={reprocessingBookId}
+        onComplete={() => {
+            const id = reprocessingBookId;
+            setReprocessingBookId(null);
+            if (id) navigate(`/read/${id}`);
+        }}
+        onClose={() => setReprocessingBookId(null)}
+      />
 
       <header className="mb-6 flex flex-col gap-4">
         {/* Top Row: Title and Actions */}
@@ -360,6 +384,7 @@ export const LibraryView: React.FC = () => {
                     <div key={book.id} className="flex justify-center">
                       <BookCard
                         book={book}
+                        onOpen={handleBookOpen}
                         onDelete={handleDelete}
                         onOffload={handleOffload}
                         onRestore={handleRestore}
@@ -373,6 +398,7 @@ export const LibraryView: React.FC = () => {
                     <BookListItem
                         key={book.id}
                         book={book}
+                        onOpen={handleBookOpen}
                         onDelete={handleDelete}
                         onOffload={handleOffload}
                         onRestore={handleRestore}

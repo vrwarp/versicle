@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { extractContentOffscreen } from './offscreen-renderer';
 import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
-import { sanitizeContent } from './sanitizer';
 
 // Mock dependencies
 vi.mock('epubjs');
@@ -22,10 +21,12 @@ vi.mock('./sanitizer', () => ({
 }));
 
 describe('extractContentOffscreen', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockBook: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockRendition: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockSpine: any;
-  let container: HTMLDivElement;
 
   beforeEach(() => {
     // Setup mock Rendition

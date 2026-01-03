@@ -4,6 +4,7 @@ import React from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
+import { MemoryRouter } from 'react-router-dom';
 
 // Mock BookCard
 vi.mock('./BookCard', () => ({
@@ -76,12 +77,20 @@ describe('LibraryView', () => {
 
     it('renders loading state', () => {
         useLibraryStore.setState({ isLoading: true });
-        render(<LibraryView />);
+        render(
+            <MemoryRouter>
+                <LibraryView />
+            </MemoryRouter>
+        );
         expect(document.querySelector('.animate-spin')).toBeInTheDocument();
     });
 
     it('renders empty state', async () => {
-        render(<LibraryView />);
+        render(
+            <MemoryRouter>
+                <LibraryView />
+            </MemoryRouter>
+        );
         expect(screen.getByTestId('empty-library')).toBeInTheDocument();
     });
 
@@ -96,7 +105,11 @@ describe('LibraryView', () => {
             viewMode: 'grid'
         });
 
-        render(<LibraryView />);
+        render(
+            <MemoryRouter>
+                <LibraryView />
+            </MemoryRouter>
+        );
 
         await waitFor(() => {
             expect(screen.getAllByTestId('book-card')).toHaveLength(2);
@@ -116,7 +129,11 @@ describe('LibraryView', () => {
             viewMode: 'grid'
         });
 
-        render(<LibraryView />);
+        render(
+            <MemoryRouter>
+                <LibraryView />
+            </MemoryRouter>
+        );
 
         const searchInput = screen.getByTestId('library-search-input');
         fireEvent.change(searchInput, { target: { value: 'George' } });
@@ -148,7 +165,11 @@ describe('LibraryView', () => {
             sortOrder: 'recent'
         });
 
-        render(<LibraryView />);
+        render(
+            <MemoryRouter>
+                <LibraryView />
+            </MemoryRouter>
+        );
         const sortSelect = screen.getByTestId('sort-select');
 
         // Default: Recently Added (Newest first) -> 2 (300), 3 (200), 1 (100)
@@ -188,7 +209,11 @@ describe('LibraryView', () => {
             viewMode: 'grid'
         });
 
-        render(<LibraryView />);
+        render(
+            <MemoryRouter>
+                <LibraryView />
+            </MemoryRouter>
+        );
 
         const searchInput = screen.getByTestId('library-search-input');
         fireEvent.change(searchInput, { target: { value: 'Harry Potter' } });
@@ -206,7 +231,11 @@ describe('LibraryView', () => {
             addBook: mockAddBook as any
         });
 
-        render(<LibraryView />);
+        render(
+            <MemoryRouter>
+                <LibraryView />
+            </MemoryRouter>
+        );
         const dropZone = screen.getByTestId('library-view');
 
         const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
@@ -230,7 +259,11 @@ describe('LibraryView', () => {
             addBook: mockAddBook as any
         });
 
-        render(<LibraryView />);
+        render(
+            <MemoryRouter>
+                <LibraryView />
+            </MemoryRouter>
+        );
         const dropZone = screen.getByTestId('library-view');
 
         const file = new File(['dummy'], 'test.pdf', { type: 'application/pdf' });
