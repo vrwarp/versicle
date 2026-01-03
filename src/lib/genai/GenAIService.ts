@@ -13,7 +13,7 @@ export interface GenAILogEntry {
 class GenAIService {
   private static instance: GenAIService;
   private genAI: GoogleGenerativeAI | null = null;
-  private modelId: string = 'gemini-2.5-flash-lite';
+  private modelId: string = 'gemini-flash-lite-latest';
   private logCallback: ((entry: GenAILogEntry) => void) | null = null;
 
   private constructor() {}

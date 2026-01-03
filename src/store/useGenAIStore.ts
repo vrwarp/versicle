@@ -31,7 +31,7 @@ export const useGenAIStore = create<GenAIState>()(
   persist(
     (set, get) => ({
       apiKey: '',
-      model: 'gemini-2.5-flash-lite',
+      model: 'gemini-flash-lite-latest',
       isEnabled: false,
       isContentAnalysisEnabled: false,
       contentFilterSkipTypes: ['footnote', 'table'],

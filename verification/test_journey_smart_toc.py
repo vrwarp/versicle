@@ -19,7 +19,7 @@ def test_smart_toc_success(page):
     ]
 
     page.evaluate(f"""() => {{
-        localStorage.setItem('genai-storage', JSON.stringify({{ state: {{ isEnabled: true, apiKey: 'mock-key', model: 'gemini-2.5-flash-lite' }}, version: 0 }}));
+        localStorage.setItem('genai-storage', JSON.stringify({{ state: {{ isEnabled: true, apiKey: 'mock-key', model: 'gemini-flash-lite-latest' }}, version: 0 }}));
         localStorage.setItem('mockGenAIResponse', '{json.dumps(mock_response)}');
     }}""")
 
@@ -81,7 +81,7 @@ def test_smart_toc_failure(page):
     # 1. Missing Key Scenario
     print("--- Scenario 1: Missing Key ---")
     page.evaluate("""() => {
-        localStorage.setItem('genai-storage', JSON.stringify({ state: { isEnabled: true, apiKey: '', model: 'gemini-2.5-flash-lite' }, version: 0 }));
+        localStorage.setItem('genai-storage', JSON.stringify({ state: { isEnabled: true, apiKey: '', model: 'gemini-flash-lite-latest' }, version: 0 }));
         localStorage.removeItem('mockGenAIResponse');
         localStorage.removeItem('mockGenAIError');
     }""")
@@ -119,7 +119,7 @@ def test_smart_toc_failure(page):
     # Reset history state to ensure sidebar is closed after reload
     page.evaluate("history.replaceState(null, '')")
     page.evaluate("""() => {
-        localStorage.setItem('genai-storage', JSON.stringify({ state: { isEnabled: true, apiKey: 'mock-key', model: 'gemini-2.5-flash-lite' }, version: 0 }));
+        localStorage.setItem('genai-storage', JSON.stringify({ state: { isEnabled: true, apiKey: 'mock-key', model: 'gemini-flash-lite-latest' }, version: 0 }));
         localStorage.setItem('mockGenAIError', 'true');
     }""")
     page.reload()
