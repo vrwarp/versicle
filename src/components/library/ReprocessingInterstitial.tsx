@@ -111,6 +111,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
       onClose={() => {}} // Disable closing
       title="Optimizing Book Content"
       description="We are updating this book to the latest version. This ensures the best reading experience and only happens once."
+      hideCloseButton={true}
     >
       <div className="flex flex-col items-center justify-center py-4 space-y-6">
         <div className="relative flex items-center justify-center py-4">
