@@ -373,6 +373,14 @@ The critical bridge between React and the imperative `epub.js` library.
     *   **Context Menu**: Blocks the default context menu to improve the mobile long-press experience.
 *   **Location**: Generates and caches location data to allow accurate scrollbar progress.
 
+#### CFI Normalization & Precise Grouping (`src/lib/cfi-utils.ts`)
+*   **Goal**: Ensure annotations and TTS playback align perfectly with logical text blocks (paragraphs, tables), rather than arbitrary DOM nodes.
+*   **Logic**:
+    *   **Precise Grouping**: Uses a heuristic to snap CFIs to "Known Block Roots" (like `<table>` or `<figure>`).
+    *   **Leaf Stripping**: For general text, it strips leaf offsets to target the containing block element.
+    *   **Safe Parsing**: Prioritizes known roots over standard CFI parsing and uses boundary-safe string matching to prevent false positives.
+*   **Trade-off**: Sacrifices granular addressing within complex structures. It is impossible to highlight a single cell in a table or a specific span within a figure caption; the entire block is treated as the atomic unit.
+
 ---
 
 ### State Management (`src/store/`)

@@ -31,6 +31,7 @@
 ## Features
 
 ### Reading (The "Reading Room")
+*   **Satellite FAB**: A dedicated floating action button for quick access to playback controls and menu actions.
 *   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
 *   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
 *   **Drag & Drop**: Drag files anywhere to import.
