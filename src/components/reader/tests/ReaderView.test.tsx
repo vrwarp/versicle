@@ -14,7 +14,8 @@ vi.mock('../../../db/db', () => ({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get: vi.fn((store, id) => {
       if (store === 'files') return Promise.resolve(new ArrayBuffer(10));
-      if (store === 'books') return Promise.resolve({ title: 'Test Book', version: 1 });
+      // Use version 2 to prevent redirect in ReaderView
+      if (store === 'books') return Promise.resolve({ title: 'Test Book', version: 2 });
       return Promise.resolve(null);
     }),
     getAllFromIndex: vi.fn(() => Promise.resolve([])), // Mock annotations fetch
@@ -122,7 +123,7 @@ describe('ReaderView', () => {
       setIsLoading: (isLoading) => useReaderStore.setState({ isLoading }),
       setCurrentBookId: (id) => useReaderStore.setState({ currentBookId: id }),
       viewMode: 'paginated', // Default for tests
-      immersiveMode: true, // Needed for input controller to listen
+      immersiveMode: false, // Default to false so header is visible
     });
 
     useTTSStore.setState({
@@ -159,6 +160,19 @@ describe('ReaderView', () => {
     renderComponent();
 
     await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+
+    // UnifiedInputController is always rendered, but its mock might rely on internal state or context?
+    // In ReaderView, it renders:
+    // <UnifiedInputController ... immersiveMode={immersiveMode} />
+
+    // We mocked UnifiedInputController to render a div with testid="unified-input-controller"
+    // and buttons mock-prev / mock-next.
+
+    // If it's not found, maybe the condition for rendering it failed?
+    // ReaderView always renders it.
+
+    // Wait for the mock component to appear
+    await waitFor(() => expect(screen.getByTestId('unified-input-controller')).toBeInTheDocument());
 
     // Click mock buttons exposed by UnifiedInputController mock
     const prevBtn = screen.getByTestId('mock-prev');
