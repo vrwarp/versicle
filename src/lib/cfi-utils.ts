@@ -34,6 +34,15 @@ export function parseCfiRange(range: string): CfiRangeData | null {
 }
 
 /**
+ * Extracts the last numeric step index from a CFI path.
+ * e.g. epubcfi(/6/4!/4/2) -> 2
+ */
+export function getLastStepIndex(cfi: string): number {
+    const match = cfi.match(/\/(\d+)[^/]*\)?$/);
+    return match ? parseInt(match[1], 10) : -1;
+}
+
+/**
  * Extracts the parent block-level CFI from a given CFI string.
  * This handles both range CFIs and point/standard CFIs.
  * 
@@ -43,55 +52,67 @@ export function parseCfiRange(range: string): CfiRangeData | null {
 export function getParentCfi(cfi: string): string {
     if (!cfi) return 'unknown';
 
+    let spine = '';
+    let path = '';
+    let isRange = false;
+
     // 1. Try parsing as a Range CFI (epubcfi(parent, start, end))
     const parsed = parseCfiRange(cfi);
     if (parsed) {
-        return `epubcfi(${parsed.parent})`;
-    }
-
-    // 2. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
-    if (cfi.startsWith('epubcfi(')) {
+        isRange = true;
+        const parts = parsed.parent.split('!');
+        spine = parts[0];
+        path = parts[1] || '';
+    } else if (cfi.startsWith('epubcfi(')) {
+        // 2. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
         try {
             const content = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
             const parts = content.split('!');
-            const spine = parts[0];
-            const path = parts[1];
-
-            if (path) {
-                // Heuristic: The text node is usually the last component (e.g. /4/2/1:0)
-                // We want the parent block element (e.g. /4/2).
-                const pathParts = path.split('/');
-                
-                // Filter empty strings from split
-                const cleanParts = pathParts.filter(p => p.length > 0);
-
-                // HEURISTIC: Structural Snapping
-                // If a path is deep (e.g. > 5 steps), it's likely a Table, List, or complex Sidebar.
-                // We snap to a fixed "Container Depth" (Level 4) to force them into one group.
-                // e.g. /14/2/2/10/2 -> /14/2/2 (Table Body)
-                if (cleanParts.length > 4) {
-                    return `epubcfi(${spine}!/${cleanParts.slice(0, 4).join('/')})`;
-                }
-
-                // Standard leaf-stripping for shallow paths
-                if (cleanParts.length > 0) {
-                    cleanParts.pop();
-                }
-
-                return cleanParts.length === 0
-                    ? `epubcfi(${spine}!)`
-                    : `epubcfi(${spine}!/${cleanParts.join('/')})`;
-            } else {
-                // Just spine item reference
-                return `epubcfi(${spine}!)`;
-            }
+            spine = parts[0];
+            path = parts[1] || '';
         } catch (e) {
             console.warn("Failed to extract parent CFI", e);
         }
     }
 
-    // Return original if we can't parse it (or 'unknown' based on preference, but original might be safer for grouping)
-    return cfi;
+    // Return original if we can't parse it
+    if (!spine) return cfi;
+
+    if (path) {
+        // Heuristic: The text node is usually the last component (e.g. /4/2/1:0)
+        // We want the parent block element (e.g. /4/2).
+        const pathParts = path.split('/');
+
+        // Filter empty strings from split
+        const cleanParts = pathParts.filter(p => p.length > 0);
+
+        // HEURISTIC: Structural Snapping
+        // Snap to "Container Depth" (Total Level 4)
+        // e.g. /6/14!/4/2 (Spine depth 2 + Path depth 2 = 4)
+        // e.g. /14/2/2/10/2 (Spine depth ? + Path depth 4) -> Snap to 4 total?
+
+        // Calculate spine depth
+        const spineDepth = spine.split('/').filter(p => p.length > 0).length;
+        const targetPathDepth = Math.max(1, 4 - spineDepth);
+
+        if (cleanParts.length > targetPathDepth) {
+            return `epubcfi(${spine}!/${cleanParts.slice(0, targetPathDepth).join('/')})`;
+        }
+
+        // Standard leaf-stripping for shallow paths
+        // We only pop if it's NOT a Range CFI. Range CFIs already point to the common ancestor container.
+        // Point CFIs point to a text node (leaf), so we want the parent element.
+        if (!isRange && cleanParts.length > 0) {
+            cleanParts.pop();
+        }
+
+        return cleanParts.length === 0
+            ? `epubcfi(${spine}!)`
+            : `epubcfi(${spine}!/${cleanParts.join('/')})`;
+    } else {
+        // Just spine item reference
+        return `epubcfi(${spine}!)`;
+    }
 }
 
 export function generateCfiRange(start: string, end: string): string {
@@ -126,12 +147,6 @@ export function generateCfiRange(start: string, end: string): string {
             const char = start[i];
             // If remainder starts with separator, it's a good split point
             // AND both strings are identical at this point (part of common prefix)
-            // Note: start[i] === end[i] is guaranteed for i < split point found in first loop,
-            // but we need to ensure we are back in the common region.
-            // Since we only decrease i from the divergence point, start[i] === end[i] should be true
-            // unless we started at divergence point where they differ.
-            // Wait, at divergence point i, start[i] !== end[i].
-            // So we must check start[i] === end[i].
             if (delimiters.includes(char) && start[i] === end[i]) {
                  break;
             }
@@ -224,14 +239,6 @@ export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
     return merged.map(r => generateCfiRange(r.rawStart, r.rawEnd));
 }
 
-/**
- * Generates a CFI string for a given DOM Range relative to a base Spine CFI.
- * This is used for decoupled extraction where we don't have a rendered view.
- *
- * @param range - The DOM Range to generate a CFI for.
- * @param baseCfi - The base CFI for the spine item (e.g. "epubcfi(/6/14[chapter1_id]!)").
- * @returns A full CFI string (e.g. "epubcfi(/6/14[chapter1_id]!/4/2/1:0,/4/2/1:10)").
- */
 export function generateEpubCfi(range: Range, baseCfi: string): string {
     try {
         let baseComponent = baseCfi;
@@ -252,20 +259,9 @@ export function generateEpubCfi(range: Range, baseCfi: string): string {
     }
 }
 
-/**
- * Snaps a CFI to the nearest sentence boundary.
- *
- * @param book - The epub.js Book instance.
- * @param cfi - The CFI to snap.
- * @returns The snapped CFI, or the original if snapping failed.
- *
- * @warning This function is asynchronous and relies on the Book instance being active.
- * Do NOT use this in component cleanup/unmount phases where the Book instance might be destroyed.
- */
 export async function snapCfiToSentence(book: Book, cfi: string): Promise<string> {
     try {
         // Lifecycle safety check: ensure book instance is valid
-        // Prevents crash during reader destruction if called late
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (!book || !(book as any).spine) {
             console.warn('snapCfiToSentence: Book instance is destroyed or invalid. Returning raw CFI.');

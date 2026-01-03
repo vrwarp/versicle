@@ -3,7 +3,7 @@ import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
-import { getParentCfi, generateCfiRange, parseCfiRange } from '../cfi-utils';
+import { getParentCfi, generateCfiRange, parseCfiRange, getLastStepIndex } from '../cfi-utils';
 import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
@@ -339,22 +339,53 @@ export class AudioContentPipeline {
             const fullCfi = s.cfi || '';
             const parentCfi = getParentCfi(fullCfi);
 
-            // Helper to check if the current group already "contains" this new parent
-            const currentParentBase = currentGroup ? currentGroup.parentCfi.replace(/\)$/, '') : '';
-            const newParentBase = parentCfi.replace(/\)$/, '');
+            // Determine if we should merge with current group
+            let shouldMerge = false;
 
-            // Check if one path is a prefix of the other, confirming they belong to the same branch.
-            // We verify that the prefix match is followed by a separator or is the end of string
-            // to avoid false positives (e.g. "/1" matching "/10").
-            const isDescendant = currentGroup && newParentBase.startsWith(currentParentBase) &&
-                (newParentBase.length === currentParentBase.length || ['/', '!', ':'].includes(newParentBase[currentParentBase.length]));
+            if (currentGroup) {
+                const parentA = currentGroup.parentCfi;
+                const parentB = parentCfi;
 
-            const isAncestor = currentGroup && currentParentBase.startsWith(newParentBase) &&
-                (currentParentBase.length === newParentBase.length || ['/', '!', ':'].includes(currentParentBase[newParentBase.length]));
+                // Rule 1: Vertical Ancestry (Original logic)
+                // Helper to check if the current group already "contains" this new parent
+                const currentParentBase = parentA.replace(/\)$/, '');
+                const newParentBase = parentB.replace(/\)$/, '');
 
-            const isInternalNode = isDescendant || isAncestor;
+                const isDescendant = newParentBase.startsWith(currentParentBase) &&
+                    (newParentBase.length === currentParentBase.length || ['/', '!', ':'].includes(newParentBase[currentParentBase.length]));
 
-            if (!currentGroup || !isInternalNode) {
+                const isAncestor = currentParentBase.startsWith(newParentBase) &&
+                    (currentParentBase.length === newParentBase.length || ['/', '!', ':'].includes(currentParentBase[newParentBase.length]));
+
+                if (isDescendant || isAncestor) {
+                    shouldMerge = true;
+                } else {
+                    const lastSegment = currentGroup.segments[currentGroup.segments.length - 1];
+                    const parentLast = getParentCfi(lastSegment.cfi);
+
+                    // Rule 2: Structural Proximity (The Table Rule)
+                    const grandParentLast = getParentCfi(parentLast);
+                    const grandParentB = getParentCfi(parentB);
+
+                    if (grandParentLast === grandParentB) {
+                        const indexLast = getLastStepIndex(parentLast);
+                        const indexB = getLastStepIndex(parentB);
+
+                        if (indexLast !== -1 && indexB !== -1 && Math.abs(indexLast - indexB) <= 4) {
+                            shouldMerge = true;
+                        }
+                    }
+
+                    // Rule 3: Content-Led Merging (The Label Rule)
+                    if (!shouldMerge && lastSegment && lastSegment.text.length < 15) {
+                        if (grandParentLast === grandParentB) {
+                            shouldMerge = true;
+                        }
+                    }
+                }
+            }
+
+            if (!currentGroup || !shouldMerge) {
                 if (currentGroup) {
                     finalizeGroup(currentGroup);
                 }

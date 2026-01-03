@@ -189,22 +189,22 @@ describe('cfi-utils', () => {
         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2)');
     });
 
-    it('does not truncate deep paths (previously heuristic)', () => {
+    it('snaps deep paths to container depth (unified snapping)', () => {
         // Path: /4/2/4/2/1:10
-        // Parts: ['4', '2', '4', '2', '1:10'] (Length 5)
-        // Truncate to: ['4', '2', '4', '2']
-        // New behavior: should preserve full path (minus leaf)
+        // New behavior: Snap to container depth (Total 4)
+        // Spine /6/2 (2). Target 2.
+        // /4/2/4/2/1:10 -> /4/2
         const cfi = 'epubcfi(/6/2!/4/2/4/2/1:10)';
-        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2/4/2)');
+        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2)');
     });
 
-    it('does not truncate very deep paths (e.g. tables)', () => {
-         // Path: /4/2/48/2/2/2/2/2 (Length 8)
-         // Behavior Change: We NOW snap to depth 4 if path is > 4
+    it('snaps very deep paths (e.g. tables) to container depth', () => {
+         // Path: /4/2/48/2/2/2/2/2
+         // Behavior Change: Snap to Total 4
+         // Spine /6/38 (2). Target 2.
          const cfi = 'epubcfi(/6/38!/4/2/48/2/2/2/2/2)';
-         // Parts: 4, 2, 48, 2, 2, 2, 2, 2. Length 8.
-         // Snap to 4: 4, 2, 48, 2.
-         expect(getParentCfi(cfi)).toBe('epubcfi(/6/38!/4/2/48/2)');
+         // Snap to /4/2
+         expect(getParentCfi(cfi)).toBe('epubcfi(/6/38!/4/2)');
     });
 
     it('handles CFI pointing to root of spine item (no internal path)', () => {
