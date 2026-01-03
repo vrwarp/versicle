@@ -100,11 +100,15 @@ describe('Normalization (NFKD)', () => {
       expect(segmentsInside[0].text).not.toContain(nbsp);
     });
 
-    it('should normalize text in refineSegments', () => {
+    it('should assume normalized text in refineSegments (optimization contract)', () => {
+        // NOTE: refineSegments no longer normalizes internally for performance.
+        // It assumes input comes from TextSegmenter.segment() which DOES normalize.
         const nbsp = '\u00A0';
+
+        // Simulating the contract: Input must be normalized before calling refineSegments
         const sentences = [
-            { text: `Sentence${nbsp}1.`, cfi: 'cfi1' },
-            { text: `Sentence${nbsp}2.`, cfi: 'cfi2' }
+            { text: `Sentence${nbsp}1.`.normalize('NFKD'), cfi: 'cfi1' },
+            { text: `Sentence${nbsp}2.`.normalize('NFKD'), cfi: 'cfi2' }
         ];
 
         const refined = TextSegmenter.refineSegments(
