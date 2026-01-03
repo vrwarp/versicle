@@ -31,16 +31,24 @@ function App() {
       if ('serviceWorker' in navigator) {
         try {
           await navigator.serviceWorker.ready;
-          if (!navigator.serviceWorker.controller) {
-             setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
-             // We don't return here because we still want to set swInitialized to true
-             // so the error screen can be rendered by the main logic if we choose to.
-             // But actually, if we have an error, we should block.
-          }
+
+          // Poll for controller
+          await new Promise<void>((resolve, reject) => {
+             const checkController = (count: number) => {
+               if (navigator.serviceWorker.controller) {
+                 resolve();
+               } else if (count > 10) {
+                 reject(new Error(`Controller still not ready after ${count} attempts`));
+               } else {
+                 setTimeout(() => checkController(count + 1), 100);
+               }
+             };
+             checkController(1);
+          });
+
         } catch (e) {
           console.error('Service Worker wait failed:', e);
-          // If waiting fails, we probably should show error too if it's critical.
-          // But strict requirement is checking controller.
+          setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
         }
       }
       setSwInitialized(true);

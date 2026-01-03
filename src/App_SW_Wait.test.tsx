@@ -18,7 +18,7 @@ vi.mock('./db/DBService', () => ({
 vi.mock('react-router-dom', () => ({
   BrowserRouter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Routes: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Route: () => null,
+  Route: ({ element }: { element: React.ReactNode }) => <div>{element}</div>,
   useNavigate: vi.fn(),
 }));
 
@@ -49,6 +49,7 @@ describe('App Service Worker Wait', () => {
     Object.defineProperty(window.navigator, 'serviceWorker', {
       value: {
         ready: readyPromise,
+        get controller() { return { postMessage: vi.fn() }; },
         register: vi.fn(),
       },
       configurable: true,
@@ -102,28 +103,82 @@ describe('App Service Worker Wait', () => {
     consoleSpy.mockRestore();
   });
 
-  it('shows critical error if Service Worker controller is missing', async () => {
+  it('shows critical error if Service Worker controller is missing after polling', async () => {
     // Mock navigator.serviceWorker with ready but no controller
     const readyPromise = Promise.resolve();
     Object.defineProperty(window.navigator, 'serviceWorker', {
       value: {
         ready: readyPromise,
-        controller: null, // explicit null
+        get controller() { return null; }, // Always null
         register: vi.fn(),
       },
       configurable: true,
       writable: true,
     });
 
+    vi.useFakeTimers();
     render(<App />);
 
     // Initially initializing
     expect(screen.getByText('Initializing...')).toBeInTheDocument();
 
+    // Fast-forward timers to exhaust retries
+    // 10 retries * 100ms = 1000ms
+    // We need to advance enough times to cover the recursion.
+    // Each tick of the promise chain might need resolution.
+    // Advancing in loop ensures promise ticks are processed between timer ticks.
+    for (let i = 0; i < 15; i++) {
+        await vi.advanceTimersByTimeAsync(100);
+    }
+
+    // Switch to real timers before waitFor so it doesn't hang
+    vi.useRealTimers();
+
     // Then shows error
     await waitFor(() => {
         expect(screen.getByText('Critical Error')).toBeInTheDocument();
         expect(screen.getByText(/Service Worker failed to take control/)).toBeInTheDocument();
+    });
+  });
+
+  it('initializes successfully if controller appears during polling', async () => {
+    const readyPromise = Promise.resolve();
+    let controllerValue: unknown = null;
+
+    Object.defineProperty(window.navigator, 'serviceWorker', {
+      value: {
+        ready: readyPromise,
+        get controller() { return controllerValue; },
+        register: vi.fn(),
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    vi.useFakeTimers();
+    render(<App />);
+
+    // Initially no controller
+    expect(screen.getByText('Initializing...')).toBeInTheDocument();
+
+    // Make controller appear after some time (e.g., 300ms = 3rd retry)
+    // We update the local variable, which the getter will return
+    setTimeout(() => {
+        controllerValue = { postMessage: vi.fn() };
+    }, 300);
+
+    for (let i = 0; i < 15; i++) {
+        await vi.advanceTimersByTimeAsync(100);
+    }
+
+    // Switch to real timers before waitFor so it doesn't hang
+    vi.useRealTimers();
+
+    // Should NOT show error, should show LibraryView
+    await waitFor(() => {
+        expect(screen.queryByText('Initializing...')).not.toBeInTheDocument();
+        expect(screen.queryByText('Critical Error')).not.toBeInTheDocument();
+        expect(screen.getByText('Library View')).toBeInTheDocument();
     });
   });
 });
