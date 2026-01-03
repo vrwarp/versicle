@@ -11,15 +11,28 @@ import { PlaybackStateManager, type PlaybackStateSnapshot } from './PlaybackStat
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
 
+/**
+ * Defines the possible states of the TTS playback.
+ */
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
+/**
+ * Represents a single item in the TTS playback queue.
+ */
 export interface TTSQueueItem {
+    /** The text content to be spoken. */
     text: string;
+    /** The Canonical Fragment Identifier (CFI) for the location in the book. */
     cfi: string | null;
+    /** Optional chapter title. */
     title?: string;
+    /** Optional author name. */
     author?: string;
+    /** Optional book title. */
     bookTitle?: string;
+    /** Optional cover image URL. */
     coverUrl?: string;
+    /** Indicates if this item is a pre-roll announcement. */
     isPreroll?: boolean;
 }
 
@@ -31,11 +44,20 @@ export interface DownloadInfo {
 
 type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: ReadonlyArray<TTSQueueItem>, error: string | null, downloadInfo?: DownloadInfo) => void;
 
+/**
+ * Singleton service that manages Text-to-Speech playback.
+ * Handles queue management, provider switching (Local/Cloud), synchronization,
+ * media session integration, and state persistence.
+ */
 export class AudioPlayerService {
     private static instance: AudioPlayerService;
 
+    // Components
+    // TaskSequencer ensures async operations are executed serially to prevent race conditions.
     private taskSequencer = new TaskSequencer();
+    // AudioContentPipeline handles loading content, GenAI filtering, and text refinement.
     private contentPipeline = new AudioContentPipeline();
+    // PlaybackStateManager manages the queue, current index, and position calculations.
     private stateManager = new PlaybackStateManager();
 
     private providerManager: TTSProviderManager;
