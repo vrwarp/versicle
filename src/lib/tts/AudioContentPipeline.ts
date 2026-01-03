@@ -370,7 +370,7 @@ export class AudioContentPipeline {
             }
 
             currentGroup.segments.push(s);
-            currentGroup.fullText += s.text + ' ';
+            currentGroup.fullText += s.text + '\n';
         }
 
         if (currentGroup) {
