@@ -35,6 +35,7 @@ import { useSidebarState } from '../../hooks/useSidebarState';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { ContentAnalysisLegend } from './ContentAnalysisLegend';
 import { TYPE_COLORS } from '../../types/content-analysis';
+import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 
 /**
  * The main reader interface component.
@@ -249,7 +250,15 @@ export const ReaderView: React.FC = () => {
 
   useEffect(() => {
     metadataRef.current = metadata;
-  }, [metadata]);
+
+    // Check version and redirect if outdated
+    if (metadata) {
+        const effectiveVersion = metadata.version ?? 0;
+        if (effectiveVersion < CURRENT_BOOK_VERSION && id) {
+             navigate('/', { state: { reprocessBookId: id } });
+        }
+    }
+  }, [metadata, id, navigate]);
 
   const bookRef = useRef(book);
   useEffect(() => {

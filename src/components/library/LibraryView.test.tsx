@@ -17,6 +17,13 @@ vi.mock('./EmptyLibrary', () => ({
     EmptyLibrary: () => <div data-testid="empty-library">Empty Library</div>
 }));
 
+// Mock ReprocessingInterstitial
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+vi.mock('./ReprocessingInterstitial', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ReprocessingInterstitial: ({ isOpen }: any) => isOpen ? <div data-testid="reprocessing-interstitial">Processing...</div> : null
+}));
+
 // Mock useToastStore
 vi.mock('../../store/useToastStore', () => ({
   useToastStore: vi.fn(),
@@ -277,6 +284,32 @@ describe('LibraryView', () => {
         await waitFor(() => {
             expect(mockAddBook).not.toHaveBeenCalled();
             expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Only .epub files'), 'error');
+        });
+    });
+
+    it('triggers reprocessing workflow when redirect state is present', async () => {
+        render(
+            <MemoryRouter initialEntries={[{ pathname: '/', state: { reprocessBookId: 'book-123' } }]}>
+                <LibraryView />
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('reprocessing-interstitial')).toBeInTheDocument();
+        });
+    });
+
+    it('clears reprocessing state after triggering', async () => {
+        const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
+
+        render(
+            <MemoryRouter initialEntries={[{ pathname: '/', state: { reprocessBookId: 'book-123' } }]}>
+                <LibraryView />
+            </MemoryRouter>
+        );
+
+        await waitFor(() => {
+            expect(replaceStateSpy).toHaveBeenCalledWith({}, expect.any(String));
         });
     });
 });
