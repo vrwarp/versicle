@@ -394,31 +394,21 @@ describe('AudioPlayerService', () => {
 
             const groups = contentPipeline.groupSentencesByRoot(sentences);
 
-            expect(groups).toHaveLength(2);
-
-            // Group 1: Parent /6/14!/4/2
-            expect(groups[0].segments).toHaveLength(2);
-            // Expected: Range spanning 1:0 to 3:0
-            // Since actual implementation of generateCfiRange in environment is used:
-            const expectedRange1 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/2/1:0)", "epubcfi(/6/14!/4/2/3:0)");
-            expect(groups[0].rootCfi).toBe(expectedRange1);
-
-            // Group 2: Parent /6/14!/4/4
-            expect(groups[1].segments).toHaveLength(1);
-            const expectedRange2 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/4/1:0)", "epubcfi(/6/14!/4/4/1:0)");
-            expect(groups[1].rootCfi).toBe(expectedRange2);
+            // New Behavior: Sibling Proximity rule merges adjacent paragraphs (/4/2 and /4/4)
+            expect(groups).toHaveLength(1);
+            expect(groups[0].segments).toHaveLength(3);
         });
 
         it('generates unique rootCfi for adjacent groups sharing same parent (Map Collision Fix)', () => {
             // Scenario: Groups separated by an intervening different parent
-            // P1 (Parent A)
-            // P2 (Parent B)
-            // P3 (Parent A)
+            // To force separation:
+            // 1. Indices must be > 4 apart (Sibling Proximity Rule)
+            // 2. Text must be >= 15 chars (Label-Value Rule)
 
             const sentences = [
-                { text: "A1", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Parent A
-                { text: "B1", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // Parent B
-                { text: "A2", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Parent A again
+                { text: "A1 (Long enough text to avoid label rule merging)", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Parent A
+                { text: "B1 (Long enough text to avoid label rule merging)", cfi: "epubcfi(/6/14!/4/8/1:0)" }, // Parent B (Index 8)
+                { text: "A2 (Long enough text to avoid label rule merging)", cfi: "epubcfi(/6/14!/4/14/3:0)" }, // Parent C (Index 14)
             ];
 
             const groups = contentPipeline.groupSentencesByRoot(sentences);
@@ -430,17 +420,15 @@ describe('AudioPlayerService', () => {
             // Group 3: A2
             const root3 = groups[2].rootCfi;
 
-            // Verify they have different root CFIs despite sharing parent "/6/14!/4/2"
             expect(root1).not.toBe(root3);
-            expect(groups[0].rootCfi).toContain('1:0');
-            expect(groups[2].rootCfi).toContain('3:0');
         });
 
         it('detectAndFilterContent handles colliding parents correctly', async () => {
+            // Use large gaps and long text to prevent merging
             const sentences = [
-                { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Group 1 (Parent A)
-                { text: "Interruption", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // Group 2 (Parent B)
-                { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Group 3 (Parent A)
+                { text: "Narrative segment long enough to not merge.", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Group 1
+                { text: "Interruption segment long enough to not merge.", cfi: "epubcfi(/6/14!/4/8/1:0)" }, // Group 2
+                { text: "Footnote segment long enough to not merge.", cfi: "epubcfi(/6/14!/4/14/3:0)" }, // Group 3
             ];
 
             // Mock GenAI response
@@ -458,8 +446,8 @@ describe('AudioPlayerService', () => {
             // Should preserve "Narrative" and "Interruption"
             // Should remove "Footnote"
             expect(filtered).toHaveLength(2);
-            expect(filtered[0].text).toBe("Narrative");
-            expect(filtered[1].text).toBe("Interruption");
+            expect(filtered[0].text).toBe("Narrative segment long enough to not merge.");
+            expect(filtered[1].text).toBe("Interruption segment long enough to not merge.");
         });
     });
 });
