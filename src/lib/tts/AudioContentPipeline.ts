@@ -101,6 +101,7 @@ export class AudioContentPipeline {
                             text: s.text,
                             cfi: s.cfi,
                             sourceIndices: s.sourceIndices,
+                            isSkipped: false,
                             title: title,
                             bookTitle: bookMetadata?.title,
                             author: bookMetadata?.author,
