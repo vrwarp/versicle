@@ -282,6 +282,11 @@ export class TextSegmenter {
                              last.cfi = generateCfiRange(startPoint, endPoint);
                         }
 
+                        // Merge Source Indices
+                        if (current.sourceIndices) {
+                            last.sourceIndices = (last.sourceIndices || []).concat(current.sourceIndices);
+                        }
+
                         continue;
                     }
                 }
@@ -333,6 +338,11 @@ export class TextSegmenter {
                 if (startPoint && endPoint) {
                     buffer.cfi = generateCfiRange(startPoint, endPoint);
                 }
+
+                // Merge Source Indices
+                if (current.sourceIndices) {
+                    buffer.sourceIndices = (buffer.sourceIndices || []).concat(current.sourceIndices);
+                }
             } else {
                 lengthMerged.push(buffer);
                 buffer = { ...current };
@@ -353,6 +363,11 @@ export class TextSegmenter {
 
                 if (startPoint && endPoint) {
                     last.cfi = generateCfiRange(startPoint, endPoint);
+                }
+
+                // Merge Source Indices
+                if (buffer.sourceIndices) {
+                    last.sourceIndices = (last.sourceIndices || []).concat(buffer.sourceIndices);
                 }
             } else {
                 lengthMerged.push(buffer);

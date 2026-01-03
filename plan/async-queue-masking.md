@@ -1,12 +1,12 @@
 Technical Design: Asynchronous Queue Masking for Low-Latency TTS
 ================================================================
 
-1\. Objective
+1. Objective
 -------------
 
 Versicle's Text-to-Speech (TTS) engine employs an "Optimistic UI" pattern to eliminate playback latency caused by expensive generative content analysis. By decoupling initial text segmentation from structural filtering (e.g., identifying tables, footnotes, or asides), the system achieves near-instantaneous "Time to First Word" while refining the audible timeline asynchronously.
 
-2\. Conceptual Framework: The Virtualized Timeline
+2. Conceptual Framework: The Virtualized Timeline
 --------------------------------------------------
 
 The core innovation is the transition from physical queue mutation to logical timeline projection. In traditional systems, filtering content involves splicing or re-indexing arrays, which creates complex race conditions when background tasks compete with user navigation.
@@ -31,7 +31,7 @@ The `PlaybackStateManager` acts as a projection layer, mapping the Physical Time
 
 -   **Virtual Duration**: The sum of character lengths for all non-skipped segments, adjusted by the playback speed multiplier.
 
-3\. Algorithm Details
+3. Algorithm Details
 ---------------------
 
 ### 3.1 Adaptive Prefix Sums
@@ -85,7 +85,7 @@ The `AudioContentPipeline` manages the coordination between raw text extraction 
 
 1.  **Fast Path Mapping**: During initial segmentation, `AudioContentPipeline` maintains a mapping of the logical indices (merged segments) to their source raw indices.
 
-    -   **Structure**: `Map<MergedIndex, RawIndex[]>`
+    -   **Structure**: `TTSQueueItem` contains `sourceIndices: number[]`.
 
 2.  **Slow Path Execution**: Generative analysis (via `GenAIService`) identifies non-readable structural blocks, marking specific **raw indices** as candidates for skipping based on user settings.
 
@@ -94,33 +94,33 @@ The `AudioContentPipeline` manages the coordination between raw text extraction 
 4.  **Dispatch Phase**:
 
     ```
-    function reconcileMask(mergedToRawMap, rawSkipStatus):
-        indicesToSkip = []
-        for mergedIndex in mergedToRawMap:
-            rawIndices = mergedToRawMap[mergedIndex]
+    // Pseudocode for callback-based dispatch
+    function loadSection(..., onMaskFound) {
+        // 1. Build Queue synchronously
+        queue = buildQueue()
 
-            // Merged segment is skipped ONLY if all constituents are skipped
-            shouldSkipMerged = true
-            for rawIndex in rawIndices:
-                if rawSkipStatus[rawIndex] is false:
-                    shouldSkipMerged = false
-                    break
+        // 2. Trigger Async Analysis
+        detectContentSkipMask(..., onMaskFound)
 
-            if shouldSkipMerged is true:
-                indicesToSkip.push(mergedIndex)
+        return queue
+    }
 
-        dispatch markIndicesAsSkipped(indicesToSkip)
-
+    // In AudioPlayerService
+    onMaskFound = (mask) => {
+        enqueue(() => {
+             stateManager.applySkippedMask(mask)
+        })
+    }
     ```
 
-4\. State Synchronization & Concurrency
+4. State Synchronization & Concurrency
 ---------------------------------------
 
 ### 4.1 The Stale Update Guard (Section Keying)
 
 Because analysis is asynchronous, a result for "Chapter 1" might arrive after the user has navigated to "Chapter 2."
 
-**Solution**: The `AudioPlayerService` stamps every analysis request with the `sectionId`. Upon callback, it validates that the `currentSectionId` matches the request stamp. If they do not match, the update is discarded.
+**Solution**: The `AudioPlayerService` validates that the `currentSectionId` matches the request stamp before applying the mask.
 
 ### 4.2 Playback Continuity Logic
 
@@ -132,7 +132,7 @@ If the *currently playing* item is marked as `isSkipped` by a background task:
 
 -   **Transition**: Since the `next()` logic is updated immediately upon the masking event, the "jump" to the next visible content occurs naturally at the next sentence boundary.
 
-5\. Architectural Invariants
+5. Architectural Invariants
 ----------------------------
 
 1.  **Initial Load Ceiling**: The time required to start audio must never exceed local regex segmentation and DB read time (<100ms).
@@ -141,7 +141,7 @@ If the *currently playing* item is marked as `isSkipped` by a background task:
 
 3.  **UI/Audio Parity**: The `TTSQueue` component filters items based on `isSkipped` for visual consistency.
 
-6\. Implementation Notes for PlaybackStateManager
+6. Implementation Notes for PlaybackStateManager
 -------------------------------------------------
 
 -   **Caching**: Prefix sums are cached and only recomputed when the mask changes.
@@ -153,3 +153,12 @@ If the *currently playing* item is marked as `isSkipped` by a background task:
     percentage = (currentOffset / totalVirtualLength) * 100
 
     ```
+
+7. Implementation Deviations & Discoveries
+------------------------------------------
+
+1.  **Explicit Source Mapping**: Instead of an external map, `TTSQueueItem` directly carries `sourceIndices: number[]`. This simplifies state management and persistence, as the "lineage" of a merged sentence is preserved directly in the data structure.
+2.  **CFI Range Generation**: Discovered a regression in `generateCfiRange` where it would aggressively backtrack from valid end-of-string boundaries. Fixed logic to respect exact matches and only backtrack if the common prefix ends mid-step.
+3.  **Raw Index Consistency**: `TextSegmenter` was updated to initialize `sourceIndices` (0..N) on raw sentences before merging. This ensures that even after complex merging (abbreviations, short sentences), we can trace back to the original raw sentence index used by the analysis engine.
+4.  **Callback Pattern for Async Analysis**: Instead of `AudioPlayerService` explicitly calling `runBackgroundFiltering`, the `AudioContentPipeline.loadSection` method accepts an `onMaskFound` callback. This keeps the background logic encapsulated within the pipeline while allowing the player service to safely schedule state updates on its task queue.
+5.  **Optimization**: `detectContentSkipMask` accepts the already-loaded `sentences` array to avoid a redundant database fetch during the background analysis phase.

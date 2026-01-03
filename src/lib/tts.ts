@@ -9,6 +9,8 @@ export interface SentenceNode {
     text: string;
     /** The Canonical Fragment Identifier (CFI) pointing to the sentence's location. */
     cfi: string;
+    /** The indices of the raw source sentences that make up this node. */
+    sourceIndices?: number[];
 }
 
 export interface ExtractionOptions {
@@ -171,6 +173,11 @@ export const extractSentencesFromNode = (
 
     traverse(rootNode);
     flushBuffer();
+
+    // Assign source indices to raw sentences
+    rawSentences.forEach((s, i) => {
+        s.sourceIndices = [i];
+    });
 
     // Now refine segments using the options provided
     return TextSegmenter.refineSegments(

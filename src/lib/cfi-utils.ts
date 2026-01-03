@@ -146,19 +146,11 @@ export function generateCfiRange(start: string, end: string): string {
     if (!sOk || !eOk) {
         // Backtrack to valid delimiter
         while (i > 0) {
+            i--;
             const char = start[i];
-            // If remainder starts with separator, it's a good split point
-            // AND both strings are identical at this point (part of common prefix)
-            // Note: start[i] === end[i] is guaranteed for i < split point found in first loop,
-            // but we need to ensure we are back in the common region.
-            // Since we only decrease i from the divergence point, start[i] === end[i] should be true
-            // unless we started at divergence point where they differ.
-            // Wait, at divergence point i, start[i] !== end[i].
-            // So we must check start[i] === end[i].
-            if (delimiters.includes(char) && start[i] === end[i]) {
+            if ((delimiters.includes(char) || char === ',' || char === '[') && start[i] === end[i]) {
                  break;
             }
-            i--;
         }
     }
 
