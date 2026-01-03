@@ -113,8 +113,8 @@ describe('AudioContentPipeline', () => {
             // s1 is the content we want to keep.
             // s2 is the content we want to filter out (e.g. a table).
             // We use distinct paths (/2/2/2 vs /2/2/4) to ensure they don't get merged into a single group.
-             const s1 = { text: 'Keep me', cfi: 'epubcfi(/2/2/2:0)' };
-             const s2 = { text: 'Skip me', cfi: 'epubcfi(/2/2/4:0)' };
+             const s1 = { text: 'Keep me', cfi: 'epubcfi(/2/2/2:0)', sourceIndices: [0] };
+             const s2 = { text: 'Skip me', cfi: 'epubcfi(/2/2/4:0)', sourceIndices: [1] };
 
              (dbService.getTTSContent as any).mockResolvedValue({ sentences: [s1, s2] });
 

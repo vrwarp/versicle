@@ -24,10 +24,14 @@ export const TTSQueueItem = memo(forwardRef<HTMLButtonElement, TTSQueueItemProps
                     "text-left text-sm p-2 rounded transition-all duration-200 w-full",
                     isActive
                         ? "bg-primary/20 text-foreground border-l-4 border-primary font-medium shadow-sm"
-                        : "text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted/10"
+                        : "text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted/10",
+                    item.isSkipped && "opacity-40 hover:opacity-60 bg-muted/5"
                 )}
             >
-                <p className="line-clamp-2">{item.text}</p>
+                <p className={cn("line-clamp-2", item.isSkipped && "line-through decoration-muted-foreground/50")}>
+                    {item.text}
+                </p>
+                {item.isSkipped && <span className="text-xs italic ml-1 block mt-0.5">Skipped</span>}
             </button>
         );
     }

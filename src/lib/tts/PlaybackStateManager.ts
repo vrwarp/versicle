@@ -72,6 +72,40 @@ export class PlaybackStateManager {
         this.notifyListeners();
     }
 
+    /**
+     * Applies a mask to mark specific raw indices as skipped.
+     * This updates the `isSkipped` flag on queue items and recalculates prefix sums.
+     *
+     * @param {Set<number>} rawSkippedIndices A set of raw sentence indices to skip.
+     * @param {string} sectionId The section ID for validation.
+     */
+    applySkippedMask(rawSkippedIndices: Set<number>, sectionId?: string) {
+        let changed = false;
+
+        // Iterate over the queue and update isSkipped status
+        for (let i = 0; i < this._queue.length; i++) {
+            const item = this._queue[i];
+
+            // Only skip if ALL source indices are in the skipped set
+            let shouldSkip = false;
+            if (item.sourceIndices && item.sourceIndices.length > 0) {
+                 shouldSkip = item.sourceIndices.every(idx => rawSkippedIndices.has(idx));
+            }
+
+            if (item.isSkipped !== shouldSkip) {
+                // Clone the item to maintain immutability of the previous state reference
+                this._queue[i] = { ...item, isSkipped: shouldSkip };
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            this.calculatePrefixSums();
+            this.persistQueue();
+            this.notifyListeners();
+        }
+    }
+
     get queue(): ReadonlyArray<TTSQueueItem> {
         return this._queue;
     }
@@ -86,11 +120,13 @@ export class PlaybackStateManager {
 
     /**
      * Calculates cumulative character counts for the queue to support time-based seeking.
+     * Skips items marked as `isSkipped`.
      */
     private calculatePrefixSums() {
         this.prefixSums = new Array(this._queue.length + 1).fill(0);
         for (let i = 0; i < this._queue.length; i++) {
-            this.prefixSums[i + 1] = this.prefixSums[i] + (this._queue[i].text?.length || 0);
+            const length = this._queue[i].isSkipped ? 0 : (this._queue[i].text?.length || 0);
+            this.prefixSums[i + 1] = this.prefixSums[i] + length;
         }
     }
 
@@ -103,16 +139,17 @@ export class PlaybackStateManager {
     }
 
     hasNext(): boolean {
-        return this._currentIndex < this._queue.length - 1;
+        return this.getNextVisibleIndex(this._currentIndex) !== -1;
     }
 
     hasPrev(): boolean {
-        return this._currentIndex > 0;
+        return this.getPrevVisibleIndex(this._currentIndex) !== -1;
     }
 
     next(): boolean {
-        if (this.hasNext()) {
-            this._currentIndex++;
+        const nextIndex = this.getNextVisibleIndex(this._currentIndex);
+        if (nextIndex !== -1) {
+            this._currentIndex = nextIndex;
             this.persistQueue();
             this.notifyListeners();
             return true;
@@ -121,8 +158,9 @@ export class PlaybackStateManager {
     }
 
     prev(): boolean {
-        if (this.hasPrev()) {
-            this._currentIndex--;
+        const prevIndex = this.getPrevVisibleIndex(this._currentIndex);
+        if (prevIndex !== -1) {
+            this._currentIndex = prevIndex;
             this.persistQueue();
             this.notifyListeners();
             return true;
@@ -130,8 +168,38 @@ export class PlaybackStateManager {
         return false;
     }
 
+    /**
+     * Scans forward to find the next visible (non-skipped) index.
+     */
+    private getNextVisibleIndex(startIndex: number): number {
+        for (let i = startIndex + 1; i < this._queue.length; i++) {
+            if (!this._queue[i].isSkipped) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Scans backward to find the previous visible (non-skipped) index.
+     */
+    private getPrevVisibleIndex(startIndex: number): number {
+        for (let i = startIndex - 1; i >= 0; i--) {
+            if (!this._queue[i].isSkipped) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     jumpTo(index: number): boolean {
         if (index >= 0 && index < this._queue.length) {
+            // Even if we jump to a skipped item (e.g. manually), we allow it?
+            // Or should we snap to nearest visible?
+            // For now, allow direct jumps, assuming UI handles visibility.
+            // But if auto-playing, it might be weird.
+            // Let's assume if user clicks it, they want to hear it even if skipped.
+            // BUT, for consistency, let's just update index.
             this._currentIndex = index;
             this.persistQueue();
             this.notifyListeners();

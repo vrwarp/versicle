@@ -196,53 +196,90 @@ export class AudioContentPipeline {
     }
 
     /**
+     * Analyzes content for skipping based on current settings and returns a set of raw indices to skip.
+     *
+     * @param {string} bookId The book ID.
+     * @param {string} sectionId The section ID.
+     * @param {ContentType[]} skipTypes The content types to filter out.
+     * @returns {Promise<Set<number>>} A Set of raw sentence indices to skip.
+     */
+    async detectContentSkipMask(bookId: string, sectionId: string, skipTypes: ContentType[]): Promise<Set<number>> {
+        const indicesToSkip = new Set<number>();
+
+        try {
+            const ttsContent = await dbService.getTTSContent(bookId, sectionId);
+            if (!ttsContent || ttsContent.sentences.length === 0) return indicesToSkip;
+
+             // Fetch Table CFIs for Grouping
+            const tableImages = await dbService.getTableImages(bookId);
+            const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
+
+            // Group sentences by Root Node
+            const groups = this.groupSentencesByRoot(ttsContent.sentences, tableCfis);
+            const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
+
+            if (detectedTypes && detectedTypes.length > 0) {
+                 const typeMap = new Map<string, ContentType>();
+                 detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
+
+                 const skipRoots = new Set<string>();
+                 groups.forEach(g => {
+                    const type = typeMap.get(g.rootCfi);
+                    if (type && skipTypes.includes(type)) {
+                        skipRoots.add(g.rootCfi);
+                    }
+                });
+
+                if (skipRoots.size > 0) {
+                    for (const g of groups) {
+                        if (skipRoots.has(g.rootCfi)) {
+                             // Mark all segments in this group as skipped
+                             for (const segment of g.segments) {
+                                 if (segment.sourceIndices) {
+                                     segment.sourceIndices.forEach(idx => indicesToSkip.add(idx));
+                                 }
+                             }
+                        }
+                    }
+                }
+            }
+
+        } catch (e) {
+            console.warn("Error detecting content skip mask", e);
+        }
+
+        return indicesToSkip;
+    }
+
+    /**
      * Filters out sentences belonging to unwanted content types (e.g., tables, footnotes).
      *
      * @param {string} bookId The book ID.
-     * @param {{ text: string; cfi: string }[]} sentences The raw sentences.
+     * @param {{ text: string; cfi: string; sourceIndices?: number[] }[]} sentences The raw sentences.
      * @param {ContentType[]} skipTypes The content types to filter out.
      * @param {string} sectionId The section ID.
-     * @returns {Promise<{ text: string; cfi: string }[]>} The filtered list of sentences.
+     * @returns {Promise<{ text: string; cfi: string; sourceIndices?: number[] }[]>} The filtered list of sentences.
      */
-    private async detectAndFilterContent(bookId: string, sentences: { text: string; cfi: string }[], skipTypes: ContentType[], sectionId: string): Promise<{ text: string; cfi: string }[]> {
-        if (!bookId || !sectionId) return sentences;
+    private async detectAndFilterContent(bookId: string, sentences: { text: string; cfi: string; sourceIndices?: number[] }[], skipTypes: ContentType[], sectionId: string): Promise<{ text: string; cfi: string; sourceIndices?: number[] }[]> {
+        // Updated to use the new method logic essentially, but this is for the "Initial Load" path
+        // if we decide to block load (which we generally don't for async, but might for testing or synchronous modes).
+        // However, the new plan favors "Async Masking", so this method might be deprecated or used differently.
+        // But for compatibility with existing code that calls it (if any), we keep it working.
 
-        // Fetch Table CFIs for Grouping
-        const tableImages = await dbService.getTableImages(bookId);
-        const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
+        const mask = await this.detectContentSkipMask(bookId, sectionId, skipTypes);
+        if (mask.size === 0) return sentences;
 
-        // Group sentences by Root Node
-        const groups = this.groupSentencesByRoot(sentences, tableCfis);
-
-        const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
-
-        // 3. Filter based on detected types and current settings
-        if (detectedTypes && detectedTypes.length > 0) {
-            const typeMap = new Map<string, ContentType>();
-            detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
-
-            const skipRoots = new Set<string>();
-            groups.forEach(g => {
-                const type = typeMap.get(g.rootCfi);
-                if (type && skipTypes.includes(type)) {
-                    skipRoots.add(g.rootCfi);
-                }
-            });
-
-            if (skipRoots.size > 0) {
-                const finalSentences: { text: string; cfi: string }[] = [];
-                for (const g of groups) {
-                    if (!skipRoots.has(g.rootCfi)) {
-                        finalSentences.push(...g.segments);
-                    } else {
-                        console.log(`Skipping content block (Cached/Detected)`, g.rootCfi);
-                    }
-                }
-                return finalSentences;
-            }
-        }
-
-        return sentences;
+        return sentences.filter(s => {
+             // If ANY source index is NOT in the mask, we might keep it?
+             // Or if ALL are in the mask, we skip it?
+             // Logic: A merged sentence is skipped ONLY if ALL its constituents are skipped.
+             // Here we are filtering RAW sentences. So each raw sentence is skipped if its index is in mask.
+             if (s.sourceIndices && s.sourceIndices.length > 0) {
+                 return !s.sourceIndices.every(idx => mask.has(idx));
+             }
+             // Fallback if no source indices (shouldn't happen with new ingestion)
+             return true;
+        });
     }
 
     /**
@@ -322,11 +359,11 @@ export class AudioContentPipeline {
      * Groups individual text segments by their common semantic root element using CFI structure.
      * This allows the GenAI to classify logical blocks (tables, asides) rather than fragmented sentences.
      */
-    private groupSentencesByRoot(sentences: { text: string; cfi: string }[], tableCfis: string[] = []): { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] {
-        const groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] = [];
-        let currentGroup: { parentCfi: string; segments: { text: string; cfi: string }[]; fullText: string } | null = null;
+    private groupSentencesByRoot(sentences: { text: string; cfi: string; sourceIndices?: number[] }[], tableCfis: string[] = []): { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] {
+        const groups: { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] = [];
+        let currentGroup: { parentCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string } | null = null;
 
-        const finalizeGroup = (group: { segments: { text: string; cfi: string }[]; fullText: string }) => {
+        const finalizeGroup = (group: { segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }) => {
             const first = group.segments[0].cfi;
             const last = group.segments[group.segments.length - 1].cfi;
 

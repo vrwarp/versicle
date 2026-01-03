@@ -34,6 +34,10 @@ export interface TTSQueueItem {
     coverUrl?: string;
     /** Indicates if this item is a pre-roll announcement. */
     isPreroll?: boolean;
+    /** Indicates if this item should be skipped during playback. */
+    isSkipped?: boolean;
+    /** The indices of the raw source sentences that make up this item. */
+    sourceIndices?: number[];
 }
 
 export interface DownloadInfo {
@@ -664,11 +668,42 @@ export class AudioPlayerService {
             if (autoPlay) {
                 await this.playInternal();
             }
+
+            // Trigger background analysis for current and next chapter
+            this.runBackgroundFiltering(this.currentBookId, section.sectionId);
             this.contentPipeline.triggerNextChapterAnalysis(this.currentBookId, sectionIndex, this.playlist);
             return true;
         }
 
         return false;
+    }
+
+    private async runBackgroundFiltering(bookId: string, sectionId: string) {
+        // Run asynchronously
+        try {
+            const genAISettings = (await import('../../store/useGenAIStore')).useGenAIStore.getState();
+            if (!genAISettings.isContentAnalysisEnabled || genAISettings.contentFilterSkipTypes.length === 0) {
+                return;
+            }
+
+            const skipTypes = genAISettings.contentFilterSkipTypes;
+            const mask = await this.contentPipeline.detectContentSkipMask(bookId, sectionId, skipTypes);
+
+            if (mask.size > 0) {
+                // Verify we are still on the same book and section before applying
+                if (this.currentBookId === bookId) {
+                     // Check section index match?
+                     // Ideally we check sectionId. But stateManager tracks sectionIndex.
+                     // Let's check playlist[currentSectionIndex].sectionId
+                     const currentSection = this.playlist[this.stateManager.currentSectionIndex];
+                     if (currentSection && currentSection.sectionId === sectionId) {
+                         this.stateManager.applySkippedMask(mask, sectionId);
+                     }
+                }
+            }
+        } catch (e) {
+            console.warn("Background filtering failed", e);
+        }
     }
 
     private async advanceToNextChapter(): Promise<boolean> {
