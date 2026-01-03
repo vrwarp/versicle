@@ -394,9 +394,21 @@ describe('AudioPlayerService', () => {
 
             const groups = contentPipeline.groupSentencesByRoot(sentences);
 
-            // New Behavior: Sibling Proximity rule merges adjacent paragraphs (/4/2 and /4/4)
-            expect(groups).toHaveLength(1);
-            expect(groups[0].segments).toHaveLength(3);
+            // New Behavior: Sibling Proximity rule has Depth Guard (>= 2).
+            // Parents /4/2 and /4/4 have GP /4 (Depth 1).
+            // Guard fails (1 < 2), so they SPLIT.
+            expect(groups).toHaveLength(2);
+
+            // Group 1: Parent /4/2
+            expect(groups[0].segments).toHaveLength(2);
+            // Expected: Range spanning 1:0 to 3:0
+            const expectedRange1 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/2/1:0)", "epubcfi(/6/14!/4/2/3:0)");
+            expect(groups[0].rootCfi).toBe(expectedRange1);
+
+            // Group 2: Parent /4/4
+            expect(groups[1].segments).toHaveLength(1);
+            const expectedRange2 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/4/1:0)", "epubcfi(/6/14!/4/4/1:0)");
+            expect(groups[1].rootCfi).toBe(expectedRange2);
         });
 
         it('generates unique rootCfi for adjacent groups sharing same parent (Map Collision Fix)', () => {

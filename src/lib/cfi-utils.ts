@@ -43,6 +43,20 @@ export function getLastStepIndex(cfi: string): number {
 }
 
 /**
+ * Measures nesting depth relative to the spine root.
+ * e.g. epubcfi(/6/4!/4/2) -> /4/2 -> Depth 2
+ */
+export function getDepth(cfi: string): number {
+    if (!cfi) return 0;
+    const parts = cfi.split('!');
+    const path = parts.length > 1 ? parts[1] : parts[0];
+
+    // Split by slash and filter empty or purely offset parts (though offset is usually attached to step)
+    // /4/2/1:0 -> 4, 2, 1:0.
+    return path.split('/').filter(p => p.length > 0 && !p.startsWith('epb')).length;
+}
+
+/**
  * Extracts the parent block-level CFI from a given CFI string.
  * This handles both range CFIs and point/standard CFIs.
  * 
@@ -54,12 +68,10 @@ export function getParentCfi(cfi: string): string {
 
     let spine = '';
     let path = '';
-    let isRange = false;
 
     // 1. Try parsing as a Range CFI (epubcfi(parent, start, end))
     const parsed = parseCfiRange(cfi);
     if (parsed) {
-        isRange = true;
         const parts = parsed.parent.split('!');
         spine = parts[0];
         path = parts[1] || '';
@@ -79,12 +91,17 @@ export function getParentCfi(cfi: string): string {
     if (!spine) return cfi;
 
     if (path) {
-        // Heuristic: The text node is usually the last component (e.g. /4/2/1:0)
-        // We want the parent block element (e.g. /4/2).
-        const pathParts = path.split('/');
+        const pathParts = path.split('/').filter(p => p.length > 0);
 
-        // Filter empty strings from split
-        const cleanParts = pathParts.filter(p => p.length > 0);
+        // Clean path: If last step is a text node (odd index), remove it.
+        // This applies to both Range and Point CFIs to ensure we are at an Element level.
+        if (pathParts.length > 0) {
+            const lastPart = pathParts[pathParts.length - 1];
+            const index = parseInt(lastPart, 10);
+            if (!isNaN(index) && index % 2 !== 0) {
+                pathParts.pop();
+            }
+        }
 
         // HEURISTIC: Structural Snapping
         // Snap to "Container Depth" (Total Level 4)
@@ -95,20 +112,13 @@ export function getParentCfi(cfi: string): string {
         const spineDepth = spine.split('/').filter(p => p.length > 0).length;
         const targetPathDepth = Math.max(1, 4 - spineDepth);
 
-        if (cleanParts.length > targetPathDepth) {
-            return `epubcfi(${spine}!/${cleanParts.slice(0, targetPathDepth).join('/')})`;
+        if (pathParts.length > targetPathDepth) {
+            return `epubcfi(${spine}!/${pathParts.slice(0, targetPathDepth).join('/')})`;
         }
 
-        // Standard leaf-stripping for shallow paths
-        // We only pop if it's NOT a Range CFI. Range CFIs already point to the common ancestor container.
-        // Point CFIs point to a text node (leaf), so we want the parent element.
-        if (!isRange && cleanParts.length > 0) {
-            cleanParts.pop();
-        }
-
-        return cleanParts.length === 0
+        return pathParts.length === 0
             ? `epubcfi(${spine}!)`
-            : `epubcfi(${spine}!/${cleanParts.join('/')})`;
+            : `epubcfi(${spine}!/${pathParts.join('/')})`;
     } else {
         // Just spine item reference
         return `epubcfi(${spine}!)`;

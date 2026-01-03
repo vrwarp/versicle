@@ -176,8 +176,8 @@ describe('cfi-utils', () => {
     it('handles standard CFI: specific path', () => {
         // /6/2!/4/2
         const cfi = 'epubcfi(/6/2!/4/2)';
-        // Should keep as is if depth is shallow
-        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4)');
+        // Even index (Element) is preserved
+        expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2)');
     });
 
     it('strips last segment (text node/leaf)', () => {
@@ -213,10 +213,9 @@ describe('cfi-utils', () => {
     });
     
     it('handles CFI where path becomes empty after popping', () => {
-         // /6/2!/4 -> parts ['4'] -> pop -> []
-         // Should return spine root
+         // /6/2!/4 -> parts ['4']. 4 is Even. Kept.
          const cfi = 'epubcfi(/6/2!/4)';
-         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!)');
+         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4)');
     });
 
     it('returns original CFI if parsing fails (catch block)', () => {

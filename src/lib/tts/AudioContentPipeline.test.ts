@@ -186,17 +186,18 @@ describe('AudioContentPipeline', () => {
          *            - Unified Snapping ensures parents are identified at the correct depth (e.g., Row level) to facilitate comparison.
          */
         it('Case 2: Multi-Column Lookup Table (should merge)', () => {
+            // Nested table to satisfy Depth >= 2 guard
             const segments = [
-                { text: "4Q", cfi: "epubcfi(/6/2!/10/2/2/1:0)" },
-                { text: "Cave 4 Qumran", cfi: "epubcfi(/6/2!/10/2/4/1:0)" },
-                { text: "Qoh", cfi: "epubcfi(/6/2!/10/4/2/1:0)" },
-                { text: "Ecclesiastes", cfi: "epubcfi(/6/2!/10/4/4/1:0)" },
-                { text: "a", cfi: "epubcfi(/6/2!/10/6/2/1:0)" },
-                { text: "Copy one", cfi: "epubcfi(/6/2!/10/6/4/1:0)" },
-                { text: "DSS", cfi: "epubcfi(/6/2!/10/8/2/1:0)" },
-                { text: "Dead Sea Scrolls", cfi: "epubcfi(/6/2!/10/8/4/1:0)" },
-                { text: "MT", cfi: "epubcfi(/6/2!/10/10/2/1:0)" },
-                { text: "Masoretic Text", cfi: "epubcfi(/6/2!/10/10/4/1:0)" },
+                { text: "4Q", cfi: "epubcfi(/6/2!/4/10/2/2/1:0)" },
+                { text: "Cave 4 Qumran", cfi: "epubcfi(/6/2!/4/10/2/4/1:0)" },
+                { text: "Qoh", cfi: "epubcfi(/6/2!/4/10/4/2/1:0)" },
+                { text: "Ecclesiastes", cfi: "epubcfi(/6/2!/4/10/4/4/1:0)" },
+                { text: "a", cfi: "epubcfi(/6/2!/4/10/6/2/1:0)" },
+                { text: "Copy one", cfi: "epubcfi(/6/2!/4/10/6/4/1:0)" },
+                { text: "DSS", cfi: "epubcfi(/6/2!/4/10/8/2/1:0)" },
+                { text: "Dead Sea Scrolls", cfi: "epubcfi(/6/2!/4/10/8/4/1:0)" },
+                { text: "MT", cfi: "epubcfi(/6/2!/4/10/10/2/1:0)" },
+                { text: "Masoretic Text", cfi: "epubcfi(/6/2!/4/10/10/4/1:0)" },
             ];
 
             const result = groupSentencesByRoot(pipeline, segments);
@@ -250,32 +251,37 @@ describe('AudioContentPipeline', () => {
          */
         it('Case 4: Mixed Structural Environment (should split and merge correctly)', () => {
              const segments = [
-                // 1. Preface
-                { text: "Chapter Preface.", cfi: "epubcfi(/6/4!/2/2/1:0)" },
-                // 2-5. Main Body Paragraph
-                { text: "This chapter covers the historical timeline.", cfi: "epubcfi(/6/4!/4/2/1:0)" },
-                { text: "We begin with the early period.", cfi: "epubcfi(/6/4!/4/2/1:42)" },
-                { text: "Then we move to middle ages.", cfi: "epubcfi(/6/4!/4/2/1:71)" },
-                { text: "Ending with modern times.", cfi: "epubcfi(/6/4!/4/2/1:100)" },
-                // 6-15. Metadata Table (Sibling Proximity)
-                { text: "Date:", cfi: "epubcfi(/6/4!/6/2/2/1:0)" },
-                { text: "2024-01-01", cfi: "epubcfi(/6/4!/6/2/4/1:0)" },
-                { text: "Author:", cfi: "epubcfi(/6/4!/6/4/2/1:0)" },
-                { text: "Scribe A", cfi: "epubcfi(/6/4!/6/4/4/1:0)" },
-                { text: "Location:", cfi: "epubcfi(/6/4!/6/6/2/1:0)" },
-                { text: "Tiberias", cfi: "epubcfi(/6/4!/6/6/4/1:0)" },
-                { text: "Type:", cfi: "epubcfi(/6/4!/6/8/2/1:0)" },
-                { text: "Manuscript", cfi: "epubcfi(/6/4!/6/8/4/1:0)" },
-                { text: "Status:", cfi: "epubcfi(/6/4!/6/10/2/1:0)" },
-                { text: "Verified", cfi: "epubcfi(/6/4!/6/10/4/1:0)" },
-                // 16-17. Further Reading
-                { text: "Further reading is required.", cfi: "epubcfi(/6/4!/8/1:0)" },
-                { text: "Consult the bibliography.", cfi: "epubcfi(/6/4!/8/1:28)" },
-                // 18. Figure Caption
-                { text: "Fig 1.1 Summary", cfi: "epubcfi(/6/4!/10/2/1:0)" },
-                // 19-20. Footnotes
-                { text: "Footnote 1: Found in Cairo.", cfi: "epubcfi(/6/4!/12/2/1:0)" },
-                { text: "Footnote 2: Lost in London.", cfi: "epubcfi(/6/4!/12/2/1:27)" },
+                // 1. Introduction (Parent /4/2)
+                { text: "Introduction", cfi: "epubcfi(/6/4!/4/2/1:0)" },
+
+                // 2-3. Paragraph (Parent /4/4) - Merged via Rule 1 (Same parent)
+                { text: "Paragraph Start", cfi: "epubcfi(/6/4!/4/4/1:0)" },
+                { text: "Paragraph End", cfi: "epubcfi(/6/4!/4/4/1:20)" },
+
+                // 4-13. Metadata Table (Parent /4/6) - Merged via Rule 2/3 (Sibling Proximity under Depth 2)
+                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/2/2/1:0)" },
+                { text: "Value A", cfi: "epubcfi(/6/4!/4/6/2/4/1:0)" },
+                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/4/2/1:0)" },
+                { text: "Value B", cfi: "epubcfi(/6/4!/4/6/4/4/1:0)" },
+                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/6/2/1:0)" },
+                { text: "Value C", cfi: "epubcfi(/6/4!/4/6/6/4/1:0)" },
+                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/8/2/1:0)" },
+                { text: "Value D", cfi: "epubcfi(/6/4!/4/6/8/4/1:0)" },
+                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/10/2/1:0)" },
+                { text: "Value E", cfi: "epubcfi(/6/4!/4/6/10/4/1:0)" },
+
+                // 14-17. Body Resumed (Parent /4/8) - Merged via Rule 1
+                { text: "Body text resumes", cfi: "epubcfi(/6/4!/4/8/1:0)" },
+                { text: "More text.", cfi: "epubcfi(/6/4!/4/8/1:15)" },
+                { text: "Still more.", cfi: "epubcfi(/6/4!/4/8/1:30)" },
+                { text: "End body.", cfi: "epubcfi(/6/4!/4/8/1:45)" },
+
+                // 18. Caption (Parent /4/10) - Split (Level 2 divergence)
+                { text: "Caption", cfi: "epubcfi(/6/4!/4/10/2/1:0)" },
+
+                // 19-20. Footnotes (Parent /4/12) - Merged via Rule 1
+                { text: "Footnote A", cfi: "epubcfi(/6/4!/4/12/2/1:0)" },
+                { text: "Footnote B", cfi: "epubcfi(/6/4!/4/12/2/1:20)" },
             ];
 
             const result = groupSentencesByRoot(pipeline, segments);
@@ -283,27 +289,29 @@ describe('AudioContentPipeline', () => {
             // Expect 6 groups
             expect(result).toHaveLength(6);
 
-            // Group 1: Segment 1 (1 item)
+            // Group 1: Introduction
             expect(result[0].segments).toHaveLength(1);
-            expect(result[0].segments[0].text).toBe("Chapter Preface.");
+            expect(result[0].segments[0].text).toBe("Introduction");
 
-            // Group 2: Segments 2-5 (4 items)
-            expect(result[1].segments).toHaveLength(4);
-            expect(result[1].fullText).toContain("Ending with modern times.");
+            // Group 2: Paragraph
+            expect(result[1].segments).toHaveLength(2);
+            expect(result[1].fullText).toContain("Paragraph End");
 
-            // Group 3: Segments 6-15 (10 items) - Metadata Table
+            // Group 3: Metadata Table
             expect(result[2].segments).toHaveLength(10);
-            expect(result[2].fullText).toContain("Verified");
+            expect(result[2].fullText).toContain("Value E");
 
-            // Group 4: Segments 16-17 (2 items)
-            expect(result[3].segments).toHaveLength(2);
+            // Group 4: Resumed Body
+            expect(result[3].segments).toHaveLength(4);
+            expect(result[3].fullText).toContain("End body");
 
-            // Group 5: Segment 18 (1 item)
+            // Group 5: Caption
             expect(result[4].segments).toHaveLength(1);
-            expect(result[4].segments[0].text).toBe("Fig 1.1 Summary");
+            expect(result[4].segments[0].text).toBe("Caption");
 
-            // Group 6: Segments 19-20 (2 items)
+            // Group 6: Footnotes
             expect(result[5].segments).toHaveLength(2);
+            expect(result[5].fullText).toContain("Footnote B");
         });
     });
 });

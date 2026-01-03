@@ -3,7 +3,7 @@ import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
-import { getParentCfi, generateCfiRange, parseCfiRange, getLastStepIndex } from '../cfi-utils';
+import { getParentCfi, generateCfiRange, parseCfiRange, getLastStepIndex, getDepth } from '../cfi-utils';
 import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
@@ -363,22 +363,25 @@ export class AudioContentPipeline {
                     const lastSegment = currentGroup.segments[currentGroup.segments.length - 1];
                     const parentLast = getParentCfi(lastSegment.cfi);
 
-                    // Rule 2: Structural Proximity (The Table Rule)
                     const grandParentLast = getParentCfi(parentLast);
                     const grandParentB = getParentCfi(parentB);
 
                     if (grandParentLast === grandParentB) {
-                        const indexLast = getLastStepIndex(parentLast);
-                        const indexB = getLastStepIndex(parentB);
+                        // Rule 2: Structural Proximity (The Table Rule)
+                        // HEURISTIC: Only merge siblings if they are deep in the tree (Depth >= 2)
+                        // This prevents merging top-level sections (e.g. /4/2 and /4/4) while allowing table rows (e.g. /4/6/2 and /4/6/4)
+                        if (getDepth(grandParentLast) >= 2) {
+                            const indexLast = getLastStepIndex(parentLast);
+                            const indexB = getLastStepIndex(parentB);
 
-                        if (indexLast !== -1 && indexB !== -1 && Math.abs(indexLast - indexB) <= 4) {
-                            shouldMerge = true;
+                            if (indexLast !== -1 && indexB !== -1 && Math.abs(indexLast - indexB) <= 4) {
+                                shouldMerge = true;
+                            }
                         }
-                    }
 
-                    // Rule 3: Content-Led Merging (The Label Rule)
-                    if (!shouldMerge && lastSegment && lastSegment.text.length < 15) {
-                        if (grandParentLast === grandParentB) {
+                        // Rule 3: Content-Led Merging (The Label Rule)
+                        // Merge if the previous segment was a short label/key, regardless of depth
+                        if (!shouldMerge && lastSegment && lastSegment.text.length < 15) {
                             shouldMerge = true;
                         }
                     }
