@@ -198,15 +198,6 @@ describe('cfi-utils', () => {
         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2/4/2)');
     });
 
-    it('does not truncate very deep paths (e.g. tables)', () => {
-         // Path: /4/2/48/2/2/2/2/2 (Length 8)
-         // Behavior Change: We NOW snap to depth 4 if path is > 4
-         const cfi = 'epubcfi(/6/38!/4/2/48/2/2/2/2/2)';
-         // Parts: 4, 2, 48, 2, 2, 2, 2, 2. Length 8.
-         // Snap to 4: 4, 2, 48, 2.
-         expect(getParentCfi(cfi)).toBe('epubcfi(/6/38!/4/2/48/2)');
-    });
-
     it('handles CFI pointing to root of spine item (no internal path)', () => {
         const cfi = 'epubcfi(/6/2!)';
         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!)');
@@ -228,6 +219,144 @@ describe('cfi-utils', () => {
         const cfi = 'not-a-cfi';
         expect(getParentCfi(cfi)).toBe('not-a-cfi');
     });
+
+    // New tests from "Design Doc: Precise EPUB CFI Grouping Heuristic"
+
+    describe('Leaf Stripping', () => {
+        it('Input: epubcfi(/6/4[chap1]!/4/2/1:0) -> Output: epubcfi(/6/4[chap1]!/4/2)', () => {
+            expect(getParentCfi('epubcfi(/6/4[chap1]!/4/2/1:0)')).toBe('epubcfi(/6/4[chap1]!/4/2)');
+        });
+
+        it('Input: epubcfi(/6/4[chap1]!/4/10/1:50) -> Output: epubcfi(/6/4[chap1]!/4/10)', () => {
+            expect(getParentCfi('epubcfi(/6/4[chap1]!/4/10/1:50)')).toBe('epubcfi(/6/4[chap1]!/4/10)');
+        });
+
+        it('Input: epubcfi(/6/12!/2/1:0) -> Output: epubcfi(/6/12!/2)', () => {
+            expect(getParentCfi('epubcfi(/6/12!/2/1:0)')).toBe('epubcfi(/6/12!/2)');
+        });
+
+        it('Input: epubcfi(/6/2!/4/2/4/1:20) -> Output: epubcfi(/6/2!/4/2/4)', () => {
+            // This was previously snapped to /4/2 if depth logic was aggressive, but now it should just strip leaf
+            expect(getParentCfi('epubcfi(/6/2!/4/2/4/1:20)')).toBe('epubcfi(/6/2!/4/2/4)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/2/6/2/1:0) -> Output: epubcfi(/6/4!/4/2/6/2)', () => {
+             expect(getParentCfi('epubcfi(/6/4!/4/2/6/2/1:0)')).toBe('epubcfi(/6/4!/4/2/6/2)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/4/2[id123]/1:10) -> Output: epubcfi(/6/4!/4/4/2[id123])', () => {
+             expect(getParentCfi('epubcfi(/6/4!/4/4/2[id123]/1:10)')).toBe('epubcfi(/6/4!/4/4/2[id123])');
+        });
+
+        it('Input: epubcfi(/6/8!/4/2/1:0) -> Output: epubcfi(/6/8!/4/2)', () => {
+             expect(getParentCfi('epubcfi(/6/8!/4/2/1:0)')).toBe('epubcfi(/6/8!/4/2)');
+        });
+
+        it('Input: epubcfi(/6/10!/2/2/1:0) -> Output: epubcfi(/6/10!/2/2)', () => {
+             expect(getParentCfi('epubcfi(/6/10!/2/2/1:0)')).toBe('epubcfi(/6/10!/2/2)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/20/1:100) -> Output: epubcfi(/6/4!/4/20)', () => {
+             expect(getParentCfi('epubcfi(/6/4!/4/20/1:100)')).toBe('epubcfi(/6/4!/4/20)');
+        });
+
+        it('Input: epubcfi(/6/4!/6/1:0) -> Output: epubcfi(/6/4!/6)', () => {
+             expect(getParentCfi('epubcfi(/6/4!/6/1:0)')).toBe('epubcfi(/6/4!/6)');
+        });
+    });
+
+    describe('Table Grouping (Known Roots)', () => {
+        const knownBlockRoots = ["epubcfi(/6/4!/4/12)"]; // a table at index 12
+
+        it('Input: epubcfi(/6/4!/4/12/2/2/1:0) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/2/2/1:0)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/12/4/10/2/1:5) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/4/10/2/1:5)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/12/2/4/2/2/1:0) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/2/4/2/2/1:0)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/12/2/1:0) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/2/1:0)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/12/6/2/4/1:10) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/6/2/4/1:10)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/12/2/2/2/2/2/1:0) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/2/2/2/2/2/1:0)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/12/4/2/1:0) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/4/2/1:0)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/12/2/8/1:0) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/2/8/1:0)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/12/2/6/4/2/1:0) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/2/6/4/2/1:0)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('Input: epubcfi(/6/4!/4/12/2/2/1:15) -> Output: epubcfi(/6/4!/4/12)', () => {
+            expect(getParentCfi('epubcfi(/6/4!/4/12/2/2/1:15)', knownBlockRoots)).toBe('epubcfi(/6/4!/4/12)');
+        });
+
+        it('picks the deepest known root if multiple match', () => {
+            const roots = [
+                "epubcfi(/6/4!/4/12)",       // Outer table
+                "epubcfi(/6/4!/4/12/2/2)"    // Inner table (hypothetical)
+            ];
+            // CFI is inside inner table
+            const input = "epubcfi(/6/4!/4/12/2/2/4/1:0)";
+            expect(getParentCfi(input, roots)).toBe('epubcfi(/6/4!/4/12/2/2)');
+        });
+    });
+
+    describe('boundary check', () => {
+
+        it('does not false match sibling paths (prefix issue)', () => {
+            const root = "epubcfi(/6/4!/4/1)";
+            const knownBlockRoots = [root];
+
+            // Should NOT match /4/12
+            const cfiSibling = "epubcfi(/6/4!/4/12/2/1:0)";
+            // Since it doesn't match root, it should fall through to standard leaf stripping
+            // /6/4!/4/12/2/1:0 -> strip 1:0 -> /6/4!/4/12/2
+            expect(getParentCfi(cfiSibling, knownBlockRoots)).toBe('epubcfi(/6/4!/4/12/2)');
+        });
+
+        it('matches correct child path', () => {
+            const root = "epubcfi(/6/4!/4/1)";
+            const knownBlockRoots = [root];
+
+            const cfiChild = "epubcfi(/6/4!/4/1/2/1:0)";
+            expect(getParentCfi(cfiChild, knownBlockRoots)).toBe(root);
+        });
+
+        it('matches exactly equal path', () => {
+            const root = "epubcfi(/6/4!/4/1)";
+            const knownBlockRoots = [root];
+
+            expect(getParentCfi(root, knownBlockRoots)).toBe(root);
+        });
+
+        it('matches with square bracket boundary', () => {
+            const root = "epubcfi(/6/4!/4/1)";
+            const knownBlockRoots = [root];
+
+            // /4/1[id]
+            const cfiWithId = "epubcfi(/6/4!/4/1[id]/2/1:0)";
+            expect(getParentCfi(cfiWithId, knownBlockRoots)).toBe(root);
+        });
+    });
+
   });
 
   describe('generateCfiRange', () => {

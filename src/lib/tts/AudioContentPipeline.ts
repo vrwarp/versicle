@@ -179,8 +179,12 @@ export class AudioContentPipeline {
                 const ttsContent = await dbService.getTTSContent(bookId, nextSection.sectionId);
                 if (!ttsContent || ttsContent.sentences.length === 0) return;
 
+                // 2. Fetch Table CFIs for Grouping
+                const tableImages = await dbService.getTableImages(bookId);
+                const tableCfis = tableImages.map(img => img.cfi);
+
                 // 3. Group (Using raw sentences to ensure correct parent mapping)
-                const groups = this.groupSentencesByRoot(ttsContent.sentences);
+                const groups = this.groupSentencesByRoot(ttsContent.sentences, tableCfis);
 
                 // 4. Detect (will use deduplicated promise if already running)
                 await this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups);
@@ -203,8 +207,12 @@ export class AudioContentPipeline {
     private async detectAndFilterContent(bookId: string, sentences: { text: string; cfi: string }[], skipTypes: ContentType[], sectionId: string): Promise<{ text: string; cfi: string }[]> {
         if (!bookId || !sectionId) return sentences;
 
+        // Fetch Table CFIs for Grouping
+        const tableImages = await dbService.getTableImages(bookId);
+        const tableCfis = tableImages.map(img => img.cfi);
+
         // Group sentences by Root Node
-        const groups = this.groupSentencesByRoot(sentences);
+        const groups = this.groupSentencesByRoot(sentences, tableCfis);
 
         const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
@@ -314,7 +322,7 @@ export class AudioContentPipeline {
      * Groups individual text segments by their common semantic root element using CFI structure.
      * This allows the GenAI to classify logical blocks (tables, asides) rather than fragmented sentences.
      */
-    private groupSentencesByRoot(sentences: { text: string; cfi: string }[]): { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] {
+    private groupSentencesByRoot(sentences: { text: string; cfi: string }[], tableCfis: string[] = []): { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] {
         const groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] = [];
         let currentGroup: { parentCfi: string; segments: { text: string; cfi: string }[]; fullText: string } | null = null;
 
@@ -337,7 +345,7 @@ export class AudioContentPipeline {
 
         for (const s of sentences) {
             const fullCfi = s.cfi || '';
-            const parentCfi = getParentCfi(fullCfi);
+            const parentCfi = getParentCfi(fullCfi, tableCfis);
 
             // Helper to check if the current group already "contains" this new parent
             const currentParentBase = currentGroup ? currentGroup.parentCfi.replace(/\)$/, '') : '';
