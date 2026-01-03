@@ -44,16 +44,9 @@ export function parseCfiRange(range: string): CfiRangeData | null {
 export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): string {
     if (!cfi) return 'unknown';
 
-    // 1. Try parsing as a Range CFI (epubcfi(parent, start, end))
-    const parsed = parseCfiRange(cfi);
-    if (parsed) {
-        return `epubcfi(${parsed.parent})`;
-    }
-
-    // 2. Check known block roots (e.g. Tables)
+    // 1. Check known block roots (e.g. Tables) - Priority over Range CFI parsing
     if (knownBlockRoots.length > 0) {
         // Sort by length descending to match innermost table first
-        // Optimization: Sort once if possible, but here we receive array.
         const sortedRoots = [...knownBlockRoots].sort((a, b) => b.length - a.length);
 
         // Pre-clean the target CFI once
@@ -61,10 +54,6 @@ export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): strin
 
         for (const root of sortedRoots) {
             // Check prefix.
-            // Optimization: Avoid regex inside loop if possible.
-            // root is likely 'epubcfi(...)' or just content.
-            // If we assume consistent input, we can check.
-            // But to be safe and fast:
             let cleanRoot = root;
             if (cleanRoot.startsWith('epubcfi(')) {
                  cleanRoot = cleanRoot.slice(8, -1);
@@ -73,15 +62,20 @@ export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): strin
             if (cleanCfi.startsWith(cleanRoot)) {
                 // Ensure boundary match:
                 // If cleanCfi is exactly equal to cleanRoot, it's a match.
-                // If cleanCfi is longer, the next char must be a separator (/ or ! or [)
-                // e.g. root=/4/1, cfi=/4/12 (No match)
-                // e.g. root=/4/1, cfi=/4/1/2 (Match)
+                // If cleanCfi is longer, the next char must be a separator (/ or ! or [ or ,)
+                // Added comma to support Range CFIs as target (e.g. /6/24!/4/2/4 matches /6/24!/4/2/4,/1:0,...)
                 const nextChar = cleanCfi[cleanRoot.length];
-                if (!nextChar || ['/', '!', '['].includes(nextChar)) {
+                if (!nextChar || ['/', '!', '[', ','].includes(nextChar)) {
                     return root;
                 }
             }
         }
+    }
+
+    // 2. Try parsing as a Range CFI (epubcfi(parent, start, end))
+    const parsed = parseCfiRange(cfi);
+    if (parsed) {
+        return `epubcfi(${parsed.parent})`;
     }
 
     // 3. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))

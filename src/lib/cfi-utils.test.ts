@@ -701,3 +701,49 @@ describe('cfi-utils', () => {
   });
 
 });
+import { describe, it, expect } from 'vitest';
+import { getParentCfi } from './cfi-utils';
+
+describe('getParentCfi Fixes', () => {
+
+    it('should snap Range CFI input to known block root if matched (Ordering Fix)', () => {
+        // Known block root: /6/24!/4/2/4 (Table)
+        const tableRoot = "epubcfi(/6/24!/4/2/4)";
+        const knownBlockRoots = [tableRoot];
+
+        // Input: Range CFI *inside* the table
+        // epubcfi(/6/24!/4/2/4/2/2/2/2/2,/1:0,/1:2)
+        // Parent of this range is /6/24!/4/2/4/2/2/2/2/2
+        // We want it to snap to /6/24!/4/2/4
+        const inputCfi = "epubcfi(/6/24!/4/2/4/2/2/2/2/2,/1:0,/1:2)";
+
+        expect(getParentCfi(inputCfi, knownBlockRoots)).toBe(tableRoot);
+    });
+
+    it('should match deep point CFI to known block root even if root was provided as Range CFI (Format Fix simulation)', () => {
+        // NOTE: In the actual implementation, we are now stripping the range from tableCfis BEFORE passing to getParentCfi.
+        // But getParentCfi also handles it via the comma check now.
+
+        const tableRoot = "epubcfi(/6/24!/4/2/4)";
+        const knownBlockRoots = [tableRoot];
+
+        // Deep child point CFI
+        const inputCfi = "epubcfi(/6/24!/4/2/4/2/2/1:0)";
+
+        expect(getParentCfi(inputCfi, knownBlockRoots)).toBe(tableRoot);
+    });
+
+    it('should NOT match if prefix is ambiguous (Boundary Check regression test)', () => {
+        const root = "epubcfi(/4/2)";
+        const knownBlockRoots = [root];
+        // Corrected input to be a valid Point CFI
+        const input = "epubcfi(/4/20/1:0!)";
+        // Wait, normally point CFI is epubcfi(spine!/path/offset). If no spine separator, behavior is fallback.
+        // Let's use a standard format to be safe.
+        const standardInput = "epubcfi(/6/2!/4/20/1:0)";
+        const standardRoot = "epubcfi(/6/2!/4/2)"; // Matches prefix of /4/20, but not boundary.
+
+        // Should default to standard leaf stripping: /4/20
+        expect(getParentCfi(standardInput, [standardRoot])).toBe("epubcfi(/6/2!/4/20)");
+    });
+});

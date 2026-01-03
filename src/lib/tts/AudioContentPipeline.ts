@@ -181,7 +181,7 @@ export class AudioContentPipeline {
 
                 // 2. Fetch Table CFIs for Grouping
                 const tableImages = await dbService.getTableImages(bookId);
-                const tableCfis = tableImages.map(img => img.cfi);
+                const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
                 // 3. Group (Using raw sentences to ensure correct parent mapping)
                 const groups = this.groupSentencesByRoot(ttsContent.sentences, tableCfis);
@@ -209,7 +209,7 @@ export class AudioContentPipeline {
 
         // Fetch Table CFIs for Grouping
         const tableImages = await dbService.getTableImages(bookId);
-        const tableCfis = tableImages.map(img => img.cfi);
+        const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
         // Group sentences by Root Node
         const groups = this.groupSentencesByRoot(sentences, tableCfis);
