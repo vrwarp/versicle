@@ -387,9 +387,9 @@ describe('AudioPlayerService', () => {
 
         it('groups sentences by parent and generates Range CFIs for rootCfi', () => {
             const sentences = [
-                { text: "A", cfi: "epubcfi(/6/14!/4/2/1:0)" },
-                { text: "B", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Same parent /4/2
-                { text: "C", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // New parent /4/4
+                { text: "Paragraph A long enough to avoid label merging rule", cfi: "epubcfi(/6/14!/4/2/1:0)" },
+                { text: "Paragraph B long enough to avoid label merging rule", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Same parent /4/2
+                { text: "Paragraph C long enough to avoid label merging rule", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // New parent /4/4
             ];
 
             const groups = contentPipeline.groupSentencesByRoot(sentences);

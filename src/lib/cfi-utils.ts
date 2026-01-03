@@ -43,6 +43,30 @@ export function getLastStepIndex(cfi: string): number {
 }
 
 /**
+ * Returns the parent CFI by stripping the last path segment.
+ * This is useful for finding the grandparent or traversing up the tree.
+ * e.g. epubcfi(/6/4!/4/2) -> epubcfi(/6/4!/4)
+ */
+export function getUpOneLevel(cfi: string): string {
+    if (!cfi || !cfi.includes('!')) return cfi;
+
+    const parts = cfi.split('!');
+    const spine = parts[0];
+    const path = parts[1];
+
+    // Split path, filter empty
+    const pathParts = path.split('/').filter(p => p.length > 0);
+
+    if (pathParts.length > 0) {
+        pathParts.pop();
+    }
+
+    return pathParts.length === 0
+        ? `${spine}!`
+        : `${spine}!/${pathParts.join('/')}`;
+}
+
+/**
  * Measures nesting depth relative to the spine root.
  * e.g. epubcfi(/6/4!/4/2) -> /4/2 -> Depth 2
  */
@@ -104,13 +128,13 @@ export function getParentCfi(cfi: string): string {
         }
 
         // HEURISTIC: Structural Snapping
-        // Snap to "Container Depth" (Total Level 4)
-        // e.g. /6/14!/4/2 (Spine depth 2 + Path depth 2 = 4)
-        // e.g. /14!/2/2/10/2 (Spine depth 1 + Path depth 4 = 5) -> Snap to 3 path steps (Total 4)
+        // Snap to "Container Depth" (Total Level 7)
+        // Increased from 4 to 7 to allow top-level structures (headings/paragraphs) to remain independent
+        // while ensuring deep structures (tables) are still grouped.
 
         // Calculate spine depth
         const spineDepth = spine.split('/').filter(p => p.length > 0).length;
-        const targetPathDepth = Math.max(1, 4 - spineDepth);
+        const targetPathDepth = Math.max(1, 7 - spineDepth);
 
         if (pathParts.length > targetPathDepth) {
             return `epubcfi(${spine}!/${pathParts.slice(0, targetPathDepth).join('/')})`;

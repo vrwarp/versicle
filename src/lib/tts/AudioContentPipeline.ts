@@ -3,7 +3,7 @@ import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
-import { getParentCfi, generateCfiRange, parseCfiRange, getLastStepIndex, getDepth } from '../cfi-utils';
+import { getParentCfi, generateCfiRange, parseCfiRange, getLastStepIndex, getDepth, getUpOneLevel } from '../cfi-utils';
 import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
@@ -363,8 +363,9 @@ export class AudioContentPipeline {
                     const lastSegment = currentGroup.segments[currentGroup.segments.length - 1];
                     const parentLast = getParentCfi(lastSegment.cfi);
 
-                    const grandParentLast = getParentCfi(parentLast);
-                    const grandParentB = getParentCfi(parentB);
+                    // Use getUpOneLevel to find the structural grandparent (container of the parent)
+                    const grandParentLast = getUpOneLevel(parentLast);
+                    const grandParentB = getUpOneLevel(parentB);
 
                     if (grandParentLast === grandParentB) {
                         // Rule 2: Structural Proximity (The Table Rule)
@@ -374,7 +375,7 @@ export class AudioContentPipeline {
                             const indexLast = getLastStepIndex(parentLast);
                             const indexB = getLastStepIndex(parentB);
 
-                            if (indexLast !== -1 && indexB !== -1 && Math.abs(indexLast - indexB) <= 4) {
+                            if (indexLast !== -1 && indexB !== -1 && Math.abs(indexLast - indexB) <= 2) {
                                 shouldMerge = true;
                             }
                         }

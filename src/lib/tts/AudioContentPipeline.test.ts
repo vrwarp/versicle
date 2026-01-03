@@ -186,18 +186,19 @@ describe('AudioContentPipeline', () => {
          *            - Unified Snapping ensures parents are identified at the correct depth (e.g., Row level) to facilitate comparison.
          */
         it('Case 2: Multi-Column Lookup Table (should merge)', () => {
-            // Nested table to satisfy Depth >= 2 guard
+            // Deeply nested table to satisfy snapping to Row level (Depth 5) with Total 7 threshold
+            // Structure: /1/1/4/10/2 (Row) -> Depth 5
             const segments = [
-                { text: "4Q", cfi: "epubcfi(/6/2!/4/10/2/2/1:0)" },
-                { text: "Cave 4 Qumran", cfi: "epubcfi(/6/2!/4/10/2/4/1:0)" },
-                { text: "Qoh", cfi: "epubcfi(/6/2!/4/10/4/2/1:0)" },
-                { text: "Ecclesiastes", cfi: "epubcfi(/6/2!/4/10/4/4/1:0)" },
-                { text: "a", cfi: "epubcfi(/6/2!/4/10/6/2/1:0)" },
-                { text: "Copy one", cfi: "epubcfi(/6/2!/4/10/6/4/1:0)" },
-                { text: "DSS", cfi: "epubcfi(/6/2!/4/10/8/2/1:0)" },
-                { text: "Dead Sea Scrolls", cfi: "epubcfi(/6/2!/4/10/8/4/1:0)" },
-                { text: "MT", cfi: "epubcfi(/6/2!/4/10/10/2/1:0)" },
-                { text: "Masoretic Text", cfi: "epubcfi(/6/2!/4/10/10/4/1:0)" },
+                { text: "4Q", cfi: "epubcfi(/6/2!/1/1/4/10/2/2/1:0)" },
+                { text: "Cave 4 Qumran", cfi: "epubcfi(/6/2!/1/1/4/10/2/4/1:0)" },
+                { text: "Qoh", cfi: "epubcfi(/6/2!/1/1/4/10/4/2/1:0)" },
+                { text: "Ecclesiastes", cfi: "epubcfi(/6/2!/1/1/4/10/4/4/1:0)" },
+                { text: "a", cfi: "epubcfi(/6/2!/1/1/4/10/6/2/1:0)" },
+                { text: "Copy one", cfi: "epubcfi(/6/2!/1/1/4/10/6/4/1:0)" },
+                { text: "DSS", cfi: "epubcfi(/6/2!/1/1/4/10/8/2/1:0)" },
+                { text: "Dead Sea Scrolls", cfi: "epubcfi(/6/2!/1/1/4/10/8/4/1:0)" },
+                { text: "MT", cfi: "epubcfi(/6/2!/1/1/4/10/10/2/1:0)" },
+                { text: "Masoretic Text", cfi: "epubcfi(/6/2!/1/1/4/10/10/4/1:0)" },
             ];
 
             const result = groupSentencesByRoot(pipeline, segments);
@@ -209,21 +210,24 @@ describe('AudioContentPipeline', () => {
         /**
          * Case 3: Deeply Nested Definition List
          *
-         * Outcome: Merge (1 Group)
-         * Reasoning: Depth-snapping (Depth > 4) forces siblings /2, /4, and /6 together.
-         *            The aggressively snapped parent CFI ensures that deeply nested items (Terms and Definitions)
-         *            are treated as belonging to the same container, triggering Rule 1 (Vertical Ancestry) or Rule 2.
+         * Outcome: 6 Groups (Term and Defs separate)
+         * Reasoning: With snapping threshold 7, Term (/8/2/2/2) and Def (/8/2/2/4/2) have different depths and GPs.
+         *            They split. Defs merge with each other via Rule 1.
+         *            This results in granular grouping (Term) (Defs).
          */
-        it('Case 3: Deeply Nested Definition List (should merge)', () => {
+        it('Case 3: Deeply Nested Definition List (should merge items internally but keep items separate)', () => {
             const segments = [
+                // Item 1
                 { text: "Term 1", cfi: "epubcfi(/6/4!/8/2/2/2/1:0)" },
                 { text: "Def segment 1.", cfi: "epubcfi(/6/4!/8/2/2/4/2/1:0)" },
                 { text: "Def segment 2.", cfi: "epubcfi(/6/4!/8/2/2/4/2/1:15)" },
                 { text: "Def segment 3.", cfi: "epubcfi(/6/4!/8/2/2/4/2/1:30)" },
+                // Item 2
                 { text: "Term 2", cfi: "epubcfi(/6/4!/8/2/4/2/1:0)" },
                 { text: "Def segment 1.", cfi: "epubcfi(/6/4!/8/2/4/4/2/1:0)" },
                 { text: "Def segment 2.", cfi: "epubcfi(/6/4!/8/2/4/4/2/1:15)" },
                 { text: "Def segment 3.", cfi: "epubcfi(/6/4!/8/2/4/4/2/1:30)" },
+                // Item 3
                 { text: "Term 3", cfi: "epubcfi(/6/4!/8/2/6/2/1:0)" },
                 { text: "Def segment 1.", cfi: "epubcfi(/6/4!/8/2/6/4/2/1:0)" },
                 { text: "Def segment 2.", cfi: "epubcfi(/6/4!/8/2/6/4/2/1:15)" },
@@ -232,8 +236,13 @@ describe('AudioContentPipeline', () => {
 
             const result = groupSentencesByRoot(pipeline, segments);
 
-            expect(result.length).toBe(1);
-            expect(result[0].segments.length).toBe(12);
+            expect(result.length).toBe(6);
+            expect(result[0].segments.length).toBe(1); // Term
+            expect(result[1].segments.length).toBe(3); // Defs
+            expect(result[2].segments.length).toBe(1);
+            expect(result[3].segments.length).toBe(3);
+            expect(result[4].segments.length).toBe(1);
+            expect(result[5].segments.length).toBe(3);
         });
 
         /**
@@ -252,23 +261,25 @@ describe('AudioContentPipeline', () => {
         it('Case 4: Mixed Structural Environment (should split and merge correctly)', () => {
              const segments = [
                 // 1. Introduction (Parent /4/2)
-                { text: "Introduction", cfi: "epubcfi(/6/4!/4/2/1:0)" },
+                // Text length > 15 to avoid Rule 3 merge
+                { text: "Chapter Preface.", cfi: "epubcfi(/6/4!/4/2/1:0)" },
 
                 // 2-3. Paragraph (Parent /4/4) - Merged via Rule 1 (Same parent)
                 { text: "Paragraph Start", cfi: "epubcfi(/6/4!/4/4/1:0)" },
                 { text: "Paragraph End", cfi: "epubcfi(/6/4!/4/4/1:20)" },
 
-                // 4-13. Metadata Table (Parent /4/6) - Merged via Rule 2/3 (Sibling Proximity under Depth 2)
-                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/2/2/1:0)" },
-                { text: "Value A", cfi: "epubcfi(/6/4!/4/6/2/4/1:0)" },
-                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/4/2/1:0)" },
-                { text: "Value B", cfi: "epubcfi(/6/4!/4/6/4/4/1:0)" },
-                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/6/2/1:0)" },
-                { text: "Value C", cfi: "epubcfi(/6/4!/4/6/6/4/1:0)" },
-                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/8/2/1:0)" },
-                { text: "Value D", cfi: "epubcfi(/6/4!/4/6/8/4/1:0)" },
-                { text: "Key:", cfi: "epubcfi(/6/4!/4/6/10/2/1:0)" },
-                { text: "Value E", cfi: "epubcfi(/6/4!/4/6/10/4/1:0)" },
+                // 4-13. Metadata Table (Deeply nested) - Merged via Rule 2/3
+                // Wrapped in /1/1 to reach Depth 5 for Row parent
+                { text: "Key:", cfi: "epubcfi(/6/4!/1/1/4/6/2/2/1:0)" },
+                { text: "Value A", cfi: "epubcfi(/6/4!/1/1/4/6/2/4/1:0)" },
+                { text: "Key:", cfi: "epubcfi(/6/4!/1/1/4/6/4/2/1:0)" },
+                { text: "Value B", cfi: "epubcfi(/6/4!/1/1/4/6/4/4/1:0)" },
+                { text: "Key:", cfi: "epubcfi(/6/4!/1/1/4/6/6/2/1:0)" },
+                { text: "Value C", cfi: "epubcfi(/6/4!/1/1/4/6/6/4/1:0)" },
+                { text: "Key:", cfi: "epubcfi(/6/4!/1/1/4/6/8/2/1:0)" },
+                { text: "Value D", cfi: "epubcfi(/6/4!/1/1/4/6/8/4/1:0)" },
+                { text: "Key:", cfi: "epubcfi(/6/4!/1/1/4/6/10/2/1:0)" },
+                { text: "Value E", cfi: "epubcfi(/6/4!/1/1/4/6/10/4/1:0)" },
 
                 // 14-17. Body Resumed (Parent /4/8) - Merged via Rule 1
                 { text: "Body text resumes", cfi: "epubcfi(/6/4!/4/8/1:0)" },
@@ -291,7 +302,7 @@ describe('AudioContentPipeline', () => {
 
             // Group 1: Introduction
             expect(result[0].segments).toHaveLength(1);
-            expect(result[0].segments[0].text).toBe("Introduction");
+            expect(result[0].segments[0].text).toBe("Chapter Preface.");
 
             // Group 2: Paragraph
             expect(result[1].segments).toHaveLength(2);
