@@ -6,6 +6,7 @@ import { useTTSStore } from '../../../store/useTTSStore';
 import ePub from 'epubjs';
 import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { CURRENT_BOOK_VERSION } from '../../../lib/constants';
 
 // Mock dependencies
 vi.mock('epubjs');
@@ -14,8 +15,7 @@ vi.mock('../../../db/db', () => ({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get: vi.fn((store, id) => {
       if (store === 'files') return Promise.resolve(new ArrayBuffer(10));
-      // Use version 2 to prevent redirect in ReaderView
-      if (store === 'books') return Promise.resolve({ title: 'Test Book', version: 2 });
+      if (store === 'books') return Promise.resolve({ title: 'Test Book', version: CURRENT_BOOK_VERSION });
       return Promise.resolve(null);
     }),
     getAllFromIndex: vi.fn(() => Promise.resolve([])), // Mock annotations fetch
@@ -160,16 +160,6 @@ describe('ReaderView', () => {
     renderComponent();
 
     await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
-
-    // UnifiedInputController is always rendered, but its mock might rely on internal state or context?
-    // In ReaderView, it renders:
-    // <UnifiedInputController ... immersiveMode={immersiveMode} />
-
-    // We mocked UnifiedInputController to render a div with testid="unified-input-controller"
-    // and buttons mock-prev / mock-next.
-
-    // If it's not found, maybe the condition for rendering it failed?
-    // ReaderView always renders it.
 
     // Wait for the mock component to appear
     await waitFor(() => expect(screen.getByTestId('unified-input-controller')).toBeInTheDocument());
