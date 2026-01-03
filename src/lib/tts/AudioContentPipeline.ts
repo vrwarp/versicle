@@ -71,10 +71,6 @@ export class AudioContentPipeline {
                 // -----------------------------------------------------------
                 // Background Analysis (Async)
                 // -----------------------------------------------------------
-                const genAISettings = useGenAIStore.getState();
-                const skipTypes = genAISettings.contentFilterSkipTypes;
-                const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
-
                 let workingSentences = ttsContent.sentences;
 
                 // Note: detectAndFilterContent (blocking) is skipped here in favor of async masking
@@ -117,6 +113,10 @@ export class AudioContentPipeline {
                         });
                     }
                 });
+
+                const genAISettings = useGenAIStore.getState();
+                const skipTypes = genAISettings.contentFilterSkipTypes;
+                const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
 
                 if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
                     // Trigger background detection
