@@ -159,10 +159,13 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 
 **Key Functions:**
 *   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position.
+    *   *Trade-off*: A crash within 1 second of reading might lose the very last position update.
 *   **`saveTTSState(bookId, queue, currentIndex)`**: Persists the playback queue and position.
 *   **`updateReadingHistory(bookId, newRange, type)`**: Records reading sessions.
     *   *Logic*: Merges overlapping ranges. Coalesces events within 5 minutes into a single session to prevent database bloat.
+    *   *Limits*: Enforces a rolling window of the last 100 sessions per book.
 *   **`offloadBook(id)`**: Deletes the large binary EPUB file (`files` store) to save space but keeps metadata, annotations, and reading progress.
+    *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks.
@@ -180,7 +183,15 @@ Handles the complex task of importing an EPUB file.
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`) to render chapters.
         *   *Logic*: Scrapes text nodes for TTS and uses `snapdom` to capture tables as images.
     3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head + Metadata + Tail) using a `cheapHash` function for O(1) duplicate detection.
+        *   *Trade-off*: Theoretical risk of collision is negligible for personal library scale, while performance gain is massive compared to SHA-256.
     4.  **Sanitization**: Registers an `epub.js` hook to sanitize HTML content before rendering.
+
+#### Batch Ingestion (`src/lib/batch-ingestion.ts`)
+*   **Goal**: Allow bulk import of multiple EPUBs or ZIP archives containing books.
+*   **Logic**:
+    *   **ZIP Expansion**: Uses `JSZip` to recursively scan and extract `.epub` files from uploaded archives.
+    *   **Sequential Processing**: Processes files one by one to avoid memory spikes, reporting progress to the UI.
+*   **Trade-off**: Processing a large ZIP happens on the main thread (mostly), which might cause minor UI jank.
 
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs.
@@ -190,6 +201,7 @@ Enhances the reading experience using LLMs.
     *   **Structured Output**: Enforces strict JSON schemas for all responses (e.g., content classification).
     *   **Classification**: Classifies text blocks as `title`, `footnote`, `main`, `table`, or `other`.
     *   **Mocking**: Supports `localStorage` mocks (`mockGenAIResponse`) for cost-free E2E testing.
+*   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets are sent to Google's servers.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread to prevent UI freezing.
@@ -210,12 +222,17 @@ Manages internal state backup and restoration (JSON/ZIP).
     *   **Smart Merge**: If a book already exists, it only updates reading progress if the backup's timestamp is newer.
     *   **Sanitization**: Validates and sanitizes all metadata in the backup manifest before writing to the DB.
 
+#### Cost Estimator (`src/lib/tts/CostEstimator.ts`)
+*   **Goal**: Provide users with a rough estimate of API costs for Cloud TTS usage during a session.
+*   **Logic**: Tracks total characters sent to paid providers (Google, OpenAI) in a transient Zustand store (`useCostStore`).
+*   **Trade-off**: Estimates are client-side approximations and do not account for billing nuances (e.g., minimum request size, retries).
+
 #### Maintenance (`src/lib/MaintenanceService.ts`)
 Handles database health and integrity.
 
 *   **Goal**: Ensure the database is free of orphaned records (files, annotations, lexicon rules) that no longer have a parent book.
 *   **Logic**: Scans all object stores and compares IDs against the `books` store.
-*   **Trade-off**: `pruneOrphans()` is a destructive operation.
+*   **Trade-off**: `pruneOrphans()` is a destructive operation. If logic is flawed, valid data could be lost.
 
 ---
 
@@ -258,6 +275,7 @@ Local WASM Neural TTS.
 #### Resilience: `piper-utils.ts` ("Let It Crash")
 *   **Goal**: Prevent the application from entering invalid states if the Piper WASM worker crashes.
 *   **Logic**: Instead of a complex "Supervisor" that attempts restarts, we use a simple **Error Boundary** pattern. If the worker crashes or errors, the current request rejects immediately. The worker is terminated, and a fresh instance is lazily created on the next request.
+*   **Philosophy**: Simplicity > Complex Recovery.
 
 #### `src/lib/tts/LexiconService.ts`
 Manages pronunciation rules.
@@ -276,6 +294,7 @@ Manages pronunciation rules.
 *   **Logic**:
     *   **Leaf Stripping**: Strips leaf offsets to target the containing block element.
     *   **Snap to Known Roots**: Explicitly snaps selection to known structural roots (like `<table>`) to ensure atomic treatment of complex elements.
+*   **Trade-off**: Sacrifices granular addressing within complex structures. It is impossible to highlight a single cell in a table or a specific span within a figure caption; the entire block is treated as the atomic unit.
 
 ---
 
