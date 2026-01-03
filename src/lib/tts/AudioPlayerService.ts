@@ -194,8 +194,8 @@ export class AudioPlayerService {
     }
 
     private updateSectionMediaPosition(providerTime: number) {
-        const position = this.stateManager.getCurrentPosition(providerTime, this.speed);
-        const duration = this.stateManager.getTotalDuration(this.speed);
+        const position = this.stateManager.getCurrentPosition(providerTime);
+        const duration = this.stateManager.getTotalDuration();
 
         const safeDuration = Math.max(duration, position);
 
@@ -498,7 +498,7 @@ export class AudioPlayerService {
 
     seekTo(time: number) {
         return this.enqueue(async () => {
-            const changed = this.stateManager.seekToTime(time, this.speed);
+            const changed = this.stateManager.seekToTime(time);
             const wasPlaying = (this.status === 'playing' || this.status === 'loading');
 
             if (!changed) {

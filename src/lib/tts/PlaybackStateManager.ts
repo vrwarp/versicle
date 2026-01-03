@@ -145,13 +145,12 @@ export class PlaybackStateManager {
      * Updates the current index and persists the state.
      *
      * @param {number} time The elapsed time in seconds.
-     * @param {number} speed The playback speed factor.
      * @returns {boolean} True if the index changed.
      */
-    seekToTime(time: number, speed: number): boolean {
+    seekToTime(time: number): boolean {
         if (!this._queue.length || !this.prefixSums.length) return false;
 
-        const charsPerSecond = this.calculateCharsPerSecond(speed);
+        const charsPerSecond = this.calculateCharsPerSecond();
         const targetChars = time * (charsPerSecond > 0 ? charsPerSecond : 0);
         let newIndex = 0;
 
@@ -197,28 +196,26 @@ export class PlaybackStateManager {
     }
 
     /**
-     * Calculates the processing speed in characters per second based on the current playback speed.
+     * Calculates the processing speed in characters per second.
      * Assumes a base reading rate of 180 words per minute and 5 characters per word.
-     * @param {number} speed The playback speed factor.
-     * @returns {number} Characters per second.
+     * @returns {number} Characters per second (fixed at 15 for base 1x speed).
      */
-    calculateCharsPerSecond(speed: number): number {
+    calculateCharsPerSecond(): number {
         // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 900.
-        // charsPerSecond = (900 * speed) / 60
-        return (900 * speed) / 60;
+        // charsPerSecond = 900 / 60 = 15
+        return 15;
     }
 
     /**
      * Calculates the current playback position in seconds relative to the start of the section.
      *
      * @param {number} providerTime The time reported by the TTS provider for the current utterance.
-     * @param {number} speed The playback speed factor.
      * @returns {number} The total elapsed time in seconds for the section.
      */
-    getCurrentPosition(providerTime: number, speed: number): number {
+    getCurrentPosition(providerTime: number): number {
         if (!this._queue.length || !this.prefixSums.length) return 0;
 
-        const charsPerSecond = this.calculateCharsPerSecond(speed);
+        const charsPerSecond = this.calculateCharsPerSecond();
         if (charsPerSecond === 0) return 0;
 
         const elapsedBeforeCurrent = this.prefixSums[this._currentIndex] / charsPerSecond;
@@ -228,12 +225,11 @@ export class PlaybackStateManager {
     /**
      * Calculates the total estimated duration of the current queue in seconds.
      *
-     * @param {number} speed The playback speed factor.
      * @returns {number} Total duration in seconds.
      */
-    getTotalDuration(speed: number): number {
+    getTotalDuration(): number {
          if (!this._queue.length || !this.prefixSums.length) return 0;
-         const charsPerSecond = this.calculateCharsPerSecond(speed);
+         const charsPerSecond = this.calculateCharsPerSecond();
          if (charsPerSecond === 0) return 0;
          return this.prefixSums[this._queue.length] / charsPerSecond;
     }

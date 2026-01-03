@@ -153,44 +153,43 @@ describe('PlaybackStateManager', () => {
         });
 
         it('should calculate chars per second', () => {
-            // Speed 1.0 -> 900 chars/min -> 15 chars/sec
-            expect(manager.calculateCharsPerSecond(1.0)).toBe(15);
-            expect(manager.calculateCharsPerSecond(2.0)).toBe(30);
+            // Speed independent -> 900 chars/min -> 15 chars/sec
+            expect(manager.calculateCharsPerSecond()).toBe(15);
         });
 
         it('should seek to time', () => {
             // 15 chars/sec. Item 1 ends at 5 chars (0.33s).
 
             // Seek to 0.1s -> 1.5 chars -> Index 0
-            expect(manager.seekToTime(0.1, 1.0)).toBe(false); // No change
+            expect(manager.seekToTime(0.1)).toBe(false); // No change
 
             // Seek to 0.4s -> 6 chars -> Index 1
-            expect(manager.seekToTime(0.4, 1.0)).toBe(true);
+            expect(manager.seekToTime(0.4)).toBe(true);
             expect(manager.currentIndex).toBe(1);
         });
 
         it('should calculate current position', () => {
             // Index 0. 15 chars/sec.
             // Start of item 0 is 0s.
-            expect(manager.getCurrentPosition(0.1, 1.0)).toBeCloseTo(0.1);
+            expect(manager.getCurrentPosition(0.1)).toBeCloseTo(0.1);
 
             // Move to Index 1. Prefix sum = 5.
             manager.next();
             // Start of item 1 is 5/15 = 0.333s.
             // Provider time 0.1s -> Total 0.433s
-            expect(manager.getCurrentPosition(0.1, 1.0)).toBeCloseTo(0.333 + 0.1);
+            expect(manager.getCurrentPosition(0.1)).toBeCloseTo(0.333 + 0.1);
         });
 
         it('should calculate total duration', () => {
             // Total 10 chars. 15 chars/sec.
             // Duration = 10/15 = 0.666s
-            expect(manager.getTotalDuration(1.0)).toBeCloseTo(0.666);
+            expect(manager.getTotalDuration()).toBeCloseTo(0.666);
         });
 
-        it('should handle zero duration/speed gracefully', () => {
+        it('should handle zero duration gracefully', () => {
             manager.setQueue([], 0, 0);
-            expect(manager.getTotalDuration(1.0)).toBe(0);
-            expect(manager.getCurrentPosition(0, 1.0)).toBe(0);
+            expect(manager.getTotalDuration()).toBe(0);
+            expect(manager.getCurrentPosition(0)).toBe(0);
         });
     });
 
