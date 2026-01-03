@@ -150,6 +150,13 @@ describe('AudioContentPipeline', () => {
             return (p as any).groupSentencesByRoot(sentences);
         };
 
+        /**
+         * Case 1: Complex Multi-Sentence Paragraph
+         *
+         * Outcome: Merge (1 Group)
+         * Reasoning: All segments reside in the same leaf text node.
+         *            Rule 1 (Vertical Ancestry) ensures they are grouped together as they share the same parent path.
+         */
         it('Case 1: Complex Multi-Sentence Paragraph (should merge)', () => {
             const segments = [
                 { text: "This is the first sentence.", cfi: "epubcfi(/6/4!/4/2/1:0)" },
@@ -170,6 +177,14 @@ describe('AudioContentPipeline', () => {
             expect(result[0].segments.length).toBe(10);
         });
 
+        /**
+         * Case 2: Multi-Column Lookup Table (Nomenclature)
+         *
+         * Outcome: Merge (1 Group)
+         * Reasoning: Sequential rows under common parent `/10`. Essential to merge keys with values for classification.
+         *            - Rule 2 (Sibling Proximity) merges adjacent rows (e.g., /10/2 and /10/4).
+         *            - Unified Snapping ensures parents are identified at the correct depth (e.g., Row level) to facilitate comparison.
+         */
         it('Case 2: Multi-Column Lookup Table (should merge)', () => {
             const segments = [
                 { text: "4Q", cfi: "epubcfi(/6/2!/10/2/2/1:0)" },
@@ -190,6 +205,14 @@ describe('AudioContentPipeline', () => {
             expect(result[0].segments.length).toBe(10);
         });
 
+        /**
+         * Case 3: Deeply Nested Definition List
+         *
+         * Outcome: Merge (1 Group)
+         * Reasoning: Depth-snapping (Depth > 4) forces siblings /2, /4, and /6 together.
+         *            The aggressively snapped parent CFI ensures that deeply nested items (Terms and Definitions)
+         *            are treated as belonging to the same container, triggering Rule 1 (Vertical Ancestry) or Rule 2.
+         */
         it('Case 3: Deeply Nested Definition List (should merge)', () => {
             const segments = [
                 { text: "Term 1", cfi: "epubcfi(/6/4!/8/2/2/2/1:0)" },
