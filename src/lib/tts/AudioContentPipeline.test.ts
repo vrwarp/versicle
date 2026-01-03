@@ -143,4 +143,73 @@ describe('AudioContentPipeline', () => {
             expect(result![0].text).toBe('Keep me');
         });
     });
+
+    describe('groupSentencesByRoot (Heuristics)', () => {
+        // Access private method
+        const groupSentencesByRoot = (p: AudioContentPipeline, sentences: any[]) => {
+            return (p as any).groupSentencesByRoot(sentences);
+        };
+
+        it('Case 1: Complex Multi-Sentence Paragraph (should merge)', () => {
+            const segments = [
+                { text: "This is the first sentence.", cfi: "epubcfi(/6/4!/4/2/1:0)" },
+                { text: "This is the second sentence.", cfi: "epubcfi(/6/4!/4/2/1:26)" },
+                { text: "Third sentence here.", cfi: "epubcfi(/6/4!/4/2/1:53)" },
+                { text: "Fourth one follows.", cfi: "epubcfi(/6/4!/4/2/1:74)" },
+                { text: "Fifth sentence.", cfi: "epubcfi(/6/4!/4/2/1:94)" },
+                { text: "Sixth sentence.", cfi: "epubcfi(/6/4!/4/2/1:110)" },
+                { text: "Seventh sentence.", cfi: "epubcfi(/6/4!/4/2/1:126)" },
+                { text: "Eighth sentence.", cfi: "epubcfi(/6/4!/4/2/1:143)" },
+                { text: "Ninth sentence.", cfi: "epubcfi(/6/4!/4/2/1:160)" },
+                { text: "Tenth sentence.", cfi: "epubcfi(/6/4!/4/2/1:176)" },
+            ];
+
+            const result = groupSentencesByRoot(pipeline, segments);
+
+            expect(result.length).toBe(1);
+            expect(result[0].segments.length).toBe(10);
+        });
+
+        it('Case 2: Multi-Column Lookup Table (should merge)', () => {
+            const segments = [
+                { text: "4Q", cfi: "epubcfi(/6/2!/10/2/2/1:0)" },
+                { text: "Cave 4 Qumran", cfi: "epubcfi(/6/2!/10/2/4/1:0)" },
+                { text: "Qoh", cfi: "epubcfi(/6/2!/10/4/2/1:0)" },
+                { text: "Ecclesiastes", cfi: "epubcfi(/6/2!/10/4/4/1:0)" },
+                { text: "a", cfi: "epubcfi(/6/2!/10/6/2/1:0)" },
+                { text: "Copy one", cfi: "epubcfi(/6/2!/10/6/4/1:0)" },
+                { text: "DSS", cfi: "epubcfi(/6/2!/10/8/2/1:0)" },
+                { text: "Dead Sea Scrolls", cfi: "epubcfi(/6/2!/10/8/4/1:0)" },
+                { text: "MT", cfi: "epubcfi(/6/2!/10/10/2/1:0)" },
+                { text: "Masoretic Text", cfi: "epubcfi(/6/2!/10/10/4/1:0)" },
+            ];
+
+            const result = groupSentencesByRoot(pipeline, segments);
+
+            expect(result.length).toBe(1);
+            expect(result[0].segments.length).toBe(10);
+        });
+
+        it('Case 3: Deeply Nested Definition List (should merge)', () => {
+            const segments = [
+                { text: "Term 1", cfi: "epubcfi(/6/4!/8/2/2/2/1:0)" },
+                { text: "Def segment 1.", cfi: "epubcfi(/6/4!/8/2/2/4/2/1:0)" },
+                { text: "Def segment 2.", cfi: "epubcfi(/6/4!/8/2/2/4/2/1:15)" },
+                { text: "Def segment 3.", cfi: "epubcfi(/6/4!/8/2/2/4/2/1:30)" },
+                { text: "Term 2", cfi: "epubcfi(/6/4!/8/2/4/2/1:0)" },
+                { text: "Def segment 1.", cfi: "epubcfi(/6/4!/8/2/4/4/2/1:0)" },
+                { text: "Def segment 2.", cfi: "epubcfi(/6/4!/8/2/4/4/2/1:15)" },
+                { text: "Def segment 3.", cfi: "epubcfi(/6/4!/8/2/4/4/2/1:30)" },
+                { text: "Term 3", cfi: "epubcfi(/6/4!/8/2/6/2/1:0)" },
+                { text: "Def segment 1.", cfi: "epubcfi(/6/4!/8/2/6/4/2/1:0)" },
+                { text: "Def segment 2.", cfi: "epubcfi(/6/4!/8/2/6/4/2/1:15)" },
+                { text: "Def segment 3.", cfi: "epubcfi(/6/4!/8/2/6/4/2/1:30)" },
+            ];
+
+            const result = groupSentencesByRoot(pipeline, segments);
+
+            expect(result.length).toBe(1);
+            expect(result[0].segments.length).toBe(12);
+        });
+    });
 });
