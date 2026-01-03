@@ -69,29 +69,7 @@ export class AudioContentPipeline {
             ];
 
             if (ttsContent && ttsContent.sentences.length > 0) {
-                // -----------------------------------------------------------
-                // Background Analysis (Async)
-                // -----------------------------------------------------------
-                const genAISettings = useGenAIStore.getState();
-                const skipTypes = genAISettings.contentFilterSkipTypes;
-                const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
-
                 let workingSentences = ttsContent.sentences;
-
-                if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
-                    // Trigger background detection
-                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
-                        .then(mask => {
-                            if (mask && mask.size > 0) {
-                                onMaskFound(mask);
-                            }
-                        })
-                        .catch(err => console.warn("Background mask detection failed", err));
-                }
-
-                // Note: detectAndFilterContent (blocking) is skipped here in favor of async masking
-                // unless we want to support a "Strict/Blocking" mode in future.
-                // For now, we proceed with all sentences and let the mask handle skipping.
 
                 // Dynamic Refinement: Merge segments based on current settings
                 const settings = useTTSStore.getState();
@@ -129,6 +107,24 @@ export class AudioContentPipeline {
                         });
                     }
                 });
+
+                // -----------------------------------------------------------
+                // Background Analysis (Async)
+                // -----------------------------------------------------------
+                const genAISettings = useGenAIStore.getState();
+                const skipTypes = genAISettings.contentFilterSkipTypes;
+                const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
+
+                if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
+                    // Trigger background detection
+                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
+                        .then(mask => {
+                            if (mask && mask.size > 0) {
+                                onMaskFound(mask);
+                            }
+                        })
+                        .catch(err => console.warn("Background mask detection failed", err));
+                }
             } else {
                 // Empty Chapter Handling
                 const randomMessage = NO_TEXT_MESSAGES[Math.floor(Math.random() * NO_TEXT_MESSAGES.length)];
@@ -270,37 +266,6 @@ export class AudioContentPipeline {
         return indicesToSkip;
     }
 
-    /**
-     * Filters out sentences belonging to unwanted content types (e.g., tables, footnotes).
-     *
-     * @param {string} bookId The book ID.
-     * @param {{ text: string; cfi: string; sourceIndices?: number[] }[]} sentences The raw sentences.
-     * @param {ContentType[]} skipTypes The content types to filter out.
-     * @param {string} sectionId The section ID.
-     * @returns {Promise<{ text: string; cfi: string; sourceIndices?: number[] }[]>} The filtered list of sentences.
-     */
-    // @ts-expect-error - Kept for legacy compatibility/testing if needed, though unused in async flow
-    private async detectAndFilterContent(bookId: string, sentences: { text: string; cfi: string; sourceIndices?: number[] }[], skipTypes: ContentType[], sectionId: string): Promise<{ text: string; cfi: string; sourceIndices?: number[] }[]> {
-        // Updated to use the new method logic essentially, but this is for the "Initial Load" path
-        // if we decide to block load (which we generally don't for async, but might for testing or synchronous modes).
-        // However, the new plan favors "Async Masking", so this method might be deprecated or used differently.
-        // But for compatibility with existing code that calls it (if any), we keep it working.
-
-        const mask = await this.detectContentSkipMask(bookId, sectionId, skipTypes, sentences);
-        if (mask.size === 0) return sentences;
-
-        return sentences.filter(s => {
-             // If ANY source index is NOT in the mask, we might keep it?
-             // Or if ALL are in the mask, we skip it?
-             // Logic: A merged sentence is skipped ONLY if ALL its constituents are skipped.
-             // Here we are filtering RAW sentences. So each raw sentence is skipped if its index is in mask.
-             if (s.sourceIndices && s.sourceIndices.length > 0) {
-                 return !s.sourceIndices.every(idx => mask.has(idx));
-             }
-             // Fallback if no source indices (shouldn't happen with new ingestion)
-             return true;
-        });
-    }
 
     /**
      * Retrieves cached content classifications from DB or triggers GenAI detection if missing.
