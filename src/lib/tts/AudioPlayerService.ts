@@ -453,12 +453,14 @@ export class AudioPlayerService {
             });
 
             if (this.stateManager.hasNext()) {
-                const nextItem = this.stateManager.queue[this.stateManager.currentIndex + 1];
-                const nextProcessed = this.lexiconService.applyLexicon(nextItem.text, rules);
-                this.providerManager.preload(nextProcessed, {
-                    voiceId,
-                    speed: this.speed
-                });
+                const nextItem = this.stateManager.getNextItem();
+                if (nextItem) {
+                    const nextProcessed = this.lexiconService.applyLexicon(nextItem.text, rules);
+                    this.providerManager.preload(nextProcessed, {
+                        voiceId,
+                        speed: this.speed
+                    });
+                }
             }
 
         } catch (e) {

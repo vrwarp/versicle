@@ -104,6 +104,17 @@ export class PlaybackStateManager {
         return false;
     }
 
+    /**
+     * Retrieves the next valid (non-skipped) item in the queue without advancing the index.
+     * @returns {TTSQueueItem | null} The next item or null if none exists.
+     */
+    getNextItem(): TTSQueueItem | null {
+        for (let i = this.currentIndex + 1; i < this.queue.length; i++) {
+            if (!this.queue[i].isSkipped) return this.queue[i];
+        }
+        return null;
+    }
+
     hasPrev(): boolean {
         for (let i = this.currentIndex - 1; i >= 0; i--) {
             if (!this.queue[i].isSkipped) return true;
