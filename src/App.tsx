@@ -22,6 +22,37 @@ import { StorageFullError } from './types/errors';
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [dbError, setDbError] = useState<unknown>(null);
+  const [swInitialized, setSwInitialized] = useState(false);
+  const [swError, setSwError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const initSW = async () => {
+      // If service worker is supported, wait for it to be ready
+      if ('serviceWorker' in navigator) {
+        try {
+          await navigator.serviceWorker.ready;
+
+          // Poll for controller with exponential backoff
+          let attempt = 0;
+          let delay = 5;
+          while (!navigator.serviceWorker.controller) {
+            if (attempt >= 8) {
+              throw new Error(`Controller still not ready after ${attempt} attempts`);
+            }
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+            attempt++;
+          }
+
+        } catch (e) {
+          console.error('Service Worker wait failed:', e);
+          setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
+        }
+      }
+      setSwInitialized(true);
+    };
+    initSW();
+  }, []);
 
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -95,7 +126,24 @@ function App() {
   // If we return null while loading, the app feels slow.
   // But if we render, components might fail if DB is truly broken.
   // Given we want to catch "DB fails to open", waiting is safer for this feature.
-  if (dbStatus === 'loading') {
+  if (swError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
+          <div className="max-w-md text-center">
+            <h1 className="text-xl font-bold mb-2">Critical Error</h1>
+            <p className="mb-4">{swError}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      );
+  }
+
+  if (dbStatus === 'loading' || !swInitialized) {
       return <div className="min-h-screen flex items-center justify-center bg-background text-foreground">Initializing...</div>;
   }
 
