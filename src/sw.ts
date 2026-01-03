@@ -10,6 +10,10 @@ cleanupOutdatedCaches()
 self.skipWaiting()
 clientsClaim()
 
+self.addEventListener('activate', () => {
+  self.clients.claim();
+});
+
 precacheAndRoute(self.__WB_MANIFEST)
 
 const COVERS_ENDPOINT_PREFIX = '/__versicle__/covers/';
