@@ -106,7 +106,7 @@ describe('AudioContentPipeline', () => {
     });
 
     describe('Content Filtering', () => {
-         it('should skip filtered content types when enabled', async () => {
+         it('should skip filtered content types asynchronously', async () => {
             const mockSection = { sectionId: 's1', characterCount: 500 } as any;
 
             // Setup two sentences that will be treated as separate groups by groupSentencesByRoot.
@@ -135,13 +135,22 @@ describe('AudioContentPipeline', () => {
                 apiKey: 'test-key'
             });
 
-            // Execute loadSection
-            // The pipeline calls detectAndFilterContent internally
-            const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
+            const onSkipUpdate = vi.fn();
 
-            // Expect result to contain only s1 ('Keep me'), s2 should be filtered out
-            expect(result).toHaveLength(1);
+            // Execute loadSection
+            // The pipeline returns raw queue immediately and calls onSkipUpdate asynchronously
+            const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0, onSkipUpdate);
+
+            // Immediately: Returns all items
+            expect(result).toHaveLength(2);
             expect(result![0].text).toBe('Keep me');
+            expect(result![1].text).toBe('Skip me');
+
+            // Wait for background process (microtasks/promises)
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            // Assert onSkipUpdate was called with index 1 (corresponding to s2)
+            expect(onSkipUpdate).toHaveBeenCalledWith([1]);
         });
     });
 });

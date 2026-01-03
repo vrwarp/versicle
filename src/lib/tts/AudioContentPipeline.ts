@@ -266,15 +266,17 @@ export class AudioContentPipeline {
 
                     // Map final queue items to skipped status
                     finalQueue.forEach((item, index) => {
-                         if (item.cfi && skippedRawCfis.has(item.cfi)) {
-                             indicesToSkip.push(index);
-                         } else if (item.cfi) {
-                             // Fallback: Check if item cfi is part of a skipped group logic if exact match fails?
-                             // Since refinement merges, the item.cfi is usually one of the raw cfis.
-                             // If a merged sentence contains one skipped and one non-skipped, what happens?
-                             // Usually merging respects boundaries or if it merges across boundaries, we might have an issue.
-                             // But TextSegmenter.refineSegments usually merges short sentences.
-                             // If we skip, we probably skip the whole block.
+                         if (item.cfi) {
+                             // Check for exact match or if the item's CFI was part of a skipped raw set (e.g. via merging)
+                             // Note: TextSegmenter.refineSegments typically preserves the CFI of the first sentence in a merged block.
+                             // If the first sentence of a merged block was marked to skip, we skip the whole merged block.
+                             if (skippedRawCfis.has(item.cfi)) {
+                                 indicesToSkip.push(index);
+                             } else {
+                                // Fallback: Check if item cfi overlaps with any skipped root.
+                                // This is more expensive but handles cases where refinement changes CFIs unexpectedly.
+                                // For now, we rely on the primary key match as refinement is deterministic.
+                             }
                          }
                     });
 

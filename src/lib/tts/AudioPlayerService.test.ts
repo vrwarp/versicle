@@ -379,12 +379,14 @@ describe('AudioPlayerService', () => {
             expect(groups[2].rootCfi).toContain('3:0');
         });
 
-        it('detectAndFilterContent handles colliding parents correctly', async () => {
+        it('runBackgroundFiltering handles colliding parents correctly', async () => {
             const sentences = [
                 { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Group 1 (Parent A)
                 { text: "Interruption", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // Group 2 (Parent B)
                 { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Group 3 (Parent A)
             ];
+
+            const mockQueue = sentences.map(s => ({ ...s, isSkipped: false }));
 
             // Mock GenAI response
             // IDs correspond to indices: '0', '1', '2'
@@ -395,14 +397,20 @@ describe('AudioPlayerService', () => {
                 { id: '2', type: 'footnote' } // Skip this one
             ]);
 
-            // Pass explicit sectionId to bypass state dependency
-            const filtered = await contentPipeline.detectAndFilterContent('book1', sentences, ['footnote'], 'sec1');
+            const onSkipUpdate = vi.fn();
 
-            // Should preserve "Narrative" and "Interruption"
-            // Should remove "Footnote"
-            expect(filtered).toHaveLength(2);
-            expect(filtered[0].text).toBe("Narrative");
-            expect(filtered[1].text).toBe("Interruption");
+            // Invoke runBackgroundFiltering directly (since it is private, access via any)
+            await contentPipeline.runBackgroundFiltering(
+                'book1',
+                'sec1',
+                sentences,
+                mockQueue,
+                ['footnote'],
+                onSkipUpdate
+            );
+
+            // Should identify index 2 as skippable
+            expect(onSkipUpdate).toHaveBeenCalledWith([2]);
         });
     });
 });

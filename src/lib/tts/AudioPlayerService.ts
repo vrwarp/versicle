@@ -701,7 +701,13 @@ export class AudioPlayerService {
                      // We might need to update listeners because duration/progress changed?
                      // Yes, duration definitely changed.
                      this.updateMediaSessionMetadata();
-                     this.updateSectionMediaPosition(0); // This might be abrupt but syncs the UI
+
+                     // Maintain the current relative position if possible.
+                     // Since we are likely still playing the same item (or paused), getting the exact provider time
+                     // is tricky without provider access. However, SyncEngine tracks it.
+                     const currentTime = this.syncEngine?.currentTime || 0;
+                     this.updateSectionMediaPosition(currentTime);
+
                      this.notifyListeners(this.stateManager.getCurrentItem()?.cfi || null);
                 }
             });
