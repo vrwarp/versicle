@@ -94,23 +94,23 @@ The `AudioContentPipeline` manages the coordination between raw text extraction 
 4.  **Dispatch Phase**:
 
     ```
-    function reconcileMask(mergedToRawMap, rawSkipStatus):
-        indicesToSkip = []
-        for mergedIndex in mergedToRawMap:
-            rawIndices = mergedToRawMap[mergedIndex]
+    // Pseudocode for callback-based dispatch
+    function loadSection(..., onMaskFound) {
+        // 1. Build Queue synchronously
+        queue = buildQueue()
 
-            // Merged segment is skipped ONLY if all constituents are skipped
-            shouldSkipMerged = true
-            for rawIndex in rawIndices:
-                if rawSkipStatus[rawIndex] is false:
-                    shouldSkipMerged = false
-                    break
+        // 2. Trigger Async Analysis
+        detectContentSkipMask(..., onMaskFound)
 
-            if shouldSkipMerged is true:
-                indicesToSkip.push(mergedIndex)
+        return queue
+    }
 
-        dispatch applySkippedMask(indicesToSkip)
-
+    // In AudioPlayerService
+    onMaskFound = (mask) => {
+        enqueue(() => {
+             stateManager.applySkippedMask(mask)
+        })
+    }
     ```
 
 4. State Synchronization & Concurrency
@@ -120,7 +120,7 @@ The `AudioContentPipeline` manages the coordination between raw text extraction 
 
 Because analysis is asynchronous, a result for "Chapter 1" might arrive after the user has navigated to "Chapter 2."
 
-**Solution**: The `AudioPlayerService` stamps every analysis request with the `sectionId`. Upon callback, it validates that the `currentSectionId` matches the request stamp. If they do not match, the update is discarded.
+**Solution**: The `AudioPlayerService` validates that the `currentSectionId` matches the request stamp before applying the mask.
 
 ### 4.2 Playback Continuity Logic
 
@@ -160,3 +160,5 @@ If the *currently playing* item is marked as `isSkipped` by a background task:
 1.  **Explicit Source Mapping**: Instead of an external map, `TTSQueueItem` directly carries `sourceIndices: number[]`. This simplifies state management and persistence, as the "lineage" of a merged sentence is preserved directly in the data structure.
 2.  **CFI Range Generation**: Discovered a regression in `generateCfiRange` where it would aggressively backtrack from valid end-of-string boundaries. Fixed logic to respect exact matches and only backtrack if the common prefix ends mid-step.
 3.  **Raw Index Consistency**: `TextSegmenter` was updated to initialize `sourceIndices` (0..N) on raw sentences before merging. This ensures that even after complex merging (abbreviations, short sentences), we can trace back to the original raw sentence index used by the analysis engine.
+4.  **Callback Pattern for Async Analysis**: Instead of `AudioPlayerService` explicitly calling `runBackgroundFiltering`, the `AudioContentPipeline.loadSection` method accepts an `onMaskFound` callback. This keeps the background logic encapsulated within the pipeline while allowing the player service to safely schedule state updates on its task queue.
+5.  **Optimization**: `detectContentSkipMask` accepts the already-loaded `sentences` array to avoid a redundant database fetch during the background analysis phase.

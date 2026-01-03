@@ -100,6 +100,7 @@ export class AudioContentPipeline {
                         newQueue.push({
                             text: s.text,
                             cfi: s.cfi,
+                            sourceIndices: s.sourceIndices,
                             title: title,
                             bookTitle: bookMetadata?.title,
                             author: bookMetadata?.author,
