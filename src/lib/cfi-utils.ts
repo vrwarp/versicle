@@ -146,13 +146,11 @@ export function generateCfiRange(start: string, end: string): string {
     if (!sOk || !eOk) {
         // Backtrack to valid delimiter
         while (i > 0) {
-            const char = start[i - 1]; // Look at last matched character
-            if (delimiters.includes(char) || char === ',' || char === '[') {
-                 // We found a separator in the common prefix.
-                 // This is a valid split point.
+            i--;
+            const char = start[i];
+            if ((delimiters.includes(char) || char === ',' || char === '[') && start[i] === end[i]) {
                  break;
             }
-            i--;
         }
     }
 

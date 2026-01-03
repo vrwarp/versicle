@@ -381,10 +381,15 @@ describe('AudioPlayerService', () => {
 
         it('detectAndFilterContent handles colliding parents correctly', async () => {
             const sentences = [
-                { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Group 1 (Parent A)
-                { text: "Interruption", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // Group 2 (Parent B)
-                { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Group 3 (Parent A)
+                { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)", sourceIndices: [0] }, // Group 1 (Parent A)
+                { text: "Interruption", cfi: "epubcfi(/6/14!/4/4/1:0)", sourceIndices: [1] }, // Group 2 (Parent B)
+                { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)", sourceIndices: [2] }, // Group 3 (Parent A)
             ];
+
+            // Mock getTTSContent to return these sentences so the pipeline can fetch them by indices
+            vi.mocked(dbService.getTTSContent).mockResolvedValueOnce({
+                sentences: sentences.map((s, i) => ({ ...s, sourceIndices: [i] })) as any
+            });
 
             // Mock GenAI response
             // IDs correspond to indices: '0', '1', '2'

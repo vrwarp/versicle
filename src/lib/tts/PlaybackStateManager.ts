@@ -80,6 +80,10 @@ export class PlaybackStateManager {
      * @param {string} sectionId The section ID for validation.
      */
     applySkippedMask(rawSkippedIndices: Set<number>, sectionId?: string) {
+        // Validation of sectionId can be added here if needed, currently implicitly handled by caller
+        if (sectionId && this.currentSectionIndex === -1) {
+             // Optional: validate section ID
+        }
         let changed = false;
 
         // Iterate over the queue and update isSkipped status
