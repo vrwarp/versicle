@@ -101,4 +101,29 @@ describe('App Service Worker Wait', () => {
 
     consoleSpy.mockRestore();
   });
+
+  it('shows critical error if Service Worker controller is missing', async () => {
+    // Mock navigator.serviceWorker with ready but no controller
+    const readyPromise = Promise.resolve();
+    Object.defineProperty(window.navigator, 'serviceWorker', {
+      value: {
+        ready: readyPromise,
+        controller: null, // explicit null
+        register: vi.fn(),
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    render(<App />);
+
+    // Initially initializing
+    expect(screen.getByText('Initializing...')).toBeInTheDocument();
+
+    // Then shows error
+    await waitFor(() => {
+        expect(screen.getByText('Critical Error')).toBeInTheDocument();
+        expect(screen.getByText(/Service Worker failed to take control/)).toBeInTheDocument();
+    });
+  });
 });

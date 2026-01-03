@@ -23,6 +23,7 @@ function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [dbError, setDbError] = useState<unknown>(null);
   const [swInitialized, setSwInitialized] = useState(false);
+  const [swError, setSwError] = useState<string | null>(null);
 
   useEffect(() => {
     const initSW = async () => {
@@ -30,8 +31,16 @@ function App() {
       if ('serviceWorker' in navigator) {
         try {
           await navigator.serviceWorker.ready;
+          if (!navigator.serviceWorker.controller) {
+             setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
+             // We don't return here because we still want to set swInitialized to true
+             // so the error screen can be rendered by the main logic if we choose to.
+             // But actually, if we have an error, we should block.
+          }
         } catch (e) {
           console.error('Service Worker wait failed:', e);
+          // If waiting fails, we probably should show error too if it's critical.
+          // But strict requirement is checking controller.
         }
       }
       setSwInitialized(true);
@@ -111,6 +120,23 @@ function App() {
   // If we return null while loading, the app feels slow.
   // But if we render, components might fail if DB is truly broken.
   // Given we want to catch "DB fails to open", waiting is safer for this feature.
+  if (swError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
+          <div className="max-w-md text-center">
+            <h1 className="text-xl font-bold mb-2">Critical Error</h1>
+            <p className="mb-4">{swError}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      );
+  }
+
   if (dbStatus === 'loading' || !swInitialized) {
       return <div className="min-h-screen flex items-center justify-center bg-background text-foreground">Initializing...</div>;
   }
