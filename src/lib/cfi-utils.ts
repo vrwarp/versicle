@@ -89,7 +89,7 @@ export function getParentCfi(cfi: string): string {
         // HEURISTIC: Structural Snapping
         // Snap to "Container Depth" (Total Level 4)
         // e.g. /6/14!/4/2 (Spine depth 2 + Path depth 2 = 4)
-        // e.g. /14/2/2/10/2 (Spine depth ? + Path depth 4) -> Snap to 4 total?
+        // e.g. /14!/2/2/10/2 (Spine depth 1 + Path depth 4 = 5) -> Snap to 3 path steps (Total 4)
 
         // Calculate spine depth
         const spineDepth = spine.split('/').filter(p => p.length > 0).length;
