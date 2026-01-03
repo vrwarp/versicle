@@ -15,7 +15,7 @@ import { OffloadBookDialog } from './OffloadBookDialog';
 import type { BookMetadata } from '../../types/db';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
 import { CURRENT_BOOK_VERSION } from '../../lib/constants';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 /**
  * The main library view component.
@@ -59,6 +59,7 @@ export const LibraryView: React.FC = () => {
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Modal State Coordination
   const [activeModal, setActiveModal] = useState<{
@@ -68,6 +69,17 @@ export const LibraryView: React.FC = () => {
 
   const [bookToRestore, setBookToRestore] = useState<BookMetadata | null>(null);
   const [reprocessingBookId, setReprocessingBookId] = useState<string | null>(null);
+
+  // Check for reprocessing request from navigation state
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const state = location.state as any;
+    if (state && state.reprocessBookId) {
+        setReprocessingBookId(state.reprocessBookId);
+        // Clear state to prevent reopening on reload/navigation
+        window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     fetchBooks();
