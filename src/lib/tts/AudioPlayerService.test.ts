@@ -381,11 +381,11 @@ describe('AudioPlayerService', () => {
             expect(groups[2].rootCfi).toContain('3:0');
         });
 
-        it('detectAndFilterContent handles colliding parents correctly', async () => {
+        it('detectContentSkipMask handles colliding parents correctly', async () => {
             const sentences = [
-                { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Group 1 (Parent A)
-                { text: "Interruption", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // Group 2 (Parent B)
-                { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Group 3 (Parent A)
+                { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)", sourceIndices: [0] }, // Group 1 (Parent A)
+                { text: "Interruption", cfi: "epubcfi(/6/14!/4/4/1:0)", sourceIndices: [1] }, // Group 2 (Parent B)
+                { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)", sourceIndices: [2] }, // Group 3 (Parent A)
             ];
 
             // Mock GenAI response
@@ -397,14 +397,16 @@ describe('AudioPlayerService', () => {
                 { id: '2', type: 'footnote' } // Skip this one
             ]);
 
-            // Pass explicit sectionId to bypass state dependency
-            const filtered = await contentPipeline.detectAndFilterContent('book1', sentences, ['footnote'], 'sec1');
+            // Check the mask generation
+            // @ts-expect-error casting for test compatibility
+            const mask = await contentPipeline.detectContentSkipMask('book1', 'sec1', ['footnote'], sentences);
 
-            // Should preserve "Narrative" and "Interruption"
-            // Should remove "Footnote"
-            expect(filtered).toHaveLength(2);
-            expect(filtered[0].text).toBe("Narrative");
-            expect(filtered[1].text).toBe("Interruption");
+            // Should skip index 2 ("Footnote")
+            expect(mask.has(2)).toBe(true);
+            // Should NOT skip index 0 ("Narrative")
+            expect(mask.has(0)).toBe(false);
+            // Should NOT skip index 1 ("Interruption")
+            expect(mask.has(1)).toBe(false);
         });
     });
 });

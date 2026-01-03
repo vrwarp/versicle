@@ -6,6 +6,7 @@ import { useTTSStore } from '../../../store/useTTSStore';
 import ePub from 'epubjs';
 import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { CURRENT_BOOK_VERSION } from '../../../lib/constants';
 
 // Mock dependencies
 vi.mock('epubjs');
@@ -14,7 +15,7 @@ vi.mock('../../../db/db', () => ({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get: vi.fn((store, id) => {
       if (store === 'files') return Promise.resolve(new ArrayBuffer(10));
-      if (store === 'books') return Promise.resolve({ title: 'Test Book', version: 1 });
+      if (store === 'books') return Promise.resolve({ title: 'Test Book', version: CURRENT_BOOK_VERSION });
       return Promise.resolve(null);
     }),
     getAllFromIndex: vi.fn(() => Promise.resolve([])), // Mock annotations fetch
@@ -122,7 +123,7 @@ describe('ReaderView', () => {
       setIsLoading: (isLoading) => useReaderStore.setState({ isLoading }),
       setCurrentBookId: (id) => useReaderStore.setState({ currentBookId: id }),
       viewMode: 'paginated', // Default for tests
-      immersiveMode: true, // Needed for input controller to listen
+      immersiveMode: false, // Default to false so header is visible
     });
 
     useTTSStore.setState({
@@ -159,6 +160,9 @@ describe('ReaderView', () => {
     renderComponent();
 
     await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+
+    // Wait for the mock component to appear
+    await waitFor(() => expect(screen.getByTestId('unified-input-controller')).toBeInTheDocument());
 
     // Click mock buttons exposed by UnifiedInputController mock
     const prevBtn = screen.getByTestId('mock-prev');

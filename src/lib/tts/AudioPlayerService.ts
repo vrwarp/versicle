@@ -34,6 +34,10 @@ export interface TTSQueueItem {
     coverUrl?: string;
     /** Indicates if this item is a pre-roll announcement. */
     isPreroll?: boolean;
+    /** Indicates if this item should be skipped during playback. */
+    isSkipped?: boolean;
+    /** The indices of the raw source sentences that make up this item. */
+    sourceIndices?: number[];
 }
 
 export interface DownloadInfo {
@@ -640,13 +644,30 @@ export class AudioPlayerService {
         if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
 
         const section = this.playlist[sectionIndex];
+        const currentBookId = this.currentBookId;
+        const currentSectionId = section.sectionId;
+
+        // Callback for async mask updates
+        const onMaskFound = (mask: Set<number>) => {
+            this.enqueue(async () => {
+                // Verify validity before applying
+                if (this.currentBookId !== currentBookId) return;
+
+                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
+                if (activeSection && activeSection.sectionId === currentSectionId) {
+                    this.stateManager.applySkippedMask(mask, currentSectionId);
+                }
+            });
+        };
+
         const newQueue = await this.contentPipeline.loadSection(
             this.currentBookId,
             section,
             sectionIndex,
             this.prerollEnabled,
             this.speed,
-            sectionTitle
+            sectionTitle,
+            onMaskFound
         );
 
         if (newQueue && newQueue.length > 0) {
@@ -664,6 +685,7 @@ export class AudioPlayerService {
             if (autoPlay) {
                 await this.playInternal();
             }
+
             this.contentPipeline.triggerNextChapterAnalysis(this.currentBookId, sectionIndex, this.playlist);
             return true;
         }

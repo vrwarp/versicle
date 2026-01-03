@@ -7,6 +7,7 @@ import { getParentCfi, generateCfiRange, parseCfiRange } from '../cfi-utils';
 import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
+import type { SentenceNode } from '../tts';
 
 /**
  * Manages the transformation of raw book content into a playable TTS queue.
@@ -25,6 +26,7 @@ export class AudioContentPipeline {
      * @param {boolean} prerollEnabled Whether to add a preroll announcement.
      * @param {number} speed The current playback speed (used for preroll duration estimation).
      * @param {string} [sectionTitle] Optional override for the section title.
+     * @param {(mask: Set<number>) => void} [onMaskFound] Callback to report skipped indices found during background analysis.
      * @returns {Promise<TTSQueueItem[] | null>} The processed queue or null on failure.
      */
     async loadSection(
@@ -33,7 +35,8 @@ export class AudioContentPipeline {
         sectionIndex: number,
         prerollEnabled: boolean,
         speed: number,
-        sectionTitle?: string
+        sectionTitle?: string,
+        onMaskFound?: (mask: Set<number>) => void
     ): Promise<TTSQueueItem[] | null> {
         try {
             const ttsContent = await dbService.getTTSContent(bookId, section.sectionId);
@@ -66,19 +69,7 @@ export class AudioContentPipeline {
             ];
 
             if (ttsContent && ttsContent.sentences.length > 0) {
-                // -----------------------------------------------------------
-                // Content Type Detection & Filtering (on RAW sentences)
-                // -----------------------------------------------------------
-                const genAISettings = useGenAIStore.getState();
-                const skipTypes = genAISettings.contentFilterSkipTypes;
-                const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
-
                 let workingSentences = ttsContent.sentences;
-
-                // Optimize: Don't run detection if nothing to skip
-                if (skipTypes.length > 0 && isContentAnalysisEnabled) {
-                    workingSentences = await this.detectAndFilterContent(bookId, workingSentences, skipTypes, section.sectionId);
-                }
 
                 // Dynamic Refinement: Merge segments based on current settings
                 const settings = useTTSStore.getState();
@@ -109,6 +100,8 @@ export class AudioContentPipeline {
                         newQueue.push({
                             text: s.text,
                             cfi: s.cfi,
+                            sourceIndices: s.sourceIndices,
+                            isSkipped: false,
                             title: title,
                             bookTitle: bookMetadata?.title,
                             author: bookMetadata?.author,
@@ -116,6 +109,24 @@ export class AudioContentPipeline {
                         });
                     }
                 });
+
+                // -----------------------------------------------------------
+                // Background Analysis (Async)
+                // -----------------------------------------------------------
+                const genAISettings = useGenAIStore.getState();
+                const skipTypes = genAISettings.contentFilterSkipTypes;
+                const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
+
+                if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
+                    // Trigger background detection
+                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
+                        .then(mask => {
+                            if (mask && mask.size > 0) {
+                                onMaskFound(mask);
+                            }
+                        })
+                        .catch(err => console.warn("Background mask detection failed", err));
+                }
             } else {
                 // Empty Chapter Handling
                 const randomMessage = NO_TEXT_MESSAGES[Math.floor(Math.random() * NO_TEXT_MESSAGES.length)];
@@ -196,54 +207,67 @@ export class AudioContentPipeline {
     }
 
     /**
-     * Filters out sentences belonging to unwanted content types (e.g., tables, footnotes).
+     * Analyzes content for skipping based on current settings and returns a set of raw indices to skip.
      *
      * @param {string} bookId The book ID.
-     * @param {{ text: string; cfi: string }[]} sentences The raw sentences.
-     * @param {ContentType[]} skipTypes The content types to filter out.
      * @param {string} sectionId The section ID.
-     * @returns {Promise<{ text: string; cfi: string }[]>} The filtered list of sentences.
+     * @param {ContentType[]} skipTypes The content types to filter out.
+     * @param {SentenceNode[]} [sentences] The raw sentences to analyze. If not provided, they will be fetched from DB.
+     * @returns {Promise<Set<number>>} A Set of raw sentence indices to skip.
      */
-    private async detectAndFilterContent(bookId: string, sentences: { text: string; cfi: string }[], skipTypes: ContentType[], sectionId: string): Promise<{ text: string; cfi: string }[]> {
-        if (!bookId || !sectionId) return sentences;
+    async detectContentSkipMask(bookId: string, sectionId: string, skipTypes: ContentType[], sentences?: SentenceNode[]): Promise<Set<number>> {
+        const indicesToSkip = new Set<number>();
 
-        // Fetch Table CFIs for Grouping
-        const tableImages = await dbService.getTableImages(bookId);
-        const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
+        try {
+            let targetSentences = sentences;
+            if (!targetSentences) {
+                const ttsContent = await dbService.getTTSContent(bookId, sectionId);
+                targetSentences = ttsContent?.sentences || [];
+            }
 
-        // Group sentences by Root Node
-        const groups = this.groupSentencesByRoot(sentences, tableCfis);
+            if (targetSentences.length === 0) return indicesToSkip;
 
-        const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
+             // Fetch Table CFIs for Grouping
+            const tableImages = await dbService.getTableImages(bookId);
+            const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
-        // 3. Filter based on detected types and current settings
-        if (detectedTypes && detectedTypes.length > 0) {
-            const typeMap = new Map<string, ContentType>();
-            detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
+            // Group sentences by Root Node
+            const groups = this.groupSentencesByRoot(targetSentences, tableCfis);
+            const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
-            const skipRoots = new Set<string>();
-            groups.forEach(g => {
-                const type = typeMap.get(g.rootCfi);
-                if (type && skipTypes.includes(type)) {
-                    skipRoots.add(g.rootCfi);
-                }
-            });
+            if (detectedTypes && detectedTypes.length > 0) {
+                 const typeMap = new Map<string, ContentType>();
+                 detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
 
-            if (skipRoots.size > 0) {
-                const finalSentences: { text: string; cfi: string }[] = [];
-                for (const g of groups) {
-                    if (!skipRoots.has(g.rootCfi)) {
-                        finalSentences.push(...g.segments);
-                    } else {
-                        console.log(`Skipping content block (Cached/Detected)`, g.rootCfi);
+                 const skipRoots = new Set<string>();
+                 groups.forEach(g => {
+                    const type = typeMap.get(g.rootCfi);
+                    if (type && skipTypes.includes(type)) {
+                        skipRoots.add(g.rootCfi);
+                    }
+                });
+
+                if (skipRoots.size > 0) {
+                    for (const g of groups) {
+                        if (skipRoots.has(g.rootCfi)) {
+                             // Mark all segments in this group as skipped
+                             for (const segment of g.segments) {
+                                 if (segment.sourceIndices) {
+                                     segment.sourceIndices.forEach(idx => indicesToSkip.add(idx));
+                                 }
+                             }
+                        }
                     }
                 }
-                return finalSentences;
             }
+
+        } catch (e) {
+            console.warn("Error detecting content skip mask", e);
         }
 
-        return sentences;
+        return indicesToSkip;
     }
+
 
     /**
      * Retrieves cached content classifications from DB or triggers GenAI detection if missing.
@@ -322,11 +346,11 @@ export class AudioContentPipeline {
      * Groups individual text segments by their common semantic root element using CFI structure.
      * This allows the GenAI to classify logical blocks (tables, asides) rather than fragmented sentences.
      */
-    private groupSentencesByRoot(sentences: { text: string; cfi: string }[], tableCfis: string[] = []): { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] {
-        const groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[] = [];
-        let currentGroup: { parentCfi: string; segments: { text: string; cfi: string }[]; fullText: string } | null = null;
+    private groupSentencesByRoot(sentences: { text: string; cfi: string; sourceIndices?: number[] }[], tableCfis: string[] = []): { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] {
+        const groups: { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] = [];
+        let currentGroup: { parentCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string } | null = null;
 
-        const finalizeGroup = (group: { segments: { text: string; cfi: string }[]; fullText: string }) => {
+        const finalizeGroup = (group: { segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }) => {
             const first = group.segments[0].cfi;
             const last = group.segments[group.segments.length - 1].cfi;
 

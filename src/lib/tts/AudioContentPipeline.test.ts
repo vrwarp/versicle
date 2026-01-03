@@ -113,7 +113,7 @@ describe('AudioContentPipeline', () => {
     });
 
     describe('Content Filtering', () => {
-         it('should skip filtered content types when enabled', async () => {
+         it('should trigger onMaskFound with skipped indices when filtering is enabled', async () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockSection = { sectionId: 's1', characterCount: 500 } as any;
 
@@ -121,16 +121,13 @@ describe('AudioContentPipeline', () => {
             // s1 is the content we want to keep.
             // s2 is the content we want to filter out (e.g. a table).
             // We use distinct paths (/2/2/2 vs /2/2/4) to ensure they don't get merged into a single group.
-             const s1 = { text: 'Keep me', cfi: 'epubcfi(/2/2/2:0)' };
-             const s2 = { text: 'Skip me', cfi: 'epubcfi(/2/2/4:0)' };
+             const s1 = { text: 'Keep me', cfi: 'epubcfi(/2/2/2:0)', sourceIndices: [0] };
+             const s2 = { text: 'Skip me', cfi: 'epubcfi(/2/2/4:0)', sourceIndices: [1] };
 
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
              (dbService.getTTSContent as any).mockResolvedValue({ sentences: [s1, s2] });
 
              // Mock content analysis results to classify s2 as a 'table'.
-             // The pipeline uses `generateCfiRange` to create the rootCfi for grouping.
-             // For a single-item group like s2, the range logic typically results in a self-referencing range.
-             // We mock dbService to return a matching result so the pipeline sees 'table' for s2's group.
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
              (dbService.getContentAnalysis as any).mockResolvedValue({
                 contentTypes: [
@@ -146,13 +143,24 @@ describe('AudioContentPipeline', () => {
                 apiKey: 'test-key'
             });
 
-            // Execute loadSection
-            // The pipeline calls detectAndFilterContent internally
-            const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
+            const onMaskFound = vi.fn();
 
-            // Expect result to contain only s1 ('Keep me'), s2 should be filtered out
-            expect(result).toHaveLength(1);
+            // Execute loadSection
+            const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0, undefined, onMaskFound);
+
+            // Queue should contain BOTH items initially (non-blocking load)
+            expect(result).toHaveLength(2);
             expect(result![0].text).toBe('Keep me');
+            expect(result![1].text).toBe('Skip me');
+
+            // Wait for async background task
+            await new Promise(resolve => setTimeout(resolve, 10));
+
+            // Verify callback was called with mask containing index 1
+            expect(onMaskFound).toHaveBeenCalled();
+            const mask = onMaskFound.mock.calls[0][0];
+            expect(mask.has(1)).toBe(true);
+            expect(mask.has(0)).toBe(false);
         });
     });
 });
