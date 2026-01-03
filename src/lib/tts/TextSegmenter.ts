@@ -206,7 +206,10 @@ export class TextSegmenter {
         const starterSet = TextSegmenter.cache.starterSet;
 
         for (let i = 0; i < sentences.length; i++) {
-            const current = { ...sentences[i], text: sentences[i].text.normalize('NFKD') };
+            // Optimization: Assume sentences are already normalized by TextSegmenter.segment() during ingestion.
+            // Avoiding re-normalization improves performance significantly.
+            // We MUST clone the object to avoid mutating the original input array during merging.
+            const current = { ...sentences[i] };
 
             if (merged.length > 0) {
                 const last = merged[merged.length - 1];
@@ -268,10 +271,15 @@ export class TextSegmenter {
                         const startCfi = parseCfiRange(last.cfi);
                         const endCfi = parseCfiRange(current.cfi);
 
-                        if (startCfi && endCfi) {
+                        // If startCfi/endCfi are null, it means they are point CFIs (or invalid).
+                        // We use the raw CFI string in that case.
+                        const startPoint = startCfi ? startCfi.fullStart : last.cfi;
+                        const endPoint = endCfi ? endCfi.fullEnd : current.cfi;
+
+                        if (startPoint && endPoint) {
                              // We want the range from the START of the first segment to the END of the second segment.
                              // generateCfiRange takes two points (start and end) and finds the common parent.
-                             last.cfi = generateCfiRange(startCfi.fullStart, endCfi.fullEnd);
+                             last.cfi = generateCfiRange(startPoint, endPoint);
                         }
 
                         continue;
@@ -318,8 +326,12 @@ export class TextSegmenter {
                 // Merge CFIs
                 const startCfi = parseCfiRange(buffer.cfi);
                 const endCfi = parseCfiRange(current.cfi);
-                if (startCfi && endCfi) {
-                    buffer.cfi = generateCfiRange(startCfi.fullStart, endCfi.fullEnd);
+
+                const startPoint = startCfi ? startCfi.fullStart : buffer.cfi;
+                const endPoint = endCfi ? endCfi.fullEnd : current.cfi;
+
+                if (startPoint && endPoint) {
+                    buffer.cfi = generateCfiRange(startPoint, endPoint);
                 }
             } else {
                 lengthMerged.push(buffer);
@@ -335,8 +347,12 @@ export class TextSegmenter {
 
                 const startCfi = parseCfiRange(last.cfi);
                 const endCfi = parseCfiRange(buffer.cfi);
-                if (startCfi && endCfi) {
-                    last.cfi = generateCfiRange(startCfi.fullStart, endCfi.fullEnd);
+
+                const startPoint = startCfi ? startCfi.fullStart : last.cfi;
+                const endPoint = endCfi ? endCfi.fullEnd : buffer.cfi;
+
+                if (startPoint && endPoint) {
+                    last.cfi = generateCfiRange(startPoint, endPoint);
                 }
             } else {
                 lengthMerged.push(buffer);
