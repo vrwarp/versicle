@@ -22,6 +22,22 @@ import { StorageFullError } from './types/errors';
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [dbError, setDbError] = useState<unknown>(null);
+  const [swInitialized, setSwInitialized] = useState(false);
+
+  useEffect(() => {
+    const initSW = async () => {
+      // If service worker is supported, wait for it to be ready
+      if ('serviceWorker' in navigator) {
+        try {
+          await navigator.serviceWorker.ready;
+        } catch (e) {
+          console.error('Service Worker wait failed:', e);
+        }
+      }
+      setSwInitialized(true);
+    };
+    initSW();
+  }, []);
 
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
@@ -95,7 +111,7 @@ function App() {
   // If we return null while loading, the app feels slow.
   // But if we render, components might fail if DB is truly broken.
   // Given we want to catch "DB fails to open", waiting is safer for this feature.
-  if (dbStatus === 'loading') {
+  if (dbStatus === 'loading' || !swInitialized) {
       return <div className="min-h-screen flex items-center justify-center bg-background text-foreground">Initializing...</div>;
   }
 
