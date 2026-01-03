@@ -42,7 +42,7 @@ export interface DownloadInfo {
     status: string;
 }
 
-type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null, downloadInfo?: DownloadInfo) => void;
+type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: ReadonlyArray<TTSQueueItem>, error: string | null, downloadInfo?: DownloadInfo) => void;
 
 /**
  * Singleton service that manages Text-to-Speech playback.
@@ -65,7 +65,6 @@ export class AudioPlayerService {
     private syncEngine: SyncEngine | null = null;
     private lexiconService: LexiconService;
 
-    // State
     private status: TTSStatus = 'stopped';
     private listeners: PlaybackListener[] = [];
     private activeLexiconRules: LexiconRule[] | null = null;
@@ -107,8 +106,6 @@ export class AudioPlayerService {
             onError: (error) => {
                  if (error?.type === 'fallback') {
                       console.warn("Falling back to local provider due to cloud error");
-                      // Retrying playInternal will use the new provider (which was switched internally by manager if logic allows,
-                      // but manager actually switched instance. We just need to re-trigger play.)
                       this.playInternal(true);
                       return;
                  }
@@ -136,6 +133,12 @@ export class AudioPlayerService {
 
         this.syncEngine.setOnHighlight(() => {
             // No action currently
+        });
+
+        // Subscribe to state manager changes
+        this.stateManager.subscribe((snapshot) => {
+            this.updateMediaSessionMetadata();
+            this.notifyListeners(snapshot.currentItem?.cfi || null);
         });
     }
 
@@ -168,7 +171,6 @@ export class AudioPlayerService {
                 this.setStatus('stopped');
             }
 
-            // Clear cached rules when book changes
             this.activeLexiconRules = null;
         }
     }
@@ -192,10 +194,9 @@ export class AudioPlayerService {
     }
 
     private updateSectionMediaPosition(providerTime: number) {
-        const position = this.stateManager.getCurrentPosition(providerTime, this.speed);
-        const duration = this.stateManager.getTotalDuration(this.speed);
+        const position = this.stateManager.getCurrentPosition(providerTime);
+        const duration = this.stateManager.getTotalDuration();
 
-        // Safety check
         const safeDuration = Math.max(duration, position);
 
         this.platformIntegration.setPositionState({
@@ -214,8 +215,7 @@ export class AudioPlayerService {
                 if (state && state.queue && state.queue.length > 0) {
                     await this.stopInternal();
                     this.stateManager.setQueue(state.queue, state.currentIndex || 0, state.sectionIndex ?? -1);
-                    this.updateMediaSessionMetadata();
-                    this.notifyListeners(this.stateManager.getCurrentItem()?.cfi || null);
+                    // Subscription handles metadata and listeners
                 }
             } catch (e) {
                 console.error("Failed to restore TTS queue", e);
@@ -235,15 +235,12 @@ export class AudioPlayerService {
                 totalSections: this.playlist.length
             });
 
-            // Always update position when track changes, even if metadata is identical
             this.updateSectionMediaPosition(0);
         }
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public setBackgroundAudioMode(mode: any) {
-         // Pass through to platform integration
-         // Casting because mode type is imported from BackgroundAudio file which is not exported from PlatformIntegration explicitly
          this.platformIntegration.setBackgroundAudioMode(mode, this.status === 'playing' || this.status === 'loading');
     }
 
@@ -282,7 +279,7 @@ export class AudioPlayerService {
         return await this.providerManager.isVoiceDownloaded(voiceId);
     }
 
-    public getQueue(): TTSQueueItem[] {
+    public getQueue(): ReadonlyArray<TTSQueueItem> {
         return this.stateManager.queue;
     }
 
@@ -308,7 +305,6 @@ export class AudioPlayerService {
         if (!this.currentBookId || this.playlist.length === 0) return false;
         let prevSectionIndex = this.stateManager.currentSectionIndex - 1;
         while (prevSectionIndex >= 0) {
-            // Load and play from start
             const loaded = await this.loadSectionInternal(prevSectionIndex, true);
             if (loaded) return true;
             prevSectionIndex--;
@@ -316,39 +312,18 @@ export class AudioPlayerService {
         return false;
     }
 
-    private isQueueEqual(newItems: TTSQueueItem[]): boolean {
-        const currentQueue = this.stateManager.queue;
-        if (currentQueue.length !== newItems.length) return false;
-        for (let i = 0; i < currentQueue.length; i++) {
-            if (currentQueue[i].text !== newItems[i].text) return false;
-            if (currentQueue[i].cfi !== newItems[i].cfi) return false;
-        }
-        return true;
-    }
-
     setQueue(items: TTSQueueItem[], startIndex: number = 0) {
         return this.enqueue(async () => {
-            if (this.isQueueEqual(items)) {
-                // Optimization: If the new queue is identical to the current one,
-                // we skip the heavy stop/reset logic. We update the state manager with the new start index
-                // and persist the state, but maintain continuity if possible.
-
+            if (this.stateManager.isIdenticalTo(items)) {
                 this.stateManager.setQueue(items, startIndex, this.stateManager.currentSectionIndex);
-                this.updateMediaSessionMetadata();
-                this.notifyListeners(this.stateManager.getCurrentItem()?.cfi || null);
-                this.stateManager.persistQueue();
+                // persist and notify are automatic.
                 return;
             }
 
-            // If the queue has changed, we must stop playback and fully reset the state.
             await this.stopInternal();
 
-            // Note: setQueue is often called for the current section. We assume `currentSectionIndex` remains valid.
             this.stateManager.setQueue(items, startIndex, this.stateManager.currentSectionIndex);
-
-            this.updateMediaSessionMetadata();
-            this.notifyListeners(this.stateManager.getCurrentItem()?.cfi || null);
-            this.stateManager.persistQueue();
+            // persist and notify automatic.
         });
     }
 
@@ -356,7 +331,6 @@ export class AudioPlayerService {
         return this.enqueue(async () => {
             if (this.stateManager.jumpTo(index)) {
                 await this.stopInternal();
-                this.stateManager.persistQueue();
                 await this.playInternal();
             }
         });
@@ -388,10 +362,6 @@ export class AudioPlayerService {
         return this.enqueue(() => this.playInternal());
     }
 
-    /**
-     * Internal playback logic.
-     * @param force If true, forces a full restart/re-synthesis of the current item, even if paused.
-     */
     private async playInternal(force: boolean = false): Promise<void> {
         if (this.status === 'paused' && !force) {
             return this.resumeInternal();
@@ -404,7 +374,7 @@ export class AudioPlayerService {
                 if (book) {
                     if (book.lastPlayedCfi && this.stateManager.currentIndex === 0) {
                         const index = this.stateManager.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
-                        if (index >= 0) this.stateManager.currentIndex = index;
+                        if (index >= 0) this.stateManager.jumpTo(index);
                     }
                     if (book.lastPauseTime) return this.resumeInternal();
                 }
@@ -416,7 +386,7 @@ export class AudioPlayerService {
         const item = this.stateManager.getCurrentItem();
         if (!item) {
             this.setStatus('stopped');
-            this.notifyListeners(null);
+            // notifyListeners handled by setStatus
             return;
         }
 
@@ -430,14 +400,12 @@ export class AudioPlayerService {
             this.setStatus('loading');
         }
 
-        this.notifyListeners(item.cfi);
-        this.updateMediaSessionMetadata();
-        this.stateManager.persistQueue();
+        // updateMediaSessionMetadata() and notifyListeners() are handled by listeners or setStatus
+        this.stateManager.persistQueue(); // Ensure persistence before play.
 
         try {
             const voiceId = this.voiceId || '';
 
-            // Load and cache rules if not already cached for this session
             if (!this.activeLexiconRules) {
                 this.activeLexiconRules = await this.lexiconService.getRules(this.currentBookId || undefined);
             }
@@ -493,7 +461,6 @@ export class AudioPlayerService {
         await this.stateManager.savePlaybackState('stopped');
         await this.platformIntegration.stop();
         this.setStatus('stopped');
-        this.notifyListeners(null);
         this.providerManager.stop();
     }
 
@@ -501,7 +468,6 @@ export class AudioPlayerService {
         return this.enqueue(async () => {
             if (this.stateManager.hasNext()) {
                 this.stateManager.next();
-                this.stateManager.persistQueue();
                 if (this.status === 'paused') this.setStatus('stopped');
                 await this.playInternal();
             } else {
@@ -514,7 +480,6 @@ export class AudioPlayerService {
         return this.enqueue(async () => {
             if (this.stateManager.hasPrev()) {
                 this.stateManager.prev();
-                this.stateManager.persistQueue();
                 if (this.status === 'paused') this.setStatus('stopped');
                 await this.playInternal();
             }
@@ -533,33 +498,27 @@ export class AudioPlayerService {
 
     seekTo(time: number) {
         return this.enqueue(async () => {
-            const newIndex = this.stateManager.calculateIndexFromTime(time, this.speed);
+            const changed = this.stateManager.seekToTime(time);
             const wasPlaying = (this.status === 'playing' || this.status === 'loading');
 
-            // Fix: If the approximated index is the same as current...
-            if (newIndex === this.stateManager.currentIndex) {
+            if (!changed) {
                 if (this.stateManager.hasNext()) {
                     this.stateManager.next();
                 } else {
                     await this.advanceToNextChapter();
                     return;
                 }
-            } else {
-                this.stateManager.currentIndex = newIndex;
             }
+            // if changed, PSM auto persisted and notified.
 
             if (wasPlaying) {
                 this.providerManager.stop();
             }
 
-            this.stateManager.persistQueue();
-
             if (wasPlaying) {
                 await this.playInternal();
             } else {
-                this.updateMediaSessionMetadata();
-                this.notifyListeners(this.stateManager.getCurrentItem()?.cfi || null);
-                this.updateSectionMediaPosition(0);
+                // Subscription handles metadata/listeners.
             }
         });
     }
@@ -569,7 +528,6 @@ export class AudioPlayerService {
             if (offset > 0) {
                 if (this.stateManager.hasNext()) {
                     this.stateManager.next();
-                    this.stateManager.persistQueue();
                     await this.playInternal();
                 } else {
                     await this.advanceToNextChapter();
@@ -577,7 +535,6 @@ export class AudioPlayerService {
             } else {
                 if (this.stateManager.hasPrev()) {
                     this.stateManager.prev();
-                    this.stateManager.persistQueue();
                     await this.playInternal();
                 } else {
                     await this.retreatToPreviousChapter();
@@ -599,7 +556,6 @@ export class AudioPlayerService {
     private playNext() {
         this.enqueue(async () => {
             if (this.status !== 'stopped') {
-                // Update Reading History
                 if (this.currentBookId) {
                     const item = this.stateManager.getCurrentItem();
                     if (item && item.cfi && !item.isPreroll) {
@@ -608,18 +564,14 @@ export class AudioPlayerService {
                 }
 
                 if (this.stateManager.hasNext()) {
-                    // Start Background Audio if needed (might be redundant but ensures continuity)
-                    // Actually PlatformIntegration manages this on status change, but here status doesn't change from 'playing'.
                     this.platformIntegration.setBackgroundAudioMode(this.platformIntegration.getBackgroundAudioMode(), true);
 
                     this.stateManager.next();
-                    this.stateManager.persistQueue();
                     await this.playInternal();
                 } else {
                     const loaded = await this.advanceToNextChapter();
                     if (!loaded) {
                         this.setStatus('completed');
-                        this.notifyListeners(null);
                     }
                 }
             }
@@ -627,7 +579,6 @@ export class AudioPlayerService {
     }
 
     private setStatus(status: TTSStatus) {
-        // Record TTS Session on Pause/Stop
         const oldStatus = this.status;
         if ((oldStatus === 'playing' || oldStatus === 'loading') && (status === 'paused' || status === 'stopped')) {
             if (this.currentBookId) {
@@ -701,17 +652,14 @@ export class AudioPlayerService {
         if (newQueue && newQueue.length > 0) {
             if (autoPlay) {
                 this.providerManager.stop();
-                await this.stateManager.savePlaybackState('stopped'); // or just save state
+                await this.stateManager.savePlaybackState('stopped');
                 this.setStatus('loading');
             } else {
                 await this.stopInternal();
             }
 
             this.stateManager.setQueue(newQueue, 0, sectionIndex);
-
-            this.updateMediaSessionMetadata();
-            this.notifyListeners(this.stateManager.getCurrentItem()?.cfi || null);
-            this.stateManager.persistQueue();
+            // Automatic persist and notify.
 
             if (autoPlay) {
                 await this.playInternal();
@@ -744,16 +692,10 @@ export class AudioPlayerService {
 
         while (prevSectionIndex >= 0) {
             // Load without autoplay
-            // Note: loadSectionInternal handles setting queue and calling listeners
-            // But we need to jump to end.
             const loaded = await this.loadSectionInternal(prevSectionIndex, false);
             if (loaded) {
                 // Jump to end
-                this.stateManager.currentIndex = Math.max(0, this.stateManager.queue.length - 1);
-                this.stateManager.persistQueue();
-                this.updateMediaSessionMetadata();
-                this.notifyListeners(this.stateManager.getCurrentItem()?.cfi || null);
-
+                this.stateManager.jumpToEnd();
                 await this.playInternal();
                 return true;
             }

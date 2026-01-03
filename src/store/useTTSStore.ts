@@ -33,7 +33,7 @@ interface TTSState {
   /** Current index in the playback queue */
   currentIndex: number;
   /** The playback queue */
-  queue: TTSQueueItem[];
+  queue: readonly TTSQueueItem[];
   /** The last error message, if any */
   lastError: string | null;
 
@@ -103,7 +103,7 @@ interface TTSState {
    * Internal sync method called by AudioPlayerService
    * @internal
    */
-  syncState: (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: TTSQueueItem[], error: string | null) => void;
+  syncState: (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: readonly TTSQueueItem[], error: string | null) => void;
 }
 
 const player = AudioPlayerService.getInstance();
