@@ -239,6 +239,14 @@ export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
     return merged.map(r => generateCfiRange(r.rawStart, r.rawEnd));
 }
 
+/**
+ * Generates a CFI string for a given DOM Range relative to a base Spine CFI.
+ * This is used for decoupled extraction where we don't have a rendered view.
+ *
+ * @param range - The DOM Range to generate a CFI for.
+ * @param baseCfi - The base CFI for the spine item (e.g. "epubcfi(/6/14[chapter1_id]!)").
+ * @returns A full CFI string (e.g. "epubcfi(/6/14[chapter1_id]!/4/2/1:0,/4/2/1:10)").
+ */
 export function generateEpubCfi(range: Range, baseCfi: string): string {
     try {
         let baseComponent = baseCfi;
@@ -259,6 +267,16 @@ export function generateEpubCfi(range: Range, baseCfi: string): string {
     }
 }
 
+/**
+ * Snaps a CFI to the nearest sentence boundary.
+ *
+ * @param book - The epub.js Book instance.
+ * @param cfi - The CFI to snap.
+ * @returns The snapped CFI, or the original if snapping failed.
+ *
+ * @warning This function is asynchronous and relies on the Book instance being active.
+ * Do NOT use this in component cleanup/unmount phases where the Book instance might be destroyed.
+ */
 export async function snapCfiToSentence(book: Book, cfi: string): Promise<string> {
     try {
         // Lifecycle safety check: ensure book instance is valid
