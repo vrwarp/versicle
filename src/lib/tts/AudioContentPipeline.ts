@@ -75,17 +75,6 @@ export class AudioContentPipeline {
                 const skipTypes = genAISettings.contentFilterSkipTypes;
                 const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
 
-                if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
-                    // Trigger background detection
-                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes)
-                        .then(mask => {
-                            if (mask && mask.size > 0) {
-                                onMaskFound(mask);
-                            }
-                        })
-                        .catch(err => console.warn("Background mask detection failed", err));
-                }
-
                 let workingSentences = ttsContent.sentences;
 
                 // Note: detectAndFilterContent (blocking) is skipped here in favor of async masking
@@ -128,6 +117,17 @@ export class AudioContentPipeline {
                         });
                     }
                 });
+
+                if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
+                    // Trigger background detection
+                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes, ttsContent.sentences)
+                        .then(mask => {
+                            if (mask && mask.size > 0) {
+                                onMaskFound(mask);
+                            }
+                        })
+                        .catch(err => console.warn("Background mask detection failed", err));
+                }
             } else {
                 // Empty Chapter Handling
                 const randomMessage = NO_TEXT_MESSAGES[Math.floor(Math.random() * NO_TEXT_MESSAGES.length)];
@@ -215,19 +215,25 @@ export class AudioContentPipeline {
      * @param {ContentType[]} skipTypes The content types to filter out.
      * @returns {Promise<Set<number>>} A Set of raw sentence indices to skip.
      */
-    async detectContentSkipMask(bookId: string, sectionId: string, skipTypes: ContentType[]): Promise<Set<number>> {
+    async detectContentSkipMask(bookId: string, sectionId: string, skipTypes: ContentType[], sentences?: { text: string; cfi: string; sourceIndices?: number[] }[]): Promise<Set<number>> {
         const indicesToSkip = new Set<number>();
 
         try {
-            const ttsContent = await dbService.getTTSContent(bookId, sectionId);
-            if (!ttsContent || ttsContent.sentences.length === 0) return indicesToSkip;
+            let workingSentences = sentences;
+            if (!workingSentences) {
+                const ttsContent = await dbService.getTTSContent(bookId, sectionId);
+                if (ttsContent) {
+                    workingSentences = ttsContent.sentences;
+                }
+            }
+            if (!workingSentences || workingSentences.length === 0) return indicesToSkip;
 
              // Fetch Table CFIs for Grouping
             const tableImages = await dbService.getTableImages(bookId);
             const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
             // Group sentences by Root Node
-            const groups = this.groupSentencesByRoot(ttsContent.sentences, tableCfis);
+            const groups = this.groupSentencesByRoot(workingSentences, tableCfis);
             const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
             if (detectedTypes && detectedTypes.length > 0) {
@@ -279,7 +285,7 @@ export class AudioContentPipeline {
         // However, the new plan favors "Async Masking", so this method might be deprecated or used differently.
         // But for compatibility with existing code that calls it (if any), we keep it working.
 
-        const mask = await this.detectContentSkipMask(bookId, sectionId, skipTypes);
+        const mask = await this.detectContentSkipMask(bookId, sectionId, skipTypes, sentences);
         if (mask.size === 0) return sentences;
 
         return sentences.filter(s => {
