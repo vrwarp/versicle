@@ -12,6 +12,7 @@ vi.mock('../../db/DBService', () => ({
         getContentAnalysis: vi.fn(),
         getBookMetadata: vi.fn(),
         saveContentClassifications: vi.fn(),
+        getTableImages: vi.fn().mockResolvedValue([]), // Added mock
     }
 }));
 

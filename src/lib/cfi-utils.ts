@@ -38,18 +38,47 @@ export function parseCfiRange(range: string): CfiRangeData | null {
  * This handles both range CFIs and point/standard CFIs.
  * 
  * @param cfi The CFI string (range or standard).
+ * @param knownBlockRoots Optional list of CFI strings that are known block roots (e.g. tables). If the CFI is a descendant of one of these, it will be snapped to that root.
  * @returns The parent CFI or 'unknown' if extraction fails.
  */
-export function getParentCfi(cfi: string): string {
+export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): string {
     if (!cfi) return 'unknown';
 
-    // 1. Try parsing as a Range CFI (epubcfi(parent, start, end))
+    // 1. Check known block roots (e.g. Tables) - Priority over Range CFI parsing
+    if (knownBlockRoots.length > 0) {
+        // Sort by length descending to match innermost table first
+        const sortedRoots = [...knownBlockRoots].sort((a, b) => b.length - a.length);
+
+        // Pre-clean the target CFI once
+        const cleanCfi = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+
+        for (const root of sortedRoots) {
+            // Check prefix.
+            let cleanRoot = root;
+            if (cleanRoot.startsWith('epubcfi(')) {
+                 cleanRoot = cleanRoot.slice(8, -1);
+            }
+
+            if (cleanCfi.startsWith(cleanRoot)) {
+                // Ensure boundary match:
+                // If cleanCfi is exactly equal to cleanRoot, it's a match.
+                // If cleanCfi is longer, the next char must be a separator (/ or ! or [ or ,)
+                // Added comma to support Range CFIs as target (e.g. /6/24!/4/2/4 matches /6/24!/4/2/4,/1:0,...)
+                const nextChar = cleanCfi[cleanRoot.length];
+                if (!nextChar || ['/', '!', '[', ','].includes(nextChar)) {
+                    return root;
+                }
+            }
+        }
+    }
+
+    // 2. Try parsing as a Range CFI (epubcfi(parent, start, end))
     const parsed = parseCfiRange(cfi);
     if (parsed) {
         return `epubcfi(${parsed.parent})`;
     }
 
-    // 2. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
+    // 3. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
     if (cfi.startsWith('epubcfi(')) {
         try {
             const content = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
@@ -65,13 +94,7 @@ export function getParentCfi(cfi: string): string {
                 // Filter empty strings from split
                 const cleanParts = pathParts.filter(p => p.length > 0);
 
-                // HEURISTIC: Structural Snapping
-                // If a path is deep (e.g. > 5 steps), it's likely a Table, List, or complex Sidebar.
-                // We snap to a fixed "Container Depth" (Level 4) to force them into one group.
-                // e.g. /14/2/2/10/2 -> /14/2/2 (Table Body)
-                if (cleanParts.length > 4) {
-                    return `epubcfi(${spine}!/${cleanParts.slice(0, 4).join('/')})`;
-                }
+                // Removed Old "Structural Snapping" (> 4 depth) logic here.
 
                 // Standard leaf-stripping for shallow paths
                 if (cleanParts.length > 0) {
