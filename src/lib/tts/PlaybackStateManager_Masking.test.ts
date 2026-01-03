@@ -26,7 +26,7 @@ describe('PlaybackStateManager Async Masking', () => {
     beforeEach(() => {
         stateManager = new PlaybackStateManager();
         stateManager.setBookId('test-book');
-        stateManager.setQueue([...mockQueue], 0, 0); // Start at 0
+        stateManager.loadNewQueue([...mockQueue], 0); // Start at 0
         vi.clearAllMocks();
     });
 
@@ -92,7 +92,7 @@ describe('PlaybackStateManager Async Masking', () => {
             { text: 'D', cfi: 'c3', sourceIndices: [3] }
         ];
 
-        stateManager.setQueue(complexQueue, 0, 0);
+        stateManager.loadNewQueue(complexQueue, 0);
 
         // Case 1: Skip only index 1. Item 1 has [1, 2]. NOT ALL skipped. Should NOT skip item.
         stateManager.applySkippedMask(new Set([1]));
