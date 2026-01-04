@@ -300,58 +300,72 @@ export class AudioContentPipeline {
             // Helper to build the result with indices
             const buildAdaptationResult = async (adaptationsMap: Map<string, string>) => {
                 const result: { indices: number[], text: string }[] = [];
-                const tableImages = await dbService.getTableImages(bookId);
-                const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
-                // Group sentences to map CFIs to Indices
-                const groups = this.groupSentencesByRoot(targetSentences, tableCfis);
+                // We only care about CFIs that are keys in our adaptations map (which come from table images)
+                const tableRoots = Array.from(adaptationsMap.keys());
 
-                for (const group of groups) {
-                     // The group root might slightly differ from the image CFI if `groupSentencesByRoot` calculated it differently.
-                     // But usually they should align if using image CFIs as "known roots".
-                     // However, adaptations are keyed by the Image CFI (which is the input to GenAI).
-                     // We need to match group.rootCfi with adaptationsMap keys.
-                     // The group.rootCfi comes from `generateCfiRange` or `getParentCfi`.
-                     // The adaptation key comes from the image CFI.
+                // Create a map to collect indices for each table root
+                const tableIndices = new Map<string, number[]>();
 
-                     // Let's try to find if any adaptation key matches or is a prefix/parent of this group?
-                     // Or simpler: check if `group.rootCfi` matches any adaptation key (fuzzy or exact).
-                     // `groupSentencesByRoot` uses `tableCfis` (image CFIs) to snap.
-                     // So `group.rootCfi` *should* be one of the `tableCfis` (or a derived range).
-                     // Actually `groupSentencesByRoot` computes a range CFI for the group.
-                     // But if it was snapped to a parent, the logic in `groupSentencesByRoot` might not return the parent CFI directly as `rootCfi`.
-                     // Let's look at `groupSentencesByRoot`. It pushes `rootCfi` generated from range.
+                // Iterate through all sentences and check if they belong to any known table root
+                for (let i = 0; i < targetSentences.length; i++) {
+                    const sentence = targetSentences[i];
+                    if (!sentence.cfi) continue;
 
-                     // Wait, `groupSentencesByRoot` logic:
-                     // `const parentCfi = getParentCfi(fullCfi, tableCfis);`
-                     // It groups by `parentCfi`.
-                     // BUT it outputs `rootCfi` as `generateCfiRange(...)` of the content.
-                     // It does NOT output `parentCfi` as the key.
-                     // This is a mismatch. I need the `parentCfi` to match with adaptation keys (which are image CFIs).
+                    // Check if this sentence is a child of any adaptation root
+                    // We can use getParentCfi which efficiently checks against a list of known roots
+                    // const parent = getParentCfi(sentence.cfi, tableRoots); // Unused currently as we iterate below
 
-                     // I should probably map the Adaptation Key (Image CFI) to the group.
-                     // Iterate adaptations:
-                     for (const [adaptRoot, text] of adaptationsMap.entries()) {
-                         // Check if this group belongs to this adaptation root
-                         // We can check if the group's segments' parentCfi matches `adaptRoot`.
-                         // Since all segments in a group share a parentCfi (mostly), we can check the first one.
-                         const firstSegmentCfi = group.segments[0]?.cfi;
-                         if (!firstSegmentCfi) continue;
+                    // getParentCfi returns the root if it matches/is ancestor, or a default parent if not found.
+                    // We need to check if the returned parent is actually one of our table roots.
+                    // Note: getParentCfi might return a slightly different string if it normalizes.
+                    // Let's do a direct check: if the returned parent corresponds to a table root.
+                    // Actually, getParentCfi logic: if knownRoots provided, it tries to snap to them.
 
-                         const parent = getParentCfi(firstSegmentCfi, [adaptRoot]);
-                         // If `parent` equals `adaptRoot` (normalized), then this group belongs to it.
-                         // `getParentCfi` returns the matched known root.
-                         if (parent === adaptRoot || parent.replace(/\)$/, '') === adaptRoot.replace(/\)$/, '')) {
-                             // Collect indices
-                             const indices: number[] = [];
-                             group.segments.forEach(s => {
-                                 if (s.sourceIndices) indices.push(...s.sourceIndices);
-                             });
-                             result.push({ indices, text });
-                             break; // Group matched to one adaptation
-                         }
-                     }
+                    // Simple check: does the sentence belong to any table?
+                    const matchedRoot = tableRoots.find(root => {
+                         // Normalize roots for comparison
+                         const cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1').replace(/\)$/, '');
+                         const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+
+                         return cleanCfi.startsWith(cleanRoot) &&
+                             (cleanCfi.length === cleanRoot.length || ['/', '!', '[', ':'].includes(cleanCfi[cleanRoot.length]));
+                    });
+
+                    if (matchedRoot) {
+                        if (!tableIndices.has(matchedRoot)) {
+                            tableIndices.set(matchedRoot, []);
+                        }
+                        // Use sourceIndices if available (preferred), otherwise index in the list (fallback/implicit)
+                        // But wait, PlaybackStateManager uses raw indices. SentenceNode usually doesn't have sourceIndices property directly on it?
+                        // Actually TTSContent stores sentences.
+                        // Wait, `loadSection` creates queue items with `sourceIndices`.
+                        // But here we are processing raw `SentenceNode` from DB or passed in.
+                        // The `sentences` passed to `processTableAdaptations` are `SentenceNode[]`.
+                        // Does `SentenceNode` have `sourceIndices`?
+                        // Let's check `TTSContent` definition in `src/types/db.ts`.
+                        // `sentences: { text: string; cfi: string; }[]`. It does NOT have `sourceIndices`.
+                        // However, `TextSegmenter.refineSegments` CREATES `sourceIndices`.
+                        // The `sentences` passed here are RAW sentences from DB (one per XML node usually).
+                        // So the "raw index" IS the index in this array.
+                        // Ideally, we want the index `i`.
+                        // Let's confirm `PlaybackStateManager.applyTableAdaptations` expectation.
+                        // It expects `indices: number[]`. And it checks `item.sourceIndices`.
+                        // `item.sourceIndices` points to these raw sentence indices.
+                        // So yes, we just need `i`.
+
+                        tableIndices.get(matchedRoot)?.push(i);
+                    }
                 }
+
+                // Construct result
+                for (const [root, indices] of tableIndices.entries()) {
+                    const text = adaptationsMap.get(root);
+                    if (text) {
+                        result.push({ indices, text });
+                    }
+                }
+
                 return result;
             };
 
