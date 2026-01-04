@@ -289,13 +289,8 @@ export class AudioContentPipeline {
 
         try {
             // Ensure we have sentences
-            let targetSentences = sentences;
-            if (!targetSentences || targetSentences.length === 0) {
-                const ttsContent = await dbService.getTTSContent(bookId, sectionId);
-                targetSentences = ttsContent?.sentences || [];
-            }
-
-            if (targetSentences.length === 0) return;
+            if (!sentences || sentences.length === 0) return;
+            const targetSentences = sentences;
 
             // 1. Check DB for existing adaptations
             const analysis = await dbService.getContentAnalysis(bookId, sectionId);
