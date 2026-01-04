@@ -38,9 +38,11 @@
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
 *   **Annotations**: Highlights and notes.
 *   **Table Snapshots**: Complex tables are captured as images for better readability and preservation.
+*   **Reprocessing**: Update existing books with improved text extraction or new parsing logic without losing your reading progress.
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
+*   **Optimistic Playback**: Audio starts playing instantly while content filtering (skip masks) and smart adaptations are applied asynchronously in the background.
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
