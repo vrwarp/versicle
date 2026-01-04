@@ -110,6 +110,74 @@ export class PlaybackStateManager {
         }
     }
 
+    /**
+     * Applies table adaptations using strict index matching.
+     * 1. Finds all queue items whose source indices are fully contained in the adaptation's covered indices.
+     * 2. Replaces the text of the *first* matching item with the adaptation.
+     * 3. Marks all *other* matching items as skipped.
+     *
+     * @param {Array<{ indices: number[], text: string }>} adaptations List of adaptations.
+     */
+    applyTableAdaptations(adaptations: { indices: number[], text: string }[]) {
+        let changed = false;
+
+        // Clone queue to avoid mutation
+        const newQueue = [...this._queue];
+        // Set of queue indices we have already handled to avoid overlaps
+        const handledQueueIndices = new Set<number>();
+
+        for (const adaptation of adaptations) {
+            const adaptIndicesSet = new Set(adaptation.indices);
+            const matchingQueueIndices: number[] = [];
+
+            // Find all queue items that belong to this adaptation
+            for (let i = 0; i < newQueue.length; i++) {
+                if (handledQueueIndices.has(i)) continue;
+
+                const item = newQueue[i];
+                if (item.sourceIndices && item.sourceIndices.length > 0) {
+                     // Check if all source indices of this item are in the adaptation's set
+                     const isMatch = item.sourceIndices.every(idx => adaptIndicesSet.has(idx));
+                     if (isMatch) {
+                         matchingQueueIndices.push(i);
+                     }
+                }
+            }
+
+            if (matchingQueueIndices.length > 0) {
+                // Mark these as handled
+                matchingQueueIndices.forEach(idx => handledQueueIndices.add(idx));
+
+                // 1. Update the first item (Anchor)
+                const firstIdx = matchingQueueIndices[0];
+                if (newQueue[firstIdx].text !== adaptation.text || newQueue[firstIdx].isSkipped) {
+                     newQueue[firstIdx] = {
+                         ...newQueue[firstIdx],
+                         text: adaptation.text,
+                         isSkipped: false
+                     };
+                     changed = true;
+                }
+
+                // 2. Mark others as skipped
+                for (let k = 1; k < matchingQueueIndices.length; k++) {
+                    const idx = matchingQueueIndices[k];
+                    if (!newQueue[idx].isSkipped) {
+                        newQueue[idx] = { ...newQueue[idx], isSkipped: true };
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        if (changed) {
+            this._queue = newQueue;
+            this.calculatePrefixSums();
+            this.persistQueue();
+            this.notifyListeners();
+        }
+    }
+
     get queue(): ReadonlyArray<TTSQueueItem> {
         return this._queue;
     }

@@ -660,6 +660,19 @@ export class AudioPlayerService {
             });
         };
 
+        // Callback for Table Adaptations
+        const onAdaptationsFound = (adaptations: { indices: number[], text: string }[]) => {
+            this.enqueue(async () => {
+                // Verify validity before applying
+                if (this.currentBookId !== currentBookId) return;
+
+                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
+                if (activeSection && activeSection.sectionId === currentSectionId) {
+                    this.stateManager.applyTableAdaptations(adaptations);
+                }
+            });
+        };
+
         const newQueue = await this.contentPipeline.loadSection(
             this.currentBookId,
             section,
@@ -667,7 +680,8 @@ export class AudioPlayerService {
             this.prerollEnabled,
             this.speed,
             sectionTitle,
-            onMaskFound
+            onMaskFound,
+            onAdaptationsFound
         );
 
         if (newQueue && newQueue.length > 0) {
