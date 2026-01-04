@@ -312,22 +312,14 @@ export class AudioContentPipeline {
                     const sentence = targetSentences[i];
                     if (!sentence.cfi) continue;
 
-                    // Check if this sentence is a child of any adaptation root
-                    // We can use getParentCfi which efficiently checks against a list of known roots
-                    // const parent = getParentCfi(sentence.cfi, tableRoots); // Unused currently as we iterate below
-
-                    // getParentCfi returns the root if it matches/is ancestor, or a default parent if not found.
-                    // We need to check if the returned parent is actually one of our table roots.
-                    // Note: getParentCfi might return a slightly different string if it normalizes.
-                    // Let's do a direct check: if the returned parent corresponds to a table root.
-                    // Actually, getParentCfi logic: if knownRoots provided, it tries to snap to them.
-
-                    // Simple check: does the sentence belong to any table?
+                    // Check if this sentence is a child of any known table adaptation root.
+                    // Adaptations are keyed by the CFI of the table image (known root).
                     const matchedRoot = tableRoots.find(root => {
                          // Normalize roots for comparison
                          const cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1').replace(/\)$/, '');
                          const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
 
+                         // Check for prefix match with valid separator boundary
                          return cleanCfi.startsWith(cleanRoot) &&
                              (cleanCfi.length === cleanRoot.length || ['/', '!', '[', ':'].includes(cleanCfi[cleanRoot.length]));
                     });
@@ -336,24 +328,8 @@ export class AudioContentPipeline {
                         if (!tableIndices.has(matchedRoot)) {
                             tableIndices.set(matchedRoot, []);
                         }
-                        // Use sourceIndices if available (preferred), otherwise index in the list (fallback/implicit)
-                        // But wait, PlaybackStateManager uses raw indices. SentenceNode usually doesn't have sourceIndices property directly on it?
-                        // Actually TTSContent stores sentences.
-                        // Wait, `loadSection` creates queue items with `sourceIndices`.
-                        // But here we are processing raw `SentenceNode` from DB or passed in.
-                        // The `sentences` passed to `processTableAdaptations` are `SentenceNode[]`.
-                        // Does `SentenceNode` have `sourceIndices`?
-                        // Let's check `TTSContent` definition in `src/types/db.ts`.
-                        // `sentences: { text: string; cfi: string; }[]`. It does NOT have `sourceIndices`.
-                        // However, `TextSegmenter.refineSegments` CREATES `sourceIndices`.
-                        // The `sentences` passed here are RAW sentences from DB (one per XML node usually).
-                        // So the "raw index" IS the index in this array.
-                        // Ideally, we want the index `i`.
-                        // Let's confirm `PlaybackStateManager.applyTableAdaptations` expectation.
-                        // It expects `indices: number[]`. And it checks `item.sourceIndices`.
-                        // `item.sourceIndices` points to these raw sentence indices.
-                        // So yes, we just need `i`.
-
+                        // Collect the raw sentence index (i).
+                        // This index aligns with `sourceIndices` used in the playback queue items.
                         tableIndices.get(matchedRoot)?.push(i);
                     }
                 }
