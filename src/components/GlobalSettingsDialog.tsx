@@ -5,7 +5,7 @@ import { useLibraryStore } from '../store/useLibraryStore';
 import { useReaderStore } from '../store/useReaderStore';
 import { useToastStore } from '../store/useToastStore';
 import { useShallow } from 'zustand/react/shallow';
-import { Modal, ModalContent } from './ui/Modal';
+import { Modal, ModalContent, ModalHeader, ModalTitle } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Input } from './ui/Input';
@@ -24,6 +24,7 @@ import { dbService } from '../db/DBService';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { ReadingListDialog } from './ReadingListDialog';
 import { Trash2, Download, Loader2 } from 'lucide-react';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 /**
  * Global application settings dialog.
@@ -352,6 +353,11 @@ export const GlobalSettingsDialog = () => {
         <>
         <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
             <ModalContent className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg" aria-describedby="global-settings-desc">
+                <VisuallyHidden>
+                    <ModalHeader>
+                        <ModalTitle>Global Settings</ModalTitle>
+                    </ModalHeader>
+                </VisuallyHidden>
                 <span id="global-settings-desc" className="sr-only">Global application settings including appearance, TTS configuration, and data management.</span>
                 {isCsvImporting && (
                     <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 text-center">
