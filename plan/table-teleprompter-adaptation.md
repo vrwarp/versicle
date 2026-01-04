@@ -22,13 +22,13 @@ The **Table Teleprompter Adaptation** feature improves the Text-to-Speech (TTS) 
 
 ### 3.1 Component Responsibilities
 
--   **`GenAIService`**: Executes multimodal prompts using the default model and a thinking budget of 512.
+-   **`GenAIService`**: Executes multimodal prompts using the default model.
 
--   **`AudioContentPipeline`**: Orchestrates table detection, grouping, and coordinate mapping. Maps `rootCfi` to `sourceIndices`.
+-   **`AudioContentPipeline`**: Orchestrates table detection, grouping, and coordinate mapping. Maps `rootCfi` to `sourceIndices` using strict CFI matching logic.
 
 -   **`DBService`**: Manages persistence of adaptations keyed by CFI within the `content_analysis` store.
 
--   **`AudioPlayerService`**: Mediates the lifecycle, triggering background tasks and applying results via callbacks.
+-   **`AudioPlayerService`**: Mediates the lifecycle, passing callbacks for state updates.
 
 -   **`PlaybackStateManager`**: Performs the dynamic "swap-and-skip" logic to update the live queue based on raw index matching.
 
@@ -60,7 +60,7 @@ Mirroring the `contentTypes` classification pattern, generated adaptations are s
 
 6.  **Store**: Results are persisted to `DBService`.
 
-7.  **Index Mapping**: `AudioContentPipeline` maps the adaptation's `rootCfi` to the set of `sourceIndices` from the `sentences` belonging to that table group.
+7.  **Index Mapping**: `AudioContentPipeline` calls `mapSentencesToAdaptations` to map the adaptation's `rootCfi` to the set of `sourceIndices` from the `sentences`.
 
 8.  **Live Update**: `PlaybackStateManager` receives adaptations with indices. It iterates through the queue. If a queue item's `sourceIndices` are fully contained within an adaptation's indices:
     -   The **first** matching item is updated with the adaptation text.
@@ -86,25 +86,30 @@ export interface ContentAnalysis {
 
 ### 4.2 Interlaced Multimodal Prompting
 
-Prompt strategy remains the same: interlacing text labels with images to ensure ID integrity. `GenAIService` accepts `_thinkingBudget` (unused).
+Prompt strategy remains the same: interlacing text labels with images to ensure ID integrity. `GenAIService` accepts `_thinkingBudget` (unused) as thinking models are not yet fully supported/stable in this context.
 
 ### 4.3 Background Processing with Index Mapping
 
 The pipeline maps the GenAI result (keyed by `rootCfi`) to the raw sentence structure.
 
+**Important Implementation Details:**
+*   **Range vs. Point CFIs**: Table images are keyed by Range CFIs (e.g., `epubcfi(.../1:0,/1:100)`). Sentences are Point CFIs (e.g., `.../1:50`). The mapping logic handles this by parsing the range to find the **common parent** (ancestor) and matching sentences that start with that parent path.
+*   **Nested Tables**: To prevent "parent-swallowing" (where a child table matches its parent's CFI prefix first), the logic sorts table roots by length (descending) to prioritize the most specific (innermost) match.
+*   **Boundary Checking**: Strict boundary checking is enforced (valid separators: `/`, `!`, `[`, `:`, `,`) to avoid partial false positives (e.g., `/2` matching `/20`).
+
 ```typescript
 // src/lib/tts/AudioContentPipeline.ts
-const buildAdaptationResult = async (adaptationsMap: Map<string, string>) => {
-    // ...
-    const groups = this.groupSentencesByRoot(targetSentences, tableCfis);
-    for (const group of groups) {
-         // Match group to adaptation key using parent CFI logic
-         if (matches(group, adaptRoot)) {
-             result.push({ indices: group.getAllIndices(), text: text });
-         }
+public mapSentencesToAdaptations(sentences: SentenceNode[], adaptationsMap: Map<string, string>): { indices: number[], text: string }[] {
+    // Sort roots by length descending to handle nested tables
+    const tableRoots = Array.from(adaptationsMap.keys()).sort((a, b) => b.length - a.length);
+    // ... parse roots to parents ...
+
+    for (const sentence of sentences) {
+        // Match sentence CFI to table root parent
+        // Collect indices
     }
     return result;
-};
+}
 ```
 
 ### 4.4 Playback State Integration: Raw Index "Swap-and-Skip"
@@ -116,6 +121,7 @@ Updates the live queue using raw indices. This is more robust than CFI prefix ma
 applyTableAdaptations(adaptations: { indices: number[], text: string }[]) {
     // ...
     for (const adaptation of adaptations) {
+        // Find items where sourceIndices are a strict subset of adaptation indices
         const matchingQueueIndices = findQueueItems(queue, adaptation.indices);
         if (matchingQueueIndices.length > 0) {
             // Anchor: Replace first item
@@ -128,8 +134,10 @@ applyTableAdaptations(adaptations: { indices: number[], text: string }[]) {
 }
 ```
 
-5\. Considerations & Edge Cases
+5\. Deviations & Learnings
 -------------------------------
 
--   **Partial Matches**: If a queue item contains text from both inside and outside the table (rare, but possible with aggressive merging), it will *not* be matched/skipped because its `sourceIndices` won't be a subset of the table indices. This is the desired safe behavior to avoid hiding non-table content.
--   **Performance**: Mapping indices is fast (set lookups). Recalculating prefix sums is efficient.
+-   **Public Helper for Testing**: `mapSentencesToAdaptations` was extracted as a public method in `AudioContentPipeline` to facilitate the extensive unit testing and fuzzing requested during review.
+-   **Trigger Encapsulation**: The background trigger was moved from `AudioPlayerService` into `AudioContentPipeline.loadSection` to improve encapsulation and reduce service coupling.
+-   **Thinking Budget**: The `thinking_budget` parameter in `GenAIService` is currently unused (`_thinkingBudget`) as the default model does not support it reliably yet.
+-   **CFI Complexity**: Matching Range CFIs (tables) to Point CFIs (content) required explicit parsing of the CFI range to identify the common parent ancestor, rather than simple string prefix matching.
