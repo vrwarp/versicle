@@ -366,8 +366,29 @@ export class AudioContentPipeline {
     public mapSentencesToAdaptations(sentences: SentenceNode[], adaptationsMap: Map<string, string>): { indices: number[], text: string }[] {
         const result: { indices: number[], text: string }[] = [];
 
-        // We only care about CFIs that are keys in our adaptations map (which come from table images)
-        const tableRoots = Array.from(adaptationsMap.keys());
+        // Pre-process roots:
+        // 1. Resolve Range CFIs to their parent (base) CFI for matching.
+        // 2. Sort by length descending to ensure deepest match first (handling nested tables).
+        const matchableRoots: { cleanCfi: string; originalRoot: string }[] = [];
+
+        for (const root of adaptationsMap.keys()) {
+            let cleanCfi = root;
+            const rangeParts = parseCfiRange(root);
+            if (rangeParts) {
+                // Use the parent part of the Range CFI
+                cleanCfi = `epubcfi(${rangeParts.parent})`;
+            }
+
+            // Remove wrapper for string comparison
+            if (cleanCfi.startsWith('epubcfi(')) {
+                cleanCfi = cleanCfi.slice(8, -1);
+            }
+
+            matchableRoots.push({ cleanCfi, originalRoot: root });
+        }
+
+        // Sort by length descending
+        matchableRoots.sort((a, b) => b.cleanCfi.length - a.cleanCfi.length);
 
         // Create a map to collect indices for each table root
         const tableIndices = new Map<string, number[]>();
@@ -377,25 +398,28 @@ export class AudioContentPipeline {
             const sentence = sentences[i];
             if (!sentence.cfi) continue;
 
-            // Check if this sentence is a child of any known table adaptation root.
-            // Adaptations are keyed by the CFI of the table image (known root).
-            const matchedRoot = tableRoots.find(root => {
-                    // Normalize roots for comparison
-                    const cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1').replace(/\)$/, '');
-                    const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+            let currentCfi = sentence.cfi;
+            if (currentCfi.startsWith('epubcfi(')) {
+                currentCfi = currentCfi.slice(8, -1);
+            }
 
-                    // Check for prefix match with valid separator boundary
-                    return cleanCfi.startsWith(cleanRoot) &&
-                        (cleanCfi.length === cleanRoot.length || ['/', '!', '[', ':'].includes(cleanCfi[cleanRoot.length]));
+            // Find the first (deepest) matching root
+            const match = matchableRoots.find(({ cleanCfi }) => {
+                if (currentCfi.startsWith(cleanCfi)) {
+                    // Boundary check
+                    const nextChar = currentCfi[cleanCfi.length];
+                    return !nextChar || ['/', '!', '[', ':', ','].includes(nextChar);
+                }
+                return false;
             });
 
-            if (matchedRoot) {
-                if (!tableIndices.has(matchedRoot)) {
-                    tableIndices.set(matchedRoot, []);
+            if (match) {
+                if (!tableIndices.has(match.originalRoot)) {
+                    tableIndices.set(match.originalRoot, []);
                 }
                 // Collect the raw sentence index (i).
                 // This index aligns with `sourceIndices` used in the playback queue items.
-                tableIndices.get(matchedRoot)?.push(i);
+                tableIndices.get(match.originalRoot)?.push(i);
             }
         }
 
