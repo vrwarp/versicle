@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { TTSQueueItem } from './TTSQueueItem';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * Displays the current TTS playback queue.
@@ -9,7 +10,11 @@ import { TTSQueueItem } from './TTSQueueItem';
  * @returns A React component rendering the queue list.
  */
 export const TTSQueue: React.FC = () => {
-    const { queue, currentIndex, jumpTo } = useTTSStore();
+    const { queue, currentIndex, jumpTo } = useTTSStore(useShallow(state => ({
+        queue: state.queue,
+        currentIndex: state.currentIndex,
+        jumpTo: state.jumpTo
+    })));
     const activeRef = useRef<HTMLButtonElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const prevIndexRef = useRef<number | null>(null);
