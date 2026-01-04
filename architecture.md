@@ -72,6 +72,7 @@ graph TD
     end
 
     subgraph TTS [TTS Subsystem]
+        PSM[PlaybackStateManager]
         Segmenter[TextSegmenter]
         Lexicon[LexiconService]
         TTSCache[TTSCache]
@@ -112,6 +113,7 @@ graph TD
     LibStore --> Maint
 
     APS --> Pipeline
+    APS --> PSM
     Pipeline --> GenAI
     Pipeline --> GenAIStore
     Pipeline --> DBService
@@ -155,6 +157,9 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   `table_images`: **(New)** Stores `webp` snapshots of tables captured during ingestion. Keyed by `${bookId}-${cfi}`.
 *   `content_analysis`: **(New)** Stores GenAI classification results (e.g., this block is a footnote).
 *   `tts_cache`: Stores generated audio segments.
+*   `tts_queue`: Persistent playback queue (for resumption).
+*   `tts_position`: **(New)** Lightweight position tracking.
+*   `app_metadata`: **(New)** Application-level configuration and flags.
 *   `reading_history`: Tracks user sessions.
 
 **Key Functions:**
@@ -179,12 +184,17 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 Handles the complex task of importing an EPUB file.
 
 *   **`processEpub(file)`**:
-    1.  **Validation**: Checks ZIP headers.
+    1.  **Validation**: Enforces strict ZIP signature check (`PK\x03\x04`) to reject invalid files immediately.
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`) to render chapters.
         *   *Logic*: Scrapes text nodes for TTS and uses `snapdom` to capture tables as images.
     3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head + Metadata + Tail) using a `cheapHash` function for O(1) duplicate detection.
         *   *Trade-off*: Theoretical risk of collision is negligible for personal library scale, while performance gain is massive compared to SHA-256.
     4.  **Sanitization**: Registers an `epub.js` hook to sanitize HTML content before rendering.
+
+*   **`reprocessBook(bookId)`**:
+    *   **Goal**: Update book content (e.g., better text extraction, new table snapshots) without losing reading progress or annotations.
+    *   **Logic**: Re-reads the source file from the `files` store, re-runs the extraction pipeline, and performs a transactional update of `sections`, `tts_content`, and `table_images`.
+    *   **Trade-off**: Computationally expensive. Requires the original file to still be present in the `files` store (i.e., not offloaded).
 
 #### Batch Ingestion (`src/lib/batch-ingestion.ts`)
 *   **Goal**: Allow bulk import of multiple EPUBs or ZIP archives containing books.
@@ -197,9 +207,10 @@ Handles the complex task of importing an EPUB file.
 Enhances the reading experience using LLMs.
 
 *   **Logic**:
-    *   **Service**: Wrapper around **Gemini 2.5 Flash Lite** (via `@google/generative-ai`).
-    *   **Structured Output**: Enforces strict JSON schemas for all responses (e.g., content classification).
-    *   **Classification**: Classifies text blocks as `title`, `footnote`, `main`, `table`, or `other`.
+    *   **Service**: Wrapper around **Gemini 2.5 Flash Lite** (defaulting to `gemini-flash-lite-latest`) via `@google/generative-ai`.
+    *   **Structured Output**: Enforces strict JSON schemas for all responses.
+        *   **TOC Generation**: Can generate synthetic Table of Contents from raw text segments.
+        *   **Content Type**: Classifies blocks as `title`, `footnote`, `main`, `table`, or `other`.
     *   **Mocking**: Supports `localStorage` mocks (`mockGenAIResponse`) for cost-free E2E testing.
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets are sent to Google's servers.
 
@@ -242,8 +253,8 @@ Handles database health and integrity.
 The Orchestrator. Manages playback state, provider selection, and UI updates.
 
 *   **Logic**:
-    *   **Delegation**: Offloads content loading and filtering to `AudioContentPipeline`.
-    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize async operations (Play -> Pause -> Next).
+    *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state management to `PlaybackStateManager`.
+    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize all public methods (Play, Pause, Next, Seek) to prevent race conditions during rapid user interaction.
     *   **Persistence**: Syncs state to `DBService` for resume-on-restart.
 
 #### `src/lib/tts/AudioContentPipeline.ts`
@@ -251,9 +262,19 @@ The Data Pipeline for TTS.
 
 *   **Goal**: Separate "what to play" (Content) from "how to play it" (Player).
 *   **Logic**:
+    *   **Optimistic Loading**: Returns a playable queue immediately while background processes (masking, adaptation) run.
+    *   **Async Masking**: Accepts a callback (`onMaskFound`) to update the playing queue dynamically when content to skip (e.g., footnotes) is identified.
     *   **Precise Grouping**: Groups sentences by their "Root CFI" (e.g., all cells in a table share a common `<table>` parent).
-    *   **Content Filtering**: Uses GenAI analysis (from `content_analysis` store) to filter out unwanted blocks (footnotes, tables) based on user settings.
     *   **Speculative Execution**: Implements `triggerNextChapterAnalysis` to analyze the *next* chapter in the background while the current one plays.
+
+#### `src/lib/tts/PlaybackStateManager.ts`
+Manages the virtual playback timeline.
+
+*   **Goal**: Abstract the complexity of skipped items and queue manipulation from the player.
+*   **Logic**:
+    *   **Virtualized Timeline**: Maintains a queue of items where some may be marked `isSkipped`.
+    *   **Adaptive Prefix Sums**: Calculates playback duration and position dynamically, ignoring skipped items (masking) without removing them from the array (preserving index stability).
+    *   **Trade-off**: Increases complexity of time-seeking logic. "Time Remaining" calculations become non-linear and computationally heavier than simple arithmetic.
 
 #### `src/lib/tts/providers/CapacitorTTSProvider.ts`
 Native mobile TTS integration.
