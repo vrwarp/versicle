@@ -111,53 +111,64 @@ export class PlaybackStateManager {
     }
 
     /**
-     * Applies table adaptations using "Swap-and-Skip" logic.
+     * Applies table adaptations using strict index matching.
+     * 1. Finds all queue items whose source indices are fully contained in the adaptation's covered indices.
+     * 2. Replaces the text of the *first* matching item with the adaptation.
+     * 3. Marks all *other* matching items as skipped.
      *
-     * @param {Map<string, string>} adaptations Map of root CFI to adapted text.
+     * @param {Array<{ indices: number[], text: string }>} adaptations List of adaptations.
      */
-    applyTableAdaptations(adaptations: Map<string, string>) {
-        const handledRoots = new Set<string>();
+    applyTableAdaptations(adaptations: { indices: number[], text: string }[]) {
         let changed = false;
 
-        const newQueue = this._queue.map((item) => {
-            if (!item.cfi) return item;
+        // Clone queue to avoid mutation
+        const newQueue = [...this._queue];
+        // Set of queue indices we have already handled to avoid overlaps
+        const handledQueueIndices = new Set<number>();
 
-            for (const [rootCfi, text] of adaptations) {
-                // Check if segment is a child of the table root
-                // We compare the base CFI (without step indirections if possible)
-                // But for simplicity, we assume startsWith works if rooted correctly.
-                // The rootCfi usually looks like `epubcfi(/6/14[table1])` or `/6/14[table1]`.
-                // The item.cfi looks like `/6/14[table1]/2/1`.
+        for (const adaptation of adaptations) {
+            const adaptIndicesSet = new Set(adaptation.indices);
+            const matchingQueueIndices: number[] = [];
 
-                // Clean up CFIs for comparison (remove 'epubcfi(' wrapper if present)
-                const cleanRoot = rootCfi.replace(/^epubcfi\((.*)\)$/, '$1');
-                const cleanItemCfi = item.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+            // Find all queue items that belong to this adaptation
+            for (let i = 0; i < newQueue.length; i++) {
+                if (handledQueueIndices.has(i)) continue;
 
-                // Ensure strict path matching (prevent /2 matching /20)
-                const isChild = cleanItemCfi.startsWith(cleanRoot) &&
-                    (cleanItemCfi.length === cleanRoot.length ||
-                     ['/', '!', '[', ':'].includes(cleanItemCfi[cleanRoot.length]));
+                const item = newQueue[i];
+                if (item.sourceIndices && item.sourceIndices.length > 0) {
+                     // Check if all source indices of this item are in the adaptation's set
+                     const isMatch = item.sourceIndices.every(idx => adaptIndicesSet.has(idx));
+                     if (isMatch) {
+                         matchingQueueIndices.push(i);
+                     }
+                }
+            }
 
-                if (isChild) {
-                    // Check if it's the anchor (first encountered for this root)
-                    if (!handledRoots.has(rootCfi)) {
-                        handledRoots.add(rootCfi);
-                        // Update only the anchor item with the full natural adaptation
-                        // Make sure we unskip it if it was skipped (unless globally skipped?)
-                        // But adaptations override raw text.
+            if (matchingQueueIndices.length > 0) {
+                // Mark these as handled
+                matchingQueueIndices.forEach(idx => handledQueueIndices.add(idx));
+
+                // 1. Update the first item (Anchor)
+                const firstIdx = matchingQueueIndices[0];
+                if (newQueue[firstIdx].text !== adaptation.text || newQueue[firstIdx].isSkipped) {
+                     newQueue[firstIdx] = {
+                         ...newQueue[firstIdx],
+                         text: adaptation.text,
+                         isSkipped: false
+                     };
+                     changed = true;
+                }
+
+                // 2. Mark others as skipped
+                for (let k = 1; k < matchingQueueIndices.length; k++) {
+                    const idx = matchingQueueIndices[k];
+                    if (!newQueue[idx].isSkipped) {
+                        newQueue[idx] = { ...newQueue[idx], isSkipped: true };
                         changed = true;
-                        return { ...item, text, isSkipped: false };
-                    } else {
-                        // Mark subsequent cell data as skipped to avoid double-reading
-                        if (!item.isSkipped) {
-                            changed = true;
-                            return { ...item, isSkipped: true };
-                        }
                     }
                 }
             }
-            return item;
-        });
+        }
 
         if (changed) {
             this._queue = newQueue;

@@ -661,7 +661,7 @@ export class AudioPlayerService {
         };
 
         // Callback for Table Adaptations
-        const onAdaptationsFound = (adaptations: Map<string, string>) => {
+        const onAdaptationsFound = (adaptations: { indices: number[], text: string }[]) => {
             this.enqueue(async () => {
                 // Verify validity before applying
                 if (this.currentBookId !== currentBookId) return;

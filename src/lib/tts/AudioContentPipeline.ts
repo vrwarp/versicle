@@ -37,7 +37,7 @@ export class AudioContentPipeline {
         speed: number,
         sectionTitle?: string,
         onMaskFound?: (mask: Set<number>) => void,
-        onAdaptationsFound?: (adaptations: Map<string, string>) => void
+        onAdaptationsFound?: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<TTSQueueItem[] | null> {
         try {
             const ttsContent = await dbService.getTTSContent(bookId, section.sectionId);
@@ -281,13 +281,81 @@ export class AudioContentPipeline {
     async processTableAdaptations(
         bookId: string,
         sectionId: string,
-        _sentences: SentenceNode[],
-        onAdaptationsFound: (adaptations: Map<string, string>) => void
+        sentences: SentenceNode[],
+        onAdaptationsFound: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<void> {
         const genAISettings = useGenAIStore.getState();
         if (!genAISettings.isContentAnalysisEnabled) return;
 
         try {
+            // Ensure we have sentences
+            let targetSentences = sentences;
+            if (!targetSentences || targetSentences.length === 0) {
+                const ttsContent = await dbService.getTTSContent(bookId, sectionId);
+                targetSentences = ttsContent?.sentences || [];
+            }
+
+            if (targetSentences.length === 0) return;
+
+            // Helper to build the result with indices
+            const buildAdaptationResult = async (adaptationsMap: Map<string, string>) => {
+                const result: { indices: number[], text: string }[] = [];
+                const tableImages = await dbService.getTableImages(bookId);
+                const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
+
+                // Group sentences to map CFIs to Indices
+                const groups = this.groupSentencesByRoot(targetSentences, tableCfis);
+
+                for (const group of groups) {
+                     // The group root might slightly differ from the image CFI if `groupSentencesByRoot` calculated it differently.
+                     // But usually they should align if using image CFIs as "known roots".
+                     // However, adaptations are keyed by the Image CFI (which is the input to GenAI).
+                     // We need to match group.rootCfi with adaptationsMap keys.
+                     // The group.rootCfi comes from `generateCfiRange` or `getParentCfi`.
+                     // The adaptation key comes from the image CFI.
+
+                     // Let's try to find if any adaptation key matches or is a prefix/parent of this group?
+                     // Or simpler: check if `group.rootCfi` matches any adaptation key (fuzzy or exact).
+                     // `groupSentencesByRoot` uses `tableCfis` (image CFIs) to snap.
+                     // So `group.rootCfi` *should* be one of the `tableCfis` (or a derived range).
+                     // Actually `groupSentencesByRoot` computes a range CFI for the group.
+                     // But if it was snapped to a parent, the logic in `groupSentencesByRoot` might not return the parent CFI directly as `rootCfi`.
+                     // Let's look at `groupSentencesByRoot`. It pushes `rootCfi` generated from range.
+
+                     // Wait, `groupSentencesByRoot` logic:
+                     // `const parentCfi = getParentCfi(fullCfi, tableCfis);`
+                     // It groups by `parentCfi`.
+                     // BUT it outputs `rootCfi` as `generateCfiRange(...)` of the content.
+                     // It does NOT output `parentCfi` as the key.
+                     // This is a mismatch. I need the `parentCfi` to match with adaptation keys (which are image CFIs).
+
+                     // I should probably map the Adaptation Key (Image CFI) to the group.
+                     // Iterate adaptations:
+                     for (const [adaptRoot, text] of adaptationsMap.entries()) {
+                         // Check if this group belongs to this adaptation root
+                         // We can check if the group's segments' parentCfi matches `adaptRoot`.
+                         // Since all segments in a group share a parentCfi (mostly), we can check the first one.
+                         const firstSegmentCfi = group.segments[0]?.cfi;
+                         if (!firstSegmentCfi) continue;
+
+                         const parent = getParentCfi(firstSegmentCfi, [adaptRoot]);
+                         // If `parent` equals `adaptRoot` (normalized), then this group belongs to it.
+                         // `getParentCfi` returns the matched known root.
+                         if (parent === adaptRoot || parent.replace(/\)$/, '') === adaptRoot.replace(/\)$/, '')) {
+                             // Collect indices
+                             const indices: number[] = [];
+                             group.segments.forEach(s => {
+                                 if (s.sourceIndices) indices.push(...s.sourceIndices);
+                             });
+                             result.push({ indices, text });
+                             break; // Group matched to one adaptation
+                         }
+                     }
+                }
+                return result;
+            };
+
+
             // 1. Check DB for existing adaptations
             const analysis = await dbService.getContentAnalysis(bookId, sectionId);
             const existingAdaptations = new Map<string, string>(
@@ -296,28 +364,20 @@ export class AudioContentPipeline {
 
             // Notify with cached data immediately if available
             if (existingAdaptations.size > 0) {
-                onAdaptationsFound(existingAdaptations);
+                const result = await buildAdaptationResult(existingAdaptations);
+                if (result.length > 0) {
+                    onAdaptationsFound(result);
+                }
             }
 
             // 2. Identify tables that actually exist in the current section
-            // Fetch Table CFIs for Grouping (we need to know what are tables)
-            // But actually we need images to generate adaptations.
-            // So we fetch table images first.
             const tableImages = await dbService.getTableImages(bookId);
-
-            // Filter images that belong to this section
             const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
 
             if (sectionTableImages.length === 0) return;
 
             // 3. Filter for those missing from the cache
-            const workSet = sectionTableImages.filter(img => {
-                // We need to match the image CFI to the root CFI of the adaptation.
-                // The image CFI is usually the <table> element itself.
-                // Adaptations are keyed by rootCfi.
-                // We assume the image CFI is the root CFI.
-                return !existingAdaptations.has(img.cfi);
-            });
+            const workSet = sectionTableImages.filter(img => !existingAdaptations.has(img.cfi));
 
             if (workSet.length === 0) return;
 
@@ -331,7 +391,6 @@ export class AudioContentPipeline {
              }
 
              if (genAIService.isConfigured()) {
-                 // Batch requests if necessary (not implemented here, assuming reasonable count)
                  const nodes = workSet.map(img => ({
                      rootCfi: img.cfi,
                      imageBlob: img.imageBlob
@@ -350,7 +409,9 @@ export class AudioContentPipeline {
                  const finalAdaptations = new Map<string, string>(
                      updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
                  );
-                 onAdaptationsFound(finalAdaptations);
+
+                 const finalResult = await buildAdaptationResult(finalAdaptations);
+                 onAdaptationsFound(finalResult);
              }
 
         } catch (e) {
