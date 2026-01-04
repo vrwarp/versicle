@@ -297,55 +297,6 @@ export class AudioContentPipeline {
 
             if (targetSentences.length === 0) return;
 
-            // Helper to build the result with indices
-            const buildAdaptationResult = async (adaptationsMap: Map<string, string>) => {
-                const result: { indices: number[], text: string }[] = [];
-
-                // We only care about CFIs that are keys in our adaptations map (which come from table images)
-                const tableRoots = Array.from(adaptationsMap.keys());
-
-                // Create a map to collect indices for each table root
-                const tableIndices = new Map<string, number[]>();
-
-                // Iterate through all sentences and check if they belong to any known table root
-                for (let i = 0; i < targetSentences.length; i++) {
-                    const sentence = targetSentences[i];
-                    if (!sentence.cfi) continue;
-
-                    // Check if this sentence is a child of any known table adaptation root.
-                    // Adaptations are keyed by the CFI of the table image (known root).
-                    const matchedRoot = tableRoots.find(root => {
-                         // Normalize roots for comparison
-                         const cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1').replace(/\)$/, '');
-                         const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
-
-                         // Check for prefix match with valid separator boundary
-                         return cleanCfi.startsWith(cleanRoot) &&
-                             (cleanCfi.length === cleanRoot.length || ['/', '!', '[', ':'].includes(cleanCfi[cleanRoot.length]));
-                    });
-
-                    if (matchedRoot) {
-                        if (!tableIndices.has(matchedRoot)) {
-                            tableIndices.set(matchedRoot, []);
-                        }
-                        // Collect the raw sentence index (i).
-                        // This index aligns with `sourceIndices` used in the playback queue items.
-                        tableIndices.get(matchedRoot)?.push(i);
-                    }
-                }
-
-                // Construct result
-                for (const [root, indices] of tableIndices.entries()) {
-                    const text = adaptationsMap.get(root);
-                    if (text) {
-                        result.push({ indices, text });
-                    }
-                }
-
-                return result;
-            };
-
-
             // 1. Check DB for existing adaptations
             const analysis = await dbService.getContentAnalysis(bookId, sectionId);
             const existingAdaptations = new Map<string, string>(
@@ -354,7 +305,7 @@ export class AudioContentPipeline {
 
             // Notify with cached data immediately if available
             if (existingAdaptations.size > 0) {
-                const result = await buildAdaptationResult(existingAdaptations);
+                const result = this.mapSentencesToAdaptations(targetSentences, existingAdaptations);
                 if (result.length > 0) {
                     onAdaptationsFound(result);
                 }
@@ -400,13 +351,68 @@ export class AudioContentPipeline {
                      updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
                  );
 
-                 const finalResult = await buildAdaptationResult(finalAdaptations);
+                 const finalResult = this.mapSentencesToAdaptations(targetSentences, finalAdaptations);
                  onAdaptationsFound(finalResult);
              }
 
         } catch (e) {
             console.warn("Error processing table adaptations", e);
         }
+    }
+
+    /**
+     * Maps raw sentences to their corresponding table adaptations based on CFI structure.
+     * Identifying which sentences belong to which table allows us to replace them in the queue.
+     *
+     * @param sentences The list of raw sentence nodes.
+     * @param adaptationsMap A map of Table Root CFI -> Adaptation Text.
+     * @returns An array of mappings, each containing the source indices and the replacement text.
+     */
+    public mapSentencesToAdaptations(sentences: SentenceNode[], adaptationsMap: Map<string, string>): { indices: number[], text: string }[] {
+        const result: { indices: number[], text: string }[] = [];
+
+        // We only care about CFIs that are keys in our adaptations map (which come from table images)
+        const tableRoots = Array.from(adaptationsMap.keys());
+
+        // Create a map to collect indices for each table root
+        const tableIndices = new Map<string, number[]>();
+
+        // Iterate through all sentences and check if they belong to any known table root
+        for (let i = 0; i < sentences.length; i++) {
+            const sentence = sentences[i];
+            if (!sentence.cfi) continue;
+
+            // Check if this sentence is a child of any known table adaptation root.
+            // Adaptations are keyed by the CFI of the table image (known root).
+            const matchedRoot = tableRoots.find(root => {
+                    // Normalize roots for comparison
+                    const cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1').replace(/\)$/, '');
+                    const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+
+                    // Check for prefix match with valid separator boundary
+                    return cleanCfi.startsWith(cleanRoot) &&
+                        (cleanCfi.length === cleanRoot.length || ['/', '!', '[', ':'].includes(cleanCfi[cleanRoot.length]));
+            });
+
+            if (matchedRoot) {
+                if (!tableIndices.has(matchedRoot)) {
+                    tableIndices.set(matchedRoot, []);
+                }
+                // Collect the raw sentence index (i).
+                // This index aligns with `sourceIndices` used in the playback queue items.
+                tableIndices.get(matchedRoot)?.push(i);
+            }
+        }
+
+        // Construct result
+        for (const [root, indices] of tableIndices.entries()) {
+            const text = adaptationsMap.get(root);
+            if (text) {
+                result.push({ indices, text });
+            }
+        }
+
+        return result;
     }
 
     /**
