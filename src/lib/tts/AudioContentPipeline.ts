@@ -269,6 +269,86 @@ export class AudioContentPipeline {
     }
 
 
+    async processTableAdaptations(
+        bookId: string,
+        sectionId: string,
+        _sentences: SentenceNode[],
+        onAdaptationsFound: (adaptations: Map<string, string>) => void
+    ): Promise<void> {
+        const genAISettings = useGenAIStore.getState();
+        if (!genAISettings.isContentAnalysisEnabled) return;
+
+        try {
+            // 1. Check DB for existing adaptations
+            const analysis = await dbService.getContentAnalysis(bookId, sectionId);
+            const existingAdaptations = new Map<string, string>(
+                analysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+            );
+
+            // Notify with cached data immediately if available
+            if (existingAdaptations.size > 0) {
+                onAdaptationsFound(existingAdaptations);
+            }
+
+            // 2. Identify tables that actually exist in the current section
+            // Fetch Table CFIs for Grouping (we need to know what are tables)
+            // But actually we need images to generate adaptations.
+            // So we fetch table images first.
+            const tableImages = await dbService.getTableImages(bookId);
+
+            // Filter images that belong to this section
+            const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
+
+            if (sectionTableImages.length === 0) return;
+
+            // 3. Filter for those missing from the cache
+            const workSet = sectionTableImages.filter(img => {
+                // We need to match the image CFI to the root CFI of the adaptation.
+                // The image CFI is usually the <table> element itself.
+                // Adaptations are keyed by rootCfi.
+                // We assume the image CFI is the root CFI.
+                return !existingAdaptations.has(img.cfi);
+            });
+
+            if (workSet.length === 0) return;
+
+            // 4. Check if GenAI is configured
+             const canUseGenAI = genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+             if (!canUseGenAI) return;
+
+             // Ensure service is configured
+             if (!genAIService.isConfigured() && genAISettings.apiKey) {
+                 genAIService.configure(genAISettings.apiKey, 'gemini-1.5-flash');
+             }
+
+             if (genAIService.isConfigured()) {
+                 // Batch requests if necessary (not implemented here, assuming reasonable count)
+                 const nodes = workSet.map(img => ({
+                     rootCfi: img.cfi,
+                     imageBlob: img.imageBlob
+                 }));
+
+                 const results = await genAIService.generateTableAdaptations(nodes);
+
+                 // 5. Update DB
+                 await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
+                     rootCfi: r.cfi,
+                     text: r.adaptation
+                 })));
+
+                 // 6. Notify listeners with updated full set
+                 const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+                 const finalAdaptations = new Map<string, string>(
+                     updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+                 );
+                 onAdaptationsFound(finalAdaptations);
+             }
+
+        } catch (e) {
+            console.warn("Error processing table adaptations", e);
+        }
+    }
+
     /**
      * Retrieves cached content classifications from DB or triggers GenAI detection if missing.
      */

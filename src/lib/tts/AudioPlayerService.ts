@@ -660,6 +660,19 @@ export class AudioPlayerService {
             });
         };
 
+        // Callback for Table Adaptations
+        const onAdaptationsFound = (adaptations: Map<string, string>) => {
+            this.enqueue(async () => {
+                // Verify validity before applying
+                if (this.currentBookId !== currentBookId) return;
+
+                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
+                if (activeSection && activeSection.sectionId === currentSectionId) {
+                    this.stateManager.applyTableAdaptations(adaptations);
+                }
+            });
+        };
+
         const newQueue = await this.contentPipeline.loadSection(
             this.currentBookId,
             section,
@@ -681,6 +694,32 @@ export class AudioPlayerService {
 
             this.stateManager.setQueue(newQueue, 0, sectionIndex);
             // Automatic persist and notify.
+
+            // Trigger adaptation processing in background
+            // We pass the raw sentences from pipeline if possible, but loadSection returns queue.
+            // We can retrieve them from db if needed or assume pipeline cached them.
+            // Actually pipeline.processTableAdaptations needs sentences just for fallback/context?
+            // Wait, pipeline.processTableAdaptations signature is:
+            // processTableAdaptations(bookId, sectionId, sentences, onAdaptationsFound)
+            // But sentences are not easily available here from newQueue.
+            // However, the pipeline methods usually fetch from DB if not provided.
+            // Let's pass empty array or fetch content again?
+            // Actually, `loadSection` creates the queue.
+            // We should probably modify `AudioContentPipeline` to initiate this internally or
+            // we call it here.
+            // The pipeline stores sentences in `tts_content` store.
+            // So passing [] might work if it fetches, or we fetch.
+            // Let's check AudioContentPipeline.processTableAdaptations implementation I just wrote.
+            // It doesn't use `sentences` argument! I defined it but didn't use it in my implementation
+            // because I fetched table images directly from DB.
+            // So passing [] is fine.
+
+            this.contentPipeline.processTableAdaptations(
+                this.currentBookId,
+                section.sectionId,
+                [], // Sentences not used in current implementation of processTableAdaptations
+                onAdaptationsFound
+            );
 
             if (autoPlay) {
                 await this.playInternal();

@@ -948,6 +948,48 @@ class DBService {
   }
 
   /**
+   * Saves table adaptations for a section.
+   * Merges with existing analysis if present, or creates a new one.
+   *
+   * @param bookId - The book ID.
+   * @param sectionId - The section ID.
+   * @param adaptations - The generated adaptations.
+   */
+  async saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): Promise<void> {
+      try {
+          const db = await this.getDB();
+          const tx = db.transaction('content_analysis', 'readwrite');
+          const store = tx.objectStore('content_analysis');
+          const id = `${bookId}-${sectionId}`;
+          const existing = await store.get(id);
+
+          const analysis: ContentAnalysis = existing || {
+              id,
+              bookId,
+              sectionId,
+              structure: { footnoteMatches: [] },
+              lastAnalyzed: Date.now()
+          };
+
+          // Merge with existing adaptations
+          const existingAdaptations = analysis.tableAdaptations || [];
+          const newAdaptationsMap = new Map(existingAdaptations.map(a => [a.rootCfi, a]));
+
+          for (const adaptation of adaptations) {
+              newAdaptationsMap.set(adaptation.rootCfi, adaptation);
+          }
+
+          analysis.tableAdaptations = Array.from(newAdaptationsMap.values());
+          analysis.lastAnalyzed = Date.now();
+
+          await store.put(analysis);
+          await tx.done;
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  /**
    * Retrieves all content analysis entries for a book.
    *
    * @param bookId - The book ID.

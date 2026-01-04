@@ -71,7 +71,7 @@ The `ContentAnalysis` type in `src/types/db.ts` is extended to prioritize the CF
 
 **Design Consideration: Granular Storage** By storing adaptations as an array of objects rather than a single blob of text, we allow the system to update the playback queue incrementally. If a section contains three tables and the AI has already processed two of them in a previous session, we only incur the cost (both time and tokens) for the third.
 
-```
+```typescript
 export interface TableAdaptation {
   rootCfi: string; // The EPUB CFI key for the table block
   text: string;    // The generated spoken-word adaptation
@@ -93,12 +93,14 @@ To ensure the model correctly maps adaptations to specific CFIs, the request par
 
 **Prompt Strategy**: We explicitly tell the model that the `id` in the output JSON must match the provided `cfi` string exactly. This enables automated merging without fuzzy text matching.
 
-```
+**Deviation**: The `thinking_config` is currently commented out in `GenAIService.ts` as thinking models are not yet universally supported or stable in this context. The `thinkingBudget` parameter is accepted but unused (underscored).
+
+```typescript
 // src/lib/genai/GenAIService.ts
 
 public async generateTableAdaptations(
   nodes: { rootCfi: string, imageBlob: Blob }[],
-  thinkingBudget: number = 512
+  _thinkingBudget: number = 512
 ): Promise<{ cfi: string, adaptation: string }[]> {
   const instructionPrompt = `
     Analyze the provided table images from a book.
@@ -123,7 +125,7 @@ public async generateTableAdaptations(
   }
 
   return this.generateStructured<{ cfi: string, adaptation: string }[]>(
-    { contents: [{ role: 'user', parts }] },
+    { contents: [{ role: 'user', parts }] } as any,
     {
       type: SchemaType.ARRAY,
       items: {
@@ -136,7 +138,7 @@ public async generateTableAdaptations(
       },
     },
     {
-      thinking_config: { include_thoughts: true, thinking_budget: thinkingBudget }
+      // thinking_config: { include_thoughts: true, thinking_budget: thinkingBudget }
     }
   );
 }
@@ -149,33 +151,60 @@ The pipeline verifies DB state before executing heavy AI tasks.
 
 **Design Consideration: Non-Blocking User Experience** Multimodal generation can take 5--15 seconds. If this were synchronous, the TTS "Play" button would feel broken. By running this in the background, the user hears the original table text (or surrounding paragraphs) immediately. When the AI finishes, the "Swap-and-Skip" logic (see 4.4) ensures the transition to the natural adaptation is seamless.
 
-```
+```typescript
 // src/lib/tts/AudioContentPipeline.ts
-async processTableAdaptations(bookId, sectionId, sentences, onAdaptationsFound) {
-    const analysis = await dbService.getContentAnalysis(bookId, sectionId);
+async processTableAdaptations(
+    bookId: string,
+    sectionId: string,
+    _sentences: SentenceNode[],
+    onAdaptationsFound: (adaptations: Map<string, string>) => void
+): Promise<void> {
+    const genAISettings = useGenAIStore.getState();
+    if (!genAISettings.isContentAnalysisEnabled) return;
 
-    // 1. Identify tables that actually exist in the current section
-    const tableGroups = this.groupSentencesByRoot(...);
+    try {
+        // 1. Check DB for existing adaptations
+        const analysis = await dbService.getContentAnalysis(bookId, sectionId);
+        const existingAdaptations = new Map<string, string>(
+            analysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+        );
 
-    // 2. Filter for those missing from the cache
-    const workSet = tableGroups.filter(g =>
-        !analysis?.tableAdaptations?.find(a => a.rootCfi === g.rootCfi)
-    );
+        if (existingAdaptations.size > 0) {
+            onAdaptationsFound(existingAdaptations);
+        }
 
-    if (workSet.length > 0) {
-        // ... call GenAIService ...
-        // 3. Update the analysis record with new results
-        await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
-            rootCfi: r.cfi,
-            text: r.adaptation
-        })));
+        // 2. Identify tables using stored images
+        const tableImages = await dbService.getTableImages(bookId);
+        const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
+
+        if (sectionTableImages.length === 0) return;
+
+        // 3. Filter for those missing from the cache
+        const workSet = sectionTableImages.filter(img => !existingAdaptations.has(img.cfi));
+
+        if (workSet.length > 0 && genAIService.isConfigured()) {
+             const nodes = workSet.map(img => ({
+                 rootCfi: img.cfi,
+                 imageBlob: img.imageBlob
+             }));
+
+             const results = await genAIService.generateTableAdaptations(nodes);
+
+             await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
+                 rootCfi: r.cfi,
+                 text: r.adaptation
+             })));
+
+             const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+             const finalAdaptations = new Map<string, string>(
+                 updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+             );
+             onAdaptationsFound(finalAdaptations);
+        }
+    } catch (e) {
+        console.warn("Error processing table adaptations", e);
     }
-
-    // 4. Always return the union of cached and new adaptations
-    const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
-    onAdaptationsFound(new Map(updatedAnalysis.tableAdaptations.map(a => [a.rootCfi, a.text])));
 }
-
 ```
 
 ### 4.4 Playback State Integration: The CFI "Swap-and-Skip"
@@ -186,41 +215,56 @@ Updates the live queue using prefix matching on segment CFIs.
 
 Instead, we use a **Swap-and-Skip** strategy:
 
-1.  **Prefix Matching**: A table root CFI like `.../4[table1]` is the parent of cell CFIs like `.../4[table1]/2/1`. We use `startsWith` to identify all queue items belonging to the table.
+1.  **Prefix Matching**: A table root CFI like `.../4[table1]` is the parent of cell CFIs like `.../4[table1]/2/1`. We use `startsWith` combined with strict path checking to avoid false positives (e.g. `/2` matching `/20`).
 
 2.  **Anchor Entry**: The first item found in the group is updated with the *entire* GenAI adaptation.
 
 3.  **Silent Survivors**: Every subsequent item in that table group is marked `isSkipped: true`. This keeps the items in the list (preserving index logic) but prevents the audio player from trying to synthesize them.
 
-```
+```typescript
 // src/lib/tts/PlaybackStateManager.ts
 applyTableAdaptations(adaptations: Map<string, string>) {
     const handledRoots = new Set<string>();
+    let changed = false;
 
-    this._queue = this._queue.map((item) => {
+    const newQueue = this._queue.map((item) => {
         if (!item.cfi) return item;
 
         for (const [rootCfi, text] of adaptations) {
-            // Check if segment is a child of the table root
-            if (item.cfi.startsWith(rootCfi.replace(')', ''))) {
+            // Clean up CFIs for comparison (remove 'epubcfi(' wrapper if present)
+            const cleanRoot = rootCfi.replace(/^epubcfi\((.*)\)$/, '$1');
+            const cleanItemCfi = item.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+
+            // Ensure strict path matching (prevent /2 matching /20)
+            const isChild = cleanItemCfi.startsWith(cleanRoot) &&
+                (cleanItemCfi.length === cleanRoot.length ||
+                 ['/', '!', '[', ':'].includes(cleanItemCfi[cleanRoot.length]));
+
+            if (isChild) {
                 if (!handledRoots.has(rootCfi)) {
                     handledRoots.add(rootCfi);
                     // Update only the anchor item with the full natural adaptation
+                    changed = true;
                     return { ...item, text, isSkipped: false };
                 } else {
                     // Mark cell data as skipped to avoid double-reading
-                    return { ...item, isSkipped: true };
+                    if (!item.isSkipped) {
+                        changed = true;
+                        return { ...item, isSkipped: true };
+                    }
                 }
             }
         }
         return item;
     });
 
-    // CRITICAL: Narrated text length has changed; recalculate progress markers
-    this.calculatePrefixSums();
-    this.notifyListeners();
+    if (changed) {
+        this._queue = newQueue;
+        this.calculatePrefixSums();
+        this.persistQueue();
+        this.notifyListeners();
+    }
 }
-
 ```
 
 5\. Considerations & Edge Cases
