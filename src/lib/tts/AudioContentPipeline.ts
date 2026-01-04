@@ -132,7 +132,7 @@ export class AudioContentPipeline {
 
                      if (onAdaptationsFound) {
                          // Trigger table adaptations
-                         this.processTableAdaptations(bookId, section.sectionId, [], onAdaptationsFound)
+                         this.processTableAdaptations(bookId, section.sectionId, workingSentences, onAdaptationsFound)
                              .catch(err => console.warn("Background table adaptation failed", err));
                      }
                 }
