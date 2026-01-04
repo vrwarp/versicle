@@ -36,7 +36,8 @@ export class AudioContentPipeline {
         prerollEnabled: boolean,
         speed: number,
         sectionTitle?: string,
-        onMaskFound?: (mask: Set<number>) => void
+        onMaskFound?: (mask: Set<number>) => void,
+        onAdaptationsFound?: (adaptations: Map<string, string>) => void
     ): Promise<TTSQueueItem[] | null> {
         try {
             const ttsContent = await dbService.getTTSContent(bookId, section.sectionId);
@@ -117,15 +118,23 @@ export class AudioContentPipeline {
                 const skipTypes = genAISettings.contentFilterSkipTypes;
                 const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
 
-                if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
-                    // Trigger background detection
-                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
-                        .then(mask => {
-                            if (mask && mask.size > 0) {
-                                onMaskFound(mask);
-                            }
-                        })
-                        .catch(err => console.warn("Background mask detection failed", err));
+                if (isContentAnalysisEnabled) {
+                     if (skipTypes.length > 0 && onMaskFound) {
+                        // Trigger background detection
+                        this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
+                            .then(mask => {
+                                if (mask && mask.size > 0) {
+                                    onMaskFound(mask);
+                                }
+                            })
+                            .catch(err => console.warn("Background mask detection failed", err));
+                     }
+
+                     if (onAdaptationsFound) {
+                         // Trigger table adaptations
+                         this.processTableAdaptations(bookId, section.sectionId, [], onAdaptationsFound)
+                             .catch(err => console.warn("Background table adaptation failed", err));
+                     }
                 }
             } else {
                 // Empty Chapter Handling
