@@ -6,7 +6,7 @@ import { useReaderStore } from '../store/useReaderStore';
  * This ensures that Tailwind's dark mode and custom CSS variables work correctly.
  */
 export const ThemeSynchronizer = () => {
-  const { currentTheme } = useReaderStore();
+  const currentTheme = useReaderStore(state => state.currentTheme);
 
   useEffect(() => {
     const root = window.document.documentElement;
