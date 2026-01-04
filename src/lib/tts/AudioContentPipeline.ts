@@ -367,29 +367,51 @@ export class AudioContentPipeline {
         const result: { indices: number[], text: string }[] = [];
 
         // We only care about CFIs that are keys in our adaptations map (which come from table images)
-        const tableRoots = Array.from(adaptationsMap.keys());
+        // Sort by length descending to handle nested tables (match most specific first)
+        const tableRoots = Array.from(adaptationsMap.keys()).sort((a, b) => b.length - a.length);
 
         // Create a map to collect indices for each table root
         const tableIndices = new Map<string, number[]>();
+
+        // Pre-parse table roots to avoid repeated parsing
+        const parsedRoots = tableRoots.map(root => {
+            const range = parseCfiRange(root);
+            // If it's a range, use the parent (common ancestor) for prefix matching.
+            // If it's a point/path, use it directly.
+            // Strip epubcfi() wrapper for raw comparison if needed, but parseCfiRange handles format.
+            // We use the full string representation of the parent/path for comparison.
+            let cleanRoot = root;
+            if (range && range.parent) {
+                 // Reconstruct parent CFI string: epubcfi(parent)
+                 // But wait, parseCfiRange returns 'parent' as the path inside.
+                 cleanRoot = range.parent;
+            } else {
+                 // Strip wrapper manually if not a range or simple path
+                 cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1');
+            }
+            // Normalize: remove trailing ')' if present from lazy regex or range structure
+            cleanRoot = cleanRoot.replace(/\)$/, '');
+
+            return { original: root, clean: cleanRoot };
+        });
 
         // Iterate through all sentences and check if they belong to any known table root
         for (let i = 0; i < sentences.length; i++) {
             const sentence = sentences[i];
             if (!sentence.cfi) continue;
 
-            // Check if this sentence is a child of any known table adaptation root.
-            // Adaptations are keyed by the CFI of the table image (known root).
-            const matchedRoot = tableRoots.find(root => {
-                    // Normalize roots for comparison
-                    const cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1').replace(/\)$/, '');
-                    const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+            const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
 
+            // Check if this sentence is a child of any known table adaptation root.
+            const match = parsedRoots.find(({ clean }) => {
                     // Check for prefix match with valid separator boundary
-                    return cleanCfi.startsWith(cleanRoot) &&
-                        (cleanCfi.length === cleanRoot.length || ['/', '!', '[', ':'].includes(cleanCfi[cleanRoot.length]));
+                    // Include ',' for range handling
+                    return cleanCfi.startsWith(clean) &&
+                        (cleanCfi.length === clean.length || ['/', '!', '[', ':', ','].includes(cleanCfi[clean.length]));
             });
 
-            if (matchedRoot) {
+            if (match) {
+                const matchedRoot = match.original;
                 if (!tableIndices.has(matchedRoot)) {
                     tableIndices.set(matchedRoot, []);
                 }
