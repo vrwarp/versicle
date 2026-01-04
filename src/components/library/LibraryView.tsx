@@ -75,9 +75,10 @@ export const LibraryView: React.FC = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const state = location.state as any;
     if (state && state.reprocessBookId) {
-        setReprocessingBookId(state.reprocessBookId);
         // Clear state to prevent reopening on reload/navigation
         window.history.replaceState({}, document.title);
+        // Defer state update to avoid triggering cascading renders
+        setTimeout(() => setReprocessingBookId(state.reprocessBookId), 0);
     }
   }, [location.state]);
 

@@ -18,7 +18,6 @@ vi.mock('./EmptyLibrary', () => ({
 }));
 
 // Mock ReprocessingInterstitial
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.mock('./ReprocessingInterstitial', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ReprocessingInterstitial: ({ isOpen }: any) => isOpen ? <div data-testid="reprocessing-interstitial">Processing...</div> : null

@@ -18,6 +18,7 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('../../../hooks/useEpubReader');
 vi.mock('../../../store/useReaderStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useReaderStore: (selector: any) => selector({
         currentTheme: 'light',
         viewMode: 'paginated',
@@ -32,6 +33,7 @@ vi.mock('../../../store/useReaderStore', () => ({
     })
 }));
 vi.mock('../../../store/useTTSStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useTTSStore: (selector: any) => selector({
         isPlaying: false,
         lastError: null,
@@ -54,11 +56,13 @@ vi.mock('../../../store/useAnnotationStore', () => ({
     })
 }));
 vi.mock('../../../store/useGenAIStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useGenAIStore: (selector: any) => selector({
         isDebugModeEnabled: false
     })
 }));
 vi.mock('../../../store/useToastStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useToastStore: (selector: any) => selector({
         showToast: vi.fn()
     })
