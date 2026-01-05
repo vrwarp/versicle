@@ -31,11 +31,17 @@ def reset_app(page: Page):
     Args:
         page: The Playwright Page object.
     """
-    page.goto("http://localhost:5173", timeout=5000)
+    print("Resetting App...")
+    # Navigate to blank page to release any DB locks
+    page.goto("about:blank")
 
-    # Explicitly clear IDB and LocalStorage to ensure a clean slate
+    # Go to app to clear storage (needs same origin)
+    page.goto("http://localhost:5173", timeout=10000)
+
+    # Explicitly clear IDB, LocalStorage, and Service Workers to ensure a clean slate
     page.evaluate("""
         async () => {
+            // Clear IndexedDB
             const dbs = await window.indexedDB.databases();
             for (const db of dbs) {
                 await new Promise((resolve, reject) => {
@@ -45,11 +51,23 @@ def reset_app(page: Page):
                     req.onblocked = resolve;
                 });
             }
+            // Clear LocalStorage
             localStorage.clear();
+
+            // Unregister Service Workers
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for(let registration of registrations) {
+                    await registration.unregister();
+                }
+            }
         }
     """)
 
-    # Reload to apply cleared storage
+    # Inject Mock Flag again if it was lost (reset clears window state usually, but evaluate clears storage)
+    page.add_init_script("window.__VERSICLE_MOCK_SYNC__ = true;")
+
+    # Reload to apply cleared storage and fresh state
     page.reload()
 
     # Wait for app to be ready
@@ -60,9 +78,15 @@ def reset_app(page: Page):
         except:
             pass # Might not have appeared
 
-        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book'), div:has-text('Your library is empty')", timeout=10000)
-    except:
-        print("Warning: App load state check timed out.")
+        # Wait for either book card (if persistence failed to clear?) or empty library state
+        # Also allow for "Critical Error" to fail faster if SW issue persists
+        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book'), div:has-text('Your library is empty')", timeout=20000)
+        print("App Reset Complete.")
+    except Exception as e:
+        print(f"Error: App load state check timed out. {e}")
+        # Capture screenshot for debugging
+        capture_screenshot(page, "reset_app_timeout")
+        raise e # Re-raise to fail the test
 
 def ensure_library_with_book(page: Page):
     """
@@ -73,28 +97,41 @@ def ensure_library_with_book(page: Page):
     Args:
         page: The Playwright Page object.
     """
-    # Wait for initial render (either book or load button)
-    try:
-        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book')", timeout=10000)
-    except:
-        print("Warning: Neither book card nor load button found within 10s")
-        pass # Proceed to check
-
-    if page.get_by_text("Alice's Adventures in Wonderland").count() > 0:
+    print("Ensuring library has book...")
+    # Check if book already exists (by text)
+    if page.locator("[data-testid^='book-card-']").filter(has_text="Alice's Adventures in Wonderland").count() > 0:
+        print("Book found.")
         return
 
     # If book not found, try to load
-    load_btn = page.get_by_role("button", name="Load Demo Book")
-    if load_btn.count() > 0 and load_btn.is_visible():
-        load_btn.click()
-        # Wait for book to appear
-        try:
-            page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
-        except:
-            # Retry once if button is still there (flaky click?)
-            if load_btn.is_visible():
-                load_btn.click()
-                page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
+    print("Book not found, attempting to load demo book...")
+    try:
+        load_btn = page.get_by_role("button", name="Load Demo Book")
+        if load_btn.count() == 0:
+             # Maybe we are in empty state but button text is different or finding it differently
+             load_btn = page.locator("button").filter(has_text="Load Demo Book")
+
+        if load_btn.count() > 0 and load_btn.is_visible():
+            load_btn.click()
+            # Wait for book to appear
+            page.wait_for_selector("[data-testid^='book-card-']", timeout=20000)
+            print("Demo book loaded.")
+        else:
+            print("Error: 'Load Demo Book' button not found.")
+            capture_screenshot(page, "missing_load_button")
+            # If neither book nor button is found, check if we are in reader?
+            if page.get_by_test_id("reader-view").count() > 0:
+                 print("Warning: Stuck in Reader View. Attempting to exit...")
+                 page.get_by_test_id("reader-back-button").click()
+                 page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
+                 return
+
+            raise Exception("Cannot load demo book: Button not found")
+
+    except Exception as e:
+        print(f"Error ensuring library with book: {e}")
+        capture_screenshot(page, "ensure_library_fail")
+        raise e
 
 def capture_screenshot(page: Page, name: str, hide_tts_status: bool = False):
     """
@@ -115,21 +152,19 @@ def capture_screenshot(page: Page, name: str, hide_tts_status: bool = False):
             const el = document.getElementById('tts-debug');
             if (el) {
                 el.style.visibility = 'hidden';
-                // Force a reflow/repaint check if possible, or just rely on the synchronous evaluation
             }
         """)
-        # Explicitly wait for the element to be hidden from the playwright perspective
-        # This ensures the rendering engine has caught up before we take the screenshot
         try:
             page.locator("#tts-debug").wait_for(state="hidden", timeout=1000)
         except:
-            # Proceed even if timeout (maybe element doesn't exist)
             pass
 
     viewport = page.viewport_size
     width = viewport['width'] if viewport else 1280
     suffix = "mobile" if width < 600 else "desktop"
-    page.screenshot(path=f"verification/screenshots/{name}_{suffix}.png", timeout=10000)
+    path = f"verification/screenshots/{name}_{suffix}.png"
+    page.screenshot(path=path, timeout=10000)
+    print(f"Screenshot saved: {path}")
 
     if hide_tts_status:
         page.evaluate("const el = document.getElementById('tts-debug'); if (el) el.style.visibility = 'visible';")

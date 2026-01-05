@@ -72,7 +72,7 @@ export const GlobalSettingsDialog = () => {
         setTheme: state.setTheme
     })));
 
-    const { googleClientId, googleApiKey, setGoogleCredentials, isSyncEnabled, setSyncEnabled } = useSyncStore();
+    const { googleClientId, googleApiKey, setGoogleCredentials, isSyncEnabled, setSyncEnabled, lastSyncTime } = useSyncStore();
     const [checkpoints, setCheckpoints] = useState<Awaited<ReturnType<typeof CheckpointService.listCheckpoints>>>([]);
 
     useEffect(() => {
@@ -664,8 +664,9 @@ export const GlobalSettingsDialog = () => {
 
                                     {providerId === 'google' && (
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium">Google API Key</label>
+                                            <label htmlFor="google-api-key" className="text-sm font-medium">Google API Key</label>
                                             <Input
+                                                id="google-api-key"
                                                 type="password"
                                                 value={apiKeys.google}
                                                 onChange={(e) => setApiKey('google', e.target.value)}
@@ -919,20 +920,23 @@ export const GlobalSettingsDialog = () => {
                                 <div className="space-y-4">
                                      <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
-                                            <label className="text-sm font-medium">Enable Sync</label>
+                                            <label htmlFor="sync-toggle" className="text-sm font-medium">Enable Sync</label>
                                             <p className="text-xs text-muted-foreground">
                                                 Requires Google Drive API credentials.
                                             </p>
                                         </div>
                                         <Switch
+                                            id="sync-toggle"
+                                            data-testid="sync-toggle"
                                             checked={isSyncEnabled}
                                             onCheckedChange={setSyncEnabled}
                                         />
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium">Google Client ID</label>
+                                        <label htmlFor="sync-google-client-id" className="text-sm font-medium">Google Client ID</label>
                                         <Input
+                                            id="sync-google-client-id"
                                             type="text"
                                             value={googleClientId}
                                             onChange={(e) => setGoogleCredentials(e.target.value, googleApiKey)}
@@ -940,8 +944,9 @@ export const GlobalSettingsDialog = () => {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium">Google API Key</label>
+                                        <label htmlFor="sync-google-api-key" className="text-sm font-medium">Google API Key</label>
                                         <Input
+                                            id="sync-google-api-key"
                                             type="password"
                                             value={googleApiKey}
                                             onChange={(e) => setGoogleCredentials(googleClientId, e.target.value)}
@@ -950,6 +955,9 @@ export const GlobalSettingsDialog = () => {
                                     </div>
                                     <div className="pt-2 text-xs text-muted-foreground">
                                         <p>Data is stored in your personal Google Drive (App Data folder).</p>
+                                        {lastSyncTime && (
+                                            <p className="mt-1">Last Synced: {new Date(lastSyncTime).toLocaleString()}</p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
