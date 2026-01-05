@@ -129,12 +129,12 @@ export class AudioContentPipeline {
                             })
                             .catch(err => console.warn("Background mask detection failed", err));
                      }
+                }
 
-                     if (onAdaptationsFound) {
-                         // Trigger table adaptations
-                         this.processTableAdaptations(bookId, section.sectionId, workingSentences, onAdaptationsFound)
-                             .catch(err => console.warn("Background table adaptation failed", err));
-                     }
+                if (onAdaptationsFound) {
+                    // Trigger table adaptations
+                    this.processTableAdaptations(bookId, section.sectionId, workingSentences, onAdaptationsFound)
+                        .catch(err => console.warn("Background table adaptation failed", err));
                 }
             } else {
                 // Empty Chapter Handling
@@ -285,7 +285,7 @@ export class AudioContentPipeline {
         onAdaptationsFound: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<void> {
         const genAISettings = useGenAIStore.getState();
-        if (!genAISettings.isContentAnalysisEnabled || !genAISettings.isTableAdaptationEnabled) return;
+        if (!genAISettings.isTableAdaptationEnabled) return;
 
         try {
             // Ensure we have sentences
