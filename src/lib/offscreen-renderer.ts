@@ -133,6 +133,7 @@ export async function extractContentOffscreen(
                       type: 'webp',
                       quality: 0.1,
                       scale: 0.5,
+                      backgroundColor: '#ffffff',
                   });
 
                   if (blob) {
