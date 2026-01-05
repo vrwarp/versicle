@@ -347,6 +347,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             }}
             role="button"
             tabIndex={0}
+            data-testid="compass-active-toggle"
             aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
         >
              <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center flex items-center justify-center gap-1.5">
