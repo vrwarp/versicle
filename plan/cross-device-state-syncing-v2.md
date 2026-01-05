@@ -106,7 +106,7 @@ Versicle uses the user's personal Google Drive via the `appDataFolder` scope. Th
 
 -   **Persistence:** These keys are stored in the `useSyncStore` state and persisted to `localStorage` (via zustand `persist` middleware).
 
--   **Security:** The sync system will remain inactive until valid credentials are provided. A "Validation" step attempts to ping the Drive API metadata endpoint.
+-   **Reactivity:** The `SyncOrchestrator` subscribes to store changes and automatically re-initializes or connects when valid credentials are provided.
 
 ### 4.2 Android Backup Manager (Capacitor)
 
@@ -127,7 +127,7 @@ Synchronization is inherently risky. To protect against "Sync Corruption," we im
 
 -   **Retention:** We maintain the last 10 checkpoints, managed by `CheckpointService`.
 
--   **Manual Rollback:** Users can restore a checkpoint from "Settings > Recovery."
+-   **Manual Rollback:** Users can restore a checkpoint from "Settings > Recovery". This uses `SyncOrchestrator.restoreFromManifest` to re-apply a historical state and reloads the application.
 
 ### 5.2 Schema Integrity & Evolution
 
@@ -146,8 +146,8 @@ Synchronization is inherently risky. To protect against "Sync Corruption," we im
 - **`src/lib/sync/CheckpointService.ts`**: Manages local snapshots.
 - **`src/lib/sync/drivers/GoogleDriveProvider.ts`**: Real implementation using GAPI/GIS.
 - **`src/lib/sync/android-backup.ts`**: Integration with `@capacitor/filesystem`.
-- **`src/lib/sync/SyncOrchestrator.ts`**: Coordinates timing, merging, and provider communication. Exposed via Singleton pattern.
-- **`src/components/GlobalSettingsDialog.tsx`**: Added "Sync & Cloud" and "Recovery" tabs.
+- **`src/lib/sync/SyncOrchestrator.ts`**: Coordinates timing, merging, and provider communication. Exposed via Singleton pattern. Includes `restoreFromManifest`.
+- **`src/components/GlobalSettingsDialog.tsx`**: Added "Sync & Cloud" and "Recovery" tabs. Functional restore button.
 - **`src/App.tsx`**: Initialized `SyncOrchestrator` via `useSyncOrchestrator` hook.
 - **`src/lib/tts/AudioPlayerService.ts`**: Calls `SyncOrchestrator.forcePush` on playback pause/stop.
 - **`src/store/useReaderStore.ts`**: Calls `SyncOrchestrator.scheduleSync` on location update (debounced).

@@ -48,6 +48,32 @@ export class SyncOrchestrator {
                 this.forcePush('background');
             }
         });
+
+        // Listen for store changes to re-init
+        useSyncStore.subscribe((state, prevState) => {
+             if (state.googleClientId !== prevState.googleClientId ||
+                 state.googleApiKey !== prevState.googleApiKey ||
+                 state.isSyncEnabled !== prevState.isSyncEnabled) {
+
+                 // If credentials changed, re-init.
+                 // We don't have an un-init, but initialize handles idempotency or re-auth attempts.
+                 if (state.isSyncEnabled) {
+                    this.initialize();
+                 }
+             }
+        });
+    }
+
+    /**
+     * Restores the library state from a provided manifest.
+     * Used for rollback/recovery.
+     */
+    async restoreFromManifest(manifest: SyncManifest): Promise<void> {
+        console.log("Restoring from manifest (Recovery)...", manifest);
+        await this.applyManifest(manifest);
+        console.log("Restore complete.");
+        // We might want to trigger a UI reload or refresh here, but DB changes are usually reactive or require reload.
+        // For now, the UI (GlobalSettings) handles the reload/toast.
     }
 
     /**

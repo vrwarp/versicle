@@ -23,6 +23,7 @@ import { backupService } from '../lib/BackupService';
 import { dbService } from '../db/DBService';
 import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
+import { SyncOrchestrator } from '../lib/sync/SyncOrchestrator';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { ReadingListDialog } from './ReadingListDialog';
 import { Trash2, Download, Loader2, RotateCcw } from 'lucide-react';
@@ -368,11 +369,14 @@ export const GlobalSettingsDialog = () => {
                 setRecoveryStatus("Restoring...");
                 const manifest = await CheckpointService.restoreCheckpoint(id);
                 if (manifest) {
-                    // In a real implementation, we would apply the manifest here.
-                    // For now, we'll just log it as the SyncManager isn't wired to DB write yet.
-                    console.log("Restoring manifest:", manifest);
-                    setRecoveryStatus("Restoration complete (Simulated).");
-                    setTimeout(() => setRecoveryStatus(null), 2000);
+                    const orchestrator = SyncOrchestrator.get();
+                    if (orchestrator) {
+                         await orchestrator.restoreFromManifest(manifest);
+                         setRecoveryStatus("Restoration complete. Reloading...");
+                         setTimeout(() => window.location.reload(), 1500);
+                    } else {
+                        setRecoveryStatus("Sync service unavailable.");
+                    }
                 } else {
                     setRecoveryStatus("Failed to load checkpoint.");
                 }
