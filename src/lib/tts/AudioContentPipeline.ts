@@ -285,7 +285,7 @@ export class AudioContentPipeline {
         onAdaptationsFound: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<void> {
         const genAISettings = useGenAIStore.getState();
-        if (!genAISettings.isContentAnalysisEnabled) return;
+        if (!genAISettings.isContentAnalysisEnabled || !genAISettings.isTableAdaptationEnabled) return;
 
         try {
             // Ensure we have sentences
