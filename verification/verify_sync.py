@@ -11,7 +11,7 @@ def verify_sync_ui():
         # Open Settings (assuming there is a settings button with specific aria-label or role)
         # Looking at GlobalSettingsDialog.tsx, it's a modal.
         # I need to find the trigger. Usually a gear icon or "Settings" button.
-        # I'll guess it's a button with "Settings" aria-label or text.
+        # I'll guess it's a button with "Settings" label or icon.
         # Let's try to find a button with "Settings" aria-label or text.
 
         # Wait for app to load
