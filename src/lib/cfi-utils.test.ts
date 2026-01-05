@@ -357,6 +357,28 @@ describe('cfi-utils', () => {
         });
     });
 
+    describe('boundary check: Hardening', () => {
+         it('should snap point CFI with offset (:) to root path', () => {
+            // Root: /6/4!/2
+            const root = "epubcfi(/6/4!/2)";
+            const knownBlockRoots = [root];
+
+            // Input: /6/4!/2:10
+            const input = "epubcfi(/6/4!/2:10)";
+
+            // Before fix: cleanCfi (/6/4!/2:10) starts with cleanRoot (/6/4!/2).
+            // Next char is ':'. If ':' not in boundary list, it failed.
+            expect(getParentCfi(input, knownBlockRoots)).toBe(root);
+        });
+
+         it('should snap point CFI with offset (:) to deeper root path', () => {
+            const root = "epubcfi(/6/4!/2/4)";
+            const knownBlockRoots = [root];
+            const input = "epubcfi(/6/4!/2/4:5)";
+            expect(getParentCfi(input, knownBlockRoots)).toBe(root);
+        });
+    });
+
     describe('getParentCfi Fixes (Regression Tests)', () => {
 
         it('should snap Range CFI input to known block root if matched', () => {
@@ -381,6 +403,31 @@ describe('cfi-utils', () => {
             const inputCfi = "epubcfi(/6/24!/4/2/4/2/2/1:0)";
 
             expect(getParentCfi(inputCfi, knownBlockRoots)).toBe(tableRoot);
+        });
+
+        it('should match point CFI to a known block root provided as a Range CFI', () => {
+            // Range Root: epubcfi(/6/4!/2, /1:0, /1:10) -> Parent is /6/4!/2
+            const rangeRoot = "epubcfi(/6/4!/2,/1:0,/1:10)";
+            const knownBlockRoots = [rangeRoot];
+
+            // Input: /6/4!/2/1:5 (Child of that parent)
+            const input = "epubcfi(/6/4!/2/1:5)";
+
+            // The input starts with /6/4!/2.
+            // But the root string is the full range string.
+            // Logic must parse root -> /6/4!/2 to match.
+            expect(getParentCfi(input, knownBlockRoots)).toBe(rangeRoot);
+        });
+
+        it('should match point CFI inside complex range root', () => {
+             // Range: /6/24!/4/2/4 (parent)
+             const rangeRoot = "epubcfi(/6/24!/4/2/4,/1:0,/3:10)";
+             const knownBlockRoots = [rangeRoot];
+
+             // Input: /6/24!/4/2/4/2/1:0
+             const input = "epubcfi(/6/24!/4/2/4/2/1:0)";
+
+             expect(getParentCfi(input, knownBlockRoots)).toBe(rangeRoot);
         });
 
         it('should NOT match if prefix is ambiguous (Boundary Check regression test)', () => {

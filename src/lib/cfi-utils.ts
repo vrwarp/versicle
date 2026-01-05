@@ -55,7 +55,10 @@ export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): strin
         for (const root of sortedRoots) {
             // Check prefix.
             let cleanRoot = root;
-            if (cleanRoot.startsWith('epubcfi(')) {
+            const range = parseCfiRange(root);
+            if (range && range.parent) {
+                cleanRoot = range.parent;
+            } else if (cleanRoot.startsWith('epubcfi(')) {
                  cleanRoot = cleanRoot.slice(8, -1);
             }
 
@@ -65,7 +68,7 @@ export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): strin
                 // If cleanCfi is longer, the next char must be a separator (/ or ! or [ or ,)
                 // Added comma to support Range CFIs as target (e.g. /6/24!/4/2/4 matches /6/24!/4/2/4,/1:0,...)
                 const nextChar = cleanCfi[cleanRoot.length];
-                if (!nextChar || ['/', '!', '[', ','].includes(nextChar)) {
+                if (!nextChar || ['/', '!', '[', ',', ':'].includes(nextChar)) {
                     return root;
                 }
             }
