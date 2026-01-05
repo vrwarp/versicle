@@ -131,7 +131,7 @@ export class AudioContentPipeline {
                      }
                 }
 
-                if (onAdaptationsFound) {
+                if (onAdaptationsFound && genAISettings.isTableAdaptationEnabled) {
                     // Trigger table adaptations
                     this.processTableAdaptations(bookId, section.sectionId, workingSentences, onAdaptationsFound)
                         .catch(err => console.warn("Background table adaptation failed", err));
@@ -285,7 +285,6 @@ export class AudioContentPipeline {
         onAdaptationsFound: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<void> {
         const genAISettings = useGenAIStore.getState();
-        if (!genAISettings.isTableAdaptationEnabled) return;
 
         try {
             // Ensure we have sentences
