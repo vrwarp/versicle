@@ -1,7 +1,7 @@
 Design Document: Versicle Cross-Device State Syncing
 ====================================================
 
-**Author:** Gemini **Status:** Draft **Target:** Robust, predictable syncing via Google Drive API with local rollback support.
+**Author:** Gemini **Status:** Implemented (Phase 1-4) **Target:** Robust, predictable syncing via Google Drive API with local rollback support.
 
 1\. Overview
 ------------
@@ -15,7 +15,7 @@ Versicle requires a predictable method to synchronize reading progress, annotati
 
 The core of the sync is a single JSON manifest stored in Google Drive. This acts as the source of truth for all metadata. The schema is designed to be extensible, allowing for future additions like reading goals or social features without breaking legacy clients.
 
-```
+```typescript
 interface SyncManifest {
   version: number;       // Schema version for migration handling
   lastUpdated: number;    // Global timestamp (UTC)
@@ -162,15 +162,23 @@ We will create a `MockDriveProvider` for the Vitest suite that simulates network
 
 -   **The "New Device" Scenario:** A completely empty IndexedDB instance pulls from Drive and correctly populates its library with offloaded book entries.
 
-6\. Implementation Roadmap
+6\. Implementation Notes
 --------------------------
 
-1.  **Phase 1 (Data Foundation):** Add `sync_log` and `checkpoints` stores to the `initDB` routine in `db.ts`.
+### 6.1 CheckpointService Implementation
+- **Deep Metadata Preservation:** The `CheckpointService` was implemented with a focus on preserving all metadata fields except for binary blobs. The `createCheckpoint` method uses object destructuring (`const { coverBlob, ...rest } = b;`) to ensure that extended metadata (like `toc`, `description`, `addedAt`) is captured in the checkpoint, even if the schema evolves.
+- **Exclusion Logic:** Explicitly excluded `coverBlob` from `books` store and all data from `files`, `content_analysis`, `tts_content`, and `tts_cache` stores.
+- **Restoration Logic:** The restoration process clears the metadata stores before repopulating them from the checkpoint. It attempts to preserve existing binary blobs (covers) if they exist in the database at the time of restoration, but if the local database has been corrupted (overwritten without blobs), the restored state will lack covers until regenerated/re-fetched.
 
-2.  **Phase 2 (Abstraction):** Implement the `RemoteStorageProvider` and its local mock.
+### 6.2 SyncService Implementation
+- **New Device Handling:** The `SyncService` logic was enhanced to handle the "New Device" scenario. If a book exists in the remote manifest but not locally, a placeholder entry is created in the `books` store with `isOffloaded: true`. This allows the user to see their library and trigger a download (ingestion) if they have the source file.
+- **Merge Logic:** Implemented `LWW` for scalar metadata and simple union for collections.
 
-3.  **Phase 3 (Cloud Integration):** Integrate the Google Identity Services (GIS) for OAuth2 authentication.
+### 6.3 GoogleDriveProvider Implementation
+- **Client Library:** Implemented using the `gapi` global object, assuming the Google API Client Library is loaded in the environment.
+- **API Calls:** Used `gapi.client.drive.files.create` and `update` for manifest management.
+- **Security:** Relies on `google.accounts.oauth2` for token management (implicit flow).
 
-4.  **Phase 4 (Merge Logic):** Implement the `CFI Union` and `LWW` merge strategies.
-
-5.  **Phase 5 (UI/UX):** Add a "Sync Status" indicator and a "Rollback/Checkpoint" manager in Global Settings.
+### 6.4 Deviations
+- **Simplified History Merge:** The current implementation uses a basic array union for `readRanges` in reading history. A full CRDT-lite implementation for range merging (handling overlaps and fragmentation) is marked as a TODO for future refinement.
+- **Testing Mocks:** The `GoogleDriveProvider` is tested via `MockDriveProvider`. The real provider implementation relies on global `gapi` objects which are not mocked in the unit test environment.

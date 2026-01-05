@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata, ContentAnalysis, ReadingHistoryEntry, ReadingListEntry, TTSContent, TTSPosition, TableImage } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata, ContentAnalysis, ReadingHistoryEntry, ReadingListEntry, TTSContent, TTSPosition, TableImage, SyncLogEntry, Checkpoint } from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -12,6 +12,20 @@ export interface EpubLibraryDB extends DBSchema {
     key: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     value: any;
+  };
+  /**
+   * Store for sync logs.
+   */
+  sync_log: {
+    key: number; // timestamp
+    value: SyncLogEntry;
+  };
+  /**
+   * Store for checkpoints.
+   */
+  checkpoints: {
+    key: number; // timestamp
+    value: Checkpoint;
   };
   /**
    * Store for book metadata.
@@ -153,11 +167,21 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 15, { // Upgrading to v15
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 16, { // Upgrading to v16
       upgrade(db, oldVersion, _newVersion, transaction) {
         // App Metadata store (New in v14)
         if (!db.objectStoreNames.contains('app_metadata')) {
           db.createObjectStore('app_metadata');
+        }
+
+        // Sync Log store (New in v16)
+        if (!db.objectStoreNames.contains('sync_log')) {
+          db.createObjectStore('sync_log', { keyPath: 'timestamp' });
+        }
+
+        // Checkpoints store (New in v16)
+        if (!db.objectStoreNames.contains('checkpoints')) {
+          db.createObjectStore('checkpoints', { keyPath: 'timestamp' });
         }
 
         // Migration to v11: Clear old reading history to enforce semantic boundaries

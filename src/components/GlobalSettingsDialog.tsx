@@ -23,6 +23,7 @@ import { backupService } from '../lib/BackupService';
 import { dbService } from '../db/DBService';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { ReadingListDialog } from './ReadingListDialog';
+import { SyncSettings } from './settings/SyncSettings';
 import { Trash2, Download, Loader2 } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
@@ -391,6 +392,9 @@ export const GlobalSettingsDialog = () => {
                     </Button>
                     <Button variant={activeTab === 'dictionary' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('dictionary')}>
                         Dictionary
+                    </Button>
+                    <Button variant={activeTab === 'sync' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('sync')}>
+                        Sync & Cloud
                     </Button>
                     {/* Add margin to last item to prevent overlap with Close button on mobile */}
                     <Button variant={activeTab === 'data' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0 text-destructive hover:text-destructive mr-10 sm:mr-0" onClick={() => setActiveTab('data')}>
@@ -888,6 +892,10 @@ export const GlobalSettingsDialog = () => {
                                 <TTSAbbreviationSettings />
                             </div>
                         </div>
+                    )}
+
+                    {activeTab === 'sync' && (
+                        <SyncSettings />
                     )}
 
                     {activeTab === 'data' && (

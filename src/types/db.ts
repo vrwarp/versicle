@@ -2,6 +2,9 @@ import type { Timepoint } from '../lib/tts/providers/types';
 import type { NavigationItem } from 'epubjs';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ContentType } from './content-analysis';
+import type { SyncLogEntry, Checkpoint } from './sync';
+
+export type { SyncLogEntry, Checkpoint };
 
 /**
  * Metadata for a book stored in the library.
