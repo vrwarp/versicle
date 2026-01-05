@@ -12,7 +12,18 @@ export class SyncManager {
    */
   static mergeManifests(local: SyncManifest, remote: SyncManifest): SyncManifest {
     // 1. Basic Metadata
+    // We prioritize remote unknown keys (Forward Compatibility) then overwrite with local knowns,
+    // but effectively we reconstruct the object below.
+    // To support "pass through unknown fields", we start with a spread of remote (if newer) or local.
+    // Actually, simply spreading both handles most cases.
+    // If we want to preserve fields from a newer version (remote), we should spread it first.
+    // But since we are explicitly defining the structure below, we cast to any to allow extra props.
+
     const merged: SyncManifest = {
+      ...remote, // Forward Compatibility: Keep unknown fields from remote
+      ...local,  // Keep unknown fields from local (if any)
+
+      // Explicitly overwrite known fields with merged results
       version: Math.max(local.version, remote.version),
       lastUpdated: Date.now(),
       deviceId: local.deviceId,
@@ -20,6 +31,8 @@ export class SyncManager {
       lexicon: [],
       readingList: {},
       transientState: {
+        ...remote.transientState, // Preserve unknown transient state
+        ...local.transientState,
         ttsPositions: {}
       },
       deviceRegistry: { ...local.deviceRegistry, ...remote.deviceRegistry }

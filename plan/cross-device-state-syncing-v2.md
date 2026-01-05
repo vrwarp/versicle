@@ -131,9 +131,9 @@ Synchronization is inherently risky. To protect against "Sync Corruption," we im
 
 ### 5.2 Schema Integrity & Evolution
 
--   **Schema Exhaustion Testing:** A mandatory Vitest run (`src/lib/sync/schema.test.ts`) compares the current IndexedDB schema against the `SyncManifest` schema.
+-   **Schema Exhaustion Testing:** A mandatory Vitest run (`src/lib/sync/schema.test.ts`) verifies the merge logic. Note: Runtime schema reflection is limited, so `generateLocalManifest` must be manually kept in sync with DB changes.
 
--   **Forward Compatibility:** Older versions of the app "pass through" unknown fields in the JSON manifest, ensuring they don't break new features for newer devices.
+-   **Forward Compatibility:** The `SyncManager` is designed to "pass through" unknown fields in the JSON manifest (by spreading the remote object), ensuring that older versions of the app don't destructively remove new fields added by newer versions.
 
 6\. Implementation Status (v1)
 --------------------
@@ -142,7 +142,7 @@ Synchronization is inherently risky. To protect against "Sync Corruption," we im
 
 - **`src/types/db.ts`**: Added `SyncManifest`, `SyncCheckpoint`, `SyncLogEntry`.
 - **`src/db/db.ts`**: Updated schema to v16 with `checkpoints` and `sync_log` stores.
-- **`src/lib/sync/SyncManager.ts`**: Implements LWW and CFI Union logic.
+- **`src/lib/sync/SyncManager.ts`**: Implements LWW and CFI Union logic, with forward compatibility for unknown keys.
 - **`src/lib/sync/CheckpointService.ts`**: Manages local snapshots.
 - **`src/lib/sync/drivers/GoogleDriveProvider.ts`**: Real implementation using GAPI/GIS.
 - **`src/lib/sync/android-backup.ts`**: Integration with `@capacitor/filesystem`.
@@ -159,3 +159,4 @@ Synchronization is inherently risky. To protect against "Sync Corruption," we im
 - **Testing:** `schema.test.ts` acts as a basic integration test for the merge logic.
 - **Orchestration:** Hooked directly into `App.tsx` for global lifecycle management.
 - **Singleton Pattern:** Used explicit `SyncOrchestrator.get()` singleton pattern to allow loose coupling from `AudioPlayerService` and `useReaderStore` without dependency injection complexity.
+- **App Metadata:** `app_metadata` store is currently excluded from sync as it is primarily used for migration flags, not user content.
