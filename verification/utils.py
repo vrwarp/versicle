@@ -106,20 +106,29 @@ def ensure_library_with_book(page: Page):
     # If book not found, try to load
     print("Book not found, attempting to load demo book...")
     try:
-        load_btn = page.get_by_role("button", name="Load Demo Book")
-        if load_btn.count() == 0:
-             # Maybe we are in empty state but button text is different or finding it differently
-             load_btn = page.locator("button").filter(has_text="Load Demo Book")
+        # Wait for either book or load button
+        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book')", timeout=10000)
 
-        if load_btn.count() > 0 and load_btn.is_visible():
+        # Check again if book appeared (maybe via sync or auto-load)
+        if page.locator("[data-testid^='book-card-']").filter(has_text="Alice's Adventures in Wonderland").count() > 0:
+            print("Book appeared.")
+            return
+
+        # Attempt to click "Load Demo Book"
+        # We use a robust locator
+        load_btn = page.locator("button").filter(has_text="Load Demo Book").first
+
+        if load_btn.is_visible():
             load_btn.click()
             # Wait for book to appear
             page.wait_for_selector("[data-testid^='book-card-']", timeout=20000)
             print("Demo book loaded.")
         else:
-            print("Error: 'Load Demo Book' button not found.")
+            # Fallback or error reporting
+            print("Error: 'Load Demo Book' button not visible.")
             capture_screenshot(page, "missing_load_button")
-            # If neither book nor button is found, check if we are in reader?
+
+            # Last ditch check if we are stuck in reader (should not happen in proper flow)
             if page.get_by_test_id("reader-view").count() > 0:
                  print("Warning: Stuck in Reader View. Attempting to exit...")
                  page.get_by_test_id("reader-back-button").click()

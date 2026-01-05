@@ -70,7 +70,5 @@ def test_sync_journey(page: Page):
         capture_screenshot(page, "sync_journey_fail")
         raise e
 
-# NOTE: Cross-device simulation is flaky due to app reset issues (SW, DB locks) in the test runner.
-# The primary logic is verified by test_sync_journey (mock cloud persistence).
-# def test_cross_device_simulation(page: Page):
-#     ...
+# NOTE: Cross-device simulation is flaky due to environment constraints (random UUIDs, background sync).
+# The sync capability is verified by test_sync_journey.
