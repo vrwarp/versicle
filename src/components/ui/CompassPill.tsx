@@ -335,11 +335,19 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         {/* Center Info */}
         <div
             className={cn(
-                "flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform group",
+                "flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg",
                 isLoading && "cursor-wait"
             )}
             onClick={handleTogglePlay}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleTogglePlay(e as unknown as React.MouseEvent);
+                }
+            }}
             role="button"
+            tabIndex={0}
+            data-testid="compass-active-toggle"
             aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
         >
              <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center flex items-center justify-center gap-1.5">

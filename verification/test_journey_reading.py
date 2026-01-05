@@ -100,7 +100,19 @@ def test_reading_journey(page: Page):
     # 1. Navigation (Next Page 1)
     print("Testing Next Page (1)...")
     # Verify Compass Pill is visible (Audio HUD)
-    expect(page.get_by_test_id("compass-pill-active")).to_be_visible(timeout=10000)
+    compass_pill = page.get_by_test_id("compass-pill-active")
+    expect(compass_pill).to_be_visible(timeout=10000)
+
+    # Verify Compass Pill Accessibility
+    print("Verifying Compass Pill Accessibility...")
+    # The center pill should be focusable (tabIndex=0) and have button role
+    active_pill = page.get_by_test_id("compass-active-toggle")
+    expect(active_pill).to_have_attribute("role", "button")
+    expect(active_pill).to_have_attribute("tabindex", "0")
+
+    # Test focus styles (implied by focusability)
+    active_pill.focus()
+    utils.capture_screenshot(page, "reading_01_compass_pill_focus")
 
     text_1 = navigate_and_verify("ArrowRight")
     print(f"Page 1 Text: {text_1}")
