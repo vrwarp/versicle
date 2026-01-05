@@ -24,6 +24,7 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
     *   **How**:
         *   **Local**: Uses the Web Speech API (OS native) or local WASM models (Piper) for free, offline reading.
         *   **Cloud**: Integrates with Google/OpenAI/LemonFox for high-quality neural voices, but caches generated audio to minimize API costs and latency on replay.
+        *   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural speech (narrative flow) instead of robotic cell reading.
     *   **Stability**: The system implements a "Let It Crash" philosophy for worker management to ensure resilience.
 
 ### User Interface: The "Three Rooms"
@@ -155,20 +156,19 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   `books`: Metadata and 50KB thumbnail blobs.
 *   `files`: The raw binary EPUB files (large).
 *   `table_images`: **(New)** Stores `webp` snapshots of tables captured during ingestion. Keyed by `${bookId}-${cfi}`.
-*   `content_analysis`: **(New)** Stores GenAI classification results (e.g., this block is a footnote).
+*   `content_analysis`: **(New)** Stores GenAI classification results (e.g., this block is a footnote) and table adaptations.
 *   `tts_cache`: Stores generated audio segments.
 *   `tts_queue`: Persistent playback queue (for resumption).
-*   `tts_position`: **(New)** Lightweight position tracking.
-*   `app_metadata`: **(New)** Application-level configuration and flags.
+*   `tts_position`: **(New)** Lightweight position tracking (current index/section). Separate from `tts_queue` to minimize write overhead.
+*   `app_metadata`: Application-level configuration and flags.
 *   `reading_history`: Tracks user sessions.
 
 **Key Functions:**
 *   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position.
     *   *Trade-off*: A crash within 1 second of reading might lose the very last position update.
-*   **`saveTTSState(bookId, queue, currentIndex)`**: Persists the playback queue and position.
-*   **`updateReadingHistory(bookId, newRange, type)`**: Records reading sessions.
-    *   *Logic*: Merges overlapping ranges. Coalesces events within 5 minutes into a single session to prevent database bloat.
-    *   *Limits*: Enforces a rolling window of the last 100 sessions per book.
+*   **`saveTTSState` / `saveTTSPosition`**:
+    *   *Logic*: `saveTTSState` writes the heavy queue object only when the playlist changes. `saveTTSPosition` writes only indices (integers) frequently during playback.
+    *   *Why*: Prevents freezing the main thread with large IDB writes every second.
 *   **`offloadBook(id)`**: Deletes the large binary EPUB file (`files` store) to save space but keeps metadata, annotations, and reading progress.
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 
@@ -186,9 +186,8 @@ Handles the complex task of importing an EPUB file.
 *   **`processEpub(file)`**:
     1.  **Validation**: Enforces strict ZIP signature check (`PK\x03\x04`) to reject invalid files immediately.
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`) to render chapters.
-        *   *Logic*: Scrapes text nodes for TTS and uses `snapdom` to capture tables as images.
+        *   *Logic*: Scrapes text nodes for TTS and uses `@zumer/snapdom` to capture tables as structural `webp` images (enforcing white background).
     3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head + Metadata + Tail) using a `cheapHash` function for O(1) duplicate detection.
-        *   *Trade-off*: Theoretical risk of collision is negligible for personal library scale, while performance gain is massive compared to SHA-256.
     4.  **Sanitization**: Registers an `epub.js` hook to sanitize HTML content before rendering.
 
 *   **`reprocessBook(bookId)`**:
@@ -201,49 +200,39 @@ Handles the complex task of importing an EPUB file.
 *   **Logic**:
     *   **ZIP Expansion**: Uses `JSZip` to recursively scan and extract `.epub` files from uploaded archives.
     *   **Sequential Processing**: Processes files one by one to avoid memory spikes, reporting progress to the UI.
-*   **Trade-off**: Processing a large ZIP happens on the main thread (mostly), which might cause minor UI jank.
 
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs.
 
 *   **Logic**:
-    *   **Service**: Wrapper around **Gemini 2.5 Flash Lite** (defaulting to `gemini-flash-lite-latest`) via `@google/generative-ai`.
+    *   **Service**: Wrapper around **Gemini Flash Lite** (`gemini-flash-lite-latest`) via `@google/generative-ai`.
+    *   **Multimodal Input**: Accepts text and images (blobs) for tasks like table interpretation.
     *   **Structured Output**: Enforces strict JSON schemas for all responses.
-        *   **TOC Generation**: Can generate synthetic Table of Contents from raw text segments.
         *   **Content Type**: Classifies blocks as `title`, `footnote`, `main`, `table`, or `other`.
+        *   **Table Adaptation**: Converts visual table data into narrative text.
     *   **Mocking**: Supports `localStorage` mocks (`mockGenAIResponse`) for cost-free E2E testing.
-*   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets are sent to Google's servers.
+*   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets/images are sent to Google's servers.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
-Implements full-text search off the main thread to prevent UI freezing.
+Implements full-text search off the main thread.
 
 *   **Logic**: Uses a simple **RegExp** scanning approach over in-memory text.
-    *   *Why*: `FlexSearch` (previously used) proved too memory-intensive and complex for typical "find on page" use cases in personal libraries.
-    *   **Offloading**: If supported, XML parsing is offloaded to the worker (`DOMParser` in Worker) to further unblock the main thread.
-    *   **Direct Archive Access**: Attempts to read raw XML from the ZIP archive (via `JSZip`) to bypass the slow `epub.js` rendering pipeline.
-*   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book. Linear scanning is slower than an inverted index for massive corpora but perfectly adequate for single books.
+    *   *Why*: `FlexSearch` (previously used) proved too memory-intensive for typical "find on page" use cases in personal libraries.
+    *   **Offloading**: XML parsing is offloaded to the worker (`DOMParser` in Worker).
+*   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book.
 
 #### Backup (`src/lib/BackupService.ts`)
-Manages internal state backup and restoration (JSON/ZIP).
+Manages internal state backup and restoration.
 
-*   **`createLightBackup()`**: Exports JSON containing metadata, themes, settings, and reading history.
-*   **`createFullBackup()`**: Exports a ZIP file containing the "Light" JSON manifest plus all original `.epub` files.
-    *   *Logic*: Uses `JSZip` to stream file content from IndexedDB into a downloadable archive.
-*   **`restoreBackup()`**:
-    *   **Smart Merge**: If a book already exists, it only updates reading progress if the backup's timestamp is newer.
-    *   **Sanitization**: Validates and sanitizes all metadata in the backup manifest before writing to the DB.
-
-#### Cost Estimator (`src/lib/tts/CostEstimator.ts`)
-*   **Goal**: Provide users with a rough estimate of API costs for Cloud TTS usage during a session.
-*   **Logic**: Tracks total characters sent to paid providers (Google, OpenAI) in a transient Zustand store (`useCostStore`).
-*   **Trade-off**: Estimates are client-side approximations and do not account for billing nuances (e.g., minimum request size, retries).
+*   **`createLightBackup()`**: JSON-only export (metadata, settings, history).
+*   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files.
+*   **`restoreBackup()`**: Implements a smart merge strategy (keeps newer progress).
 
 #### Maintenance (`src/lib/MaintenanceService.ts`)
-Handles database health and integrity.
+Handles database health.
 
-*   **Goal**: Ensure the database is free of orphaned records (files, annotations, lexicon rules) that no longer have a parent book.
+*   **Goal**: Ensure the database is free of orphaned records (files, annotations) that no longer have a parent book.
 *   **Logic**: Scans all object stores and compares IDs against the `books` store.
-*   **Trade-off**: `pruneOrphans()` is a destructive operation. If logic is flawed, valid data could be lost.
 
 ---
 
@@ -254,57 +243,44 @@ The Orchestrator. Manages playback state, provider selection, and UI updates.
 
 *   **Logic**:
     *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state management to `PlaybackStateManager`.
-    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize all public methods (Play, Pause, Next, Seek) to prevent race conditions during rapid user interaction.
-    *   **Persistence**: Syncs state to `DBService` for resume-on-restart.
+    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods.
 
 #### `src/lib/tts/AudioContentPipeline.ts`
 The Data Pipeline for TTS.
 
-*   **Goal**: Separate "what to play" (Content) from "how to play it" (Player).
-*   **Logic**:
-    *   **Optimistic Loading**: Returns a playable queue immediately while background processes (masking, adaptation) run.
-    *   **Async Masking**: Accepts a callback (`onMaskFound`) to update the playing queue dynamically when content to skip (e.g., footnotes) is identified.
-    *   **Precise Grouping**: Groups sentences by their "Root CFI" (e.g., all cells in a table share a common `<table>` parent).
-    *   **Speculative Execution**: Implements `triggerNextChapterAnalysis` to analyze the *next* chapter in the background while the current one plays.
+*   **Goal**: Decouple "Content Loading" from "Playback Readiness".
+*   **Logic (Optimistic Playback)**:
+    1.  **Immediate Return**: Returns a raw, playable queue immediately so playback starts instantly.
+    2.  **Background Analysis**: Fires asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze the content in the background.
+    3.  **Dynamic Updates**: When analysis completes, it triggers callbacks (`onMaskFound`, `onAdaptationsFound`) to update the *active* queue while it plays.
+*   **Table Adaptation Mapping**:
+    *   Uses **Precise Grouping** to match table images to their source sentences.
+    *   Logic sorts table roots by length to correctly handle nested tables (longest match wins).
+*   **Trade-off**: The first few seconds of playback might contain un-adapted content (e.g., reading a footnote) before the mask is applied.
 
 #### `src/lib/tts/PlaybackStateManager.ts`
 Manages the virtual playback timeline.
 
-*   **Goal**: Abstract the complexity of skipped items and queue manipulation from the player.
+*   **Goal**: Abstract the complexity of skipped items and dynamic replacements from the player.
 *   **Logic**:
-    *   **Virtualized Timeline**: Maintains a queue of items where some may be marked `isSkipped`.
-    *   **Adaptive Prefix Sums**: Calculates playback duration and position dynamically, ignoring skipped items (masking) without removing them from the array (preserving index stability).
-    *   **Trade-off**: Increases complexity of time-seeking logic. "Time Remaining" calculations become non-linear and computationally heavier than simple arithmetic.
+    *   **Virtualized Timeline**: Maintains a queue where items can be marked `isSkipped` without being removed (preserving index stability).
+    *   **Adaptive Prefix Sums**: Dynamically recalculates duration and seek positions based on the current mask.
+    *   **Table Adaptation Strategy (Anchor + Skip)**:
+        *   When a table adaptation is applied, the *first* matching queue item (Anchor) gets its text replaced with the AI narrative.
+        *   All *subsequent* items belonging to that table are marked `isSkipped`.
+        *   *Result*: The player reads the narrative once, then silently skips the original raw rows.
 
 #### `src/lib/tts/providers/CapacitorTTSProvider.ts`
 Native mobile TTS integration.
 
 *   **Goal**: Gapless playback on Android/iOS.
-*   **Logic (Smart Handoff)**:
-    *   **Queue Strategy 1**: Uses `queueStrategy: 1` (Add) to preload the next utterance into the OS buffer while the current one plays.
-    *   **Promise Adoption**: If `play()` is called and matches the preloaded text, it adopts the existing promise instead of stopping and restarting the engine.
+*   **Logic (Smart Handoff)**: Uses `queueStrategy: 1` to preload the next utterance into the OS buffer while the current one plays.
 
 #### `src/lib/tts/providers/PiperProvider.ts`
 Local WASM Neural TTS.
 
-*   **Transactional Download**:
-    1.  **Staging**: Download to memory.
-    2.  **Verify**: Commit to Cache API only if successful.
-    3.  **Integrity**: Test synthesis before marking as ready.
-*   **Stitching**: Stitches multiple WAV blobs (from split sentences) into a single seamless audio file.
-
-#### Resilience: `piper-utils.ts` ("Let It Crash")
-*   **Goal**: Prevent the application from entering invalid states if the Piper WASM worker crashes.
-*   **Logic**: Instead of a complex "Supervisor" that attempts restarts, we use a simple **Error Boundary** pattern. If the worker crashes or errors, the current request rejects immediately. The worker is terminated, and a fresh instance is lazily created on the next request.
-*   **Philosophy**: Simplicity > Complex Recovery.
-
-#### `src/lib/tts/LexiconService.ts`
-Manages pronunciation rules.
-
-*   **Goal**: Fix mispronounced words.
-*   **Logic**:
-    *   **Rules**: Supports simple string replacement and **RegExp**.
-    *   **Cache Invalidation**: Uses `getRulesHash` to generate a checksum of active rules. This hash is embedded in the TTS cache key, ensuring that if rules change, previously generated audio is invalidated and re-synthesized.
+*   **Transactional Download**: Verifies integrity before committing to Cache API.
+*   **Resilience**: Uses a "Let It Crash" strategy for the worker (Error Boundary resets the worker on failure).
 
 ---
 
@@ -314,8 +290,8 @@ Manages pronunciation rules.
 *   **Goal**: Ensure annotations and TTS playback align perfectly with logical text blocks.
 *   **Logic**:
     *   **Leaf Stripping**: Strips leaf offsets to target the containing block element.
-    *   **Snap to Known Roots**: Explicitly snaps selection to known structural roots (like `<table>`) to ensure atomic treatment of complex elements.
-*   **Trade-off**: Sacrifices granular addressing within complex structures. It is impossible to highlight a single cell in a table or a specific span within a figure caption; the entire block is treated as the atomic unit.
+    *   **Precise Grouping**: Explicitly snaps selection to known structural roots (like `<table>`, `<div>`) using a colon-delimiter heuristic. This ensures that complex elements (tables) are treated as atomic blocks for GenAI analysis.
+*   **Trade-off**: Sacrifices granular addressing within complex structures (e.g., cannot highlight a single cell in a table).
 
 ---
 
@@ -323,13 +299,13 @@ Manages pronunciation rules.
 
 State is managed using **Zustand**.
 
-*   **`useReaderStore`**: Persists visual preferences (Theme, Font).
-*   **`useTTSStore`**: Persists TTS settings (Voice, Rate, API Keys). Subscribes to `AudioPlayerService`.
+*   **`useReaderStore`**: Persists visual preferences.
+*   **`useTTSStore`**: Persists TTS settings.
 *   **`useGenAIStore`**: Persists AI settings and usage stats.
-*   **`useLibraryStore`**: Transient UI state for the library view.
+*   **`useLibraryStore`**: Transient UI state.
 
 ### UI Layer
 
 #### Mobile Integration
-*   **Safe Area**: Uses `@capacitor-community/safe-area` to handle notches/dynamic islands.
-*   **Media Session**: Overrides peer dependencies in `package.json` to support Capacitor 7.
+*   **Safe Area**: Uses `@capacitor-community/safe-area`.
+*   **Media Session**: Managed via `MediaSessionManager` with support for artwork cropping.

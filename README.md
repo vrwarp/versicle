@@ -26,7 +26,7 @@
 *   **Mobile**: Capacitor 7 (Android)
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
-*   **Compression**: browser-image-compression (Covers) + JSZip
+*   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`
 
 ## Features
 
@@ -37,12 +37,13 @@
 *   **Drag & Drop**: Drag files anywhere to import.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
 *   **Annotations**: Highlights and notes.
-*   **Table Snapshots**: Complex tables are captured as images for better readability and preservation.
+*   **Table Snapshots**: Complex tables are captured as structural images for better readability and preservation.
 *   **Reprocessing**: Update existing books with improved text extraction or new parsing logic without losing your reading progress.
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
 *   **Optimistic Playback**: Audio starts playing instantly while content filtering (skip masks) and smart adaptations are applied asynchronously in the background.
+*   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural narrative speech.
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
@@ -64,7 +65,7 @@
 ## Setup & Development
 
 ### Prerequisites
-*   Node.js 20+
+*   Node.js 22+
 *   npm
 *   Docker (optional, for verification suite)
 
@@ -131,7 +132,7 @@ We use Docker to run end-to-end tests in a consistent environment using Playwrig
 3.  **Run Specific Verification Script**:
     ```bash
     # Run a specific verification script (e.g., layout test)
-    docker run --rm versicle-verification /app/verification/test_golden_layout.py
+    docker run --rm versicle-verification /app/verification/test_journey_reading.py
     ```
 
 ## Contributing
