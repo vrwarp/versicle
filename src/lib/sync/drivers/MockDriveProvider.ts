@@ -13,10 +13,30 @@ export class MockDriveProvider implements RemoteStorageProvider {
   private latency = 0;
 
   constructor(initialManifest?: SyncManifest) {
+    // Try to load from local storage first (persistence)
+    const stored = localStorage.getItem('versicle_mock_drive_data');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        this.remoteManifest = parsed.manifest;
+        this.lastModified = parsed.lastModified;
+      } catch (e) {
+        console.error('Failed to load mock drive data', e);
+      }
+    }
+
     if (initialManifest) {
       this.remoteManifest = initialManifest;
       this.lastModified = Date.now();
+      this.persist();
     }
+  }
+
+  private persist() {
+    localStorage.setItem('versicle_mock_drive_data', JSON.stringify({
+      manifest: this.remoteManifest,
+      lastModified: this.lastModified
+    }));
   }
 
   // Test helpers
@@ -68,6 +88,7 @@ export class MockDriveProvider implements RemoteStorageProvider {
 
     this.remoteManifest = JSON.parse(JSON.stringify(manifest));
     this.lastModified = Date.now();
+    this.persist();
   }
 
   async getLastModified(): Promise<number | null> {
