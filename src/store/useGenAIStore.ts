@@ -8,6 +8,7 @@ interface GenAIState {
   apiKey: string;
   model: string;
   isEnabled: boolean;
+  isModelRotationEnabled: boolean;
   isContentAnalysisEnabled: boolean;
   isTableAdaptationEnabled: boolean;
   contentFilterSkipTypes: ContentType[];
@@ -20,6 +21,7 @@ interface GenAIState {
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
   setEnabled: (enabled: boolean) => void;
+  setModelRotationEnabled: (enabled: boolean) => void;
   setContentAnalysisEnabled: (enabled: boolean) => void;
   setTableAdaptationEnabled: (enabled: boolean) => void;
   setContentFilterSkipTypes: (types: ContentType[]) => void;
@@ -35,6 +37,7 @@ export const useGenAIStore = create<GenAIState>()(
       apiKey: '',
       model: 'gemini-flash-lite-latest',
       isEnabled: false,
+      isModelRotationEnabled: false,
       isContentAnalysisEnabled: false,
       isTableAdaptationEnabled: false,
       contentFilterSkipTypes: ['footnote', 'table'],
@@ -46,13 +49,17 @@ export const useGenAIStore = create<GenAIState>()(
       },
       setApiKey: (key) => {
         set({ apiKey: key });
-        genAIService.configure(key, get().model);
+        genAIService.configure(key, get().model, get().isModelRotationEnabled);
       },
       setModel: (model) => {
         set({ model });
-        genAIService.configure(get().apiKey, model);
+        genAIService.configure(get().apiKey, model, get().isModelRotationEnabled);
       },
       setEnabled: (enabled) => set({ isEnabled: enabled }),
+      setModelRotationEnabled: (enabled) => {
+        set({ isModelRotationEnabled: enabled });
+        genAIService.configure(get().apiKey, get().model, enabled);
+      },
       setContentAnalysisEnabled: (enabled) => set({ isContentAnalysisEnabled: enabled }),
       setTableAdaptationEnabled: (enabled) => set({ isTableAdaptationEnabled: enabled }),
       setContentFilterSkipTypes: (types) => set({ contentFilterSkipTypes: types }),
@@ -73,8 +80,8 @@ export const useGenAIStore = create<GenAIState>()(
           return { logs: newLogs };
         }),
       init: () => {
-          const { apiKey, model } = get();
-          genAIService.configure(apiKey, model);
+          const { apiKey, model, isModelRotationEnabled } = get();
+          genAIService.configure(apiKey, model, isModelRotationEnabled);
           genAIService.setLogCallback((log) => {
               get().addLog(log);
           });
