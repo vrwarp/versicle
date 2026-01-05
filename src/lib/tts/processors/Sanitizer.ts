@@ -4,6 +4,12 @@ import { RegexPatterns } from './RegexPatterns';
  * Sanitizes text by removing or replacing non-narrative artifacts.
  */
 export class Sanitizer {
+    // Pre-compile global regexes to avoid instantiation overhead per sanitize call
+    private static readonly RE_URL_GLOBAL = new RegExp(RegexPatterns.URL, 'g');
+    private static readonly RE_CITATION_NUMERIC_GLOBAL = new RegExp(RegexPatterns.CITATION_NUMERIC, 'g');
+    private static readonly RE_CITATION_AUTHOR_YEAR_GLOBAL = new RegExp(RegexPatterns.CITATION_AUTHOR_YEAR, 'g');
+    private static readonly RE_MULTIPLE_SPACES_GLOBAL = new RegExp(RegexPatterns.MULTIPLE_SPACES, 'g');
+
     /**
      * Sanitizes the input text.
      * @param text The raw text to sanitize.
@@ -28,8 +34,7 @@ export class Sanitizer {
         // Since our pattern in RegexPatterns isn't global, we can use split/join or a loop.
         // But to be safe and efficient, let's make a local global regex.
 
-        const urlRegex = new RegExp(RegexPatterns.URL, 'g');
-        processed = processed.replace(urlRegex, (match, domain) => {
+        processed = processed.replace(Sanitizer.RE_URL_GLOBAL, (match, domain) => {
             // Check for unbalanced trailing parentheses
             if (match.endsWith(')')) {
                 const openCount = (match.match(/\(/g) || []).length;
@@ -43,11 +48,8 @@ export class Sanitizer {
         });
 
         // 3. Remove Citations
-        const citationNumericRegex = new RegExp(RegexPatterns.CITATION_NUMERIC, 'g');
-        processed = processed.replace(citationNumericRegex, '');
-
-        const citationAuthorYearRegex = new RegExp(RegexPatterns.CITATION_AUTHOR_YEAR, 'g');
-        processed = processed.replace(citationAuthorYearRegex, '');
+        processed = processed.replace(Sanitizer.RE_CITATION_NUMERIC_GLOBAL, '');
+        processed = processed.replace(Sanitizer.RE_CITATION_AUTHOR_YEAR_GLOBAL, '');
 
         // 4. Handle Visual Separators
         // If the text is just a separator, we might return a pause or empty string.
@@ -57,7 +59,7 @@ export class Sanitizer {
         }
 
         // 5. Clean up extra spaces introduced by removals
-        processed = processed.replace(new RegExp(RegexPatterns.MULTIPLE_SPACES, 'g'), ' ').trim();
+        processed = processed.replace(Sanitizer.RE_MULTIPLE_SPACES_GLOBAL, ' ').trim();
 
         return processed;
     }
