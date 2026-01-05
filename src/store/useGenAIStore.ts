@@ -9,6 +9,7 @@ interface GenAIState {
   model: string;
   isEnabled: boolean;
   isContentAnalysisEnabled: boolean;
+  isTableAdaptationEnabled: boolean;
   contentFilterSkipTypes: ContentType[];
   isDebugModeEnabled: boolean;
   logs: GenAILogEntry[];
@@ -20,6 +21,7 @@ interface GenAIState {
   setModel: (model: string) => void;
   setEnabled: (enabled: boolean) => void;
   setContentAnalysisEnabled: (enabled: boolean) => void;
+  setTableAdaptationEnabled: (enabled: boolean) => void;
   setContentFilterSkipTypes: (types: ContentType[]) => void;
   setDebugModeEnabled: (enabled: boolean) => void;
   incrementUsage: (tokens: number) => void;
@@ -34,6 +36,7 @@ export const useGenAIStore = create<GenAIState>()(
       model: 'gemini-flash-lite-latest',
       isEnabled: false,
       isContentAnalysisEnabled: false,
+      isTableAdaptationEnabled: false,
       contentFilterSkipTypes: ['footnote', 'table'],
       isDebugModeEnabled: false,
       logs: [],
@@ -51,6 +54,7 @@ export const useGenAIStore = create<GenAIState>()(
       },
       setEnabled: (enabled) => set({ isEnabled: enabled }),
       setContentAnalysisEnabled: (enabled) => set({ isContentAnalysisEnabled: enabled }),
+      setTableAdaptationEnabled: (enabled) => set({ isTableAdaptationEnabled: enabled }),
       setContentFilterSkipTypes: (types) => set({ contentFilterSkipTypes: types }),
       setDebugModeEnabled: (enabled) => set({ isDebugModeEnabled: enabled }),
       incrementUsage: (tokens) =>

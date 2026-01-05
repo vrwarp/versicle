@@ -227,6 +227,8 @@ export const GlobalSettingsDialog = () => {
         setEnabled: setGenAIEnabled,
         isContentAnalysisEnabled,
         setContentAnalysisEnabled,
+        isTableAdaptationEnabled,
+        setTableAdaptationEnabled,
         contentFilterSkipTypes,
         setContentFilterSkipTypes,
         logs: genAILogs,
@@ -723,18 +725,34 @@ export const GlobalSettingsDialog = () => {
 
                                     <div className="pt-4 border-t space-y-4">
                                         <h4 className="text-sm font-medium">Advanced Features</h4>
-                                        <div className="flex items-center justify-between">
-                                            <div className="space-y-0.5">
-                                                <label htmlFor="genai-content-detection" className="text-sm font-medium">Content Type Detection & Filtering</label>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Automatically detects and skips non-narrative content (e.g., tables, footnotes).
-                                                </p>
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="space-y-0.5">
+                                                    <label htmlFor="genai-content-detection" className="text-sm font-medium">Content Type Detection & Filtering</label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Automatically detects and skips non-narrative content (e.g., tables, footnotes).
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    id="genai-content-detection"
+                                                    checked={isContentAnalysisEnabled}
+                                                    onCheckedChange={setContentAnalysisEnabled}
+                                                />
                                             </div>
-                                            <Switch
-                                                id="genai-content-detection"
-                                                checked={isContentAnalysisEnabled}
-                                                onCheckedChange={setContentAnalysisEnabled}
-                                            />
+
+                                            <div className="flex items-center justify-between">
+                                                <div className="space-y-0.5">
+                                                    <label htmlFor="genai-table-adaptation" className="text-sm font-medium">Table Teleprompter</label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Uses GenAI to convert table images into natural speech narration.
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    id="genai-table-adaptation"
+                                                    checked={isTableAdaptationEnabled}
+                                                    onCheckedChange={setTableAdaptationEnabled}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 

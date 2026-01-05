@@ -58,6 +58,11 @@ export interface BookMetadata {
   version?: number;
 }
 
+export interface TableAdaptation {
+  rootCfi: string; // The EPUB CFI key for the table block
+  text: string;    // The generated spoken-word adaptation
+}
+
 /**
  * Result of AI analysis for a section.
  */
@@ -78,6 +83,7 @@ export interface ContentAnalysis {
       rootCfi: string;
       type: ContentType;
   }[];
+  tableAdaptations?: TableAdaptation[];
   /** Summary of the section. */
   summary?: string;
   /** Timestamp when the analysis was performed. */

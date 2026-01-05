@@ -36,7 +36,8 @@ export class AudioContentPipeline {
         prerollEnabled: boolean,
         speed: number,
         sectionTitle?: string,
-        onMaskFound?: (mask: Set<number>) => void
+        onMaskFound?: (mask: Set<number>) => void,
+        onAdaptationsFound?: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<TTSQueueItem[] | null> {
         try {
             const ttsContent = await dbService.getTTSContent(bookId, section.sectionId);
@@ -117,15 +118,23 @@ export class AudioContentPipeline {
                 const skipTypes = genAISettings.contentFilterSkipTypes;
                 const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
 
-                if (isContentAnalysisEnabled && skipTypes.length > 0 && onMaskFound) {
-                    // Trigger background detection
-                    this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
-                        .then(mask => {
-                            if (mask && mask.size > 0) {
-                                onMaskFound(mask);
-                            }
-                        })
-                        .catch(err => console.warn("Background mask detection failed", err));
+                if (isContentAnalysisEnabled) {
+                     if (skipTypes.length > 0 && onMaskFound) {
+                        // Trigger background detection
+                        this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
+                            .then(mask => {
+                                if (mask && mask.size > 0) {
+                                    onMaskFound(mask);
+                                }
+                            })
+                            .catch(err => console.warn("Background mask detection failed", err));
+                     }
+
+                     if (onAdaptationsFound) {
+                         // Trigger table adaptations
+                         this.processTableAdaptations(bookId, section.sectionId, workingSentences, onAdaptationsFound)
+                             .catch(err => console.warn("Background table adaptation failed", err));
+                     }
                 }
             } else {
                 // Empty Chapter Handling
@@ -268,6 +277,160 @@ export class AudioContentPipeline {
         return indicesToSkip;
     }
 
+
+    async processTableAdaptations(
+        bookId: string,
+        sectionId: string,
+        sentences: SentenceNode[],
+        onAdaptationsFound: (adaptations: { indices: number[], text: string }[]) => void
+    ): Promise<void> {
+        const genAISettings = useGenAIStore.getState();
+        if (!genAISettings.isContentAnalysisEnabled || !genAISettings.isTableAdaptationEnabled) return;
+
+        try {
+            // Ensure we have sentences
+            if (!sentences || sentences.length === 0) return;
+            const targetSentences = sentences;
+
+            // 1. Check DB for existing adaptations
+            const analysis = await dbService.getContentAnalysis(bookId, sectionId);
+            const existingAdaptations = new Map<string, string>(
+                analysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+            );
+
+            // Notify with cached data immediately if available
+            if (existingAdaptations.size > 0) {
+                const result = this.mapSentencesToAdaptations(targetSentences, existingAdaptations);
+                if (result.length > 0) {
+                    onAdaptationsFound(result);
+                }
+            }
+
+            // 2. Identify tables that actually exist in the current section
+            const tableImages = await dbService.getTableImages(bookId);
+            const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
+
+            if (sectionTableImages.length === 0) return;
+
+            // 3. Filter for those missing from the cache
+            const workSet = sectionTableImages.filter(img => !existingAdaptations.has(img.cfi));
+
+            if (workSet.length === 0) return;
+
+            // 4. Check if GenAI is configured
+             const canUseGenAI = genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+             if (!canUseGenAI) return;
+
+             // Ensure service is configured
+             if (!genAIService.isConfigured() && genAISettings.apiKey) {
+                 genAIService.configure(genAISettings.apiKey, 'gemini-1.5-flash');
+             }
+
+             if (genAIService.isConfigured()) {
+                 const nodes = workSet.map(img => ({
+                     rootCfi: img.cfi,
+                     imageBlob: img.imageBlob
+                 }));
+
+                 const results = await genAIService.generateTableAdaptations(nodes);
+
+                 // 5. Update DB
+                 await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
+                     rootCfi: r.cfi,
+                     text: r.adaptation
+                 })));
+
+                 // 6. Notify listeners with updated full set
+                 const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+                 const finalAdaptations = new Map<string, string>(
+                     updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+                 );
+
+                 const finalResult = this.mapSentencesToAdaptations(targetSentences, finalAdaptations);
+                 onAdaptationsFound(finalResult);
+             }
+
+        } catch (e) {
+            console.warn("Error processing table adaptations", e);
+        }
+    }
+
+    /**
+     * Maps raw sentences to their corresponding table adaptations based on CFI structure.
+     * Identifying which sentences belong to which table allows us to replace them in the queue.
+     *
+     * @param sentences The list of raw sentence nodes.
+     * @param adaptationsMap A map of Table Root CFI -> Adaptation Text.
+     * @returns An array of mappings, each containing the source indices and the replacement text.
+     */
+    public mapSentencesToAdaptations(sentences: SentenceNode[], adaptationsMap: Map<string, string>): { indices: number[], text: string }[] {
+        const result: { indices: number[], text: string }[] = [];
+
+        // We only care about CFIs that are keys in our adaptations map (which come from table images)
+        // Sort by length descending to handle nested tables (match most specific first)
+        const tableRoots = Array.from(adaptationsMap.keys()).sort((a, b) => b.length - a.length);
+
+        // Create a map to collect indices for each table root
+        const tableIndices = new Map<string, number[]>();
+
+        // Pre-parse table roots to avoid repeated parsing
+        const parsedRoots = tableRoots.map(root => {
+            const range = parseCfiRange(root);
+            // If it's a range, use the parent (common ancestor) for prefix matching.
+            // If it's a point/path, use it directly.
+            // Strip epubcfi() wrapper for raw comparison if needed, but parseCfiRange handles format.
+            // We use the full string representation of the parent/path for comparison.
+            let cleanRoot = root;
+            if (range && range.parent) {
+                 // Reconstruct parent CFI string: epubcfi(parent)
+                 // But wait, parseCfiRange returns 'parent' as the path inside.
+                 cleanRoot = range.parent;
+            } else {
+                 // Strip wrapper manually if not a range or simple path
+                 cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1');
+            }
+            // Normalize: remove trailing ')' if present from lazy regex or range structure
+            cleanRoot = cleanRoot.replace(/\)$/, '');
+
+            return { original: root, clean: cleanRoot };
+        });
+
+        // Iterate through all sentences and check if they belong to any known table root
+        for (let i = 0; i < sentences.length; i++) {
+            const sentence = sentences[i];
+            if (!sentence.cfi) continue;
+
+            const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+
+            // Check if this sentence is a child of any known table adaptation root.
+            const match = parsedRoots.find(({ clean }) => {
+                    // Check for prefix match with valid separator boundary
+                    // Include ',' for range handling
+                    return cleanCfi.startsWith(clean) &&
+                        (cleanCfi.length === clean.length || ['/', '!', '[', ':', ','].includes(cleanCfi[clean.length]));
+            });
+
+            if (match) {
+                const matchedRoot = match.original;
+                if (!tableIndices.has(matchedRoot)) {
+                    tableIndices.set(matchedRoot, []);
+                }
+                // Collect the raw sentence index (i).
+                // This index aligns with `sourceIndices` used in the playback queue items.
+                tableIndices.get(matchedRoot)?.push(i);
+            }
+        }
+
+        // Construct result
+        for (const [root, indices] of tableIndices.entries()) {
+            const text = adaptationsMap.get(root);
+            if (text) {
+                result.push({ indices, text });
+            }
+        }
+
+        return result;
+    }
 
     /**
      * Retrieves cached content classifications from DB or triggers GenAI detection if missing.
