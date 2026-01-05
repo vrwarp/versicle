@@ -746,6 +746,60 @@ export const GlobalSettingsDialog = () => {
                                                 />
                                             </div>
 
+                                            {isContentAnalysisEnabled && (
+                                                <div className="space-y-3 pl-4 border-l-2 border-muted">
+                                                    <h5 className="text-sm font-medium">Skip Content Types</h5>
+                                                    <p className="text-xs text-muted-foreground mb-2">
+                                                        Select which detected content types should be skipped during playback.
+                                                    </p>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {(['footnote', 'table', 'other', 'title', 'main'] as ContentType[]).map((type) => (
+                                                            <div key={type} className="flex items-center space-x-2">
+                                                                <Checkbox
+                                                                    id={`skip-${type}`}
+                                                                    checked={contentFilterSkipTypes.includes(type)}
+                                                                    onCheckedChange={(checked) => {
+                                                                        if (checked) {
+                                                                            setContentFilterSkipTypes([...contentFilterSkipTypes, type]);
+                                                                        } else {
+                                                                            setContentFilterSkipTypes(contentFilterSkipTypes.filter(t => t !== type));
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <label
+                                                                    htmlFor={`skip-${type}`}
+                                                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize"
+                                                                >
+                                                                    {type}
+                                                                </label>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    <div className="pt-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="space-y-0.5">
+                                                                <label htmlFor="genai-debug" className="text-sm font-medium">Enable Content Analysis Debugging</label>
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    Highlights content based on its detected type in the reader.
+                                                                </p>
+                                                            </div>
+                                                            <Switch
+                                                                id="genai-debug"
+                                                                checked={isDebugModeEnabled}
+                                                                onCheckedChange={setDebugModeEnabled}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="pt-2">
+                                                        <Button variant="outline" size="sm" onClick={handleClearContentAnalysis}>
+                                                            Clear Content Analysis Cache
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <div className="flex items-center justify-between">
                                                 <div className="space-y-0.5">
                                                     <label htmlFor="genai-table-adaptation" className="text-sm font-medium">Table Teleprompter</label>
@@ -761,60 +815,6 @@ export const GlobalSettingsDialog = () => {
                                             </div>
                                         </div>
                                     </div>
-
-                                    {isContentAnalysisEnabled && (
-                                        <div className="space-y-3 pl-4 border-l-2 border-muted">
-                                            <h5 className="text-sm font-medium">Skip Content Types</h5>
-                                            <p className="text-xs text-muted-foreground mb-2">
-                                                Select which detected content types should be skipped during playback.
-                                            </p>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                {(['footnote', 'table', 'other', 'title', 'main'] as ContentType[]).map((type) => (
-                                                    <div key={type} className="flex items-center space-x-2">
-                                                        <Checkbox
-                                                            id={`skip-${type}`}
-                                                            checked={contentFilterSkipTypes.includes(type)}
-                                                            onCheckedChange={(checked) => {
-                                                                if (checked) {
-                                                                    setContentFilterSkipTypes([...contentFilterSkipTypes, type]);
-                                                                } else {
-                                                                    setContentFilterSkipTypes(contentFilterSkipTypes.filter(t => t !== type));
-                                                                }
-                                                            }}
-                                                        />
-                                                        <label
-                                                            htmlFor={`skip-${type}`}
-                                                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize"
-                                                        >
-                                                            {type}
-                                                        </label>
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            <div className="pt-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="space-y-0.5">
-                                                        <label htmlFor="genai-debug" className="text-sm font-medium">Enable Content Analysis Debugging</label>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Highlights content based on its detected type in the reader.
-                                                        </p>
-                                                    </div>
-                                                    <Switch
-                                                        id="genai-debug"
-                                                        checked={isDebugModeEnabled}
-                                                        onCheckedChange={setDebugModeEnabled}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="pt-2">
-                                                <Button variant="outline" size="sm" onClick={handleClearContentAnalysis}>
-                                                    Clear Content Analysis Cache
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
 
                                             <div className="pt-4 border-t space-y-4">
                                                 <div className="flex items-center justify-between">
