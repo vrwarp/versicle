@@ -144,6 +144,7 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
                 callback: (response: any) => {
                     if (response.error !== undefined) {
                         reject(response);
+                        return;
                     }
                     this.authorized = true;
                     this.token = response.access_token;
