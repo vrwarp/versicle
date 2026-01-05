@@ -237,30 +237,39 @@ ${JSON.stringify(nodes)}`;
 
   public async generateTableAdaptations(
     nodes: { rootCfi: string, imageBlob: Blob }[],
-    _thinkingBudget: number = 512
+    thinkingBudget: number = 512
   ): Promise<{ cfi: string, adaptation: string }[]> {
-    const instructionPrompt = `
-      Analyze the provided table images from a book.
-      Generate a "teleprompter adaptation" for Text-to-Speech.
-      Convert data into natural, complete sentences.
-      Return a JSON array of objects: {cfi: string, adaptation: string}.
-      Ensure the 'cfi' strictly matches the identifier provided before each image.
+    const instructionPrompt = `ACT AS: An expert accessibility specialist and audiobook narrator.
+TASK: Convert each of the above table images into a "teleprompter adaptation" for Text-to-Speech playback.
+  
+CORE RULES:
+  1. NARRATIVE FLOW: Do not say "Row 1, Column 1." Instead, create natural sentences that a person would say when explaining the data to a friend (e.g., "In the category of 'Demographics,' the 'Under 18' group accounts for 22% of the population").
+  2. HEADER ANCHORING: Always anchor cell data to its column and row headers so the listener doesn't lose context.
+  3. NO PLACEHOLDERS: Do not use phrases like "This is a placeholder" or describe the technical identifiers (CFIs).
+  4. ACCURACY: If a cell is unreadable, skip it rather than hallucinating a value.
+  5. JSON FORMAT: Return exactly a JSON array of objects: { "cfi": string, "adaptation": string }.
+
+PROCESS:
+  - Step 1: Transcribe the headers and data.
+  - Step 2: Synthesize into a narrative.
+  - Step 3: Match the 'cfi' identifier provided before each image exactly.
     `;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parts: any[] = [{ text: instructionPrompt }];
+    const parts: any[] = [];
 
     for (const node of nodes) {
       const base64 = await this.blobToBase64(node.imageBlob);
       // Anchor the image to its unique key in the prompt stream
-      parts.push({ text: `Image for CFI: ${node.rootCfi}` });
       parts.push({
         inlineData: {
           data: base64,
           mimeType: node.imageBlob.type
         }
       });
+      parts.push({ text: `Table Image CFI: ${node.rootCfi}` });
     }
+    parts.push({ text: instructionPrompt });
 
     return this.generateStructured<{ cfi: string, adaptation: string }[]>(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -285,7 +294,7 @@ ${JSON.stringify(nodes)}`;
         // Thinking models are usually separate. I will include it as requested but it might be ignored or cause error if model doesn't support it.
         // Actually, for now I will pass it as an arbitrary object because the type definition might not include it.
         // The plan specifically mentioned thinking_budget.
-        // thinking_config: { include_thoughts: true, thinking_budget: thinkingBudget }
+        thinkingConfig: { includeThoughts: false, thinkingBudget: thinkingBudget }
       }
     );
   }

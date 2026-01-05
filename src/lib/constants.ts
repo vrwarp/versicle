@@ -5,4 +5,4 @@
  * Version History:
  * 1: Initial version with table image processing.
  */
-export const CURRENT_BOOK_VERSION = 2;
+export const CURRENT_BOOK_VERSION = 3;
