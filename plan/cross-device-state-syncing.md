@@ -1,7 +1,7 @@
 Design Document: Versicle Cross-Device State Syncing
 ====================================================
 
-**Author:** Gemini **Status:** Implemented (Phase 1-4) **Target:** Robust, predictable syncing via Google Drive API with local rollback support.
+**Author:** Gemini **Status:** Implemented (Phase 1-5) **Target:** Robust, predictable syncing via Google Drive API with local rollback support.
 
 1\. Overview
 ------------
@@ -178,7 +178,13 @@ We will create a `MockDriveProvider` for the Vitest suite that simulates network
 - **Client Library:** Implemented using the `gapi` global object, assuming the Google API Client Library is loaded in the environment.
 - **API Calls:** Used `gapi.client.drive.files.create` and `update` for manifest management.
 - **Security:** Relies on `google.accounts.oauth2` for token management (implicit flow).
+- **Optimistic Concurrency:** Implemented utilizing `gapi.client.drive.files.get` to fetch the current version and comparing it with the local ETag before performing updates, throwing 412 on mismatch.
 
-### 6.4 Deviations
+### 6.4 UI/UX Implementation
+- **SyncSettings Component:** Created a dedicated component for managing sync connections, viewing status, and restoring checkpoints.
+- **Global Settings Integration:** Integrated the sync settings into the `GlobalSettingsDialog` under a new "Sync & Cloud" tab.
+- **SyncStore:** Implemented a Zustand store (`useSyncStore`) to manage sync state, authorization, and interactions with the sync services.
+
+### 6.5 Deviations
 - **Simplified History Merge:** The current implementation uses a basic array union for `readRanges` in reading history. A full CRDT-lite implementation for range merging (handling overlaps and fragmentation) is marked as a TODO for future refinement.
 - **Testing Mocks:** The `GoogleDriveProvider` is tested via `MockDriveProvider`. The real provider implementation relies on global `gapi` objects which are not mocked in the unit test environment.
