@@ -308,3 +308,78 @@ export interface TableImage {
   /** The webp image blob. */
   imageBlob: Blob;
 }
+
+/**
+ * The "Moral Layer" of the Library.
+ * A serialized, optimized projection designed for efficient merging.
+ */
+export interface SyncManifest {
+  /** Schema version to handle forward/backward compatibility. */
+  version: number;
+  /** Global UTC timestamp (ms) representing the last authoritative write. */
+  lastUpdated: number;
+  /** Unique ID of the device that last modified the manifest. */
+  deviceId: string;
+
+  /**
+   * The "Moral Layer" of the Library.
+   */
+  books: {
+    [bookId: string]: {
+      /** Synchronized via Last-Write-Wins (LWW). */
+      metadata: Partial<BookMetadata>;
+      /** Merged via CFI Range Union. */
+      history: ReadingHistoryEntry;
+      /** Merged as a unique set. */
+      annotations: Annotation[];
+    };
+  };
+
+  /** Global pronunciation rules and custom abbreviations. */
+  lexicon: LexiconRule[];
+  /** Current reading queue and priority states. */
+  readingList: Record<string, ReadingListEntry>;
+
+  /** High-frequency "Handoff" state. */
+  transientState: {
+    ttsPositions: Record<string, TTSPosition>;
+  };
+
+  /** Registry used to display "Last Synced" status per device. */
+  deviceRegistry: {
+    [deviceId: string]: {
+      name: string;
+      lastSeen: number;
+    };
+  };
+}
+
+/**
+ * A local snapshot of the SyncManifest for recovery.
+ */
+export interface SyncCheckpoint {
+  /** Auto-incrementing ID. */
+  id: number;
+  /** Timestamp when the checkpoint was created. */
+  timestamp: number;
+  /** The snapshot data. */
+  manifest: SyncManifest;
+  /** What triggered this checkpoint (e.g., 'pre-sync', 'manual'). */
+  trigger: string;
+}
+
+/**
+ * Log entry for synchronization events.
+ */
+export interface SyncLogEntry {
+  /** Auto-incrementing ID. */
+  id: number;
+  /** Timestamp of the log entry. */
+  timestamp: number;
+  /** Severity level. */
+  level: 'info' | 'warn' | 'error';
+  /** Log message. */
+  message: string;
+  /** Optional details or error object. */
+  details?: any;
+}

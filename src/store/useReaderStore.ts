@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { NavigationItem } from 'epubjs';
+import { SyncOrchestrator } from '../lib/sync/SyncOrchestrator';
 
 /**
  * State interface for the Reader store.
@@ -106,13 +107,15 @@ export const useReaderStore = create<ReaderState>()(
       setFontFamily: (fontFamily) => set({ fontFamily }),
       setLineHeight: (lineHeight) => set({ lineHeight }),
       setFontSize: (size) => set({ fontSize: size }),
-      updateLocation: (cfi, progress, sectionTitle, sectionId) =>
+      updateLocation: (cfi, progress, sectionTitle, sectionId) => {
         set((state) => ({
           currentCfi: cfi,
           progress,
           currentSectionTitle: sectionTitle ?? state.currentSectionTitle,
           currentSectionId: sectionId ?? state.currentSectionId
-        })),
+        }));
+        SyncOrchestrator.get()?.scheduleSync();
+      },
       setToc: (toc) => set({ toc }),
       setViewMode: (mode) => set({ viewMode: mode }),
       setImmersiveMode: (enabled) => set({ immersiveMode: enabled }),

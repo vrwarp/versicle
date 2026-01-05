@@ -13,6 +13,7 @@ import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
+import { useSyncOrchestrator } from './lib/sync/hooks/useSyncOrchestrator';
 
 /**
  * Main Application component.
@@ -24,6 +25,9 @@ function App() {
   const [dbError, setDbError] = useState<unknown>(null);
   const [swInitialized, setSwInitialized] = useState(false);
   const [swError, setSwError] = useState<string | null>(null);
+
+  // Initialize Sync
+  useSyncOrchestrator();
 
   useEffect(() => {
     const initSW = async () => {

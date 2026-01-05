@@ -21,9 +21,11 @@ import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
 import { dbService } from '../db/DBService';
+import { CheckpointService } from '../lib/sync/CheckpointService';
+import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { ReadingListDialog } from './ReadingListDialog';
-import { Trash2, Download, Loader2 } from 'lucide-react';
+import { Trash2, Download, Loader2, RotateCcw } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 /**
@@ -43,6 +45,7 @@ export const GlobalSettingsDialog = () => {
     const [orphanScanResult, setOrphanScanResult] = useState<string | null>(null);
     const [isScanning, setIsScanning] = useState(false);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
+    const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const csvInputRef = useRef<HTMLInputElement>(null);
     const zipImportRef = useRef<HTMLInputElement>(null);
@@ -68,9 +71,15 @@ export const GlobalSettingsDialog = () => {
         setTheme: state.setTheme
     })));
 
+    const { googleClientId, googleApiKey, setGoogleCredentials, isSyncEnabled, setSyncEnabled } = useSyncStore();
+    const [checkpoints, setCheckpoints] = useState<Awaited<ReturnType<typeof CheckpointService.listCheckpoints>>>([]);
+
     useEffect(() => {
         if (activeTab === 'data') {
             dbService.getReadingList().then(list => setReadingListCount(list ? list.length : 0));
+        }
+        if (activeTab === 'recovery') {
+            CheckpointService.listCheckpoints().then(setCheckpoints);
         }
     }, [activeTab]);
 
@@ -353,6 +362,27 @@ export const GlobalSettingsDialog = () => {
         URL.revokeObjectURL(url);
     };
 
+    const handleRestoreCheckpoint = async (id: number) => {
+        if (confirm("Are you sure you want to restore this checkpoint? Current state will be overwritten.")) {
+            try {
+                setRecoveryStatus("Restoring...");
+                const manifest = await CheckpointService.restoreCheckpoint(id);
+                if (manifest) {
+                    // In a real implementation, we would apply the manifest here.
+                    // For now, we'll just log it as the SyncManager isn't wired to DB write yet.
+                    console.log("Restoring manifest:", manifest);
+                    setRecoveryStatus("Restoration complete (Simulated).");
+                    setTimeout(() => setRecoveryStatus(null), 2000);
+                } else {
+                    setRecoveryStatus("Failed to load checkpoint.");
+                }
+            } catch (e) {
+                console.error(e);
+                setRecoveryStatus("Error during restoration.");
+            }
+        }
+    };
+
     return (
         <>
         <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
@@ -389,8 +419,14 @@ export const GlobalSettingsDialog = () => {
                     <Button variant={activeTab === 'genai' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('genai')}>
                         Generative AI
                     </Button>
+                    <Button variant={activeTab === 'sync' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('sync')}>
+                        Sync & Cloud
+                    </Button>
                     <Button variant={activeTab === 'dictionary' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('dictionary')}>
                         Dictionary
+                    </Button>
+                    <Button variant={activeTab === 'recovery' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('recovery')}>
+                        Recovery
                     </Button>
                     {/* Add margin to last item to prevent overlap with Close button on mobile */}
                     <Button variant={activeTab === 'data' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0 text-destructive hover:text-destructive mr-10 sm:mr-0" onClick={() => setActiveTab('data')}>
@@ -863,6 +899,91 @@ export const GlobalSettingsDialog = () => {
                                                 </div>
                                             </div>
                                         </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'sync' && (
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="text-lg font-medium mb-4">Cross-Device Sync</h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    Sync your reading progress, annotations, and reading list across devices using Google Drive.
+                                </p>
+                                <div className="space-y-4">
+                                     <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                            <label className="text-sm font-medium">Enable Sync</label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Requires Google Drive API credentials.
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            checked={isSyncEnabled}
+                                            onCheckedChange={setSyncEnabled}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Google Client ID</label>
+                                        <Input
+                                            type="text"
+                                            value={googleClientId}
+                                            onChange={(e) => setGoogleCredentials(e.target.value, googleApiKey)}
+                                            placeholder="OAuth2 Client ID"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Google API Key</label>
+                                        <Input
+                                            type="password"
+                                            value={googleApiKey}
+                                            onChange={(e) => setGoogleCredentials(googleClientId, e.target.value)}
+                                            placeholder="API Key"
+                                        />
+                                    </div>
+                                    <div className="pt-2 text-xs text-muted-foreground">
+                                        <p>Data is stored in your personal Google Drive (App Data folder).</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'recovery' && (
+                        <div className="space-y-6">
+                            <div>
+                                <h3 className="text-lg font-medium mb-4">Disaster Recovery</h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    Restore your library state from local checkpoints. Checkpoints are created automatically before sync.
+                                </p>
+                                {recoveryStatus && (
+                                    <div className="mb-4 p-2 bg-muted text-sm rounded">
+                                        {recoveryStatus}
+                                    </div>
+                                )}
+                                <div className="space-y-2">
+                                    {checkpoints.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground">No checkpoints available.</p>
+                                    ) : (
+                                        checkpoints.map((cp) => (
+                                            <div key={cp.id} className="flex items-center justify-between p-3 border rounded-md">
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium text-sm">
+                                                        {new Date(cp.timestamp).toLocaleString()}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground capitalize">
+                                                        Trigger: {cp.trigger}
+                                                    </span>
+                                                </div>
+                                                <Button size="sm" variant="outline" onClick={() => handleRestoreCheckpoint(cp.id)}>
+                                                    <RotateCcw className="h-4 w-4 mr-2" />
+                                                    Restore
+                                                </Button>
+                                            </div>
+                                        ))
                                     )}
                                 </div>
                             </div>

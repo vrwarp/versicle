@@ -10,6 +10,7 @@ import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
+import { SyncOrchestrator } from '../sync/SyncOrchestrator';
 
 /**
  * Defines the possible states of the TTS playback.
@@ -597,6 +598,8 @@ export class AudioPlayerService {
 
         if (status === 'stopped' || status === 'paused') {
             this.activeLexiconRules = null;
+            // Trigger sync on pause/stop
+            SyncOrchestrator.get()?.forcePush(status).catch(e => console.error("Sync push failed", e));
         }
 
         this.platformIntegration.updatePlaybackState(status);
