@@ -14,6 +14,8 @@ class GenAIService {
   private static instance: GenAIService;
   private genAI: GoogleGenerativeAI | null = null;
   private modelId: string = 'gemini-flash-lite-latest';
+  private isRotationEnabled: boolean = false;
+  private readonly ROTATION_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3-flash'];
   private logCallback: ((entry: GenAILogEntry) => void) | null = null;
 
   private constructor() {}
@@ -25,8 +27,9 @@ class GenAIService {
     return GenAIService.instance;
   }
 
-  public configure(apiKey: string, model: string): void {
+  public configure(apiKey: string, model: string, enableRotation: boolean = false): void {
     this.modelId = model;
+    this.isRotationEnabled = enableRotation;
     if (apiKey) {
       this.genAI = new GoogleGenerativeAI(apiKey);
     } else {
@@ -59,27 +62,60 @@ class GenAIService {
     return this.genAI !== null;
   }
 
-  public async generateContent(prompt: string): Promise<string> {
-    this.log('request', 'generateContent', { prompt, model: this.modelId });
-
+  // Helper to execute with retry logic for model rotation
+  private async executeWithRetry<T>(
+    operation: (genAI: GoogleGenerativeAI, modelId: string) => Promise<T>,
+    methodName: string
+  ): Promise<T> {
     if (!this.genAI) {
       const error = new Error('GenAI Service not configured (missing API key).');
-      this.log('error', 'generateContent', { message: error.message });
+      this.log('error', methodName, { message: error.message });
       throw error;
     }
 
-    try {
-      const model = this.genAI.getGenerativeModel({ model: this.modelId });
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-      this.log('response', 'generateContent', { text });
-      return text;
-    } catch (error) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.log('error', 'generateContent', { message: (error as any).message, error });
-      throw error;
+    // Determine models to try
+    let modelsToTry: string[];
+    if (this.isRotationEnabled) {
+      // Shuffle rotation models
+      modelsToTry = [...this.ROTATION_MODELS].sort(() => Math.random() - 0.5);
+    } else {
+      modelsToTry = [this.modelId];
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let lastError: any = null;
+
+    for (const currentModelId of modelsToTry) {
+        try {
+            return await operation(this.genAI, currentModelId);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (error: any) {
+            lastError = error;
+            const isResourceExhausted = error.message?.includes('429') || error.status === 429 || error.toString().includes('RESOURCE_EXHAUSTED');
+
+            if (this.isRotationEnabled && isResourceExhausted) {
+                this.log('error', methodName, { message: `Model ${currentModelId} exhausted (429). Retrying with next model...`, error: error.message });
+                continue;
+            } else {
+                // If not 429 or rotation disabled, fail immediately
+                throw error;
+            }
+        }
+    }
+
+    throw lastError;
+  }
+
+  public async generateContent(prompt: string): Promise<string> {
+    return this.executeWithRetry(async (genAI, modelId) => {
+        this.log('request', 'generateContent', { prompt, model: modelId });
+        const model = genAI.getGenerativeModel({ model: modelId });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        this.log('response', 'generateContent', { text });
+        return text;
+    }, 'generateContent');
   }
 
   private async blobToBase64(blob: Blob): Promise<string> {
@@ -98,8 +134,6 @@ class GenAIService {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public async generateStructured<T>(prompt: string | any, schema: any, generationConfigOverride?: any): Promise<T> {
-    this.log('request', 'generateStructured', { prompt, schema, model: this.modelId, generationConfigOverride });
-
     // Check for E2E Test Mocks
     if (typeof localStorage !== 'undefined') {
         const mockError = localStorage.getItem('mockGenAIError');
@@ -125,41 +159,33 @@ class GenAIService {
         }
     }
 
-    if (!this.genAI) {
-      const error = new Error('GenAI Service not configured (missing API key).');
-      this.log('error', 'generateStructured', { message: error.message });
-      throw error;
-    }
+    return this.executeWithRetry(async (genAI, modelId) => {
+        this.log('request', 'generateStructured', { prompt, schema, model: modelId, generationConfigOverride });
 
-    try {
-      const model = this.genAI.getGenerativeModel({
-        model: this.modelId,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-          ...(generationConfigOverride || {})
-        },
-      });
+        const model = genAI.getGenerativeModel({
+            model: modelId,
+            generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: schema,
+            ...(generationConfigOverride || {})
+            },
+        });
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
 
-      try {
-        const parsed = JSON.parse(text) as T;
-        this.log('response', 'generateStructured', { text, parsed });
-        return parsed;
-      } catch (error) {
-        console.error('Failed to parse GenAI response as JSON:', text);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message });
-        throw error;
-      }
-    } catch (error) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.log('error', 'generateStructured', { message: (error as any).message, error });
-      throw error;
-    }
+        try {
+            const parsed = JSON.parse(text) as T;
+            this.log('response', 'generateStructured', { text, parsed });
+            return parsed;
+        } catch (error) {
+            console.error('Failed to parse GenAI response as JSON:', text);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message });
+            throw error;
+        }
+    }, 'generateStructured');
   }
 
   /**
@@ -286,14 +312,6 @@ PROCESS:
         },
       },
       {
-        // Only valid if using a model that supports thinking, but adding it as requested
-        // Note: thinking_config might not be supported by all models or client versions yet.
-        // If it causes issues, it might need to be removed or conditional.
-        // However, the plan explicitly asks for it.
-        // The memory says "The `GenAIService` uses `gemini-flash-lite-latest`".
-        // Thinking models are usually separate. I will include it as requested but it might be ignored or cause error if model doesn't support it.
-        // Actually, for now I will pass it as an arbitrary object because the type definition might not include it.
-        // The plan specifically mentioned thinking_budget.
         thinkingConfig: { includeThoughts: false, thinkingBudget: thinkingBudget }
       }
     );

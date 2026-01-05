@@ -226,6 +226,8 @@ export const GlobalSettingsDialog = () => {
         setModel: setGenAIModel,
         isEnabled: isGenAIEnabled,
         setEnabled: setGenAIEnabled,
+        isModelRotationEnabled,
+        setModelRotationEnabled,
         isContentAnalysisEnabled,
         setContentAnalysisEnabled,
         isTableAdaptationEnabled,
@@ -714,10 +716,24 @@ export const GlobalSettingsDialog = () => {
                                                 </p>
                                             </div>
 
+                                            <div className="flex items-center justify-between border-b pb-4">
+                                                <div className="space-y-0.5">
+                                                    <label htmlFor="genai-rotation" className="text-sm font-medium">Free Tier Rotation</label>
+                                                    <p className="text-xs text-muted-foreground max-w-sm">
+                                                        Maximizes free quota by randomly rotating between gemini-2.5-flash-lite, gemini-2.5-flash, and gemini-3-flash on each request. Retries with a different model if one is exhausted (429).
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    id="genai-rotation"
+                                                    checked={isModelRotationEnabled}
+                                                    onCheckedChange={setModelRotationEnabled}
+                                                />
+                                            </div>
+
                                             <div className="space-y-2">
                                                 <label className="text-sm font-medium">Model</label>
                                                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                                <Select value={genAIModel} onValueChange={(val: any) => setGenAIModel(val)}>
+                                                <Select value={genAIModel} onValueChange={(val: any) => setGenAIModel(val)} disabled={isModelRotationEnabled}>
                                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="gemini-flash-lite-latest">Gemini Flash-Lite Latest (Recommended)</SelectItem>
@@ -727,6 +743,11 @@ export const GlobalSettingsDialog = () => {
                                                         <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
                                                     </SelectContent>
                                                 </Select>
+                                                {isModelRotationEnabled && (
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Model selection is handled automatically when rotation is enabled.
+                                                    </p>
+                                                )}
                                             </div>
 
                                     <div className="pt-4 border-t space-y-4">
