@@ -284,74 +284,89 @@ export class AudioContentPipeline {
         sentences: SentenceNode[],
         onAdaptationsFound: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<void> {
-        const genAISettings = useGenAIStore.getState();
-        if (!genAISettings.isContentAnalysisEnabled || !genAISettings.isTableAdaptationEnabled) return;
+        // Deduplicate concurrent requests for the same section
+        const key = `table:${bookId}:${sectionId}`;
+        if (this.analysisPromises.has(key)) {
+            return this.analysisPromises.get(key);
+        }
 
-        try {
-            // Ensure we have sentences
-            if (!sentences || sentences.length === 0) return;
-            const targetSentences = sentences;
+        const promise = (async () => {
+            const genAISettings = useGenAIStore.getState();
+            if (!genAISettings.isContentAnalysisEnabled || !genAISettings.isTableAdaptationEnabled) return;
 
-            // 1. Check DB for existing adaptations
-            const analysis = await dbService.getContentAnalysis(bookId, sectionId);
-            const existingAdaptations = new Map<string, string>(
-                analysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
-            );
+            try {
+                // Ensure we have sentences
+                if (!sentences || sentences.length === 0) return;
+                const targetSentences = sentences;
 
-            // Notify with cached data immediately if available
-            if (existingAdaptations.size > 0) {
-                const result = this.mapSentencesToAdaptations(targetSentences, existingAdaptations);
-                if (result.length > 0) {
-                    onAdaptationsFound(result);
+                // 1. Check DB for existing adaptations
+                const analysis = await dbService.getContentAnalysis(bookId, sectionId);
+                const existingAdaptations = new Map<string, string>(
+                    analysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+                );
+
+                // Notify with cached data immediately if available
+                if (existingAdaptations.size > 0) {
+                    const result = this.mapSentencesToAdaptations(targetSentences, existingAdaptations);
+                    if (result.length > 0) {
+                        onAdaptationsFound(result);
+                    }
                 }
+
+                // 2. Identify tables that actually exist in the current section
+                const tableImages = await dbService.getTableImages(bookId);
+                const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
+
+                if (sectionTableImages.length === 0) return;
+
+                // 3. Filter for those missing from the cache
+                const workSet = sectionTableImages.filter(img => !existingAdaptations.has(img.cfi));
+
+                if (workSet.length === 0) return;
+
+                // 4. Check if GenAI is configured
+                const canUseGenAI = genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+                if (!canUseGenAI) return;
+
+                // Ensure service is configured
+                if (!genAIService.isConfigured() && genAISettings.apiKey) {
+                    genAIService.configure(genAISettings.apiKey, 'gemini-1.5-flash');
+                }
+
+                if (genAIService.isConfigured()) {
+                    const nodes = workSet.map(img => ({
+                        rootCfi: img.cfi,
+                        imageBlob: img.imageBlob
+                    }));
+
+                    const results = await genAIService.generateTableAdaptations(nodes);
+
+                    // 5. Update DB
+                    await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
+                        rootCfi: r.cfi,
+                        text: r.adaptation
+                    })));
+
+                    // 6. Notify listeners with updated full set
+                    const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+                    const finalAdaptations = new Map<string, string>(
+                        updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+                    );
+
+                    const finalResult = this.mapSentencesToAdaptations(targetSentences, finalAdaptations);
+                    onAdaptationsFound(finalResult);
+                }
+
+            } catch (e) {
+                console.warn("Error processing table adaptations", e);
             }
+        })();
 
-            // 2. Identify tables that actually exist in the current section
-            const tableImages = await dbService.getTableImages(bookId);
-            const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
-
-            if (sectionTableImages.length === 0) return;
-
-            // 3. Filter for those missing from the cache
-            const workSet = sectionTableImages.filter(img => !existingAdaptations.has(img.cfi));
-
-            if (workSet.length === 0) return;
-
-            // 4. Check if GenAI is configured
-             const canUseGenAI = genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
-             if (!canUseGenAI) return;
-
-             // Ensure service is configured
-             if (!genAIService.isConfigured() && genAISettings.apiKey) {
-                 genAIService.configure(genAISettings.apiKey, 'gemini-1.5-flash');
-             }
-
-             if (genAIService.isConfigured()) {
-                 const nodes = workSet.map(img => ({
-                     rootCfi: img.cfi,
-                     imageBlob: img.imageBlob
-                 }));
-
-                 const results = await genAIService.generateTableAdaptations(nodes);
-
-                 // 5. Update DB
-                 await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
-                     rootCfi: r.cfi,
-                     text: r.adaptation
-                 })));
-
-                 // 6. Notify listeners with updated full set
-                 const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
-                 const finalAdaptations = new Map<string, string>(
-                     updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
-                 );
-
-                 const finalResult = this.mapSentencesToAdaptations(targetSentences, finalAdaptations);
-                 onAdaptationsFound(finalResult);
-             }
-
-        } catch (e) {
-            console.warn("Error processing table adaptations", e);
+        this.analysisPromises.set(key, promise);
+        try {
+            await promise;
+        } finally {
+            this.analysisPromises.delete(key);
         }
     }
 
