@@ -4,20 +4,20 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
 import { useTTSStore } from '../store/useTTSStore';
 
-// Mock Radix UI Dialog to avoid title warnings
-vi.mock('./ui/Dialog', () => {
+// Mock Radix UI Modal to avoid title warnings
+vi.mock('./ui/Modal', () => {
     return {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        Dialog: ({ isOpen, children }: any) => isOpen ? <div role="dialog">{children}</div> : null,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-        DialogContent: ({ children, className, title, description, footer }: any) => (
+        Modal: ({ open, children }: any) => open ? <div role="dialog">{children}</div> : null,
+        ModalContent: ({ children, className, 'aria-describedby': ariaDescribedBy }: any) => (
             <div>
-                {title && <h1>{title}</h1>}
-                {description && <p>{description}</p>}
+                 {/* Ensure accessibility elements are present in tests */}
+                <h1>Global Settings</h1>
+                <p id={ariaDescribedBy || "dialog-desc"}>Global application settings including appearance, TTS configuration, and data management.</p>
                 {children}
-                {footer}
             </div>
-        )
+        ),
+        ModalHeader: ({ children }: any) => <header>{children}</header>,
+        ModalTitle: ({ children }: any) => <h2>{children}</h2>,
     };
 });
 

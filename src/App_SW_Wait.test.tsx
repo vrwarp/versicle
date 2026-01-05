@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import App from './App';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import React from 'react';
@@ -131,11 +131,15 @@ describe('App Service Worker Wait', () => {
     // We need to advance enough times to cover the loop.
     let delay = 5;
     for (let i = 0; i < 8; i++) {
-        await vi.advanceTimersByTimeAsync(delay);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(delay);
+        });
         delay *= 2;
     }
     // Advance a bit more to ensure rejection
-    await vi.advanceTimersByTimeAsync(100);
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+    });
 
     // Switch to real timers before waitFor so it doesn't hang
     vi.useRealTimers();
@@ -174,10 +178,18 @@ describe('App Service Worker Wait', () => {
     }, 35);
 
     // Advance enough to trigger the timeout callback
-    await vi.advanceTimersByTimeAsync(5); // 1st wait
-    await vi.advanceTimersByTimeAsync(10); // 2nd wait
-    await vi.advanceTimersByTimeAsync(20); // 3rd wait triggers controller check
-    await vi.advanceTimersByTimeAsync(40); // safety buffer
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(5); // 1st wait
+    });
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(10); // 2nd wait
+    });
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(20); // 3rd wait triggers controller check
+    });
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(40); // safety buffer
+    });
 
     // Switch to real timers before waitFor so it doesn't hang
     vi.useRealTimers();

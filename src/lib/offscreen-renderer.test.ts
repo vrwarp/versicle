@@ -127,12 +127,19 @@ describe('extractContentOffscreen', () => {
         cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/2)')
     }]);
 
-    (snapdom.toBlob as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Snap failed'));
+    // Mock failure
+    const error = new Error('Snap failed');
+    (snapdom.toBlob as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(error);
+
+    // Spy on console.warn to suppress the expected error log
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const file = new Blob(['dummy content']);
     const results = await extractContentOffscreen(file);
 
     expect(results[0].tables).toHaveLength(0);
-    // Should not throw
+    expect(consoleSpy).toHaveBeenCalledWith('Failed to snap table', error);
+
+    consoleSpy.mockRestore();
   });
 });

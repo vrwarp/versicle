@@ -70,7 +70,7 @@ export class AudioContentPipeline {
             ];
 
             if (ttsContent && ttsContent.sentences.length > 0) {
-                let workingSentences = ttsContent.sentences;
+                const workingSentences = ttsContent.sentences;
 
                 // Dynamic Refinement: Merge segments based on current settings
                 const settings = useTTSStore.getState();
