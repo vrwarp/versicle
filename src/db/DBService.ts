@@ -227,15 +227,12 @@ class DBService {
                  const bookMap = new Y.Map();
 
                  Object.entries(bookMetadata).forEach(([key, value]) => {
-                     // We skip blob fields if we want to keep CRDT light, but plan says:
-                     // "Value: A child Y.Map containing BookMetadata fields."
-                     // However, covers are heavy. 'coverBlob' is in BookMetadata.
-                     // The plan for Phase 2A/B doesn't explicitly exclude them yet,
-                     // but general CRDT best practice is to avoid large blobs.
-                     // For now, we will mirror structure, but we should be careful.
-                     // The 'files' store handles the EPUB binary. 'coverBlob' is usually a thumbnail.
-                     // Let's include it for now to be true "Shadow" of IDB 'books' store.
-                     if (value !== undefined) {
+                     // We skip blob fields if we want to keep CRDT light.
+                     // 'coverBlob' (Blob/File) causes "Unexpected content type" error in Yjs.
+                     // Yjs does not support Blobs natively in Y.Map.
+                     // Since covers are derived or heavy, we exclude them from the moral layer.
+                     // They are still available in IndexedDB 'books' store if needed by legacy code.
+                     if (value !== undefined && !(value instanceof Blob) && !(value instanceof File)) {
                          bookMap.set(key, value);
                      }
                  });
