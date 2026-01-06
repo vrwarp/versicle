@@ -2,6 +2,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useAnnotationStore } from './useAnnotationStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getDB } from '../db/db';
+import { crdtService } from '../lib/crdt/CRDTService';
 
 vi.mock('../db/db', () => ({
   getDB: vi.fn(),
@@ -32,6 +33,12 @@ describe('useAnnotationStore', () => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (getDB as any).mockResolvedValue(mockDB);
+
+    // Clear CRDT
+    crdtService.doc.transact(() => {
+        crdtService.annotations.clear();
+    });
+
     vi.clearAllMocks();
   });
 
@@ -57,20 +64,24 @@ describe('useAnnotationStore', () => {
     expect(result.current.popover.visible).toBe(false);
   });
 
-  it('should load annotations', async () => {
+  it('should load annotations from CRDT', async () => {
     const { result } = renderHook(() => useAnnotationStore());
     const annotations = [{ id: '1', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 }];
-    mockDB.getAllFromIndex.mockResolvedValue(annotations);
+
+    // Populate CRDT
+    crdtService.doc.transact(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        crdtService.annotations.set('1', annotations[0] as any);
+    });
 
     await act(async () => {
       await result.current.loadAnnotations('book1');
     });
 
-    expect(mockDB.getAllFromIndex).toHaveBeenCalledWith('annotations', 'by_bookId', 'book1');
     expect(result.current.annotations).toEqual(annotations);
   });
 
-  it('should add annotation', async () => {
+  it('should add annotation (dual-write)', async () => {
     const { result } = renderHook(() => useAnnotationStore());
     const newAnnotation = { bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow' };
 
@@ -79,6 +90,7 @@ describe('useAnnotationStore', () => {
       await result.current.addAnnotation(newAnnotation as any);
     });
 
+    // Check DB write
     expect(mockDB.add).toHaveBeenCalledWith('annotations', expect.objectContaining({
       id: 'test-uuid',
       bookId: 'book1',
@@ -87,39 +99,63 @@ describe('useAnnotationStore', () => {
       type: 'highlight',
       color: 'yellow',
     }));
+
+    // Check CRDT write
+    expect(crdtService.annotations.has('test-uuid')).toBe(true);
+
     expect(result.current.annotations).toHaveLength(1);
     expect(result.current.annotations[0].id).toBe('test-uuid');
   });
 
-  it('should delete annotation', async () => {
+  it('should delete annotation (dual-delete)', async () => {
     const { result } = renderHook(() => useAnnotationStore());
     const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
+
+    // Populate store
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: [annotation as any] });
+    // Populate CRDT
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    crdtService.annotations.set('test-uuid', annotation as any);
 
     await act(async () => {
       await result.current.deleteAnnotation('test-uuid');
     });
 
-    expect(mockDB.delete).toHaveBeenCalledWith('annotations', 'test-uuid');
+    await waitFor(() => {
+        expect(mockDB.delete).toHaveBeenCalledWith('annotations', 'test-uuid');
+    });
+    expect(crdtService.annotations.has('test-uuid')).toBe(false);
     expect(result.current.annotations).toHaveLength(0);
   });
 
-  it('should update annotation', async () => {
+  it('should update annotation (dual-update)', async () => {
     const { result } = renderHook(() => useAnnotationStore());
     const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
+
+    // Populate store
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: [annotation as any] });
+    // Populate CRDT
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    crdtService.annotations.set('test-uuid', annotation as any);
+
     mockDB.get.mockResolvedValue(annotation);
 
     await act(async () => {
       await result.current.updateAnnotation('test-uuid', { note: 'new note' });
     });
 
-    expect(mockDB.put).toHaveBeenCalledWith('annotations', expect.objectContaining({
-        id: 'test-uuid',
-        note: 'new note',
-    }));
+    await waitFor(() => {
+        expect(mockDB.put).toHaveBeenCalledWith('annotations', expect.objectContaining({
+            id: 'test-uuid',
+            note: 'new note',
+        }));
+    });
+
+    const crdtAnnotation = crdtService.annotations.get('test-uuid');
+    expect(crdtAnnotation?.note).toBe('new note');
+
     expect(result.current.annotations[0].note).toBe('new note');
   });
 });

@@ -101,6 +101,10 @@ describe('useLibraryStore', () => {
   it('should init library from CRDT/DB', async () => {
     // Setup DB to return one book for migration
     vi.mocked(dbService.getLibrary).mockResolvedValue([mockBook]);
+    // Also mock other DB calls used by MigrationService
+    vi.mocked(dbService.getAnnotations).mockResolvedValue([]);
+    vi.mocked(dbService.getReadingHistoryEntry).mockResolvedValue(undefined);
+    vi.mocked(dbService.getReadingList).mockResolvedValue([]);
 
     // Initial state empty
     expect(useLibraryStore.getState().books).toHaveLength(0);
