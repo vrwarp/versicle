@@ -165,3 +165,28 @@ If the browser crashes or the user closes the tab between the file write and the
 Hydrating a library with hundreds of books and thousands of annotations can block the main thread.
 
 -   **Mitigation:** The `MigrationService` hydration loop must use `requestIdleCallback` with a `timeout: 2000`. We will process data in batches of 20 items per frame. This ensures the browser remains responsive to "Stop" or "Back" commands even while moving the entire database into the CRDT log.
+## Phase 2A Execution Report (Deviations & Findings)
+
+**Status:** Phase 2A Complete.
+
+**Implementation Summary:**
+- **The Shunt (Infrastructure):**
+    - `src/db/DBService.ts` was refactored to support three modes: `'legacy'`, `'shadow'`, and `'crdt'`.
+    - `updateBookMetadata` writes to both IndexedDB and Yjs (CRDT) when in 'shadow' mode.
+    - `deleteBook` was split: it always deletes "Heavy Layer" assets (files, locations, TTS content) from IndexedDB, but delegates "Moral Layer" (metadata, annotations) deletion to the Shunt logic.
+    - `addBook` was updated to perform a "Double Write" in 'shadow' mode: first to IndexedDB via `processEpub`, then transacting the metadata into the Yjs `books` map.
+- **Legacy Migration:**
+    - `LegacyStorageBridge` was implemented to inspect `localStorage` for `reader-storage` and `sync-storage`.
+    - It maps these legacy keys (e.g., `currentTheme`, `googleClientId`) to a new `settings` Y.Map in the CRDT doc.
+    - A unit test suite (`LegacyStorageBridge.test.ts`) verifies this migration logic.
+- **Hydration Guard:**
+    - A `HydrationGuard` component wraps the application in `App.tsx`.
+    - It initializes the `CRDTService`, injects it into `DBService`, and sets the mode to `'shadow'`.
+    - It blocks rendering until `y-indexeddb` signals `synced`, ensuring no "Ghost Library" issues.
+- **Schema Update:**
+    - Added `SETTINGS: 'settings'` to `CRDT_KEYS` in `types.ts` to accommodate global settings migration.
+
+**Findings & Deviations:**
+- **Global Settings in CRDT:** The original plan did not explicitly define where global settings (theme, sync config) should live in the Y.Doc. We established a top-level `settings` map for this purpose.
+- **Shadow Mode Complexity:** Implementing "Shadow Mode" for `addBook` required reading back the metadata from IndexedDB immediately after ingestion to populate the CRDT. This ensures the CRDT has the full initial state, including cover thumbnails (which are currently treated as metadata).
+- **Singleton Injection:** To avoid circular dependencies and complex rewiring, `CRDTService` is instantiated as a singleton and injected into `DBService` at runtime via `HydrationGuard`. This serves as a pragmatic bridge before a full dependency injection system or store refactor.

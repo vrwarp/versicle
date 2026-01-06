@@ -59,4 +59,5 @@ export const CRDT_KEYS = {
   HISTORY: 'history',
   READING_LIST: 'readingList',
   TRANSIENT: 'transient',
+  SETTINGS: 'settings',
 } as const;

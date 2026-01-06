@@ -8,8 +8,34 @@ import { mergeCfiRanges } from '../lib/cfi-utils';
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
+import { CRDTService } from '../lib/crdt/CRDTService';
+import { CRDT_KEYS } from '../lib/crdt/types';
+import * as Y from 'yjs';
+
+// We import the singleton instance of CRDTService.
+// Note: In a real app, we might use dependency injection, but for now we'll instantiate or import it.
+// Assuming we have a way to access the global CRDT service instance.
+// For Phase 2A, we'll import a shared instance or create one if it doesn't exist,
+// but ideally this should be passed in or accessed via a singleton pattern.
+// Let's assume we can access it via a global singleton for now or pass it in.
+// To keep it simple and consistent with `dbService` being a singleton, we'll instantiate it here lazily or assume usage.
+
+// However, `CRDTService` is exported as a class.
+// We need to ensure we're using the SAME instance as the rest of the app.
+// Since `dbService` is a singleton exported at the bottom, we can add `crdtService` property to it.
 
 class DBService {
+  private _mode: 'legacy' | 'shadow' | 'crdt' = 'legacy';
+  private crdtService: CRDTService | null = null;
+
+  public setMode(mode: 'legacy' | 'shadow' | 'crdt') {
+      this._mode = mode;
+  }
+
+  public setCRDTService(service: CRDTService) {
+      this.crdtService = service;
+  }
+
   private async getDB() {
     return getDB();
   }
@@ -96,15 +122,45 @@ class DBService {
    */
   async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
     try {
-      const db = await this.getDB();
-      const tx = db.transaction('books', 'readwrite');
-      const store = tx.objectStore('books');
-      const existing = await store.get(id);
+      // Legacy or Shadow Mode
+      if (this._mode !== 'crdt') {
+        const db = await this.getDB();
+        const tx = db.transaction('books', 'readwrite');
+        const store = tx.objectStore('books');
+        const existing = await store.get(id);
 
-      if (existing) {
-        await store.put({ ...existing, ...metadata });
+        if (existing) {
+          await store.put({ ...existing, ...metadata });
+        }
+        await tx.done;
       }
-      await tx.done;
+
+      // Shadow or CRDT Mode
+      if (this._mode !== 'legacy' && this.crdtService) {
+        // Yjs Update
+        this.crdtService.doc.transact(() => {
+             const booksMap = this.crdtService!.doc.getMap(CRDT_KEYS.BOOKS);
+             if (booksMap.has(id)) {
+                 const bookMap = booksMap.get(id) as any; // Y.Map<any>
+                 // If it's a Y.Map
+                 if (bookMap && typeof bookMap.set === 'function') {
+                    Object.entries(metadata).forEach(([key, value]) => {
+                         if (value !== undefined) {
+                             bookMap.set(key, value);
+                         }
+                    });
+                 }
+             } else {
+                 // Note: We typically don't create books here, only update.
+                 // Creation usually happens in addBook (ingestion).
+                 // But if we need to support creation via update:
+                 // const newBookMap = new Y.Map();
+                 // ... populate ...
+                 // booksMap.set(id, newBookMap);
+             }
+        });
+      }
+
     } catch (error) {
       this.handleError(error);
     }
@@ -154,7 +210,41 @@ class DBService {
     onProgress?: (progress: number, message: string) => void
   ): Promise<void> {
     try {
-      await processEpub(file, ttsOptions, onProgress);
+      // 1. Process EPUB and write to IDB (Heavy Layer + Metadata)
+      // This returns the bookId after successfully writing to 'books' (legacy/shadow source)
+      // and 'files' (heavy layer).
+      const bookId = await processEpub(file, ttsOptions, onProgress);
+
+      // 2. Shadow / CRDT Mode: Write Metadata to Yjs
+      if (this._mode !== 'legacy' && this.crdtService) {
+          const db = await this.getDB();
+          const bookMetadata = await db.get('books', bookId);
+
+          if (bookMetadata) {
+             this.crdtService.doc.transact(() => {
+                 const booksMap = this.crdtService!.doc.getMap(CRDT_KEYS.BOOKS);
+                 // Create a new Y.Map for the book
+                 const bookMap = new Y.Map();
+
+                 Object.entries(bookMetadata).forEach(([key, value]) => {
+                     // We skip blob fields if we want to keep CRDT light, but plan says:
+                     // "Value: A child Y.Map containing BookMetadata fields."
+                     // However, covers are heavy. 'coverBlob' is in BookMetadata.
+                     // The plan for Phase 2A/B doesn't explicitly exclude them yet,
+                     // but general CRDT best practice is to avoid large blobs.
+                     // For now, we will mirror structure, but we should be careful.
+                     // The 'files' store handles the EPUB binary. 'coverBlob' is usually a thumbnail.
+                     // Let's include it for now to be true "Shadow" of IDB 'books' store.
+                     if (value !== undefined) {
+                         bookMap.set(key, value);
+                     }
+                 });
+
+                 booksMap.set(bookId, bookMap);
+             });
+          }
+      }
+
     } catch (error) {
       this.handleError(error);
     }
@@ -169,62 +259,160 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'], 'readwrite');
+
+      // 1. Heavy Layer Deletion (Always performed on local DB)
+      // Note: 'books' is metadata (Moral layer), but 'files' and others are Heavy layer.
+      // We must handle metadata deletion according to the shunt mode.
+      const heavyStores = ['files', 'locations', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'];
+
+      // If mode is legacy, we include 'books', 'annotations', 'lexicon' in the transaction
+      // If mode is crdt, we do NOT touch 'books', 'annotations', 'lexicon' in IndexedDB (they are in Yjs)
+      // EXCEPT: 'annotations' and 'lexicon' are currently indexed by bookId in IDB.
+      // Ideally in CRDT mode, we don't use IDB for them.
+      // But for Phase 2A, we might still be using IDB for read?
+      // "Standard stores become read-only caches or are cleared entirely."
+
+      const storesToTransact = [...heavyStores];
+      if (this._mode !== 'crdt') {
+          storesToTransact.push('books', 'annotations', 'lexicon');
+      } else {
+          // Even in CRDT mode, we might want to clean up legacy data if it exists?
+          // But if we are in CRDT mode, we assume the source of truth is Yjs.
+          // However, to be safe and clean up space, we should probably delete them from IDB regardless.
+          // But the plan says: "Metadata deletion in the books map follows the shunt logic."
+          // "The refactored function must always call db.delete('files', id) first to free up IndexedDB space."
+          // So we should delete files first.
+
+          // Let's stick to the plan:
+          // 1. Delete Heavy Assets (files, etc)
+          // 2. Delete Metadata via Shunt
+
+          // Actually, 'annotations' and 'lexicon' are Moral layer too.
+          // So they should also follow the shunt logic.
+
+          // To safely delete heavy assets regardless of mode:
+          // We'll add 'books', 'annotations', 'lexicon' to the transaction ONLY if we are in legacy/shadow mode
+          // OR if we want to aggressively clean up IDB even in CRDT mode.
+          // Let's behave as if we are cleaning up IDB in all modes for Heavy Assets.
+      }
+
+      // We'll open a transaction for Heavy Assets first.
+      const txHeavy = db.transaction(heavyStores, 'readwrite');
 
       await Promise.all([
-          tx.objectStore('books').delete(id),
-          tx.objectStore('files').delete(id),
-          tx.objectStore('locations').delete(id),
-          tx.objectStore('tts_queue').delete(id),
-          tx.objectStore('tts_position').delete(id),
+          txHeavy.objectStore('files').delete(id),
+          txHeavy.objectStore('locations').delete(id),
+          txHeavy.objectStore('tts_queue').delete(id),
+          txHeavy.objectStore('tts_position').delete(id),
       ]);
 
-      // Delete annotations
-      const annotationStore = tx.objectStore('annotations');
-      const annotationIndex = annotationStore.index('by_bookId');
-      let annotationCursor = await annotationIndex.openCursor(IDBKeyRange.only(id));
-      while (annotationCursor) {
-        await annotationCursor.delete();
-        annotationCursor = await annotationCursor.continue();
+      // Heavy loop deletions
+      const cleanupIndex = async (storeName: string) => {
+          const store = txHeavy.objectStore(storeName);
+          const index = store.index('by_bookId');
+          let cursor = await index.openCursor(IDBKeyRange.only(id));
+          while (cursor) {
+              await cursor.delete();
+              cursor = await cursor.continue();
+          }
+      };
+
+      await Promise.all([
+          cleanupIndex('content_analysis'),
+          cleanupIndex('tts_content'),
+          cleanupIndex('table_images')
+      ]);
+
+      await txHeavy.done;
+
+      // 2. Moral Layer Deletion (Metadata, Annotations, Lexicon)
+
+      // Legacy / Shadow Mode
+      if (this._mode !== 'crdt') {
+          const txMoral = db.transaction(['books', 'annotations', 'lexicon'], 'readwrite');
+
+          await txMoral.objectStore('books').delete(id);
+
+          // Annotations
+           const annotationStore = txMoral.objectStore('annotations');
+           const annotationIndex = annotationStore.index('by_bookId');
+           let annotationCursor = await annotationIndex.openCursor(IDBKeyRange.only(id));
+           while (annotationCursor) {
+               await annotationCursor.delete();
+               annotationCursor = await annotationCursor.continue();
+           }
+
+           // Lexicon
+           const lexiconStore = txMoral.objectStore('lexicon');
+           const lexiconIndex = lexiconStore.index('by_bookId');
+           let lexiconCursor = await lexiconIndex.openCursor(IDBKeyRange.only(id));
+           while (lexiconCursor) {
+               await lexiconCursor.delete();
+               lexiconCursor = await lexiconCursor.continue();
+           }
+
+           await txMoral.done;
       }
 
-      // Delete lexicon rules
-      const lexiconStore = tx.objectStore('lexicon');
-      const lexiconIndex = lexiconStore.index('by_bookId');
-      let lexiconCursor = await lexiconIndex.openCursor(IDBKeyRange.only(id));
-      while (lexiconCursor) {
-        await lexiconCursor.delete();
-        lexiconCursor = await lexiconCursor.continue();
+      // Shadow / CRDT Mode
+      if (this._mode !== 'legacy' && this.crdtService) {
+          this.crdtService.doc.transact(() => {
+              // Delete from Books Map
+              const booksMap = this.crdtService!.doc.getMap(CRDT_KEYS.BOOKS);
+              if (booksMap.has(id)) {
+                  booksMap.delete(id);
+              }
+
+              // Delete Annotations (Global Array filter? No, that's expensive)
+              // The Y.Array is append-only for history, but for annotations we might want to delete.
+              // Annotations in Yjs are in a global Y.Array<Annotation>.
+              // To delete by bookId efficiently is hard.
+              // However, the plan says: "annotations: Y.Array<Annotation>".
+              // If we delete a book, we should probably mark annotations as deleted or filter them out.
+              // Or better, iterate and delete.
+
+              // Wait, plan says: "annotations: Y.Array<Annotation>"
+              // Y.Array deletions are by index.
+              // We need to iterate and find indices.
+              // This is O(N).
+              const annotationsArray = this.crdtService!.doc.getArray<Annotation>(CRDT_KEYS.ANNOTATIONS);
+              let i = 0;
+              while (i < annotationsArray.length) {
+                  const ann = annotationsArray.get(i);
+                  if (ann.bookId === id) {
+                      annotationsArray.delete(i, 1);
+                      // Do not increment i, as the array shifted
+                  } else {
+                      i++;
+                  }
+              }
+
+              // Lexicon
+              const lexiconArray = this.crdtService!.doc.getArray<LexiconRule>(CRDT_KEYS.LEXICON);
+              let j = 0;
+              while (j < lexiconArray.length) {
+                  const rule = lexiconArray.get(j);
+                  if (rule.bookId === id) {
+                      lexiconArray.delete(j, 1);
+                  } else {
+                      j++;
+                  }
+              }
+
+              // History
+              const historyMap = this.crdtService!.doc.getMap(CRDT_KEYS.HISTORY);
+              if (historyMap.has(id)) {
+                  historyMap.delete(id);
+              }
+
+              // Transient
+              const transientMap = this.crdtService!.doc.getMap(CRDT_KEYS.TRANSIENT);
+              if (transientMap.has(id)) {
+                  transientMap.delete(id);
+              }
+          });
       }
 
-      // Delete content analysis
-      const analysisStore = tx.objectStore('content_analysis');
-      const analysisIndex = analysisStore.index('by_bookId');
-      let analysisCursor = await analysisIndex.openCursor(IDBKeyRange.only(id));
-      while (analysisCursor) {
-        await analysisCursor.delete();
-        analysisCursor = await analysisCursor.continue();
-      }
-
-      // Delete TTS content
-      const ttsContentStore = tx.objectStore('tts_content');
-      const ttsContentIndex = ttsContentStore.index('by_bookId');
-      let ttsContentCursor = await ttsContentIndex.openCursor(IDBKeyRange.only(id));
-      while (ttsContentCursor) {
-        await ttsContentCursor.delete();
-        ttsContentCursor = await ttsContentCursor.continue();
-      }
-
-      // Delete table images
-      const tableStore = tx.objectStore('table_images');
-      const tableIndex = tableStore.index('by_bookId');
-      let tableCursor = await tableIndex.openCursor(IDBKeyRange.only(id));
-      while (tableCursor) {
-        await tableCursor.delete();
-        tableCursor = await tableCursor.continue();
-      }
-
-      await tx.done;
     } catch (error) {
       this.handleError(error);
     }

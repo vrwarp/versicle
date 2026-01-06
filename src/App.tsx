@@ -14,6 +14,7 @@ import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 import { useSyncOrchestrator } from './lib/sync/hooks/useSyncOrchestrator';
+import { HydrationGuard } from './components/HydrationGuard';
 
 /**
  * Main Application component.
@@ -152,26 +153,28 @@ function App() {
   }
 
   return (
-    <Router>
-      <ThemeSynchronizer />
-      <GlobalSettingsDialog />
-      <ToastContainer />
-      <ReaderControlBar />
-      <div className="min-h-screen bg-background text-foreground main_layout">
-        <Routes>
-          <Route path="/" element={
-            <ErrorBoundary>
-              <LibraryView />
-            </ErrorBoundary>
-          } />
-          <Route path="/read/:id" element={
-            <ErrorBoundary>
-              <ReaderView />
-            </ErrorBoundary>
-          } />
-        </Routes>
-      </div>
-    </Router>
+    <HydrationGuard>
+      <Router>
+        <ThemeSynchronizer />
+        <GlobalSettingsDialog />
+        <ToastContainer />
+        <ReaderControlBar />
+        <div className="min-h-screen bg-background text-foreground main_layout">
+          <Routes>
+            <Route path="/" element={
+              <ErrorBoundary>
+                <LibraryView />
+              </ErrorBoundary>
+            } />
+            <Route path="/read/:id" element={
+              <ErrorBoundary>
+                <ReaderView />
+              </ErrorBoundary>
+            } />
+          </Routes>
+        </div>
+      </Router>
+    </HydrationGuard>
   );
 }
 
