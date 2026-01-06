@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition, TableImage } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition, TableImage, LexiconRule } from '../types/db';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
@@ -263,7 +263,7 @@ class DBService {
       // 1. Heavy Layer Deletion (Always performed on local DB)
       // Note: 'books' is metadata (Moral layer), but 'files' and others are Heavy layer.
       // We must handle metadata deletion according to the shunt mode.
-      const heavyStores = ['files', 'locations', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'];
+      const heavyStores: ("files" | "locations" | "tts_queue" | "tts_position" | "content_analysis" | "tts_content" | "table_images")[] = ['files', 'locations', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'];
 
       // If mode is legacy, we include 'books', 'annotations', 'lexicon' in the transaction
       // If mode is crdt, we do NOT touch 'books', 'annotations', 'lexicon' in IndexedDB (they are in Yjs)
@@ -272,7 +272,8 @@ class DBService {
       // But for Phase 2A, we might still be using IDB for read?
       // "Standard stores become read-only caches or are cleared entirely."
 
-      const storesToTransact = [...heavyStores];
+      // We must explicitly type the array for the transaction
+      const storesToTransact: (typeof heavyStores[number] | "books" | "annotations" | "lexicon")[] = [...heavyStores];
       if (this._mode !== 'crdt') {
           storesToTransact.push('books', 'annotations', 'lexicon');
       } else {
@@ -307,7 +308,7 @@ class DBService {
       ]);
 
       // Heavy loop deletions
-      const cleanupIndex = async (storeName: string) => {
+      const cleanupIndex = async (storeName: "content_analysis" | "tts_content" | "table_images") => {
           const store = txHeavy.objectStore(storeName);
           const index = store.index('by_bookId');
           let cursor = await index.openCursor(IDBKeyRange.only(id));
