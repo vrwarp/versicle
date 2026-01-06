@@ -25,7 +25,7 @@ done
 echo "🧪 Running verification suite..."
 # We pass all arguments ($@) to the python script, which passes them to pytest.
 # This allows running `docker run ... --update-snapshots`
-python verification/run_all.py "$@"
+python3 verification/run_all.py "$@"
 EXIT_CODE=$?
 
 # 4. Cleanup and Exit

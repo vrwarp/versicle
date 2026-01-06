@@ -24,6 +24,31 @@ import * as Y from 'yjs';
 // We need to ensure we're using the SAME instance as the rest of the app.
 // Since `dbService` is a singleton exported at the bottom, we can add `crdtService` property to it.
 
+// Helper to convert JS values to Yjs types recursively
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const toYjsType = (value: any): any => {
+    if (value === null || value === undefined) return null;
+    if (value instanceof Blob || value instanceof File) return null; // Exclude Blobs/Files
+    if (Array.isArray(value)) {
+        const yArray = new Y.Array();
+        const convertedItems = value.map(toYjsType).filter(v => v !== null); // Filter nulls if desired, or keep them
+        // Note: Y.Array.push expects an array of items
+        yArray.push(convertedItems);
+        return yArray;
+    }
+    if (typeof value === 'object') {
+        const yMap = new Y.Map();
+        Object.entries(value).forEach(([k, v]) => {
+            const converted = toYjsType(v);
+            if (converted !== null) {
+                yMap.set(k, converted);
+            }
+        });
+        return yMap;
+    }
+    return value; // Primitives (string, number, boolean)
+};
+
 class DBService {
   private _mode: 'legacy' | 'shadow' | 'crdt' = 'legacy';
   private crdtService: CRDTService | null = null;
@@ -145,8 +170,10 @@ class DBService {
                  // If it's a Y.Map
                  if (bookMap && typeof bookMap.set === 'function') {
                     Object.entries(metadata).forEach(([key, value]) => {
-                         if (value !== undefined) {
-                             bookMap.set(key, value);
+                         // Use helper to handle complex types (arrays/objects) and exclude Blobs
+                         const yValue = toYjsType(value);
+                         if (yValue !== null) {
+                             bookMap.set(key, yValue);
                          }
                     });
                  }
@@ -227,13 +254,10 @@ class DBService {
                  const bookMap = new Y.Map();
 
                  Object.entries(bookMetadata).forEach(([key, value]) => {
-                     // We skip blob fields if we want to keep CRDT light.
-                     // 'coverBlob' (Blob/File) causes "Unexpected content type" error in Yjs.
-                     // Yjs does not support Blobs natively in Y.Map.
-                     // Since covers are derived or heavy, we exclude them from the moral layer.
-                     // They are still available in IndexedDB 'books' store if needed by legacy code.
-                     if (value !== undefined && !(value instanceof Blob) && !(value instanceof File)) {
-                         bookMap.set(key, value);
+                     // Use helper to handle complex types (arrays/objects) and exclude Blobs
+                     const yValue = toYjsType(value);
+                     if (yValue !== null) {
+                         bookMap.set(key, yValue);
                      }
                  });
 
