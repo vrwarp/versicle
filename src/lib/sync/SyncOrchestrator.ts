@@ -5,6 +5,8 @@ import type { RemoteStorageProvider } from './types';
 import type { SyncManifest } from '../../types/db';
 import { useSyncStore } from './hooks/useSyncStore';
 import { getDB } from '../../db/db';
+import { crdtService } from '../crdt/CRDTService';
+import * as Y from 'yjs';
 
 const DEBOUNCE_MS = 60000; // 60s
 
@@ -214,50 +216,77 @@ export class SyncOrchestrator {
         const db = await getDB();
         const tx = db.transaction(['books', 'reading_history', 'annotations', 'lexicon', 'reading_list', 'tts_position'], 'readwrite');
 
-        // Apply Books (Metadata Updates)
+        // Prepare CRDT batch update (moved logic to end)
+
+        // Since we need to read existing books from DB to merge metadata correctly (partial updates),
+        // we'll do the DB operations and collect the final state to push to CRDT.
+        const crdtUpdates: {
+            books: any[],
+            annotations: any[],
+            history: any[],
+            readingList: any[]
+        } = { books: [], annotations: [], history: [], readingList: [] };
+
         for (const [bookId, data] of Object.entries(manifest.books)) {
             const existingBook = await tx.objectStore('books').get(bookId);
             if (existingBook) {
-                // Only update if remote is newer? Manifest is already merged LWW.
-                // So we just update specific fields.
                 const updated = { ...existingBook, ...data.metadata };
-                // Ensure we don't overwrite crucial local-only fields if they existed,
-                // but metadata in manifest is Partial.
                 await tx.objectStore('books').put(updated);
+                crdtUpdates.books.push(updated);
             }
-            // Note: We don't create new books from sync if we don't have the file!
-            // The plan says "Books not present locally are marked isOffloaded: true".
-            // Implementation detail: If we sync a book we don't have, we might want to show it as "Cloud only".
-            // For now, I'll skip creating books we don't have to avoid "ghost" books without files.
 
-            // Apply History
             if (data.history) {
                 await tx.objectStore('reading_history').put(data.history);
+                // CRDT History is Y.Array of strings (ranges)
+                // We need to map readingHistory structure to it.
+                // Currently MigrationService does: yArr.push(historyEntry.readRanges);
+                crdtUpdates.history.push(data.history);
             }
 
-            // Apply Annotations
-            // This assumes we overwrite/append.
-            // Since we merged, we can just put all.
             for (const ann of data.annotations) {
                 await tx.objectStore('annotations').put(ann);
+                crdtUpdates.annotations.push(ann);
             }
         }
 
-        // Lexicon
         for (const rule of manifest.lexicon) {
             await tx.objectStore('lexicon').put(rule);
+            // CRDT Lexicon TODO if needed
         }
 
-        // Reading List
         for (const entry of Object.values(manifest.readingList)) {
             await tx.objectStore('reading_list').put(entry);
+            crdtUpdates.readingList.push(entry);
         }
 
-        // TTS Positions
         for (const pos of Object.values(manifest.transientState.ttsPositions)) {
              await tx.objectStore('tts_position').put(pos);
         }
 
         await tx.done;
+
+        // Apply to CRDT
+        crdtService.doc.transact(() => {
+            for (const book of crdtUpdates.books) {
+                crdtService.books.set(book.id, book);
+            }
+            for (const ann of crdtUpdates.annotations) {
+                crdtService.annotations.set(ann.id, ann);
+            }
+            for (const hist of crdtUpdates.history) {
+                // history is Map<BookID, Y.Array<string>>
+                if (crdtService.history.has(hist.bookId)) {
+                    const yArr = crdtService.history.get(hist.bookId);
+                    if (yArr) yArr.delete(0, yArr.length);
+                } else {
+                    crdtService.history.set(hist.bookId, new Y.Array<string>());
+                }
+                const yArr = crdtService.history.get(hist.bookId);
+                if (yArr) yArr.push(hist.readRanges);
+            }
+            for (const rl of crdtUpdates.readingList) {
+                crdtService.readingList.set(rl.filename, rl);
+            }
+        });
     }
 }
