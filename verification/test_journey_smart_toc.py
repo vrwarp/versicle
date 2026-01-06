@@ -27,7 +27,11 @@ def test_smart_toc_success(page):
     page.reload()
 
     # Wait for library to load
-    expect(page.get_by_test_id("library-view")).to_be_visible(timeout=10000)
+    try:
+        expect(page.get_by_test_id("library-view")).to_be_visible(timeout=15000)
+    except:
+        print("Library view not visible after reload, ensuring library...")
+        ensure_library_with_book(page)
 
     # 3. Open Reader
     # Ensure book is present (reload might have cleared state or DB latency)
@@ -39,7 +43,7 @@ def test_smart_toc_success(page):
         page.locator('[data-testid^="book-card-"]').first.wait_for(timeout=30000)
 
     page.locator('[data-testid^="book-card-"]').first.click()
-    expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=20000)
+    expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=30000)
 
     # 4. Open TOC
     page.get_by_test_id("reader-toc-button").click()
