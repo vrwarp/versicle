@@ -72,42 +72,16 @@ export class CRDTService {
   }
 
   /**
-   * Compaction Strategy:
-   * Consolidates the update history into a single snapshot to reduce
-   * the number of records in IndexedDB and optimize loading time.
+   * Generates a snapshot of the current state and returns its size.
    *
-   * Note: y-indexeddb automatically merges updates to some extent,
-   * but explicit snapshotting can be useful if we manage the storage manually
-   * or want to export a "clean" state.
+   * This is currently a diagnostic method to monitor the document size.
    *
-   * However, standard y-indexeddb usage usually doesn't require manual "compaction"
-   * in the sense of rewriting the DB, as it stores updates efficiently.
-   * But the plan calls for "State Snapshots".
-   *
-   * To "compact" in Yjs usually means `Y.encodeStateAsUpdate(doc)`
-   * and potentially storing that as a base, but Yjs relies on history.
-   *
-   * For this implementation, we will follow the plan's instruction:
-   * "Every N updates... call Y.encodeStateAsUpdate(ydoc). This creates a single 'Full Update' block".
-   *
-   * To actually replace the IndexedDB content with a single update,
-   * we would need to clear the existing DB and write the snapshot.
-   * This is risky without careful locking.
-   *
-   * For Phase 1, we will implement `compact` as generating the snapshot
-   * and (optionally) replacing the persistence if we were managing it manually.
-   * Since we use `y-indexeddb`, we can use `provider.setStoredByteLength` limitation?
-   * No.
-   *
-   * We will simply expose the ability to get the snapshot for now,
-   * or if we want to "reset" persistence to a snapshot:
+   * @todo Implement full compaction strategy:
+   * 1. Clear existing IndexedDB update logs.
+   * 2. Write the single snapshot back to storage to reduce startup time/size.
    */
   async compact() {
     const snapshot = Y.encodeStateAsUpdate(this.doc);
-    // In a real scenario, we might clear the provider's data and re-inject this snapshot.
-    // But `y-indexeddb` doesn't expose a simple "clear and set" API easily.
-    // We would have to `clearData()`, then `applyUpdate()`.
-    // Let's try that pattern if needed, but for now we just return the snapshot size.
     return snapshot.byteLength;
   }
 
