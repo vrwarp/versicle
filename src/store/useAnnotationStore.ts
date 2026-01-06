@@ -51,6 +51,12 @@ interface AnnotationState {
    */
   updateAnnotation: (id: string, changes: Partial<Annotation>) => Promise<void>;
 
+  /**
+   * INTERNAL: Updates the store from an external source (CRDT/Sync).
+   * @param annotations - The new list of annotations.
+   */
+  internalSync: (annotations: Annotation[]) => void;
+
   // Popover Actions
   /**
    * Shows the annotation popover at a specific location.
@@ -131,6 +137,10 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     } catch (error) {
       console.error('Failed to update annotation:', error);
     }
+  },
+
+  internalSync: (annotations: Annotation[]) => {
+    set({ annotations });
   },
 
   showPopover: (x, y, cfiRange, text) => {

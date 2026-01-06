@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { NavigationItem } from 'epubjs';
 import { SyncOrchestrator } from '../lib/sync/SyncOrchestrator';
+import { dbService } from '../db/DBService';
+import { throttledCrdtUpdate } from './utils/throttledCrdtUpdate';
 
 /**
  * State interface for the Reader store.
@@ -108,12 +110,26 @@ export const useReaderStore = create<ReaderState>()(
       setLineHeight: (lineHeight) => set({ lineHeight }),
       setFontSize: (size) => set({ fontSize: size }),
       updateLocation: (cfi, progress, sectionTitle, sectionId) => {
-        set((state) => ({
-          currentCfi: cfi,
-          progress,
-          currentSectionTitle: sectionTitle ?? state.currentSectionTitle,
-          currentSectionId: sectionId ?? state.currentSectionId
-        }));
+        set((state) => {
+          const newState = {
+            currentCfi: cfi,
+            progress,
+            currentSectionTitle: sectionTitle ?? state.currentSectionTitle,
+            currentSectionId: sectionId ?? state.currentSectionId
+          };
+
+          // Throttled update to CRDT (Moral Layer)
+          if (state.currentBookId && (dbService.mode === 'shadow' || dbService.mode === 'crdt')) {
+             throttledCrdtUpdate(state.currentBookId, {
+                 lastRead: Date.now(),
+                 progress: newState.progress
+                 // We don't store CFI in metadata usually, but if we did:
+                 // cfi: newState.currentCfi
+             });
+          }
+
+          return newState;
+        });
         SyncOrchestrator.get()?.scheduleSync();
       },
       setToc: (toc) => set({ toc }),

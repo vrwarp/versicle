@@ -14,6 +14,7 @@ import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 import { useSyncOrchestrator } from './lib/sync/hooks/useSyncOrchestrator';
+import { YjsObserverService } from './lib/crdt/YjsObserverService';
 
 /**
  * Main Application component.
@@ -28,6 +29,11 @@ function App() {
 
   // Initialize Sync
   useSyncOrchestrator();
+
+  useEffect(() => {
+    // Initialize Yjs Observer (Phase 2B)
+    YjsObserverService.getInstance().initialize();
+  }, []);
 
   useEffect(() => {
     const initSW = async () => {

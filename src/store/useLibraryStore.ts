@@ -74,6 +74,12 @@ interface LibraryState {
    * @param file - The EPUB file to upload.
    */
   restoreBook: (id: string, file: File) => Promise<void>;
+
+  /**
+   * INTERNAL: Updates the store from an external source (CRDT/Sync).
+   * @param books - The new list of books.
+   */
+  internalSync: (books: BookMetadata[]) => void;
 }
 
 /**
@@ -236,6 +242,10 @@ export const useLibraryStore = create<LibraryState>()(
           // Ensure we expose the error message to the UI
           set({ error: err instanceof Error ? err.message : 'Failed to restore book.', isImporting: false });
         }
+      },
+
+      internalSync: (books: BookMetadata[]) => {
+        set({ books, isLoading: false });
       },
     }),
     {

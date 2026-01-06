@@ -62,21 +62,42 @@ vi.mock('./store/useReaderStore', () => {
     };
 });
 
-vi.mock('./store/useLibraryStore', () => ({
-    useLibraryStore: (selector: any) => selector({ books: [] }),
-}));
+vi.mock('./store/useLibraryStore', () => {
+    const state = { books: [] };
+    const useLibraryStore = (selector: any) => selector(state);
+    useLibraryStore.getState = () => state;
+    return { useLibraryStore };
+});
 
-vi.mock('./store/useAnnotationStore', () => ({
-    useAnnotationStore: (selector: any) => selector({
+vi.mock('./store/useAnnotationStore', () => {
+    const state = {
         popover: { visible: false },
         addAnnotation: vi.fn(),
         hidePopover: vi.fn(),
-    }),
-}));
+        annotations: [],
+    };
+    const useAnnotationStore = (selector: any) => selector(state);
+    useAnnotationStore.getState = () => state;
+    return { useAnnotationStore };
+});
 
 vi.mock('./store/useTTSStore', () => ({
     useTTSStore: (selector: any) => selector({ queue: [], isPlaying: false }),
 }));
+
+vi.mock('./lib/sync/hooks/useSyncStore', () => {
+    const state = {
+        googleClientId: '',
+        googleApiKey: '',
+        setGoogleCredentials: vi.fn(),
+        isSyncEnabled: false,
+        setSyncEnabled: vi.fn(),
+    };
+    const useSyncStore = (selector: any) => selector(state);
+    useSyncStore.getState = () => state;
+    useSyncStore.subscribe = vi.fn();
+    return { useSyncStore };
+});
 
 vi.mock('react-router-dom', () => ({
     useNavigate: vi.fn(),
