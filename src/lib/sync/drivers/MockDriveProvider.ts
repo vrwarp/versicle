@@ -55,7 +55,7 @@ export class MockDriveProvider implements RemoteStorageProvider {
     }
   }
 
-  async initialize(_config: { clientId?: string; apiKey?: string }): Promise<void> {
+  async initialize(): Promise<void> {
     await this.simulateLatency();
     if (this.shouldFailAuth) {
       throw new Error('Mock Auth Failed');

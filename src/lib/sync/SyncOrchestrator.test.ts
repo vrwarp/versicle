@@ -34,7 +34,7 @@ describe('SyncOrchestrator', () => {
         vi.clearAllMocks();
         // Reset singleton (if possible, or just create new instance since we passed provider)
         // Accessing private instance for test isolation if needed, but constructor sets it.
-        orchestrator = new SyncOrchestrator(mockProvider as any);
+        orchestrator = new SyncOrchestrator(mockProvider as unknown as import('./drivers/SyncProvider').SyncProvider);
 
         // Mock Store state
         useSyncStore.setState({
@@ -96,11 +96,11 @@ describe('SyncOrchestrator', () => {
             readingList: {},
             transientState: { ttsPositions: {} },
             deviceRegistry: {}
-        } as any;
+        } as unknown as import('../../types/db').SyncManifest;
 
         mockProvider.getManifest.mockResolvedValue(fullManifest);
 
-        (SyncManager.mergeManifests as any).mockReturnValue(fullManifest);
+        vi.mocked(SyncManager.mergeManifests).mockReturnValue(fullManifest);
 
         await orchestrator.forcePush('test');
 

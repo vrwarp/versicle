@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { SyncManifest, BookMetadata, ReadingHistoryEntry, Annotation, LexiconRule, ReadingListEntry, TTSPosition } from '../../types/db';
+import type { SyncManifest, Annotation, LexiconRule } from '../../types/db';
 import { SyncManager } from './SyncManager';
 
 // Mock cfi-utils since it's used in SyncManager
@@ -7,7 +7,7 @@ import { SyncManager } from './SyncManager';
 // However, for integration correctness, a simple functional mock is better than a no-op.
 vi.mock('../cfi-utils', async (importOriginal) => {
     return {
-        ...await importOriginal<any>(),
+        ...await importOriginal<unknown>(),
         mergeCfiRanges: (ranges: string[]) => {
             // Simple mock: dedupe and sort
             return Array.from(new Set(ranges)).sort();
@@ -73,14 +73,14 @@ describe('SyncManager', () => {
     it('should union read ranges', () => {
       const local = createBaseManifest('local');
       local.books['b1'] = {
-        metadata: {},
+        metadata: { id: 'b1', title: 'T1', author: 'A1', addedAt: 0 },
         history: { bookId: 'b1', readRanges: ['cfi1'], sessions: [], lastUpdated: 100 },
         annotations: []
       };
 
       const remote = createBaseManifest('remote');
       remote.books['b1'] = {
-        metadata: {},
+        metadata: { id: 'b1', title: 'T1', author: 'A1', addedAt: 0 },
         history: { bookId: 'b1', readRanges: ['cfi2'], sessions: [], lastUpdated: 200 },
         annotations: []
       };
@@ -97,10 +97,10 @@ describe('SyncManager', () => {
       const a2: Annotation = { id: 'a2', bookId: 'b1', cfiRange: 'c2', text: 't2', type: 'note', color: 'blue', created: 200 };
 
       const local = createBaseManifest('local');
-      local.books['b1'] = { metadata: {}, history: { bookId:'b1', readRanges:[], sessions:[], lastUpdated:0 }, annotations: [a1] };
+      local.books['b1'] = { metadata: { id: 'b1', title: 'T1', author: 'A1', addedAt: 0 }, history: { bookId:'b1', readRanges:[], sessions:[], lastUpdated:0 }, annotations: [a1] };
 
       const remote = createBaseManifest('remote');
-      remote.books['b1'] = { metadata: {}, history: { bookId:'b1', readRanges:[], sessions:[], lastUpdated:0 }, annotations: [a2] };
+      remote.books['b1'] = { metadata: { id: 'b1', title: 'T1', author: 'A1', addedAt: 0 }, history: { bookId:'b1', readRanges:[], sessions:[], lastUpdated:0 }, annotations: [a2] };
 
       const merged = SyncManager.mergeManifests(local, remote);
       expect(merged.books['b1'].annotations).toHaveLength(2);
@@ -112,10 +112,10 @@ describe('SyncManager', () => {
       const a1_mod: Annotation = { id: 'a1', bookId: 'b1', cfiRange: 'c1', text: 't1_mod', type: 'highlight', color: 'red', created: 100 };
 
       const local = createBaseManifest('local');
-      local.books['b1'] = { metadata: {}, history: { bookId:'b1', readRanges:[], sessions:[], lastUpdated:0 }, annotations: [a1] };
+      local.books['b1'] = { metadata: { id: 'b1', title: 'T1', author: 'A1', addedAt: 0 }, history: { bookId:'b1', readRanges:[], sessions:[], lastUpdated:0 }, annotations: [a1] };
 
       const remote = createBaseManifest('remote');
-      remote.books['b1'] = { metadata: {}, history: { bookId:'b1', readRanges:[], sessions:[], lastUpdated:0 }, annotations: [a1_mod] };
+      remote.books['b1'] = { metadata: { id: 'b1', title: 'T1', author: 'A1', addedAt: 0 }, history: { bookId:'b1', readRanges:[], sessions:[], lastUpdated:0 }, annotations: [a1_mod] };
 
       const merged = SyncManager.mergeManifests(local, remote);
       // Implementation detail: Using Map sets usually keeps the last one inserted if we iterate local then remote?
@@ -147,10 +147,12 @@ describe('SyncManager', () => {
       it('should preserve unknown fields from remote manifest', () => {
           const local = createBaseManifest('local');
           const remote = createBaseManifest('remote');
-          (remote as any).newFeatureField = 'someValue';
+          // @ts-expect-error - testing unexpected fields
+          remote.newFeatureField = 'someValue';
 
           const merged = SyncManager.mergeManifests(local, remote);
-          expect((merged as any).newFeatureField).toBe('someValue');
+          // @ts-expect-error - testing unexpected fields
+          expect(merged.newFeatureField).toBe('someValue');
       });
   });
 });

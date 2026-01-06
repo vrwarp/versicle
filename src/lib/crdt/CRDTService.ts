@@ -33,7 +33,7 @@ export class CRDTService {
 
   // Typed getters for the shared structures
   get books() {
-    return this.doc.getMap<Y.Map<any>>(CRDT_KEYS.BOOKS);
+    return this.doc.getMap<Y.Map<unknown>>(CRDT_KEYS.BOOKS);
   }
 
   get annotations() {

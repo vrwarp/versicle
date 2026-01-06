@@ -1,18 +1,36 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GoogleDriveProvider } from './GoogleDriveProvider';
-import type { SyncManifest } from '../../../types/db';
 
 describe('GoogleDriveProvider', () => {
     let provider: GoogleDriveProvider;
-    let mockGapi: any;
-    let mockGoogle: any;
+    let mockGapi: {
+        load: (lib: string, cb: () => void) => void;
+        client: {
+            init: ReturnType<typeof vi.fn>;
+            getToken: ReturnType<typeof vi.fn>;
+            drive: {
+                files: {
+                    list: ReturnType<typeof vi.fn>;
+                    get: ReturnType<typeof vi.fn>;
+                    create: ReturnType<typeof vi.fn>;
+                }
+            }
+        };
+    };
+    let mockGoogle: {
+        accounts: {
+            oauth2: {
+                initTokenClient: ReturnType<typeof vi.fn>;
+            }
+        };
+    };
 
     beforeEach(() => {
         provider = new GoogleDriveProvider();
 
         // Mock Globals
         mockGapi = {
-            load: vi.fn((lib, cb) => cb()),
+            load: vi.fn((_lib, cb) => cb()),
             client: {
                 init: vi.fn().mockResolvedValue(undefined),
                 getToken: vi.fn().mockReturnValue({ access_token: 'mock_token' }),
@@ -26,7 +44,8 @@ describe('GoogleDriveProvider', () => {
                 }
             }
         };
-        (window as any).gapi = mockGapi;
+        // @ts-expect-error - mock global
+        window.gapi = mockGapi;
 
         mockGoogle = {
             accounts: {
@@ -37,7 +56,8 @@ describe('GoogleDriveProvider', () => {
                 }
             }
         };
-        (window as any).google = mockGoogle;
+        // @ts-expect-error - mock global
+        window.google = mockGoogle;
 
         // Mock Fetch
         global.fetch = vi.fn();
@@ -56,7 +76,7 @@ describe('GoogleDriveProvider', () => {
     it('should authenticate on demand', async () => {
         // Prepare mock that triggers callback automatically
         // We need a mutable object because Provider overwrites .callback
-        mockGoogle.accounts.oauth2.initTokenClient.mockImplementation((config: any) => {
+        mockGoogle.accounts.oauth2.initTokenClient.mockImplementation((config: { callback: (token: { access_token: string }) => void }) => {
             const clientMock = {
                 callback: config.callback,
                 requestAccessToken: vi.fn(() => {
@@ -76,20 +96,24 @@ describe('GoogleDriveProvider', () => {
 
     it('should search for manifest file', async () => {
         await provider.initialize({ clientId: 'cid', apiKey: 'key' });
-        (provider as any).accessToken = 'token'; // Bypass auth check
+        // @ts-expect-error - access private
+        provider.accessToken = 'token'; // Bypass auth check
 
         mockGapi.client.drive.files.list.mockResolvedValue({
             result: { files: [{ id: 'file_123' }] }
         });
 
-        const id = await (provider as any).findManifestFileId();
+        // @ts-expect-error - access private
+        const id = await provider.findManifestFileId();
         expect(id).toBe('file_123');
     });
 
     it('should get manifest', async () => {
         await provider.initialize({ clientId: 'cid', apiKey: 'key' });
-        (provider as any).accessToken = 'token';
-        (provider as any).manifestFileId = 'file_123';
+        // @ts-expect-error - access private
+        provider.accessToken = 'token';
+        // @ts-expect-error - access private
+        provider.manifestFileId = 'file_123';
 
         const mockManifest = { version: 1 };
         mockGapi.client.drive.files.get.mockResolvedValue({
@@ -102,12 +126,13 @@ describe('GoogleDriveProvider', () => {
 
     it('should upload manifest (create new)', async () => {
         await provider.initialize({ clientId: 'cid', apiKey: 'key' });
-        (provider as any).accessToken = 'token';
+        // @ts-expect-error - access private
+        provider.accessToken = 'token';
 
         // Mock find returning null
         mockGapi.client.drive.files.list.mockResolvedValue({ result: { files: [] } });
 
-        await provider.uploadManifest({ version: 1 } as any);
+        await provider.uploadManifest({ version: 1 } as unknown as import('../../../types/db').SyncManifest);
 
         expect(fetch).toHaveBeenCalledWith(
             expect.stringContaining('upload/drive/v3/files?uploadType=multipart'),

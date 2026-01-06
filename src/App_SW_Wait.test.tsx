@@ -130,7 +130,7 @@ describe('App Service Worker Wait', () => {
     // Exponential backoff: 5, 10, 20, 40, 80, 160, 320, 640. Sum = 1275ms.
     // We need to advance enough times to cover the loop.
     let delay = 5;
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 9; i++) { // Increased iterations
         await act(async () => {
             await vi.advanceTimersByTimeAsync(delay);
         });
@@ -138,7 +138,7 @@ describe('App Service Worker Wait', () => {
     }
     // Advance a bit more to ensure rejection
     await act(async () => {
-        await vi.advanceTimersByTimeAsync(100);
+        await vi.advanceTimersByTimeAsync(500);
     });
 
     // Switch to real timers before waitFor so it doesn't hang

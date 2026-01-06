@@ -186,12 +186,12 @@ export class SyncOrchestrator {
             };
         }
 
-        const readingList: Record<string, any> = {};
+        const readingList: Record<string, import('../../types/db').ReadingListEntry> = {};
         for (const rl of readingListList) {
             readingList[rl.filename] = rl;
         }
 
-        const ttsPosMap: Record<string, any> = {};
+        const ttsPosMap: Record<string, import('../../types/db').TTSPosition> = {};
         for (const tp of ttsPositions) {
             ttsPosMap[tp.bookId] = tp;
         }
