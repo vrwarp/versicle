@@ -140,7 +140,7 @@ def test_smart_toc_failure(page):
     expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
 
     # Verify TOC is not empty
-    expect(page.locator(".toc-item").first).to_be_visible()
+    expect(page.locator('[data-testid^="toc-item-"]').first).to_be_visible()
 
     page.get_by_label("Generated Titles").click()
 
