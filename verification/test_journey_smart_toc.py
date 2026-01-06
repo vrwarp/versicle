@@ -138,13 +138,17 @@ def test_smart_toc_failure(page):
 
     page.get_by_test_id("reader-toc-button").click()
     expect(page.get_by_test_id("reader-toc-sidebar")).to_be_visible()
+
+    # Verify TOC is not empty
+    expect(page.locator(".toc-item").first).to_be_visible()
+
     page.get_by_label("Generated Titles").click()
 
     page.get_by_role("button", name="Enhance Titles with AI").click()
 
     # Check for success toast (false positive)
     if page.get_by_text("Table of Contents enhanced successfully!").is_visible():
-        print("FAILURE: Got success toast instead of error! Chapters likely empty.")
+        print("FAILURE: Got success toast instead of error! Chapters likely empty or mock error ignored.")
 
     # Expect failure toast
     try:
