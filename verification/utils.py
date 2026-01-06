@@ -36,13 +36,23 @@ def reset_app(page: Page):
     # Explicitly clear IDB and LocalStorage to ensure a clean slate
     page.evaluate("""
         async () => {
+            // Close CRDT connection if available to prevent blocking IDB deletion
+            if (window.__VERSICLE_CRDT_RESET__) {
+                window.__VERSICLE_CRDT_RESET__();
+            }
+
             const dbs = await window.indexedDB.databases();
             for (const db of dbs) {
                 await new Promise((resolve, reject) => {
                     const req = window.indexedDB.deleteDatabase(db.name);
                     req.onsuccess = resolve;
                     req.onerror = reject;
-                    req.onblocked = resolve;
+                    req.onblocked = () => {
+                        console.warn(`Database deletion blocked: ${db.name}`);
+                        // If blocked, we resolve anyway to try to proceed,
+                        // but usually this means the delete failed or is pending.
+                        resolve();
+                    };
                 });
             }
             localStorage.clear();

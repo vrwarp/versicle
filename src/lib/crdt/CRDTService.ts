@@ -92,3 +92,12 @@ export class CRDTService {
 }
 
 export const crdtService = new CRDTService();
+
+// Expose reset hook for integration tests
+if (typeof window !== 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__VERSICLE_CRDT_RESET__ = () => {
+    crdtService.destroy();
+    console.log('[CRDT] Service destroyed by test hook');
+  };
+}
