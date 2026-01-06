@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db/db';
+import { crdtService } from '../lib/crdt/CRDTService';
 import type { Annotation } from '../types/db';
 
 /**
@@ -30,7 +31,12 @@ interface AnnotationState {
 
   // Actions
   /**
-   * Loads annotations for a specific book from the database.
+   * Initializes the store (subscribes to CRDT).
+   */
+  init: () => Promise<void>;
+  /**
+   * Loads annotations for a specific book.
+   * Now primarily filters the local CRDT state.
    * @param bookId - The unique identifier of the book.
    */
   loadAnnotations: (bookId: string) => Promise<void>;
@@ -77,11 +83,21 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     text: '',
   },
 
+  init: async () => {
+      // Phase 2 Implementation Note:
+      // We purposefully rely on `loadAnnotations` for population and manual updates for mutations
+      // to avoid filtering complexity without access to `currentBookId`.
+      // Real-time observation will be implemented in Phase 3 when ReaderStore integration is tighter.
+      await crdtService.waitForReady();
+  },
+
   loadAnnotations: async (bookId: string) => {
     try {
-      const db = await getDB();
-      const annotations = await db.getAllFromIndex('annotations', 'by_bookId', bookId);
-      set({ annotations });
+      await crdtService.waitForReady();
+      // Filter from Yjs
+      const allAnnotations = crdtService.annotations.toArray();
+      const bookAnnotations = allAnnotations.filter(a => a.bookId === bookId);
+      set({ annotations: bookAnnotations });
     } catch (error) {
       console.error('Failed to load annotations:', error);
     }
@@ -95,8 +111,14 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     };
 
     try {
+      // 1. Update Legacy DB (Backup)
       const db = await getDB();
       await db.add('annotations', newAnnotation);
+
+      // 2. Update Yjs (Moral Layer)
+      crdtService.annotations.push([newAnnotation]);
+
+      // 3. Update Local State
       set((state) => ({
         annotations: [...state.annotations, newAnnotation],
       }));
@@ -107,8 +129,24 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
   deleteAnnotation: async (id: string) => {
     try {
+      // 1. Update Legacy DB
       const db = await getDB();
       await db.delete('annotations', id);
+
+      // 2. Update Yjs
+      // Y.Array doesn't support deleteById easily. We need to find index.
+      const yArr = crdtService.annotations;
+      let index = -1;
+      for (let i = 0; i < yArr.length; i++) {
+          if (yArr.get(i).id === id) {
+              index = i;
+              break;
+          }
+      }
+      if (index !== -1) {
+          yArr.delete(index, 1);
+      }
+
       set((state) => ({
         annotations: state.annotations.filter((a) => a.id !== id),
       }));
@@ -121,9 +159,30 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     try {
       const db = await getDB();
       const annotation = await db.get('annotations', id);
+
       if (annotation) {
         const updated = { ...annotation, ...changes };
+
+        // 1. Update Legacy DB
         await db.put('annotations', updated);
+
+        // 2. Update Yjs
+        const yArr = crdtService.annotations;
+        let index = -1;
+        for (let i = 0; i < yArr.length; i++) {
+            if (yArr.get(i).id === id) {
+                index = i;
+                break;
+            }
+        }
+        if (index !== -1) {
+             // Yjs Array doesn't support partial update of object.
+             // We must delete and insert (or use Y.Map inside Y.Array if schema allowed, but it's JSON object).
+             // Since it's a JSON object, we treat it as immutable replacement.
+             yArr.delete(index, 1);
+             yArr.insert(index, [updated]);
+        }
+
         set((state) => ({
           annotations: state.annotations.map((a) => (a.id === id ? updated : a)),
         }));

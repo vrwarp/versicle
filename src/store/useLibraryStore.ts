@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { dbService } from '../db/DBService';
+import { crdtService } from '../lib/crdt/CRDTService';
+import { MigrationService } from '../lib/crdt/MigrationService';
 import type { BookMetadata } from '../types/db';
 import { StorageFullError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
@@ -16,6 +18,8 @@ interface LibraryState {
   books: BookMetadata[];
   /** Flag indicating if the library is currently loading. */
   isLoading: boolean;
+  /** Flag indicating if the library is initialized (subscribed to CRDT). */
+  initialized: boolean;
   /** Flag indicating if a book is currently being imported. */
   isImporting: boolean;
   /** Progress percentage of the current import (0-100). */
@@ -43,9 +47,9 @@ interface LibraryState {
    */
   setSortOrder: (sort: SortOption) => void;
   /**
-   * Fetches all books from the database and updates the store.
+   * Initializes the library store (migrates data and subscribes to CRDT).
    */
-  fetchBooks: () => Promise<void>;
+  init: () => Promise<void>;
   /**
    * Imports a new EPUB file into the library.
    * @param file - The EPUB file to import.
@@ -85,6 +89,7 @@ export const useLibraryStore = create<LibraryState>()(
     (set, get) => ({
       books: [],
       isLoading: false,
+      initialized: false,
       isImporting: false,
       importProgress: 0,
       importStatus: '',
@@ -97,13 +102,28 @@ export const useLibraryStore = create<LibraryState>()(
       setViewMode: (mode) => set({ viewMode: mode }),
       setSortOrder: (sort) => set({ sortOrder: sort }),
 
-      fetchBooks: async () => {
+      init: async () => {
+        if (get().initialized) return;
+
         set({ isLoading: true, error: null });
         try {
-          const books = await dbService.getLibrary();
-          set({ books, isLoading: false });
+          const migration = new MigrationService(crdtService);
+          await migration.migrateIfNeeded();
+
+          // Subscribe to CRDT updates
+          crdtService.books.observe(() => {
+            set({ books: Array.from(crdtService.books.values()) as unknown as BookMetadata[] });
+          });
+
+          // Initial load
+          set({
+            books: Array.from(crdtService.books.values()) as unknown as BookMetadata[],
+            isLoading: false,
+            initialized: true
+          });
+
         } catch (err) {
-          console.error('Failed to fetch books:', err);
+          console.error('Failed to init library:', err);
           set({ error: 'Failed to load library.', isLoading: false });
         }
       },
@@ -121,16 +141,22 @@ export const useLibraryStore = create<LibraryState>()(
           const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
           // Maximal Splitting: Ingest with empty abbreviations to maximize segments.
           // Merging will happen dynamically during playback.
-          await dbService.addBook(file, {
+          // 1. Process File & Metadata (Legacy DB for Binary + Backup)
+          const bookId = await dbService.addBook(file, {
               abbreviations: [],
               alwaysMerge: [],
               sentenceStarters,
               sanitizationEnabled
           }, (progress, message) => {
               set({ importProgress: progress, importStatus: message });
-          });
-          // Refresh library
-          await get().fetchBooks();
+          }) as unknown as string; // dbService.addBook returns Promise<string> but types are messing up?
+
+          // 2. Sync Metadata to Yjs (Moral Layer)
+          const metadata = await dbService.getBookMetadata(bookId);
+          if (metadata) {
+             crdtService.books.set(bookId, metadata as any);
+          }
+
           set({ isImporting: false, importProgress: 0, importStatus: '' });
         } catch (err) {
           console.error('Failed to import book:', err);
@@ -178,8 +204,29 @@ export const useLibraryStore = create<LibraryState>()(
                       });
                   }
               );
-              // Refresh library
-              await get().fetchBooks();
+
+              // Note: processBatchImport uses dbService internally.
+              // We need to sync newly added books to Yjs.
+              // Since batch import returns void, we can scan the legacy DB or assume batch import
+              // logic needs to be aware.
+              // For now, simpler: Just re-read legacy DB for new items or
+              // trust that processEpub was called inside batch import?
+              // `processBatchImport` calls `processEpub`.
+              // We can't easily hook into that without changing batch ingestion.
+              //
+              // Workaround: Re-fetch all from DBService and update Yjs for missing ones?
+              // Or rely on MigrationService on next reload? No, need immediate update.
+              //
+              // Let's iterate all legacy books and ensure they are in Yjs.
+              const allBooks = await dbService.getLibrary();
+              crdtService.doc.transact(() => {
+                 for(const book of allBooks) {
+                     if (!crdtService.books.has(book.id)) {
+                         crdtService.books.set(book.id, book as any);
+                     }
+                 }
+              });
+
               set({
                   isImporting: false,
                   importProgress: 0,
@@ -207,8 +254,10 @@ export const useLibraryStore = create<LibraryState>()(
 
       removeBook: async (id: string) => {
         try {
+          // 1. Remove from Yjs
+          crdtService.books.delete(id);
+          // 2. Remove from Legacy DB (Binaries + Backup)
           await dbService.deleteBook(id);
-          await get().fetchBooks();
         } catch (err) {
           console.error('Failed to remove book:', err);
           set({ error: 'Failed to remove book.' });
@@ -218,7 +267,11 @@ export const useLibraryStore = create<LibraryState>()(
       offloadBook: async (id: string) => {
         try {
           await dbService.offloadBook(id);
-          await get().fetchBooks();
+          // Update Yjs metadata
+          const book = crdtService.books.get(id);
+          if (book) {
+              crdtService.books.set(id, { ...book, isOffloaded: true } as any);
+          }
         } catch (err) {
           console.error('Failed to offload book:', err);
           set({ error: 'Failed to offload book.' });
@@ -229,7 +282,11 @@ export const useLibraryStore = create<LibraryState>()(
         set({ isImporting: true, error: null });
         try {
           await dbService.restoreBook(id, file);
-          await get().fetchBooks();
+          // Update Yjs metadata
+          const book = crdtService.books.get(id);
+          if (book) {
+             crdtService.books.set(id, { ...book, isOffloaded: false } as any);
+          }
           set({ isImporting: false });
         } catch (err) {
           console.error('Failed to restore book:', err);

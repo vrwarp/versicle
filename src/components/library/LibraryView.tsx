@@ -28,7 +28,7 @@ export const LibraryView: React.FC = () => {
   // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
   const {
     books,
-    fetchBooks,
+    // fetchBooks,
     isLoading,
     error,
     addBook,
@@ -40,7 +40,7 @@ export const LibraryView: React.FC = () => {
     setSortOrder
   } = useLibraryStore(useShallow(state => ({
     books: state.books,
-    fetchBooks: state.fetchBooks,
+    // fetchBooks: state.fetchBooks,
     isLoading: state.isLoading,
     error: state.error,
     addBook: state.addBook,
@@ -82,9 +82,11 @@ export const LibraryView: React.FC = () => {
     }
   }, [location.state]);
 
+  const init = useLibraryStore((state) => state.init);
+
   useEffect(() => {
-    fetchBooks();
-  }, [fetchBooks]);
+    init();
+  }, [init]);
 
   const handleBookOpen = useCallback((book: BookMetadata) => {
     const effectiveVersion = book.version ?? 0;

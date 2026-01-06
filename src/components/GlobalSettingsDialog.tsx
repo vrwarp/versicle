@@ -59,13 +59,15 @@ export const GlobalSettingsDialog = () => {
 
     const {
         addBooks,
-        fetchBooks,
+        // fetchBooks,
         isImporting,
         importProgress,
         importStatus,
         uploadProgress,
         uploadStatus
     } = useLibraryStore();
+    // Re-expose fetchBooks locally if needed or remove usage
+    const fetchBooks = useLibraryStore(state => state.init);
     const showToast = useToastStore(state => state.showToast);
     const { currentTheme, setTheme } = useReaderStore(useShallow(state => ({
         currentTheme: state.currentTheme,

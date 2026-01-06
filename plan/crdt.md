@@ -3,7 +3,7 @@ Design Document: Versicle CRDT-Based State Syncing (Yjs)
 
 **Author:** Gemini
 
-**Status:** Draft / Conceptual
+**Status:** Implementation Phase 2 Complete
 
 **Target:** Replace manual LWW/CFI merging with Yjs CRDTs for absolute data consistency across high-latency or high-concurrency environments.
 
@@ -143,24 +143,23 @@ For extremely large libraries (1000+ books), reconstructing the doc from Indexed
 
 1.  **Phase 1 (Proof of Concept):** Implement a standalone `Y.Doc` in a test environment and verify that two separate tabs can sync via a shared binary blob.
 
-2.  **Phase 2 (The Bridge):** Implement the `HydrationService` to move v1 data into Yjs.
+2.  **Phase 2 (The Bridge):** Implement the `MigrationService` to move v1 data into Yjs.
 
 3.  **Phase 3 (Store Refactor):** Rewrite `useLibraryStore` to act as a reactive wrapper around `yDoc.getMap('books')`.
 
 4.  **Phase 4 (Cloud Sync):** Refactor `SyncOrchestrator` to use `Y.applyUpdate` instead of `SyncManager.mergeManifests`.
 
-## Phase 1 Execution Report (Deviations & Findings)
+## Execution Report
 
-**Status:** Phase 1 Complete.
+**Phase 1 (Completed):**
+- Core `CRDTService` implemented with `yjs` and `y-indexeddb`.
+- Typescript schema `VersicleDocSchema` defined.
+- Comprehensive integration tests created (`src/lib/crdt/tests/unit/CRDTService.test.ts`) verifying convergence, history accumulation, and persistence.
 
-**Implementation Summary:**
-- **Core:** The `CRDTService` has been implemented in `src/lib/crdt/CRDTService.ts`, utilizing `yjs` and `y-indexeddb`.
-- **Schema:** A strict TypeScript schema `VersicleDocSchema` was defined in `src/lib/crdt/types.ts` to map the "Moral Layer" entities (Books, Annotations, History) to Yjs structures.
-- **Testing:** Instead of a manual "debug page", a comprehensive automated test suite (`src/lib/crdt/tests/CRDTService.test.ts`) was created. It uses `fake-indexeddb` to simulate multiple isolated instances (devices) and validates:
-    - **Convergence:** Concurrent metadata updates from different instances merge correctly.
-    - **History:** CFI ranges from different instances are unioned in the shared `Y.Array`.
-    - **Persistence:** Data survives service re-instantiation.
-
-**Findings:**
-- **Compaction:** While the plan called for periodic `Y.encodeStateAsUpdate`, `y-indexeddb` handles incremental updates efficiently. A `compact()` method was added to the service to return the current snapshot size, but manual replacement of the persistence layer was not necessary for basic functionality.
-- **Testing Strategy:** Automated tests proved far more effective than a manual debug view for verifying convergence scenarios and ensuring no "split-brain" timestamp issues.
+**Phase 2 (Completed):**
+- **Migration:** `MigrationService` (`src/lib/crdt/MigrationService.ts`) implements a one-way hydration strategy. On app startup, if the Yjs `books` map is empty, it populates the CRDT with metadata from the legacy `DBService` (IndexedDB). It handles books, annotations, history, and reading list.
+- **Store Integration:**
+    - `useLibraryStore`: Refactored to initialize via `MigrationService`. It subscribes to `crdtService.books` to update the UI state. Writes (add/remove/offload) are dual-written to both legacy `DBService` (for binary assets and backup) and `CRDTService` (as the new source of truth for metadata).
+    - `useAnnotationStore`: Refactored to read from `CRDTService` on load. Writes (add/update/delete) are performed on both legacy DB and Yjs CRDT.
+- **Testing:** Unit tests added (`src/lib/crdt/tests/unit/MigrationService.test.ts`) to verify migration logic (skipping if populated, migrating if empty).
+- **Architecture Note:** We introduced an `initialized` flag in `useLibraryStore` to prevent duplicate subscriptions to the CRDT observer, ensuring memory safety.

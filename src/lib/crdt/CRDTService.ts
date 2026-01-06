@@ -90,3 +90,5 @@ export class CRDTService {
     this.doc.destroy();
   }
 }
+
+export const crdtService = new CRDTService();
