@@ -10,7 +10,9 @@ vi.mock('./db/db', () => ({
 
 vi.mock('./db/DBService', () => ({
   dbService: {
-    cleanup: vi.fn()
+    cleanup: vi.fn(),
+    setCRDTService: vi.fn(),
+    setMode: vi.fn()
   }
 }));
 
