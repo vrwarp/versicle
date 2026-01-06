@@ -164,6 +164,18 @@ For extremely large libraries (1000+ books), reconstructing the doc from Indexed
 **Findings:**
 - **Compaction:** While the plan called for periodic `Y.encodeStateAsUpdate`, `y-indexeddb` handles incremental updates efficiently. A `compact()` method was added to the service to return the current snapshot size, but manual replacement of the persistence layer was not necessary for basic functionality.
 - **Testing Strategy:** Automated tests proved far more effective than a manual debug view for verifying convergence scenarios and ensuring no "split-brain" timestamp issues.
+
+## Phase 2A Execution Report (Deviations & Findings)
+
+**Status:** Phase 2A Complete.
+
+**Implementation Summary:**
+- **The Shunt:** `DBService` now supports `'legacy' | 'shadow' | 'crdt'` modes. 'Shadow' mode implements dual-writing to IndexedDB and Yjs for `addBook` and `updateBookMetadata`.
+- **Legacy Storage Bridge:** A new `LegacyStorageBridge` migrates local storage keys (like theme and sync settings) to a new `settings` map in the Yjs doc.
+- **Hydration Guard:** The app is now wrapped in a `HydrationGuard` that ensures the CRDT layer is synced with IndexedDB before rendering.
+
+**Findings:**
+- **Global Settings:** We introduced a new top-level `settings` map in the `Y.Doc` to handle global app state, which was not explicitly defined in the original schema.
 Design Document: CRDT Phase 2 - Gradual Data Migration & Store Refactor
 =======================================================================
 
