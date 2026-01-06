@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GoogleDriveProvider } from './GoogleDriveProvider';
+import type { SyncManifest } from '../../../types/db';
 
 describe('GoogleDriveProvider', () => {
     let provider: GoogleDriveProvider;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockGapi: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockGoogle: any;
 
     beforeEach(() => {
@@ -13,8 +12,7 @@ describe('GoogleDriveProvider', () => {
 
         // Mock Globals
         mockGapi = {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            load: vi.fn((lib: any, cb: any) => cb()),
+            load: vi.fn((lib, cb) => cb()),
             client: {
                 init: vi.fn().mockResolvedValue(undefined),
                 getToken: vi.fn().mockReturnValue({ access_token: 'mock_token' }),
@@ -28,7 +26,6 @@ describe('GoogleDriveProvider', () => {
                 }
             }
         };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).gapi = mockGapi;
 
         mockGoogle = {
@@ -40,7 +37,6 @@ describe('GoogleDriveProvider', () => {
                 }
             }
         };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).google = mockGoogle;
 
         // Mock Fetch
@@ -60,14 +56,12 @@ describe('GoogleDriveProvider', () => {
     it('should authenticate on demand', async () => {
         // Prepare mock that triggers callback automatically
         // We need a mutable object because Provider overwrites .callback
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mockGoogle.accounts.oauth2.initTokenClient.mockImplementation((config: any) => {
             const clientMock = {
                 callback: config.callback,
                 requestAccessToken: vi.fn(() => {
                     // Call the current callback property
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    setTimeout(() => (clientMock as any).callback({ access_token: 'new_token' }), 0);
+                    setTimeout(() => clientMock.callback({ access_token: 'new_token' }), 0);
                 })
             };
             return clientMock;
@@ -82,23 +76,19 @@ describe('GoogleDriveProvider', () => {
 
     it('should search for manifest file', async () => {
         await provider.initialize({ clientId: 'cid', apiKey: 'key' });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (provider as any).accessToken = 'token'; // Bypass auth check
 
         mockGapi.client.drive.files.list.mockResolvedValue({
             result: { files: [{ id: 'file_123' }] }
         });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const id = await (provider as any).findManifestFileId();
         expect(id).toBe('file_123');
     });
 
     it('should get manifest', async () => {
         await provider.initialize({ clientId: 'cid', apiKey: 'key' });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (provider as any).accessToken = 'token';
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (provider as any).manifestFileId = 'file_123';
 
         const mockManifest = { version: 1 };
@@ -112,13 +102,11 @@ describe('GoogleDriveProvider', () => {
 
     it('should upload manifest (create new)', async () => {
         await provider.initialize({ clientId: 'cid', apiKey: 'key' });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (provider as any).accessToken = 'token';
 
         // Mock find returning null
         mockGapi.client.drive.files.list.mockResolvedValue({ result: { files: [] } });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await provider.uploadManifest({ version: 1 } as any);
 
         expect(fetch).toHaveBeenCalledWith(

@@ -9,7 +9,7 @@ export interface VersicleDocSchema {
    * Keyed by bookId.
    * Value: A child Y.Map containing BookMetadata fields.
    */
-  books: Y.Map<Y.Map<unknown>>;
+  books: Y.Map<Y.Map<any>>;
 
   /**
    * Global append-only array of user highlights.

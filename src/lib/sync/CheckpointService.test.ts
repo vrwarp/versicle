@@ -4,6 +4,7 @@ import type { SyncManifest } from '../../types/db';
 
 // Mock getDB
 const mockAdd = vi.fn();
+const mockPut = vi.fn();
 const mockCount = vi.fn();
 const mockOpenCursor = vi.fn();
 const mockGet = vi.fn();

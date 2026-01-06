@@ -57,26 +57,6 @@ describe('Sync Schema Exhaustion', () => {
     }
   });
 
-  it('should validate SyncManifest structure', () => {
-    // Basic structure check
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _syncManifest = {
-      version: 1,
-      lastUpdated: 123456789,
-      deviceId: 'device-id',
-      books: {},
-      lexicon: [],
-      readingList: {},
-      transientState: { ttsPositions: {} },
-      deviceRegistry: {}
-    };
-
-    // This test ensures that the type definitions match expected runtime shape if we were to validate it.
-    // For now, it's a compile-time check that the object literal satisfies the interface.
-    // We can add runtime validation logic here if needed.
-    // expect(isValidSyncManifest(_syncManifest)).toBe(true);
-  });
-
   it('should ensure every Store in EpubLibraryDB has a corresponding sync strategy', () => {
     // This part requires us to parse `src/db/db.ts` to find the `EpubLibraryDB` interface.
     const project = new Project();
@@ -88,8 +68,7 @@ describe('Sync Schema Exhaustion', () => {
     const syncManifestFile = project.addSourceFileAtPath(
         path.resolve(__dirname, '../../types/db.ts')
     );
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _syncManifest = syncManifestFile.getInterfaceOrThrow('SyncManifest');
+    const syncManifest = syncManifestFile.getInterfaceOrThrow('SyncManifest');
 
     const dbStores = dbInterface.getProperties().map(p => p.getName());
 

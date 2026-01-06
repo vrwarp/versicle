@@ -9,7 +9,6 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
   private clientId: string = '';
   private apiKey: string = '';
   private initialized: boolean = false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private tokenClient: any; // google.accounts.oauth2.TokenClient
   private accessToken: string | null = null;
   private manifestFileId: string | null = null;
@@ -33,7 +32,6 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
 
   private loadGapiScripts(): Promise<void> {
     return new Promise((resolve, reject) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((window as any).gapi && (window as any).google?.accounts) {
             resolve();
             return;
@@ -57,9 +55,7 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
 
   private initGapiClient(): Promise<void> {
     return new Promise((resolve, reject) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const gapi = (window as any).gapi;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const google = (window as any).google;
 
         gapi.load('client', async () => {
@@ -72,7 +68,6 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
                 this.tokenClient = google.accounts.oauth2.initTokenClient({
                     client_id: this.clientId,
                     scope: 'https://www.googleapis.com/auth/drive.appdata',
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     callback: (resp: any) => {
                          if (resp.error) {
                              throw resp;
@@ -94,7 +89,6 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
       if (!this.tokenClient) throw new Error("GAPI not initialized");
       return new Promise((resolve) => {
            // We need to override the callback to capture the resolution
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
            this.tokenClient.callback = (resp: any) => {
                 if (resp.error) {
                     console.error("Auth Error", resp);
@@ -115,7 +109,6 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
     if (!fileId) return null;
 
     try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const gapi = (window as any).gapi;
         const response = await gapi.client.drive.files.get({
             fileId: fileId,
@@ -128,7 +121,7 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
     }
   }
 
-  async uploadManifest(manifest: SyncManifest): Promise<void> {
+  async uploadManifest(manifest: SyncManifest, _previousVersion?: number): Promise<void> {
     if (!this.isAuthenticated()) await this.signIn();
 
     const fileId = this.manifestFileId || await this.findManifestFileId();
@@ -144,7 +137,6 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
     form.append('file', new Blob([fileContent], { type: 'application/json' }));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const gapi = (window as any).gapi;
     const accessToken = gapi.client.getToken()?.access_token || this.accessToken;
 
@@ -175,7 +167,6 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
     const fileId = await this.findManifestFileId();
     if (!fileId) return null;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const gapi = (window as any).gapi;
     const response = await gapi.client.drive.files.get({
         fileId: fileId,
@@ -188,7 +179,6 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
   private async findManifestFileId(): Promise<string | null> {
       if (this.manifestFileId) return this.manifestFileId;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gapi = (window as any).gapi;
       try {
           const response = await gapi.client.drive.files.list({
