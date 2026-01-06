@@ -164,3 +164,17 @@ For extremely large libraries (1000+ books), reconstructing the doc from Indexed
 **Findings:**
 - **Compaction:** While the plan called for periodic `Y.encodeStateAsUpdate`, `y-indexeddb` handles incremental updates efficiently. A `compact()` method was added to the service to return the current snapshot size, but manual replacement of the persistence layer was not necessary for basic functionality.
 - **Testing Strategy:** Automated tests proved far more effective than a manual debug view for verifying convergence scenarios and ensuring no "split-brain" timestamp issues.
+
+## Phase 2C Execution Report (Partial Hydration)
+
+**Status:** Phase 2C Complete.
+
+**Implementation Summary:**
+- **MigrationService:** Created `src/lib/migration/MigrationService.ts` to handle one-way hydration.
+- **Selective Hydration:** Implemented hydration for `lexicon`, `readingList`, and `annotations`.
+- **Infrastructure:**
+    - Updated `DBService` to expose `getAllLexiconRules` and ensure access to legacy data.
+    - Updated `useLibraryStore` to trigger hydration (non-blocking) on `fetchBooks`.
+
+**Deviations:**
+- **Completion Flag:** Instead of checking `books.size > 0` (since Phase 2C doesn't hydrate books yet), we use a specific flag `migration_phase_2c_complete` in the `settings` Y.Map to prevent re-hydration loops.

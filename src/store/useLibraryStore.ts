@@ -5,6 +5,8 @@ import type { BookMetadata } from '../types/db';
 import { StorageFullError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
 import { processBatchImport } from '../lib/batch-ingestion';
+import { migrationService } from '../lib/migration/MigrationService';
+import { Logger } from '../lib/logger';
 
 export type SortOption = 'recent' | 'last_read' | 'author' | 'title';
 
@@ -106,6 +108,14 @@ export const useLibraryStore = create<LibraryState>()(
       fetchBooks: async () => {
         set({ isLoading: true, error: null });
         try {
+          // Trigger Phase 2C Hydration (non-blocking)
+          // We wrap it in a timeout or requestIdleCallback to not block initial render
+          setTimeout(() => {
+              migrationService.hydrateIfNeeded().catch(err => {
+                  Logger.error('LibraryStore', 'Hydration failed', err);
+              });
+          }, 1000);
+
           const books = await dbService.getLibrary();
           set({ books, isLoading: false });
         } catch (err) {

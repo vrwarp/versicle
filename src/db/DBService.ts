@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition, TableImage } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition, TableImage, LexiconRule } from '../types/db';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
@@ -544,6 +544,24 @@ class DBService {
       }
       const db = await this.getDB();
       return await db.getAll('reading_list');
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Retrieves all lexicon rules.
+   *
+   * @returns A Promise resolving to an array of LexiconRule objects.
+   */
+  async getAllLexiconRules(): Promise<LexiconRule[]> {
+    try {
+      if (this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          return crdtService.lexicon.toArray();
+      }
+      const db = await this.getDB();
+      return await db.getAll('lexicon');
     } catch (error) {
       this.handleError(error);
     }

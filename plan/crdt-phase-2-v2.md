@@ -119,3 +119,20 @@ If `saveFile` succeeds but the app crashes before the Yjs `addBookMetadata` call
 Hydrating a library of 200 books on a Tesla browser might block the main thread.
 
 -   **Mitigation:** Wrap the migration loop in `requestIdleCallback` with a `timeout: 2000` to ensure user interactions (like clicking "Cancel") remain responsive during the database upgrade.
+
+## Phase 2C Execution Report
+
+**Status:** Completed.
+
+**Work Done:**
+1.  **MigrationService:** Implemented `src/lib/migration/MigrationService.ts`.
+2.  **Hydration Logic:**
+    *   `lexicon`: Migrated with order preservation (sorted by `order` field).
+    *   `reading_list`: Migrated to `Y.Map` (keyed by filename as per schema, despite plan note about bookId mapping which seemed contradictory to current schema definition).
+    *   `annotations`: Migrated to `Y.Array` (as per schema).
+3.  **Trigger:** Integrated into `useLibraryStore.fetchBooks` (init path) with a non-blocking timeout.
+4.  **Guard Mechanism:** Used `crdtService.settings.get('migration_phase_2c_complete')` to prevent re-hydration loops, as checking `books.size` was insufficient (since books are not hydrated yet in this phase).
+
+**Findings:**
+*   **Flag Necessity:** Since Phase 2C only hydrates side tables, `crdtService.books` remains empty. We introduced a `migration_phase_2c_complete` flag in the `settings` map to ensure migration runs exactly once.
+*   **Documentation vs Schema:** The plan mentioned mapping reading list keys to `bookId`, but the CRDT schema explicitly defines `readingList` as a `Y.Map` keyed by filename. We followed the schema.
