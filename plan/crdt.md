@@ -3,7 +3,7 @@ Design Document: Versicle CRDT-Based State Syncing (Yjs)
 
 **Author:** Gemini
 
-**Status:** Draft / Conceptual
+**Status:** Implementation In Progress (Phase 1 Complete)
 
 **Target:** Replace manual LWW/CFI merging with Yjs CRDTs for absolute data consistency across high-latency or high-concurrency environments.
 
@@ -141,7 +141,7 @@ For extremely large libraries (1000+ books), reconstructing the doc from Indexed
 6\. Development Roadmap
 -----------------------
 
-1.  **Phase 1 (Proof of Concept):** Implement a standalone `Y.Doc` in a test environment and verify that two separate tabs can sync via a shared binary blob.
+1.  **Phase 1 (Proof of Concept):** Implement a standalone `Y.Doc` in a test environment and verify that two separate tabs can sync via a shared binary blob. (COMPLETE)
 
 2.  **Phase 2 (The Bridge):** Implement the `HydrationService` to move v1 data into Yjs.
 
