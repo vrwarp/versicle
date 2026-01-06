@@ -33,7 +33,7 @@ vi.mock('../../CRDTService', async (importOriginal) => {
             doc: doc,
             waitForReady: vi.fn().mockResolvedValue(undefined),
             books: doc.getMap(CRDT_KEYS.BOOKS),
-            annotations: doc.getArray(CRDT_KEYS.ANNOTATIONS),
+            annotations: doc.getMap(CRDT_KEYS.ANNOTATIONS),
             history: doc.getMap(CRDT_KEYS.HISTORY),
             readingList: doc.getMap(CRDT_KEYS.READING_LIST),
         })),
@@ -41,7 +41,7 @@ vi.mock('../../CRDTService', async (importOriginal) => {
              doc: doc,
              waitForReady: vi.fn().mockResolvedValue(undefined),
              books: doc.getMap(CRDT_KEYS.BOOKS),
-             annotations: doc.getArray(CRDT_KEYS.ANNOTATIONS),
+             annotations: doc.getMap(CRDT_KEYS.ANNOTATIONS),
              history: doc.getMap(CRDT_KEYS.HISTORY),
              readingList: doc.getMap(CRDT_KEYS.READING_LIST),
         }
@@ -60,7 +60,7 @@ describe('MigrationService', () => {
         doc,
         waitForReady: vi.fn().mockResolvedValue(undefined),
         books: doc.getMap('books'),
-        annotations: doc.getArray('annotations'),
+        annotations: doc.getMap('annotations'),
         history: doc.getMap('history'),
         readingList: doc.getMap('readingList'),
     };
@@ -102,8 +102,8 @@ describe('MigrationService', () => {
     expect(crdtServiceMock.books.get('book-1')).toEqual(mockBook);
 
     // Verify Annotations
-    expect(crdtServiceMock.annotations.length).toBe(1);
-    expect(crdtServiceMock.annotations.get(0)).toEqual(mockAnnotation);
+    expect(crdtServiceMock.annotations.size).toBe(1);
+    expect(crdtServiceMock.annotations.get(mockAnnotation.id)).toEqual(mockAnnotation);
 
     // Verify History
     expect(crdtServiceMock.history.has('book-1')).toBe(true);

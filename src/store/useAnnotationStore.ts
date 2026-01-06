@@ -95,7 +95,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     try {
       await crdtService.waitForReady();
       // Filter from Yjs
-      const allAnnotations = crdtService.annotations.toArray();
+      const allAnnotations = Array.from(crdtService.annotations.values());
       const bookAnnotations = allAnnotations.filter(a => a.bookId === bookId);
       set({ annotations: bookAnnotations });
     } catch (error) {
@@ -116,7 +116,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
       await db.add('annotations', newAnnotation);
 
       // 2. Update Yjs (Moral Layer)
-      crdtService.annotations.push([newAnnotation]);
+      crdtService.annotations.set(newAnnotation.id, newAnnotation);
 
       // 3. Update Local State
       set((state) => ({
@@ -134,18 +134,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
       await db.delete('annotations', id);
 
       // 2. Update Yjs
-      // Y.Array doesn't support deleteById easily. We need to find index.
-      const yArr = crdtService.annotations;
-      let index = -1;
-      for (let i = 0; i < yArr.length; i++) {
-          if (yArr.get(i).id === id) {
-              index = i;
-              break;
-          }
-      }
-      if (index !== -1) {
-          yArr.delete(index, 1);
-      }
+      crdtService.annotations.delete(id);
 
       set((state) => ({
         annotations: state.annotations.filter((a) => a.id !== id),
@@ -167,21 +156,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
         await db.put('annotations', updated);
 
         // 2. Update Yjs
-        const yArr = crdtService.annotations;
-        let index = -1;
-        for (let i = 0; i < yArr.length; i++) {
-            if (yArr.get(i).id === id) {
-                index = i;
-                break;
-            }
-        }
-        if (index !== -1) {
-             // Yjs Array doesn't support partial update of object.
-             // We must delete and insert (or use Y.Map inside Y.Array if schema allowed, but it's JSON object).
-             // Since it's a JSON object, we treat it as immutable replacement.
-             yArr.delete(index, 1);
-             yArr.insert(index, [updated]);
-        }
+        crdtService.annotations.set(id, updated);
 
         set((state) => ({
           annotations: state.annotations.map((a) => (a.id === id ? updated : a)),

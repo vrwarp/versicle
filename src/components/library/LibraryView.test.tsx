@@ -12,6 +12,12 @@ vi.mock('./BookCard', () => ({
   BookCard: ({ book }: any) => <div data-testid="book-card">{book.title}</div>
 }));
 
+// Mock BookListItem (was missing)
+vi.mock('./BookListItem', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    BookListItem: ({ book }: any) => <div data-testid="book-list-item">{book.title}</div>
+}));
+
 // Mock EmptyLibrary
 vi.mock('./EmptyLibrary', () => ({
     EmptyLibrary: () => <div data-testid="empty-library">Empty Library</div>
@@ -64,12 +70,14 @@ describe('LibraryView', () => {
             return { showToast: mockShowToast };
         });
 
+        // Initialize with default state, mocking init
         useLibraryStore.setState({
             books: [],
             isLoading: false,
             error: null,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            fetchBooks: vi.fn().mockResolvedValue(undefined) as any
+            // Mock init to resolve immediately (or simulate loading if needed)
+            init: vi.fn().mockResolvedValue(undefined) as any,
+            fetchBooks: vi.fn() as any // Just in case
         });
 
         // Mock getBoundingClientRect and offsetWidth
@@ -92,23 +100,34 @@ describe('LibraryView', () => {
     });
 
     it('renders empty state', async () => {
+        // Ensure init is called
+        const initMock = vi.fn();
+        useLibraryStore.setState({ init: initMock, books: [], isLoading: false });
+
         render(
             <MemoryRouter>
                 <LibraryView />
             </MemoryRouter>
         );
-        expect(screen.getByTestId('empty-library')).toBeInTheDocument();
+
+        await waitFor(() => {
+             expect(initMock).toHaveBeenCalled();
+             expect(screen.getByTestId('empty-library')).toBeInTheDocument();
+        });
     });
 
     it('renders grid with books', async () => {
+        const initMock = vi.fn();
         useLibraryStore.setState({
+            init: initMock,
             books: [
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 { id: '1', title: 'Book 1', author: 'Author 1' } as any,
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 { id: '2', title: 'Book 2', author: 'Author 2' } as any
             ],
-            viewMode: 'grid'
+            viewMode: 'grid',
+            isLoading: false
         });
 
         render(
@@ -118,6 +137,7 @@ describe('LibraryView', () => {
         );
 
         await waitFor(() => {
+            expect(initMock).toHaveBeenCalled();
             expect(screen.getAllByTestId('book-card')).toHaveLength(2);
         });
     });

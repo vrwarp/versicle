@@ -37,7 +37,7 @@ export class CRDTService {
   }
 
   get annotations() {
-    return this.doc.getArray<Annotation>(CRDT_KEYS.ANNOTATIONS);
+    return this.doc.getMap<Annotation>(CRDT_KEYS.ANNOTATIONS);
   }
 
   get lexicon() {

@@ -1,28 +1,29 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useLibraryStore } from './useLibraryStore';
-import { getDB } from '../db/db';
+import { crdtService } from '../lib/crdt/CRDTService';
 import type { BookMetadata, LexiconRule } from '../types/db';
 
-// Mock ingestion
-vi.mock('../lib/ingestion', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  processEpub: vi.fn(async (file: File) => {
-    // Mock implementation of processEpub that just puts a dummy book in DB
-    const db = await getDB();
-    const mockBook: BookMetadata = {
-      id: 'test-id',
-      title: 'Test Book',
-      author: 'Test Author',
-      description: 'Test Description',
-      cover: 'cover-data',
-      addedAt: 1234567890,
-    };
-    await db.put('books', mockBook);
-    // Use a simpler way to get buffer or just mock data
-    await db.put('files', new ArrayBuffer(8), 'test-id');
-    return 'test-id';
-  }),
+// Mock DBService completely to avoid IndexedDB errors
+vi.mock('../db/DBService', () => ({
+  dbService: {
+    addBook: vi.fn(),
+    getBookMetadata: vi.fn(),
+    deleteBook: vi.fn(),
+    offloadBook: vi.fn(),
+    restoreBook: vi.fn(),
+    getLibrary: vi.fn(), // used by MigrationService
+    getAnnotations: vi.fn(),
+    getReadingHistoryEntry: vi.fn(),
+    getReadingList: vi.fn(),
+  }
 }));
+
+// Mock ingestion (though likely unused if dbService.addBook is mocked)
+vi.mock('../lib/ingestion', () => ({
+  processEpub: vi.fn(),
+}));
+
+import { dbService } from '../db/DBService';
 
 describe('useLibraryStore', () => {
   const mockBook: BookMetadata = {
@@ -37,27 +38,27 @@ describe('useLibraryStore', () => {
   // Create a mock file
   const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
 
-  // Polyfill arrayBuffer if missing (JSDOM/Vitest issue sometimes)
-  if (!mockFile.arrayBuffer) {
-      mockFile.arrayBuffer = async () => new ArrayBuffer(8);
-  }
-
   beforeEach(async () => {
+    vi.clearAllMocks();
+
     // Reset Zustand store
     useLibraryStore.setState({
       books: [],
       isLoading: false,
-      sortOrder: 'last_read', // Default
+      initialized: false,
+      sortOrder: 'last_read',
     });
 
-    // Clear IndexedDB
-    const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'annotations', 'lexicon'], 'readwrite');
-    await tx.objectStore('books').clear();
-    await tx.objectStore('files').clear();
-    await tx.objectStore('annotations').clear();
-    await tx.objectStore('lexicon').clear();
-    await tx.done;
+    // Clear CRDT
+    crdtService.doc.transact(() => {
+        crdtService.books.clear();
+        crdtService.annotations.clear();
+    });
+
+    // Setup default DBService mock responses
+    vi.mocked(dbService.addBook).mockResolvedValue('test-id');
+    vi.mocked(dbService.getBookMetadata).mockResolvedValue(mockBook);
+    vi.mocked(dbService.getLibrary).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -71,75 +72,51 @@ describe('useLibraryStore', () => {
     expect(state.sortOrder).toBe('last_read');
   });
 
-  it('should add a book', async () => {
+  it('should add a book (dual-write)', async () => {
     await useLibraryStore.getState().addBook(mockFile);
 
-    const state = useLibraryStore.getState();
-    expect(state.books).toHaveLength(1);
-    expect(state.books[0]).toEqual(mockBook);
-    expect(state.isLoading).toBe(false);
+    // Verify DBService calls
+    expect(dbService.addBook).toHaveBeenCalledWith(mockFile, expect.any(Object), expect.any(Function));
+    expect(dbService.getBookMetadata).toHaveBeenCalledWith('test-id');
 
-    // Verify it's in DB
-    const db = await getDB();
-    const storedBook = await db.get('books', 'test-id');
-    expect(storedBook).toEqual(mockBook);
+    // Verify CRDT update
+    expect(crdtService.books.has('test-id')).toBe(true);
+    expect(crdtService.books.get('test-id')).toEqual(mockBook);
   });
 
-  it('should remove a book', async () => {
-    // First add a book
-    await useLibraryStore.getState().addBook(mockFile);
+  it('should remove a book (dual-delete)', async () => {
+    // Setup initial state: book exists
+    crdtService.books.set('test-id', mockBook);
+    useLibraryStore.setState({ books: [mockBook] });
 
-    // Verify it was added
-    expect(useLibraryStore.getState().books).toHaveLength(1);
+    await useLibraryStore.getState().removeBook('test-id');
 
-    // Then remove it
-    await useLibraryStore.getState().removeBook(mockBook.id);
+    // Verify CRDT update
+    expect(crdtService.books.has('test-id')).toBe(false);
 
-    // Verify it's gone from state
-    const state = useLibraryStore.getState();
-    expect(state.books).toHaveLength(0);
-    expect(state.isLoading).toBe(false);
-
-    // Verify it's gone from DB
-    const db = await getDB();
-    const storedBook = await db.get('books', 'test-id');
-    expect(storedBook).toBeUndefined();
-
-    const storedFile = await db.get('files', 'test-id');
-    expect(storedFile).toBeUndefined();
+    // Verify DBService call
+    expect(dbService.deleteBook).toHaveBeenCalledWith('test-id');
   });
 
-  it('should refresh library from DB', async () => {
-    // Manually add a book to DB (simulating a fresh load)
-    const db = await getDB();
-    await db.put('books', mockBook);
+  it('should init library from CRDT/DB', async () => {
+    // Setup DB to return one book for migration
+    vi.mocked(dbService.getLibrary).mockResolvedValue([mockBook]);
 
-    // Initial state should be empty
+    // Initial state empty
     expect(useLibraryStore.getState().books).toHaveLength(0);
 
-    // Refresh library
-    await useLibraryStore.getState().fetchBooks();
+    // Run init
+    await useLibraryStore.getState().init();
 
-    // State should now have the book
-    const state = useLibraryStore.getState();
-    expect(state.books).toHaveLength(1);
-    expect(state.books[0]).toEqual(mockBook);
-  });
+    // Verify migration ran (checks DB)
+    expect(dbService.getLibrary).toHaveBeenCalled();
 
-  it('should sort books by addedAt desc on refresh', async () => {
-    const book1 = { ...mockBook, id: '1', addedAt: 100 };
-    const book2 = { ...mockBook, id: '2', addedAt: 200 };
+    // Verify CRDT populated
+    expect(crdtService.books.has('test-id')).toBe(true);
 
-    const db = await getDB();
-    await db.put('books', book1);
-    await db.put('books', book2);
-
-    await useLibraryStore.getState().fetchBooks();
-
-    const state = useLibraryStore.getState();
-    expect(state.books).toHaveLength(2);
-    expect(state.books[0].id).toBe('2'); // Newer one first
-    expect(state.books[1].id).toBe('1');
+    // Verify store updated (via observer)
+    expect(useLibraryStore.getState().books).toHaveLength(1);
+    expect(useLibraryStore.getState().books[0].id).toBe('test-id');
   });
 
   it('should update and persist sort order', () => {
@@ -150,54 +127,34 @@ describe('useLibraryStore', () => {
     expect(useLibraryStore.getState().sortOrder).toBe('author');
   });
 
-  it('should handle annotations deletion when removing a book', async () => {
-      // Add a book and an annotation
-      await useLibraryStore.getState().addBook(mockFile);
+  it('should handle offload book', async () => {
+      // Setup
+      crdtService.books.set('test-id', mockBook);
+      useLibraryStore.setState({ books: [mockBook] });
 
-      const db = await getDB();
-      const annotation = {
-          id: 'note-1',
-          bookId: mockBook.id,
-          cfiRange: 'epubcfi(...)',
-          text: 'Note text',
-          color: 'yellow',
-          createdAt: Date.now()
-      };
+      await useLibraryStore.getState().offloadBook('test-id');
 
-      await db.put('annotations', annotation);
+      // Verify DB call
+      expect(dbService.offloadBook).toHaveBeenCalledWith('test-id');
 
-      // Verify annotation exists
-      expect(await db.get('annotations', 'note-1')).toEqual(annotation);
-
-      // Remove the book
-      await useLibraryStore.getState().removeBook(mockBook.id);
-
-      // Verify annotation is deleted
-      expect(await db.get('annotations', 'note-1')).toBeUndefined();
+      // Verify CRDT update (isOffloaded flag)
+      const book = crdtService.books.get('test-id');
+      expect(book.isOffloaded).toBe(true);
   });
 
-  it('should delete associated lexicon rules when removing a book', async () => {
-      // Add a book
-      await useLibraryStore.getState().addBook(mockFile);
+  it('should handle restore book', async () => {
+      // Setup: Offloaded book
+      const offloadedBook = { ...mockBook, isOffloaded: true };
+      crdtService.books.set('test-id', offloadedBook);
+      useLibraryStore.setState({ books: [offloadedBook] });
 
-      const db = await getDB();
-      const rule: LexiconRule = {
-          id: 'rule-1',
-          bookId: mockBook.id,
-          original: 'hello',
-          replacement: 'hi',
-          created: Date.now()
-      };
+      await useLibraryStore.getState().restoreBook('test-id', mockFile);
 
-      await db.put('lexicon', rule);
+      // Verify DB call
+      expect(dbService.restoreBook).toHaveBeenCalledWith('test-id', mockFile);
 
-      // Verify rule exists
-      expect(await db.get('lexicon', 'rule-1')).toEqual(rule);
-
-      // Remove the book
-      await useLibraryStore.getState().removeBook(mockBook.id);
-
-      // Verify rule is deleted
-      expect(await db.get('lexicon', 'rule-1')).toBeUndefined();
+      // Verify CRDT update
+      const book = crdtService.books.get('test-id');
+      expect(book.isOffloaded).toBe(false);
   });
 });

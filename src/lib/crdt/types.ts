@@ -12,9 +12,10 @@ export interface VersicleDocSchema {
   books: Y.Map<Y.Map<any>>;
 
   /**
-   * Global append-only array of user highlights.
+   * Global map of user highlights.
+   * Keyed by annotation.id.
    */
-  annotations: Y.Array<Annotation>;
+  annotations: Y.Map<Annotation>;
 
   /**
    * Ordered global/book pronunciation rules.

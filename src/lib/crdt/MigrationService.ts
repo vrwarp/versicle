@@ -61,7 +61,9 @@ export class MigrationService {
           if (annotations && annotations.length > 0) {
               this.crdt.doc.transact(() => {
                   const yAnnotations = this.crdt.annotations;
-                  yAnnotations.push(annotations);
+                  for (const annotation of annotations) {
+                      yAnnotations.set(annotation.id, annotation);
+                  }
               });
           }
 
