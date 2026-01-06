@@ -101,10 +101,8 @@ describe('useAnnotationStore', () => {
       await result.current.deleteAnnotation('test-uuid');
     });
 
-    await waitFor(() => {
-        expect(mockDB.delete).toHaveBeenCalledWith('annotations', 'test-uuid');
-        expect(result.current.annotations).toHaveLength(0);
-    });
+    expect(mockDB.delete).toHaveBeenCalledWith('annotations', 'test-uuid');
+    expect(result.current.annotations).toHaveLength(0);
   });
 
   it('should update annotation', async () => {
@@ -118,12 +116,10 @@ describe('useAnnotationStore', () => {
       await result.current.updateAnnotation('test-uuid', { note: 'new note' });
     });
 
-    await waitFor(() => {
-        expect(mockDB.put).toHaveBeenCalledWith('annotations', expect.objectContaining({
-            id: 'test-uuid',
-            note: 'new note',
-        }));
-        expect(result.current.annotations[0].note).toBe('new note');
-    });
+    expect(mockDB.put).toHaveBeenCalledWith('annotations', expect.objectContaining({
+        id: 'test-uuid',
+        note: 'new note',
+    }));
+    expect(result.current.annotations[0].note).toBe('new note');
   });
 });
