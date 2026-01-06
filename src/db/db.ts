@@ -1,10 +1,30 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata, ContentAnalysis, ReadingHistoryEntry, ReadingListEntry, TTSContent, TTSPosition, TableImage } from '../types/db';
+import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata, ContentAnalysis, ReadingHistoryEntry, ReadingListEntry, TTSContent, TTSPosition, TableImage, SyncCheckpoint, SyncLogEntry } from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
  */
 export interface EpubLibraryDB extends DBSchema {
+  /**
+   * Store for synchronization checkpoints.
+   */
+  checkpoints: {
+    key: number;
+    value: SyncCheckpoint;
+    indexes: {
+      by_timestamp: number;
+    };
+  };
+  /**
+   * Store for synchronization logs.
+   */
+  sync_log: {
+    key: number;
+    value: SyncLogEntry;
+    indexes: {
+      by_timestamp: number;
+    };
+  };
   /**
    * Store for application-level metadata and configuration.
    */
@@ -153,8 +173,20 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 15, { // Upgrading to v15
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 16, { // Upgrading to v16
       upgrade(db, oldVersion, _newVersion, transaction) {
+        // Checkpoints store (New in v16)
+        if (!db.objectStoreNames.contains('checkpoints')) {
+          const checkpointsStore = db.createObjectStore('checkpoints', { keyPath: 'id', autoIncrement: true });
+          checkpointsStore.createIndex('by_timestamp', 'timestamp', { unique: false });
+        }
+
+        // Sync Log store (New in v16)
+        if (!db.objectStoreNames.contains('sync_log')) {
+          const syncLogStore = db.createObjectStore('sync_log', { keyPath: 'id', autoIncrement: true });
+          syncLogStore.createIndex('by_timestamp', 'timestamp', { unique: false });
+        }
+
         // App Metadata store (New in v14)
         if (!db.objectStoreNames.contains('app_metadata')) {
           db.createObjectStore('app_metadata');
