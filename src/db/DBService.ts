@@ -8,8 +8,15 @@ import { mergeCfiRanges } from '../lib/cfi-utils';
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
+import { crdtService } from '../lib/crdt/CRDTService';
+import { CRDT_KEYS } from '../lib/crdt/types';
+import * as Y from 'yjs';
+
+export type PersistenceMode = 'legacy' | 'shadow' | 'crdt';
 
 class DBService {
+  public mode: PersistenceMode = 'legacy';
+
   private async getDB() {
     return getDB();
   }
@@ -39,6 +46,23 @@ class DBService {
    */
   async getLibrary(): Promise<BookMetadata[]> {
     try {
+      if (this.mode === 'crdt') {
+        await crdtService.waitForReady();
+        const booksMap = crdtService.books;
+        const validBooks: BookMetadata[] = [];
+
+        booksMap.forEach((bookMap) => {
+             const book = bookMap.toJSON() as BookMetadata;
+             if (validateBookMetadata(book)) {
+                 validBooks.push(book);
+             } else {
+                 Logger.error('DBService', 'CRDT Integrity: Found corrupted book record', book);
+             }
+        });
+
+        return validBooks.sort((a, b) => b.addedAt - a.addedAt);
+      }
+
       const db = await this.getDB();
       const books = await db.getAll('books');
 
@@ -64,9 +88,18 @@ class DBService {
    */
   async getBook(id: string): Promise<{ metadata: BookMetadata | undefined; file: Blob | ArrayBuffer | undefined }> {
     try {
+      // NOTE: Files are ALWAYS in IndexedDB (Heavy Layer), regardless of mode.
       const db = await this.getDB();
-      const metadata = await db.get('books', id);
       const file = await db.get('files', id);
+
+      if (this.mode === 'crdt') {
+           await crdtService.waitForReady();
+           const bookMap = crdtService.books.get(id);
+           const metadata = bookMap ? (bookMap.toJSON() as BookMetadata) : undefined;
+           return { metadata, file };
+      }
+
+      const metadata = await db.get('books', id);
       return { metadata, file };
     } catch (error) {
       this.handleError(error);
@@ -81,6 +114,11 @@ class DBService {
    */
   async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
       try {
+          if (this.mode === 'crdt') {
+              await crdtService.waitForReady();
+              const bookMap = crdtService.books.get(id);
+              return bookMap ? (bookMap.toJSON() as BookMetadata) : undefined;
+          }
           const db = await this.getDB();
           return await db.get('books', id);
       } catch (error) {
@@ -96,15 +134,43 @@ class DBService {
    */
   async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
     try {
-      const db = await this.getDB();
-      const tx = db.transaction('books', 'readwrite');
-      const store = tx.objectStore('books');
-      const existing = await store.get(id);
+      // 1. Legacy / Shadow Path (IndexedDB)
+      if (this.mode === 'legacy' || this.mode === 'shadow') {
+          const db = await this.getDB();
+          const tx = db.transaction('books', 'readwrite');
+          const store = tx.objectStore('books');
+          const existing = await store.get(id);
 
-      if (existing) {
-        await store.put({ ...existing, ...metadata });
+          if (existing) {
+            await store.put({ ...existing, ...metadata });
+          }
+          await tx.done;
       }
-      await tx.done;
+
+      // 2. Shadow / CRDT Path (Yjs)
+      if (this.mode === 'shadow' || this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          const booksMap = crdtService.books;
+          const bookMap = booksMap.get(id);
+
+          if (bookMap) {
+             // In Yjs, we update individual fields in the Y.Map
+             crtdTransact(() => {
+                 for (const [key, value] of Object.entries(metadata)) {
+                    // Note: Y.Map.set expects value, not undefined.
+                    if (value !== undefined) {
+                        bookMap.set(key, value);
+                    }
+                 }
+                 // Always update lastModified? Or trust metadata has it?
+                 // If not provided, we might want to set it, but usually caller provides it.
+             });
+          } else {
+             // If missing in CRDT but we are updating it, it might be an issue.
+             // In Shadow mode, we assume migration happened or we are tolerant.
+             Logger.warn('DBService', `Attempted to update metadata for missing book ${id} in CRDT`);
+          }
+      }
     } catch (error) {
       this.handleError(error);
     }
@@ -169,65 +235,75 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'], 'readwrite');
 
+      // 1. Heavy Layer Cleanup (Always runs)
+      // We must delete from 'files' and 'table_images' etc regardless of mode.
+      // We create a single transaction for all stores we want to clean.
+
+      // Determine stores to include based on mode
+      const heavyStores: any[] = ['files', 'locations', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'];
+      const moralStores: any[] = ['books', 'annotations', 'lexicon'];
+
+      let allStores = [...heavyStores];
+      if (this.mode === 'legacy' || this.mode === 'shadow') {
+          allStores = [...heavyStores, ...moralStores];
+      }
+
+      const tx = db.transaction(allStores, 'readwrite');
+
+      // Heavy Layer deletions (Common)
       await Promise.all([
-          tx.objectStore('books').delete(id),
           tx.objectStore('files').delete(id),
           tx.objectStore('locations').delete(id),
           tx.objectStore('tts_queue').delete(id),
           tx.objectStore('tts_position').delete(id),
       ]);
 
-      // Delete annotations
-      const annotationStore = tx.objectStore('annotations');
-      const annotationIndex = annotationStore.index('by_bookId');
-      let annotationCursor = await annotationIndex.openCursor(IDBKeyRange.only(id));
-      while (annotationCursor) {
-        await annotationCursor.delete();
-        annotationCursor = await annotationCursor.continue();
-      }
+      // Cursor deletions for heavy stores
+      await this._deleteByCursor(tx, 'content_analysis', 'by_bookId', id);
+      await this._deleteByCursor(tx, 'tts_content', 'by_bookId', id);
+      await this._deleteByCursor(tx, 'table_images', 'by_bookId', id);
 
-      // Delete lexicon rules
-      const lexiconStore = tx.objectStore('lexicon');
-      const lexiconIndex = lexiconStore.index('by_bookId');
-      let lexiconCursor = await lexiconIndex.openCursor(IDBKeyRange.only(id));
-      while (lexiconCursor) {
-        await lexiconCursor.delete();
-        lexiconCursor = await lexiconCursor.continue();
-      }
-
-      // Delete content analysis
-      const analysisStore = tx.objectStore('content_analysis');
-      const analysisIndex = analysisStore.index('by_bookId');
-      let analysisCursor = await analysisIndex.openCursor(IDBKeyRange.only(id));
-      while (analysisCursor) {
-        await analysisCursor.delete();
-        analysisCursor = await analysisCursor.continue();
-      }
-
-      // Delete TTS content
-      const ttsContentStore = tx.objectStore('tts_content');
-      const ttsContentIndex = ttsContentStore.index('by_bookId');
-      let ttsContentCursor = await ttsContentIndex.openCursor(IDBKeyRange.only(id));
-      while (ttsContentCursor) {
-        await ttsContentCursor.delete();
-        ttsContentCursor = await ttsContentCursor.continue();
-      }
-
-      // Delete table images
-      const tableStore = tx.objectStore('table_images');
-      const tableIndex = tableStore.index('by_bookId');
-      let tableCursor = await tableIndex.openCursor(IDBKeyRange.only(id));
-      while (tableCursor) {
-        await tableCursor.delete();
-        tableCursor = await tableCursor.continue();
+      // Moral Layer deletions (Legacy/Shadow only)
+      if (this.mode === 'legacy' || this.mode === 'shadow') {
+          await tx.objectStore('books').delete(id);
+          await this._deleteByCursor(tx, 'annotations', 'by_bookId', id);
+          await this._deleteByCursor(tx, 'lexicon', 'by_bookId', id);
       }
 
       await tx.done;
+
+      // 2. CRDT Deletion (Shadow/CRDT)
+      if (this.mode === 'shadow' || this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          crtdTransact(() => {
+              // Delete book metadata
+              crdtService.books.delete(id);
+
+              // Delete history
+              crdtService.history.delete(id);
+
+              // NOTE: Orphaned Annotations Risk
+              // We do not currently delete annotations from the Y.Array because filtering/finding index
+              // is expensive and Y.Array doesn't support key-based deletion.
+              // This is a known technical debt item.
+              // In future, 'annotations' should potentially be keyed by bookId in a Y.Map<Y.Array>.
+          });
+      }
+
     } catch (error) {
       this.handleError(error);
     }
+  }
+
+  private async _deleteByCursor(tx: any, storeName: string, indexName: string, key: any) {
+      const store = tx.objectStore(storeName);
+      const index = store.index(indexName);
+      let cursor = await index.openCursor(IDBKeyRange.only(key));
+      while (cursor) {
+          await cursor.delete();
+          cursor = await cursor.continue();
+      }
   }
 
   /**
@@ -239,15 +315,26 @@ class DBService {
   async offloadBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files'], 'readwrite');
-      const bookStore = tx.objectStore('books');
-      const book = await bookStore.get(id);
+      // Offloading logic is tricky with CRDT because 'isOffloaded' is metadata.
+      // And 'fileHash' is metadata.
+
+      // We need to update metadata.
+      // First, get the book to calc hash if needed.
+      // This part reads from 'books' or CRDT?
+      let book: BookMetadata | undefined;
+      if (this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          const map = crdtService.books.get(id);
+          book = map ? (map.toJSON() as BookMetadata) : undefined;
+      } else {
+          book = await db.get('books', id);
+      }
 
       if (!book) throw new Error('Book not found');
 
-      // If missing hash, calculate fingerprint from existing file before deleting
+      // Calculate hash if missing (Requires file from IDB)
       if (!book.fileHash) {
-        const fileStore = tx.objectStore('files');
+        const fileStore = await db.transaction('files').objectStore('files');
         const fileData = await fileStore.get(id);
         if (fileData) {
           const blob = fileData instanceof Blob ? fileData : new Blob([fileData]);
@@ -260,10 +347,15 @@ class DBService {
       }
 
       book.isOffloaded = true;
-      await bookStore.put(book);
-      await tx.objectStore('files').delete(id);
 
+      // Update Metadata
+      await this.updateBookMetadata(id, { isOffloaded: true, fileHash: book.fileHash });
+
+      // Delete file (Heavy Layer, IDB)
+      const tx = db.transaction(['files'], 'readwrite');
+      await tx.objectStore('files').delete(id);
       await tx.done;
+
     } catch (error) {
       this.handleError(error);
     }
@@ -280,7 +372,15 @@ class DBService {
   async restoreBook(id: string, file: File): Promise<void> {
     try {
       const db = await this.getDB();
-      const book = await db.get('books', id);
+      let book: BookMetadata | undefined;
+
+      if (this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          const map = crdtService.books.get(id);
+          book = map ? (map.toJSON() as BookMetadata) : undefined;
+      } else {
+          book = await db.get('books', id);
+      }
 
       if (!book) throw new Error('Book not found');
 
@@ -297,13 +397,14 @@ class DBService {
         book.fileHash = newFingerprint;
       }
 
-      const tx = db.transaction(['books', 'files'], 'readwrite');
+      const tx = db.transaction(['files'], 'readwrite');
       // Store File (Blob) instead of ArrayBuffer
       await tx.objectStore('files').put(file, id);
-
-      book.isOffloaded = false;
-      await tx.objectStore('books').put(book);
       await tx.done;
+
+      // Update Metadata
+      await this.updateBookMetadata(id, { isOffloaded: false, fileHash: book.fileHash });
+
     } catch (error) {
       this.handleError(error);
     }
@@ -332,64 +433,93 @@ class DBService {
           this.pendingProgress = {};
 
           try {
-              const db = await this.getDB();
-              // Include 'reading_list' and 'files' in the transaction
-              const tx = db.transaction(['books', 'reading_list', 'files'], 'readwrite');
-              const bookStore = tx.objectStore('books');
-              const rlStore = tx.objectStore('reading_list');
-              const fileStore = tx.objectStore('files');
+              // Shunt Logic for Progress
+              // 1. Legacy/Shadow (IDB)
+              if (this.mode === 'legacy' || this.mode === 'shadow') {
+                  const db = await this.getDB();
+                  const tx = db.transaction(['books', 'reading_list', 'files'], 'readwrite');
+                  const bookStore = tx.objectStore('books');
+                  const rlStore = tx.objectStore('reading_list');
+                  const fileStore = tx.objectStore('files');
 
-              for (const [id, data] of Object.entries(pending)) {
-                  const book = await bookStore.get(id);
-                  if (book) {
-                      book.currentCfi = data.cfi;
-                      book.progress = data.progress;
-                      book.lastRead = Date.now();
+                  for (const [id, data] of Object.entries(pending)) {
+                      const book = await bookStore.get(id);
+                      if (book) {
+                          book.currentCfi = data.cfi;
+                          book.progress = data.progress;
+                          book.lastRead = Date.now();
 
-                      // Update Reading List Logic
-                      let filename = book.filename;
-                      if (!filename) {
-                          // Try to recover filename from file store if missing
-                          try {
-                              const fileData = await fileStore.get(id);
-                              // Check if it's a File or has a name property (fake-indexeddb might strip prototype)
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              if (fileData instanceof File || (fileData && (fileData as any).name)) {
+                          // Update Reading List Logic (Legacy)
+                          let filename = book.filename;
+                          if (!filename) {
+                              try {
+                                  const fileData = await fileStore.get(id);
                                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                  filename = (fileData instanceof File) ? fileData.name : (fileData as any).name;
-                                  book.filename = filename; // Update book metadata
+                                  if (fileData instanceof File || (fileData && (fileData as any).name)) {
+                                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                      filename = (fileData instanceof File) ? fileData.name : (fileData as any).name;
+                                      book.filename = filename;
+                                  }
+                              } catch (e) {
+                                  Logger.warn('DBService', 'Failed to fetch file for filename recovery', e);
                               }
-                          } catch (e) {
-                              // Ignore file fetch errors
-                              Logger.warn('DBService', 'Failed to fetch file for filename recovery', e);
+                          }
+
+                          await bookStore.put(book);
+
+                          if (filename) {
+                               const existingEntry = await rlStore.get(filename);
+                               const entry: ReadingListEntry = {
+                                   filename: filename,
+                                   title: book.title,
+                                   author: book.author,
+                                   isbn: existingEntry?.isbn,
+                                   rating: existingEntry?.rating,
+                                   percentage: data.progress,
+                                   lastUpdated: Date.now(),
+                                   status: data.progress > 0.98 ? 'read' : 'currently-reading'
+                               };
+                               await rlStore.put(entry);
                           }
                       }
-
-                      await bookStore.put(book);
-
-                      if (filename) {
-                           // Fetch existing entry to preserve fields like rating/isbn that aren't in book metadata
-                           const existingEntry = await rlStore.get(filename);
-
-                           const entry: ReadingListEntry = {
-                               filename: filename,
-                               title: book.title,
-                               author: book.author,
-                               isbn: existingEntry?.isbn,
-                               rating: existingEntry?.rating,
-                               percentage: data.progress,
-                               lastUpdated: Date.now(),
-                               status: data.progress > 0.98 ? 'read' : 'currently-reading'
-                           };
-                           await rlStore.put(entry);
-                      }
                   }
+                  await tx.done;
               }
-              await tx.done;
+
+              // 2. Shadow/CRDT (Yjs)
+              if (this.mode === 'shadow' || this.mode === 'crdt') {
+                   await crdtService.waitForReady();
+                   crtdTransact(() => {
+                       for (const [id, data] of Object.entries(pending)) {
+                           const bookMap = crdtService.books.get(id);
+                           if (bookMap) {
+                               bookMap.set('currentCfi', data.cfi);
+                               bookMap.set('progress', data.progress);
+                               bookMap.set('lastRead', Date.now());
+
+                               // Reading List Update in CRDT
+                               const filename = bookMap.get('filename') as string;
+                               if (filename) {
+                                   const existingEntry = crdtService.readingList.get(filename);
+                                    const entry: ReadingListEntry = {
+                                       filename: filename,
+                                       title: bookMap.get('title') as string,
+                                       author: bookMap.get('author') as string,
+                                       isbn: existingEntry?.isbn,
+                                       rating: existingEntry?.rating,
+                                       percentage: data.progress,
+                                       lastUpdated: Date.now(),
+                                       status: data.progress > 0.98 ? 'read' : 'currently-reading'
+                                   };
+                                   crdtService.readingList.set(filename, entry);
+                               }
+                           }
+                       }
+                   });
+              }
+
           } catch (error) {
               Logger.error('DBService', 'Failed to save progress', error);
-              // We don't throw here to avoid interrupting the user flow,
-              // but we might want to surface this via a global error handler eventually.
           }
       }, 1000); // 1 second debounce
   }
@@ -403,6 +533,10 @@ class DBService {
    */
   async getReadingList(): Promise<ReadingListEntry[]> {
     try {
+      if (this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          return Array.from(crdtService.readingList.values());
+      }
       const db = await this.getDB();
       return await db.getAll('reading_list');
     } catch (error) {
@@ -417,8 +551,14 @@ class DBService {
    */
   async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
     try {
-      const db = await this.getDB();
-      await db.put('reading_list', entry);
+      if (this.mode === 'legacy' || this.mode === 'shadow') {
+          const db = await this.getDB();
+          await db.put('reading_list', entry);
+      }
+      if (this.mode === 'shadow' || this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          crdtService.readingList.set(entry.filename, entry);
+      }
     } catch (error) {
       this.handleError(error);
     }
@@ -431,38 +571,44 @@ class DBService {
    */
   async deleteReadingListEntry(filename: string): Promise<void> {
     try {
-      const db = await this.getDB();
-      await db.delete('reading_list', filename);
+      if (this.mode === 'legacy' || this.mode === 'shadow') {
+          const db = await this.getDB();
+          await db.delete('reading_list', filename);
+      }
+      if (this.mode === 'shadow' || this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          crdtService.readingList.delete(filename);
+      }
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Deletes multiple reading list entries.
-   *
-   * @param filenames - The filenames of the entries to delete.
-   */
   async deleteReadingListEntries(filenames: string[]): Promise<void> {
     try {
-      const db = await this.getDB();
-      const tx = db.transaction('reading_list', 'readwrite');
-      const store = tx.objectStore('reading_list');
-
-      await Promise.all(filenames.map(filename => store.delete(filename)));
-      await tx.done;
+      if (this.mode === 'legacy' || this.mode === 'shadow') {
+          const db = await this.getDB();
+          const tx = db.transaction('reading_list', 'readwrite');
+          const store = tx.objectStore('reading_list');
+          await Promise.all(filenames.map(filename => store.delete(filename)));
+          await tx.done;
+      }
+      if (this.mode === 'shadow' || this.mode === 'crdt') {
+           await crdtService.waitForReady();
+           crtdTransact(() => {
+               filenames.forEach(f => crdtService.readingList.delete(f));
+           });
+      }
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Imports reading list entries and syncs progress to books.
-   *
-   * @param entries - The list of entries to import.
-   */
+  // --- Import Reading List ---
   async importReadingList(entries: ReadingListEntry[]): Promise<void> {
-      try {
+      // Logic is complex (reconciliation).
+      // For now, only supporting Legacy.
+       try {
           const db = await this.getDB();
           const tx = db.transaction(['reading_list', 'books'], 'readwrite');
           const rlStore = tx.objectStore('reading_list');
@@ -496,48 +642,43 @@ class DBService {
       }
   }
 
-  /**
-   * Updates the last playback state for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param lastPlayedCfi - Optional CFI of the last played segment.
-   * @param lastPauseTime - Optional timestamp of when playback was paused.
-   * @returns A Promise that resolves when the state is updated.
-   */
   async updatePlaybackState(bookId: string, lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
       try {
-          const db = await this.getDB();
-          const tx = db.transaction('books', 'readwrite');
-          const store = tx.objectStore('books');
-          const book = await store.get(bookId);
-          if (book) {
-              if (lastPlayedCfi !== undefined) book.lastPlayedCfi = lastPlayedCfi;
-              if (lastPauseTime !== undefined) book.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
-              await store.put(book);
+          if (this.mode === 'legacy' || this.mode === 'shadow') {
+              const db = await this.getDB();
+              const tx = db.transaction('books', 'readwrite');
+              const store = tx.objectStore('books');
+              const book = await store.get(bookId);
+              if (book) {
+                  if (lastPlayedCfi !== undefined) book.lastPlayedCfi = lastPlayedCfi;
+                  if (lastPauseTime !== undefined) book.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
+                  await store.put(book);
+              }
+              await tx.done;
           }
-          await tx.done;
+          if (this.mode === 'shadow' || this.mode === 'crdt') {
+               await crdtService.waitForReady();
+               const bookMap = crdtService.books.get(bookId);
+               if (bookMap) {
+                   crtdTransact(() => {
+                       if (lastPlayedCfi !== undefined) bookMap.set('lastPlayedCfi', lastPlayedCfi);
+                       if (lastPauseTime !== undefined) {
+                           if (lastPauseTime === null) {
+                               bookMap.delete('lastPauseTime');
+                           } else {
+                               bookMap.set('lastPauseTime', lastPauseTime);
+                           }
+                       }
+                   });
+               }
+          }
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  // --- TTS State Operations ---
-
-  private saveTTSStateTimeout: NodeJS.Timeout | null = null;
-  private pendingTTSState: { [bookId: string]: TTSState } = {};
-
-  private saveTTSPositionTimeout: NodeJS.Timeout | null = null;
-  private pendingTTSPosition: { [bookId: string]: TTSPosition } = {};
-
-  /**
-   * Saves TTS Queue and Index. Debounced.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param queue - The current TTS queue.
-   * @param currentIndex - The index of the currently playing item.
-   * @param sectionIndex - The index of the current section in the playlist (optional).
-   */
-  saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number, sectionIndex?: number): void {
+  async saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number, sectionIndex?: number): void {
+      // Legacy implementation for now
       this.pendingTTSState[bookId] = {
           bookId,
           queue,
@@ -545,19 +686,15 @@ class DBService {
           sectionIndex,
           updatedAt: Date.now()
       };
-
       if (this.saveTTSStateTimeout) return;
-
       this.saveTTSStateTimeout = setTimeout(async () => {
           this.saveTTSStateTimeout = null;
           const pending = { ...this.pendingTTSState };
           this.pendingTTSState = {};
-
           try {
               const db = await this.getDB();
               const tx = db.transaction('tts_queue', 'readwrite');
               const store = tx.objectStore('tts_queue');
-
               for (const state of Object.values(pending)) {
                   await store.put(state);
               }
@@ -565,37 +702,26 @@ class DBService {
           } catch (error) {
               Logger.error('DBService', 'Failed to save TTS state', error);
           }
-      }, 1000); // 1s debounce
+      }, 1000);
   }
 
-  /**
-   * Saves only the TTS playback position (lightweight).
-   * Debounced separately to allow more frequent updates without heavy serialization.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param currentIndex - The current index in the queue.
-   * @param sectionIndex - The index of the current section in the playlist (optional).
-   */
-  saveTTSPosition(bookId: string, currentIndex: number, sectionIndex?: number): void {
+  async saveTTSPosition(bookId: string, currentIndex: number, sectionIndex?: number): void {
+      // Legacy
       this.pendingTTSPosition[bookId] = {
           bookId,
           currentIndex,
           sectionIndex,
           updatedAt: Date.now()
       };
-
       if (this.saveTTSPositionTimeout) return;
-
       this.saveTTSPositionTimeout = setTimeout(async () => {
           this.saveTTSPositionTimeout = null;
           const pending = { ...this.pendingTTSPosition };
           this.pendingTTSPosition = {};
-
           try {
               const db = await this.getDB();
               const tx = db.transaction('tts_position', 'readwrite');
               const store = tx.objectStore('tts_position');
-
               for (const position of Object.values(pending)) {
                   await store.put(position);
               }
@@ -603,18 +729,11 @@ class DBService {
           } catch (error) {
               Logger.error('DBService', 'Failed to save TTS position', error);
           }
-      }, 500); // 500ms debounce
+      }, 500);
   }
 
-  /**
-   * Retrieves the saved TTS state for a book.
-   * Merges data from both `tts_queue` and `tts_position` stores.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to the TTSState or undefined.
-   */
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
-      try {
+       try {
           const db = await this.getDB();
           const state = await db.get('tts_queue', bookId);
           const position = await db.get('tts_position', bookId);
@@ -626,38 +745,34 @@ class DBService {
                   sectionIndex: position.sectionIndex !== undefined ? position.sectionIndex : state.sectionIndex
               };
           }
-
           return state;
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  // --- Annotation Operations ---
-
-  /**
-   * Adds a new annotation to the database.
-   *
-   * @param annotation - The annotation object to add.
-   * @returns A Promise that resolves when the annotation is saved.
-   */
   async addAnnotation(annotation: Annotation): Promise<void> {
     try {
-      const db = await this.getDB();
-      await db.put('annotations', annotation);
+      if (this.mode === 'legacy' || this.mode === 'shadow') {
+          const db = await this.getDB();
+          await db.put('annotations', annotation);
+      }
+      if (this.mode === 'shadow' || this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          crdtService.annotations.push([annotation]);
+      }
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Retrieves all annotations for a specific book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to an array of Annotation objects.
-   */
   async getAnnotations(bookId: string): Promise<Annotation[]> {
     try {
+      if (this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          // Filter annotations by bookId (inefficient in Y.Array, but that's the schema)
+          return crdtService.annotations.toArray().filter(a => a.bookId === bookId);
+      }
       const db = await this.getDB();
       return await db.getAllFromIndex('annotations', 'by_bookId', bookId);
     } catch (error) {
@@ -665,37 +780,30 @@ class DBService {
     }
   }
 
-  /**
-   * Deletes an annotation by its ID.
-   *
-   * @param id - The unique identifier of the annotation.
-   * @returns A Promise that resolves when the annotation is deleted.
-   */
   async deleteAnnotation(id: string): Promise<void> {
       try {
-          const db = await this.getDB();
-          await db.delete('annotations', id);
+          if (this.mode === 'legacy' || this.mode === 'shadow') {
+              const db = await this.getDB();
+              await db.delete('annotations', id);
+          }
+          if (this.mode === 'shadow' || this.mode === 'crdt') {
+              await crdtService.waitForReady();
+              // Delete from Y.Array requires finding index.
+              const index = crdtService.annotations.toArray().findIndex(a => a.id === id);
+              if (index !== -1) {
+                  crdtService.annotations.delete(index, 1);
+              }
+          }
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  // --- TTS Cache Operations ---
-
-  /**
-   * Retrieves a cached TTS segment.
-   *
-   * @param key - The cache key.
-   * @returns A Promise resolving to the CachedSegment or undefined.
-   */
   async getCachedSegment(key: string): Promise<CachedSegment | undefined> {
       try {
           const db = await this.getDB();
           const segment = await db.get('tts_cache', key);
-
           if (segment) {
-              // Fire and forget update to lastAccessed
-              // We don't await this to keep read fast
               db.put('tts_cache', { ...segment, lastAccessed: Date.now() }).catch((err) => Logger.error('DBService', 'Failed to update TTS cache lastAccessed', err));
           }
           return segment;
@@ -704,14 +812,6 @@ class DBService {
       }
   }
 
-  /**
-   * Caches a TTS segment.
-   *
-   * @param key - The cache key.
-   * @param audio - The audio data.
-   * @param alignment - Optional alignment data.
-   * @returns A Promise that resolves when the segment is cached.
-   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async cacheSegment(key: string, audio: ArrayBuffer, alignment?: any[]): Promise<void> {
       try {
@@ -729,14 +829,6 @@ class DBService {
       }
   }
 
-  // --- Locations ---
-
-  /**
-   * Retrieves stored locations for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to the BookLocations object or undefined.
-   */
   async getLocations(bookId: string): Promise<BookLocations | undefined> {
       try {
           const db = await this.getDB();
@@ -746,13 +838,6 @@ class DBService {
       }
   }
 
-  /**
-   * Saves generated locations for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param locations - The locations string (JSON).
-   * @returns A Promise that resolves when the locations are saved.
-   */
   async saveLocations(bookId: string, locations: string): Promise<void> {
       try {
           const db = await this.getDB();
@@ -762,16 +847,13 @@ class DBService {
       }
   }
 
-  // --- Reading History Operations ---
-
-  /**
-   * Retrieves the reading history for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to an array of CFI ranges.
-   */
   async getReadingHistory(bookId: string): Promise<string[]> {
       try {
+          if (this.mode === 'crdt') {
+              await crdtService.waitForReady();
+              const hist = crdtService.history.get(bookId);
+              return hist ? hist.toArray() : [];
+          }
           const db = await this.getDB();
           const entry = await db.get('reading_history', bookId);
           return entry ? entry.readRanges : [];
@@ -780,12 +862,6 @@ class DBService {
       }
   }
 
-  /**
-   * Retrieves the full reading history entry for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to the ReadingHistoryEntry or undefined.
-   */
   async getReadingHistoryEntry(bookId: string): Promise<ReadingHistoryEntry | undefined> {
       try {
           const db = await this.getDB();
@@ -795,99 +871,115 @@ class DBService {
       }
   }
 
-  /**
-   * Updates the reading history for a book by merging a new range.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param newRange - The new CFI range to add.
-   * @param type - The source of the reading event.
-   * @param label - Optional contextual label.
-   * @returns A Promise that resolves when the history is updated.
-   */
   async updateReadingHistory(bookId: string, newRange: string, type: ReadingEventType, label?: string, skipSession: boolean = false): Promise<void> {
       try {
-          const db = await this.getDB();
-          const tx = db.transaction('reading_history', 'readwrite');
-          const store = tx.objectStore('reading_history');
-          const entry = await store.get(bookId);
+          if (this.mode === 'legacy' || this.mode === 'shadow') {
+              // ... existing logic ...
+              const db = await this.getDB();
+              const tx = db.transaction('reading_history', 'readwrite');
+              const store = tx.objectStore('reading_history');
+              const entry = await store.get(bookId);
 
-          let readRanges: string[] = [];
-          let sessions: ReadingSession[] = [];
+              let readRanges: string[] = [];
+              let sessions: ReadingSession[] = [];
 
-          if (entry) {
-              readRanges = entry.readRanges;
-              if (entry.sessions) {
-                  sessions = entry.sessions;
+              if (entry) {
+                  readRanges = entry.readRanges;
+                  if (entry.sessions) {
+                      sessions = entry.sessions;
+                  }
               }
+
+              let updatedRanges = mergeCfiRanges(readRanges, newRange);
+
+              if (updatedRanges.length > 100) {
+                  updatedRanges = updatedRanges.slice(updatedRanges.length - 100);
+              }
+
+              if (!skipSession) {
+                  const newTimestamp = Date.now();
+                  const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+
+                  let shouldCoalesce = false;
+
+                  if (lastSession && lastSession.type === type && type !== 'tts') {
+                       const timeDiff = newTimestamp - lastSession.timestamp;
+                       if (timeDiff < 300000) {
+                           shouldCoalesce = true;
+                       }
+                  }
+
+                  if (shouldCoalesce && lastSession) {
+                      lastSession.cfiRange = newRange;
+                      lastSession.timestamp = newTimestamp;
+                      if (label) lastSession.label = label;
+                      sessions[sessions.length - 1] = lastSession;
+                  } else {
+                      const newSession: ReadingSession = {
+                          cfiRange: newRange,
+                          timestamp: newTimestamp,
+                          type: type,
+                          label: label
+                      };
+                      sessions.push(newSession);
+                  }
+
+                  if (sessions.length > 100) {
+                     sessions = sessions.slice(sessions.length - 100);
+                  }
+              }
+
+              await store.put({
+                  bookId,
+                  readRanges: updatedRanges,
+                  sessions,
+                  lastUpdated: Date.now()
+              });
+              await tx.done;
           }
 
-          let updatedRanges = mergeCfiRanges(readRanges, newRange);
-
-          // Enforce limit on history size to prevent unbounded growth
-          if (updatedRanges.length > 100) {
-              updatedRanges = updatedRanges.slice(updatedRanges.length - 100);
-          }
-
-          if (!skipSession) {
-              // Coalescing Logic
-              const newTimestamp = Date.now();
-              const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
-
-              let shouldCoalesce = false;
-
-              if (lastSession && lastSession.type === type && type !== 'tts') {
-                   const timeDiff = newTimestamp - lastSession.timestamp;
-                   // 5 minutes = 300,000 ms
-                   if (timeDiff < 300000) {
-                       shouldCoalesce = true;
+          if (this.mode === 'shadow' || this.mode === 'crdt') {
+               await crdtService.waitForReady();
+               crtdTransact(() => {
+                   let hist = crdtService.history.get(bookId);
+                   if (!hist) {
+                       hist = new Y.Array<string>();
+                       crdtService.history.set(bookId, hist);
                    }
-              }
+                   // Simply push the new range.
+                   // NOTE: The legacy logic merges and coalesces.
+                   // The Plan for Phase 2D.1 says: "Legacy data must be passed through mergeCfiRanges... A user might have 1000 small scroll sessions... compress... before enter CRDT log."
+                   // Here we are pushing live updates.
+                   // If we just push `newRange` every time, we bloat the CRDT.
+                   // Ideally we should do intelligent updating (delete old range, add new merged range?)
+                   // But `mergeCfiRanges` returns a list of disjoint ranges.
 
-              if (shouldCoalesce && lastSession) {
-                  // Update last session
-                  lastSession.cfiRange = newRange;
-                  lastSession.timestamp = newTimestamp;
-                  if (label) lastSession.label = label;
+                   // For now, in Shadow mode, just pushing is safer to avoid logic bugs,
+                   // BUT for 1:1 parity, we might want to replicate the merge logic.
+                   // However, Y.Array operations are append-only mostly for sync.
+                   // If we constantly replace the array, it might be weird.
+                   // The plan says: "history... Array of CFI strings. If Device A adds Range1... Yjs array simply contains both. A computed getter... will merge."
+                   // So we SHOULD just push the raw range?
+                   // "A user might have 1,000 small "scroll" sessions. We should compress these into unified ranges *before* they enter the permanent CRDT log."
 
-                  // Update in array
-                  sessions[sessions.length - 1] = lastSession;
-              } else {
-                  // Add new session
-                  const newSession: ReadingSession = {
-                      cfiRange: newRange,
-                      timestamp: newTimestamp,
-                      type: type,
-                      label: label
-                  };
-                  sessions.push(newSession);
-              }
+                   // This implies we should debounce or coalesce locally before pushing.
+                   // The `updateReadingHistory` is called often?
+                   // No, `updateReadingHistory` is called by `Reader` on pause/leave or periodically?
+                   // Actually `saveProgress` is the high freq one. `updateReadingHistory` is for "Sessions".
 
-              // Limit sessions size too
-              if (sessions.length > 100) {
-                 sessions = sessions.slice(sessions.length - 100);
-              }
+                   // TECH DEBT: Unbounded History Growth.
+                   // In CRDT mode, we are currently appending every new range to the Y.Array.
+                   // This differs from the legacy implementation which merges ranges (mergeCfiRanges) and coalesces sessions.
+                   // This will lead to unbounded growth of the history array over time.
+                   // Resolution: Implement a coalescing strategy that respects CRDT convergence (e.g., periodic compaction or smarter append logic).
+                   hist.push([newRange]);
+               });
           }
-
-          await store.put({
-              bookId,
-              readRanges: updatedRanges,
-              sessions,
-              lastUpdated: Date.now()
-          });
-          await tx.done;
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  // --- Content Analysis ---
-
-  /**
-   * Saves content analysis results.
-   *
-   * @param analysis - The analysis object to save.
-   * @returns A Promise that resolves when the analysis is saved.
-   */
   async saveContentAnalysis(analysis: ContentAnalysis): Promise<void> {
     try {
       const db = await this.getDB();
@@ -897,13 +989,6 @@ class DBService {
     }
   }
 
-  /**
-   * Retrieves content analysis for a specific section.
-   *
-   * @param bookId - The book ID.
-   * @param sectionId - The section ID.
-   * @returns A Promise resolving to the ContentAnalysis or undefined.
-   */
   async getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined> {
     try {
       const db = await this.getDB();
@@ -913,14 +998,6 @@ class DBService {
     }
   }
 
-  /**
-   * Saves content classifications for a section.
-   * Merges with existing analysis if present, or creates a new one.
-   *
-   * @param bookId - The book ID.
-   * @param sectionId - The section ID.
-   * @param classifications - The detected content types.
-   */
   async saveContentClassifications(bookId: string, sectionId: string, classifications: { rootCfi: string; type: ContentType }[]): Promise<void> {
       try {
           const db = await this.getDB();
@@ -947,14 +1024,6 @@ class DBService {
       }
   }
 
-  /**
-   * Saves table adaptations for a section.
-   * Merges with existing analysis if present, or creates a new one.
-   *
-   * @param bookId - The book ID.
-   * @param sectionId - The section ID.
-   * @param adaptations - The generated adaptations.
-   */
   async saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): Promise<void> {
       try {
           const db = await this.getDB();
@@ -989,12 +1058,6 @@ class DBService {
       }
   }
 
-  /**
-   * Retrieves all content analysis entries for a book.
-   *
-   * @param bookId - The book ID.
-   * @returns A Promise resolving to an array of ContentAnalysis objects.
-   */
   async getBookAnalysis(bookId: string): Promise<ContentAnalysis[]> {
       try {
           const db = await this.getDB();
@@ -1004,11 +1067,6 @@ class DBService {
       }
   }
 
-  /**
-   * Clears the entire content analysis cache.
-   *
-   * @returns A Promise that resolves when the cache is cleared.
-   */
   async clearContentAnalysis(): Promise<void> {
     try {
       const db = await this.getDB();
@@ -1018,18 +1076,6 @@ class DBService {
     }
   }
 
-  // --- Lexicon ---
-  // Adding minimal support for lexicon to match removeBook requirements,
-  // full service migration for LexiconManager can be done later or added here if needed.
-
-  // --- TTS Content Operations ---
-
-  /**
-   * Saves extracted TTS content for a section.
-   *
-   * @param content - The TTS content to save.
-   * @returns A Promise that resolves when the content is saved.
-   */
   async saveTTSContent(content: TTSContent): Promise<void> {
     try {
       const db = await this.getDB();
@@ -1039,13 +1085,6 @@ class DBService {
     }
   }
 
-  /**
-   * Retrieves extracted TTS content for a specific section.
-   *
-   * @param bookId - The book ID.
-   * @param sectionId - The section ID.
-   * @returns A Promise resolving to the TTSContent or undefined.
-   */
   async getTTSContent(bookId: string, sectionId: string): Promise<TTSContent | undefined> {
     try {
       const db = await this.getDB();
@@ -1055,14 +1094,6 @@ class DBService {
     }
   }
 
-  // --- Table Images Operations ---
-
-  /**
-   * Retrieves all table images for a book.
-   *
-   * @param bookId - The book ID.
-   * @returns A Promise resolving to an array of TableImage objects.
-   */
   async getTableImages(bookId: string): Promise<TableImage[]> {
       try {
           const db = await this.getDB();
@@ -1072,10 +1103,6 @@ class DBService {
       }
   }
 
-  /**
-   * Cleans up any pending operations/timeouts.
-   * Call this before deleting the database or when shutting down the service.
-   */
   cleanup(): void {
       if (this.saveProgressTimeout) {
           clearTimeout(this.saveProgressTimeout);
@@ -1093,6 +1120,11 @@ class DBService {
           this.pendingTTSPosition = {};
       }
   }
+}
+
+// Helper for transactions
+function crtdTransact(callback: () => void) {
+    crdtService.doc.transact(callback);
 }
 
 export const dbService = new DBService();

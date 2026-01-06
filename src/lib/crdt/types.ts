@@ -38,6 +38,12 @@ export interface VersicleDocSchema {
    * Keyed by bookId.
    */
   transient: Y.Map<TTSPosition>;
+
+  /**
+   * synchronized settings (credentials, flags).
+   * Keyed by setting name.
+   */
+  settings: Y.Map<any>;
 }
 
 /**
@@ -59,4 +65,5 @@ export const CRDT_KEYS = {
   HISTORY: 'history',
   READING_LIST: 'readingList',
   TRANSIENT: 'transient',
+  SETTINGS: 'settings',
 } as const;
