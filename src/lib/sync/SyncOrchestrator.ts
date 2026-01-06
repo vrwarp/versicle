@@ -157,6 +157,7 @@ export class SyncOrchestrator {
         const readingHistory = await db.getAll('reading_history');
         const annotations = await db.getAll('annotations');
         const lexicon = await db.getAll('lexicon');
+        console.log('Generate Manifest - Lexicon count:', lexicon.length);
         const readingListList = await db.getAll('reading_list');
         const ttsPositions = await db.getAll('tts_position');
 
