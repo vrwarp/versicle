@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
@@ -36,17 +36,21 @@ export const ReaderControlBar: React.FC = () => {
         currentSectionTitle: state.currentSectionTitle
     })));
 
-    const books = useLibraryStore(state => state.books);
+    // OPTIMIZATION: Use granular selectors to avoid re-rendering on every library change.
+    // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.
+    // Now, we only re-render if the calculated `lastReadBook` or `currentBook` reference changes.
 
-    // Memoize last read book calculation
-    const lastReadBook = useMemo(() => {
-        return books.filter(b => b.lastRead).sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
-    }, [books]);
+    // Select the most recently read book
+    const lastReadBook = useLibraryStore(state => {
+        return state.books
+            .filter(b => b.lastRead)
+            .sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
+    });
 
-    // Determine current book title if active
-    const currentBook = useMemo(() => {
-        return currentBookId ? books.find(b => b.id === currentBookId) : undefined;
-    }, [currentBookId, books]);
+    // Select the current book if active
+    const currentBook = useLibraryStore(state => {
+        return currentBookId ? state.books.find(b => b.id === currentBookId) : undefined;
+    });
 
     // Determine State Priority
     // 1. Annotation Mode
