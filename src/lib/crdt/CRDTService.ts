@@ -56,6 +56,10 @@ export class CRDTService {
     return this.doc.getMap<TTSPosition>(CRDT_KEYS.TRANSIENT);
   }
 
+  get settings() {
+    return this.doc.getMap<any>(CRDT_KEYS.SETTINGS);
+  }
+
   /**
    * Encodes the current state of the document as a binary update.
    * This is used for syncing with other devices.
@@ -90,3 +94,5 @@ export class CRDTService {
     this.doc.destroy();
   }
 }
+
+export const crdtService = new CRDTService();

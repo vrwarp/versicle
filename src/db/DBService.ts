@@ -9,13 +9,18 @@ import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
 import { crdtService } from '../lib/crdt/CRDTService';
-import { CRDT_KEYS } from '../lib/crdt/types';
 import * as Y from 'yjs';
 
 export type PersistenceMode = 'legacy' | 'shadow' | 'crdt';
 
 class DBService {
   public mode: PersistenceMode = 'legacy';
+
+  private saveTTSStateTimeout: NodeJS.Timeout | null = null;
+  private pendingTTSState: { [bookId: string]: TTSState } = {};
+
+  private saveTTSPositionTimeout: NodeJS.Timeout | null = null;
+  private pendingTTSPosition: { [bookId: string]: TTSPosition } = {};
 
   private async getDB() {
     return getDB();
@@ -51,7 +56,7 @@ class DBService {
         const booksMap = crdtService.books;
         const validBooks: BookMetadata[] = [];
 
-        booksMap.forEach((bookMap) => {
+        booksMap.forEach((bookMap: Y.Map<any>) => {
              const book = bookMap.toJSON() as BookMetadata;
              if (validateBookMetadata(book)) {
                  validBooks.push(book);
@@ -201,7 +206,7 @@ class DBService {
       try {
           const db = await this.getDB();
           const sections = await db.getAllFromIndex('sections', 'by_bookId', bookId);
-          return sections.sort((a, b) => a.playOrder - b.playOrder);
+          return sections.sort((a: any, b: any) => a.playOrder - b.playOrder);
       } catch (error) {
           this.handleError(error);
       }
@@ -606,11 +611,10 @@ class DBService {
 
   // --- Import Reading List ---
   async importReadingList(entries: ReadingListEntry[]): Promise<void> {
-      // Logic is complex (reconciliation).
-      // For now, only supporting Legacy.
        try {
-          const db = await this.getDB();
-          const tx = db.transaction(['reading_list', 'books'], 'readwrite');
+          if (this.mode === 'legacy' || this.mode === 'shadow') {
+              const db = await this.getDB();
+              const tx = db.transaction(['reading_list', 'books'], 'readwrite');
           const rlStore = tx.objectStore('reading_list');
           const bookStore = tx.objectStore('books');
 
@@ -636,7 +640,21 @@ class DBService {
               cursor = await cursor.continue();
           }
 
-          await tx.done;
+              await tx.done;
+          }
+
+          if (this.mode === 'shadow' || this.mode === 'crdt') {
+              await crdtService.waitForReady();
+              crtdTransact(() => {
+                  for (const entry of entries) {
+                      crdtService.readingList.set(entry.filename, entry);
+
+                      // Reconciliation with books (Reverse lookup is expensive in Yjs, skipping for Phase 2A)
+                      // Ideally we would iterate all books and update progress if matching filename.
+                      // Given this is an "Import" action, we assume it's a one-off.
+                  }
+              });
+          }
       } catch (error) {
           this.handleError(error);
       }
@@ -677,7 +695,7 @@ class DBService {
       }
   }
 
-  async saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number, sectionIndex?: number): void {
+  async saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number, sectionIndex?: number): Promise<void> {
       // Legacy implementation for now
       this.pendingTTSState[bookId] = {
           bookId,
@@ -705,7 +723,7 @@ class DBService {
       }, 1000);
   }
 
-  async saveTTSPosition(bookId: string, currentIndex: number, sectionIndex?: number): void {
+  async saveTTSPosition(bookId: string, currentIndex: number, sectionIndex?: number): Promise<void> {
       // Legacy
       this.pendingTTSPosition[bookId] = {
           bookId,
@@ -771,7 +789,7 @@ class DBService {
       if (this.mode === 'crdt') {
           await crdtService.waitForReady();
           // Filter annotations by bookId (inefficient in Y.Array, but that's the schema)
-          return crdtService.annotations.toArray().filter(a => a.bookId === bookId);
+          return crdtService.annotations.toArray().filter((a: Annotation) => a.bookId === bookId);
       }
       const db = await this.getDB();
       return await db.getAllFromIndex('annotations', 'by_bookId', bookId);
@@ -789,7 +807,7 @@ class DBService {
           if (this.mode === 'shadow' || this.mode === 'crdt') {
               await crdtService.waitForReady();
               // Delete from Y.Array requires finding index.
-              const index = crdtService.annotations.toArray().findIndex(a => a.id === id);
+              const index = crdtService.annotations.toArray().findIndex((a: Annotation) => a.id === id);
               if (index !== -1) {
                   crdtService.annotations.delete(index, 1);
               }
