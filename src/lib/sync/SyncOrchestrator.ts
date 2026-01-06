@@ -186,11 +186,13 @@ export class SyncOrchestrator {
             };
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const readingList: Record<string, any> = {};
         for (const rl of readingListList) {
             readingList[rl.filename] = rl;
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ttsPosMap: Record<string, any> = {};
         for (const tp of ttsPositions) {
             ttsPosMap[tp.bookId] = tp;

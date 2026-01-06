@@ -343,6 +343,8 @@ export interface SyncManifest {
   /** High-frequency "Handoff" state. */
   transientState: {
     ttsPositions: Record<string, TTSPosition>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [key: string]: any; // Forward compatibility
   };
 
   /** Registry used to display "Last Synced" status per device. */
@@ -381,5 +383,6 @@ export interface SyncLogEntry {
   /** Log message. */
   message: string;
   /** Optional details or error object. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   details?: any;
 }

@@ -34,6 +34,7 @@ describe('SyncOrchestrator', () => {
         vi.clearAllMocks();
         // Reset singleton (if possible, or just create new instance since we passed provider)
         // Accessing private instance for test isolation if needed, but constructor sets it.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         orchestrator = new SyncOrchestrator(mockProvider as any);
 
         // Mock Store state
@@ -96,10 +97,12 @@ describe('SyncOrchestrator', () => {
             readingList: {},
             transientState: { ttsPositions: {} },
             deviceRegistry: {}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any;
 
         mockProvider.getManifest.mockResolvedValue(fullManifest);
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (SyncManager.mergeManifests as any).mockReturnValue(fullManifest);
 
         await orchestrator.forcePush('test');

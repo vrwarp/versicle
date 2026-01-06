@@ -9,7 +9,7 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
 1.  **Local-First & Offline-Capable**:
     *   **Why**: To provide zero-latency access, total privacy (no reading analytics sent to a server), and true ownership of data. Users should be able to read their books without an internet connection or fear of service shutdown.
     *   **How**: All data—books, annotations, progress, and settings—is stored in **IndexedDB** via the `idb` wrapper. The app is a PWA that functions completely offline.
-    *   **Trade-off**: Data is bound to the device. Syncing across devices requires manual backup/restore (JSON/ZIP export), as there is no central sync server. Storage is limited by the browser's quota.
+    *   **Trade-off**: Data is bound to the device. Syncing across devices requires manual backup/restore (JSON/ZIP export) or explicit sync configuration (Google Drive), as there is no central sync server. Storage is limited by the browser's quota.
 
 2.  **Heavy Client-Side Logic**:
     *   **Why**: To avoid server costs and maintain privacy. Features typically done on a backend (Text-to-Speech segmentation, Full-Text Indexing, File Parsing) are moved to the client.
@@ -55,7 +55,7 @@ graph TD
         AnnotStore[useAnnotationStore]
         GenAIStore[useGenAIStore]
         UIStore[useUIStore]
-        ToastStore[useToastStore]
+        SyncStore[useSyncStore]
     end
 
     subgraph Core [Core Services]
@@ -70,6 +70,14 @@ graph TD
         CostEst[CostEstimator]
         TaskRunner[cancellable-task-runner.ts]
         MediaSession[MediaSessionManager]
+    end
+
+    subgraph SyncSubsystem [Sync & Cloud]
+        Orchestrator[SyncOrchestrator]
+        Manager[SyncManager]
+        Checkpoint[CheckpointService]
+        Provider[GoogleDriveProvider]
+        AndroidBackup[AndroidBackupService]
     end
 
     subgraph TTS [TTS Subsystem]
@@ -92,6 +100,12 @@ graph TD
     subgraph Storage [IndexedDB]
         DBService[DBService]
         IDB[(IndexedDB)]
+        Checkpoints[(Checkpoints)]
+    end
+
+    subgraph Experimental [Phase 2]
+        CRDT[CRDTService]
+        Yjs[Yjs / y-indexeddb]
     end
 
     App --> Library
@@ -104,6 +118,7 @@ graph TD
     VisualSettings --> ReaderStore
     AudioPanel --> TTSStore
     GlobalSettings --> UIStore
+    GlobalSettings --> SyncStore
 
     TTSStore --> APS
     Library --> LibStore
@@ -112,6 +127,15 @@ graph TD
     LibStore --> BatchIngestion
     LibStore --> Backup
     LibStore --> Maint
+
+    ReaderStore --> Orchestrator
+
+    Orchestrator --> Manager
+    Orchestrator --> Checkpoint
+    Orchestrator --> Provider
+    Orchestrator --> AndroidBackup
+    Checkpoint --> Checkpoints
+    Manager --> DBService
 
     APS --> Pipeline
     APS --> PSM
@@ -152,19 +176,19 @@ The data layer is built on **IndexedDB** using the `idb` library. It is accessed
 #### `src/db/DBService.ts`
 The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
 
-**Key Stores (Schema v15):**
+**Key Stores (Schema v16):**
 *   `books`: Metadata and 50KB thumbnail blobs.
 *   `files`: The raw binary EPUB files (large).
-*   `table_images`: **(New)** Stores `webp` snapshots of tables captured during ingestion. Keyed by `${bookId}-${cfi}`.
-*   `content_analysis`: **(New)** Stores GenAI classification results (e.g., this block is a footnote) and table adaptations.
+*   `table_images`: Stores `webp` snapshots of tables captured during ingestion. Keyed by `${bookId}-${cfi}`.
+*   `content_analysis`: Stores GenAI classification results (e.g., this block is a footnote) and table adaptations.
 *   `tts_cache`: Stores generated audio segments.
 *   `tts_queue`: Persistent playback queue (for resumption).
-*   `tts_position`: **(New)** Lightweight position tracking (current index/section). Separate from `tts_queue` to minimize write overhead.
-*   `app_metadata`: Application-level configuration and flags.
+*   `tts_position`: Lightweight position tracking (current index/section). Separate from `tts_queue` to minimize write overhead.
+*   `checkpoints`: **(New)** Stores `SyncManifest` snapshots for recovery.
 *   `reading_history`: Tracks user sessions.
 
 **Key Functions:**
-*   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position.
+*   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position. Now triggers `SyncOrchestrator` to schedule a sync.
     *   *Trade-off*: A crash within 1 second of reading might lose the very last position update.
 *   **`saveTTSState` / `saveTTSPosition`**:
     *   *Logic*: `saveTTSState` writes the heavy queue object only when the playlist changes. `saveTTSPosition` writes only indices (integers) frequently during playback.
@@ -177,6 +201,35 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   **Logic**:
     *   **Magic Number Check**: Verifies ZIP signature (`50 4B 03 04`) before parsing.
     *   **Sanitization**: Delegates to `DOMPurify` to strip HTML tags from metadata.
+
+### Sync & Cloud (`src/lib/sync/`)
+
+Versicle implements a "Serverless Sync" model using personal cloud storage (Google Drive) as a dumb file store.
+
+#### `SyncOrchestrator.ts`
+The controller for synchronization. It manages the sync lifecycle and integrates with the UI.
+
+*   **Logic**:
+    *   **JSON Manifests**: Converts the local database state into a portable `SyncManifest` JSON object.
+    *   **Last-Write-Wins (LWW)**: Merges local and remote manifests based on timestamps.
+    *   **Debounced Push**: Reading progress updates are debounced (60s) to avoid API rate limits.
+    *   **Force Push**: Critical actions (Pause, Bookmark) trigger immediate sync.
+    *   **Background Sync**: Listens for `visibilitychange` to sync when the app is backgrounded.
+*   **Trade-offs**:
+    *   **Conflict Resolution**: LWW is simple but can lose data if two devices edit the same field offline simultaneously.
+    *   **Traffic**: Uploads the entire metadata manifest on every sync (no delta sync yet).
+
+#### `CheckpointService.ts` ("The Moral Layer")
+*   **Goal**: Safety net for sync operations.
+*   **Logic**: Creates a local snapshot of the `SyncManifest` before every sync operation. Allows the user to roll back to a previous state if a bad sync occurs.
+
+#### `AndroidBackupService.ts`
+*   **Goal**: Native Android backup integration.
+*   **Logic**: Writes the `SyncManifest` to a specific file (`backup_payload.json`) in the app's data directory, which Android's `BackupManager` can include in OS-level backups.
+
+#### `CRDTService.ts` (Phase 2 / Experimental)
+*   **Goal**: Future-proof sync using Conflict-Free Replicated Data Types (Yjs).
+*   **Status**: Implemented but not yet active in the main `SyncOrchestrator` loop. Intended to replace LWW with true merge semantics.
 
 ### Core Logic & Services (`src/lib/`)
 
@@ -221,18 +274,18 @@ Implements full-text search off the main thread.
     *   **Offloading**: XML parsing is offloaded to the worker (`DOMParser` in Worker).
 *   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book.
 
+#### Maintenance (`src/lib/MaintenanceService.ts`)
+Handles database health.
+
+*   **Goal**: Ensure the database is free of orphaned records (files, annotations) that no longer have a parent book.
+*   **Logic**: Scans all object stores and compares IDs against the `books` store.
+
 #### Backup (`src/lib/BackupService.ts`)
 Manages internal state backup and restoration.
 
 *   **`createLightBackup()`**: JSON-only export (metadata, settings, history).
 *   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files.
 *   **`restoreBackup()`**: Implements a smart merge strategy (keeps newer progress).
-
-#### Maintenance (`src/lib/MaintenanceService.ts`)
-Handles database health.
-
-*   **Goal**: Ensure the database is free of orphaned records (files, annotations) that no longer have a parent book.
-*   **Logic**: Scans all object stores and compares IDs against the `books` store.
 
 ---
 
@@ -303,6 +356,7 @@ State is managed using **Zustand**.
 *   **`useTTSStore`**: Persists TTS settings.
 *   **`useGenAIStore`**: Persists AI settings and usage stats.
 *   **`useLibraryStore`**: Transient UI state.
+*   **`useSyncStore`**: Persists Sync credentials and settings.
 
 ### UI Layer
 

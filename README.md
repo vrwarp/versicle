@@ -12,14 +12,15 @@
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google) for studio-quality narration.
     *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content and filter content.
+*   **Serverless Sync**: Synchronize your reading progress and highlights across devices using your own Google Drive as a private storage backend.
 *   **Data Ownership**: Export your data at any time. Full backups (ZIP) or Metadata (JSON).
 
 ## Tech Stack
 
 *   **Framework**: React 19 + Vite 7
 *   **Language**: TypeScript
-*   **State**: Zustand
-*   **Storage**: IndexedDB (via `idb`)
+*   **State**: Zustand + Yjs (Experimental CRDT)
+*   **Storage**: IndexedDB (via `idb`) + `y-indexeddb`
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
 *   **AI**: Google Gemini 2.5 Flash Lite (via `@google/generative-ai`)
@@ -54,6 +55,10 @@
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
 
 ### Management (The "Engine Room")
+*   **Sync & Cloud**:
+    *   **Google Drive Sync**: Keep your progress and annotations in sync across devices.
+    *   **Checkpoints**: Automatic "Moral Layer" snapshots protect against data loss during sync.
+    *   **Android Backup**: Native integration with Android's Backup Manager.
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Track status (Read, Reading, Want to Read) and Rating. Export to CSV (Goodreads compatible).
 *   **Backups**:
