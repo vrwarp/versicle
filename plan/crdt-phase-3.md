@@ -16,7 +16,8 @@ In the legacy system, we uploaded a single `sync_manifest.json`. In Phase 3, we 
 
 3.  **The Atomic Push:** The client uploads the diff to a `pending_updates/` folder as a unique file (e.g., `${deviceId}_${timestamp}.delta`).
 
-4.  **The Merge (Brokerless):** On the next fetch, every device reads all files in `pending_updates/`, applies them locally using `Y.applyUpdate`, and then periodically merges them into a canonical `root_state.bin`.
+4.  **The Merge (Brokerless):** On the next fetch, every device reads all files in `pending_updates/`, applies them locally using `Y.applyUpdate`.
+    *   **Reactivity:** Because our stores are bound via `zustand-middleware-yjs` (Phase 2), `Y.applyUpdate` immediately updates the `Y.Doc`. This triggers the middleware, which automatically updates the React state. No manual dispatch is required.
 
 2\. Storage Minutia: Cloud Log Management
 -----------------------------------------
