@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CRDTService } from '../CRDTService';
 import * as Y from 'yjs';
 import 'fake-indexeddb/auto'; // Automatically mock IndexedDB
