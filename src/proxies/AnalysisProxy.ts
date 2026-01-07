@@ -1,15 +1,8 @@
 import { dbService } from '../db/DBService';
-import { BaseModel } from './BaseModel';
 import type { ContentAnalysis } from '../types/db';
 import type { ContentType } from '../types/content-analysis';
-import * as Y from 'yjs';
 
-export class AnalysisModel extends BaseModel<Y.Map<ContentAnalysis>> {
-  constructor(doc: Y.Doc) {
-    // Plan: Y.Map<CompositeId, ContentAnalysis>
-    super(doc.getMap('content_analysis'));
-  }
-
+export class AnalysisProxy {
   async saveContentAnalysis(analysis: ContentAnalysis) {
     return dbService.saveContentAnalysis(analysis);
   }

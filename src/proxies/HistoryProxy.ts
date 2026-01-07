@@ -1,14 +1,7 @@
 import { dbService } from '../db/DBService';
-import { BaseModel } from './BaseModel';
 import type { ReadingEventType, ReadingHistoryEntry } from '../types/db';
-import * as Y from 'yjs';
 
-export class HistoryModel extends BaseModel<Y.Map<Y.Array<string>>> {
-  constructor(doc: Y.Doc) {
-    // Plan: Y.Map<BookId, Y.Array<string>>
-    super(doc.getMap('reading_history'));
-  }
-
+export class HistoryProxy {
   async getReadingHistory(bookId: string) {
     return dbService.getReadingHistory(bookId);
   }

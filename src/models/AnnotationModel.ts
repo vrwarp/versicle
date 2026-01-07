@@ -1,34 +1,45 @@
-import { dbService } from '../db/DBService';
 import { BaseModel } from './BaseModel';
-import type { Annotation } from '../types/db';
 import * as Y from 'yjs';
+import type { Annotation } from '../types/db';
 
-// Plan says Y.Map<UUID, Annotation>, but CRDTService uses Y.Array<Annotation>.
-// The plan is the "new" truth. I will use Y.Map as per plan, assuming we will migrate.
-// "Key Data Structures: ... Yjs Type Mapping: Y.Map<UUID, Annotation>"
-
-export class AnnotationModel extends BaseModel<Y.Map<Annotation>> {
-  constructor(doc: Y.Doc) {
-    // Note: If the existing data is Y.Array, this might conflict if we were actually syncing.
-    // Since we are "shunting", this initialization is structural only for now.
-    // However, if CRDTService.ts expects 'annotations' to be Array, and I ask for Map, Yjs might complain if data exists.
-    // But CRDTService uses 'annotations' key.
-    // Let's use a new key 'annotations_v2' or assume we are rewriting the schema?
-    // The plan implies we are rewriting the architecture.
-    // I will stick to 'annotations' but use Y.Map as instructed.
-    // IF strict Yjs checks types, this might be an issue if we load an old doc.
-    super(doc.getMap('annotations'));
+export class AnnotationModel extends BaseModel<Y.Map<any>> implements Annotation {
+  constructor(data: Y.Map<any> | Annotation) {
+    if (data instanceof Y.Map) {
+      super(data);
+    } else {
+      const map = new Y.Map();
+      for (const [key, value] of Object.entries(data)) {
+        map.set(key, value);
+      }
+      super(map);
+    }
   }
 
-  async addAnnotation(annotation: Annotation) {
-    return dbService.addAnnotation(annotation);
-  }
+  get id(): string { return this.y.get('id'); }
+  set id(v: string) { this.y.set('id', v); }
 
-  async getAnnotations(bookId: string) {
-    return dbService.getAnnotations(bookId);
-  }
+  get bookId(): string { return this.y.get('bookId'); }
+  set bookId(v: string) { this.y.set('bookId', v); }
 
-  async deleteAnnotation(id: string) {
-    return dbService.deleteAnnotation(id);
+  get cfiRange(): string { return this.y.get('cfiRange'); }
+  set cfiRange(v: string) { this.y.set('cfiRange', v); }
+
+  get text(): string { return this.y.get('text'); }
+  set text(v: string) { this.y.set('text', v); }
+
+  get type(): 'highlight' | 'note' { return this.y.get('type'); }
+  set type(v: 'highlight' | 'note') { this.y.set('type', v); }
+
+  get color(): string { return this.y.get('color'); }
+  set color(v: string) { this.y.set('color', v); }
+
+  get note(): string | undefined { return this.y.get('note'); }
+  set note(v: string | undefined) { this.y.set('note', v); }
+
+  get created(): number { return this.y.get('created'); }
+  set created(v: number) { this.y.set('created', v); }
+
+  toJSON(): Annotation {
+    return this.y.toJSON() as Annotation;
   }
 }

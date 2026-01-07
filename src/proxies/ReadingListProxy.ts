@@ -1,19 +1,16 @@
 import { dbService } from '../db/DBService';
-import { BaseModel } from './BaseModel';
+import { ReadingListEntryModel } from '../models/ReadingListEntryModel';
 import type { ReadingListEntry } from '../types/db';
-import * as Y from 'yjs';
 
-export class ReadingListModel extends BaseModel<Y.Map<ReadingListEntry>> {
-  constructor(doc: Y.Doc) {
-    super(doc.getMap('reading_list'));
-  }
-
+export class ReadingListProxy {
   async getReadingList() {
-    return dbService.getReadingList();
+    const list = await dbService.getReadingList();
+    return list.map(entry => new ReadingListEntryModel(entry));
   }
 
-  async upsertReadingListEntry(entry: ReadingListEntry) {
-    return dbService.upsertReadingListEntry(entry);
+  async upsertReadingListEntry(entry: ReadingListEntry | ReadingListEntryModel) {
+    const data = entry instanceof ReadingListEntryModel ? entry.toJSON() : entry;
+    return dbService.upsertReadingListEntry(data);
   }
 
   async deleteReadingListEntry(filename: string) {
@@ -25,6 +22,7 @@ export class ReadingListModel extends BaseModel<Y.Map<ReadingListEntry>> {
   }
 
   async importReadingList(entries: ReadingListEntry[]) {
+    // Bulk import usually takes raw data
     return dbService.importReadingList(entries);
   }
 }

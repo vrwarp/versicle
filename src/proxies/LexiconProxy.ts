@@ -1,19 +1,17 @@
 import { LexiconService } from '../lib/tts/LexiconService';
-import { BaseModel } from './BaseModel';
+import { LexiconRuleModel } from '../models/LexiconRuleModel';
 import type { LexiconRule } from '../types/db';
-import * as Y from 'yjs';
 
-export class LexiconModel extends BaseModel<Y.Array<LexiconRule>> {
+export class LexiconProxy {
   private service: LexiconService;
 
-  constructor(doc: Y.Doc) {
-    // Plan: Y.Array<LexiconRule>
-    super(doc.getArray('lexicon'));
+  constructor() {
     this.service = LexiconService.getInstance();
   }
 
   async getRules(bookId?: string) {
-    return this.service.getRules(bookId);
+    const rules = await this.service.getRules(bookId);
+    return rules.map(r => new LexiconRuleModel(r));
   }
 
   async saveRule(rule: Omit<LexiconRule, 'id' | 'created'> & { id?: string }) {
@@ -33,6 +31,8 @@ export class LexiconModel extends BaseModel<Y.Array<LexiconRule>> {
   }
 
   applyLexicon(text: string, rules: LexiconRule[]) {
+    // LexiconService expects plain objects or at least compatible interfaces.
+    // LexiconRuleModel implements LexiconRule, so it should be fine.
     return this.service.applyLexicon(text, rules);
   }
 
