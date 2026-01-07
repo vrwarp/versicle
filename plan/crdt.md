@@ -164,3 +164,22 @@ For extremely large libraries (1000+ books), reconstructing the doc from Indexed
 **Findings:**
 - **Compaction:** While the plan called for periodic `Y.encodeStateAsUpdate`, `y-indexeddb` handles incremental updates efficiently. A `compact()` method was added to the service to return the current snapshot size, but manual replacement of the persistence layer was not necessary for basic functionality.
 - **Testing Strategy:** Automated tests proved far more effective than a manual debug view for verifying convergence scenarios and ensuring no "split-brain" timestamp issues.
+
+## Phase 2C Execution Report (Selective Hydration)
+
+**Status:** Phase 2C Complete.
+
+**Implementation Summary:**
+- **Core:** Implemented `MigrationService` in `src/services/MigrationService.ts` to handle the one-way hydration of legacy data into the Yjs `CRDTService`.
+- **Integration:** Hooked `MigrationService.hydrateIfNeeded()` into `App.tsx` initialization, wrapped in `requestIdleCallback` with a 2-second timeout to avoid blocking the main thread during startup.
+- **Data Scope:**
+    - **Books Metadata:** Migrated from legacy `books` store to `crdtService.books` (Y.Map). This was deemed necessary as a dependency for other entities (annotations, reading list).
+    - **Lexicon:** Migrated from `lexicon` store to `crdtService.lexicon` (Y.Array), preserving order. Added `getAllLexiconRules` to `DBService`.
+    - **Reading List:** Migrated from `reading_list` store to `crdtService.readingList` (Y.Map), currently using filename as key as per v1 schema.
+    - **Annotations:** Migrated from `annotations` store to `crdtService.annotations` (Y.Array).
+- **Testing:** Created comprehensive unit tests in `src/services/tests/MigrationService.test.ts` mocking `DBService` and `CRDTService` to verify correct data transfer and idempotency (skipping if already migrated).
+
+**Findings & Deviations:**
+- **Books Metadata Included:** Although Phase 2C focused on "Selective Hydration" of low-risk data, Books Metadata was included because it serves as the foundational foreign key for Annotations and other entities. Without it, the "Moral Layer" in CRDT would be structurally incomplete.
+- **Reading List Keys:** The plan suggested mapping Reading List keys from filenames to Book IDs. However, efficient reverse lookup (filename -> bookId) without a full scan is expensive. For Phase 2C, we maintained the filename key to match the current `ReadingListEntry` schema and `crdt.md` definition, deferring the potentially complex re-keying to a later refactor or cleanup phase if necessary.
+- **Test Strategy:** Mocking `Yjs` and `CRDTService` in Vitest required careful handling of module mocking (hoisting) to ensure the test and the service under test shared the same `Y.Doc` instance logic. A factory-based mock approach was used.
