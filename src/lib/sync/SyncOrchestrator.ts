@@ -186,12 +186,12 @@ export class SyncOrchestrator {
             };
         }
 
-        const readingList: Record<string, any> = {};
+        const readingList: SyncManifest['readingList'] = {};
         for (const rl of readingListList) {
             readingList[rl.filename] = rl;
         }
 
-        const ttsPosMap: Record<string, any> = {};
+        const ttsPosMap: SyncManifest['transientState']['ttsPositions'] = {};
         for (const tp of ttsPositions) {
             ttsPosMap[tp.bookId] = tp;
         }

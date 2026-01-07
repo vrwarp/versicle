@@ -381,5 +381,5 @@ export interface SyncLogEntry {
   /** Log message. */
   message: string;
   /** Optional details or error object. */
-  details?: any;
+  details?: unknown;
 }
