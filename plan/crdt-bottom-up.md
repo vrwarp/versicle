@@ -98,11 +98,18 @@ Based on an exhaustive audit of the repository (including `EpubLibraryDB` schema
 
 **Objective:** Replace direct `dbService` calls in UI components and stores with calls to new Model classes.
 
+-   **Status:** **COMPLETE** (2025-05-27)
 -   Create `src/models/` and implement the classes listed in Section 2.
-
 -   **Initial Implementation:** These models will initially use a "Storage Shunt" that simply redirects to the existing `DBService`.
-
 -   **Logic Encapsulation:** Move complex logic (like `mergeCfiRanges` for History or Rule Ordering for Lexicon) into the Model classes.
+
+#### Implementation Notes (Phase 1):
+-   Implemented `BaseModel` and all 9 specific models in `src/models/`.
+-   **Storage Shunt:** Most models (`LibraryModel`, `AnnotationModel`, etc.) wrap `DBService` directly as planned.
+-   **LexiconModel Deviation:** Instead of `DBService`, this model wraps `LexiconService` because `DBService` lacks granular rule management methods (only bulk delete). `LexiconService` already handles IDB interactions and rule logic (sorting, regex caching).
+-   **SettingsModel:** Currently a placeholder as settings primarily live in `localStorage` via Zustand `persist` middleware. Future integration will require refactoring stores to use this model for persistence.
+-   **HistoryModel:** Logic for `mergeCfiRanges` remains in `DBService` for now to maintain stability of the legacy path. It will be moved to `HistoryModel` in Phase 3 when Yjs implementation begins, as the logic will operate on Y.Arrays instead of plain arrays.
+-   **Testing:** Validated with `npm test`. No regressions.
 
 ### Phase 2: Reactive Store Integration
 
