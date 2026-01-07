@@ -1,19 +1,20 @@
 import { BaseModel } from './BaseModel';
+import * as Y from 'yjs';
 
-export class RegistryModel extends BaseModel {
-    // Currently no DBService methods for Registry.
-    // It seems to be inferred from legacy sync logic (SyncOrchestrator).
-    // For Phase 1 Wrapper, we might need to expose methods to interact with "deviceRegistry" store
-    // if it exists in IndexedDB, or localStorage.
-
-    // Looking at SyncOrchestrator, it seems to handle registry.
-    // But DBService doesn't expose it.
-
-    // I will leave this empty for now or add placeholders if I find usages.
-    async getRegistry() {
-        // Placeholder
-        return [];
-    }
+interface DeviceInfo {
+  deviceId: string;
+  name: string;
+  lastSeen: number;
 }
 
-export const registryModel = new RegistryModel();
+export class RegistryModel extends BaseModel<Y.Map<DeviceInfo>> {
+  constructor(doc: Y.Doc) {
+    // Plan: Y.Map<DeviceId, DeviceInfo>
+    super(doc.getMap('deviceRegistry'));
+  }
+
+  async getRegistry() {
+    // Placeholder
+    return [];
+  }
+}

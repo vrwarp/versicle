@@ -1,14 +1,14 @@
 import { BaseModel } from './BaseModel';
+import * as Y from 'yjs';
 
-export class SettingsModel extends BaseModel {
-    // Settings are primarily in localStorage via Zustand persist.
-    // This model will eventually wrap that.
-    // For now, it serves as a placeholder for the architecture.
+export class SettingsModel extends BaseModel<Y.Map<any>> {
+  constructor(doc: Y.Doc) {
+    // Plan: Y.Map<string, any>
+    super(doc.getMap('settings'));
+  }
 
-    async getSettings() {
-        // Placeholder
-        return {};
-    }
+  async getSettings() {
+    // Placeholder
+    return {};
+  }
 }
-
-export const settingsModel = new SettingsModel();

@@ -1,7 +1,12 @@
 import { dbService } from '../db/DBService';
 import { BaseModel } from './BaseModel';
+import * as Y from 'yjs';
 
-export class LibraryModel extends BaseModel {
+export class LibraryModel extends BaseModel<Y.Map<Y.Map<any>>> {
+  constructor(doc: Y.Doc) {
+    super(doc.getMap('books'));
+  }
+
   async getLibrary() {
     return dbService.getLibrary();
   }
@@ -34,5 +39,3 @@ export class LibraryModel extends BaseModel {
     return dbService.restoreBook(id, file);
   }
 }
-
-export const libraryModel = new LibraryModel();

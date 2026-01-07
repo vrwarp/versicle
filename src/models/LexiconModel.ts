@@ -1,12 +1,14 @@
 import { LexiconService } from '../lib/tts/LexiconService';
 import { BaseModel } from './BaseModel';
 import type { LexiconRule } from '../types/db';
+import * as Y from 'yjs';
 
-export class LexiconModel extends BaseModel {
+export class LexiconModel extends BaseModel<Y.Array<LexiconRule>> {
   private service: LexiconService;
 
-  constructor() {
-    super();
+  constructor(doc: Y.Doc) {
+    // Plan: Y.Array<LexiconRule>
+    super(doc.getArray('lexicon'));
     this.service = LexiconService.getInstance();
   }
 
@@ -38,5 +40,3 @@ export class LexiconModel extends BaseModel {
       return this.service.getRulesHash(rules);
   }
 }
-
-export const lexiconModel = new LexiconModel();

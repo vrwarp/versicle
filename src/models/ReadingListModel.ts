@@ -1,8 +1,13 @@
 import { dbService } from '../db/DBService';
 import { BaseModel } from './BaseModel';
 import type { ReadingListEntry } from '../types/db';
+import * as Y from 'yjs';
 
-export class ReadingListModel extends BaseModel {
+export class ReadingListModel extends BaseModel<Y.Map<ReadingListEntry>> {
+  constructor(doc: Y.Doc) {
+    super(doc.getMap('reading_list'));
+  }
+
   async getReadingList() {
     return dbService.getReadingList();
   }
@@ -23,5 +28,3 @@ export class ReadingListModel extends BaseModel {
     return dbService.importReadingList(entries);
   }
 }
-
-export const readingListModel = new ReadingListModel();

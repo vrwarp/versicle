@@ -105,10 +105,10 @@ Based on an exhaustive audit of the repository (including `EpubLibraryDB` schema
 
 #### Implementation Notes (Phase 1):
 -   Implemented `BaseModel` and all 9 specific models in `src/models/`.
--   **Storage Shunt:** Most models (`LibraryModel`, `AnnotationModel`, etc.) wrap `DBService` directly as planned.
--   **LexiconModel Deviation:** Instead of `DBService`, this model wraps `LexiconService` because `DBService` lacks granular rule management methods (only bulk delete). `LexiconService` already handles IDB interactions and rule logic (sorting, regex caching).
--   **SettingsModel:** Currently a placeholder as settings primarily live in `localStorage` via Zustand `persist` middleware. Future integration will require refactoring stores to use this model for persistence.
--   **HistoryModel:** Logic for `mergeCfiRanges` remains in `DBService` for now to maintain stability of the legacy path. It will be moved to `HistoryModel` in Phase 3 when Yjs implementation begins, as the logic will operate on Y.Arrays instead of plain arrays.
+-   **Yjs Integration:** All models now inherit from `BaseModel<T>` where T is a Yjs shared type (`Y.Map` or `Y.Array`). The models are initialized with a `Y.Doc` and hold a reference to their specific shared structure (e.g., `doc.getMap('books')`).
+-   **Storage Shunt:** Despite holding Yjs structures, the models primarily delegate data operations to `DBService` (or `LexiconService`) for the "Shunt" phase. This prepares the structural "wrapper" for Phase 3 (Shadowing) while maintaining current behavior.
+-   **LexiconModel Deviation:** Wraps `LexiconService` instead of `DBService` as `LexiconService` owns the logic.
+-   **Type Mapping:** strictly followed Section 2 type definitions (e.g., `Y.Map` for annotations) even where they differ from legacy `CRDTService` assumptions, preparing for the migration.
 -   **Testing:** Validated with `npm test`. No regressions.
 
 ### Phase 2: Reactive Store Integration

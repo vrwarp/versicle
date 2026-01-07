@@ -1,5 +1,11 @@
-export abstract class BaseModel {
-  constructor() {}
+import type * as Y from 'yjs';
+
+export abstract class BaseModel<T extends Y.AbstractType<any>> {
+  public sharedType: T;
+
+  constructor(sharedType: T) {
+    this.sharedType = sharedType;
+  }
 
   /**
    * Helper to ensure consistency in method signatures.
