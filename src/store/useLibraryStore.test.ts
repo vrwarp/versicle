@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useLibraryStore } from './useLibraryStore';
 import { getDB } from '../db/db';
 import type { BookMetadata, LexiconRule } from '../types/db';
+import { dbService } from '../db/DBService';
 
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
@@ -43,6 +44,9 @@ describe('useLibraryStore', () => {
   }
 
   beforeEach(async () => {
+    // Force Legacy Mode for store tests that verify IDB side-effects
+    dbService.mode = 'legacy';
+
     // Reset Zustand store
     useLibraryStore.setState({
       books: [],

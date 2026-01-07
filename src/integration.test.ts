@@ -4,6 +4,7 @@ import { useLibraryStore } from './store/useLibraryStore';
 import { useReaderStore } from './store/useReaderStore';
 import * as fs from 'fs';
 import * as path from 'path';
+import { dbService } from './db/DBService';
 
 // Mock offscreen renderer
 vi.mock('./lib/offscreen-renderer', () => ({
@@ -93,6 +94,9 @@ vi.mock('epubjs', async (importOriginal) => {
 describe('Feature Integration Tests', () => {
   vi.setConfig({ testTimeout: 120000 });
   beforeEach(async () => {
+    // Force Legacy Mode for Integration Tests that check IDB directly
+    dbService.mode = 'legacy';
+
     // Clear DB
     const db = await getDB();
     const tx = db.transaction(['books', 'files', 'annotations', 'sections', 'tts_content'], 'readwrite');

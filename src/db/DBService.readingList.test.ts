@@ -5,6 +5,9 @@ import type { ReadingListEntry } from '../types/db';
 
 describe('DBService Reading List', () => {
     beforeEach(async () => {
+        // Force Legacy Mode for direct IDB testing
+        dbService.mode = 'legacy';
+
         const db = await getDB();
         await db.clear('reading_list');
         await db.clear('books');

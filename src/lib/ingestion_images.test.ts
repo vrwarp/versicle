@@ -40,6 +40,9 @@ describe('Ingestion Image Optimization', () => {
   const mockThumbnailBlob = new Blob(['thumbnail'], { type: 'image/jpeg' });
 
   beforeEach(async () => {
+    // Force Legacy Mode for direct IDB testing
+    dbService.mode = 'legacy';
+
     // Reset mocks
     vi.clearAllMocks();
 

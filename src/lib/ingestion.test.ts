@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { processEpub, validateZipSignature } from './ingestion';
 import { getDB } from '../db/db';
+import { dbService } from '../db/DBService';
 
 // Mock browser-image-compression
 vi.mock('browser-image-compression', () => ({
@@ -60,6 +61,9 @@ vi.mock('uuid', () => ({
 
 describe('ingestion', () => {
   beforeEach(async () => {
+    // Force Legacy Mode for Ingestion Tests asserting against IndexedDB
+    dbService.mode = 'legacy';
+
     vi.spyOn(window, 'confirm').mockImplementation(() => true);
     const db = await getDB();
     const tx = db.transaction(['books', 'files', 'sections', 'annotations', 'tts_content'], 'readwrite');
