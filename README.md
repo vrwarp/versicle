@@ -23,7 +23,7 @@
 *   **Storage**: IndexedDB (via `idb`) + `y-indexeddb`
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
-*   **AI**: Google Gemini 2.5 Flash Lite (via `@google/generative-ai`)
+*   **AI**: Google Gemini Flash (Latest) with Model Rotation (via `@google/generative-ai`)
 *   **Mobile**: Capacitor 7 (Android)
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
@@ -45,6 +45,7 @@
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
 *   **Optimistic Playback**: Audio starts playing instantly while content filtering (skip masks) and smart adaptations are applied asynchronously in the background.
 *   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural narrative speech.
+*   **Model Rotation**: Automatically switches between Gemini models to handle API rate limits during content analysis.
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.

@@ -264,6 +264,7 @@ Enhances the reading experience using LLMs.
         *   **Content Type**: Classifies blocks as `title`, `footnote`, `main`, `table`, or `other`.
         *   **Table Adaptation**: Converts visual table data into narrative text.
     *   **Mocking**: Supports `localStorage` mocks (`mockGenAIResponse`) for cost-free E2E testing.
+    *   **Model Rotation**: Automatically rotates between `gemini-flash` variants to handle `429 Resource Exhausted` errors.
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets/images are sent to Google's servers.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
