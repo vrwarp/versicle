@@ -1,20 +1,87 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
-import { render, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import App from './App';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Capacitor } from '@capacitor/core';
-import { AudioPlayerService } from './lib/tts/AudioPlayerService';
+import { dbService } from './db/DBService';
+import { audioPlayerService } from './lib/tts/AudioPlayerService';
+import { useSyncStore } from './lib/sync/hooks/useSyncStore';
+import { YjsObserverService } from './lib/crdt/YjsObserverService';
+import { MigrationService } from './services/MigrationService';
 
-// Mock dependencies
+// Mock MigrationService (Phase 2C)
+vi.mock('./services/MigrationService', () => ({
+  MigrationService: {
+    hydrateIfNeeded: vi.fn(),
+  },
+}));
+
+// Mock requestIdleCallback (missing in JSDOM)
+global.requestIdleCallback = vi.fn((cb) => {
+    return setTimeout(() => {
+      cb({
+        didTimeout: false,
+        timeRemaining: () => 50,
+      });
+    }, 1) as unknown as number;
+});
+global.cancelIdleCallback = vi.fn((id) => clearTimeout(id));
+
+// Mock SyncStore
+vi.mock('./lib/sync/hooks/useSyncStore', () => ({
+  useSyncStore: vi.fn(),
+}));
+
+// Mock Capacitor
+vi.mock('@capacitor/core', () => ({
+  Capacitor: {
+    getPlatform: vi.fn(),
+  },
+}));
+
+// Mock DBService
+vi.mock('./db/DBService', () => ({
+  dbService: {
+    getLibrary: vi.fn().mockResolvedValue([]),
+    cleanup: vi.fn(),
+  },
+}));
+
+// Mock db/db
 vi.mock('./db/db', () => ({
   getDB: vi.fn().mockResolvedValue({}),
 }));
+
+// Mock AudioPlayerService
+vi.mock('./lib/tts/AudioPlayerService', () => ({
+  audioPlayerService: {
+    initialize: vi.fn(),
+  },
+}));
+
+// Mock useSyncOrchestrator
+vi.mock('./lib/sync/hooks/useSyncOrchestrator', () => ({
+  useSyncOrchestrator: vi.fn(),
+}));
+
+// Mock YjsObserverService
+vi.mock('./lib/crdt/YjsObserverService', () => ({
+  YjsObserverService: {
+    getInstance: vi.fn().mockReturnValue({
+      initialize: vi.fn(),
+    }),
+  },
+}));
+
+// Mock child components
 vi.mock('./components/library/LibraryView', () => ({
-  LibraryView: () => <div>LibraryView</div>,
+  LibraryView: () => <div data-testid="library-view">Library View</div>,
 }));
 vi.mock('./components/reader/ReaderView', () => ({
-  ReaderView: () => <div>ReaderView</div>,
+  ReaderView: () => <div data-testid="reader-view">Reader View</div>,
+}));
+vi.mock('./components/reader/ReaderControlBar', () => ({
+  ReaderControlBar: () => <div data-testid="reader-control-bar">Control Bar</div>,
 }));
 vi.mock('./components/ThemeSynchronizer', () => ({
   ThemeSynchronizer: () => null,
@@ -25,105 +92,51 @@ vi.mock('./components/GlobalSettingsDialog', () => ({
 vi.mock('./components/ui/ToastContainer', () => ({
   ToastContainer: () => null,
 }));
-vi.mock('./components/ErrorBoundary', () => ({
-  ErrorBoundary: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}));
 vi.mock('./components/SafeModeView', () => ({
-  SafeModeView: () => <div>SafeModeView</div>,
+  SafeModeView: () => <div>Safe Mode</div>,
 }));
-vi.mock('@capacitor/core', () => ({
-  Capacitor: {
-    getPlatform: vi.fn(),
-    isNativePlatform: vi.fn(),
-  },
-}));
-vi.mock('./lib/tts/AudioPlayerService', () => ({
-  AudioPlayerService: {
-    getInstance: vi.fn().mockReturnValue({
-      pause: vi.fn(),
-      subscribe: vi.fn(),
-    }),
-  },
-}));
-vi.mock('./store/useToastStore', () => {
-    const showToastMock = vi.fn();
-    const useToastStoreMock = (selector: any) => selector({ showToast: showToastMock });
-    useToastStoreMock.getState = () => ({ showToast: showToastMock });
-    return { useToastStore: useToastStoreMock };
-});
-
-vi.mock('./store/useReaderStore', () => {
-    return {
-        useReaderStore: (selector: any) => selector({
-            immersiveMode: false,
-            currentBookId: null,
-            currentSectionTitle: null,
-        }),
-    };
-});
-
-vi.mock('./store/useLibraryStore', () => {
-    const state = { books: [] };
-    const useLibraryStore = (selector: any) => selector(state);
-    useLibraryStore.getState = () => state;
-    return { useLibraryStore };
-});
-
-vi.mock('./store/useAnnotationStore', () => {
-    const state = {
-        popover: { visible: false },
-        addAnnotation: vi.fn(),
-        hidePopover: vi.fn(),
-        annotations: [],
-    };
-    const useAnnotationStore = (selector: any) => selector(state);
-    useAnnotationStore.getState = () => state;
-    return { useAnnotationStore };
-});
-
-vi.mock('./store/useTTSStore', () => ({
-    useTTSStore: (selector: any) => selector({ queue: [], isPlaying: false }),
-}));
-
-vi.mock('./lib/sync/hooks/useSyncStore', () => {
-    const state = {
-        googleClientId: '',
-        googleApiKey: '',
-        setGoogleCredentials: vi.fn(),
-        isSyncEnabled: false,
-        setSyncEnabled: vi.fn(),
-    };
-    const useSyncStore = (selector: any) => selector(state);
-    useSyncStore.getState = () => state;
-    useSyncStore.subscribe = vi.fn();
-    return { useSyncStore };
-});
-
-vi.mock('react-router-dom', () => ({
-    useNavigate: vi.fn(),
-    BrowserRouter: ({ children }: any) => <div>{children}</div>,
-    Routes: ({ children }: any) => <div>{children}</div>,
-    Route: ({ element }: any) => <div>{element}</div>,
-}));
-
 
 describe('App Capacitor Initialization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (useSyncStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+       actions: { setGoogleClientId: vi.fn(), setCloudEnabled: vi.fn() }
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   it('should not initialize anything specific when platform is web', async () => {
-    (Capacitor.getPlatform as any).mockReturnValue('web');
+    (Capacitor.getPlatform as ReturnType<typeof vi.fn>).mockReturnValue('web');
+
     await act(async () => {
       render(<App />);
-      // Wait for effects
-      await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    // No assertions needed as we removed the foreground service calls
+
+    // Wait for "loading" to finish
+    await waitFor(() => {
+       expect(screen.getByTestId('library-view')).toBeInTheDocument();
+    });
+
+    // App.tsx does NOT call audioPlayerService.initialize().
+    expect(audioPlayerService.initialize).not.toHaveBeenCalled();
   });
 
-  it('should attempt to initialize player service', () => {
-      // Just to use the import
-      expect(AudioPlayerService).toBeDefined();
+  it('should attempt to initialize player service', async () => {
+     (Capacitor.getPlatform as ReturnType<typeof vi.fn>).mockReturnValue('android');
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    await waitFor(() => {
+       expect(screen.getByTestId('library-view')).toBeInTheDocument();
+    });
+
+    // App.tsx does NOT initialize AudioPlayerService anymore (refactor from Phase 1 or earlier).
+    // So this should also be not called.
+    expect(audioPlayerService.initialize).not.toHaveBeenCalled();
   });
 });
