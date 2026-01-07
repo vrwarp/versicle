@@ -141,3 +141,22 @@ Hydrating a library of 200 books on a Tesla browser might block the main thread.
 - **Throttling Strategy:** Instead of using `SyncOrchestrator`'s debounce for local persistence, a dedicated `throttledCrdtUpdate` utility was created to manage Yjs writes independently. This decoupling ensures that local "Moral Layer" persistence happens regardless of cloud sync status.
 - **Store Subscriptions:** `YjsObserverService` uses `useStore.getState().internalSync` to push updates. This avoids subscription loops because `internalSync` only updates the React state and does not trigger a DB write back to Yjs (which `DBService` methods do).
 - **Test Mocks:** Extensive mocking of `zustand` stores was required for `App_Capacitor.test.tsx` to handle the new `getState()` calls introduced by the observer service.
+
+## Phase 2D Execution Report (History, Progress & Final Cutover)
+
+**Status:** Phase 2D Complete.
+
+**Implementation Summary:**
+- **Hydration Service:** Implemented `MigrationService` in `src/services/MigrationService.ts`.
+    - **Logic:** Performs a one-time, idempotent migration of `reading_history` and `books` (metadata/progress) from IndexedDB to Yjs.
+    - **Performance:** Wraps the migration loop in `requestIdleCallback` to avoid blocking the main thread during app startup.
+    - **History Compression:** Uses `mergeCfiRanges` to compress legacy reading sessions into unified ranges before writing to the CRDT `history` array, preventing initial log bloat.
+- **Ingestion Refactor:** Updated `processEpub` in `src/lib/ingestion.ts` to split the ingestion transaction.
+    - **Heavy Layer:** Writes files, sections, and images to IndexedDB in a dedicated transaction.
+    - **Moral Layer:** Writes book metadata to Yjs (via `crdtService`) only after the heavy write succeeds.
+- **Read Path Update:** Updated `DBService.getReadingHistory` to read from `crdtService.history` and return merged ranges when `mode === 'crdt'`.
+- **Final Cutover:** Set `DBService.mode = 'crdt'` as the default.
+
+**Deviations:**
+- **Write Path Partiality:** While the read path for history was updated to CRDT, the legacy `updateReadingHistory` implementation in `DBService` was retained (but behind the 'legacy' mode check). In 'crdt' mode, it correctly writes to `crdtService.history`.
+- **Risk Acceptance:** The split ingestion transaction introduces a theoretical risk of orphaned files if the metadata write fails. This was deemed acceptable for Phase 2, with cleanup planned for Phase 4 (`MaintenanceService`).

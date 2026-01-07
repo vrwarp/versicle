@@ -7,6 +7,7 @@ import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from './constants';
+import { dbService } from '../db/DBService';
 
 function cheapHash(buffer: ArrayBuffer): string {
   const view = new Uint8Array(buffer);
@@ -334,29 +335,66 @@ export async function processEpub(
 
   const db = await getDB();
 
-  const tx = db.transaction(['books', 'files', 'sections', 'tts_content', 'table_images'], 'readwrite');
-  await tx.objectStore('books').add(finalBook);
-  await tx.objectStore('files').add(file, bookId);
+  // Phase 2D Refactor: Split transaction for CRDT support.
+  // We separate the "Heavy" (IDB) write from the "Moral" (Metadata) write.
+  // NOTE: If dbService.mode is 'legacy', we could still use a single transaction,
+  // but to simplify logic and support the cutover, we split it.
 
-  // Store section metadata
-  const sectionsStore = tx.objectStore('sections');
+  // 1. Heavy Write (IndexedDB only)
+  // Stores: files, sections, tts_content, table_images
+  const heavyTx = db.transaction(['files', 'sections', 'tts_content', 'table_images'], 'readwrite');
+
+  await heavyTx.objectStore('files').add(file, bookId);
+
+  const sectionsStore = heavyTx.objectStore('sections');
   for (const section of sections) {
     await sectionsStore.add(section);
   }
 
-  // Store TTS content
-  const ttsStore = tx.objectStore('tts_content');
+  const ttsStore = heavyTx.objectStore('tts_content');
   for (const batch of ttsContentBatches) {
       await ttsStore.add(batch);
   }
 
-  // Store Table Images
-  const tableStore = tx.objectStore('table_images');
+  const tableStore = heavyTx.objectStore('table_images');
   for (const table of tableImages) {
       await tableStore.add(table);
   }
 
-  await tx.done;
+  await heavyTx.done;
+
+  // 2. Moral Write (Metadata)
+  // This uses DBService to route to Yjs if needed.
+  try {
+      // If mode is 'legacy', we need to write to 'books' store manually?
+      // No, DBService doesn't have a public 'addBookMetadata' that writes to IDB/Yjs selectively
+      // EXCEPT updateBookMetadata.
+      // But we are ADDING a new book.
+
+      if (dbService.mode === 'crdt' || dbService.mode === 'shadow') {
+           const { crdtService } = await import('./crdt/CRDTService');
+           await crdtService.waitForReady();
+           const map = new (await import('yjs')).Map();
+           for (const [key, value] of Object.entries(finalBook)) {
+               if (value !== undefined) map.set(key, value);
+           }
+           crdtService.books.set(bookId, map);
+
+           // If shadow, we ALSO write to IDB?
+           if (dbService.mode === 'shadow') {
+                await db.put('books', finalBook);
+           }
+      } else {
+           // Legacy Mode
+           await db.put('books', finalBook);
+      }
+  } catch (e) {
+      // Rollback? We can't easily rollback the heavy tx.
+      // This creates an orphan file (Risk 2.R1).
+      // We rely on MaintenanceService to clean it up later.
+      console.error('Failed to write book metadata, leaving orphan file:', e);
+      throw e;
+  }
 
   return bookId;
 }

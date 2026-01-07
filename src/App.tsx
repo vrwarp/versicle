@@ -15,6 +15,7 @@ import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 import { useSyncOrchestrator } from './lib/sync/hooks/useSyncOrchestrator';
 import { YjsObserverService } from './lib/crdt/YjsObserverService';
+import { MigrationService } from './services/MigrationService';
 
 /**
  * Main Application component.
@@ -33,6 +34,8 @@ function App() {
   useEffect(() => {
     // Initialize Yjs Observer (Phase 2B)
     YjsObserverService.getInstance().initialize();
+    // Hydrate History & Progress (Phase 2D)
+    MigrationService.hydrateHistoryAndProgress();
   }, []);
 
   useEffect(() => {

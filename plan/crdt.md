@@ -3,7 +3,7 @@ Design Document: Versicle CRDT-Based State Syncing (Yjs)
 
 **Author:** Gemini
 
-**Status:** Draft / Conceptual
+**Status:** Implementation Complete
 
 **Target:** Replace manual LWW/CFI merging with Yjs CRDTs for absolute data consistency across high-latency or high-concurrency environments.
 
@@ -164,3 +164,22 @@ For extremely large libraries (1000+ books), reconstructing the doc from Indexed
 **Findings:**
 - **Compaction:** While the plan called for periodic `Y.encodeStateAsUpdate`, `y-indexeddb` handles incremental updates efficiently. A `compact()` method was added to the service to return the current snapshot size, but manual replacement of the persistence layer was not necessary for basic functionality.
 - **Testing Strategy:** Automated tests proved far more effective than a manual debug view for verifying convergence scenarios and ensuring no "split-brain" timestamp issues.
+
+## Phase 2 Execution Report (Migration & Cutover)
+
+**Status:** Phase 2 Complete.
+
+**Implementation Summary:**
+- **Store Decommissioning (Phase 2A):** Implemented `LegacyStorageBridge` to migrate `localStorage` (sync settings, theme) to CRDT settings map and delete legacy keys.
+- **Persistence Shunt (Phase 2A):** Refactored `DBService` to support multiple modes (`legacy`, `shadow`, `crdt`).
+- **Reactive Wrappers (Phase 2B):** Created `YjsObserverService` to pipe Yjs updates into Zustand stores (`useLibraryStore`, `useReaderStore`).
+- **Hydration (Phase 2C/2D):** Implemented `MigrationService` to perform a one-way migration of:
+    - **History:** Compresses legacy reading sessions using `mergeCfiRanges` before writing to `crdtService.history`.
+    - **Progress:** Migrates `lastRead`, `progress`, and `currentCfi` to `crdtService.books`.
+    - **Execution:** Uses `requestIdleCallback` to run non-blocking hydration on app startup.
+- **Ingestion Refactor (Phase 2D):** Refactored `processEpub` to decouple binary writes (IndexedDB) from metadata writes (Yjs). This ensures atomicity of the "Heavy Layer" while allowing the "Moral Layer" to live in CRDT.
+- **Cutover:** Switched `DBService` default mode to `'crdt'`.
+
+**Findings:**
+- **Transaction Splitting:** Decoupling ingestion required splitting the single IDB transaction. This introduces a slight risk of "orphaned files" if the metadata write fails after the binary write. This is acceptable and will be addressed by `MaintenanceService` in Phase 4.
+- **History Compression:** We successfully implemented the compression strategy. Legacy history is merged into a minimal set of ranges before entering the CRDT log, preventing initial bloat.

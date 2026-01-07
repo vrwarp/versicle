@@ -14,7 +14,7 @@ import * as Y from 'yjs';
 export type PersistenceMode = 'legacy' | 'shadow' | 'crdt';
 
 class DBService {
-  public mode: PersistenceMode = 'legacy';
+  public mode: PersistenceMode = 'crdt';
 
   private saveTTSStateTimeout: NodeJS.Timeout | null = null;
   private pendingTTSState: { [bookId: string]: TTSState } = {};
@@ -870,7 +870,8 @@ class DBService {
           if (this.mode === 'crdt') {
               await crdtService.waitForReady();
               const hist = crdtService.history.get(bookId);
-              return hist ? hist.toArray() : [];
+              // CRDT (Phase 2D): Return merged ranges for UI
+              return hist ? mergeCfiRanges(hist.toArray()) : [];
           }
           const db = await this.getDB();
           const entry = await db.get('reading_history', bookId);

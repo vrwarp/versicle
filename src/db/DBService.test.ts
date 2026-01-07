@@ -7,7 +7,38 @@ import type { BookMetadata } from '../types/db';
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
   processEpub: vi.fn(),
+  generateFileFingerprint: vi.fn().mockResolvedValue('mock-hash'),
 }));
+
+// Mock CRDTService
+vi.mock('../lib/crdt/CRDTService', async () => {
+    const Y = await import('yjs');
+    class MockCRDTService {
+        doc = new Y.Doc();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        books: Y.Map<any>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        annotations: Y.Array<any>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        history: Y.Map<any>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        settings: Y.Map<any>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        readingList: Y.Map<any>;
+
+        constructor() {
+            this.books = this.doc.getMap('books');
+            this.annotations = this.doc.getArray('annotations');
+            this.history = this.doc.getMap('history');
+            this.settings = this.doc.getMap('settings');
+            this.readingList = this.doc.getMap('readingList');
+        }
+
+        async waitForReady() { return Promise.resolve(); }
+        destroy() {}
+    }
+    return { crdtService: new MockCRDTService() };
+});
 
 describe('DBService', () => {
 
@@ -22,6 +53,13 @@ describe('DBService', () => {
       }
       await tx.done;
     }
+
+    // Explicitly set mode to legacy for tests verifying IDB behavior directly
+    // Tests that want to verify CRDT should toggle it or rely on default 'crdt' if the test logic supports it.
+    // However, the test suite is mostly asserting against getDB() results (IndexedDB).
+    // If we want to test legacy IDB ops, we MUST set mode = 'legacy'.
+    dbService.mode = 'legacy';
+
     vi.clearAllMocks();
   });
 
