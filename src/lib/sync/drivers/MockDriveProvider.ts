@@ -55,6 +55,7 @@ export class MockDriveProvider implements RemoteStorageProvider {
     }
   }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async initialize(_config: { clientId?: string; apiKey?: string }): Promise<void> {
     await this.simulateLatency();
     if (this.shouldFailAuth) {

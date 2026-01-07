@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { SyncManifest } from '../../../types/db';
 import type { RemoteStorageProvider } from '../types';
 
@@ -121,6 +122,7 @@ export class GoogleDriveProvider implements RemoteStorageProvider {
     }
   }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async uploadManifest(manifest: SyncManifest, _previousVersion?: number): Promise<void> {
     if (!this.isAuthenticated()) await this.signIn();
 

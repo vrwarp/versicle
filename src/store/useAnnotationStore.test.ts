@@ -1,4 +1,4 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useAnnotationStore } from './useAnnotationStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getDB } from '../db/db';
@@ -95,7 +95,7 @@ describe('useAnnotationStore', () => {
     const { result } = renderHook(() => useAnnotationStore());
     const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useAnnotationStore.setState({ annotations: [annotation as any] });
+    act(() => useAnnotationStore.setState({ annotations: [annotation as any] }));
 
     await act(async () => {
       await result.current.deleteAnnotation('test-uuid');
@@ -109,7 +109,7 @@ describe('useAnnotationStore', () => {
     const { result } = renderHook(() => useAnnotationStore());
     const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useAnnotationStore.setState({ annotations: [annotation as any] });
+    act(() => useAnnotationStore.setState({ annotations: [annotation as any] }));
     mockDB.get.mockResolvedValue(annotation);
 
     await act(async () => {

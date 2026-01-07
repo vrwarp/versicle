@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { SyncManifest, BookMetadata, ReadingHistoryEntry, Annotation, LexiconRule, ReadingListEntry, TTSPosition } from '../../types/db';
+import type { SyncManifest, Annotation, LexiconRule } from '../../types/db';
 import { SyncManager } from './SyncManager';
 
 // Mock cfi-utils since it's used in SyncManager
@@ -7,7 +7,7 @@ import { SyncManager } from './SyncManager';
 // However, for integration correctness, a simple functional mock is better than a no-op.
 vi.mock('../cfi-utils', async (importOriginal) => {
     return {
-        ...await importOriginal<any>(),
+        ...await importOriginal<unknown>(),
         mergeCfiRanges: (ranges: string[]) => {
             // Simple mock: dedupe and sort
             return Array.from(new Set(ranges)).sort();
@@ -147,10 +147,10 @@ describe('SyncManager', () => {
       it('should preserve unknown fields from remote manifest', () => {
           const local = createBaseManifest('local');
           const remote = createBaseManifest('remote');
-          (remote as any).newFeatureField = 'someValue';
+          (remote as unknown as Record<string, unknown>).newFeatureField = 'someValue';
 
           const merged = SyncManager.mergeManifests(local, remote);
-          expect((merged as any).newFeatureField).toBe('someValue');
+          expect((merged as unknown as Record<string, unknown>).newFeatureField).toBe('someValue');
       });
   });
 });

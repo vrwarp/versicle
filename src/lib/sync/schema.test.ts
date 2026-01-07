@@ -65,10 +65,6 @@ describe('Sync Schema Exhaustion', () => {
     );
 
     const dbInterface = sourceFile.getInterfaceOrThrow('EpubLibraryDB');
-    const syncManifestFile = project.addSourceFileAtPath(
-        path.resolve(__dirname, '../../types/db.ts')
-    );
-    const syncManifest = syncManifestFile.getInterfaceOrThrow('SyncManifest');
 
     const dbStores = dbInterface.getProperties().map(p => p.getName());
 
