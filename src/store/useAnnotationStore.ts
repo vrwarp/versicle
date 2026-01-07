@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { getDB } from '../db/db';
+import { dbService } from '../db/DBService';
 import type { Annotation } from '../types/db';
 
 /**
@@ -85,8 +85,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
   loadAnnotations: async (bookId: string) => {
     try {
-      const db = await getDB();
-      const annotations = await db.getAllFromIndex('annotations', 'by_bookId', bookId);
+      const annotations = await dbService.getAnnotations(bookId);
       set({ annotations });
     } catch (error) {
       console.error('Failed to load annotations:', error);
@@ -101,8 +100,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     };
 
     try {
-      const db = await getDB();
-      await db.add('annotations', newAnnotation);
+      await dbService.addAnnotation(newAnnotation);
       set((state) => ({
         annotations: [...state.annotations, newAnnotation],
       }));
@@ -113,8 +111,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
   deleteAnnotation: async (id: string) => {
     try {
-      const db = await getDB();
-      await db.delete('annotations', id);
+      await dbService.deleteAnnotation(id);
       set((state) => ({
         annotations: state.annotations.filter((a) => a.id !== id),
       }));
@@ -125,15 +122,10 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
   updateAnnotation: async (id: string, changes: Partial<Annotation>) => {
     try {
-      const db = await getDB();
-      const annotation = await db.get('annotations', id);
-      if (annotation) {
-        const updated = { ...annotation, ...changes };
-        await db.put('annotations', updated);
-        set((state) => ({
-          annotations: state.annotations.map((a) => (a.id === id ? updated : a)),
-        }));
-      }
+      await dbService.updateAnnotation(id, changes);
+      set((state) => ({
+        annotations: state.annotations.map((a) => (a.id === id ? { ...a, ...changes } : a)),
+      }));
     } catch (error) {
       console.error('Failed to update annotation:', error);
     }

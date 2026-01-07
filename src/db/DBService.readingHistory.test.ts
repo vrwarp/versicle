@@ -31,6 +31,7 @@ vi.mock('../lib/logger', () => ({
 
 describe('DBService Reading History', () => {
     beforeEach(() => {
+        dbService.mode = 'legacy'; // Force legacy mode for direct IDB testing
         vi.clearAllMocks();
     });
 

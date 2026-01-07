@@ -183,3 +183,26 @@ For extremely large libraries (1000+ books), reconstructing the doc from Indexed
 - **Books Metadata Included:** Although Phase 2C focused on "Selective Hydration" of low-risk data, Books Metadata was included because it serves as the foundational foreign key for Annotations and other entities. Without it, the "Moral Layer" in CRDT would be structurally incomplete.
 - **Reading List Keys:** The plan suggested mapping Reading List keys from filenames to Book IDs. However, efficient reverse lookup (filename -> bookId) without a full scan is expensive. For Phase 2C, we maintained the filename key to match the current `ReadingListEntry` schema and `crdt.md` definition, deferring the potentially complex re-keying to a later refactor or cleanup phase if necessary.
 - **Test Strategy:** Mocking `Yjs` and `CRDTService` in Vitest required careful handling of module mocking (hoisting) to ensure the test and the service under test shared the same `Y.Doc` instance logic. A factory-based mock approach was used.
+
+## Phase 2D Execution Report (The Final Cutover)
+
+**Status:** Phase 2D Complete.
+
+**Implementation Summary:**
+- **Core Switch:** Switched `DBService.ts` default persistence mode to `'crdt'`. This makes Yjs the primary source of truth for "Moral Layer" data (Books Metadata, Annotations, Reading List, Reading History, Lexicon), while binary assets (Files, Covers) remain in IndexedDB ("Heavy Layer").
+- **Hydration Guard:** Created a `HydrationGuard.tsx` component that wraps the application in `App.tsx`. It blocks UI rendering until `CRDTService` is ready and the `MigrationService.hydrateIfNeeded()` process (including the new Phase 2D history migration) completes. This prevents "First Run" empty states during the async migration.
+- **Migration Logic:**
+    - Updated `MigrationService.ts` to include `hydrateHistory()` for `reading_history`.
+    - Refactored `MigrationService.ts` to bypass `dbService` getters (which now default to CRDT) and read directly from IndexedDB (`getDB`) to ensuring accurate legacy data retrieval during migration.
+- **Store Refactoring:**
+    - Updated `useLibraryStore.ts` and `useAnnotationStore.ts` to fully delegate to `DBService` (which now handles the CRDT abstraction) instead of raw IDB calls.
+    - Added `updateAnnotation` to `DBService` to support CRDT-based updates.
+- **Testing:**
+    - Updated unit tests (`DBService.test.ts`, `DBService.readingHistory.test.ts`, `DBService.readingList.test.ts`) to explicitly set `dbService.mode = 'legacy'` in `beforeEach` where the test intent is to verify low-level IDB interactions.
+    - Updated integration tests (`integration.test.ts`) to use legacy mode, ensuring they verify the full IDB persistence stack as originally designed.
+    - Verified that `processEpub` (Ingestion) correctly populates the CRDT `books` map immediately after writing binary data to IDB, preventing "ghost" files.
+
+**Findings & Deviations:**
+- **Test Mode Conflicts:** A significant number of existing tests failed because they were written to assert against IndexedDB state, but the app code (via `DBService`) was now writing to Yjs. The fix was not to change the app code, but to update the *tests* to explicitly opt-in to `'legacy'` mode when verifying IDB logic.
+- **Direct IDB Access in Migration:** Relying on `dbService.getLibrary()` inside `MigrationService` became problematic once `dbService` defaulted to `'crdt'` (circular dependency or empty returns). The migration service was refactored to use `getDB()` directly, ensuring it always reads from the legacy store regardless of the active service mode.
+- **Integration Test Scope:** `integration.test.ts` was updated to `dbService.mode = 'legacy'` to keep testing the heavy-layer integration. Future "Moral Layer" integration tests should likely target the CRDT state or use the default mode and assert against `crdtService` getters.

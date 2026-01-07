@@ -1,10 +1,16 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useAnnotationStore } from './useAnnotationStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getDB } from '../db/db';
+import { dbService } from '../db/DBService';
+import type { Annotation } from '../types/db';
 
-vi.mock('../db/db', () => ({
-  getDB: vi.fn(),
+vi.mock('../db/DBService', () => ({
+  dbService: {
+    getAnnotations: vi.fn(),
+    addAnnotation: vi.fn(),
+    deleteAnnotation: vi.fn(),
+    updateAnnotation: vi.fn(),
+  },
 }));
 
 vi.mock('uuid', () => ({
@@ -12,26 +18,14 @@ vi.mock('uuid', () => ({
 }));
 
 describe('useAnnotationStore', () => {
-  const mockDB = {
-    getAllFromIndex: vi.fn(),
-    add: vi.fn(),
-    delete: vi.fn(),
-    get: vi.fn(),
-    put: vi.fn(),
-  };
-
   beforeEach(() => {
     useAnnotationStore.setState({ annotations: [], popover: { visible: false, x: 0, y: 0, cfiRange: '', text: '' } });
 
-    // Ensure all DB methods return promises
-    mockDB.getAllFromIndex.mockResolvedValue([]);
-    mockDB.add.mockResolvedValue(undefined);
-    mockDB.delete.mockResolvedValue(undefined);
-    mockDB.get.mockResolvedValue(undefined);
-    mockDB.put.mockResolvedValue(undefined);
+    vi.mocked(dbService.getAnnotations).mockResolvedValue([]);
+    vi.mocked(dbService.addAnnotation).mockResolvedValue(undefined);
+    vi.mocked(dbService.deleteAnnotation).mockResolvedValue(undefined);
+    vi.mocked(dbService.updateAnnotation).mockResolvedValue(undefined);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (getDB as any).mockResolvedValue(mockDB);
     vi.clearAllMocks();
   });
 
@@ -59,14 +53,14 @@ describe('useAnnotationStore', () => {
 
   it('should load annotations', async () => {
     const { result } = renderHook(() => useAnnotationStore());
-    const annotations = [{ id: '1', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 }];
-    mockDB.getAllFromIndex.mockResolvedValue(annotations);
+    const annotations: Annotation[] = [{ id: '1', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 }];
+    vi.mocked(dbService.getAnnotations).mockResolvedValue(annotations);
 
     await act(async () => {
       await result.current.loadAnnotations('book1');
     });
 
-    expect(mockDB.getAllFromIndex).toHaveBeenCalledWith('annotations', 'by_bookId', 'book1');
+    expect(dbService.getAnnotations).toHaveBeenCalledWith('book1');
     expect(result.current.annotations).toEqual(annotations);
   });
 
@@ -79,7 +73,7 @@ describe('useAnnotationStore', () => {
       await result.current.addAnnotation(newAnnotation as any);
     });
 
-    expect(mockDB.add).toHaveBeenCalledWith('annotations', expect.objectContaining({
+    expect(dbService.addAnnotation).toHaveBeenCalledWith(expect.objectContaining({
       id: 'test-uuid',
       bookId: 'book1',
       cfiRange: 'cfi',
@@ -93,33 +87,27 @@ describe('useAnnotationStore', () => {
 
   it('should delete annotation', async () => {
     const { result } = renderHook(() => useAnnotationStore());
-    const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useAnnotationStore.setState({ annotations: [annotation as any] });
+    const annotation: Annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
+    useAnnotationStore.setState({ annotations: [annotation] });
 
     await act(async () => {
       await result.current.deleteAnnotation('test-uuid');
     });
 
-    expect(mockDB.delete).toHaveBeenCalledWith('annotations', 'test-uuid');
+    expect(dbService.deleteAnnotation).toHaveBeenCalledWith('test-uuid');
     expect(result.current.annotations).toHaveLength(0);
   });
 
   it('should update annotation', async () => {
     const { result } = renderHook(() => useAnnotationStore());
-    const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useAnnotationStore.setState({ annotations: [annotation as any] });
-    mockDB.get.mockResolvedValue(annotation);
+    const annotation: Annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
+    useAnnotationStore.setState({ annotations: [annotation] });
 
     await act(async () => {
       await result.current.updateAnnotation('test-uuid', { note: 'new note' });
     });
 
-    expect(mockDB.put).toHaveBeenCalledWith('annotations', expect.objectContaining({
-        id: 'test-uuid',
-        note: 'new note',
-    }));
+    expect(dbService.updateAnnotation).toHaveBeenCalledWith('test-uuid', { note: 'new note' });
     expect(result.current.annotations[0].note).toBe('new note');
   });
 });

@@ -14,7 +14,7 @@ import * as Y from 'yjs';
 export type PersistenceMode = 'legacy' | 'shadow' | 'crdt';
 
 class DBService {
-  public mode: PersistenceMode = 'legacy';
+  public mode: PersistenceMode = 'crdt'; // Default to CRDT for Final Cutover
 
   private saveTTSStateTimeout: NodeJS.Timeout | null = null;
   private pendingTTSState: { [bookId: string]: TTSState } = {};
@@ -160,7 +160,7 @@ class DBService {
 
           if (bookMap) {
              // In Yjs, we update individual fields in the Y.Map
-             crtdTransact(() => {
+             crdtTransact(() => {
                  for (const [key, value] of Object.entries(metadata)) {
                     // Note: Y.Map.set expects value, not undefined.
                     if (value !== undefined) {
@@ -225,7 +225,26 @@ class DBService {
     onProgress?: (progress: number, message: string) => void
   ): Promise<void> {
     try {
-      await processEpub(file, ttsOptions, onProgress);
+      const bookId = await processEpub(file, ttsOptions, onProgress);
+
+      // In CRDT mode, we need to populate the CRDT with the new book metadata
+      if (this.mode === 'shadow' || this.mode === 'crdt') {
+          await crdtService.waitForReady();
+          const db = await this.getDB();
+          const book = await db.get('books', bookId);
+
+          if (book) {
+             crdtTransact(() => {
+                 const bookMap = new Y.Map();
+                 for (const [key, value] of Object.entries(book)) {
+                     if (value !== undefined) {
+                         bookMap.set(key, value);
+                     }
+                 }
+                 crdtService.books.set(bookId, bookMap);
+             });
+          }
+      }
     } catch (error) {
       this.handleError(error);
     }
@@ -281,7 +300,7 @@ class DBService {
       // 2. CRDT Deletion (Shadow/CRDT)
       if (this.mode === 'shadow' || this.mode === 'crdt') {
           await crdtService.waitForReady();
-          crtdTransact(() => {
+          crdtTransact(() => {
               // Delete book metadata
               crdtService.books.delete(id);
 
@@ -494,7 +513,7 @@ class DBService {
               // 2. Shadow/CRDT (Yjs)
               if (this.mode === 'shadow' || this.mode === 'crdt') {
                    await crdtService.waitForReady();
-                   crtdTransact(() => {
+                   crdtTransact(() => {
                        for (const [id, data] of Object.entries(pending)) {
                            const bookMap = crdtService.books.get(id);
                            if (bookMap) {
@@ -600,7 +619,7 @@ class DBService {
       }
       if (this.mode === 'shadow' || this.mode === 'crdt') {
            await crdtService.waitForReady();
-           crtdTransact(() => {
+           crdtTransact(() => {
                filenames.forEach(f => crdtService.readingList.delete(f));
            });
       }
@@ -645,7 +664,7 @@ class DBService {
 
           if (this.mode === 'shadow' || this.mode === 'crdt') {
               await crdtService.waitForReady();
-              crtdTransact(() => {
+              crdtTransact(() => {
                   for (const entry of entries) {
                       crdtService.readingList.set(entry.filename, entry);
 
@@ -678,7 +697,7 @@ class DBService {
                await crdtService.waitForReady();
                const bookMap = crdtService.books.get(bookId);
                if (bookMap) {
-                   crtdTransact(() => {
+                   crdtTransact(() => {
                        if (lastPlayedCfi !== undefined) bookMap.set('lastPlayedCfi', lastPlayedCfi);
                        if (lastPauseTime !== undefined) {
                            if (lastPauseTime === null) {
@@ -811,6 +830,34 @@ class DBService {
               if (index !== -1) {
                   crdtService.annotations.delete(index, 1);
               }
+          }
+      } catch (error) {
+          this.handleError(error);
+      }
+  }
+
+  async updateAnnotation(id: string, changes: Partial<Annotation>): Promise<void> {
+      try {
+          if (this.mode === 'legacy' || this.mode === 'shadow') {
+              const db = await this.getDB();
+              const annotation = await db.get('annotations', id);
+              if (annotation) {
+                  const updated = { ...annotation, ...changes };
+                  await db.put('annotations', updated);
+              }
+          }
+          if (this.mode === 'shadow' || this.mode === 'crdt') {
+              await crdtService.waitForReady();
+              crdtTransact(() => {
+                  const index = crdtService.annotations.toArray().findIndex((a: Annotation) => a.id === id);
+                  if (index !== -1) {
+                      const current = crdtService.annotations.get(index);
+                      const updated = { ...current, ...changes };
+
+                      crdtService.annotations.delete(index, 1);
+                      crdtService.annotations.insert(index, [updated]);
+                  }
+              });
           }
       } catch (error) {
           this.handleError(error);
@@ -958,7 +1005,7 @@ class DBService {
 
           if (this.mode === 'shadow' || this.mode === 'crdt') {
                await crdtService.waitForReady();
-               crtdTransact(() => {
+               crdtTransact(() => {
                    let hist = crdtService.history.get(bookId);
                    if (!hist) {
                        hist = new Y.Array<string>();
@@ -1155,7 +1202,7 @@ class DBService {
 }
 
 // Helper for transactions
-function crtdTransact(callback: () => void) {
+function crdtTransact(callback: () => void) {
     crdtService.doc.transact(callback);
 }
 

@@ -5,11 +5,24 @@ import type { Annotation, BookMetadata, LexiconRule, ReadingListEntry } from '..
 // Mock dependencies BEFORE importing the service
 vi.mock('../../db/DBService', () => ({
   dbService: {
+    // Note: getLibrary is NOT called for book hydration in updated MigrationService,
+    // it accesses IDB directly via getDB.
+    // However, the test below assumes we can control it via dbService mock?
+    // Wait, MigrationService now uses `getDB` directly for books hydration in Phase 2D.
+    // I need to mock getDB or revert MigrationService to use dbService if possible.
+    // But I used getDB to force legacy read.
+    // So I should mock getDB here too.
     getLibrary: vi.fn(),
     getAllLexiconRules: vi.fn(),
     getReadingList: vi.fn(),
     getAnnotations: vi.fn(),
   },
+}));
+
+vi.mock('../../db/db', () => ({
+    getDB: vi.fn().mockResolvedValue({
+        getAll: vi.fn().mockResolvedValue([]), // Default empty
+    }),
 }));
 
 vi.mock('../../lib/logger', () => ({
@@ -33,6 +46,7 @@ vi.mock('../../lib/crdt/CRDTService', async () => {
     get readingList() { return doc.getMap('readingList'); },
     get annotations() { return doc.getArray('annotations'); },
     get settings() { return doc.getMap('settings'); },
+    get history() { return doc.getMap('history'); }, // Added history
   };
 
   return {
@@ -44,6 +58,7 @@ vi.mock('../../lib/crdt/CRDTService', async () => {
 import { MigrationService } from '../MigrationService';
 import { dbService } from '../../db/DBService';
 import { crdtService } from '../../lib/crdt/CRDTService';
+import { getDB } from '../../db/db';
 
 describe('MigrationService', () => {
   beforeEach(() => {
@@ -55,20 +70,28 @@ describe('MigrationService', () => {
       Array.from(crdtService.books.keys()).forEach(k => crdtService.books.delete(k));
       Array.from(crdtService.readingList.keys()).forEach(k => crdtService.readingList.delete(k));
       Array.from(crdtService.settings.keys()).forEach(k => crdtService.settings.delete(k));
+      Array.from(crdtService.history.keys()).forEach(k => crdtService.history.delete(k));
 
       // Clear arrays
       if (crdtService.lexicon.length > 0) crdtService.lexicon.delete(0, crdtService.lexicon.length);
       if (crdtService.annotations.length > 0) crdtService.annotations.delete(0, crdtService.annotations.length);
     });
+
+    // Default mock behavior for getDB (legacy books)
+    vi.mocked(getDB).mockResolvedValue({
+        getAll: vi.fn().mockResolvedValue([]), // Return empty by default
+        getAllFromIndex: vi.fn().mockResolvedValue([]),
+    } as any);
   });
 
   it('should skip migration if already completed', async () => {
-    crdtService.settings.set('migration_phase_2c_complete', true);
+    crdtService.settings.set('migration_phase_2d_complete', true);
 
     await MigrationService.hydrateIfNeeded();
 
-    expect(dbService.getLibrary).not.toHaveBeenCalled();
     expect(dbService.getAllLexiconRules).not.toHaveBeenCalled();
+    // Verify getDB was not called for books
+    expect(getDB).not.toHaveBeenCalled();
   });
 
   it('should hydrate lexicon rules', async () => {
@@ -76,9 +99,14 @@ describe('MigrationService', () => {
       { id: '1', original: 'foo', replacement: 'bar', created: 100, order: 2 },
       { id: '2', original: 'baz', replacement: 'qux', created: 100, order: 1 },
     ];
-    vi.mocked(dbService.getAllLexiconRules).mockResolvedValue(rules);
-    vi.mocked(dbService.getLibrary).mockResolvedValue([]);
-    vi.mocked(dbService.getReadingList).mockResolvedValue([]);
+    // Mock getDB for lexicon
+    vi.mocked(getDB).mockResolvedValue({
+        getAll: vi.fn().mockImplementation((store) => {
+             if (store === 'lexicon') return Promise.resolve(rules);
+             return Promise.resolve([]);
+        }),
+        getAllFromIndex: vi.fn().mockResolvedValue([]),
+    } as any);
 
     await MigrationService.hydrateIfNeeded();
 
@@ -86,7 +114,7 @@ describe('MigrationService', () => {
     const storedRules = crdtService.lexicon.toArray();
     expect(storedRules[0].id).toBe('2'); // Order 1
     expect(storedRules[1].id).toBe('1'); // Order 2
-    expect(crdtService.settings.get('migration_phase_2c_complete')).toBe(true);
+    expect(crdtService.settings.get('migration_phase_2d_complete')).toBe(true);
   });
 
   it('should hydrate reading list', async () => {
@@ -94,9 +122,14 @@ describe('MigrationService', () => {
       { filename: 'book1.epub', title: 'Book 1', author: 'Author 1', percentage: 0.5, lastUpdated: 100 },
       { filename: 'book2.epub', title: 'Book 2', author: 'Author 2', percentage: 0.1, lastUpdated: 200 },
     ];
-    vi.mocked(dbService.getReadingList).mockResolvedValue(entries);
-    vi.mocked(dbService.getAllLexiconRules).mockResolvedValue([]);
-    vi.mocked(dbService.getLibrary).mockResolvedValue([]);
+    // Mock getDB for reading_list
+    vi.mocked(getDB).mockResolvedValue({
+        getAll: vi.fn().mockImplementation((store) => {
+             if (store === 'reading_list') return Promise.resolve(entries);
+             return Promise.resolve([]);
+        }),
+        getAllFromIndex: vi.fn().mockResolvedValue([]),
+    } as any);
 
     await MigrationService.hydrateIfNeeded();
 
@@ -113,10 +146,17 @@ describe('MigrationService', () => {
       { id: 'a1', bookId: 'book1', cfiRange: 'cfi1', text: 'text1', type: 'highlight', color: 'red', created: 100 },
     ];
 
-    vi.mocked(dbService.getLibrary).mockResolvedValue(books);
-    vi.mocked(dbService.getAnnotations).mockResolvedValue(annotations);
-    vi.mocked(dbService.getAllLexiconRules).mockResolvedValue([]);
-    vi.mocked(dbService.getReadingList).mockResolvedValue([]);
+    // Mock getDB for books and annotations
+    vi.mocked(getDB).mockResolvedValue({
+        getAll: vi.fn().mockImplementation((store) => {
+             if (store === 'books') return Promise.resolve(books);
+             return Promise.resolve([]);
+        }),
+        getAllFromIndex: vi.fn().mockImplementation((store, index, key) => {
+             if (store === 'annotations' && key === 'book1') return Promise.resolve(annotations);
+             return Promise.resolve([]);
+        }),
+    } as any);
 
     await MigrationService.hydrateIfNeeded();
 
@@ -128,10 +168,15 @@ describe('MigrationService', () => {
     const books: BookMetadata[] = [
       { id: 'book1', title: 'Book 1', author: 'Author 1', addedAt: 100 },
     ];
-    vi.mocked(dbService.getLibrary).mockResolvedValue(books);
-    vi.mocked(dbService.getAllLexiconRules).mockResolvedValue([]);
-    vi.mocked(dbService.getReadingList).mockResolvedValue([]);
-    vi.mocked(dbService.getAnnotations).mockResolvedValue([]);
+
+    // Mock getDB to return these books when getAll('books') is called
+    vi.mocked(getDB).mockResolvedValue({
+        getAll: vi.fn().mockImplementation((store) => {
+            if (store === 'books') return Promise.resolve(books);
+            return Promise.resolve([]);
+        }),
+        getAllFromIndex: vi.fn().mockResolvedValue([]),
+    } as any);
 
     await MigrationService.hydrateIfNeeded();
 

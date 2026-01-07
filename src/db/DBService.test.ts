@@ -12,6 +12,9 @@ vi.mock('../lib/ingestion', () => ({
 describe('DBService', () => {
 
   beforeEach(async () => {
+    // Force legacy mode for direct IDB testing
+    dbService.mode = 'legacy';
+
     // Clear DB before each test
     const db = await getDB();
     const storeNames = Array.from(db.objectStoreNames);

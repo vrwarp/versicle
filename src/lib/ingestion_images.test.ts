@@ -43,6 +43,10 @@ describe('Ingestion Image Optimization', () => {
     // Reset mocks
     vi.clearAllMocks();
 
+    // Force DBService to legacy mode for ingestion tests, as processEpub writes to IDB
+    // and we want to verify IDB writes without CRDT complexity in this specific unit test.
+    dbService.mode = 'legacy';
+
     // Setup fetch to return cover blob
     mockFetch.mockResolvedValue({
       blob: () => Promise.resolve(mockCoverBlob),
