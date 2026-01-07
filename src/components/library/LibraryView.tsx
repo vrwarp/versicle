@@ -189,9 +189,11 @@ export const LibraryView: React.FC = () => {
 
   // OPTIMIZATION: Memoize filtered and sorted books to avoid expensive re-calculation on every render
   const filteredAndSortedBooks = useMemo(() => {
+    // BOLT: Lift query normalization out of the loop (O(N) -> O(1) for this op)
+    const query = searchQuery.toLowerCase();
+
     return books
       .filter(book => {
-        const query = searchQuery.toLowerCase();
         return (
           (book.title || '').toLowerCase().includes(query) ||
           (book.author || '').toLowerCase().includes(query)
