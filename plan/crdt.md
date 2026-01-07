@@ -1,7 +1,7 @@
 Design Document: Versicle CRDT-Based State Syncing (Yjs)
 ========================================================
 
-**Author:** Gemini
+**Author:** Gemini (Revised by Jules)
 
 **Status:** Draft / Conceptual
 
@@ -92,51 +92,23 @@ Because this change is "invasive," we cannot simply delete the old IndexedDB sto
 
 3.  **Deprecation:** The standard stores (`books`, `annotations`) are no longer the primary source of truth. They are kept as "Legacy Backups" for one version cycle, then deleted.
 
-4.  **Reactive Store Integration:**
+4.  **Reactive Store Integration (Revised):**
 
-    -   Our Zustand stores (`useLibraryStore`, `useAnnotationStore`) will now subscribe to Yjs events (`yDoc.observeDeep()`).
-
-    -   When Yjs updates (locally or via sync), the Zustand store is notified and updates its React state.
+    -   Instead of manual observers, we will utilize `zustand-middleware-yjs`.
+    -   We will split "Data Stores" (e.g., `useBookStore`) from "UI Stores" (e.g., `useLibraryStore`).
+    -   The Data Stores will use the middleware to automatically bind to the Yjs shared types.
+    -   Changes to the store (e.g., `setBook(id, data)`) automatically update the Y.Doc.
+    -   Changes to the Y.Doc (via sync) automatically update the store.
 
 5\. Risks and Mitigations
 -------------------------
 
-|
-
-Risk
-
- |
-
-Mitigation
-
- |
-|
-
-**Storage Bloat**
-
- |
-
-Yjs keeps a history of changes. We must periodically call `Y.encodeStateAsUpdate` and write a "Clean Snapshot" back to the database to prune the incremental update log.
-
- |
-|
-
-**Schema Incompatibility**
-
- |
-
-Yjs is very flexible with types. We must use a robust **Validator** (like the existing `src/db/validators.ts`) before applying updates to the `Y.Doc` to prevent corrupted state from syncing.
-
- |
-|
-
-**Initial Load Time**
-
- |
-
-For extremely large libraries (1000+ books), reconstructing the doc from IndexedDB might take >100ms. We will use a "Loading State" during the `y-indexeddb` ready event.
-
- |
+| Risk | Mitigation |
+| :--- | :--- |
+| **Storage Bloat** | Yjs keeps a history of changes. We must periodically call `Y.encodeStateAsUpdate` and write a "Clean Snapshot" back to the database to prune the incremental update log. |
+| **Schema Incompatibility** | Yjs is very flexible with types. We must use a robust **Validator** (like the existing `src/db/validators.ts`) before applying updates to the `Y.Doc` to prevent corrupted state from syncing. |
+| **Initial Load Time** | For extremely large libraries (1000+ books), reconstructing the doc from IndexedDB might take >100ms. We will use a "Loading State" during the `y-indexeddb` ready event. |
+| **Sync Loops** | Bi-directional binding can cause infinite loops. The `zustand-middleware-yjs` handles this by ensuring updates originating from Yjs do not trigger a write-back to Yjs. |
 
 6\. Development Roadmap
 -----------------------
@@ -145,6 +117,6 @@ For extremely large libraries (1000+ books), reconstructing the doc from Indexed
 
 2.  **Phase 2 (The Bridge):** Implement the `HydrationService` to move v1 data into Yjs.
 
-3.  **Phase 3 (Store Refactor):** Rewrite `useLibraryStore` to act as a reactive wrapper around `yDoc.getMap('books')`.
+3.  **Phase 3 (Apply Middleware):** Refactor `useLibraryStore` and `useAnnotationStore` to use `zustand-middleware-yjs`. This involves separating persistent data state from transient UI state.
 
 4.  **Phase 4 (Cloud Sync):** Refactor `SyncOrchestrator` to use `Y.applyUpdate` instead of `SyncManager.mergeManifests`.
