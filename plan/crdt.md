@@ -148,19 +148,3 @@ For extremely large libraries (1000+ books), reconstructing the doc from Indexed
 3.  **Phase 3 (Store Refactor):** Rewrite `useLibraryStore` to act as a reactive wrapper around `yDoc.getMap('books')`.
 
 4.  **Phase 4 (Cloud Sync):** Refactor `SyncOrchestrator` to use `Y.applyUpdate` instead of `SyncManager.mergeManifests`.
-
-## Phase 1 Execution Report (Deviations & Findings)
-
-**Status:** Phase 1 Complete.
-
-**Implementation Summary:**
-- **Core:** The `CRDTService` has been implemented in `src/lib/crdt/CRDTService.ts`, utilizing `yjs` and `y-indexeddb`.
-- **Schema:** A strict TypeScript schema `VersicleDocSchema` was defined in `src/lib/crdt/types.ts` to map the "Moral Layer" entities (Books, Annotations, History) to Yjs structures.
-- **Testing:** Instead of a manual "debug page", a comprehensive automated test suite (`src/lib/crdt/tests/CRDTService.test.ts`) was created. It uses `fake-indexeddb` to simulate multiple isolated instances (devices) and validates:
-    - **Convergence:** Concurrent metadata updates from different instances merge correctly.
-    - **History:** CFI ranges from different instances are unioned in the shared `Y.Array`.
-    - **Persistence:** Data survives service re-instantiation.
-
-**Findings:**
-- **Compaction:** While the plan called for periodic `Y.encodeStateAsUpdate`, `y-indexeddb` handles incremental updates efficiently. A `compact()` method was added to the service to return the current snapshot size, but manual replacement of the persistence layer was not necessary for basic functionality.
-- **Testing Strategy:** Automated tests proved far more effective than a manual debug view for verifying convergence scenarios and ensuring no "split-brain" timestamp issues.
