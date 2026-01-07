@@ -1,5 +1,5 @@
 export abstract class BaseModel {
-  protected constructor() {}
+  constructor() {}
 
   /**
    * Helper to ensure consistency in method signatures.
