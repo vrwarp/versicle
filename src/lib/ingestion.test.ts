@@ -62,11 +62,14 @@ describe('ingestion', () => {
   beforeEach(async () => {
     vi.spyOn(window, 'confirm').mockImplementation(() => true);
     const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'sections', 'annotations', 'tts_content'], 'readwrite');
-    await tx.objectStore('books').clear();
-    await tx.objectStore('files').clear();
-    await tx.objectStore('sections').clear();
-    await tx.objectStore('tts_content').clear();
+    // Update reset logic to include new stores
+    const stores = ['books', 'book_sources', 'book_states', 'files', 'sections', 'annotations', 'tts_content'];
+    const tx = db.transaction(stores, 'readwrite');
+    for (const store of stores) {
+        if (db.objectStoreNames.contains(store)) {
+            await tx.objectStore(store).clear();
+        }
+    }
     await tx.done;
   });
 
@@ -114,6 +117,8 @@ describe('ingestion', () => {
 
     const db = await getDB();
     const book = await db.get('books', bookId);
+    const source = await db.get('book_sources', bookId);
+    const state = await db.get('book_states', bookId);
 
     expect(book).toBeDefined();
     expect(book?.title).toBe('Mock Title');
@@ -121,6 +126,13 @@ describe('ingestion', () => {
     expect(book?.description).toBe('Mock Description');
     expect(book?.id).toBe('mock-uuid');
     expect(book?.coverBlob).toBeDefined();
+
+    expect(source).toBeDefined();
+    expect(source?.fileHash).toBeDefined();
+    expect(source?.filename).toBe('test.epub');
+
+    expect(state).toBeDefined();
+    expect(state?.isOffloaded).toBe(false);
 
     const storedFile = await db.get('files', bookId);
     expect(storedFile).toBeDefined();
@@ -216,5 +228,5 @@ describe('ingestion', () => {
      expect(book?.title.length).toBe(500);
      expect(book?.title).not.toBe(longTitle);
      consoleSpy.mockRestore();
-   });
+  });
 });
