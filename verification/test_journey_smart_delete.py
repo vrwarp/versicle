@@ -44,9 +44,8 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
 
     # 3. Verify Offloaded State
     # The image should have opacity/grayscale class or overlay
-    # We can check for the cloud icon overlay.
-    # Using a selector that likely targets the overlay
-    expect(page.locator(".bg-black\\/20 > svg")).to_be_visible(timeout=5000)
+    # We can check for the cloud icon overlay using the robust testid
+    expect(page.get_by_test_id("offloaded-overlay")).to_be_visible(timeout=5000)
 
     # Wait a moment for state update
     page.wait_for_timeout(1000)
@@ -64,7 +63,7 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
 
     # Wait for restore to complete (loader or just state change)
     # The overlay should disappear
-    expect(page.locator(".bg-black\\/20 > svg")).not_to_be_visible(timeout=5000)
+    expect(page.get_by_test_id("offloaded-overlay")).not_to_be_visible(timeout=5000)
 
     capture_screenshot(page, "library_smart_delete_restored")
 
