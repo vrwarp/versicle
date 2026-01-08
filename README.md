@@ -11,7 +11,7 @@
 *   **Hybrid Intelligence**:
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google) for studio-quality narration.
-    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content and filter content.
+    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening.
 *   **Serverless Sync**: Synchronize your reading progress and highlights across devices using your own Google Drive as a private storage backend.
 *   **Data Ownership**: Export your data at any time. Full backups (ZIP) or Metadata (JSON).
 

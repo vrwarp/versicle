@@ -257,13 +257,13 @@ Handles the complex task of importing an EPUB file.
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs.
 
+*   **Goal**: Enhance the reading and listening experience using LLMs (Gemini).
 *   **Logic**:
-    *   **Service**: Wrapper around **Gemini Flash Lite** (`gemini-flash-lite-latest`) via `@google/generative-ai`.
+    *   **Service**: Wrapper around **Gemini Flash Lite** via `@google/generative-ai`.
+    *   **Free Tier Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite`, `gemini-2.5-flash`, `gemini-3-flash`) to maximize quota. Automatically retries with a different model upon `429 RESOURCE_EXHAUSTED` errors.
     *   **Multimodal Input**: Accepts text and images (blobs) for tasks like table interpretation.
-    *   **Structured Output**: Enforces strict JSON schemas for all responses.
-        *   **Content Type**: Classifies blocks as `title`, `footnote`, `main`, `table`, or `other`.
-        *   **Table Adaptation**: Converts visual table data into narrative text.
-    *   **Mocking**: Supports `localStorage` mocks (`mockGenAIResponse`) for cost-free E2E testing.
+    *   **Structured Output**: Enforces strict JSON schemas for all responses (e.g., Content Type classification, Table Adaptation).
+    *   **E2E Testing**: Supports full mocking via `localStorage` triggers (`mockGenAIResponse`, `mockGenAIError`) to allow cost-free, deterministic integration tests.
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets/images are sent to Google's servers.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
@@ -306,9 +306,12 @@ The Data Pipeline for TTS.
     1.  **Immediate Return**: Returns a raw, playable queue immediately so playback starts instantly.
     2.  **Background Analysis**: Fires asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze the content in the background.
     3.  **Dynamic Updates**: When analysis completes, it triggers callbacks (`onMaskFound`, `onAdaptationsFound`) to update the *active* queue while it plays.
+*   **Content Filtering (Background Masking)**:
+    *   `detectContentSkipMask` runs asynchronously using GenAI to identify skip targets (e.g., footnotes, tables) based on user preferences.
+    *   Returns a set of *source indices* to skip, which are applied to the active queue without interrupting playback.
 *   **Table Adaptation Mapping**:
-    *   Uses **Precise Grouping** to match table images to their source sentences.
-    *   Logic sorts table roots by length to correctly handle nested tables (longest match wins).
+    *   Uses **Precise Grouping** to match table images to their source sentences by CFI structure.
+    *   Sorts table roots by length descending to correctly handle nested tables (longest match wins).
 *   **Trade-off**: The first few seconds of playback might contain un-adapted content (e.g., reading a footnote) before the mask is applied.
 
 #### `src/lib/tts/PlaybackStateManager.ts`
@@ -352,11 +355,11 @@ Local WASM Neural TTS.
 
 State is managed using **Zustand**.
 
-*   **`useReaderStore`**: Persists visual preferences.
-*   **`useTTSStore`**: Persists TTS settings.
-*   **`useGenAIStore`**: Persists AI settings and usage stats.
-*   **`useLibraryStore`**: Transient UI state.
-*   **`useSyncStore`**: Persists Sync credentials and settings.
+*   **`useReaderStore`**: Persists visual preferences and reading state (font size, theme, current location) to **localStorage**.
+*   **`useTTSStore`**: Persists TTS settings (voice, speed, provider) to **localStorage**.
+*   **`useGenAIStore`**: Persists AI settings and usage stats to **localStorage**.
+*   **`useLibraryStore`**: Transient UI state. Actual book data is persisted in **IndexedDB** via `DBService`, but the store itself hydrates from DB on mount.
+*   **`useSyncStore`**: Persists Sync credentials and settings to **localStorage**.
 
 ### UI Layer
 
