@@ -4,11 +4,16 @@ The verification suite is written as playwright tests. All code changes require 
 **Important:**
 1. All playwright tests must record a screenshot in `verification/screenshots/` for key steps to assist in verification and debugging.
 2. The playwright tests must be modeled after a user journey. So to test new features or big fixes, find an existing journey that is suitable or create a new one. Make sure the journeys are not too long.
-3. The main way to run the playwright verification test suite is via Docker:
+3. The main way to run the playwright verification test suite is via the `jules_run_verification.sh` wrapper script. This handles building the Docker image and mounting the screenshots directory automatically:
    ```bash
-   sudo docker build -t versicle-verify -f Dockerfile.verification .
-   mkdir -p verification/screenshots
-   sudo docker run --rm -v $(pwd)/verification/screenshots:/app/verification/screenshots versicle-verify
+   # Run all tests
+   ./jules_run_verification.sh
+
+   # Run a specific test file
+   ./jules_run_verification.sh verification/test_journey_sync.py
+
+   # Run with specific pytest flags (e.g. no parallelism)
+   ./jules_run_verification.sh -n 0 verification/test_bug_spacer.py
    ```
 4. The individual verification tests are located in `verification/test_*.py`.
 5. Timeouts are often caused by bugs or flakiness in the code or the test. It is rarely a performance issue, so increasing the timeout should be a last resort.
