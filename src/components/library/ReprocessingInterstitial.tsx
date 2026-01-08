@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { dbService } from '../../db/DBService';
 import { extractContentOffscreen } from '../../lib/offscreen-renderer';
-import type { TableImage } from '../../types/db';
+import type { TableImage, BookSource } from '../../types/db';
 import { getDB } from '../../db/db';
 import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 import { Dialog } from '../ui/Dialog';
@@ -35,12 +35,20 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
                 // If file is missing (e.g. offloaded book), we can't process tables.
                 // Mark as processed to avoid infinite loop of trying.
                 const db = await getDB();
-                const tx = db.transaction('books', 'readwrite');
-                const bookStore = tx.objectStore('books');
-                const book = await bookStore.get(bookId);
-                if (book) {
-                    book.version = CURRENT_BOOK_VERSION;
-                    await bookStore.put(book);
+                const tx = db.transaction('book_sources', 'readwrite');
+                const sourceStore = tx.objectStore('book_sources');
+                // Cast to avoid implicit any if store is not generic enough, but here we know the schema
+                const source = await sourceStore.get(bookId);
+
+                if (source) {
+                    source.version = CURRENT_BOOK_VERSION;
+                    await sourceStore.put(source);
+                } else {
+                    // Create minimal source record if missing (unlikely)
+                    await sourceStore.put({
+                        bookId,
+                        version: CURRENT_BOOK_VERSION
+                    } as BookSource);
                 }
                 await tx.done;
                 onComplete();
@@ -74,14 +82,19 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
 
             // Batch save
             const db = await getDB();
-            const tx = db.transaction(['books', 'table_images'], 'readwrite');
+            const tx = db.transaction(['book_sources', 'table_images'], 'readwrite');
 
-            // Update Metadata
-            const bookStore = tx.objectStore('books');
-            const book = await bookStore.get(bookId);
-            if (book) {
-                book.version = CURRENT_BOOK_VERSION;
-                await bookStore.put(book);
+            // Update Metadata (Source)
+            const sourceStore = tx.objectStore('book_sources');
+            const source = await sourceStore.get(bookId);
+            if (source) {
+                source.version = CURRENT_BOOK_VERSION;
+                await sourceStore.put(source);
+            } else {
+                 await sourceStore.put({
+                    bookId,
+                    version: CURRENT_BOOK_VERSION
+                } as BookSource);
             }
 
             // Store Images

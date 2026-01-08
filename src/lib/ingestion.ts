@@ -2,7 +2,7 @@ import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { BookMetadata, SectionMetadata, TTSContent, TableImage } from '../types/db';
+import type { Book, BookSource, BookState, SectionMetadata, TTSContent, TableImage } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
@@ -141,7 +141,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
   });
 
   // Transaction
-  const tx = db.transaction(['books', 'sections', 'tts_content', 'table_images'], 'readwrite');
+  const tx = db.transaction(['book_sources', 'sections', 'tts_content', 'table_images'], 'readwrite');
 
   // Helper to delete by index
   const deleteByIndex = async (storeName: 'sections' | 'tts_content' | 'table_images') => {
@@ -158,15 +158,14 @@ export async function reprocessBook(bookId: string): Promise<void> {
   await deleteByIndex('tts_content');
   await deleteByIndex('table_images');
 
-  // Update Book Metadata
-  const bookStore = tx.objectStore('books');
-  const book = await bookStore.get(bookId);
-  if (book) {
-      book.totalChars = totalChars;
-      book.syntheticToc = syntheticToc;
-      book.version = CURRENT_BOOK_VERSION;
-      // We don't update title/author as user might have edited them
-      await bookStore.put(book);
+  // Update Book Source Metadata
+  const sourceStore = tx.objectStore('book_sources');
+  const source = await sourceStore.get(bookId);
+  if (source) {
+      source.totalChars = totalChars;
+      source.syntheticToc = syntheticToc;
+      source.version = CURRENT_BOOK_VERSION;
+      await sourceStore.put(source);
   }
 
   // Insert new data
@@ -305,37 +304,54 @@ export async function processEpub(
     filename: file.name
   });
 
-  const candidateBook: BookMetadata = {
+  // Split into Book, Source, State
+  const bookData: Book = {
     id: bookId,
-    filename: file.name,
     title: metadata.title || 'Untitled',
     author: metadata.creator || 'Unknown Author',
     description: metadata.description || '',
     addedAt: Date.now(),
-    coverBlob: thumbnailBlob || coverBlob, // Use thumbnail if available, else original (or undefined)
-    fileHash,
-    isOffloaded: false,
-    fileSize: file.size,
-    syntheticToc,
-    totalChars, // Store the calculated total characters
-    version: CURRENT_BOOK_VERSION // Set version for new books
+    coverBlob: thumbnailBlob || coverBlob, // Use thumbnail if available
   };
 
-  const check = getSanitizedBookMetadata(candidateBook);
-  let finalBook = candidateBook;
+  const sourceData: BookSource = {
+      bookId,
+      filename: file.name,
+      fileHash,
+      fileSize: file.size,
+      syntheticToc,
+      totalChars,
+      version: CURRENT_BOOK_VERSION
+  };
+
+  const stateData: BookState = {
+      bookId,
+      isOffloaded: false,
+      progress: 0,
+      status: 'new' // Assuming new status or just omitted
+  } as any; // Cast to any to allow 'status' if we added it, or stick to interface
+
+  // Sanitize Book Metadata (Composite validation)
+  const candidateComposite = { ...bookData, ...sourceData, ...stateData };
+  const check = getSanitizedBookMetadata(candidateComposite);
 
   if (check) {
-    // Always sanitize metadata to ensure security (XSS prevention) and DB integrity
-    finalBook = check.sanitized;
+    const s = check.sanitized;
+    // Update fields from sanitized version
+    bookData.title = s.title;
+    bookData.author = s.author;
+    bookData.description = s.description;
     if (check.wasModified) {
-       console.warn(`Metadata sanitized for "${candidateBook.title}":`, check.modifications);
+       console.warn(`Metadata sanitized for "${bookData.title}":`, check.modifications);
     }
   }
 
   const db = await getDB();
 
-  const tx = db.transaction(['books', 'files', 'sections', 'tts_content', 'table_images'], 'readwrite');
-  await tx.objectStore('books').add(finalBook);
+  const tx = db.transaction(['books', 'book_sources', 'book_states', 'files', 'sections', 'tts_content', 'table_images'], 'readwrite');
+  await tx.objectStore('books').add(bookData);
+  await tx.objectStore('book_sources').add(sourceData);
+  await tx.objectStore('book_states').add(stateData);
   await tx.objectStore('files').add(file, bookId);
 
   // Store section metadata

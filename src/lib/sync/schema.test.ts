@@ -21,7 +21,8 @@ describe('Sync Schema Exhaustion', () => {
       path.resolve(__dirname, '../../types/db.ts')
     );
 
-    const bookMetadata = sourceFile.getInterfaceOrThrow('BookMetadata');
+    // BookMetadata is now a Type Alias (composite), so we use getTypeAliasOrThrow
+    const bookMetadataType = sourceFile.getTypeAliasOrThrow('BookMetadata').getType();
     const syncManifest = sourceFile.getInterfaceOrThrow('SyncManifest');
 
     // Get the keys defined in the SyncManifest.books[id].metadata structure
@@ -42,7 +43,7 @@ describe('Sync Schema Exhaustion', () => {
         .getApparentProperties()
         .map(p => p.getName()) || [];
 
-    const dbFields = bookMetadata.getProperties().map(p => p.getName());
+    const dbFields = bookMetadataType.getProperties().map(p => p.getName());
 
     const missingFields = dbFields.filter(field =>
       !syncedMetadataKeys.includes(field) &&
@@ -104,6 +105,8 @@ describe('Sync Schema Exhaustion', () => {
         'lexicon',
         'reading_list',
         'tts_position',
+        'book_sources', // Synced via books metadata
+        'book_states',  // Synced via books metadata
     ];
 
     const missingStores = dbStores.filter(store =>

@@ -53,7 +53,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     # DEBUG: Check DB content on Device A
     db_count = page_a.evaluate("""
         async () => {
-            const db = await window.indexedDB.open('EpubLibraryDB', 16);
+            const db = await window.indexedDB.open('EpubLibraryDB', 17);
             return new Promise((resolve, reject) => {
                 db.onsuccess = (event) => {
                     const database = event.target.result;
@@ -150,7 +150,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
         # db.getAll('lexicon')
         rule_count = page_b.evaluate("""
             async () => {
-                const db = await window.indexedDB.open('EpubLibraryDB', 16);
+                const db = await window.indexedDB.open('EpubLibraryDB', 17);
                 return new Promise((resolve, reject) => {
                     db.onsuccess = (event) => {
                         const database = event.target.result;

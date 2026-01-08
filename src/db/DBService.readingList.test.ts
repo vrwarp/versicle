@@ -7,7 +7,10 @@ describe('DBService Reading List', () => {
     beforeEach(async () => {
         const db = await getDB();
         await db.clear('reading_list');
+        // Clear all book-related stores
         await db.clear('books');
+        await db.clear('book_sources');
+        await db.clear('book_states');
         await db.clear('files');
     });
 
@@ -39,22 +42,10 @@ describe('DBService Reading List', () => {
 
         // Setup existing book
         const bookId = 'book-1';
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const book: any = {
-            id: bookId,
-            filename: 'sync_test.epub',
-            title: 'Sync Test',
-            author: 'Author',
-            addedAt: 100,
-            isOffloaded: false,
-            fileHash: 'h',
-            fileSize: 10,
-            syntheticToc: [],
-            totalChars: 0,
-            progress: 0.1,
-            description: ''
-        };
-        await db.put('books', book);
+        // Need to populate new split stores
+        await db.put('books', { id: bookId, title: 'Sync Test', author: 'Author', addedAt: 100, coverBlob: undefined });
+        await db.put('book_sources', { bookId, filename: 'sync_test.epub', fileHash: 'h', fileSize: 10, syntheticToc: [], totalChars: 0, version: 1 });
+        await db.put('book_states', { bookId, progress: 0.1, isOffloaded: false });
 
         // Import entry with higher progress
         const entries: ReadingListEntry[] = [{
@@ -68,30 +59,17 @@ describe('DBService Reading List', () => {
 
         await dbService.importReadingList(entries);
 
-        const updatedBook = await db.get('books', bookId);
-        expect(updatedBook?.progress).toBe(0.9);
+        const updatedState = await db.get('book_states', bookId);
+        expect(updatedState?.progress).toBe(0.9);
     });
 
     it('should NOT sync progress if imported progress is lower', async () => {
         const db = await getDB();
 
         const bookId = 'book-2';
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const book: any = {
-            id: bookId,
-            filename: 'lower_test.epub',
-            title: 'Lower Test',
-            author: 'Author',
-            addedAt: 100,
-            isOffloaded: false,
-            fileHash: 'h',
-            fileSize: 10,
-            syntheticToc: [],
-            totalChars: 0,
-            progress: 0.8,
-            description: ''
-        };
-        await db.put('books', book);
+        await db.put('books', { id: bookId, title: 'Lower Test', author: 'Author', addedAt: 100 });
+        await db.put('book_sources', { bookId, filename: 'lower_test.epub', fileHash: 'h' });
+        await db.put('book_states', { bookId, progress: 0.8, isOffloaded: false });
 
         const entries: ReadingListEntry[] = [{
             filename: 'lower_test.epub',
@@ -104,29 +82,18 @@ describe('DBService Reading List', () => {
 
         await dbService.importReadingList(entries);
 
-        const updatedBook = await db.get('books', bookId);
-        expect(updatedBook?.progress).toBe(0.8);
+        const updatedState = await db.get('book_states', bookId);
+        expect(updatedState?.progress).toBe(0.8);
     });
 
     it('should save to reading list when saving progress', async () => {
         const db = await getDB();
         const bookId = 'prog-sync-1';
         const filename = 'prog_sync.epub';
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const book: any = {
-            id: bookId,
-            filename: filename,
-            title: 'Prog Sync',
-            author: 'Author',
-            addedAt: 100,
-            isOffloaded: false,
-            fileHash: 'h',
-            fileSize: 10,
-            syntheticToc: [],
-            totalChars: 0,
-            description: ''
-        };
-        await db.put('books', book);
+
+        await db.put('books', { id: bookId, title: 'Prog Sync', author: 'Author', addedAt: 100 });
+        await db.put('book_sources', { bookId, filename: filename, fileHash: 'h' });
+        await db.put('book_states', { bookId, progress: 0, isOffloaded: false });
 
         dbService.saveProgress(bookId, 'cfi1', 0.45);
 
@@ -144,21 +111,10 @@ describe('DBService Reading List', () => {
         const db = await getDB();
         const bookId = 'preserve-1';
         const filename = 'preserve.epub';
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const book: any = {
-            id: bookId,
-            filename: filename,
-            title: 'Preserve',
-            author: 'Author',
-            addedAt: 100,
-            isOffloaded: false,
-            fileHash: 'h',
-            fileSize: 10,
-            syntheticToc: [],
-            totalChars: 0,
-            description: ''
-        };
-        await db.put('books', book);
+
+        await db.put('books', { id: bookId, title: 'Preserve', author: 'Author', addedAt: 100 });
+        await db.put('book_sources', { bookId, filename: filename, fileHash: 'h' });
+        await db.put('book_states', { bookId, progress: 0, isOffloaded: false });
 
         // Pre-existing entry with rating/isbn
         const entry: ReadingListEntry = {

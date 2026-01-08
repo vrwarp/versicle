@@ -1,5 +1,5 @@
 import { getDB } from './db';
-import type { BookMetadata, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition, TableImage } from '../types/db';
+import type { BookMetadata, Book, BookSource, BookState, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition, TableImage } from '../types/db';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
@@ -34,23 +34,47 @@ class DBService {
 
   /**
    * Retrieves all books in the library.
+   * Joins data from 'books' (metadata) and 'book_states' (user progress).
    *
-   * @returns A Promise resolving to an array of valid BookMetadata objects.
+   * @returns A Promise resolving to an array of valid BookMetadata objects (Composite).
    */
   async getLibrary(): Promise<BookMetadata[]> {
     try {
       const db = await this.getDB();
-      const books = await db.getAll('books');
 
-      const validBooks = books.filter((book) => {
-        const isValid = validateBookMetadata(book);
-        if (!isValid) {
-          Logger.error('DBService', 'DB Integrity: Found corrupted book record', book);
-        }
-        return isValid;
-      });
+      // Fetch both stores in parallel
+      const [books, states] = await Promise.all([
+          db.getAll('books'),
+          db.getAll('book_states')
+      ]);
 
-      return validBooks.sort((a, b) => b.addedAt - a.addedAt);
+      // Create a map of states for O(1) lookup
+      const stateMap = new Map<string, BookState>(states.map(s => [s.bookId, s]));
+
+      const library: BookMetadata[] = [];
+
+      for (const book of books) {
+          const state = stateMap.get(book.id) || {};
+
+          // Construct the composite object
+          // Note: BookSource is not fetched for the list view to stay lightweight
+          const composite: BookMetadata = {
+              ...book,
+              ...state
+          };
+
+          // Validate
+          // We apply the same validation logic as before to ensure no corrupted data leaks into the UI.
+          const isValid = validateBookMetadata(composite);
+          if (!isValid) {
+            Logger.error('DBService', 'DB Integrity: Found corrupted book record', composite);
+            continue;
+          }
+
+          library.push(composite);
+      }
+
+      return library.sort((a, b) => b.addedAt - a.addedAt);
     } catch (error) {
       this.handleError(error);
     }
@@ -65,8 +89,23 @@ class DBService {
   async getBook(id: string): Promise<{ metadata: BookMetadata | undefined; file: Blob | ArrayBuffer | undefined }> {
     try {
       const db = await this.getDB();
-      const metadata = await db.get('books', id);
-      const file = await db.get('files', id);
+      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files'], 'readonly');
+
+      const book = await tx.objectStore('books').get(id);
+      const source = await tx.objectStore('book_sources').get(id);
+      const state = await tx.objectStore('book_states').get(id);
+      const file = await tx.objectStore('files').get(id);
+
+      await tx.done;
+
+      if (!book) return { metadata: undefined, file: undefined };
+
+      const metadata: BookMetadata = {
+          ...book,
+          ...(source || {}),
+          ...(state || {})
+      };
+
       return { metadata, file };
     } catch (error) {
       this.handleError(error);
@@ -82,7 +121,21 @@ class DBService {
   async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
       try {
           const db = await this.getDB();
-          return await db.get('books', id);
+          const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readonly');
+
+          const book = await tx.objectStore('books').get(id);
+          const source = await tx.objectStore('book_sources').get(id);
+          const state = await tx.objectStore('book_states').get(id);
+
+          await tx.done;
+
+          if (!book) return undefined;
+
+          return {
+              ...book,
+              ...(source || {}),
+              ...(state || {})
+          };
       } catch (error) {
           this.handleError(error);
       }
@@ -90,6 +143,7 @@ class DBService {
 
   /**
    * Updates only the metadata for a specific book.
+   * Handles splitting updates to appropriate stores.
    *
    * @param id - The unique identifier of the book.
    * @param metadata - The partial metadata to update.
@@ -97,13 +151,38 @@ class DBService {
   async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction('books', 'readwrite');
-      const store = tx.objectStore('books');
-      const existing = await store.get(id);
+      const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readwrite');
 
-      if (existing) {
-        await store.put({ ...existing, ...metadata });
+      // Helper to update if changed
+      const updateIfChanged = async <T>(storeName: 'books' | 'book_sources' | 'book_states', updates: Partial<T>) => {
+          const store = tx.objectStore(storeName);
+          // @ts-ignore
+          const existing = await store.get(id);
+          if (existing && updates && Object.keys(updates).length > 0) {
+              // @ts-ignore
+              await store.put({ ...existing, ...updates });
+          }
+      };
+
+      // Split metadata
+      const bookUpdates: Partial<Book> = {};
+      const sourceUpdates: Partial<BookSource> = {};
+      const stateUpdates: Partial<BookState> = {};
+
+      const bookKeys: (keyof Book)[] = ['title', 'author', 'description', 'coverUrl', 'coverBlob', 'addedAt'];
+      const sourceKeys: (keyof BookSource)[] = ['filename', 'fileHash', 'fileSize', 'totalChars', 'syntheticToc', 'version'];
+      const stateKeys: (keyof BookState)[] = ['lastRead', 'progress', 'currentCfi', 'lastPlayedCfi', 'lastPauseTime', 'isOffloaded', 'aiAnalysisStatus'];
+
+      for (const [key, value] of Object.entries(metadata)) {
+          if (bookKeys.includes(key as keyof Book)) bookUpdates[key as keyof Book] = value as any;
+          if (sourceKeys.includes(key as keyof BookSource)) sourceUpdates[key as keyof BookSource] = value as any;
+          if (stateKeys.includes(key as keyof BookState)) stateUpdates[key as keyof BookState] = value as any;
       }
+
+      if (Object.keys(bookUpdates).length > 0) await updateIfChanged('books', bookUpdates);
+      if (Object.keys(sourceUpdates).length > 0) await updateIfChanged('book_sources', sourceUpdates);
+      if (Object.keys(stateUpdates).length > 0) await updateIfChanged('book_states', stateUpdates);
+
       await tx.done;
     } catch (error) {
       this.handleError(error);
@@ -169,10 +248,12 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'], 'readwrite');
+      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'], 'readwrite');
 
       await Promise.all([
           tx.objectStore('books').delete(id),
+          tx.objectStore('book_sources').delete(id),
+          tx.objectStore('book_states').delete(id),
           tx.objectStore('files').delete(id),
           tx.objectStore('locations').delete(id),
           tx.objectStore('tts_queue').delete(id),
@@ -239,28 +320,53 @@ class DBService {
   async offloadBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'files'], 'readwrite');
+      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files'], 'readwrite');
+
       const bookStore = tx.objectStore('books');
+      const sourceStore = tx.objectStore('book_sources');
+      const stateStore = tx.objectStore('book_states');
+
       const book = await bookStore.get(id);
+      const source = await sourceStore.get(id);
+      const state = await stateStore.get(id);
 
       if (!book) throw new Error('Book not found');
 
-      // If missing hash, calculate fingerprint from existing file before deleting
-      if (!book.fileHash) {
+      // If missing hash in source, calculate fingerprint from existing file before deleting
+      if (!source?.fileHash) {
         const fileStore = tx.objectStore('files');
         const fileData = await fileStore.get(id);
         if (fileData) {
           const blob = fileData instanceof Blob ? fileData : new Blob([fileData]);
-          book.fileHash = await generateFileFingerprint(blob, {
+          const fileHash = await generateFileFingerprint(blob, {
             title: book.title,
             author: book.author,
-            filename: book.filename || 'unknown.epub'
+            filename: source?.filename || 'unknown.epub'
           });
+
+          if (source) {
+              source.fileHash = fileHash;
+              await sourceStore.put(source);
+          } else {
+              // Create source if missing (unlikely)
+              await sourceStore.put({
+                  bookId: id,
+                  fileHash,
+                  filename: 'unknown.epub'
+              });
+          }
         }
       }
 
-      book.isOffloaded = true;
-      await bookStore.put(book);
+      // Update state
+      if (state) {
+          state.isOffloaded = true;
+          await stateStore.put(state);
+      } else {
+          await stateStore.put({ bookId: id, isOffloaded: true });
+      }
+
+      // Delete file
       await tx.objectStore('files').delete(id);
 
       await tx.done;
@@ -280,29 +386,54 @@ class DBService {
   async restoreBook(id: string, file: File): Promise<void> {
     try {
       const db = await this.getDB();
-      const book = await db.get('books', id);
+
+      // 1. Fetch metadata needed (read-only first, implicit or explicit)
+      let book: Book | undefined;
+      let source: BookSource | undefined;
+      let state: BookState | undefined;
+
+      {
+        const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readonly');
+        book = await tx.objectStore('books').get(id);
+        source = await tx.objectStore('book_sources').get(id);
+        state = await tx.objectStore('book_states').get(id);
+        await tx.done;
+      }
 
       if (!book) throw new Error('Book not found');
 
+      // 2. Perform async/expensive operation outside transaction
       const newFingerprint = await generateFileFingerprint(file, {
         title: book.title,
         author: book.author,
         filename: file.name
       });
 
-      if (book.fileHash && book.fileHash !== newFingerprint) {
+      if (source?.fileHash && source.fileHash !== newFingerprint) {
         throw new Error('File verification failed: Fingerprint mismatch.');
-      } else if (!book.fileHash) {
-        // If hash was missing, we accept the file and set the hash
-        book.fileHash = newFingerprint;
       }
 
-      const tx = db.transaction(['books', 'files'], 'readwrite');
-      // Store File (Blob) instead of ArrayBuffer
+      // 3. Start write transaction to update DB
+      const tx = db.transaction(['book_sources', 'book_states', 'files'], 'readwrite');
+
+      // Update source if hash was missing
+      if (!source?.fileHash) {
+         const newSource = source ? { ...source } : { bookId: id, filename: file.name };
+         newSource.fileHash = newFingerprint;
+         await tx.objectStore('book_sources').put(newSource as BookSource);
+      }
+
+      // Store File (Blob)
       await tx.objectStore('files').put(file, id);
 
-      book.isOffloaded = false;
-      await tx.objectStore('books').put(book);
+      // Update state
+      if (state) {
+          state.isOffloaded = false;
+          await tx.objectStore('book_states').put(state);
+      } else {
+          await tx.objectStore('book_states').put({ bookId: id, isOffloaded: false });
+      }
+
       await tx.done;
     } catch (error) {
       this.handleError(error);
@@ -316,6 +447,7 @@ class DBService {
 
   /**
    * Saves reading progress. Debounced to prevent frequent DB writes.
+   * Only updates 'book_states'.
    *
    * @param bookId - The unique identifier of the book.
    * @param cfi - The Canonical Fragment Identifier (CFI) representing the current location.
@@ -334,38 +466,50 @@ class DBService {
           try {
               const db = await this.getDB();
               // Include 'reading_list' and 'files' in the transaction
-              const tx = db.transaction(['books', 'reading_list', 'files'], 'readwrite');
+              const tx = db.transaction(['books', 'book_sources', 'book_states', 'reading_list', 'files'], 'readwrite');
               const bookStore = tx.objectStore('books');
+              const sourceStore = tx.objectStore('book_sources');
+              const stateStore = tx.objectStore('book_states');
               const rlStore = tx.objectStore('reading_list');
               const fileStore = tx.objectStore('files');
 
               for (const [id, data] of Object.entries(pending)) {
                   const book = await bookStore.get(id);
+                  let state = await stateStore.get(id);
+                  const source = await sourceStore.get(id);
+
                   if (book) {
-                      book.currentCfi = data.cfi;
-                      book.progress = data.progress;
-                      book.lastRead = Date.now();
+                      if (!state) {
+                          state = { bookId: id };
+                      }
+                      state.currentCfi = data.cfi;
+                      state.progress = data.progress;
+                      state.lastRead = Date.now();
+                      await stateStore.put(state);
 
                       // Update Reading List Logic
-                      let filename = book.filename;
+                      let filename = source?.filename;
                       if (!filename) {
                           // Try to recover filename from file store if missing
                           try {
                               const fileData = await fileStore.get(id);
-                              // Check if it's a File or has a name property (fake-indexeddb might strip prototype)
                               // eslint-disable-next-line @typescript-eslint/no-explicit-any
                               if (fileData instanceof File || (fileData && (fileData as any).name)) {
                                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                   filename = (fileData instanceof File) ? fileData.name : (fileData as any).name;
-                                  book.filename = filename; // Update book metadata
+                                  // Update source metadata
+                                  if (source) {
+                                      source.filename = filename;
+                                      await sourceStore.put(source);
+                                  } else {
+                                      await sourceStore.put({ bookId: id, filename });
+                                  }
                               }
                           } catch (e) {
                               // Ignore file fetch errors
                               Logger.warn('DBService', 'Failed to fetch file for filename recovery', e);
                           }
                       }
-
-                      await bookStore.put(book);
 
                       if (filename) {
                            // Fetch existing entry to preserve fields like rating/isbn that aren't in book metadata
@@ -464,26 +608,31 @@ class DBService {
   async importReadingList(entries: ReadingListEntry[]): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction(['reading_list', 'books'], 'readwrite');
+          const tx = db.transaction(['reading_list', 'book_sources', 'book_states'], 'readwrite');
           const rlStore = tx.objectStore('reading_list');
-          const bookStore = tx.objectStore('books');
+          const sourceStore = tx.objectStore('book_sources');
+          const stateStore = tx.objectStore('book_states');
 
           // 1. Bulk upsert to reading_list
           for (const entry of entries) {
               await rlStore.put(entry);
           }
 
-          // 2. Reconciliation with books
-          let cursor = await bookStore.openCursor();
+          // 2. Reconciliation with books (via sources which have filename)
+          // Iterate book_sources to find matches by filename
+          // Note: iterating all sources might be slow if library is huge, but it's likely fine.
+          let cursor = await sourceStore.openCursor();
           while (cursor) {
-              const book = cursor.value;
-              if (book.filename) {
-                  const rlEntry = await rlStore.get(book.filename);
+              const source = cursor.value;
+              if (source.filename) {
+                  const rlEntry = await rlStore.get(source.filename);
                   if (rlEntry) {
-                      if (rlEntry.percentage > (book.progress || 0)) {
-                          book.progress = rlEntry.percentage;
-                          book.lastRead = Date.now();
-                          cursor.update(book);
+                      const state = await stateStore.get(source.bookId) || { bookId: source.bookId };
+
+                      if (rlEntry.percentage > (state.progress || 0)) {
+                          state.progress = rlEntry.percentage;
+                          state.lastRead = Date.now();
+                          await stateStore.put(state);
                       }
                   }
               }
@@ -507,14 +656,14 @@ class DBService {
   async updatePlaybackState(bookId: string, lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction('books', 'readwrite');
-          const store = tx.objectStore('books');
-          const book = await store.get(bookId);
-          if (book) {
-              if (lastPlayedCfi !== undefined) book.lastPlayedCfi = lastPlayedCfi;
-              if (lastPauseTime !== undefined) book.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
-              await store.put(book);
-          }
+          const tx = db.transaction('book_states', 'readwrite');
+          const store = tx.objectStore('book_states');
+          const state = await store.get(bookId) || { bookId };
+
+          if (lastPlayedCfi !== undefined) state.lastPlayedCfi = lastPlayedCfi;
+          if (lastPauseTime !== undefined) state.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
+
+          await store.put(state);
           await tx.done;
       } catch (error) {
           this.handleError(error);

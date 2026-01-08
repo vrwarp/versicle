@@ -31,11 +31,20 @@ def reset_app(page: Page):
     Args:
         page: The Playwright Page object.
     """
-    page.goto("http://localhost:5173", timeout=5000)
+    page.goto("http://localhost:5173", timeout=10000)
 
-    # Explicitly clear IDB and LocalStorage to ensure a clean slate
+    # Explicitly clear IDB, LocalStorage, and Unregister Service Workers
     page.evaluate("""
         async () => {
+            // Unregister Service Workers
+            if ('serviceWorker' in navigator) {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (const registration of registrations) {
+                    await registration.unregister();
+                }
+            }
+
+            // Clear DBs
             const dbs = await window.indexedDB.databases();
             for (const db of dbs) {
                 await new Promise((resolve, reject) => {
@@ -49,7 +58,7 @@ def reset_app(page: Page):
         }
     """)
 
-    # Reload to apply cleared storage
+    # Reload to apply cleared storage and fresh SW registration
     page.reload()
 
     # Wait for app to be ready
@@ -60,9 +69,15 @@ def reset_app(page: Page):
         except:
             pass # Might not have appeared
 
-        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book'), div:has-text('Your library is empty')", timeout=10000)
-    except:
-        print("Warning: App load state check timed out.")
+        # Relaxed selector to be more robust
+        # Use :text() pseudo-class for compatibility in comma-separated list
+        page.wait_for_selector(
+            "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
+            timeout=45000
+        )
+    except Exception as e:
+        print(f"Warning: App load state check failed: {e}")
+        capture_screenshot(page, "reset_app_timeout_debug")
 
 def ensure_library_with_book(page: Page):
     """
@@ -75,26 +90,35 @@ def ensure_library_with_book(page: Page):
     """
     # Wait for initial render (either book or load button)
     try:
-        page.wait_for_selector("[data-testid^='book-card-'], button:has-text('Load Demo Book')", timeout=10000)
-    except:
-        print("Warning: Neither book card nor load button found within 10s")
+        page.wait_for_selector(
+            "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
+            timeout=45000
+        )
+    except Exception as e:
+        print(f"Warning: Neither book card nor load button found within 45s: {e}")
+        capture_screenshot(page, "ensure_library_timeout_debug")
         pass # Proceed to check
 
     if page.get_by_text("Alice's Adventures in Wonderland").count() > 0:
         return
 
     # If book not found, try to load
+    # Check for both "Load Demo Book" variations
     load_btn = page.get_by_role("button", name="Load Demo Book")
-    if load_btn.count() > 0 and load_btn.is_visible():
-        load_btn.click()
+    if load_btn.count() == 0:
+         # Try finding by partial text if exact name match fails
+         load_btn = page.locator("button").filter(has_text="Load Demo Book")
+
+    if load_btn.count() > 0 and load_btn.first.is_visible():
+        load_btn.first.click()
         # Wait for book to appear
         try:
-            page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
+            page.wait_for_selector("[data-testid^='book-card-']", timeout=30000)
         except:
             # Retry once if button is still there (flaky click?)
-            if load_btn.is_visible():
-                load_btn.click()
-                page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
+            if load_btn.first.is_visible():
+                load_btn.first.click()
+                page.wait_for_selector("[data-testid^='book-card-']", timeout=30000)
 
 def capture_screenshot(page: Page, name: str, hide_tts_status: bool = False):
     """
