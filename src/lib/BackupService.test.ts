@@ -116,10 +116,14 @@ describe('BackupService', () => {
 
       const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
 
+      // Stable mocks
+      const putMock = vi.fn().mockResolvedValue(undefined);
+      const getMock = vi.fn().mockResolvedValue(undefined);
+
       const mockTx = {
         objectStore: vi.fn().mockReturnValue({
-          get: vi.fn().mockResolvedValue(undefined), // Book not found
-          put: vi.fn().mockResolvedValue(undefined),
+          get: getMock,
+          put: putMock,
         }),
         done: Promise.resolve(),
       };
@@ -129,10 +133,10 @@ describe('BackupService', () => {
 
       // Verify splitting
       expect(mockTx.objectStore).toHaveBeenCalledWith('books');
-      expect(mockTx.objectStore('books').put).toHaveBeenCalledWith(expect.objectContaining({ title: 'Restored Book' }));
+      expect(putMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Restored Book' }));
 
       expect(mockTx.objectStore).toHaveBeenCalledWith('book_states');
-      expect(mockTx.objectStore('book_states').put).toHaveBeenCalledWith(expect.objectContaining({ isOffloaded: true }));
+      expect(putMock).toHaveBeenCalledWith(expect.objectContaining({ isOffloaded: true }));
     });
 
     it('should smart merge existing books', async () => {
@@ -150,15 +154,29 @@ describe('BackupService', () => {
         const existingBook = { id: 'b1', title: 'Old Title' };
         const existingState = { bookId: 'b1', lastRead: 100, progress: 0.1 };
 
+        // We need to handle different return values based on the store name.
+        // Since objectStore returns a NEW object each time if we just use a simple mock,
+        // we need a way to correlate.
+
+        const booksStoreMock = {
+            get: vi.fn().mockResolvedValue(existingBook),
+            put: vi.fn().mockResolvedValue(undefined)
+        };
+        const statesStoreMock = {
+            get: vi.fn().mockResolvedValue(existingState),
+            put: vi.fn().mockResolvedValue(undefined)
+        };
+        const genericStoreMock = {
+            get: vi.fn().mockResolvedValue(undefined),
+            put: vi.fn().mockResolvedValue(undefined)
+        };
+
         const mockTx = {
-          objectStore: vi.fn((store) => ({
-            get: vi.fn().mockImplementation(() => {
-                if (store === 'books') return Promise.resolve(existingBook);
-                if (store === 'book_states') return Promise.resolve(existingState);
-                return Promise.resolve(undefined);
-            }),
-            put: vi.fn().mockResolvedValue(undefined),
-          })),
+          objectStore: vi.fn((store) => {
+              if (store === 'books') return booksStoreMock;
+              if (store === 'book_states') return statesStoreMock;
+              return genericStoreMock;
+          }),
           done: Promise.resolve(),
         };
         mockDB.transaction.mockReturnValue(mockTx);
@@ -167,7 +185,7 @@ describe('BackupService', () => {
 
         // Should update book_states with newer progress
         expect(mockTx.objectStore).toHaveBeenCalledWith('book_states');
-        expect(mockTx.objectStore('book_states').put).toHaveBeenCalledWith(expect.objectContaining({
+        expect(statesStoreMock.put).toHaveBeenCalledWith(expect.objectContaining({
             bookId: 'b1',
             lastRead: 200,
             progress: 0.5
@@ -186,10 +204,11 @@ describe('BackupService', () => {
 
       const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
 
+      const putMock = vi.fn();
       const mockTx = {
         objectStore: vi.fn().mockReturnValue({
           get: vi.fn().mockResolvedValue(undefined),
-          put: vi.fn().mockResolvedValue(undefined),
+          put: putMock,
         }),
         done: Promise.resolve(),
       };
@@ -197,7 +216,7 @@ describe('BackupService', () => {
 
       await service.restoreBackup(file);
 
-      expect(mockTx.objectStore('books').put).not.toHaveBeenCalled();
+      expect(putMock).not.toHaveBeenCalled();
     });
 
     it('should sanitize and restore book with missing title', async () => {
@@ -213,10 +232,11 @@ describe('BackupService', () => {
 
       const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
 
+      const putMock = vi.fn();
       const mockTx = {
         objectStore: vi.fn().mockReturnValue({
           get: vi.fn().mockResolvedValue(undefined),
-          put: vi.fn().mockResolvedValue(undefined),
+          put: putMock,
         }),
         done: Promise.resolve(),
       };
@@ -224,7 +244,7 @@ describe('BackupService', () => {
 
       await service.restoreBackup(file);
 
-      expect(mockTx.objectStore('books').put).toHaveBeenCalledWith(expect.objectContaining({
+      expect(putMock).toHaveBeenCalledWith(expect.objectContaining({
         id: 'b1',
         title: 'Untitled',
         author: 'Author'
@@ -245,10 +265,11 @@ describe('BackupService', () => {
 
         const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
 
+        const putMock = vi.fn();
         const mockTx = {
           objectStore: vi.fn().mockReturnValue({
             get: vi.fn().mockResolvedValue(undefined),
-            put: vi.fn().mockResolvedValue(undefined),
+            put: putMock,
           }),
           done: Promise.resolve(),
         };
@@ -257,7 +278,7 @@ describe('BackupService', () => {
         await service.restoreBackup(file);
 
         expect(confirmSpy).not.toHaveBeenCalled();
-        expect(mockTx.objectStore('books').put).toHaveBeenCalledWith(expect.objectContaining({
+        expect(putMock).toHaveBeenCalledWith(expect.objectContaining({
           title: 'a'.repeat(500)
         }));
     });
