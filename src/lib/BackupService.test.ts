@@ -40,6 +40,8 @@ describe('BackupService', () => {
     it('should create a JSON backup of metadata', async () => {
       mockDB.getAll.mockImplementation((store) => {
         if (store === 'books') return Promise.resolve([{ id: 'b1', title: 'Book 1' }]);
+        if (store === 'book_sources') return Promise.resolve([{ bookId: 'b1' }]);
+        if (store === 'book_states') return Promise.resolve([{ bookId: 'b1' }]);
         if (store === 'annotations') return Promise.resolve([]);
         if (store === 'lexicon') return Promise.resolve([]);
         if (store === 'locations') return Promise.resolve([]);
@@ -67,7 +69,8 @@ describe('BackupService', () => {
   describe('createFullBackup', () => {
     it('should create a ZIP backup with files', async () => {
       mockDB.getAll.mockImplementation((store) => {
-        if (store === 'books') return Promise.resolve([{ id: 'b1', title: 'Book 1', isOffloaded: false }]);
+        if (store === 'books') return Promise.resolve([{ id: 'b1', title: 'Book 1' }]);
+        if (store === 'book_states') return Promise.resolve([{ bookId: 'b1', isOffloaded: false }]);
         return Promise.resolve([]);
       });
 
@@ -88,8 +91,11 @@ describe('BackupService', () => {
     });
 
     it('should skip offloaded books', async () => {
-      mockDB.getAll.mockResolvedValueOnce([{ id: 'b1', isOffloaded: true }]); // books
-      mockDB.getAll.mockResolvedValue([]); // others
+      mockDB.getAll.mockImplementation((store) => {
+          if (store === 'books') return Promise.resolve([{ id: 'b1', title: 'Book 1' }]);
+          if (store === 'book_states') return Promise.resolve([{ bookId: 'b1', isOffloaded: true }]);
+          return Promise.resolve([]);
+      });
 
       await service.createFullBackup();
 
@@ -121,8 +127,12 @@ describe('BackupService', () => {
 
       await service.restoreBackup(file);
 
+      // Verify splitting
       expect(mockTx.objectStore).toHaveBeenCalledWith('books');
-      expect(mockTx.objectStore('books').put).toHaveBeenCalledWith(expect.objectContaining({ title: 'Restored Book', isOffloaded: true }));
+      expect(mockTx.objectStore('books').put).toHaveBeenCalledWith(expect.objectContaining({ title: 'Restored Book' }));
+
+      expect(mockTx.objectStore).toHaveBeenCalledWith('book_states');
+      expect(mockTx.objectStore('book_states').put).toHaveBeenCalledWith(expect.objectContaining({ isOffloaded: true }));
     });
 
     it('should smart merge existing books', async () => {
@@ -137,22 +147,29 @@ describe('BackupService', () => {
 
         const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
 
-        const existingBook = { id: 'b1', title: 'Old Title', lastRead: 100, progress: 0.1 };
+        const existingBook = { id: 'b1', title: 'Old Title' };
+        const existingState = { bookId: 'b1', lastRead: 100, progress: 0.1 };
 
         const mockTx = {
-          objectStore: vi.fn().mockReturnValue({
-            get: vi.fn().mockResolvedValue(existingBook),
+          objectStore: vi.fn((store) => ({
+            get: vi.fn().mockImplementation(() => {
+                if (store === 'books') return Promise.resolve(existingBook);
+                if (store === 'book_states') return Promise.resolve(existingState);
+                return Promise.resolve(undefined);
+            }),
             put: vi.fn().mockResolvedValue(undefined),
-          }),
+          })),
           done: Promise.resolve(),
         };
         mockDB.transaction.mockReturnValue(mockTx);
 
         await service.restoreBackup(file);
 
-        expect(mockTx.objectStore('books').put).toHaveBeenCalledWith(expect.objectContaining({
-            id: 'b1',
-            lastRead: 200, // Updated
+        // Should update book_states with newer progress
+        expect(mockTx.objectStore).toHaveBeenCalledWith('book_states');
+        expect(mockTx.objectStore('book_states').put).toHaveBeenCalledWith(expect.objectContaining({
+            bookId: 'b1',
+            lastRead: 200,
             progress: 0.5
         }));
       });
