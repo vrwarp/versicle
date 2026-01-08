@@ -386,14 +386,23 @@ class DBService {
   async restoreBook(id: string, file: File): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files'], 'readwrite');
 
-      const book = await tx.objectStore('books').get(id);
-      const source = await tx.objectStore('book_sources').get(id);
-      const state = await tx.objectStore('book_states').get(id);
+      // 1. Fetch metadata needed (read-only first, implicit or explicit)
+      let book: Book | undefined;
+      let source: BookSource | undefined;
+      let state: BookState | undefined;
+
+      {
+        const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readonly');
+        book = await tx.objectStore('books').get(id);
+        source = await tx.objectStore('book_sources').get(id);
+        state = await tx.objectStore('book_states').get(id);
+        await tx.done;
+      }
 
       if (!book) throw new Error('Book not found');
 
+      // 2. Perform async/expensive operation outside transaction
       const newFingerprint = await generateFileFingerprint(file, {
         title: book.title,
         author: book.author,
@@ -402,21 +411,19 @@ class DBService {
 
       if (source?.fileHash && source.fileHash !== newFingerprint) {
         throw new Error('File verification failed: Fingerprint mismatch.');
-      } else if (!source?.fileHash) {
-        // If hash was missing, we accept the file and set the hash
-        if (source) {
-            source.fileHash = newFingerprint;
-            await tx.objectStore('book_sources').put(source);
-        } else {
-             await tx.objectStore('book_sources').put({
-                 bookId: id,
-                 fileHash: newFingerprint,
-                 filename: file.name
-             });
-        }
       }
 
-      // Store File (Blob) instead of ArrayBuffer
+      // 3. Start write transaction to update DB
+      const tx = db.transaction(['book_sources', 'book_states', 'files'], 'readwrite');
+
+      // Update source if hash was missing
+      if (!source?.fileHash) {
+         const newSource = source ? { ...source } : { bookId: id, filename: file.name };
+         newSource.fileHash = newFingerprint;
+         await tx.objectStore('book_sources').put(newSource as BookSource);
+      }
+
+      // Store File (Blob)
       await tx.objectStore('files').put(file, id);
 
       // Update state

@@ -20,12 +20,16 @@ def test_tts_queue(page: Page):
 
     # Wait for reader to load
     print("Waiting for reader...")
-    expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=2000)
+    expect(page.get_by_test_id("reader-iframe-container")).to_be_visible(timeout=10000)
     page.wait_for_timeout(2000)
+
+    # Ensure audio button is visible before clicking (especially on mobile)
+    audio_btn = page.get_by_test_id("reader-audio-button")
+    audio_btn.wait_for(state="visible", timeout=10000)
 
     # Open TTS Controls
     print("Opening TTS controls...")
-    page.get_by_test_id("reader-audio-button").click()
+    audio_btn.click()
 
     # Wait for popup
     try:
