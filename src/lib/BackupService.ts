@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { dbService } from '../db/DBService';
-import type { BookMetadata, Annotation, LexiconRule, BookLocations } from '../types/db';
+import type { BookMetadata, Annotation, LexiconRule, BookLocations, Book, BookSource, BookState } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import { getDB } from '../db/db';
 
@@ -120,18 +120,31 @@ export class BackupService {
   private async generateManifest(): Promise<BackupManifest> {
     const db = await getDB();
 
-    const [books, annotations, lexicon, locations] = await Promise.all([
+    const [books, bookSources, bookStates, annotations, lexicon, locations] = await Promise.all([
       db.getAll('books'),
+      db.getAll('book_sources'),
+      db.getAll('book_states'),
       db.getAll('annotations'),
       db.getAll('lexicon'),
       db.getAll('locations')
     ]);
 
-    // Sanitize books to remove non-serializable objects or large blobs
-    const sanitizedBooks = books.map(book => {
+    // Create lookup maps for source and state
+    const sourceMap = new Map<string, BookSource>(bookSources.map(s => [s.bookId, s]));
+    const stateMap = new Map<string, BookState>(bookStates.map(s => [s.bookId, s]));
+
+    // Sanitize books to remove non-serializable objects or large blobs, and join with source/state
+    const sanitizedBooks: BookMetadata[] = books.map(book => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { coverBlob, coverUrl, ...rest } = book;
-        return rest;
+        const { coverBlob, coverUrl, ...bookRest } = book;
+        const source = sourceMap.get(book.id) || {};
+        const state = stateMap.get(book.id) || {};
+
+        return {
+            ...bookRest,
+            ...source,
+            ...state
+        } as BookMetadata;
     });
 
     return {
@@ -229,26 +242,70 @@ export class BackupService {
     // --- PHASE 2: Database Operations ---
 
     // Metadata Transaction
-    const tx = db.transaction(['books', 'annotations', 'locations', 'lexicon'], 'readwrite');
+    const tx = db.transaction(['books', 'book_sources', 'book_states', 'annotations', 'locations', 'lexicon'], 'readwrite');
 
     // 1.1 Restore Books Metadata
     for (const book of booksToSave) {
+      // Use DBService logic for splitting data or do it manually
+      // We do it manually here to control the transaction
+
       const existingBook = await tx.objectStore('books').get(book.id);
+      const existingSource = await tx.objectStore('book_sources').get(book.id);
+      const existingState = await tx.objectStore('book_states').get(book.id);
 
       if (existingBook) {
         // Smart Merge: Update progress if newer
-        if ((book.lastRead || 0) > (existingBook.lastRead || 0)) {
-          existingBook.lastRead = book.lastRead;
-          existingBook.progress = book.progress;
-          existingBook.currentCfi = book.currentCfi;
+        if ((book.lastRead || 0) > (existingState?.lastRead || 0)) {
+            // Update state
+            const newState: BookState = {
+                ...(existingState || { bookId: book.id }),
+                lastRead: book.lastRead,
+                progress: book.progress,
+                currentCfi: book.currentCfi,
+            };
+            await tx.objectStore('book_states').put(newState);
         }
-        await tx.objectStore('books').put(existingBook);
+
+        // Update Book Metadata (Identity) if needed? Usually we trust existing local or favor backup?
+        // Let's assume backup is authoritative for metadata properties if newer?
+        // For now, only merging progress as per original logic.
       } else {
-        // New Book - initially mark as offloaded until we confirm file
-        // If it's a light backup, it remains offloaded.
-        // If it's a full backup, we will update it in the next step.
-        book.isOffloaded = true;
-        await tx.objectStore('books').put(book);
+        // New Book
+        // Split into Book, Source, State
+
+        const bookData: Book = {
+            id: book.id,
+            title: book.title,
+            author: book.author,
+            description: book.description,
+            addedAt: book.addedAt,
+            // coverBlob is excluded in backup, so undefined
+        };
+
+        const sourceData: BookSource = {
+            bookId: book.id,
+            filename: book.filename,
+            fileHash: book.fileHash,
+            fileSize: book.fileSize,
+            totalChars: book.totalChars,
+            syntheticToc: book.syntheticToc,
+            version: book.version
+        };
+
+        const stateData: BookState = {
+            bookId: book.id,
+            lastRead: book.lastRead,
+            progress: book.progress,
+            currentCfi: book.currentCfi,
+            lastPlayedCfi: book.lastPlayedCfi,
+            lastPauseTime: book.lastPauseTime,
+            isOffloaded: true, // initially mark as offloaded until we confirm file
+            aiAnalysisStatus: book.aiAnalysisStatus
+        };
+
+        await tx.objectStore('books').put(bookData);
+        await tx.objectStore('book_sources').put(sourceData);
+        await tx.objectStore('book_states').put(stateData);
       }
       updateProgress(`Restoring metadata for ${book.title}...`);
     }
@@ -289,14 +346,17 @@ export class BackupService {
                 const arrayBuffer = await zipFile.async('arraybuffer');
 
                 // New short-lived transaction for file write
-                const fileTx = db.transaction(['books', 'files'], 'readwrite');
+                const fileTx = db.transaction(['book_states', 'files'], 'readwrite');
                 await fileTx.objectStore('files').put(arrayBuffer, book.id);
 
                 // Update book status to not offloaded
-                const bookRecord = await fileTx.objectStore('books').get(book.id);
-                if (bookRecord) {
-                    bookRecord.isOffloaded = false;
-                    await fileTx.objectStore('books').put(bookRecord);
+                const bookState = await fileTx.objectStore('book_states').get(book.id);
+                if (bookState) {
+                    bookState.isOffloaded = false;
+                    await fileTx.objectStore('book_states').put(bookState);
+                } else {
+                    // Create if missing (should exist from Step 2)
+                    await fileTx.objectStore('book_states').put({ bookId: book.id, isOffloaded: false });
                 }
                 await fileTx.done;
             }

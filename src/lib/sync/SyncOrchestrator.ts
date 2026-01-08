@@ -2,7 +2,7 @@ import { SyncManager } from './SyncManager';
 import { CheckpointService } from './CheckpointService';
 import { AndroidBackupService } from './android-backup';
 import type { RemoteStorageProvider } from './types';
-import type { SyncManifest } from '../../types/db';
+import type { SyncManifest, BookMetadata, BookState, BookSource } from '../../types/db';
 import { useSyncStore } from './hooks/useSyncStore';
 import { getDB } from '../../db/db';
 
@@ -154,6 +154,7 @@ export class SyncOrchestrator {
     private async generateLocalManifest(): Promise<SyncManifest> {
         const db = await getDB();
         const books = await db.getAll('books');
+        const bookStates = await db.getAll('book_states');
         const readingHistory = await db.getAll('reading_history');
         const annotations = await db.getAll('annotations');
         const lexicon = await db.getAll('lexicon');
@@ -161,14 +162,16 @@ export class SyncOrchestrator {
         const ttsPositions = await db.getAll('tts_position');
 
         const manifestBooks: SyncManifest['books'] = {};
+        const stateMap = new Map<string, BookState>(bookStates.map(s => [s.bookId, s]));
 
         // Map books
         for (const b of books) {
+            const state = stateMap.get(b.id) || {};
             const hist = readingHistory.find(h => h.bookId === b.id) || {
                 bookId: b.id,
                 readRanges: [],
                 sessions: [],
-                lastUpdated: b.lastRead || 0
+                lastUpdated: state.lastRead || 0
             };
             const ann = annotations.filter(a => a.bookId === b.id);
 
@@ -177,9 +180,9 @@ export class SyncOrchestrator {
                     id: b.id,
                     title: b.title,
                     author: b.author,
-                    lastRead: b.lastRead,
-                    progress: b.progress,
-                    // Minimal metadata
+                    lastRead: state.lastRead,
+                    progress: state.progress,
+                    // Minimal metadata to satisfy Sync
                 },
                 history: hist,
                 annotations: ann
@@ -212,23 +215,31 @@ export class SyncOrchestrator {
 
     private async applyManifest(manifest: SyncManifest) {
         const db = await getDB();
-        const tx = db.transaction(['books', 'reading_history', 'annotations', 'lexicon', 'reading_list', 'tts_position'], 'readwrite');
+        const tx = db.transaction(['books', 'book_states', 'reading_history', 'annotations', 'lexicon', 'reading_list', 'tts_position'], 'readwrite');
 
         // Apply Books (Metadata Updates)
         for (const [bookId, data] of Object.entries(manifest.books)) {
             const existingBook = await tx.objectStore('books').get(bookId);
+            const existingState = await tx.objectStore('book_states').get(bookId);
+
             if (existingBook) {
-                // Only update if remote is newer? Manifest is already merged LWW.
-                // So we just update specific fields.
-                const updated = { ...existingBook, ...data.metadata };
-                // Ensure we don't overwrite crucial local-only fields if they existed,
-                // but metadata in manifest is Partial.
-                await tx.objectStore('books').put(updated);
+                // Update Book (Identity) - limited fields
+                if (data.metadata.title) existingBook.title = data.metadata.title;
+                if (data.metadata.author) existingBook.author = data.metadata.author;
+                await tx.objectStore('books').put(existingBook);
+
+                // Update State (Progress)
+                const newState: BookState = {
+                    ...(existingState || { bookId }),
+                    lastRead: data.metadata.lastRead,
+                    progress: data.metadata.progress,
+                    currentCfi: data.metadata.currentCfi,
+                };
+                // Ensure we don't overwrite if local is newer?
+                // applyManifest assumes manifest is authoritative/merged.
+                await tx.objectStore('book_states').put(newState);
             }
             // Note: We don't create new books from sync if we don't have the file!
-            // The plan says "Books not present locally are marked isOffloaded: true".
-            // Implementation detail: If we sync a book we don't have, we might want to show it as "Cloud only".
-            // For now, I'll skip creating books we don't have to avoid "ghost" books without files.
 
             // Apply History
             if (data.history) {
@@ -236,8 +247,6 @@ export class SyncOrchestrator {
             }
 
             // Apply Annotations
-            // This assumes we overwrite/append.
-            // Since we merged, we can just put all.
             for (const ann of data.annotations) {
                 await tx.objectStore('annotations').put(ann);
             }
