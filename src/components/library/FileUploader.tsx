@@ -126,7 +126,7 @@ export const FileUploader: React.FC = () => {
     <div className="space-y-4">
     <div
       className={cn(
-        "group relative w-full border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ease-in-out cursor-pointer",
+        "group relative w-full border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ease-in-out cursor-pointer focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
         dragActive
           ? "border-primary bg-accent"
           : "border-muted-foreground/25 hover:border-primary hover:bg-muted/30"
@@ -150,7 +150,7 @@ export const FileUploader: React.FC = () => {
 
       {isImporting ? (
         <div className="flex flex-col items-center justify-center space-y-3">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary" role="status" aria-label="Loading" />
 
             {/* Upload/Processing Progress */}
             <div className="w-full flex flex-col items-center space-y-1">
