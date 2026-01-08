@@ -2,7 +2,7 @@ import { SyncManager } from './SyncManager';
 import { CheckpointService } from './CheckpointService';
 import { AndroidBackupService } from './android-backup';
 import type { RemoteStorageProvider } from './types';
-import type { SyncManifest, BookMetadata, BookState, BookSource } from '../../types/db';
+import type { SyncManifest, BookState } from '../../types/db';
 import { useSyncStore } from './hooks/useSyncStore';
 import { getDB } from '../../db/db';
 
@@ -166,7 +166,8 @@ export class SyncOrchestrator {
 
         // Map books
         for (const b of books) {
-            const state = stateMap.get(b.id) || {};
+            // Ensure state exists or use fallback
+            const state = stateMap.get(b.id) || { bookId: b.id };
             const hist = readingHistory.find(h => h.bookId === b.id) || {
                 bookId: b.id,
                 readRanges: [],

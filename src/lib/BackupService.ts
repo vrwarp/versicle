@@ -250,7 +250,7 @@ export class BackupService {
       // We do it manually here to control the transaction
 
       const existingBook = await tx.objectStore('books').get(book.id);
-      const existingSource = await tx.objectStore('book_sources').get(book.id);
+      // Removed unused existingSource
       const existingState = await tx.objectStore('book_states').get(book.id);
 
       if (existingBook) {
