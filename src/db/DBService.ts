@@ -64,14 +64,12 @@ class DBService {
           };
 
           // Validate
-          // Note: validators need to be updated or we rely on the schema being correct here.
-          // Since we just split it, trust the DB, but filter for sanity.
-          // validateBookMetadata might fail if required fields from 'BookSource' are missing (like filename/fileHash).
-          // However, existing validation logic in `validators.ts` likely checks for existence.
-          // If the UI relies on 'filename' (which is in BookSource), we might need to fetch sources too.
-          // Let's assume for the "Card" view, we don't need 'syntheticToc' or 'totalChars'.
-          // But 'filename' is often used.
-          // Let's check the BookMetadata definition. 'filename' is optional.
+          // We apply the same validation logic as before to ensure no corrupted data leaks into the UI.
+          const isValid = validateBookMetadata(composite);
+          if (!isValid) {
+            Logger.error('DBService', 'DB Integrity: Found corrupted book record', composite);
+            continue;
+          }
 
           library.push(composite);
       }
