@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { BookMetadata, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata, ContentAnalysis, ReadingHistoryEntry, ReadingListEntry, TTSContent, TTSPosition, TableImage, SyncCheckpoint, SyncLogEntry } from '../types/db';
+import type { BookMetadata, Book, BookSource, BookState, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata, ContentAnalysis, ReadingHistoryEntry, ReadingListEntry, TTSContent, TTSPosition, TableImage, SyncCheckpoint, SyncLogEntry } from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -35,15 +35,30 @@ export interface EpubLibraryDB extends DBSchema {
   };
   /**
    * Store for book metadata.
+   * Stores the essential display information (Book interface).
    */
   books: {
     key: string;
-    value: BookMetadata;
+    value: Book; // Refactored from BookMetadata
     indexes: {
       by_title: string;
       by_author: string;
       by_addedAt: number;
     };
+  };
+  /**
+   * Store for book source metadata (Technical/File Info).
+   */
+  book_sources: {
+    key: string; // bookId
+    value: BookSource;
+  };
+  /**
+   * Store for book user state (Progress/Status).
+   */
+  book_states: {
+    key: string; // bookId
+    value: BookState;
   };
   /**
    * Store for binary file data (EPUB files).
@@ -173,8 +188,69 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 16, { // Upgrading to v16
-      upgrade(db, oldVersion, _newVersion, transaction) {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 17, { // Upgrading to v17
+      async upgrade(db, oldVersion, _newVersion, transaction) {
+        // v17: Refactor Book Model (Split books store into books, book_sources, book_states)
+        // Ensure stores are created regardless of oldVersion if they don't exist.
+        if (!db.objectStoreNames.contains('book_sources')) {
+            db.createObjectStore('book_sources', { keyPath: 'bookId' });
+        }
+        if (!db.objectStoreNames.contains('book_states')) {
+            db.createObjectStore('book_states', { keyPath: 'bookId' });
+        }
+
+        if (oldVersion < 17) {
+            if (db.objectStoreNames.contains('books')) {
+                // We need to migrate data.
+                const booksStore = transaction.objectStore('books');
+                const sourcesStore = transaction.objectStore('book_sources');
+                const statesStore = transaction.objectStore('book_states');
+
+                // Iterate and split
+                let cursor = await booksStore.openCursor();
+                while (cursor) {
+                    const oldBook = cursor.value as BookMetadata;
+
+                    const source: BookSource = {
+                        bookId: oldBook.id,
+                        filename: oldBook.filename,
+                        fileHash: oldBook.fileHash,
+                        fileSize: oldBook.fileSize,
+                        totalChars: oldBook.totalChars,
+                        syntheticToc: oldBook.syntheticToc,
+                        version: oldBook.version
+                    };
+                    await sourcesStore.put(source);
+
+                    const state: BookState = {
+                        bookId: oldBook.id,
+                        lastRead: oldBook.lastRead,
+                        progress: oldBook.progress,
+                        currentCfi: oldBook.currentCfi,
+                        lastPlayedCfi: oldBook.lastPlayedCfi,
+                        lastPauseTime: oldBook.lastPauseTime,
+                        isOffloaded: oldBook.isOffloaded,
+                        aiAnalysisStatus: oldBook.aiAnalysisStatus
+                    };
+                    await statesStore.put(state);
+
+                    // Update Book Entry (Keep only essential metadata)
+                    const book: Book = {
+                        id: oldBook.id,
+                        title: oldBook.title,
+                        author: oldBook.author,
+                        description: oldBook.description,
+                        coverUrl: oldBook.coverUrl,
+                        coverBlob: oldBook.coverBlob,
+                        addedAt: oldBook.addedAt
+                    };
+                    await cursor.update(book);
+
+                    cursor = await cursor.continue();
+                }
+            }
+        }
+
         // Checkpoints store (New in v16)
         if (!db.objectStoreNames.contains('checkpoints')) {
           const checkpointsStore = db.createObjectStore('checkpoints', { keyPath: 'id', autoIncrement: true });

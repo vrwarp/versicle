@@ -4,13 +4,13 @@ import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ContentType } from './content-analysis';
 
 /**
- * Metadata for a book stored in the library.
+ * 1. Core Book Identity & Display Metadata.
+ * Essential metadata for displaying the book in the library (including offloaded state).
+ * Stored in 'books'.
  */
-export interface BookMetadata {
+export interface Book {
   /** Unique identifier for the book (UUID). */
   id: string;
-  /** The original filename of the EPUB file. */
-  filename?: string;
   /** The title of the book. */
   title: string;
   /** The author(s) of the book. */
@@ -24,11 +24,46 @@ export interface BookMetadata {
   coverUrl?: string;
   /**
    * The binary Blob of the cover image.
-   * Stored in IndexedDB.
+   * Stored in IndexedDB (books store).
    */
   coverBlob?: Blob;
   /** Timestamp when the book was added to the library. */
   addedAt: number;
+}
+
+/**
+ * 2. Source Metadata (Technical/File Info).
+ * Metadata related to the original file and ingestion process.
+ * Stored in 'book_sources'.
+ */
+export interface BookSource {
+  /** The unique identifier of the book (FK). */
+  bookId: string;
+  /** The original filename of the EPUB file. */
+  filename?: string;
+  /** SHA-256 hash of the original EPUB file, used for verification during restore. */
+  fileHash?: string;
+  /** The size of the file in bytes. */
+  fileSize?: number;
+  /** Total number of characters in the book, used for duration estimation. */
+  totalChars?: number;
+  /** Synthetic Table of Contents generated during ingestion. */
+  syntheticToc?: NavigationItem[];
+  /**
+   * The version of the ingestion pipeline used for this book.
+   * Used to trigger reprocessing when the pipeline is updated.
+   */
+  version?: number;
+}
+
+/**
+ * 3. User State (User Generated Content/Runtime).
+ * Mutable user data like progress, current location, and status.
+ * Stored in 'book_states'.
+ */
+export interface BookState {
+  /** The unique identifier of the book (FK). */
+  bookId: string;
   /** Timestamp when the book was last opened. */
   lastRead?: number;
   /** Reading progress as a percentage (0.0 to 1.0). */
@@ -39,24 +74,17 @@ export interface BookMetadata {
   lastPlayedCfi?: string;
   /** Timestamp when TTS playback was last paused, for smart resume. */
   lastPauseTime?: number;
-  /** SHA-256 hash of the original EPUB file, used for verification during restore. */
-  fileHash?: string;
   /** Whether the binary file content has been deleted to save space. */
   isOffloaded?: boolean;
-  /** The size of the file in bytes. */
-  fileSize?: number;
-  /** Synthetic Table of Contents generated during ingestion. */
-  syntheticToc?: NavigationItem[];
-  /** Total number of characters in the book, used for duration estimation. */
-  totalChars?: number;
   /** Status of AI analysis for the book. */
   aiAnalysisStatus?: 'none' | 'partial' | 'complete';
-  /**
-   * The version of the ingestion pipeline used for this book.
-   * Used to trigger reprocessing when the pipeline is updated.
-   */
-  version?: number;
 }
+
+/**
+ * Composite type representing the full view of a book.
+ * Maintains backward compatibility with the application layer.
+ */
+export type BookMetadata = Book & Partial<BookSource> & Partial<BookState>;
 
 export interface TableAdaptation {
   rootCfi: string; // The EPUB CFI key for the table block
