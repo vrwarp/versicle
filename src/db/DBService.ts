@@ -271,7 +271,7 @@ class DBService {
           'cache_locations',
           'user_lexicon',
           'cache_tts_queue',
-          'cache_tts_position',
+          'user_tts_position',
           'cache_content_analysis',
           'static_tts_content',
           'cache_table_images',
@@ -285,7 +285,7 @@ class DBService {
           tx.objectStore('static_files').delete(id),
           tx.objectStore('cache_locations').delete(id),
           tx.objectStore('cache_tts_queue').delete(id),
-          tx.objectStore('cache_tts_position').delete(id),
+          tx.objectStore('user_tts_position').delete(id),
           tx.objectStore('cache_covers').delete(id),
       ]);
 
@@ -771,8 +771,8 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              const tx = db.transaction('cache_tts_position', 'readwrite');
-              const store = tx.objectStore('cache_tts_position');
+              const tx = db.transaction('user_tts_position', 'readwrite');
+              const store = tx.objectStore('user_tts_position');
 
               for (const position of Object.values(pending)) {
                   await store.put(position);
@@ -786,7 +786,7 @@ class DBService {
 
   /**
    * Retrieves the saved TTS state for a book.
-   * Merges data from both `cache_tts_queue` and `cache_tts_position` stores.
+   * Merges data from both `cache_tts_queue` and `user_tts_position` stores.
    *
    * @param bookId - The unique identifier of the book.
    * @returns A Promise resolving to the TTSState or undefined.
@@ -795,7 +795,7 @@ class DBService {
       try {
           const db = await this.getDB();
           const state = await db.get('cache_tts_queue', bookId);
-          const position = await db.get('cache_tts_position', bookId);
+          const position = await db.get('user_tts_position', bookId);
 
           if (state && position && position.updatedAt > state.updatedAt) {
               return {

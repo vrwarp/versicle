@@ -147,6 +147,15 @@ export interface EpubLibraryDB extends DBSchema {
     value: any;
   };
 
+  /**
+   * User: TTS Position (Lightweight).
+   * Persisted user state, relevant for sync.
+   */
+  user_tts_position: {
+    key: string; // bookId
+    value: TTSPosition;
+  };
+
   // --- Cache Stores ---
 
   /**
@@ -172,14 +181,6 @@ export interface EpubLibraryDB extends DBSchema {
   cache_tts_queue: {
     key: string; // bookId
     value: TTSState;
-  };
-
-  /**
-   * Cache: TTS Position (Lightweight).
-   */
-  cache_tts_position: {
-    key: string; // bookId
-    value: TTSPosition;
   };
 
   /**
@@ -285,6 +286,9 @@ export const initDB = () => {
         if (!db.objectStoreNames.contains('user_app_metadata')) {
             db.createObjectStore('user_app_metadata');
         }
+        if (!db.objectStoreNames.contains('user_tts_position')) {
+            db.createObjectStore('user_tts_position', { keyPath: 'bookId' });
+        }
 
         // Cache
         if (!db.objectStoreNames.contains('cache_covers')) {
@@ -295,9 +299,6 @@ export const initDB = () => {
         }
         if (!db.objectStoreNames.contains('cache_tts_queue')) {
             db.createObjectStore('cache_tts_queue', { keyPath: 'bookId' });
-        }
-        if (!db.objectStoreNames.contains('cache_tts_position')) {
-            db.createObjectStore('cache_tts_position', { keyPath: 'bookId' });
         }
         if (!db.objectStoreNames.contains('cache_tts_audio')) {
             const store = db.createObjectStore('cache_tts_audio', { keyPath: 'key' });
@@ -382,7 +383,7 @@ export const initDB = () => {
 
             await migrate('locations', 'cache_locations');
             await migrate('tts_queue', 'cache_tts_queue');
-            await migrate('tts_position', 'cache_tts_position');
+            await migrate('tts_position', 'user_tts_position');
             await migrate('tts_cache', 'cache_tts_audio');
             await migrate('content_analysis', 'cache_content_analysis');
             await migrate('table_images', 'cache_table_images');

@@ -206,7 +206,7 @@ export interface TTSState {
 
 /**
  * Lightweight persisted TTS position for frequent updates.
- * Stored in 'cache_tts_position'.
+ * Stored in 'user_tts_position'.
  */
 export interface TTSPosition {
   /** The book ID this position belongs to. */

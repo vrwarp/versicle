@@ -159,7 +159,7 @@ export class SyncOrchestrator {
         const annotations = await db.getAll('user_annotations');
         const lexicon = await db.getAll('user_lexicon');
         const readingListList = await db.getAll('user_reading_list');
-        const ttsPositions = await db.getAll('cache_tts_position');
+        const ttsPositions = await db.getAll('user_tts_position');
 
         const manifestBooks: SyncManifest['books'] = {};
         const stateMap = new Map<string, BookState>(bookStates.map(s => [s.bookId, s]));
@@ -223,7 +223,7 @@ export class SyncOrchestrator {
             'user_annotations',
             'user_lexicon',
             'user_reading_list',
-            'cache_tts_position'
+            'user_tts_position'
         ], 'readwrite');
 
         // Apply Books (Metadata Updates)
@@ -273,7 +273,7 @@ export class SyncOrchestrator {
 
         // TTS Positions
         for (const pos of Object.values(manifest.transientState.ttsPositions)) {
-             await tx.objectStore('cache_tts_position').put(pos);
+             await tx.objectStore('user_tts_position').put(pos);
         }
 
         await tx.done;
