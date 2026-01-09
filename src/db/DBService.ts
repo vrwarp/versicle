@@ -413,7 +413,7 @@ class DBService {
                   if (inv) {
                       inv.lastInteraction = Date.now();
                       if (data.progress > 0.98) inv.status = 'completed';
-                      else if (data.progress > 0) inv.status = 'reading';
+                      else if (inv.status !== 'completed') inv.status = 'reading';
                       await invStore.put(inv);
                   }
               }
