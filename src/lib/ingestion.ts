@@ -294,8 +294,7 @@ export async function processEpub(
 
   const resource: StaticResource = {
       bookId,
-      epubBlob: file,
-      coverBlob: thumbnailBlob || coverBlob
+      epubBlob: file
   };
 
   const structure = {

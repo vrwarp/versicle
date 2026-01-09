@@ -6,6 +6,7 @@ import type {
     TTSState, Annotation, CachedSegment, BookLocations, ContentAnalysis,
     CacheSessionState
 } from '../types/db';
+import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
