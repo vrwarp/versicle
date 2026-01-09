@@ -122,20 +122,9 @@ export class LexiconService {
   }
 
   async reorderRules(updates: { id: string; order: number }[]): Promise<void> {
-    // This is tricky because updates might span global and book rules.
-    // But usually reordering is within a context.
-    // Let's assume updates are for a single book context or global.
-    // Since we don't know the bookId from just ID, we'd have to search.
-    // Optimization: The UI likely knows the context.
-    // But maintaining signature:
-
     const db = await getDB();
     const tx = db.transaction('user_overrides', 'readwrite');
     const store = tx.objectStore('user_overrides');
-
-    // We iterate all overrides? Expensive.
-    // Or we assume `updates` are ordered by new index?
-    // Let's try to find which override doc contains these IDs.
 
     // Getting all override keys
     const keys = await store.getAllKeys();
@@ -144,42 +133,20 @@ export class LexiconService {
         const overrides = await store.get(key);
         if (!overrides) continue;
 
-        let changed = false;
-        // Check if any rule in this doc is in updates
-        // This logic implies updates contains ALL rules for this context in new order?
-        // "updates" has {id, order}.
-
-        // If we want to support arbitrary ordering, we should probably sort the array based on `order`.
-        // But `LexiconRule` interface had `order`. `user_overrides` uses array position.
-
-        // Let's assume `updates` allows us to reconstruct the array.
-        // Simplified: We assume `reorderRules` is called with the full list of IDs in order?
-        // No, `updates` is `{id, order}`.
-
-        // Let's map current rules to a map.
-        const ruleMap = new Map(overrides.lexicon.map(r => [r.id, r]));
         const currentIds = new Set(overrides.lexicon.map(r => r.id));
-
-        // Filter updates relevant to this doc
         const relevantUpdates = updates.filter(u => currentIds.has(u.id));
 
         if (relevantUpdates.length > 0) {
-            // Apply updates to `order` property? But we don't store `order` in `user_overrides` items.
-            // We need to re-sort the array based on these new orders.
-
             // Assign temporary order
             const items = overrides.lexicon.map(r => {
                 const update = relevantUpdates.find(u => u.id === r.id);
                 return { ...r, _tempOrder: update ? update.order : (Number.MAX_SAFE_INTEGER) };
-                // If not updated, put at end? Or keep relative?
-                // This is messy. `reorderRules` assumes we store `order`.
-                // In v18, we rely on array order.
-                // So we should probably sort the array by `order`.
             });
 
             // Sort
             items.sort((a, b) => a._tempOrder - b._tempOrder);
 
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             overrides.lexicon = items.map(({ _tempOrder, ...r }) => r);
             await store.put(overrides);
         }

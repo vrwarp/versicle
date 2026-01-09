@@ -6,17 +6,12 @@ import path from 'path';
 const OPT_OUT_REGISTRY = [
   'coverBlob',      // Binary data
   'imageBlob',      // Binary data
-  'epubBlob',       // Binary data (new in v18)
   'audio',          // Binary data
   'locations',      // Large derived cache
   'syntheticToc',   // Derived from EPUB
   'sentences',      // Large derived cache
   'tableAdaptations',// Derived cache
   'coverUrl',       // Ephemeral URL
-  'schemaVersion',  // Technical metadata
-  'fileHash',       // Technical
-  'fileSize',       // Technical
-  'totalChars',     // Technical
 ];
 
 describe('Sync Schema Exhaustion', () => {
@@ -70,41 +65,35 @@ describe('Sync Schema Exhaustion', () => {
     );
 
     const dbInterface = sourceFile.getInterfaceOrThrow('EpubLibraryDB');
-
     const dbStores = dbInterface.getProperties().map(p => p.getName());
 
-    // --- MAPPING STRATEGY (v18) ---
-    // User Domain -> Synced
-    const MAPPED_STORES = [
-        'user_inventory',   // Synced (Mapped to books.metadata / ReadingList)
-        'user_progress',    // Synced (Mapped to books.metadata / books.history)
-        'user_annotations', // Synced (Mapped to books.annotations)
-        'user_overrides',   // Synced (Mapped to lexicon)
-        'user_journey',     // Synced (Mapped to books.history)
-        'user_ai_inference' // Synced (Explicitly mentioned in plan, although implementation in SyncOrchestrator currently handles mapping?)
-                            // Wait, I didn't update `SyncOrchestrator` to sync `user_ai_inference`.
-                            // The plan says: "user_ai_inference ... (Synced due to high compute cost)."
-                            // My `SyncOrchestrator` implementation likely missed this new store.
-                            // I should check `SyncOrchestrator` later.
-                            // For now, let's assume it IS mapped or should be.
-    ];
-
-    // Static Domain -> Not Synced (File Dependent)
+    // Explicitly Opted Out DB Stores (The "Heavy" or "Local-Only" Stores):
     const STORE_OPT_OUT = [
-        'static_manifests',  // Re-derivable from file or partially synced via metadata
-        'static_resources',  // Heavy binary (Files)
-        'static_structure',  // Derived from file
+        // Static Domain
+        'static_manifests', // Heavy/Immutable
+        'static_resources', // Heavy Binary
+        'static_structure', // Heavy/Derived
 
-        // Cache Domain -> Not Synced
+        // Cache Domain
         'cache_render_metrics',
         'cache_audio_blobs',
         'cache_session_state',
         'cache_tts_preparation',
 
         // App Level
-        'checkpoints',
-        'sync_log',
-        'app_metadata'
+        'checkpoints',      // Local recovery
+        'sync_log',         // Local logging
+        'app_metadata',     // Local config
+    ];
+
+    // Some stores are mapped to properties inside SyncManifest.
+    const MAPPED_STORES = [
+        'user_inventory',   // Mapped to books.metadata + readingList
+        'user_progress',    // Mapped to books.metadata + history
+        'user_annotations', // Mapped to books.annotations
+        'user_overrides',   // Mapped to lexicon
+        'user_journey',     // Mapped to books.history.sessions
+        'user_ai_inference' // Mapped to books.aiInference
     ];
 
     const missingStores = dbStores.filter(store =>

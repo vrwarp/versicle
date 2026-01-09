@@ -645,6 +645,8 @@ export interface SyncManifest {
       history: ReadingHistoryEntry;
       /** Merged as a unique set. */
       annotations: Annotation[];
+      /** Synced AI analysis. */
+      aiInference?: ContentAnalysis[];
     };
   };
 

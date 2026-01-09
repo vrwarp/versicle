@@ -1,18 +1,14 @@
 import { getDB } from './db';
 import type {
-    BookMetadata, Book, BookSource, BookState, Annotation,
-    CachedSegment, BookLocations, TTSState, ContentAnalysis,
-    ReadingListEntry, ReadingHistoryEntry, ReadingSession,
-    ReadingEventType, TTSContent, SectionMetadata, TTSPosition, TableImage,
-    // New Types
-    StaticBookManifest, StaticResource, UserInventoryItem, UserProgress,
-    UserAnnotation, UserOverrides, UserJourneyStep, UserAiInference,
-    CacheRenderMetrics, CacheAudioBlob, CacheSessionState
+    BookMetadata,
+    ReadingListEntry, ReadingHistoryEntry, ReadingEventType, TTSContent, SectionMetadata, TableImage,
+    // Legacy / Composite Types used in Service Layer
+    TTSState, Annotation, CachedSegment, BookLocations, ContentAnalysis,
+    CacheSessionState
 } from '../types/db';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
-import { validateBookMetadata } from './validators';
 import { mergeCfiRanges } from '../lib/cfi-utils';
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
@@ -305,7 +301,8 @@ class DBService {
       // Delete from index-based stores
       const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
           const store = tx.objectStore(storeName);
-          const index = store.index(indexName);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const index = store.index(indexName as any);
           let cursor = await index.openCursor(IDBKeyRange.only(id));
           while (cursor) {
               await cursor.delete();
@@ -459,23 +456,23 @@ class DBService {
     }
   }
 
-  async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
-      // This is harder because we need to map filename back to bookId.
-      // For now, if we can't find the book, we can't update.
-      // Or we need a filename index on user_inventory?
-      // Just log warning for now as this feature is deprecated.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async upsertReadingListEntry(_entry: ReadingListEntry): Promise<void> {
       Logger.warn('DBService', 'upsertReadingListEntry is deprecated in v18 architecture');
   }
 
-  async deleteReadingListEntry(filename: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async deleteReadingListEntry(_filename: string): Promise<void> {
       Logger.warn('DBService', 'deleteReadingListEntry is deprecated in v18 architecture');
   }
 
-  async deleteReadingListEntries(filenames: string[]): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async deleteReadingListEntries(_filenames: string[]): Promise<void> {
        Logger.warn('DBService', 'deleteReadingListEntries is deprecated in v18 architecture');
   }
 
-  async importReadingList(entries: ReadingListEntry[]): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async importReadingList(_entries: ReadingListEntry[]): Promise<void> {
        Logger.warn('DBService', 'importReadingList is deprecated in v18 architecture');
   }
 
@@ -730,7 +727,7 @@ class DBService {
       }
   }
 
-  async updateReadingHistory(bookId: string, newRange: string, type: ReadingEventType, label?: string, skipSession: boolean = false): Promise<void> {
+  async updateReadingHistory(bookId: string, newRange: string, type: ReadingEventType, _label?: string, skipSession: boolean = false): Promise<void> {
       try {
           const db = await this.getDB();
           const tx = db.transaction(['user_progress', 'user_journey'], 'readwrite');
@@ -771,7 +768,7 @@ class DBService {
           sectionId: analysis.sectionId,
           semanticMap: analysis.contentTypes || [],
           accessibilityLayers: (analysis.tableAdaptations || []).map(t => ({
-              type: 'table-adaptation',
+              type: 'table-adaptation' as const,
               rootCfi: t.rootCfi,
               content: t.text
           })),
@@ -927,7 +924,8 @@ class DBService {
   // Current implementation drops them in migration.
   // If we need them, we should implement tableSnapshots in CacheRenderMetrics.
 
-  async getTableImages(bookId: string): Promise<TableImage[]> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async getTableImages(_bookId: string): Promise<TableImage[]> {
       return []; // Not implemented in v18
   }
 

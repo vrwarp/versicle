@@ -3,12 +3,9 @@ import { CheckpointService } from './CheckpointService';
 import { AndroidBackupService } from './android-backup';
 import type { RemoteStorageProvider } from './types';
 import type { SyncManifest } from '../../types/db';
-import type { BookState } from '../../types/db'; // Legacy import, but we use new types now
-// We need to import new types to map correctly
-import type { UserInventoryItem, UserProgress, UserAnnotation, LexiconRule, ReadingHistoryEntry, UserJourneyStep, UserOverrides } from '../../types/db';
+import type { LexiconRule, ReadingHistoryEntry } from '../../types/db';
 import { useSyncStore } from './hooks/useSyncStore';
 import { getDB } from '../../db/db';
-import { v4 as uuidv4 } from 'uuid';
 
 const DEBOUNCE_MS = 60000; // 60s
 
@@ -129,6 +126,7 @@ export class SyncOrchestrator {
         const annotations = await db.getAll('user_annotations');
         const overrides = await db.getAll('user_overrides');
         const journey = await db.getAll('user_journey'); // We need to flatten this to ReadingHistoryEntry for manifest compatibility
+        const aiInference = await db.getAll('user_ai_inference');
 
         // We also need static_manifests to get Title/Author fallback?
         // No, SyncManifest stores "metadata" which is effectively UserInventory + snapshot of core metadata.
@@ -173,6 +171,20 @@ export class SyncOrchestrator {
                 created: a.created
             }));
 
+            const bookAi = aiInference.filter(ai => ai.bookId === bookId).map(ai => ({
+                id: ai.id,
+                bookId: ai.bookId,
+                sectionId: ai.sectionId,
+                contentTypes: ai.semanticMap,
+                tableAdaptations: ai.accessibilityLayers.filter(l => l.type === 'table-adaptation').map(l => ({
+                    rootCfi: l.rootCfi,
+                    text: l.content
+                })),
+                summary: ai.summary,
+                structure: ai.structure || { footnoteMatches: [] },
+                lastAnalyzed: ai.generatedAt
+            }));
+
             manifestBooks[bookId] = {
                 metadata: {
                     id: bookId,
@@ -184,7 +196,8 @@ export class SyncOrchestrator {
                     // We map back fields compatible with BookMetadata partial
                 },
                 history: hist,
-                annotations: bookAnns
+                annotations: bookAnns,
+                aiInference: bookAi
             };
         }
 
@@ -263,7 +276,7 @@ export class SyncOrchestrator {
 
         // We need to write to: user_inventory, user_progress, user_annotations, user_overrides, user_journey.
         const tx = db.transaction([
-            'user_inventory', 'user_progress', 'user_annotations', 'user_overrides', 'user_journey'
+            'user_inventory', 'user_progress', 'user_annotations', 'user_overrides', 'user_journey', 'user_ai_inference'
         ], 'readwrite');
 
         const invStore = tx.objectStore('user_inventory');
@@ -271,6 +284,7 @@ export class SyncOrchestrator {
         const annStore = tx.objectStore('user_annotations');
         const overrideStore = tx.objectStore('user_overrides');
         const journeyStore = tx.objectStore('user_journey');
+        const aiStore = tx.objectStore('user_ai_inference');
 
         // Apply Books
         for (const [bookId, data] of Object.entries(manifest.books)) {
@@ -344,6 +358,25 @@ export class SyncOrchestrator {
                          created: ann.created
                      });
                 }
+
+                if (data.aiInference) {
+                    for (const ai of data.aiInference) {
+                        await aiStore.put({
+                            id: ai.id,
+                            bookId: ai.bookId,
+                            sectionId: ai.sectionId,
+                            semanticMap: ai.contentTypes || [],
+                            accessibilityLayers: (ai.tableAdaptations || []).map(t => ({
+                                type: 'table-adaptation' as const,
+                                rootCfi: t.rootCfi,
+                                content: t.text
+                            })),
+                            summary: ai.summary,
+                            structure: ai.structure,
+                            generatedAt: ai.lastAnalyzed
+                        });
+                    }
+                }
             }
             // If book doesn't exist locally, we currently don't create it because we lack the file.
             // Unless we want to create a "Ghost" inventory item?
@@ -386,7 +419,7 @@ export class SyncOrchestrator {
 
         // Reading List (Ghost Items?)
         // If items are in reading list but not in inventory, create ghost items.
-        for (const entry of Object.values(manifest.readingList)) {
+        for (const _entry of Object.values(manifest.readingList)) {
             // Check if inventory exists by filename?
             // Expensive check without index.
             // We'll skip for now.

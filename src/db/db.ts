@@ -20,14 +20,11 @@ import type {
   BookState,
   Annotation,
   ReadingHistoryEntry,
-  ReadingListEntry,
   ContentAnalysis,
   BookLocations,
   CachedSegment,
-  TTSState,
   LexiconRule,
   TTSContent,
-  TableImage,
   // App Types
   SyncCheckpoint,
   SyncLogEntry
@@ -146,10 +143,10 @@ export const initDB = () => {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // Create New Stores if they don't exist
         const createStore = (name: string, options?: IDBObjectStoreParameters) => {
-          if (!db.objectStoreNames.contains(name)) {
-            return db.createObjectStore(name, options);
+          if (!db.objectStoreNames.contains(name as any)) {
+            return db.createObjectStore(name as any, options);
           }
-          return transaction.objectStore(name);
+          return transaction.objectStore(name as any);
         };
 
         // Static
@@ -160,14 +157,19 @@ export const initDB = () => {
         // User
         createStore('user_inventory', { keyPath: 'bookId' });
         createStore('user_progress', { keyPath: 'bookId' });
-        const userAnn = createStore('user_annotations', { keyPath: 'id' });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const userAnn: any = createStore('user_annotations', { keyPath: 'id' });
         if (!userAnn.indexNames.contains('by_bookId')) userAnn.createIndex('by_bookId', 'bookId');
 
         createStore('user_overrides', { keyPath: 'bookId' });
-        const userJourney = createStore('user_journey', { keyPath: 'id', autoIncrement: true });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const userJourney: any = createStore('user_journey', { keyPath: 'id', autoIncrement: true });
         if (!userJourney.indexNames.contains('by_bookId')) userJourney.createIndex('by_bookId', 'bookId');
 
-        const userAi = createStore('user_ai_inference', { keyPath: 'id' });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const userAi: any = createStore('user_ai_inference', { keyPath: 'id' });
         if (!userAi.indexNames.contains('by_bookId')) userAi.createIndex('by_bookId', 'bookId');
 
         // Cache
@@ -176,7 +178,8 @@ export const initDB = () => {
         createStore('cache_session_state', { keyPath: 'bookId' });
 
         // Cache TTS Prep - Added Index for cleanup
-        const ttsPrep = createStore('cache_tts_preparation', { keyPath: 'id' });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ttsPrep: any = createStore('cache_tts_preparation', { keyPath: 'id' });
         if (!ttsPrep.indexNames.contains('by_bookId')) ttsPrep.createIndex('by_bookId', 'bookId');
 
         // App Level (Preserve)
@@ -199,15 +202,13 @@ export const initDB = () => {
           // Use 'any' casting for legacy store access within upgrade logic
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const tx: any = transaction;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const dbAny: any = db;
 
           // 1. Books (Metadata) & Sources & States & Files
-          if (db.objectStoreNames.contains('books')) {
+          if (db.objectStoreNames.contains('books' as any)) {
              const booksStore = tx.objectStore('books');
-             const sourcesStore = db.objectStoreNames.contains('book_sources') ? tx.objectStore('book_sources') : null;
-             const statesStore = db.objectStoreNames.contains('book_states') ? tx.objectStore('book_states') : null;
-             const filesStore = db.objectStoreNames.contains('files') ? tx.objectStore('files') : null;
+             const sourcesStore = db.objectStoreNames.contains('book_sources' as any) ? tx.objectStore('book_sources') : null;
+             const statesStore = db.objectStoreNames.contains('book_states' as any) ? tx.objectStore('book_states') : null;
+             const filesStore = db.objectStoreNames.contains('files' as any) ? tx.objectStore('files') : null;
 
              const newManifests = tx.objectStore('static_manifests');
              const newResources = tx.objectStore('static_resources');
@@ -218,16 +219,15 @@ export const initDB = () => {
              let cursor = await booksStore.openCursor();
              while (cursor) {
                const book = cursor.value as BookMetadata;
-               const bookId = book.id;
 
                // Fetch related data
-               const source: BookSource = sourcesStore ? await sourcesStore.get(bookId) : {};
-               const state: BookState = statesStore ? await statesStore.get(bookId) : {};
-               const file: Blob | ArrayBuffer = filesStore ? await filesStore.get(bookId) : null;
+               const source: BookSource = sourcesStore ? await sourcesStore.get(book.id) : {};
+               const state: BookState = statesStore ? await statesStore.get(book.id) : {};
+               const file: Blob | ArrayBuffer = filesStore ? await filesStore.get(book.id) : null;
 
                // A. Static Manifest
                await newManifests.put({
-                 bookId,
+                 bookId: book.id,
                  title: book.title,
                  author: book.author,
                  description: book.description,
@@ -242,7 +242,7 @@ export const initDB = () => {
                // B. Static Resource
                if (file || book.coverBlob) {
                    await newResources.put({
-                       bookId,
+                       bookId: book.id,
                        epubBlob: file as Blob,
                        coverBlob: book.coverBlob
                    });
@@ -251,7 +251,7 @@ export const initDB = () => {
                // C. Static Structure (Synthetic TOC)
                if (source.syntheticToc) {
                    await newStructure.put({
-                       bookId,
+                       bookId: book.id,
                        toc: source.syntheticToc,
                        spineItems: []
                    });
@@ -259,7 +259,7 @@ export const initDB = () => {
 
                // D. User Inventory
                await newInventory.put({
-                   bookId,
+                   bookId: book.id,
                    addedAt: book.addedAt,
                    sourceFilename: source.filename,
                    tags: [],
@@ -272,7 +272,7 @@ export const initDB = () => {
 
                // E. User Progress
                await newProgress.put({
-                   bookId,
+                   bookId: book.id,
                    percentage: state.progress || 0,
                    currentCfi: state.currentCfi,
                    lastPlayedCfi: state.lastPlayedCfi,
@@ -287,7 +287,7 @@ export const initDB = () => {
           }
 
           // 2. Sections (Spine Items) -> StaticStructure
-          if (db.objectStoreNames.contains('sections')) {
+          if (db.objectStoreNames.contains('sections' as any)) {
               const sectionsStore = tx.objectStore('sections');
               const structureStore = tx.objectStore('static_structure');
 
@@ -334,7 +334,7 @@ export const initDB = () => {
           }
 
           // 3. Annotations -> UserAnnotations
-          if (db.objectStoreNames.contains('annotations')) {
+          if (db.objectStoreNames.contains('annotations' as any)) {
               const oldAnnStore = tx.objectStore('annotations');
               const newAnnStore = tx.objectStore('user_annotations');
               let cursor = await oldAnnStore.openCursor();
@@ -355,7 +355,7 @@ export const initDB = () => {
           }
 
           // 4. Lexicon -> UserOverrides
-          if (db.objectStoreNames.contains('lexicon')) {
+          if (db.objectStoreNames.contains('lexicon' as any)) {
               const lexiconStore = tx.objectStore('lexicon');
               const overridesStore = tx.objectStore('user_overrides');
               let cursor = await lexiconStore.openCursor();
@@ -387,7 +387,7 @@ export const initDB = () => {
           }
 
           // 5. Reading History -> UserJourney + UserProgress.completedRanges
-          if (db.objectStoreNames.contains('reading_history')) {
+          if (db.objectStoreNames.contains('reading_history' as any)) {
               const histStore = tx.objectStore('reading_history');
               const journeyStore = tx.objectStore('user_journey');
               const progressStore = tx.objectStore('user_progress');
@@ -420,7 +420,7 @@ export const initDB = () => {
           }
 
           // 6. Content Analysis -> UserAiInference
-          if (db.objectStoreNames.contains('content_analysis')) {
+          if (db.objectStoreNames.contains('content_analysis' as any)) {
               const caStore = tx.objectStore('content_analysis');
               const aiStore = tx.objectStore('user_ai_inference');
 
@@ -446,7 +446,7 @@ export const initDB = () => {
           }
 
           // 7. Locations -> CacheRenderMetrics
-          if (db.objectStoreNames.contains('locations')) {
+          if (db.objectStoreNames.contains('locations' as any)) {
               const locStore = tx.objectStore('locations');
               const metricsStore = tx.objectStore('cache_render_metrics');
               let cursor = await locStore.openCursor();
@@ -461,7 +461,7 @@ export const initDB = () => {
           }
 
           // 8. TTS Cache -> CacheAudioBlobs
-          if (db.objectStoreNames.contains('tts_cache')) {
+          if (db.objectStoreNames.contains('tts_cache' as any)) {
               const cacheStore = tx.objectStore('tts_cache');
               const blobStore = tx.objectStore('cache_audio_blobs');
               let cursor = await cacheStore.openCursor();
@@ -479,7 +479,7 @@ export const initDB = () => {
           }
 
            // 9. TTS Content -> CacheTtsPreparation
-          if (db.objectStoreNames.contains('tts_content')) {
+          if (db.objectStoreNames.contains('tts_content' as any)) {
               const ttsContentStore = tx.objectStore('tts_content');
               const prepStore = tx.objectStore('cache_tts_preparation');
               let cursor = await ttsContentStore.openCursor();
@@ -496,7 +496,7 @@ export const initDB = () => {
           }
 
            // 10. Reading List (Shadow Inventory) -> UserInventory
-           if (db.objectStoreNames.contains('reading_list')) {
+           if (db.objectStoreNames.contains('reading_list' as any)) {
                const rlStore = tx.objectStore('reading_list');
                let cursor = await rlStore.openCursor();
                while (cursor) {
@@ -514,8 +514,8 @@ export const initDB = () => {
           ];
 
           for (const store of oldStores) {
-              if (db.objectStoreNames.contains(store)) {
-                  db.deleteObjectStore(store);
+              if (db.objectStoreNames.contains(store as any)) {
+                  db.deleteObjectStore(store as any);
               }
           }
         }
