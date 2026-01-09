@@ -187,19 +187,28 @@ export const LibraryView: React.FC = () => {
     });
   }, []);
 
-  // OPTIMIZATION: Memoize filtered and sorted books to avoid expensive re-calculation on every render
+  // OPTIMIZATION: Create a search index to avoid expensive re-calculation on every render
+  // This memoized value updates only when the books array changes, not on every search keystroke.
+  // This avoids calling toLowerCase() N times per frame during typing.
+  const searchableBooks = useMemo(() => {
+    return books.map(book => ({
+      book,
+      // Pre-compute normalized strings
+      searchString: `${(book.title || '').toLowerCase()} ${(book.author || '').toLowerCase()}`
+    }));
+  }, [books]);
+
+  // OPTIMIZATION: Memoize filtered and sorted books
   const filteredAndSortedBooks = useMemo(() => {
-    // BOLT: Lift query normalization out of the loop (O(N) -> O(1) for this op)
     const query = searchQuery.toLowerCase();
 
-    return books
-      .filter(book => {
-        return (
-          (book.title || '').toLowerCase().includes(query) ||
-          (book.author || '').toLowerCase().includes(query)
-        );
-      })
-      .sort((a, b) => {
+    // 1. Filter using the pre-computed index (fast string check)
+    const filtered = searchableBooks
+      .filter(item => item.searchString.includes(query))
+      .map(item => item.book);
+
+    // 2. Sort the filtered results
+    return filtered.sort((a, b) => {
         switch (sortOrder) {
           case 'recent':
             // Sort by addedAt descending (newest first)
@@ -217,7 +226,7 @@ export const LibraryView: React.FC = () => {
             return 0;
         }
       });
-  }, [books, searchQuery, sortOrder]);
+  }, [searchableBooks, searchQuery, sortOrder]);
 
   return (
     <div
