@@ -3,115 +3,111 @@ import type { BookMetadata, Book, BookSource, BookState, Annotation, CachedSegme
 
 /**
  * Interface defining the schema for the IndexedDB database.
+ *
+ * Data is categorized into:
+ * - Static (static_): Unchanging once loaded.
+ * - User (user_): User generated content like progress and settings.
+ * - Cache (cache_): Generated or cached data like queue, AI data, cloud TTS.
  */
 export interface EpubLibraryDB extends DBSchema {
+  // --- Static Stores ---
+
   /**
-   * Store for synchronization checkpoints.
+   * Static: Book Metadata (Identity & Display).
+   * Unchanging after ingestion.
    */
-  checkpoints: {
-    key: number;
-    value: SyncCheckpoint;
-    indexes: {
-      by_timestamp: number;
-    };
-  };
-  /**
-   * Store for synchronization logs.
-   */
-  sync_log: {
-    key: number;
-    value: SyncLogEntry;
-    indexes: {
-      by_timestamp: number;
-    };
-  };
-  /**
-   * Store for application-level metadata and configuration.
-   */
-  app_metadata: {
+  static_books: {
     key: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    value: any;
-  };
-  /**
-   * Store for book metadata.
-   * Stores the essential display information (Book interface).
-   */
-  books: {
-    key: string;
-    value: Book; // Refactored from BookMetadata
+    value: Book; // Note: coverBlob is moved to cache_covers
     indexes: {
       by_title: string;
       by_author: string;
       by_addedAt: number;
     };
   };
+
   /**
-   * Store for book source metadata (Technical/File Info).
+   * Static: Source Metadata (Technical/File Info).
    */
-  book_sources: {
+  static_book_sources: {
     key: string; // bookId
     value: BookSource;
   };
+
   /**
-   * Store for book user state (Progress/Status).
+   * Static: Binary File Data (EPUB files).
    */
-  book_states: {
-    key: string; // bookId
-    value: BookState;
-  };
-  /**
-   * Store for binary file data (EPUB files).
-   */
-  files: {
+  static_files: {
     key: string;
     value: Blob | ArrayBuffer;
   };
+
   /**
-   * Store for generated locations cache.
+   * Static: Section Metadata (Structure).
    */
-  locations: {
-    key: string; // bookId
-    value: BookLocations;
+  static_sections: {
+    key: string; // id
+    value: SectionMetadata;
+    indexes: {
+      by_bookId: string;
+    };
   };
+
   /**
-   * Store for user annotations.
+   * Static: Extracted TTS Content (Text).
    */
-  annotations: {
+  static_tts_content: {
+    key: string;
+    value: TTSContent;
+    indexes: {
+      by_bookId: string;
+    };
+  };
+
+  // --- User Stores ---
+
+  /**
+   * User: Book State (Progress, CFI, Status).
+   */
+  user_book_states: {
+    key: string; // bookId
+    value: BookState;
+  };
+
+  /**
+   * User: Annotations.
+   */
+  user_annotations: {
     key: string;
     value: Annotation;
     indexes: {
       by_bookId: string;
     };
   };
+
   /**
-   * Store for TTS audio cache.
+   * User: Reading History.
    */
-  tts_cache: {
-    key: string;
-    value: CachedSegment;
+  user_reading_history: {
+    key: string; // bookId
+    value: ReadingHistoryEntry;
+  };
+
+  /**
+   * User: Reading List (Portable Sync).
+   */
+  user_reading_list: {
+    key: string; // filename
+    value: ReadingListEntry;
     indexes: {
-        by_lastAccessed: number;
+      by_isbn: string;
     };
   };
+
   /**
-   * Store for TTS queue persistence.
+   * User: Lexicon Rules.
    */
-  tts_queue: {
-    key: string; // bookId
-    value: TTSState;
-  };
-  /**
-   * Store for TTS position persistence (lightweight).
-   */
-  tts_position: {
-    key: string; // bookId
-    value: TTSPosition;
-  };
-  /**
-   * Store for user pronunciation rules.
-   */
-  lexicon: {
+  user_lexicon: {
     key: string;
     value: LexiconRule;
     indexes: {
@@ -119,57 +115,99 @@ export interface EpubLibraryDB extends DBSchema {
       by_original: string;
     };
   };
+
   /**
-   * Store for section metadata (character counts).
+   * User: Sync Checkpoints.
    */
-  sections: {
-    key: string; // id
-    value: SectionMetadata;
+  user_checkpoints: {
+    key: number;
+    value: SyncCheckpoint;
     indexes: {
-      by_bookId: string;
+      by_timestamp: number;
     };
   };
+
   /**
-   * Store for AI content analysis results.
+   * User: Sync Logs.
    */
-  content_analysis: {
+  user_sync_log: {
+    key: number;
+    value: SyncLogEntry;
+    indexes: {
+      by_timestamp: number;
+    };
+  };
+
+  /**
+   * User: App Metadata.
+   */
+  user_app_metadata: {
+    key: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    value: any;
+  };
+
+  // --- Cache Stores ---
+
+  /**
+   * Cache: Cover Images (Blobs).
+   * Extracted from EPUB, can be regenerated.
+   */
+  cache_covers: {
+    key: string; // bookId
+    value: Blob;
+  };
+
+  /**
+   * Cache: Generated Locations.
+   */
+  cache_locations: {
+    key: string; // bookId
+    value: BookLocations;
+  };
+
+  /**
+   * Cache: TTS Queue State.
+   */
+  cache_tts_queue: {
+    key: string; // bookId
+    value: TTSState;
+  };
+
+  /**
+   * Cache: TTS Position (Lightweight).
+   */
+  cache_tts_position: {
+    key: string; // bookId
+    value: TTSPosition;
+  };
+
+  /**
+   * Cache: TTS Audio Segments.
+   */
+  cache_tts_audio: { // Renamed from tts_cache
+    key: string;
+    value: CachedSegment;
+    indexes: {
+        by_lastAccessed: number;
+    };
+  };
+
+  /**
+   * Cache: Content Analysis (AI).
+   */
+  cache_content_analysis: {
     key: string; // id
     value: ContentAnalysis;
     indexes: {
       by_bookId: string;
     };
   };
+
   /**
-   * Store for reading history.
+   * Cache: Table Images.
    */
-  reading_history: {
-    key: string; // bookId
-    value: ReadingHistoryEntry;
-  };
-  /**
-   * Store for reading list (portable sync).
-   */
-  reading_list: {
-    key: string; // filename
-    value: ReadingListEntry;
-    indexes: {
-      by_isbn: string;
-    };
-  };
-  /**
-   * Store for decoupled TTS content.
-   */
-  tts_content: {
-    key: string;
-    value: TTSContent;
-    indexes: {
-      by_bookId: string;
-    };
-  };
-  /**
-   * Store for table image snapshots.
-   */
-  table_images: {
+  cache_table_images: {
     key: string; // id: `${bookId}-${cfi}`
     value: TableImage;
     indexes: {
@@ -182,183 +220,172 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
 /**
  * Initializes the IndexedDB database connection and handles schema upgrades.
- * It creates the 'books', 'files', 'annotations', 'tts_cache', and 'lexicon' object stores if they don't exist.
  *
  * @returns A Promise resolving to the database instance.
  */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 17, { // Upgrading to v17
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 18, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
-        // v17: Refactor Book Model (Split books store into books, book_sources, book_states)
-        // Ensure stores are created regardless of oldVersion if they don't exist.
-        if (!db.objectStoreNames.contains('book_sources')) {
-            db.createObjectStore('book_sources', { keyPath: 'bookId' });
+
+        // --- V18: Aggressive Refactoring (Prefixing Stores) ---
+
+        // 1. Create New Stores
+
+        // Static
+        if (!db.objectStoreNames.contains('static_books')) {
+            const store = db.createObjectStore('static_books', { keyPath: 'id' });
+            store.createIndex('by_title', 'title', { unique: false });
+            store.createIndex('by_author', 'author', { unique: false });
+            store.createIndex('by_addedAt', 'addedAt', { unique: false });
         }
-        if (!db.objectStoreNames.contains('book_states')) {
-            db.createObjectStore('book_states', { keyPath: 'bookId' });
+        if (!db.objectStoreNames.contains('static_book_sources')) {
+            db.createObjectStore('static_book_sources', { keyPath: 'bookId' });
+        }
+        if (!db.objectStoreNames.contains('static_files')) {
+            db.createObjectStore('static_files');
+        }
+        if (!db.objectStoreNames.contains('static_sections')) {
+            const store = db.createObjectStore('static_sections', { keyPath: 'id' });
+            store.createIndex('by_bookId', 'bookId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('static_tts_content')) {
+            const store = db.createObjectStore('static_tts_content', { keyPath: 'id' });
+            store.createIndex('by_bookId', 'bookId', { unique: false });
         }
 
-        if (oldVersion < 17) {
+        // User
+        if (!db.objectStoreNames.contains('user_book_states')) {
+            db.createObjectStore('user_book_states', { keyPath: 'bookId' });
+        }
+        if (!db.objectStoreNames.contains('user_annotations')) {
+            const store = db.createObjectStore('user_annotations', { keyPath: 'id' });
+            store.createIndex('by_bookId', 'bookId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('user_reading_history')) {
+            db.createObjectStore('user_reading_history', { keyPath: 'bookId' });
+        }
+        if (!db.objectStoreNames.contains('user_reading_list')) {
+            const store = db.createObjectStore('user_reading_list', { keyPath: 'filename' });
+            store.createIndex('by_isbn', 'isbn', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('user_lexicon')) {
+            const store = db.createObjectStore('user_lexicon', { keyPath: 'id' });
+            store.createIndex('by_bookId', 'bookId', { unique: false });
+            store.createIndex('by_original', 'original', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('user_checkpoints')) {
+            const store = db.createObjectStore('user_checkpoints', { keyPath: 'id', autoIncrement: true });
+            store.createIndex('by_timestamp', 'timestamp', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('user_sync_log')) {
+            const store = db.createObjectStore('user_sync_log', { keyPath: 'id', autoIncrement: true });
+            store.createIndex('by_timestamp', 'timestamp', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('user_app_metadata')) {
+            db.createObjectStore('user_app_metadata');
+        }
+
+        // Cache
+        if (!db.objectStoreNames.contains('cache_covers')) {
+            db.createObjectStore('cache_covers');
+        }
+        if (!db.objectStoreNames.contains('cache_locations')) {
+            db.createObjectStore('cache_locations', { keyPath: 'bookId' });
+        }
+        if (!db.objectStoreNames.contains('cache_tts_queue')) {
+            db.createObjectStore('cache_tts_queue', { keyPath: 'bookId' });
+        }
+        if (!db.objectStoreNames.contains('cache_tts_position')) {
+            db.createObjectStore('cache_tts_position', { keyPath: 'bookId' });
+        }
+        if (!db.objectStoreNames.contains('cache_tts_audio')) {
+            const store = db.createObjectStore('cache_tts_audio', { keyPath: 'key' });
+            store.createIndex('by_lastAccessed', 'lastAccessed', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('cache_content_analysis')) {
+            const store = db.createObjectStore('cache_content_analysis', { keyPath: 'id' });
+            store.createIndex('by_bookId', 'bookId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('cache_table_images')) {
+            const store = db.createObjectStore('cache_table_images', { keyPath: 'id' });
+            store.createIndex('by_bookId', 'bookId', { unique: false });
+        }
+
+        // 2. Data Migration from Old Stores (if they exist)
+
+        if (oldVersion < 18) {
+            const migrate = async (oldName: string, newName: string, transform?: (val: any) => any) => {
+                if (db.objectStoreNames.contains(oldName)) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const oldStore = transaction.objectStore(oldName as any);
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const newStore = transaction.objectStore(newName as any);
+
+                    let cursor = await oldStore.openCursor();
+                    while (cursor) {
+                        const val = transform ? transform(cursor.value) : cursor.value;
+                        // For stores without keyPath, we need to provide the key
+                        if (newStore.keyPath) {
+                            await newStore.put(val);
+                        } else {
+                            await newStore.put(val, cursor.key);
+                        }
+                        cursor = await cursor.continue();
+                    }
+                    // We don't delete old stores here to allow rollback if needed,
+                    // or we delete them at the end.
+                    // For aggressive refactoring, we should probably delete them to clean up.
+                    db.deleteObjectStore(oldName);
+                }
+            };
+
+            // Specialized migration for 'books' (Split into static_books and cache_covers)
             if (db.objectStoreNames.contains('books')) {
-                // We need to migrate data.
-                const booksStore = transaction.objectStore('books');
-                const sourcesStore = transaction.objectStore('book_sources');
-                const statesStore = transaction.objectStore('book_states');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const oldStore = transaction.objectStore('books' as any);
+                const newBookStore = transaction.objectStore('static_books');
+                const coverStore = transaction.objectStore('cache_covers');
 
-                // Iterate and split
-                let cursor = await booksStore.openCursor();
+                let cursor = await oldStore.openCursor();
                 while (cursor) {
-                    const oldBook = cursor.value as BookMetadata;
+                    const oldBook = cursor.value as Book;
 
-                    const source: BookSource = {
-                        bookId: oldBook.id,
-                        filename: oldBook.filename,
-                        fileHash: oldBook.fileHash,
-                        fileSize: oldBook.fileSize,
-                        totalChars: oldBook.totalChars,
-                        syntheticToc: oldBook.syntheticToc,
-                        version: oldBook.version
-                    };
-                    await sourcesStore.put(source);
+                    // Extract cover
+                    if (oldBook.coverBlob) {
+                        await coverStore.put(oldBook.coverBlob, oldBook.id);
+                    }
 
-                    const state: BookState = {
-                        bookId: oldBook.id,
-                        lastRead: oldBook.lastRead,
-                        progress: oldBook.progress,
-                        currentCfi: oldBook.currentCfi,
-                        lastPlayedCfi: oldBook.lastPlayedCfi,
-                        lastPauseTime: oldBook.lastPauseTime,
-                        isOffloaded: oldBook.isOffloaded,
-                        aiAnalysisStatus: oldBook.aiAnalysisStatus
-                    };
-                    await statesStore.put(state);
-
-                    // Update Book Entry (Keep only essential metadata)
-                    const book: Book = {
-                        id: oldBook.id,
-                        title: oldBook.title,
-                        author: oldBook.author,
-                        description: oldBook.description,
-                        coverUrl: oldBook.coverUrl,
-                        coverBlob: oldBook.coverBlob,
-                        addedAt: oldBook.addedAt
-                    };
-                    await cursor.update(book);
+                    // Create new book entry without coverBlob (optional, but cleaner)
+                    const { coverBlob, ...bookData } = oldBook;
+                    await newBookStore.put(bookData);
 
                     cursor = await cursor.continue();
                 }
+                db.deleteObjectStore('books');
             }
-        }
 
-        // Checkpoints store (New in v16)
-        if (!db.objectStoreNames.contains('checkpoints')) {
-          const checkpointsStore = db.createObjectStore('checkpoints', { keyPath: 'id', autoIncrement: true });
-          checkpointsStore.createIndex('by_timestamp', 'timestamp', { unique: false });
-        }
+            // Simple Renames
+            await migrate('book_sources', 'static_book_sources');
+            await migrate('files', 'static_files');
+            await migrate('sections', 'static_sections');
+            await migrate('tts_content', 'static_tts_content');
 
-        // Sync Log store (New in v16)
-        if (!db.objectStoreNames.contains('sync_log')) {
-          const syncLogStore = db.createObjectStore('sync_log', { keyPath: 'id', autoIncrement: true });
-          syncLogStore.createIndex('by_timestamp', 'timestamp', { unique: false });
-        }
+            await migrate('book_states', 'user_book_states');
+            await migrate('annotations', 'user_annotations');
+            await migrate('reading_history', 'user_reading_history');
+            await migrate('reading_list', 'user_reading_list');
+            await migrate('lexicon', 'user_lexicon');
+            await migrate('checkpoints', 'user_checkpoints');
+            await migrate('sync_log', 'user_sync_log');
+            await migrate('app_metadata', 'user_app_metadata');
 
-        // App Metadata store (New in v14)
-        if (!db.objectStoreNames.contains('app_metadata')) {
-          db.createObjectStore('app_metadata');
-        }
-
-        // Migration to v11: Clear old reading history to enforce semantic boundaries
-        if (oldVersion < 11) {
-             if (db.objectStoreNames.contains('reading_history')) {
-                 transaction.objectStore('reading_history').clear();
-             }
-        }
-        // Books store
-        if (!db.objectStoreNames.contains('books')) {
-          const booksStore = db.createObjectStore('books', { keyPath: 'id' });
-          booksStore.createIndex('by_title', 'title', { unique: false });
-          booksStore.createIndex('by_author', 'author', { unique: false });
-          booksStore.createIndex('by_addedAt', 'addedAt', { unique: false });
-        }
-
-        // Files store
-        if (!db.objectStoreNames.contains('files')) {
-          db.createObjectStore('files');
-        }
-
-        // Migration to v15: Remove covers store (unused)
-        // We do not delete the store to avoid type errors in the upgrade callback
-        // as 'covers' is no longer in the EpubLibraryDB interface.
-        // It will remain as an orphaned store for existing users.
-
-        // Locations store (New in v4)
-        if (!db.objectStoreNames.contains('locations')) {
-          db.createObjectStore('locations', { keyPath: 'bookId' });
-        }
-
-        // Annotations store
-        if (!db.objectStoreNames.contains('annotations')) {
-          const annotationsStore = db.createObjectStore('annotations', { keyPath: 'id' });
-          annotationsStore.createIndex('by_bookId', 'bookId', { unique: false });
-        }
-
-        // TTS Cache store (New in v2)
-        if (!db.objectStoreNames.contains('tts_cache')) {
-          const cacheStore = db.createObjectStore('tts_cache', { keyPath: 'key' });
-          cacheStore.createIndex('by_lastAccessed', 'lastAccessed', { unique: false });
-        }
-
-        // TTS Queue store (New in v5)
-        if (!db.objectStoreNames.contains('tts_queue')) {
-          db.createObjectStore('tts_queue', { keyPath: 'bookId' });
-        }
-
-        // TTS Position store (New in v13)
-        if (!db.objectStoreNames.contains('tts_position')) {
-          db.createObjectStore('tts_position', { keyPath: 'bookId' });
-        }
-
-        // Lexicon store (New in v3)
-        if (!db.objectStoreNames.contains('lexicon')) {
-          const lexiconStore = db.createObjectStore('lexicon', { keyPath: 'id' });
-          lexiconStore.createIndex('by_bookId', 'bookId', { unique: false });
-          lexiconStore.createIndex('by_original', 'original', { unique: false });
-        }
-
-        // Sections store (New in v6)
-        if (!db.objectStoreNames.contains('sections')) {
-          const sectionsStore = db.createObjectStore('sections', { keyPath: 'id' });
-          sectionsStore.createIndex('by_bookId', 'bookId', { unique: false });
-        }
-
-        // Content Analysis store (New in v7)
-        if (!db.objectStoreNames.contains('content_analysis')) {
-          const caStore = db.createObjectStore('content_analysis', { keyPath: 'id' });
-          caStore.createIndex('by_bookId', 'bookId', { unique: false });
-        }
-
-        // Reading History store (New in v8)
-        if (!db.objectStoreNames.contains('reading_history')) {
-          db.createObjectStore('reading_history', { keyPath: 'bookId' });
-        }
-
-        // Reading List store (New in v9)
-        if (!db.objectStoreNames.contains('reading_list')) {
-          const rlStore = db.createObjectStore('reading_list', { keyPath: 'filename' });
-          rlStore.createIndex('by_isbn', 'isbn', { unique: false });
-        }
-
-        // TTS Content store (New in v10)
-        if (!db.objectStoreNames.contains('tts_content')) {
-          const ttsContentStore = db.createObjectStore('tts_content', { keyPath: 'id' });
-          ttsContentStore.createIndex('by_bookId', 'bookId', { unique: false });
-        }
-
-        // Table Images store (New in v15)
-        if (!db.objectStoreNames.contains('table_images')) {
-          const tableStore = db.createObjectStore('table_images', { keyPath: 'id' });
-          tableStore.createIndex('by_bookId', 'bookId', { unique: false });
+            await migrate('locations', 'cache_locations');
+            await migrate('tts_queue', 'cache_tts_queue');
+            await migrate('tts_position', 'cache_tts_position');
+            await migrate('tts_cache', 'cache_tts_audio');
+            await migrate('content_analysis', 'cache_content_analysis');
+            await migrate('table_images', 'cache_table_images');
         }
       },
     });

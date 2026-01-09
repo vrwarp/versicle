@@ -6,7 +6,7 @@ import type { ContentType } from './content-analysis';
 /**
  * 1. Core Book Identity & Display Metadata.
  * Essential metadata for displaying the book in the library (including offloaded state).
- * Stored in 'books'.
+ * Stored in 'static_books'.
  */
 export interface Book {
   /** Unique identifier for the book (UUID). */
@@ -24,7 +24,7 @@ export interface Book {
   coverUrl?: string;
   /**
    * The binary Blob of the cover image.
-   * Stored in IndexedDB (books store).
+   * Stored separately in 'cache_covers'.
    */
   coverBlob?: Blob;
   /** Timestamp when the book was added to the library. */
@@ -34,7 +34,7 @@ export interface Book {
 /**
  * 2. Source Metadata (Technical/File Info).
  * Metadata related to the original file and ingestion process.
- * Stored in 'book_sources'.
+ * Stored in 'static_book_sources'.
  */
 export interface BookSource {
   /** The unique identifier of the book (FK). */
@@ -59,7 +59,7 @@ export interface BookSource {
 /**
  * 3. User State (User Generated Content/Runtime).
  * Mutable user data like progress, current location, and status.
- * Stored in 'book_states'.
+ * Stored in 'user_book_states'.
  */
 export interface BookState {
   /** The unique identifier of the book (FK). */
@@ -93,6 +93,7 @@ export interface TableAdaptation {
 
 /**
  * Result of AI analysis for a section.
+ * Stored in 'cache_content_analysis'.
  */
 export interface ContentAnalysis {
   /** Composite key (bookId-sectionId). */
@@ -120,6 +121,7 @@ export interface ContentAnalysis {
 
 /**
  * Metadata for a section (chapter) of a book.
+ * Stored in 'static_sections'.
  */
 export interface SectionMetadata {
   /** Composite key or unique ID (e.g., bookId + sectionId). */
@@ -136,6 +138,7 @@ export interface SectionMetadata {
 
 /**
  * Represents a user annotation (highlight or note) within a book.
+ * Stored in 'user_annotations'.
  */
 export interface Annotation {
   /** Unique identifier for the annotation. */
@@ -158,6 +161,7 @@ export interface Annotation {
 
 /**
  * Cached location data for a book to speed up loading.
+ * Stored in 'cache_locations'.
  */
 export interface BookLocations {
   /** The ID of the book. */
@@ -168,6 +172,7 @@ export interface BookLocations {
 
 /**
  * A cached audio segment for TTS.
+ * Stored in 'cache_tts_audio'.
  */
 export interface CachedSegment {
   /** SHA-256 hash key generated from text, voice, and settings. */
@@ -184,6 +189,7 @@ export interface CachedSegment {
 
 /**
  * Persisted TTS state for session restoration.
+ * Stored in 'cache_tts_queue'.
  */
 export interface TTSState {
   /** The book ID this state belongs to. */
@@ -200,6 +206,7 @@ export interface TTSState {
 
 /**
  * Lightweight persisted TTS position for frequent updates.
+ * Stored in 'cache_tts_position'.
  */
 export interface TTSPosition {
   /** The book ID this position belongs to. */
@@ -214,6 +221,7 @@ export interface TTSPosition {
 
 /**
  * A pronunciation rule for the TTS engine.
+ * Stored in 'user_lexicon'.
  */
 export interface LexiconRule {
   /** Unique identifier for the rule. */
@@ -242,6 +250,7 @@ export type ReadingEventType = 'tts' | 'scroll' | 'page';
 
 /**
  * Represents the reading history of a book.
+ * Stored in 'user_reading_history'.
  */
 export interface ReadingSession {
   /** The snapped CFI range associated with this event. */
@@ -260,6 +269,7 @@ export interface ReadingSession {
 
 /**
  * Represents the reading history of a book.
+ * Stored in 'user_reading_history'.
  */
 export interface ReadingHistoryEntry {
   /** The ID of the book. */
@@ -276,6 +286,7 @@ export interface ReadingHistoryEntry {
 
 /**
  * Represents an entry in the reading list (lightweight, portable history).
+ * Stored in 'user_reading_list'.
  */
 export interface ReadingListEntry {
   /** The filename of the book (Primary Key). */
@@ -298,6 +309,7 @@ export interface ReadingListEntry {
 
 /**
  * Pre-extracted text content for TTS, allowing playback without rendering.
+ * Stored in 'static_tts_content'.
  */
 export interface TTSContent {
   /** Composite key: `${bookId}-${sectionId}` */
@@ -323,6 +335,7 @@ export interface TTSContent {
 
 /**
  * Represents a snapped image of a table.
+ * Stored in 'cache_table_images'.
  */
 export interface TableImage {
   /** Unique identifier: `${bookId}-${cfi}` */
@@ -384,6 +397,7 @@ export interface SyncManifest {
 
 /**
  * A local snapshot of the SyncManifest for recovery.
+ * Stored in 'user_checkpoints'.
  */
 export interface SyncCheckpoint {
   /** Auto-incrementing ID. */
@@ -398,6 +412,7 @@ export interface SyncCheckpoint {
 
 /**
  * Log entry for synchronization events.
+ * Stored in 'user_sync_log'.
  */
 export interface SyncLogEntry {
   /** Auto-incrementing ID. */

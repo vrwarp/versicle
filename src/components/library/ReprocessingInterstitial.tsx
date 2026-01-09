@@ -35,8 +35,8 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
                 // If file is missing (e.g. offloaded book), we can't process tables.
                 // Mark as processed to avoid infinite loop of trying.
                 const db = await getDB();
-                const tx = db.transaction('book_sources', 'readwrite');
-                const sourceStore = tx.objectStore('book_sources');
+                const tx = db.transaction('static_book_sources', 'readwrite');
+                const sourceStore = tx.objectStore('static_book_sources');
                 // Cast to avoid implicit any if store is not generic enough, but here we know the schema
                 const source = await sourceStore.get(bookId);
 
@@ -82,10 +82,10 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
 
             // Batch save
             const db = await getDB();
-            const tx = db.transaction(['book_sources', 'table_images'], 'readwrite');
+            const tx = db.transaction(['static_book_sources', 'cache_table_images'], 'readwrite');
 
             // Update Metadata (Source)
-            const sourceStore = tx.objectStore('book_sources');
+            const sourceStore = tx.objectStore('static_book_sources');
             const source = await sourceStore.get(bookId);
             if (source) {
                 source.version = CURRENT_BOOK_VERSION;
@@ -98,7 +98,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
             }
 
             // Store Images
-            const tableStore = tx.objectStore('table_images');
+            const tableStore = tx.objectStore('cache_table_images');
             for (const img of tableImages) {
                 await tableStore.put(img);
             }

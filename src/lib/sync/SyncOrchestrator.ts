@@ -153,13 +153,13 @@ export class SyncOrchestrator {
 
     private async generateLocalManifest(): Promise<SyncManifest> {
         const db = await getDB();
-        const books = await db.getAll('books');
-        const bookStates = await db.getAll('book_states');
-        const readingHistory = await db.getAll('reading_history');
-        const annotations = await db.getAll('annotations');
-        const lexicon = await db.getAll('lexicon');
-        const readingListList = await db.getAll('reading_list');
-        const ttsPositions = await db.getAll('tts_position');
+        const books = await db.getAll('static_books');
+        const bookStates = await db.getAll('user_book_states');
+        const readingHistory = await db.getAll('user_reading_history');
+        const annotations = await db.getAll('user_annotations');
+        const lexicon = await db.getAll('user_lexicon');
+        const readingListList = await db.getAll('user_reading_list');
+        const ttsPositions = await db.getAll('cache_tts_position');
 
         const manifestBooks: SyncManifest['books'] = {};
         const stateMap = new Map<string, BookState>(bookStates.map(s => [s.bookId, s]));
@@ -216,18 +216,26 @@ export class SyncOrchestrator {
 
     private async applyManifest(manifest: SyncManifest) {
         const db = await getDB();
-        const tx = db.transaction(['books', 'book_states', 'reading_history', 'annotations', 'lexicon', 'reading_list', 'tts_position'], 'readwrite');
+        const tx = db.transaction([
+            'static_books',
+            'user_book_states',
+            'user_reading_history',
+            'user_annotations',
+            'user_lexicon',
+            'user_reading_list',
+            'cache_tts_position'
+        ], 'readwrite');
 
         // Apply Books (Metadata Updates)
         for (const [bookId, data] of Object.entries(manifest.books)) {
-            const existingBook = await tx.objectStore('books').get(bookId);
-            const existingState = await tx.objectStore('book_states').get(bookId);
+            const existingBook = await tx.objectStore('static_books').get(bookId);
+            const existingState = await tx.objectStore('user_book_states').get(bookId);
 
             if (existingBook) {
                 // Update Book (Identity) - limited fields
                 if (data.metadata.title) existingBook.title = data.metadata.title;
                 if (data.metadata.author) existingBook.author = data.metadata.author;
-                await tx.objectStore('books').put(existingBook);
+                await tx.objectStore('static_books').put(existingBook);
 
                 // Update State (Progress)
                 const newState: BookState = {
@@ -238,34 +246,34 @@ export class SyncOrchestrator {
                 };
                 // Ensure we don't overwrite if local is newer?
                 // applyManifest assumes manifest is authoritative/merged.
-                await tx.objectStore('book_states').put(newState);
+                await tx.objectStore('user_book_states').put(newState);
             }
             // Note: We don't create new books from sync if we don't have the file!
 
             // Apply History
             if (data.history) {
-                await tx.objectStore('reading_history').put(data.history);
+                await tx.objectStore('user_reading_history').put(data.history);
             }
 
             // Apply Annotations
             for (const ann of data.annotations) {
-                await tx.objectStore('annotations').put(ann);
+                await tx.objectStore('user_annotations').put(ann);
             }
         }
 
         // Lexicon
         for (const rule of manifest.lexicon) {
-            await tx.objectStore('lexicon').put(rule);
+            await tx.objectStore('user_lexicon').put(rule);
         }
 
         // Reading List
         for (const entry of Object.values(manifest.readingList)) {
-            await tx.objectStore('reading_list').put(entry);
+            await tx.objectStore('user_reading_list').put(entry);
         }
 
         // TTS Positions
         for (const pos of Object.values(manifest.transientState.ttsPositions)) {
-             await tx.objectStore('tts_position').put(pos);
+             await tx.objectStore('cache_tts_position').put(pos);
         }
 
         await tx.done;
