@@ -4,7 +4,8 @@ import type {
     ReadingListEntry, ReadingHistoryEntry, ReadingEventType, TTSContent, SectionMetadata, TableImage,
     // Legacy / Composite Types used in Service Layer
     TTSState, Annotation, CachedSegment, BookLocations, ContentAnalysis,
-    CacheSessionState
+    CacheSessionState,
+    UserInventoryItem
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
