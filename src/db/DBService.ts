@@ -284,7 +284,8 @@ class DBService {
           'static_manifests', 'static_resources', 'static_structure',
           'user_inventory', 'user_progress', 'user_annotations',
           'user_overrides', 'user_journey', 'user_ai_inference',
-          'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation'
+          'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation',
+          'cache_table_images'
       ], 'readwrite');
 
       await Promise.all([
@@ -299,7 +300,8 @@ class DBService {
       ]);
 
       // Delete from index-based stores
-      const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const deleteFromIndex = async (storeName: any, indexName: string) => {
           const store = tx.objectStore(storeName);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const index = store.index(indexName as any);
@@ -315,6 +317,8 @@ class DBService {
       await deleteFromIndex('user_ai_inference', 'by_bookId');
       // Added index support for cache_tts_preparation
       await deleteFromIndex('cache_tts_preparation', 'by_bookId');
+      // Added cache_table_images
+      await deleteFromIndex('cache_table_images', 'by_bookId');
 
       await tx.done;
     } catch (error) {
@@ -924,31 +928,9 @@ class DBService {
   async getTableImages(bookId: string): Promise<TableImage[]> {
       try {
           const db = await this.getDB();
-          const metrics = await db.get('cache_render_metrics', bookId);
-
-          if (!metrics || !metrics.tableSnapshots) {
-              return [];
-          }
-
-          const images: TableImage[] = [];
-          for (const [key, blob] of Object.entries(metrics.tableSnapshots)) {
-              // Key format: `${sectionId}|${cfi}`
-              const parts = key.split('|');
-              if (parts.length >= 2) {
-                  const sectionId = parts[0];
-                  // Join rest in case CFI contained separator (unlikely but safe)
-                  const cfi = parts.slice(1).join('|');
-
-                  images.push({
-                      id: `${bookId}-${cfi}`,
-                      bookId,
-                      sectionId,
-                      cfi,
-                      imageBlob: blob
-                  });
-              }
-          }
-          return images;
+          // Use index to get all images for book
+          const imgs = await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId);
+          return imgs || [];
       } catch (error) {
           this.handleError(error);
           return [];

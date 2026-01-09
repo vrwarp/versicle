@@ -139,7 +139,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 18, {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 19, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // Create New Stores if they don't exist
         const createStore = (name: string, options?: IDBObjectStoreParameters) => {
@@ -182,6 +182,11 @@ export const initDB = () => {
         const ttsPrep: any = createStore('cache_tts_preparation', { keyPath: 'id' });
         if (!ttsPrep.indexNames.contains('by_bookId')) ttsPrep.createIndex('by_bookId', 'bookId');
 
+        // Cache Table Images
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tableImgs: any = createStore('cache_table_images', { keyPath: 'id' });
+        if (!tableImgs.indexNames.contains('by_bookId')) tableImgs.createIndex('by_bookId', 'bookId');
+
         // App Level (Preserve)
         if (!db.objectStoreNames.contains('checkpoints')) {
            const cp = db.createObjectStore('checkpoints', { keyPath: 'id', autoIncrement: true });
@@ -195,9 +200,9 @@ export const initDB = () => {
            db.createObjectStore('app_metadata');
         }
 
-        // --- MIGRATION LOGIC (v17 -> v18) ---
+        // --- MIGRATION LOGIC (v17 -> v18/v19) ---
         if (oldVersion < 18) {
-          console.log('Migrating to v18 Data Architecture...');
+          console.log('Migrating to v18/v19 Data Architecture...');
 
           // Use 'any' casting for legacy store access within upgrade logic
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

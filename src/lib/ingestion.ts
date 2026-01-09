@@ -2,7 +2,7 @@ import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides } from '../types/db';
+import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
@@ -58,7 +58,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
   const syntheticToc: NavigationItem[] = [];
   const sections: SectionMetadata[] = [];
   const ttsContentBatches: TTSContent[] = [];
-  const tableSnapshots: Record<string, Blob> = {};
+  const tableImages: TableImage[] = [];
   let totalChars = 0;
 
   chapters.forEach((chapter, i) => {
@@ -88,14 +88,18 @@ export async function reprocessBook(bookId: string): Promise<void> {
 
       if (chapter.tables && chapter.tables.length > 0) {
           for (const table of chapter.tables) {
-              // Key: sectionId|cfi
-              const key = `${chapter.href}|${table.cfi}`;
-              tableSnapshots[key] = table.imageBlob;
+               tableImages.push({
+                   id: `${bookId}-${table.cfi}`,
+                   bookId,
+                   sectionId: chapter.href,
+                   cfi: table.cfi,
+                   imageBlob: table.imageBlob
+               });
           }
       }
   });
 
-  const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation', 'cache_render_metrics'], 'readwrite');
+  const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation', 'cache_table_images'], 'readwrite');
 
   // Update Metadata
   const manStore = tx.objectStore('static_manifests');
@@ -138,11 +142,19 @@ export async function reprocessBook(bookId: string): Promise<void> {
       });
   }
 
-  // Update Cache Render Metrics (Table Snapshots)
-  const metricsStore = tx.objectStore('cache_render_metrics');
-  const existingMetrics = await metricsStore.get(bookId) || { bookId, locations: '' };
-  existingMetrics.tableSnapshots = tableSnapshots;
-  await metricsStore.put(existingMetrics);
+  // Update Table Images
+  const tableStore = tx.objectStore('cache_table_images');
+  // Clean up old entries first
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tableIndex = tableStore.index('by_bookId' as any);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const oldTableKeys = await tableIndex.getAllKeys(bookId as any);
+  for (const key of oldTableKeys) {
+      await tableStore.delete(key);
+  }
+  for (const img of tableImages) {
+      await tableStore.put(img);
+  }
 
   await tx.done;
 }
@@ -197,7 +209,7 @@ export async function processEpub(
   const syntheticToc: NavigationItem[] = [];
   const sections: SectionMetadata[] = [];
   const ttsContentBatches: TTSContent[] = [];
-  const tableSnapshots: Record<string, Blob> = {};
+  const tableImages: TableImage[] = [];
   let totalChars = 0;
 
   chapters.forEach((chapter, i) => {
@@ -227,8 +239,13 @@ export async function processEpub(
 
       if (chapter.tables && chapter.tables.length > 0) {
           for (const table of chapter.tables) {
-              const key = `${chapter.href}|${table.cfi}`;
-              tableSnapshots[key] = table.imageBlob;
+               tableImages.push({
+                   id: `${bookId}-${table.cfi}`,
+                   bookId,
+                   sectionId: chapter.href,
+                   cfi: table.cfi,
+                   imageBlob: table.imageBlob
+               });
           }
       }
   });
@@ -317,7 +334,7 @@ export async function processEpub(
   const tx = db.transaction([
       'static_manifests', 'static_resources', 'static_structure',
       'user_inventory', 'user_progress', 'user_overrides',
-      'cache_tts_preparation', 'cache_render_metrics'
+      'cache_tts_preparation', 'cache_table_images'
   ], 'readwrite');
 
   await tx.objectStore('static_manifests').add(manifest);
@@ -337,11 +354,10 @@ export async function processEpub(
       });
   }
 
-  await tx.objectStore('cache_render_metrics').add({
-      bookId,
-      locations: '', // Initial empty locations
-      tableSnapshots
-  });
+  const tableStore = tx.objectStore('cache_table_images');
+  for (const img of tableImages) {
+      await tableStore.add(img);
+  }
 
   await tx.done;
 
