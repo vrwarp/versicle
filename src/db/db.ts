@@ -1,5 +1,20 @@
-import { openDB, type IDBPDatabase } from 'idb';
+import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type {
+  // New Types
+  StaticBookManifest,
+  StaticResource,
+  StaticStructure,
+  UserInventoryItem,
+  UserProgress,
+  UserAnnotation,
+  UserOverrides,
+  UserJourneyStep,
+  UserAiInference,
+  CacheRenderMetrics,
+  CacheAudioBlob,
+  CacheSessionState,
+  CacheTtsPreparation,
+  TableImage,
   // Old Types for Migration
   BookMetadata,
   BookSource,
@@ -11,10 +26,122 @@ import type {
   CachedSegment,
   LexiconRule,
   TTSContent,
-  EpubLibraryDB
+  // App Types
+  SyncCheckpoint,
+  SyncLogEntry
 } from '../types/db';
 
-export type { EpubLibraryDB };
+/**
+ * Interface defining the schema for the IndexedDB database.
+ * Updated to v18 architecture.
+ */
+export interface EpubLibraryDB extends DBSchema {
+  /**
+   * Store for synchronization checkpoints.
+   */
+  checkpoints: {
+    key: number;
+    value: SyncCheckpoint;
+    indexes: {
+      by_timestamp: number;
+    };
+  };
+  /**
+   * Store for synchronization logs.
+   */
+  sync_log: {
+    key: number;
+    value: SyncLogEntry;
+    indexes: {
+      by_timestamp: number;
+    };
+  };
+  /**
+   * Store for application-level metadata and configuration.
+   */
+  app_metadata: {
+    key: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    value: any;
+  };
+
+  // --- DOMAIN 1: STATIC ---
+  static_manifests: {
+    key: string;
+    value: StaticBookManifest;
+  };
+  static_resources: {
+    key: string;
+    value: StaticResource;
+  };
+  static_structure: {
+    key: string;
+    value: StaticStructure;
+  };
+
+  // --- DOMAIN 2: USER ---
+  user_inventory: {
+    key: string;
+    value: UserInventoryItem;
+  };
+  user_progress: {
+    key: string;
+    value: UserProgress;
+  };
+  user_annotations: {
+    key: string;
+    value: UserAnnotation;
+    indexes: {
+      by_bookId: string;
+    };
+  };
+  user_overrides: {
+    key: string;
+    value: UserOverrides;
+  };
+  user_journey: {
+    key: number;
+    value: UserJourneyStep;
+    indexes: {
+      by_bookId: string;
+    };
+  };
+  user_ai_inference: {
+    key: string;
+    value: UserAiInference;
+    indexes: {
+      by_bookId: string;
+    };
+  };
+
+  // --- DOMAIN 3: CACHE ---
+  cache_render_metrics: {
+    key: string;
+    value: CacheRenderMetrics;
+  };
+  cache_audio_blobs: {
+    key: string;
+    value: CacheAudioBlob;
+  };
+  cache_session_state: {
+    key: string;
+    value: CacheSessionState;
+  };
+  cache_tts_preparation: {
+    key: string;
+    value: CacheTtsPreparation;
+    indexes: {
+      by_bookId: string;
+    };
+  };
+  cache_table_images: {
+    key: string;
+    value: TableImage;
+    indexes: {
+      by_bookId: string;
+    };
+  };
+}
 
 let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
