@@ -72,12 +72,12 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     /**
      * Toggles selection state of a single entry.
      */
-    const toggleSelection = (filename: string) => {
+    const toggleSelection = (bookId: string) => {
         const newSelection = new Set(selectedEntries);
-        if (newSelection.has(filename)) {
-            newSelection.delete(filename);
+        if (newSelection.has(bookId)) {
+            newSelection.delete(bookId);
         } else {
-            newSelection.add(filename);
+            newSelection.add(bookId);
         }
         setSelectedEntries(newSelection);
     };
@@ -90,16 +90,16 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         if (selectedEntries.size === entries.length) {
             setSelectedEntries(new Set());
         } else {
-            setSelectedEntries(new Set(entries.map(e => e.filename)));
+            setSelectedEntries(new Set(entries.map(e => e.bookId)));
         }
     };
 
-    const handleDelete = async (filename: string) => {
-        if (confirm('Are you sure you want to delete this entry?')) {
-            await dbService.deleteReadingListEntry(filename);
+    const handleDelete = async (bookId: string) => {
+        if (confirm('Are you sure you want to delete this book? This will remove it from your library.')) {
+            await dbService.deleteBook(bookId);
             setSelectedEntries(prev => {
                 const newSet = new Set(prev);
-                newSet.delete(filename);
+                newSet.delete(bookId);
                 return newSet;
             });
             refreshEntries();
@@ -107,8 +107,8 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     };
 
     const handleBatchDelete = async () => {
-        if (confirm(`Are you sure you want to delete ${selectedEntries.size} entries?`)) {
-            await dbService.deleteReadingListEntries(Array.from(selectedEntries));
+        if (confirm(`Are you sure you want to delete ${selectedEntries.size} books?`)) {
+            await Promise.all(Array.from(selectedEntries).map(id => dbService.deleteBook(id)));
             setSelectedEntries(new Set());
             refreshEntries();
         }
@@ -119,7 +119,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
      * Escapes quotes in fields to ensure valid CSV format.
      */
     const handleExportCSV = () => {
-        const entriesToExport = entries.filter(e => selectedEntries.has(e.filename));
+        const entriesToExport = entries.filter(e => selectedEntries.has(e.bookId));
         if (entriesToExport.length === 0) return;
 
         const headers = ['Title', 'Author', 'Status', 'Progress', 'Rating', 'Last Read', 'ISBN'];
@@ -150,7 +150,18 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     };
 
     const handleEditSave = async (updatedEntry: ReadingListEntry) => {
-        await dbService.upsertReadingListEntry(updatedEntry);
+        // Map UI status back to DB status
+        let dbStatus: 'unread' | 'reading' | 'completed' | 'abandoned' | undefined;
+        if (updatedEntry.status === 'read') dbStatus = 'completed';
+        else if (updatedEntry.status === 'currently-reading') dbStatus = 'reading';
+        else if (updatedEntry.status === 'to-read') dbStatus = 'unread';
+
+        await dbService.updateBookMetadata(updatedEntry.bookId, {
+            title: updatedEntry.title,
+            author: updatedEntry.author,
+            rating: updatedEntry.rating,
+            status: dbStatus
+        });
         refreshEntries();
     };
 
@@ -230,23 +241,23 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                 </thead>
                                 <tbody>
                                     {sortedEntries.map((entry) => (
-                                        <tr key={entry.filename} className={`border-b hover:bg-muted/20 transition-colors ${selectedEntries.has(entry.filename) ? 'bg-muted/30' : ''}`}>
+                                        <tr key={entry.bookId} className={`border-b hover:bg-muted/20 transition-colors ${selectedEntries.has(entry.bookId) ? 'bg-muted/30' : ''}`}>
                                             <td className="px-4 py-3 text-center">
                                                 <div
                                                     className="cursor-pointer flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-                                                    onClick={() => toggleSelection(entry.filename)}
+                                                    onClick={() => toggleSelection(entry.bookId)}
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter' || e.key === ' ') {
                                                             e.preventDefault();
-                                                            toggleSelection(entry.filename);
+                                                            toggleSelection(entry.bookId);
                                                         }
                                                     }}
                                                     role="checkbox"
-                                                    aria-checked={selectedEntries.has(entry.filename)}
+                                                    aria-checked={selectedEntries.has(entry.bookId)}
                                                     aria-label={`Select ${entry.title}`}
                                                     tabIndex={0}
                                                 >
-                                                    {selectedEntries.has(entry.filename) ? (
+                                                    {selectedEntries.has(entry.bookId) ? (
                                                         <CheckSquare className="w-4 h-4" />
                                                     ) : (
                                                         <Square className="w-4 h-4" />
@@ -289,7 +300,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                                         variant="ghost"
                                                         size="sm"
                                                         className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                                        onClick={() => handleDelete(entry.filename)}
+                                                        onClick={() => handleDelete(entry.bookId)}
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                         <span className="sr-only">Delete</span>
@@ -312,7 +323,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
             </Modal>
 
             <EditReadingListEntryDialog
-                key={editEntry?.filename ?? 'new'}
+                key={editEntry?.bookId ?? 'new'}
                 open={!!editEntry}
                 onOpenChange={(open) => !open && setEditEntry(null)}
                 entry={editEntry}

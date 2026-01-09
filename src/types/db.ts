@@ -374,6 +374,10 @@ export interface BookState {
   isOffloaded?: boolean;
   /** Status of AI analysis for the book. */
   aiAnalysisStatus?: 'none' | 'partial' | 'complete';
+  /** User rating (1-5). */
+  rating?: number;
+  /** Reading status. */
+  status?: 'unread' | 'reading' | 'completed' | 'abandoned';
 }
 
 /**
@@ -574,8 +578,10 @@ export interface ReadingHistoryEntry {
  * Represents an entry in the reading list (lightweight, portable history).
  */
 export interface ReadingListEntry {
-  /** The filename of the book (Primary Key). */
+  /** The filename of the book. */
   filename: string;
+  /** The unique identifier of the book. */
+  bookId: string;
   /** The title of the book. */
   title: string;
   /** The author(s) of the book. */

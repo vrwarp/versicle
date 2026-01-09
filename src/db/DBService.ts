@@ -84,7 +84,9 @@ class DBService {
               progress: prog?.percentage,
               currentCfi: prog?.currentCfi,
               lastPlayedCfi: prog?.lastPlayedCfi,
-              isOffloaded: false // Placeholder, see logic below
+              isOffloaded: false, // Placeholder, see logic below
+              rating: inv.rating,
+              status: inv.status
           };
           library.push(composite);
       }
@@ -139,7 +141,9 @@ class DBService {
           progress: progress?.percentage,
           currentCfi: progress?.currentCfi,
           lastPlayedCfi: progress?.lastPlayedCfi,
-          isOffloaded: !resource?.epubBlob
+          isOffloaded: !resource?.epubBlob,
+          rating: inventory.rating,
+          status: inventory.status
       };
 
       return { metadata, file: resource?.epubBlob };
@@ -185,7 +189,9 @@ class DBService {
               progress: progress?.percentage,
               currentCfi: progress?.currentCfi,
               lastPlayedCfi: progress?.lastPlayedCfi,
-              isOffloaded: !resourceKey
+              isOffloaded: !resourceKey,
+              rating: inventory.rating,
+              status: inventory.status
           };
       } catch (error) {
           this.handleError(error);
@@ -209,6 +215,8 @@ class DBService {
       if (inventory) {
           if (metadata.title) inventory.customTitle = metadata.title;
           if (metadata.author) inventory.customAuthor = metadata.author;
+          if (metadata.rating !== undefined) inventory.rating = metadata.rating;
+          if (metadata.status !== undefined) inventory.status = metadata.status;
           await invStore.put(inventory);
       }
 
@@ -442,6 +450,7 @@ class DBService {
           const man = manMap.get(inv.bookId);
           const prog = progMap.get(inv.bookId);
           return {
+              bookId: inv.bookId,
               filename: inv.sourceFilename || 'unknown',
               title: inv.customTitle || man?.title || 'Unknown',
               author: inv.customAuthor || man?.author || 'Unknown',
@@ -455,26 +464,6 @@ class DBService {
     } catch (error) {
       this.handleError(error);
     }
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async upsertReadingListEntry(_entry: ReadingListEntry): Promise<void> {
-      Logger.warn('DBService', 'upsertReadingListEntry is deprecated in v18 architecture');
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async deleteReadingListEntry(_filename: string): Promise<void> {
-      Logger.warn('DBService', 'deleteReadingListEntry is deprecated in v18 architecture');
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async deleteReadingListEntries(_filenames: string[]): Promise<void> {
-       Logger.warn('DBService', 'deleteReadingListEntries is deprecated in v18 architecture');
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async importReadingList(_entries: ReadingListEntry[]): Promise<void> {
-       Logger.warn('DBService', 'importReadingList is deprecated in v18 architecture');
   }
 
   // --- Playback State ---

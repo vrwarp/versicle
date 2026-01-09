@@ -24,7 +24,7 @@ import { dbService } from '../db/DBService';
 import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
 import { SyncOrchestrator } from '../lib/sync/SyncOrchestrator';
-import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
+import { exportReadingListToCSV } from '../lib/csv';
 import { ReadingListDialog } from './ReadingListDialog';
 import { Trash2, Download, Loader2, RotateCcw } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
@@ -48,18 +48,13 @@ export const GlobalSettingsDialog = () => {
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
     const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const csvInputRef = useRef<HTMLInputElement>(null);
     const zipImportRef = useRef<HTMLInputElement>(null);
     const folderImportRef = useRef<HTMLInputElement>(null);
     const [readingListCount, setReadingListCount] = useState<number | null>(null);
     const [isReadingListOpen, setIsReadingListOpen] = useState(false);
-    const [isCsvImporting, setIsCsvImporting] = useState(false);
-    const [csvImportMessage, setCsvImportMessage] = useState('');
-    const [csvImportComplete, setCsvImportComplete] = useState(false);
 
     const {
         addBooks,
-        fetchBooks,
         isImporting,
         importProgress,
         importStatus,
@@ -107,59 +102,6 @@ export const GlobalSettingsDialog = () => {
         }
     };
 
-    const handleImportReadingListClick = () => {
-        csvInputRef.current?.click();
-    };
-
-    const handleCsvFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setIsCsvImporting(true);
-        setCsvImportComplete(false);
-        setCsvImportMessage('Reading file...');
-
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            const text = ev.target?.result as string;
-            if (text) {
-                try {
-                    setCsvImportMessage('Parsing CSV...');
-                    // Artificial delay for UX
-                    await new Promise(r => setTimeout(r, 500));
-                    const entries = parseReadingListCSV(text);
-
-                    setCsvImportMessage(`Importing ${entries.length} entries and syncing with library...`);
-                    // Another small delay to ensure the user sees the message
-                    await new Promise(r => setTimeout(r, 500));
-
-                    await dbService.importReadingList(entries);
-
-                    // Update local count
-                    setReadingListCount(entries.length);
-                    dbService.getReadingList().then(list => setReadingListCount(list ? list.length : 0));
-
-                    setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
-                    setCsvImportComplete(true);
-                } catch (err) {
-                    console.error(err);
-                    setCsvImportMessage('Failed to import CSV.');
-                    // Allow retry after a delay
-                    setTimeout(() => setIsCsvImporting(false), 2000);
-                }
-            }
-            e.target.value = ''; // Reset
-        };
-        reader.readAsText(file);
-    };
-
-    const handleReturnToLibrary = async () => {
-        setIsCsvImporting(false);
-        setCsvImportComplete(false);
-        setCsvImportMessage('');
-        await fetchBooks();
-        setGlobalSettingsOpen(false);
-    };
 
     const handleBatchImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
@@ -402,19 +344,6 @@ export const GlobalSettingsDialog = () => {
                     </ModalHeader>
                 </VisuallyHidden>
                 <span id="global-settings-desc" className="sr-only">Global application settings including appearance, TTS configuration, and data management.</span>
-                {isCsvImporting && (
-                    <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 text-center">
-                        <Loader2 className={`h-12 w-12 text-primary mb-4 ${!csvImportComplete ? 'animate-spin' : ''}`} />
-                        <h3 className="text-xl font-semibold mb-2">{csvImportComplete ? 'Import Complete' : 'Importing Reading List'}</h3>
-                        <p className="text-muted-foreground mb-6">{csvImportMessage}</p>
-
-                        {csvImportComplete && (
-                            <Button size="lg" onClick={handleReturnToLibrary}>
-                                Return to Library
-                            </Button>
-                        )}
-                    </div>
-                )}
 
                 {/* Sidebar */}
                 <div className="w-full sm:w-1/4 bg-muted/30 border-b sm:border-r sm:border-b-0 p-2 sm:p-4 flex flex-row sm:flex-col gap-2 overflow-x-auto sm:overflow-visible items-center sm:items-stretch shrink-0">
@@ -1038,17 +967,6 @@ export const GlobalSettingsDialog = () => {
                                     <Button onClick={handleExportReadingList} variant="outline" className="flex-1">
                                         Export to CSV
                                     </Button>
-                                    <Button onClick={handleImportReadingListClick} variant="outline" className="flex-1">
-                                        Import CSV
-                                    </Button>
-                                    <input
-                                        type="file"
-                                        ref={csvInputRef}
-                                        className="hidden"
-                                        accept=".csv"
-                                        onChange={handleCsvFileChange}
-                                        data-testid="reading-list-csv-input"
-                                    />
                                 </div>
                              </div>
 
