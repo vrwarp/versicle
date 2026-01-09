@@ -18,27 +18,24 @@ describe('DBService Reading List', () => {
         await db.clear('static_resources');
     });
 
-    it('should upsert and get reading list entries (via deprecated methods warning)', async () => {
-        // upsertReadingListEntry is deprecated and logs warning, does nothing.
-        // So this test expectation needs to change or we acknowledge it's deprecated.
-        // But getReadingList returns from user_inventory.
-        // So we should seed user_inventory directly to test getReadingList.
-
+    it('should upsert reading list entries', async () => {
         const db = await getDB();
+
+        // Seed initial data
         await db.put('user_inventory', {
             bookId: 'b1',
             sourceFilename: 'test.epub',
-            customTitle: 'Test Book',
-            customAuthor: 'Test Author',
+            customTitle: 'Old Title',
+            customAuthor: 'Old Author',
             addedAt: 100,
-            status: 'reading',
-            lastInteraction: Date.now(),
+            status: 'unread',
+            lastInteraction: 100,
             tags: []
         } as UserInventoryItem);
 
         await db.put('user_progress', {
             bookId: 'b1',
-            percentage: 0.5,
+            percentage: 0,
             lastRead: 0,
             completedRanges: []
         } as UserProgress);
@@ -53,18 +50,85 @@ describe('DBService Reading List', () => {
             totalChars: 1000
         } as StaticBookManifest);
 
-        const list = await dbService.getReadingList();
+        // Perform upsert
+        await dbService.upsertReadingListEntry({
+            filename: 'test.epub',
+            title: 'New Title',
+            author: 'New Author',
+            percentage: 0.5,
+            lastUpdated: 200,
+            status: 'currently-reading',
+            rating: 4
+        });
 
+        // Verify user_inventory updated
+        const inv = await db.get('user_inventory', 'b1');
+        expect(inv?.customTitle).toBe('New Title');
+        expect(inv?.customAuthor).toBe('New Author');
+        expect(inv?.status).toBe('reading');
+        expect(inv?.rating).toBe(4);
+        expect(inv?.lastInteraction).toBe(200);
+
+        // Verify user_progress updated
+        const prog = await db.get('user_progress', 'b1');
+        expect(prog?.percentage).toBe(0.5);
+        expect(prog?.lastRead).toBe(200);
+
+        // Verify getReadingList reflects changes
+        const list = await dbService.getReadingList();
         expect(list).toHaveLength(1);
-        expect(list[0].filename).toBe('test.epub');
-        expect(list[0].percentage).toBe(0.5);
+        expect(list[0].title).toBe('New Title');
+        expect(list[0].status).toBe('currently-reading');
     });
 
-    it('should sync progress to books on import (deprecated)', async () => {
-        // importReadingList is deprecated.
-        // If we want to test legacy behavior, we can't because method is stubbed to log warning.
-        // We should skip this test or remove it.
-        // I will skip it.
+    it('should delete reading list entry', async () => {
+        const db = await getDB();
+
+        await db.put('user_inventory', {
+            bookId: 'del-1', sourceFilename: 'del.epub', addedAt: 100, status: 'unread', lastInteraction: 100, tags: []
+        } as UserInventoryItem);
+        await db.put('static_manifests', {
+            bookId: 'del-1', title: 'Del', author: 'Auth', schemaVersion: 1, fileHash: 'h', fileSize: 1, totalChars: 1
+        } as StaticBookManifest);
+        // Need store dependent tables to ensure no crash
+        await db.put('user_progress', { bookId: 'del-1', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
+        await db.put('static_resources', { bookId: 'del-1', epubBlob: new Blob([]) } as any);
+        await db.put('static_structure', { bookId: 'del-1', toc: [], spineItems: [] } as any);
+
+        await dbService.deleteReadingListEntry('del.epub');
+
+        const inv = await db.get('user_inventory', 'del-1');
+        expect(inv).toBeUndefined();
+    });
+
+    it('should import reading list (batch upsert)', async () => {
+        const db = await getDB();
+
+        // Seed
+        await db.put('user_inventory', {
+            bookId: 'imp-1', sourceFilename: 'imp1.epub', addedAt: 100, status: 'unread', lastInteraction: 100, tags: []
+        } as UserInventoryItem);
+         await db.put('static_manifests', {
+            bookId: 'imp-1', title: 'Imp 1', author: 'Auth', schemaVersion: 1, fileHash: 'h', fileSize: 1, totalChars: 1
+        } as StaticBookManifest);
+        await db.put('user_progress', { bookId: 'imp-1', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
+
+        await dbService.importReadingList([{
+            filename: 'imp1.epub',
+            title: 'Imported Title',
+            author: 'Imported Author',
+            percentage: 0.8,
+            lastUpdated: 300,
+            status: 'read',
+            rating: 5
+        }]);
+
+        const inv = await db.get('user_inventory', 'imp-1');
+        expect(inv?.customTitle).toBe('Imported Title');
+        expect(inv?.status).toBe('completed');
+
+        const prog = await db.get('user_progress', 'imp-1');
+        expect(prog?.percentage).toBe(0.8);
     });
 
     /*

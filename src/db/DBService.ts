@@ -457,24 +457,92 @@ class DBService {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async upsertReadingListEntry(_entry: ReadingListEntry): Promise<void> {
-      Logger.warn('DBService', 'upsertReadingListEntry is deprecated in v18 architecture');
+  async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
+    try {
+      const db = await this.getDB();
+      // Scan user_inventory for sourceFilename matches
+      const tx = db.transaction(['user_inventory', 'user_progress'], 'readwrite');
+      const invStore = tx.objectStore('user_inventory');
+      const progStore = tx.objectStore('user_progress');
+
+      let bookId: string | undefined;
+      let inventoryItem: UserInventoryItem | undefined;
+
+      let cursor = await invStore.openCursor();
+      while (cursor) {
+        if (cursor.value.sourceFilename === entry.filename) {
+          bookId = cursor.value.bookId;
+          inventoryItem = cursor.value;
+          break;
+        }
+        cursor = await cursor.continue();
+      }
+
+      if (bookId && inventoryItem) {
+        // Update Inventory
+        inventoryItem.customTitle = entry.title;
+        inventoryItem.customAuthor = entry.author;
+        inventoryItem.rating = entry.rating;
+        inventoryItem.lastInteraction = entry.lastUpdated;
+
+        // Map status
+        if (entry.status === 'read') inventoryItem.status = 'completed';
+        else if (entry.status === 'currently-reading') inventoryItem.status = 'reading';
+        else if (entry.status === 'to-read') inventoryItem.status = 'unread';
+
+        await invStore.put(inventoryItem);
+
+        // Update Progress
+        const prog = await progStore.get(bookId) || {
+          bookId, percentage: 0, lastRead: Date.now(), completedRanges: []
+        };
+        prog.percentage = entry.percentage;
+        prog.lastRead = entry.lastUpdated;
+        await progStore.put(prog);
+      } else {
+        Logger.warn('DBService', `Skipping upsertReadingListEntry: Book not found for filename ${entry.filename}`);
+      }
+
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async deleteReadingListEntry(_filename: string): Promise<void> {
-      Logger.warn('DBService', 'deleteReadingListEntry is deprecated in v18 architecture');
+  async deleteReadingListEntry(filename: string): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const inv = await db.getAll('user_inventory');
+      const target = inv.find(i => i.sourceFilename === filename);
+      if (target) {
+        await this.deleteBook(target.bookId);
+      } else {
+        Logger.warn('DBService', `Cannot delete entry: Book not found for filename ${filename}`);
+      }
+    } catch (error) {
+      this.handleError(error);
+    }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async deleteReadingListEntries(_filenames: string[]): Promise<void> {
-       Logger.warn('DBService', 'deleteReadingListEntries is deprecated in v18 architecture');
+  async deleteReadingListEntries(filenames: string[]): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const inv = await db.getAll('user_inventory');
+      const set = new Set(filenames);
+      const targets = inv.filter(i => i.sourceFilename && set.has(i.sourceFilename));
+
+      for (const target of targets) {
+        await this.deleteBook(target.bookId);
+      }
+    } catch (error) {
+      this.handleError(error);
+    }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async importReadingList(_entries: ReadingListEntry[]): Promise<void> {
-       Logger.warn('DBService', 'importReadingList is deprecated in v18 architecture');
+  async importReadingList(entries: ReadingListEntry[]): Promise<void> {
+    for (const entry of entries) {
+      await this.upsertReadingListEntry(entry);
+    }
   }
 
   // --- Playback State ---
