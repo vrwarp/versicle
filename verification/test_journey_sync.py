@@ -53,14 +53,14 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     # DEBUG: Check DB content on Device A
     db_count = page_a.evaluate("""
         async () => {
-            const db = await window.indexedDB.open('EpubLibraryDB', 17);
+            const db = await window.indexedDB.open('EpubLibraryDB', 18);
             return new Promise((resolve, reject) => {
                 db.onsuccess = (event) => {
                     const database = event.target.result;
-                    const tx = database.transaction(['lexicon'], 'readonly');
-                    const store = tx.objectStore('lexicon');
-                    const request = store.count();
-                    request.onsuccess = () => resolve(request.result);
+                    const tx = database.transaction(['user_overrides'], 'readonly');
+                    const store = tx.objectStore('user_overrides');
+                    const request = store.get('global');
+                    request.onsuccess = () => resolve(request.result ? request.result.lexicon.length : 0);
                     request.onerror = () => reject(request.error);
                 };
                 db.onerror = () => reject(db.error);
@@ -146,18 +146,17 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     # We can poll DB instead of sleeping
     print("Waiting for sync to apply...")
     for i in range(10):
-        # Check IndexedDB 'lexicon' store
-        # db.getAll('lexicon')
+        # Check IndexedDB 'user_overrides' store (key: global)
         rule_count = page_b.evaluate("""
             async () => {
-                const db = await window.indexedDB.open('EpubLibraryDB', 17);
+                const db = await window.indexedDB.open('EpubLibraryDB', 18);
                 return new Promise((resolve, reject) => {
                     db.onsuccess = (event) => {
                         const database = event.target.result;
-                        const tx = database.transaction(['lexicon'], 'readonly');
-                        const store = tx.objectStore('lexicon');
-                        const request = store.getAll();
-                        request.onsuccess = () => resolve(request.result.length);
+                        const tx = database.transaction(['user_overrides'], 'readonly');
+                        const store = tx.objectStore('user_overrides');
+                        const request = store.get('global');
+                        request.onsuccess = () => resolve(request.result ? request.result.lexicon.length : 0);
                         request.onerror = () => reject(request.error);
                     };
                     db.onerror = () => reject(db.error);
