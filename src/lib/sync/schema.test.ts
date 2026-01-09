@@ -79,6 +79,7 @@ describe('Sync Schema Exhaustion', () => {
         'cache_audio_blobs',
         'cache_session_state',
         'cache_tts_preparation',
+        'cache_table_images',
 
         // App Level
         'checkpoints',      // Local recovery
