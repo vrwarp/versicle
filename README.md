@@ -19,11 +19,11 @@
 
 *   **Framework**: React 19 + Vite 7
 *   **Language**: TypeScript
-*   **State**: Zustand + Yjs (Experimental CRDT)
-*   **Storage**: IndexedDB (via `idb`) + `y-indexeddb`
+*   **State**: Zustand + React Query (implied via hooks/idb)
+*   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
-*   **AI**: Google Gemini 2.5 Flash Lite (via `@google/generative-ai`)
+*   **AI**: Google Gemini (Flash Lite / Flash / Pro) via `@google/generative-ai`
 *   **Mobile**: Capacitor 7 (Android)
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
@@ -49,6 +49,7 @@
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
 *   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
+*   **Free Tier Rotation**: Automatically rotates between Gemini models (Flash Lite/Flash) to maximize free tier usage quotas.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
@@ -56,7 +57,8 @@
 
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
-    *   **Google Drive Sync**: Keep your progress and annotations in sync across devices.
+    *   **Google Drive Sync**: Keep your progress and annotations in sync across devices using your personal Google Drive.
+    *   **Last-Write-Wins**: Simple, conflict-free synchronization logic.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots protect against data loss during sync.
     *   **Android Backup**: Native integration with Android's Backup Manager.
 *   **Reading History**: Detailed session tracking with timeline visualization.

@@ -103,11 +103,6 @@ graph TD
         Checkpoints[(Checkpoints)]
     end
 
-    subgraph Experimental [Phase 2]
-        CRDT[CRDTService]
-        Yjs[Yjs / y-indexeddb]
-    end
-
     App --> Library
     App --> Reader
     Reader --> VisualSettings
@@ -129,6 +124,7 @@ graph TD
     LibStore --> Maint
 
     ReaderStore --> Orchestrator
+    SyncStore --> Orchestrator
 
     Orchestrator --> Manager
     Orchestrator --> Checkpoint
@@ -142,6 +138,8 @@ graph TD
     Pipeline --> GenAI
     Pipeline --> GenAIStore
     Pipeline --> DBService
+
+    APS --> Orchestrator
 
     APS --> Providers
     APS --> Segmenter
@@ -176,24 +174,23 @@ The data layer is built on **IndexedDB** using the `idb` library. It is accessed
 #### `src/db/DBService.ts`
 The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
 
-**Key Stores (Schema v16):**
-*   `books`: Metadata and 50KB thumbnail blobs.
+**Key Stores (Schema v17):**
+*   **Book Data (Split for Performance):**
+    *   `books`: Lightweight Metadata (Title, Author, Cover).
+    *   `book_sources`: Technical File Info (Hash, Size, Filename).
+    *   `book_states`: User Progress (CFI, Percentage, Last Read).
 *   `files`: The raw binary EPUB files (large).
 *   `table_images`: Stores `webp` snapshots of tables captured during ingestion. Keyed by `${bookId}-${cfi}`.
 *   `content_analysis`: Stores GenAI classification results (e.g., this block is a footnote) and table adaptations.
 *   `tts_cache`: Stores generated audio segments.
-*   `tts_queue`: Persistent playback queue (for resumption).
-*   `tts_position`: Lightweight position tracking (current index/section). Separate from `tts_queue` to minimize write overhead.
-*   `checkpoints`: **(New)** Stores `SyncManifest` snapshots for recovery.
-*   `reading_history`: Tracks user sessions.
+*   `tts_queue` / `tts_position`: Persistent playback queue and lightweight position tracking.
+*   `checkpoints`: Stores `SyncManifest` snapshots for recovery.
+*   `sync_log`: Logs sync operations for debugging.
+*   `app_metadata`: Global app configuration.
 
 **Key Functions:**
-*   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position. Now triggers `SyncOrchestrator` to schedule a sync.
-    *   *Trade-off*: A crash within 1 second of reading might lose the very last position update.
-*   **`saveTTSState` / `saveTTSPosition`**:
-    *   *Logic*: `saveTTSState` writes the heavy queue object only when the playlist changes. `saveTTSPosition` writes only indices (integers) frequently during playback.
-    *   *Why*: Prevents freezing the main thread with large IDB writes every second.
-*   **`offloadBook(id)`**: Deletes the large binary EPUB file (`files` store) to save space but keeps metadata, annotations, and reading progress.
+*   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position. Updates `book_states`.
+*   **`offloadBook(id)`**: Deletes the large binary EPUB file (`files` store) to save space but keeps metadata (`books`), source info (`book_sources`), and user state (`book_states`).
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
@@ -210,7 +207,6 @@ Versicle implements a "Serverless Sync" model using personal cloud storage (Goog
 The controller for synchronization. It manages the sync lifecycle and integrates with the UI.
 
 *   **Logic**:
-    *   **JSON Manifests**: Converts the local database state into a portable `SyncManifest` JSON object.
     *   **Last-Write-Wins (LWW)**: Merges local and remote manifests based on timestamps.
     *   **Debounced Push**: Reading progress updates are debounced (60s) to avoid API rate limits.
     *   **Force Push**: Critical actions (Pause, Bookmark) trigger immediate sync.
@@ -227,10 +223,6 @@ The controller for synchronization. It manages the sync lifecycle and integrates
 *   **Goal**: Native Android backup integration.
 *   **Logic**: Writes the `SyncManifest` to a specific file (`backup_payload.json`) in the app's data directory, which Android's `BackupManager` can include in OS-level backups.
 
-#### `CRDTService.ts` (Phase 2 / Experimental)
-*   **Goal**: Future-proof sync using Conflict-Free Replicated Data Types (Yjs).
-*   **Status**: Implemented but not yet active in the main `SyncOrchestrator` loop. Intended to replace LWW with true merge semantics.
-
 ### Core Logic & Services (`src/lib/`)
 
 #### Ingestion (`src/lib/ingestion.ts`)
@@ -241,29 +233,19 @@ Handles the complex task of importing an EPUB file.
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`) to render chapters.
         *   *Logic*: Scrapes text nodes for TTS and uses `@zumer/snapdom` to capture tables as structural `webp` images (enforcing white background).
     3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head + Metadata + Tail) using a `cheapHash` function for O(1) duplicate detection.
-    4.  **Sanitization**: Registers an `epub.js` hook to sanitize HTML content before rendering.
 
 *   **`reprocessBook(bookId)`**:
     *   **Goal**: Update book content (e.g., better text extraction, new table snapshots) without losing reading progress or annotations.
     *   **Logic**: Re-reads the source file from the `files` store, re-runs the extraction pipeline, and performs a transactional update of `sections`, `tts_content`, and `table_images`.
-    *   **Trade-off**: Computationally expensive. Requires the original file to still be present in the `files` store (i.e., not offloaded).
-
-#### Batch Ingestion (`src/lib/batch-ingestion.ts`)
-*   **Goal**: Allow bulk import of multiple EPUBs or ZIP archives containing books.
-*   **Logic**:
-    *   **ZIP Expansion**: Uses `JSZip` to recursively scan and extract `.epub` files from uploaded archives.
-    *   **Sequential Processing**: Processes files one by one to avoid memory spikes, reporting progress to the UI.
 
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs.
 
 *   **Goal**: Enhance the reading and listening experience using LLMs (Gemini).
 *   **Logic**:
-    *   **Service**: Wrapper around **Gemini Flash Lite** via `@google/generative-ai`.
     *   **Free Tier Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite`, `gemini-2.5-flash`, `gemini-3-flash`) to maximize quota. Automatically retries with a different model upon `429 RESOURCE_EXHAUSTED` errors.
     *   **Multimodal Input**: Accepts text and images (blobs) for tasks like table interpretation.
     *   **Structured Output**: Enforces strict JSON schemas for all responses (e.g., Content Type classification, Table Adaptation).
-    *   **E2E Testing**: Supports full mocking via `localStorage` triggers (`mockGenAIResponse`, `mockGenAIError`) to allow cost-free, deterministic integration tests.
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets/images are sent to Google's servers.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
@@ -320,11 +302,9 @@ Manages the virtual playback timeline.
 *   **Goal**: Abstract the complexity of skipped items and dynamic replacements from the player.
 *   **Logic**:
     *   **Virtualized Timeline**: Maintains a queue where items can be marked `isSkipped` without being removed (preserving index stability).
-    *   **Adaptive Prefix Sums**: Dynamically recalculates duration and seek positions based on the current mask.
     *   **Table Adaptation Strategy (Anchor + Skip)**:
         *   When a table adaptation is applied, the *first* matching queue item (Anchor) gets its text replaced with the AI narrative.
         *   All *subsequent* items belonging to that table are marked `isSkipped`.
-        *   *Result*: The player reads the narrative once, then silently skips the original raw rows.
 
 #### `src/lib/tts/providers/CapacitorTTSProvider.ts`
 Native mobile TTS integration.
