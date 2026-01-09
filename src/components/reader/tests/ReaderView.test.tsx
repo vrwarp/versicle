@@ -12,7 +12,8 @@ import { CURRENT_BOOK_VERSION } from '../../../lib/constants';
 vi.mock('epubjs');
 vi.mock('../../../db/db', () => ({
   getDB: vi.fn(() => Promise.resolve({
-    get: vi.fn((store, id) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    get: vi.fn((store, _id) => {
       if (store === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
 
       if (store === 'static_manifests') return Promise.resolve({
@@ -35,7 +36,8 @@ vi.mock('../../../db/db', () => ({
     put: vi.fn(() => Promise.resolve()),
     transaction: vi.fn(() => ({
         objectStore: vi.fn((name) => ({
-            get: vi.fn((id) => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            get: vi.fn((_id) => {
                if (name === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
                if (name === 'static_manifests') return Promise.resolve({
                    bookId: 'test-book-id', title: 'Test Book', author: 'Author',

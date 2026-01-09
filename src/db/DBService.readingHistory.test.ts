@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { dbService } from './DBService';
 import { initDB } from './db';
-import type { ReadingHistoryEntry, UserInventoryItem, UserProgress, UserJourneyStep } from '../types/db';
+import type { UserProgress } from '../types/db';
 import 'fake-indexeddb/auto';
 
 // Mock mergeCfiRanges to ensure it works in this environment

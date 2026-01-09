@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
-import type { ReadingListEntry, StaticBookManifest, UserInventoryItem, UserProgress } from '../types/db';
+import type { StaticBookManifest, UserInventoryItem, UserProgress } from '../types/db';
 
 describe('DBService Reading List', () => {
     beforeEach(async () => {
@@ -32,20 +32,26 @@ describe('DBService Reading List', () => {
             customAuthor: 'Test Author',
             addedAt: 100,
             status: 'reading',
-            lastInteraction: Date.now()
+            lastInteraction: Date.now(),
+            tags: []
         } as UserInventoryItem);
 
         await db.put('user_progress', {
             bookId: 'b1',
             percentage: 0.5,
-            lastRead: 0
+            lastRead: 0,
+            completedRanges: []
         } as UserProgress);
 
         await db.put('static_manifests', {
             bookId: 'b1',
             title: 'Orig Title',
-            author: 'Orig Author'
-        } as any);
+            author: 'Orig Author',
+            schemaVersion: 1,
+            fileHash: 'hash',
+            fileSize: 100,
+            totalChars: 1000
+        } as StaticBookManifest);
 
         const list = await dbService.getReadingList();
 
@@ -72,9 +78,17 @@ describe('DBService Reading List', () => {
         const bookId = 'prog-sync-1';
         const filename = 'prog_sync.epub';
 
-        await db.put('static_manifests', { bookId, title: 'Prog Sync', author: 'Author' } as any);
-        await db.put('user_inventory', { bookId, sourceFilename: filename, customTitle: 'Prog Sync', addedAt: 100, status: 'reading', lastInteraction: 0 } as UserInventoryItem);
-        await db.put('user_progress', { bookId, percentage: 0, lastRead: 0 } as UserProgress);
+        await db.put('static_manifests', {
+            bookId, title: 'Prog Sync', author: 'Author',
+            schemaVersion: 1, fileHash: 'hash', fileSize: 0, totalChars: 0
+        } as StaticBookManifest);
+        await db.put('user_inventory', {
+            bookId, sourceFilename: filename, customTitle: 'Prog Sync', addedAt: 100, status: 'reading', lastInteraction: 0,
+            tags: []
+        } as UserInventoryItem);
+        await db.put('user_progress', {
+            bookId, percentage: 0, lastRead: 0, completedRanges: []
+        } as UserProgress);
 
         dbService.saveProgress(bookId, 'cfi1', 0.45);
 
@@ -106,12 +120,17 @@ describe('DBService Reading List', () => {
         const bookId = 'preserve-1';
         const filename = 'preserve.epub';
 
-        await db.put('static_manifests', { bookId, title: 'Preserve', author: 'Author', isbn: '123' } as any);
+        await db.put('static_manifests', {
+            bookId, title: 'Preserve', author: 'Author', isbn: '123',
+            schemaVersion: 1, fileHash: 'hash', fileSize: 0, totalChars: 0
+        } as StaticBookManifest);
         await db.put('user_inventory', {
             bookId, sourceFilename: filename, addedAt: 100, status: 'reading', lastInteraction: 0,
-            rating: 5
+            rating: 5, tags: []
         } as UserInventoryItem);
-        await db.put('user_progress', { bookId, percentage: 0.1, lastRead: 0 } as UserProgress);
+        await db.put('user_progress', {
+            bookId, percentage: 0.1, lastRead: 0, completedRanges: []
+        } as UserProgress);
 
         // Update progress
         dbService.saveProgress(bookId, 'cfi1', 0.5);

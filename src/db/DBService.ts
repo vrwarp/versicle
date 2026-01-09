@@ -6,6 +6,7 @@ import type {
     TTSState, Annotation, CachedSegment, BookLocations, ContentAnalysis,
     CacheSessionState
 } from '../types/db';
+import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
@@ -301,8 +302,8 @@ class DBService {
       // Delete from index-based stores
       const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
           const store = tx.objectStore(storeName);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const index = store.index(indexName as any);
+          // @ts-expect-error - index() types are tricky with generic strings, casting or expect error is needed
+          const index = store.index(indexName);
           let cursor = await index.openCursor(IDBKeyRange.only(id));
           while (cursor) {
               await cursor.delete();
@@ -650,7 +651,7 @@ class DBService {
       }
   }
 
-  async cacheSegment(key: string, audio: ArrayBuffer, alignment?: any[]): Promise<void> {
+      async cacheSegment(key: string, audio: ArrayBuffer, alignment?: Timepoint[]): Promise<void> {
       try {
           const db = await this.getDB();
           await db.put('cache_audio_blobs', {
@@ -920,13 +921,17 @@ class DBService {
   }
 
   // --- Table Images Operations ---
-  // Table images are now in cache_render_metrics.tableSnapshots or transient.
+  // Table images are now in cache_table_images or transient.
   // Current implementation drops them in migration.
-  // If we need them, we should implement tableSnapshots in CacheRenderMetrics.
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async getTableImages(_bookId: string): Promise<TableImage[]> {
-      return []; // Not implemented in v18
+  async getTableImages(bookId: string): Promise<TableImage[]> {
+      try {
+          const db = await this.getDB();
+          const images = await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId);
+          return images;
+      } catch (error) {
+          this.handleError(error);
+      }
   }
 
   cleanup(): void {

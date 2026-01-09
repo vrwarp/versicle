@@ -419,6 +419,7 @@ export class SyncOrchestrator {
 
         // Reading List (Ghost Items?)
         // If items are in reading list but not in inventory, create ghost items.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for (const _entry of Object.values(manifest.readingList)) {
             // Check if inventory exists by filename?
             // Expensive check without index.
