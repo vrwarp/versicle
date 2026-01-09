@@ -258,11 +258,10 @@ export const initDB = () => {
                });
 
                // B. Static Resource
-               if (file || book.coverBlob) {
+               if (file) {
                    await newResources.put({
                        bookId: book.id,
-                       epubBlob: file as Blob,
-                       coverBlob: book.coverBlob
+                       epubBlob: file as Blob
                    });
                }
 

@@ -46,11 +46,6 @@ export interface StaticResource {
   bookId: string;
   /** The original EPUB file. */
   epubBlob: Blob | ArrayBuffer;
-  /**
-   * The full cover image blob.
-   * Optional if thumbnail in manifest is sufficient, but kept for high-res needs.
-   */
-  coverBlob?: Blob;
 }
 
 /**
@@ -234,8 +229,6 @@ export interface CacheRenderMetrics {
   locations: string;
   /** Page count estimation. */
   pageCount?: number;
-  /** Table snapshots (optional, if we cache them here). */
-  tableSnapshots?: Record<string, Blob>;
 }
 
 /**
