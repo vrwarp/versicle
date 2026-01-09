@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
-import type { StaticBookManifest, UserInventoryItem, UserProgress } from '../types/db';
+import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, StaticStructure } from '../types/db';
 
 describe('DBService Reading List', () => {
     beforeEach(async () => {
@@ -92,8 +92,8 @@ describe('DBService Reading List', () => {
         } as StaticBookManifest);
         // Need store dependent tables to ensure no crash
         await db.put('user_progress', { bookId: 'del-1', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-        await db.put('static_resources', { bookId: 'del-1', epubBlob: new Blob([]) } as any);
-        await db.put('static_structure', { bookId: 'del-1', toc: [], spineItems: [] } as any);
+        await db.put('static_resources', { bookId: 'del-1', epubBlob: new Blob([]) } as StaticResource);
+        await db.put('static_structure', { bookId: 'del-1', toc: [], spineItems: [] } as StaticStructure);
 
         await dbService.deleteReadingListEntry('del.epub');
 
