@@ -161,7 +161,8 @@ export const initDB = () => {
         };
 
         // Cache Table Images - New in v19
-        const tableImages = createStore('cache_table_images', { keyPath: 'id' });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tableImages: any = createStore('cache_table_images', { keyPath: 'id' });
         if (!tableImages.indexNames.contains('by_bookId')) {
              tableImages.createIndex('by_bookId', 'bookId');
         }
