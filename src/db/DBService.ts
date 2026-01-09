@@ -156,10 +156,10 @@ class DBService {
       // Helper to update if changed
       const updateIfChanged = async <T>(storeName: 'books' | 'book_sources' | 'book_states', updates: Partial<T>) => {
           const store = tx.objectStore(storeName);
-          // @ts-ignore
+          // @ts-expect-error - Dynamic store access
           const existing = await store.get(id);
           if (existing && updates && Object.keys(updates).length > 0) {
-              // @ts-ignore
+              // @ts-expect-error - Dynamic store access
               await store.put({ ...existing, ...updates });
           }
       };
@@ -174,9 +174,9 @@ class DBService {
       const stateKeys: (keyof BookState)[] = ['lastRead', 'progress', 'currentCfi', 'lastPlayedCfi', 'lastPauseTime', 'isOffloaded', 'aiAnalysisStatus'];
 
       for (const [key, value] of Object.entries(metadata)) {
-          if (bookKeys.includes(key as keyof Book)) bookUpdates[key as keyof Book] = value as any;
-          if (sourceKeys.includes(key as keyof BookSource)) sourceUpdates[key as keyof BookSource] = value as any;
-          if (stateKeys.includes(key as keyof BookState)) stateUpdates[key as keyof BookState] = value as any;
+          if (bookKeys.includes(key as keyof Book)) bookUpdates[key as keyof Book] = value as unknown as Book[keyof Book];
+          if (sourceKeys.includes(key as keyof BookSource)) sourceUpdates[key as keyof BookSource] = value as unknown as BookSource[keyof BookSource];
+          if (stateKeys.includes(key as keyof BookState)) stateUpdates[key as keyof BookState] = value as unknown as BookState[keyof BookState];
       }
 
       if (Object.keys(bookUpdates).length > 0) await updateIfChanged('books', bookUpdates);

@@ -31,7 +31,7 @@ vi.mock('../../../db/db', () => ({
     put: vi.fn(() => Promise.resolve()), // Mock put for caching locations
     transaction: vi.fn(() => ({
         objectStore: vi.fn((name) => ({
-            get: vi.fn((id) => {
+            get: vi.fn(() => {
                if (name === 'files') return Promise.resolve(new ArrayBuffer(10));
                if (name === 'books') return Promise.resolve({ id: 'test-book-id', title: 'Test Book', author: 'Author' });
                if (name === 'book_sources') return Promise.resolve({ bookId: 'test-book-id', version: CURRENT_BOOK_VERSION });

@@ -328,8 +328,7 @@ export async function processEpub(
       bookId,
       isOffloaded: false,
       progress: 0,
-      status: 'new' // Assuming new status or just omitted
-  } as any; // Cast to any to allow 'status' if we added it, or stick to interface
+  } as BookState;
 
   // Sanitize Book Metadata (Composite validation)
   const candidateComposite = { ...bookData, ...sourceData, ...stateData };
