@@ -286,6 +286,23 @@ export interface CacheTtsPreparation {
   }[];
 }
 
+/**
+ * Represents a snapped image of a table.
+ * Store: 'cache_table_images' (Key: `${bookId}-${cfi}`)
+ */
+export interface TableImage {
+  /** Unique identifier: `${bookId}-${cfi}` */
+  id: string;
+  /** The ID of the book. */
+  bookId: string;
+  /** The section ID (href) where the table is located. */
+  sectionId: string;
+  /** The CFI of the table element. */
+  cfi: string;
+  /** The webp image blob. */
+  imageBlob: Blob;
+}
+
 // --- LEGACY TYPES (For Migration & Backward Compatibility) ---
 
 /**
@@ -604,22 +621,6 @@ export interface TTSContent {
      */
     cfi: string;
   }[];
-}
-
-/**
- * Represents a snapped image of a table.
- */
-export interface TableImage {
-  /** Unique identifier: `${bookId}-${cfi}` */
-  id: string;
-  /** The ID of the book. */
-  bookId: string;
-  /** The section ID (href) where the table is located. */
-  sectionId: string;
-  /** The CFI of the table element. */
-  cfi: string;
-  /** The webp image blob. */
-  imageBlob: Blob;
 }
 
 /**

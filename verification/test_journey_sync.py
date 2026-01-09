@@ -53,9 +53,10 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     # DEBUG: Check DB content on Device A
     db_count = page_a.evaluate("""
         async () => {
-            const db = await window.indexedDB.open('EpubLibraryDB', 18);
+            const req = window.indexedDB.open('EpubLibraryDB', 19);
             return new Promise((resolve, reject) => {
-                db.onsuccess = (event) => {
+                req.onsuccess = (event) => {
+                    const db = event.target.result;
                     const database = event.target.result;
                     const tx = database.transaction(['user_overrides'], 'readonly');
                     const store = tx.objectStore('user_overrides');
@@ -63,7 +64,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
                     request.onsuccess = () => resolve(request.result ? request.result.lexicon.length : 0);
                     request.onerror = () => reject(request.error);
                 };
-                db.onerror = () => reject(db.error);
+                req.onerror = () => reject(req.error);
             });
         }
     """)
@@ -149,9 +150,9 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
         # Check IndexedDB 'user_overrides' store (key: global)
         rule_count = page_b.evaluate("""
             async () => {
-                const db = await window.indexedDB.open('EpubLibraryDB', 18);
+                const req = window.indexedDB.open('EpubLibraryDB', 19);
                 return new Promise((resolve, reject) => {
-                    db.onsuccess = (event) => {
+                    req.onsuccess = (event) => {
                         const database = event.target.result;
                         const tx = database.transaction(['user_overrides'], 'readonly');
                         const store = tx.objectStore('user_overrides');
@@ -159,7 +160,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
                         request.onsuccess = () => resolve(request.result ? request.result.lexicon.length : 0);
                         request.onerror = () => reject(request.error);
                     };
-                    db.onerror = () => reject(db.error);
+                    req.onerror = () => reject(req.error);
                 });
             }
         """)

@@ -22,11 +22,11 @@ def test_orphan_repair(page: Page):
     print("Injecting orphans...")
     # Using window.indexedDB directly because window.idb might not be exposed globally in the bundle
     page.evaluate("""async () => {
-            // Use version 18 (current)
-            const req = window.indexedDB.open('EpubLibraryDB', 18);
+            // Use version 19 (current)
+            const req = window.indexedDB.open('EpubLibraryDB', 19);
         req.onsuccess = (e) => {
             const db = e.target.result;
-            // Updated store names for v18
+            // Updated store names for v19
             const tx = db.transaction(['static_resources', 'user_annotations'], 'readwrite');
 
             // Orphaned File -> static_resources
@@ -91,8 +91,8 @@ def test_orphan_repair(page: Page):
     print("Verifying cleanup...")
     orphans_exist = page.evaluate("""async () => {
         return new Promise((resolve, reject) => {
-            // Use version 18
-            const req = window.indexedDB.open('EpubLibraryDB', 18);
+            // Use version 19
+            const req = window.indexedDB.open('EpubLibraryDB', 19);
             req.onsuccess = (e) => {
                 const db = e.target.result;
                 const tx = db.transaction(['static_resources', 'user_annotations'], 'readonly');
