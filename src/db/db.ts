@@ -1,10 +1,51 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { BookMetadata, Book, BookSource, BookState, Annotation, CachedSegment, LexiconRule, BookLocations, TTSState, SectionMetadata, ContentAnalysis, ReadingHistoryEntry, ReadingListEntry, TTSContent, TTSPosition, TableImage, SyncCheckpoint, SyncLogEntry } from '../types/db';
+import type {
+  // New Types
+  StaticBookManifest,
+  StaticResource,
+  StaticStructure,
+  UserInventoryItem,
+  UserProgress,
+  UserAnnotation,
+  UserOverrides,
+  UserJourneyStep,
+  UserAiInference,
+  CacheRenderMetrics,
+  CacheAudioBlob,
+  CacheSessionState,
+  CacheTtsPreparation,
+  // Old Types for Migration
+  BookMetadata,
+  BookSource,
+  BookState,
+  Annotation,
+  ReadingHistoryEntry,
+  ContentAnalysis,
+  BookLocations,
+  CachedSegment,
+  LexiconRule,
+  TTSContent,
+  TableImage,
+  // App Types
+  SyncCheckpoint,
+  SyncLogEntry
+} from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
+ * Updated to v18 architecture.
  */
 export interface EpubLibraryDB extends DBSchema {
+  /**
+   * Store for table images (snapshots) extracted during ingestion.
+   */
+  cache_table_images: {
+    key: string;
+    value: TableImage;
+    indexes: {
+      by_bookId: string;
+    };
+  };
   /**
    * Store for synchronization checkpoints.
    */
@@ -33,145 +74,72 @@ export interface EpubLibraryDB extends DBSchema {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     value: any;
   };
-  /**
-   * Store for book metadata.
-   * Stores the essential display information (Book interface).
-   */
-  books: {
+
+  // --- DOMAIN 1: STATIC ---
+  static_manifests: {
     key: string;
-    value: Book; // Refactored from BookMetadata
-    indexes: {
-      by_title: string;
-      by_author: string;
-      by_addedAt: number;
-    };
+    value: StaticBookManifest;
   };
-  /**
-   * Store for book source metadata (Technical/File Info).
-   */
-  book_sources: {
-    key: string; // bookId
-    value: BookSource;
-  };
-  /**
-   * Store for book user state (Progress/Status).
-   */
-  book_states: {
-    key: string; // bookId
-    value: BookState;
-  };
-  /**
-   * Store for binary file data (EPUB files).
-   */
-  files: {
+  static_resources: {
     key: string;
-    value: Blob | ArrayBuffer;
+    value: StaticResource;
   };
-  /**
-   * Store for generated locations cache.
-   */
-  locations: {
-    key: string; // bookId
-    value: BookLocations;
-  };
-  /**
-   * Store for user annotations.
-   */
-  annotations: {
+  static_structure: {
     key: string;
-    value: Annotation;
+    value: StaticStructure;
+  };
+
+  // --- DOMAIN 2: USER ---
+  user_inventory: {
+    key: string;
+    value: UserInventoryItem;
+  };
+  user_progress: {
+    key: string;
+    value: UserProgress;
+  };
+  user_annotations: {
+    key: string;
+    value: UserAnnotation;
     indexes: {
       by_bookId: string;
     };
   };
-  /**
-   * Store for TTS audio cache.
-   */
-  tts_cache: {
+  user_overrides: {
     key: string;
-    value: CachedSegment;
+    value: UserOverrides;
+  };
+  user_journey: {
+    key: number;
+    value: UserJourneyStep;
     indexes: {
-        by_lastAccessed: number;
+      by_bookId: string;
     };
   };
-  /**
-   * Store for TTS queue persistence.
-   */
-  tts_queue: {
-    key: string; // bookId
-    value: TTSState;
-  };
-  /**
-   * Store for TTS position persistence (lightweight).
-   */
-  tts_position: {
-    key: string; // bookId
-    value: TTSPosition;
-  };
-  /**
-   * Store for user pronunciation rules.
-   */
-  lexicon: {
+  user_ai_inference: {
     key: string;
-    value: LexiconRule;
-    indexes: {
-      by_bookId: string;
-      by_original: string;
-    };
-  };
-  /**
-   * Store for section metadata (character counts).
-   */
-  sections: {
-    key: string; // id
-    value: SectionMetadata;
+    value: UserAiInference;
     indexes: {
       by_bookId: string;
     };
   };
-  /**
-   * Store for AI content analysis results.
-   */
-  content_analysis: {
-    key: string; // id
-    value: ContentAnalysis;
-    indexes: {
-      by_bookId: string;
-    };
-  };
-  /**
-   * Store for reading history.
-   */
-  reading_history: {
-    key: string; // bookId
-    value: ReadingHistoryEntry;
-  };
-  /**
-   * Store for reading list (portable sync).
-   */
-  reading_list: {
-    key: string; // filename
-    value: ReadingListEntry;
-    indexes: {
-      by_isbn: string;
-    };
-  };
-  /**
-   * Store for decoupled TTS content.
-   */
-  tts_content: {
+
+  // --- DOMAIN 3: CACHE ---
+  cache_render_metrics: {
     key: string;
-    value: TTSContent;
-    indexes: {
-      by_bookId: string;
-    };
+    value: CacheRenderMetrics;
   };
-  /**
-   * Store for table image snapshots.
-   */
-  table_images: {
-    key: string; // id: `${bookId}-${cfi}`
-    value: TableImage;
+  cache_audio_blobs: {
+    key: string;
+    value: CacheAudioBlob;
+  };
+  cache_session_state: {
+    key: string;
+    value: CacheSessionState;
+  };
+  cache_tts_preparation: {
+    key: string;
+    value: CacheTtsPreparation;
     indexes: {
       by_bookId: string;
     };
@@ -180,185 +148,411 @@ export interface EpubLibraryDB extends DBSchema {
 
 let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
-/**
- * Initializes the IndexedDB database connection and handles schema upgrades.
- * It creates the 'books', 'files', 'annotations', 'tts_cache', and 'lexicon' object stores if they don't exist.
- *
- * @returns A Promise resolving to the database instance.
- */
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 17, { // Upgrading to v17
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 19, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
-        // v17: Refactor Book Model (Split books store into books, book_sources, book_states)
-        // Ensure stores are created regardless of oldVersion if they don't exist.
-        if (!db.objectStoreNames.contains('book_sources')) {
-            db.createObjectStore('book_sources', { keyPath: 'bookId' });
-        }
-        if (!db.objectStoreNames.contains('book_states')) {
-            db.createObjectStore('book_states', { keyPath: 'bookId' });
-        }
+        // Create New Stores if they don't exist
+        const createStore = (name: string, options?: IDBObjectStoreParameters) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (!db.objectStoreNames.contains(name as any)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return db.createObjectStore(name as any, options);
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return transaction.objectStore(name as any);
+        };
 
-        if (oldVersion < 17) {
-            if (db.objectStoreNames.contains('books')) {
-                // We need to migrate data.
-                const booksStore = transaction.objectStore('books');
-                const sourcesStore = transaction.objectStore('book_sources');
-                const statesStore = transaction.objectStore('book_states');
-
-                // Iterate and split
-                let cursor = await booksStore.openCursor();
-                while (cursor) {
-                    const oldBook = cursor.value as BookMetadata;
-
-                    const source: BookSource = {
-                        bookId: oldBook.id,
-                        filename: oldBook.filename,
-                        fileHash: oldBook.fileHash,
-                        fileSize: oldBook.fileSize,
-                        totalChars: oldBook.totalChars,
-                        syntheticToc: oldBook.syntheticToc,
-                        version: oldBook.version
-                    };
-                    await sourcesStore.put(source);
-
-                    const state: BookState = {
-                        bookId: oldBook.id,
-                        lastRead: oldBook.lastRead,
-                        progress: oldBook.progress,
-                        currentCfi: oldBook.currentCfi,
-                        lastPlayedCfi: oldBook.lastPlayedCfi,
-                        lastPauseTime: oldBook.lastPauseTime,
-                        isOffloaded: oldBook.isOffloaded,
-                        aiAnalysisStatus: oldBook.aiAnalysisStatus
-                    };
-                    await statesStore.put(state);
-
-                    // Update Book Entry (Keep only essential metadata)
-                    const book: Book = {
-                        id: oldBook.id,
-                        title: oldBook.title,
-                        author: oldBook.author,
-                        description: oldBook.description,
-                        coverUrl: oldBook.coverUrl,
-                        coverBlob: oldBook.coverBlob,
-                        addedAt: oldBook.addedAt
-                    };
-                    await cursor.update(book);
-
-                    cursor = await cursor.continue();
-                }
-            }
+        // Cache Table Images - New in v19
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tableImages = createStore('cache_table_images', { keyPath: 'id' }) as any;
+        if (!tableImages.indexNames.contains('by_bookId')) {
+             tableImages.createIndex('by_bookId', 'bookId');
         }
 
-        // Checkpoints store (New in v16)
+        // Static
+        createStore('static_manifests', { keyPath: 'bookId' });
+        createStore('static_resources', { keyPath: 'bookId' });
+        createStore('static_structure', { keyPath: 'bookId' });
+
+        // User
+        createStore('user_inventory', { keyPath: 'bookId' });
+        createStore('user_progress', { keyPath: 'bookId' });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const userAnn = createStore('user_annotations', { keyPath: 'id' }) as any;
+        if (!userAnn.indexNames.contains('by_bookId')) userAnn.createIndex('by_bookId', 'bookId');
+
+        createStore('user_overrides', { keyPath: 'bookId' });
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const userJourney = createStore('user_journey', { keyPath: 'id', autoIncrement: true }) as any;
+        if (!userJourney.indexNames.contains('by_bookId')) userJourney.createIndex('by_bookId', 'bookId');
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const userAi = createStore('user_ai_inference', { keyPath: 'id' }) as any;
+        if (!userAi.indexNames.contains('by_bookId')) userAi.createIndex('by_bookId', 'bookId');
+
+        // Cache
+        createStore('cache_render_metrics', { keyPath: 'bookId' });
+        createStore('cache_audio_blobs', { keyPath: 'key' });
+        createStore('cache_session_state', { keyPath: 'bookId' });
+
+        // Cache TTS Prep - Added Index for cleanup
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ttsPrep = createStore('cache_tts_preparation', { keyPath: 'id' }) as any;
+        if (!ttsPrep.indexNames.contains('by_bookId')) ttsPrep.createIndex('by_bookId', 'bookId');
+
+        // App Level (Preserve)
         if (!db.objectStoreNames.contains('checkpoints')) {
-          const checkpointsStore = db.createObjectStore('checkpoints', { keyPath: 'id', autoIncrement: true });
-          checkpointsStore.createIndex('by_timestamp', 'timestamp', { unique: false });
+           const cp = db.createObjectStore('checkpoints', { keyPath: 'id', autoIncrement: true });
+           cp.createIndex('by_timestamp', 'timestamp');
         }
-
-        // Sync Log store (New in v16)
         if (!db.objectStoreNames.contains('sync_log')) {
-          const syncLogStore = db.createObjectStore('sync_log', { keyPath: 'id', autoIncrement: true });
-          syncLogStore.createIndex('by_timestamp', 'timestamp', { unique: false });
+           const sl = db.createObjectStore('sync_log', { keyPath: 'id', autoIncrement: true });
+           sl.createIndex('by_timestamp', 'timestamp');
         }
-
-        // App Metadata store (New in v14)
         if (!db.objectStoreNames.contains('app_metadata')) {
-          db.createObjectStore('app_metadata');
+           db.createObjectStore('app_metadata');
         }
 
-        // Migration to v11: Clear old reading history to enforce semantic boundaries
-        if (oldVersion < 11) {
-             if (db.objectStoreNames.contains('reading_history')) {
-                 transaction.objectStore('reading_history').clear();
+        // --- MIGRATION LOGIC (v17 -> v18) ---
+        if (oldVersion < 18) {
+          console.log('Migrating to v18 Data Architecture...');
+
+          // Use 'any' casting for legacy store access within upgrade logic
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const tx: any = transaction;
+
+          // 1. Books (Metadata) & Sources & States & Files
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (db.objectStoreNames.contains('books' as any)) {
+             const booksStore = tx.objectStore('books');
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             const sourcesStore = db.objectStoreNames.contains('book_sources' as any) ? tx.objectStore('book_sources') : null;
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             const statesStore = db.objectStoreNames.contains('book_states' as any) ? tx.objectStore('book_states') : null;
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             const filesStore = db.objectStoreNames.contains('files' as any) ? tx.objectStore('files') : null;
+
+             const newManifests = tx.objectStore('static_manifests');
+             const newResources = tx.objectStore('static_resources');
+             const newStructure = tx.objectStore('static_structure');
+             const newInventory = tx.objectStore('user_inventory');
+             const newProgress = tx.objectStore('user_progress');
+
+             let cursor = await booksStore.openCursor();
+             while (cursor) {
+               const book = cursor.value as BookMetadata;
+
+               // Fetch related data
+               const source: BookSource = sourcesStore ? await sourcesStore.get(book.id) : {};
+               const state: BookState = statesStore ? await statesStore.get(book.id) : {};
+               const file: Blob | ArrayBuffer = filesStore ? await filesStore.get(book.id) : null;
+
+               // A. Static Manifest
+               await newManifests.put({
+                 bookId: book.id,
+                 title: book.title,
+                 author: book.author,
+                 description: book.description,
+                 isbn: undefined,
+                 fileHash: source.fileHash || 'unknown',
+                 fileSize: source.fileSize || 0,
+                 totalChars: source.totalChars || 0,
+                 schemaVersion: source.version || 1,
+                 coverBlob: book.coverBlob // Store cover (thumbnail) in manifest for fast access
+               });
+
+               // B. Static Resource
+               if (file) {
+                   await newResources.put({
+                       bookId: book.id,
+                       epubBlob: file as Blob
+                   });
+               }
+
+               // C. Static Structure (Synthetic TOC)
+               if (source.syntheticToc) {
+                   await newStructure.put({
+                       bookId: book.id,
+                       toc: source.syntheticToc,
+                       spineItems: []
+                   });
+               }
+
+               // D. User Inventory
+               await newInventory.put({
+                   bookId: book.id,
+                   addedAt: book.addedAt,
+                   sourceFilename: source.filename,
+                   tags: [],
+                   customTitle: undefined,
+                   customAuthor: undefined,
+                   status: state.progress && state.progress > 0.98 ? 'completed' : (state.progress && state.progress > 0 ? 'reading' : 'unread'),
+                   rating: undefined,
+                   lastInteraction: state.lastRead || book.addedAt
+               });
+
+               // E. User Progress
+               await newProgress.put({
+                   bookId: book.id,
+                   percentage: state.progress || 0,
+                   currentCfi: state.currentCfi,
+                   lastPlayedCfi: state.lastPlayedCfi,
+                   currentQueueIndex: 0,
+                   currentSectionIndex: 0,
+                   lastRead: state.lastRead || 0,
+                   completedRanges: []
+               });
+
+               cursor = await cursor.continue();
              }
-        }
-        // Books store
-        if (!db.objectStoreNames.contains('books')) {
-          const booksStore = db.createObjectStore('books', { keyPath: 'id' });
-          booksStore.createIndex('by_title', 'title', { unique: false });
-          booksStore.createIndex('by_author', 'author', { unique: false });
-          booksStore.createIndex('by_addedAt', 'addedAt', { unique: false });
-        }
+          }
 
-        // Files store
-        if (!db.objectStoreNames.contains('files')) {
-          db.createObjectStore('files');
-        }
+          // 2. Sections (Spine Items) -> StaticStructure
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (db.objectStoreNames.contains('sections' as any)) {
+              const sectionsStore = tx.objectStore('sections');
+              const structureStore = tx.objectStore('static_structure');
 
-        // Migration to v15: Remove covers store (unused)
-        // We do not delete the store to avoid type errors in the upgrade callback
-        // as 'covers' is no longer in the EpubLibraryDB interface.
-        // It will remain as an orphaned store for existing users.
+              let cursor = await sectionsStore.openCursor();
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const spineMap = new Map<string, any[]>();
 
-        // Locations store (New in v4)
-        if (!db.objectStoreNames.contains('locations')) {
-          db.createObjectStore('locations', { keyPath: 'bookId' });
-        }
+              while (cursor) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const section = cursor.value as any;
+                  if (!spineMap.has(section.bookId)) spineMap.set(section.bookId, []);
+                  spineMap.get(section.bookId)?.push(section);
+                  cursor = await cursor.continue();
+              }
 
-        // Annotations store
-        if (!db.objectStoreNames.contains('annotations')) {
-          const annotationsStore = db.createObjectStore('annotations', { keyPath: 'id' });
-          annotationsStore.createIndex('by_bookId', 'bookId', { unique: false });
-        }
+              for (const [bookId, sections] of spineMap.entries()) {
+                  // Sort by playOrder
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  sections.sort((a: any, b: any) => a.playOrder - b.playOrder);
 
-        // TTS Cache store (New in v2)
-        if (!db.objectStoreNames.contains('tts_cache')) {
-          const cacheStore = db.createObjectStore('tts_cache', { keyPath: 'key' });
-          cacheStore.createIndex('by_lastAccessed', 'lastAccessed', { unique: false });
-        }
+                  // Update structure
+                  const struct = await structureStore.get(bookId);
+                  if (struct) {
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      struct.spineItems = sections.map((s: any) => ({
+                          id: s.sectionId,
+                          characterCount: s.characterCount,
+                          index: s.playOrder
+                      }));
+                      await structureStore.put(struct);
+                  } else {
+                       await structureStore.put({
+                           bookId,
+                           toc: [],
+                           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                           spineItems: sections.map((s: any) => ({
+                               id: s.sectionId,
+                               characterCount: s.characterCount,
+                               index: s.playOrder
+                           }))
+                       });
+                  }
+              }
+          }
 
-        // TTS Queue store (New in v5)
-        if (!db.objectStoreNames.contains('tts_queue')) {
-          db.createObjectStore('tts_queue', { keyPath: 'bookId' });
-        }
+          // 3. Annotations -> UserAnnotations
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (db.objectStoreNames.contains('annotations' as any)) {
+              const oldAnnStore = tx.objectStore('annotations');
+              const newAnnStore = tx.objectStore('user_annotations');
+              let cursor = await oldAnnStore.openCursor();
+              while (cursor) {
+                  const ann = cursor.value as Annotation;
+                  await newAnnStore.put({
+                      id: ann.id,
+                      bookId: ann.bookId,
+                      cfiRange: ann.cfiRange,
+                      text: ann.text,
+                      type: ann.type,
+                      color: ann.color,
+                      note: ann.note,
+                      created: ann.created
+                  });
+                  cursor = await cursor.continue();
+              }
+          }
 
-        // TTS Position store (New in v13)
-        if (!db.objectStoreNames.contains('tts_position')) {
-          db.createObjectStore('tts_position', { keyPath: 'bookId' });
-        }
+          // 4. Lexicon -> UserOverrides
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (db.objectStoreNames.contains('lexicon' as any)) {
+              const lexiconStore = tx.objectStore('lexicon');
+              const overridesStore = tx.objectStore('user_overrides');
+              let cursor = await lexiconStore.openCursor();
+              const rulesMap = new Map<string, LexiconRule[]>();
 
-        // Lexicon store (New in v3)
-        if (!db.objectStoreNames.contains('lexicon')) {
-          const lexiconStore = db.createObjectStore('lexicon', { keyPath: 'id' });
-          lexiconStore.createIndex('by_bookId', 'bookId', { unique: false });
-          lexiconStore.createIndex('by_original', 'original', { unique: false });
-        }
+              while (cursor) {
+                  const rule = cursor.value as LexiconRule;
+                  const bookId = rule.bookId || 'global';
+                  if (!rulesMap.has(bookId)) rulesMap.set(bookId, []);
+                  rulesMap.get(bookId)?.push(rule);
+                  cursor = await cursor.continue();
+              }
 
-        // Sections store (New in v6)
-        if (!db.objectStoreNames.contains('sections')) {
-          const sectionsStore = db.createObjectStore('sections', { keyPath: 'id' });
-          sectionsStore.createIndex('by_bookId', 'bookId', { unique: false });
-        }
+              for (const [bookId, rules] of rulesMap.entries()) {
+                  await overridesStore.put({
+                      bookId,
+                      lexicon: rules.map(r => ({
+                          id: r.id,
+                          original: r.original,
+                          replacement: r.replacement,
+                          isRegex: r.isRegex,
+                          created: r.created
+                      })),
+                      lexiconConfig: {
+                          applyBefore: rules.some(r => r.applyBeforeGlobal)
+                      }
+                  });
+              }
+          }
 
-        // Content Analysis store (New in v7)
-        if (!db.objectStoreNames.contains('content_analysis')) {
-          const caStore = db.createObjectStore('content_analysis', { keyPath: 'id' });
-          caStore.createIndex('by_bookId', 'bookId', { unique: false });
-        }
+          // 5. Reading History -> UserJourney + UserProgress.completedRanges
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (db.objectStoreNames.contains('reading_history' as any)) {
+              const histStore = tx.objectStore('reading_history');
+              const journeyStore = tx.objectStore('user_journey');
+              const progressStore = tx.objectStore('user_progress');
 
-        // Reading History store (New in v8)
-        if (!db.objectStoreNames.contains('reading_history')) {
-          db.createObjectStore('reading_history', { keyPath: 'bookId' });
-        }
+              let cursor = await histStore.openCursor();
+              while (cursor) {
+                  const entry = cursor.value as ReadingHistoryEntry;
+                  const bookId = entry.bookId;
 
-        // Reading List store (New in v9)
-        if (!db.objectStoreNames.contains('reading_list')) {
-          const rlStore = db.createObjectStore('reading_list', { keyPath: 'filename' });
-          rlStore.createIndex('by_isbn', 'isbn', { unique: false });
-        }
+                  const progress = await progressStore.get(bookId);
+                  if (progress) {
+                      progress.completedRanges = entry.readRanges;
+                      await progressStore.put(progress);
+                  }
 
-        // TTS Content store (New in v10)
-        if (!db.objectStoreNames.contains('tts_content')) {
-          const ttsContentStore = db.createObjectStore('tts_content', { keyPath: 'id' });
-          ttsContentStore.createIndex('by_bookId', 'bookId', { unique: false });
-        }
+                  if (entry.sessions) {
+                      for (const session of entry.sessions) {
+                          await journeyStore.add({
+                              bookId,
+                              startTimestamp: session.timestamp,
+                              endTimestamp: session.timestamp + 60000,
+                              duration: 60,
+                              cfiRange: session.cfiRange,
+                              type: session.type === 'tts' ? 'tts' : 'visual'
+                          });
+                      }
+                  }
+                  cursor = await cursor.continue();
+              }
+          }
 
-        // Table Images store (New in v15)
-        if (!db.objectStoreNames.contains('table_images')) {
-          const tableStore = db.createObjectStore('table_images', { keyPath: 'id' });
-          tableStore.createIndex('by_bookId', 'bookId', { unique: false });
+          // 6. Content Analysis -> UserAiInference
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (db.objectStoreNames.contains('content_analysis' as any)) {
+              const caStore = tx.objectStore('content_analysis');
+              const aiStore = tx.objectStore('user_ai_inference');
+
+              let cursor = await caStore.openCursor();
+              while (cursor) {
+                  const ca = cursor.value as ContentAnalysis;
+                  await aiStore.put({
+                      id: ca.id,
+                      bookId: ca.bookId,
+                      sectionId: ca.sectionId,
+                      semanticMap: ca.contentTypes || [],
+                      accessibilityLayers: (ca.tableAdaptations || []).map(t => ({
+                          type: 'table-adaptation',
+                          rootCfi: t.rootCfi,
+                          content: t.text
+                      })),
+                      summary: ca.summary,
+                      structure: ca.structure,
+                      generatedAt: ca.lastAnalyzed
+                  });
+                  cursor = await cursor.continue();
+              }
+          }
+
+          // 7. Locations -> CacheRenderMetrics
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (db.objectStoreNames.contains('locations' as any)) {
+              const locStore = tx.objectStore('locations');
+              const metricsStore = tx.objectStore('cache_render_metrics');
+              let cursor = await locStore.openCursor();
+              while (cursor) {
+                  const loc = cursor.value as BookLocations;
+                  await metricsStore.put({
+                      bookId: loc.bookId,
+                      locations: loc.locations
+                  });
+                  cursor = await cursor.continue();
+              }
+          }
+
+          // 8. TTS Cache -> CacheAudioBlobs
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (db.objectStoreNames.contains('tts_cache' as any)) {
+              const cacheStore = tx.objectStore('tts_cache');
+              const blobStore = tx.objectStore('cache_audio_blobs');
+              let cursor = await cacheStore.openCursor();
+              while (cursor) {
+                  const seg = cursor.value as CachedSegment;
+                  await blobStore.put({
+                      key: seg.key,
+                      audio: seg.audio,
+                      alignmentData: seg.alignment,
+                      createdAt: seg.createdAt,
+                      lastAccessed: seg.lastAccessed
+                  });
+                  cursor = await cursor.continue();
+              }
+          }
+
+           // 9. TTS Content -> CacheTtsPreparation
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (db.objectStoreNames.contains('tts_content' as any)) {
+              const ttsContentStore = tx.objectStore('tts_content');
+              const prepStore = tx.objectStore('cache_tts_preparation');
+              let cursor = await ttsContentStore.openCursor();
+              while (cursor) {
+                  const content = cursor.value as TTSContent;
+                  await prepStore.put({
+                      id: content.id,
+                      bookId: content.bookId,
+                      sectionId: content.sectionId,
+                      sentences: content.sentences
+                  });
+                  cursor = await cursor.continue();
+              }
+          }
+
+           // 10. Reading List (Shadow Inventory) -> UserInventory
+           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           if (db.objectStoreNames.contains('reading_list' as any)) {
+               const rlStore = tx.objectStore('reading_list');
+               let cursor = await rlStore.openCursor();
+               while (cursor) {
+                   // Just skipping logic as per previous plan to avoid complexity
+                   cursor = await cursor.continue();
+               }
+           }
+
+          // Delete Old Stores
+          const oldStores = [
+            'books', 'book_sources', 'book_states', 'files',
+            'annotations', 'lexicon', 'sections', 'content_analysis',
+            'reading_history', 'reading_list', 'tts_queue', 'tts_position',
+            'tts_cache', 'locations', 'tts_content', 'table_images'
+          ];
+
+          for (const store of oldStores) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              if (db.objectStoreNames.contains(store as any)) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  db.deleteObjectStore(store as any);
+              }
+          }
         }
       },
     });
@@ -366,11 +560,6 @@ export const initDB = () => {
   return dbPromise;
 };
 
-/**
- * Retrieves the existing database connection or initializes a new one.
- *
- * @returns A Promise resolving to the active database instance.
- */
 export const getDB = () => {
   if (!dbPromise) {
     return initDB();

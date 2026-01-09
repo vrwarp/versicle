@@ -13,29 +13,42 @@ vi.mock('epubjs');
 vi.mock('../../../db/db', () => ({
   getDB: vi.fn(() => Promise.resolve({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    get: vi.fn((store, id) => {
-      if (store === 'files') return Promise.resolve(new ArrayBuffer(10));
-      // Add 'book_states' and 'book_sources' handling if ReaderView uses DBService directly (it mostly uses db.ts in DBService)
-      // But here we are mocking `getDB` which DBService uses.
-      // ReaderView uses DBService.getBook(id) -> which calls db.get('books', id), db.get('book_sources'), etc.
-      // Wait, ReaderView calls `dbService.getBook(id)` inside `useEffect`.
-      // `dbService.getBook` calls `getDB()` then `transaction`.
+    get: vi.fn((store, _id) => {
+      if (store === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
 
-      // If we are mocking getDB return value:
-      if (store === 'books') return Promise.resolve({ id: 'test-book-id', title: 'Test Book', author: 'Author' });
-      if (store === 'book_sources') return Promise.resolve({ bookId: 'test-book-id', version: CURRENT_BOOK_VERSION });
-      if (store === 'book_states') return Promise.resolve({ bookId: 'test-book-id', progress: 0 });
+      if (store === 'static_manifests') return Promise.resolve({
+          bookId: 'test-book-id', title: 'Test Book', author: 'Author',
+          fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION,
+          coverBlob: new Blob([''])
+      });
+
+      if (store === 'user_inventory') return Promise.resolve({
+          bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
+      });
+
+      if (store === 'user_progress') return Promise.resolve({
+          bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
+      });
+
       return Promise.resolve(null);
     }),
-    getAllFromIndex: vi.fn(() => Promise.resolve([])), // Mock annotations fetch
-    put: vi.fn(() => Promise.resolve()), // Mock put for caching locations
+    getAllFromIndex: vi.fn(() => Promise.resolve([])),
+    put: vi.fn(() => Promise.resolve()),
     transaction: vi.fn(() => ({
         objectStore: vi.fn((name) => ({
-            get: vi.fn((id) => {
-               if (name === 'files') return Promise.resolve(new ArrayBuffer(10));
-               if (name === 'books') return Promise.resolve({ id: 'test-book-id', title: 'Test Book', author: 'Author' });
-               if (name === 'book_sources') return Promise.resolve({ bookId: 'test-book-id', version: CURRENT_BOOK_VERSION });
-               if (name === 'book_states') return Promise.resolve({ bookId: 'test-book-id', progress: 0 });
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            get: vi.fn((_id) => {
+               if (name === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
+               if (name === 'static_manifests') return Promise.resolve({
+                   bookId: 'test-book-id', title: 'Test Book', author: 'Author',
+                   fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION
+               });
+               if (name === 'user_inventory') return Promise.resolve({
+                   bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
+               });
+               if (name === 'user_progress') return Promise.resolve({
+                   bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
+               });
                return Promise.resolve(null);
             }),
             put: vi.fn()

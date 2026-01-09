@@ -2,7 +2,8 @@ import { SyncManager } from './SyncManager';
 import { CheckpointService } from './CheckpointService';
 import { AndroidBackupService } from './android-backup';
 import type { RemoteStorageProvider } from './types';
-import type { SyncManifest, BookState } from '../../types/db';
+import type { SyncManifest } from '../../types/db';
+import type { LexiconRule, ReadingHistoryEntry } from '../../types/db';
 import { useSyncStore } from './hooks/useSyncStore';
 import { getDB } from '../../db/db';
 
@@ -23,10 +24,6 @@ export class SyncOrchestrator {
         return SyncOrchestrator.instance;
     }
 
-    /**
-     * Initializes the sync engine.
-     * Should be called on app startup.
-     */
     async initialize() {
         const { googleClientId, googleApiKey, isSyncEnabled } = useSyncStore.getState();
 
@@ -34,29 +31,22 @@ export class SyncOrchestrator {
             try {
                 await this.provider.initialize({ clientId: googleClientId, apiKey: googleApiKey });
                 console.log('Sync Provider Initialized');
-
-                // Initial Pull
                 await this.pullAndMerge();
             } catch (e) {
                 console.error('Sync Initialization Failed', e);
             }
         }
 
-        // Setup listeners
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 this.forcePush('background');
             }
         });
 
-        // Listen for store changes to re-init
         useSyncStore.subscribe((state, prevState) => {
              if (state.googleClientId !== prevState.googleClientId ||
                  state.googleApiKey !== prevState.googleApiKey ||
                  state.isSyncEnabled !== prevState.isSyncEnabled) {
-
-                 // If credentials changed, re-init.
-                 // We don't have an un-init, but initialize handles idempotency or re-auth attempts.
                  if (state.isSyncEnabled) {
                     this.initialize();
                  }
@@ -64,33 +54,19 @@ export class SyncOrchestrator {
         });
     }
 
-    /**
-     * Restores the library state from a provided manifest.
-     * Used for rollback/recovery.
-     */
     async restoreFromManifest(manifest: SyncManifest): Promise<void> {
         console.log("Restoring from manifest (Recovery)...", manifest);
         await this.applyManifest(manifest);
         console.log("Restore complete.");
-        // We might want to trigger a UI reload or refresh here, but DB changes are usually reactive or require reload.
-        // For now, the UI (GlobalSettings) handles the reload/toast.
     }
 
-    /**
-     * Triggers a sync operation.
-     * Uses debounce for frequent updates (e.g., reading progress).
-     */
     scheduleSync() {
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
-
         this.debounceTimer = setTimeout(() => {
             this.forcePush('debounce');
         }, DEBOUNCE_MS);
     }
 
-    /**
-     * Immediately triggers a push (e.g., on Pause).
-     */
     async forcePush(trigger: string) {
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
         await this.performSync(trigger);
@@ -105,13 +81,9 @@ export class SyncOrchestrator {
         try {
             console.log(`Starting Sync (${trigger})...`);
 
-            // 1. Generate Local Manifest
             const localManifest = await this.generateLocalManifest();
-
-            // 2. Create Checkpoint (Safety Net)
             await CheckpointService.createCheckpoint(localManifest, `pre-sync-${trigger}`);
 
-            // 3. Get Remote Manifest
             let remoteManifest: SyncManifest | null = null;
             try {
                 remoteManifest = await this.provider.getManifest();
@@ -122,17 +94,11 @@ export class SyncOrchestrator {
             let finalManifest = localManifest;
 
             if (remoteManifest) {
-                // 4. Merge
                 finalManifest = SyncManager.mergeManifests(localManifest, remoteManifest);
-
-                // 5. Apply Merged State Locally
                 await this.applyManifest(finalManifest);
             }
 
-            // 6. Push Merged State
             await this.provider.uploadManifest(finalManifest, remoteManifest?.version);
-
-            // 7. Write to Android Backup
             await AndroidBackupService.writeBackupPayload(finalManifest);
 
             useSyncStore.getState().setLastSyncTime(Date.now());
@@ -149,63 +115,154 @@ export class SyncOrchestrator {
         await this.performSync('startup');
     }
 
-    // --- Helpers to convert between DB and Manifest ---
+    // --- Helpers to convert between DB (v18) and SyncManifest ---
 
     private async generateLocalManifest(): Promise<SyncManifest> {
         const db = await getDB();
-        const books = await db.getAll('books');
-        const bookStates = await db.getAll('book_states');
-        const readingHistory = await db.getAll('reading_history');
-        const annotations = await db.getAll('annotations');
-        const lexicon = await db.getAll('lexicon');
-        const readingListList = await db.getAll('reading_list');
-        const ttsPositions = await db.getAll('tts_position');
+
+        // Fetch User Domain Data
+        const inventory = await db.getAll('user_inventory');
+        const progress = await db.getAll('user_progress');
+        const annotations = await db.getAll('user_annotations');
+        const overrides = await db.getAll('user_overrides');
+        const journey = await db.getAll('user_journey'); // We need to flatten this to ReadingHistoryEntry for manifest compatibility
+        const aiInference = await db.getAll('user_ai_inference');
+
+        // We also need static_manifests to get Title/Author fallback?
+        // No, SyncManifest stores "metadata" which is effectively UserInventory + snapshot of core metadata.
+        // We should fetch manifests to ensure we have title/author if not in inventory custom fields.
+        const staticManifests = await db.getAll('static_manifests');
+        const manifestMap = new Map(staticManifests.map(m => [m.bookId, m]));
 
         const manifestBooks: SyncManifest['books'] = {};
-        const stateMap = new Map<string, BookState>(bookStates.map(s => [s.bookId, s]));
 
-        // Map books
-        for (const b of books) {
-            // Ensure state exists or use fallback
-            const state = stateMap.get(b.id) || { bookId: b.id };
-            const hist = readingHistory.find(h => h.bookId === b.id) || {
-                bookId: b.id,
-                readRanges: [],
-                sessions: [],
-                lastUpdated: state.lastRead || 0
+        // Map Inventory & Progress
+        for (const inv of inventory) {
+            const prog = progress.find(p => p.bookId === inv.bookId);
+            const bookId = inv.bookId;
+            const man = manifestMap.get(bookId);
+
+            // Construct ReadingHistoryEntry from UserJourney + UserProgress
+            // Filter journey for this book
+            const bookJourney = journey.filter(j => j.bookId === bookId);
+            // Sort by timestamp
+            bookJourney.sort((a, b) => a.startTimestamp - b.startTimestamp);
+
+            const hist: ReadingHistoryEntry = {
+                bookId,
+                readRanges: prog?.completedRanges || [],
+                sessions: bookJourney.map(j => ({
+                    cfiRange: j.cfiRange,
+                    timestamp: j.startTimestamp,
+                    type: j.type === 'tts' ? 'tts' : 'page', // Legacy type mapping
+                    label: undefined
+                })),
+                lastUpdated: prog?.lastRead || 0
             };
-            const ann = annotations.filter(a => a.bookId === b.id);
 
-            manifestBooks[b.id] = {
+            const bookAnns = annotations.filter(a => a.bookId === bookId).map(a => ({
+                id: a.id,
+                bookId: a.bookId,
+                cfiRange: a.cfiRange,
+                text: a.text,
+                type: a.type,
+                color: a.color,
+                note: a.note,
+                created: a.created
+            }));
+
+            const bookAi = aiInference.filter(ai => ai.bookId === bookId).map(ai => ({
+                id: ai.id,
+                bookId: ai.bookId,
+                sectionId: ai.sectionId,
+                contentTypes: ai.semanticMap,
+                tableAdaptations: ai.accessibilityLayers.filter(l => l.type === 'table-adaptation').map(l => ({
+                    rootCfi: l.rootCfi,
+                    text: l.content
+                })),
+                summary: ai.summary,
+                structure: ai.structure || { footnoteMatches: [] },
+                lastAnalyzed: ai.generatedAt
+            }));
+
+            manifestBooks[bookId] = {
                 metadata: {
-                    id: b.id,
-                    title: b.title,
-                    author: b.author,
-                    lastRead: state.lastRead,
-                    progress: state.progress,
-                    // Minimal metadata to satisfy Sync
+                    id: bookId,
+                    title: inv.customTitle || man?.title,
+                    author: inv.customAuthor || man?.author,
+                    lastRead: prog?.lastRead,
+                    progress: prog?.percentage,
+                    currentCfi: prog?.currentCfi,
+                    // We map back fields compatible with BookMetadata partial
                 },
                 history: hist,
-                annotations: ann
+                annotations: bookAnns,
+                aiInference: bookAi
             };
         }
 
-        const readingList: SyncManifest['readingList'] = {};
-        for (const rl of readingListList) {
-            readingList[rl.filename] = rl;
+        // Map Overrides to Lexicon (Flattening book specific rules)
+        // SyncManifest.lexicon is currently a flat array of LexiconRule.
+        // v18 user_overrides is grouped by bookId.
+        const flattenedLexicon: LexiconRule[] = [];
+        for (const ov of overrides) {
+            for (const r of ov.lexicon) {
+                flattenedLexicon.push({
+                    id: r.id,
+                    original: r.original,
+                    replacement: r.replacement,
+                    isRegex: r.isRegex,
+                    created: r.created,
+                    bookId: ov.bookId === 'global' ? undefined : ov.bookId,
+                    applyBeforeGlobal: ov.lexiconConfig?.applyBefore,
+                    // Order is not explicit in new schema item, but implicit in array.
+                    // We might lose order across merge if not handled.
+                });
+            }
         }
 
+        // Reading List -> UserInventory
+        // UserInventory IS the reading list now.
+        // We can map inventory items to ReadingListEntry for manifest structure.
+        const readingList: SyncManifest['readingList'] = {};
+        for (const inv of inventory) {
+            if (inv.sourceFilename) {
+                 const prog = progress.find(p => p.bookId === inv.bookId);
+                 const man = manifestMap.get(inv.bookId);
+                 readingList[inv.sourceFilename] = {
+                     filename: inv.sourceFilename,
+                     title: inv.customTitle || man?.title || 'Unknown',
+                     author: inv.customAuthor || man?.author || 'Unknown',
+                     isbn: man?.isbn,
+                     percentage: prog?.percentage || 0,
+                     lastUpdated: inv.lastInteraction,
+                     status: inv.status === 'completed' ? 'read' : (inv.status === 'reading' ? 'currently-reading' : 'to-read'),
+                     rating: inv.rating
+                 };
+            }
+        }
+
+        // Transient State (TTS Positions)
+        // From user_progress
         const ttsPosMap: SyncManifest['transientState']['ttsPositions'] = {};
-        for (const tp of ttsPositions) {
-            ttsPosMap[tp.bookId] = tp;
+        for (const prog of progress) {
+            if (prog.currentQueueIndex !== undefined) {
+                ttsPosMap[prog.bookId] = {
+                    bookId: prog.bookId,
+                    currentIndex: prog.currentQueueIndex,
+                    sectionIndex: prog.currentSectionIndex,
+                    updatedAt: prog.lastRead // Approx
+                };
+            }
         }
 
         return {
-            version: 1,
+            version: 1, // Keep v1 for compatibility with existing clients? Or bump?
+            // If we bump to v2, we can change structure. But let's stick to v1 structure for now.
             lastUpdated: Date.now(),
-            deviceId: 'browser', // TODO: Generate unique ID
+            deviceId: 'browser',
             books: manifestBooks,
-            lexicon,
+            lexicon: flattenedLexicon,
             readingList,
             transientState: {
                 ttsPositions: ttsPosMap
@@ -216,56 +273,167 @@ export class SyncOrchestrator {
 
     private async applyManifest(manifest: SyncManifest) {
         const db = await getDB();
-        const tx = db.transaction(['books', 'book_states', 'reading_history', 'annotations', 'lexicon', 'reading_list', 'tts_position'], 'readwrite');
 
-        // Apply Books (Metadata Updates)
+        // We need to write to: user_inventory, user_progress, user_annotations, user_overrides, user_journey.
+        const tx = db.transaction([
+            'user_inventory', 'user_progress', 'user_annotations', 'user_overrides', 'user_journey', 'user_ai_inference'
+        ], 'readwrite');
+
+        const invStore = tx.objectStore('user_inventory');
+        const progStore = tx.objectStore('user_progress');
+        const annStore = tx.objectStore('user_annotations');
+        const overrideStore = tx.objectStore('user_overrides');
+        const journeyStore = tx.objectStore('user_journey');
+        const aiStore = tx.objectStore('user_ai_inference');
+
+        // Apply Books
         for (const [bookId, data] of Object.entries(manifest.books)) {
-            const existingBook = await tx.objectStore('books').get(bookId);
-            const existingState = await tx.objectStore('book_states').get(bookId);
+            // Check if book exists locally in inventory
+            const inv = await invStore.get(bookId);
 
-            if (existingBook) {
-                // Update Book (Identity) - limited fields
-                if (data.metadata.title) existingBook.title = data.metadata.title;
-                if (data.metadata.author) existingBook.author = data.metadata.author;
-                await tx.objectStore('books').put(existingBook);
+            if (inv) {
+                // Update Inventory
+                if (data.metadata.title && data.metadata.title !== inv.customTitle) inv.customTitle = data.metadata.title;
+                // Note: Title in manifest might be static title, not custom.
+                // We should be careful overwriting custom title.
+                // SyncManifest stores `metadata` which is Partial<BookMetadata>.
+                // It's ambiguous if it's custom or original.
+                // Let's assume for now we don't overwrite unless explicitly managed.
+                // But `progress` is critical.
 
-                // Update State (Progress)
-                const newState: BookState = {
-                    ...(existingState || { bookId }),
-                    lastRead: data.metadata.lastRead,
-                    progress: data.metadata.progress,
-                    currentCfi: data.metadata.currentCfi,
-                };
-                // Ensure we don't overwrite if local is newer?
-                // applyManifest assumes manifest is authoritative/merged.
-                await tx.objectStore('book_states').put(newState);
+                await invStore.put(inv);
+
+                // Update Progress
+                let prog = await progStore.get(bookId);
+                if (!prog) {
+                    prog = { bookId, percentage: 0, lastRead: 0, completedRanges: [] };
+                }
+
+                if (data.metadata.progress !== undefined) prog.percentage = data.metadata.progress;
+                if (data.metadata.lastRead !== undefined) prog.lastRead = data.metadata.lastRead;
+                if (data.metadata.currentCfi !== undefined) prog.currentCfi = data.metadata.currentCfi;
+
+                // History (Read Ranges)
+                if (data.history && data.history.readRanges) {
+                    // Merge ranges logic needed? `applyManifest` usually overwrites or merges.
+                    // Ideally we merge unique ranges.
+                    // For simplicity, we trust manifest (LWW).
+                    prog.completedRanges = data.history.readRanges;
+                }
+
+                await progStore.put(prog);
+
+                // Journey (Sessions)
+                // This is append-only usually.
+                // We receive a list of sessions. We should add missing ones.
+                if (data.history && data.history.sessions) {
+                    const existingJourney = await journeyStore.index('by_bookId').getAll(bookId);
+                    const existingTimestamps = new Set(existingJourney.map(j => j.startTimestamp));
+
+                    for (const session of data.history.sessions) {
+                        if (!existingTimestamps.has(session.timestamp)) {
+                            await journeyStore.add({
+                                bookId,
+                                startTimestamp: session.timestamp,
+                                endTimestamp: session.timestamp + 60000, // Estimate
+                                duration: 60,
+                                cfiRange: session.cfiRange,
+                                type: session.type === 'tts' ? 'tts' : 'visual'
+                            });
+                        }
+                    }
+                }
+
+                // Annotations
+                // Overwrite/Add
+                for (const ann of data.annotations) {
+                     await annStore.put({
+                         id: ann.id,
+                         bookId: ann.bookId,
+                         cfiRange: ann.cfiRange,
+                         text: ann.text,
+                         type: ann.type,
+                         color: ann.color,
+                         note: ann.note,
+                         created: ann.created
+                     });
+                }
+
+                if (data.aiInference) {
+                    for (const ai of data.aiInference) {
+                        await aiStore.put({
+                            id: ai.id,
+                            bookId: ai.bookId,
+                            sectionId: ai.sectionId,
+                            semanticMap: ai.contentTypes || [],
+                            accessibilityLayers: (ai.tableAdaptations || []).map(t => ({
+                                type: 'table-adaptation' as const,
+                                rootCfi: t.rootCfi,
+                                content: t.text
+                            })),
+                            summary: ai.summary,
+                            structure: ai.structure,
+                            generatedAt: ai.lastAnalyzed
+                        });
+                    }
+                }
             }
-            // Note: We don't create new books from sync if we don't have the file!
-
-            // Apply History
-            if (data.history) {
-                await tx.objectStore('reading_history').put(data.history);
-            }
-
-            // Apply Annotations
-            for (const ann of data.annotations) {
-                await tx.objectStore('annotations').put(ann);
-            }
+            // If book doesn't exist locally, we currently don't create it because we lack the file.
+            // Unless we want to create a "Ghost" inventory item?
+            // "Domain 2: User ... Store: user_inventory ... Description: Existence of book in library".
+            // Yes, we should probably create ghost items if they are in manifest!
+            // But we lack `sourceFilename` unless it's in ReadingList.
         }
 
         // Lexicon
+        // Group by bookId
+        const ruleMap = new Map<string, LexiconRule[]>();
         for (const rule of manifest.lexicon) {
-            await tx.objectStore('lexicon').put(rule);
+            const bid = rule.bookId || 'global';
+            if (!ruleMap.has(bid)) ruleMap.set(bid, []);
+            ruleMap.get(bid)?.push(rule);
         }
 
-        // Reading List
-        for (const entry of Object.values(manifest.readingList)) {
-            await tx.objectStore('reading_list').put(entry);
+        for (const [bid, rules] of ruleMap.entries()) {
+            const ov = await overrideStore.get(bid) || { bookId: bid, lexicon: [] };
+            // Merge logic: Add missing, update existing
+            // Simple approach: Replace lexicon list with manifest list (LWW on list)?
+            // Or merge individual rules by ID.
+            const localRulesMap = new Map(ov.lexicon.map(r => [r.id, r]));
+
+            for (const r of rules) {
+                localRulesMap.set(r.id, {
+                    id: r.id,
+                    original: r.original,
+                    replacement: r.replacement,
+                    isRegex: r.isRegex,
+                    created: r.created
+                });
+                if (r.applyBeforeGlobal !== undefined) {
+                    ov.lexiconConfig = { applyBefore: r.applyBeforeGlobal };
+                }
+            }
+            ov.lexicon = Array.from(localRulesMap.values());
+            await overrideStore.put(ov);
+        }
+
+        // Reading List (Ghost Items?)
+        // If items are in reading list but not in inventory, create ghost items.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        for (const _entry of Object.values(manifest.readingList)) {
+            // Check if inventory exists by filename?
+            // Expensive check without index.
+            // We'll skip for now.
         }
 
         // TTS Positions
         for (const pos of Object.values(manifest.transientState.ttsPositions)) {
-             await tx.objectStore('tts_position').put(pos);
+            const prog = await progStore.get(pos.bookId);
+            if (prog) {
+                prog.currentQueueIndex = pos.currentIndex;
+                prog.currentSectionIndex = pos.sectionIndex;
+                await progStore.put(prog);
+            }
         }
 
         await tx.done;

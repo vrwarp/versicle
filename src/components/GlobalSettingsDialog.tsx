@@ -252,14 +252,19 @@ export const GlobalSettingsDialog = () => {
     const handleClearAllData = async () => {
         if (confirm("Are you sure you want to delete ALL data? This includes books, annotations, and settings.")) {
             dbService.cleanup();
-            // Clear IndexedDB
+            // Clear IndexedDB (v18 stores)
             const db = await getDB();
-            await db.clear('books');
-            await db.clear('files');
-            await db.clear('annotations');
-            await db.clear('tts_cache');
-            await db.clear('lexicon');
-            await db.clear('locations');
+            await db.clear('static_manifests');
+            await db.clear('static_resources');
+            await db.clear('static_structure');
+            await db.clear('user_inventory');
+            await db.clear('user_progress');
+            await db.clear('user_annotations');
+            await db.clear('user_overrides');
+            await db.clear('cache_render_metrics');
+            await db.clear('cache_audio_blobs');
+            await db.clear('cache_session_state');
+            await db.clear('cache_tts_preparation');
 
             // Clear LocalStorage
             localStorage.clear();

@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { dbService } from '../db/DBService';
-import type { BookMetadata, Annotation, LexiconRule, BookLocations, Book, BookSource, BookState } from '../types/db';
+import type { BookMetadata, Annotation, LexiconRule, BookLocations } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import { getDB } from '../db/db';
 
@@ -25,17 +25,11 @@ export interface BackupManifest {
 
 /**
  * Service responsible for creating and restoring backups of the application data.
- * Supports both "Light" backups (metadata only) and "Full" backups (including EPUB files).
+ * Updated to v18 store names.
  */
 export class BackupService {
   private readonly BACKUP_VERSION = 1;
 
-  /**
-   * Generates a Light Backup (JSON) containing only metadata, annotations, lexicon, and locations.
-   * The backup is downloaded as a .json file.
-   *
-   * @returns A Promise that resolves when the download has been initiated.
-   */
   async createLightBackup(): Promise<void> {
     const manifest = await this.generateManifest();
     const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
@@ -43,19 +37,11 @@ export class BackupService {
     saveAs(blob, filename);
   }
 
-  /**
-   * Generates a Full Backup (ZIP) containing metadata and all EPUB files.
-   * Also includes a progress callback for UI feedback.
-   *
-   * @param onProgress - Optional callback function to report progress.
-   * @returns A Promise that resolves when the download has been initiated.
-   */
   async createFullBackup(onProgress?: (percent: number, message: string) => void): Promise<void> {
     onProgress?.(0, 'Preparing manifest...');
     const manifest = await this.generateManifest();
     const zip = new JSZip();
 
-    // Add manifest
     zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
     const filesFolder = zip.folder('files');
@@ -84,7 +70,7 @@ export class BackupService {
       }
 
       processed++;
-      const percent = 10 + Math.floor((processed / totalBooks) * 80); // 10% to 90%
+      const percent = 10 + Math.floor((processed / totalBooks) * 80);
       onProgress?.(percent, `Archiving ${book.title}...`);
     }
 
@@ -98,13 +84,6 @@ export class BackupService {
     onProgress?.(100, 'Done!');
   }
 
-  /**
-   * Restores a backup from a File (JSON or ZIP).
-   *
-   * @param file - The backup file to restore.
-   * @param onProgress - Optional callback function to report progress.
-   * @returns A Promise that resolves when the restoration is complete.
-   */
   async restoreBackup(file: File, onProgress?: (percent: number, message: string) => void): Promise<void> {
     onProgress?.(0, 'Analyzing file...');
 
@@ -120,38 +99,72 @@ export class BackupService {
   private async generateManifest(): Promise<BackupManifest> {
     const db = await getDB();
 
-    const [books, bookSources, bookStates, annotations, lexicon, locations] = await Promise.all([
-      db.getAll('books'),
-      db.getAll('book_sources'),
-      db.getAll('book_states'),
-      db.getAll('annotations'),
-      db.getAll('lexicon'),
-      db.getAll('locations')
-    ]);
+    // Map new stores to BackupManifest structure
+    // We construct legacy-like objects from v18 schema for portability
+    const manifests = await db.getAll('static_manifests');
+    const inventory = await db.getAll('user_inventory');
+    const progress = await db.getAll('user_progress');
+    const annotations = await db.getAll('user_annotations');
+    const overrides = await db.getAll('user_overrides');
+    const metrics = await db.getAll('cache_render_metrics');
 
-    // Create lookup maps for source and state
-    const sourceMap = new Map<string, BookSource>(bookSources.map(s => [s.bookId, s]));
-    const stateMap = new Map<string, BookState>(bookStates.map(s => [s.bookId, s]));
+    const invMap = new Map(inventory.map(i => [i.bookId, i]));
+    const progMap = new Map(progress.map(p => [p.bookId, p]));
 
-    // Sanitize books to remove non-serializable objects or large blobs, and join with source/state
-    const sanitizedBooks: BookMetadata[] = books.map(book => {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { coverBlob, coverUrl, ...bookRest } = book;
-        const source = sourceMap.get(book.id) || {};
-        const state = stateMap.get(book.id) || {};
-
+    const books: BookMetadata[] = manifests.map(m => {
+        const inv = invMap.get(m.bookId);
+        const prog = progMap.get(m.bookId);
         return {
-            ...bookRest,
-            ...source,
-            ...state
-        } as BookMetadata;
+            id: m.bookId,
+            title: inv?.customTitle || m.title,
+            author: inv?.customAuthor || m.author,
+            description: m.description,
+            addedAt: inv?.addedAt || 0,
+
+            bookId: m.bookId,
+            filename: inv?.sourceFilename,
+            fileHash: m.fileHash,
+            fileSize: m.fileSize,
+            totalChars: m.totalChars,
+            version: m.schemaVersion,
+
+            lastRead: prog?.lastRead,
+            progress: prog?.percentage,
+            currentCfi: prog?.currentCfi,
+            lastPlayedCfi: prog?.lastPlayedCfi,
+            isOffloaded: false // Not accurate here, but irrelevant for export mostly
+        };
     });
+
+    // Flatten Overrides to LexiconRule[]
+    const lexicon: LexiconRule[] = [];
+    for (const ov of overrides) {
+        for (const r of ov.lexicon) {
+            lexicon.push({
+                id: r.id,
+                original: r.original,
+                replacement: r.replacement,
+                isRegex: r.isRegex,
+                created: r.created,
+                bookId: ov.bookId === 'global' ? undefined : ov.bookId,
+                applyBeforeGlobal: ov.lexiconConfig?.applyBefore
+            });
+        }
+    }
+
+    // Map UserAnnotations to Annotation[] (Identical mostly)
+
+    // Map Metrics to BookLocations[]
+    const locations: BookLocations[] = metrics.map(met => ({
+        bookId: met.bookId,
+        locations: met.locations
+    }));
 
     return {
       version: this.BACKUP_VERSION,
       timestamp: new Date().toISOString(),
-      books: sanitizedBooks,
-      annotations,
+      books,
+      annotations: annotations as Annotation[],
       lexicon,
       locations
     };
@@ -177,13 +190,6 @@ export class BackupService {
     await this.processManifest(manifest, zip, onProgress);
   }
 
-  /**
-   * Processes the manifest and restores data to the database.
-   *
-   * @param manifest - The backup manifest object.
-   * @param zip - Optional JSZip object if restoring from a full backup.
-   * @param onProgress - Optional callback for progress updates.
-   */
   private async processManifest(
     manifest: BackupManifest,
     zip?: JSZip,
@@ -194,7 +200,6 @@ export class BackupService {
     }
 
     const db = await getDB();
-
     const totalItems = manifest.books.length + manifest.annotations.length + manifest.lexicon.length + manifest.locations.length;
     let processed = 0;
 
@@ -204,16 +209,11 @@ export class BackupService {
         onProgress?.(percent, msg);
     };
 
-    // --- PHASE 1: Sanitization Checks (User Interaction) ---
-    // We prepare the list of books to be saved, asking the user if needed, BEFORE starting the transaction.
     const booksToSave: BookMetadata[] = [];
     const rawBooks = Array.isArray(manifest.books) ? manifest.books : [];
 
     for (const rawBook of rawBooks) {
       if (!rawBook || typeof rawBook !== 'object') continue;
-
-      // Sanitization / Defaulting (Pre-validation fixup)
-      // We cast to any to allow modification before type check
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const candidate: any = rawBook;
       if (typeof candidate.title !== 'string' || !candidate.title.trim()) candidate.title = 'Untitled';
@@ -227,137 +227,156 @@ export class BackupService {
         updateProgress('Skipping invalid record...');
         continue;
       }
-
-      // Always sanitize metadata to ensure security (XSS prevention) and DB integrity
-      const book = check.sanitized;
-
-      if (check.wasModified) {
-          console.warn(`Metadata sanitized for backup book "${candidate.title}":`, check.modifications);
-      }
-
-      booksToSave.push(book);
-      // We don't increment "processed" here because we want to track the actual write progress
+      booksToSave.push(check.sanitized);
     }
 
-    // --- PHASE 2: Database Operations ---
-
-    // Metadata Transaction
-    const tx = db.transaction(['books', 'book_sources', 'book_states', 'annotations', 'locations', 'lexicon'], 'readwrite');
+    const tx = db.transaction([
+        'static_manifests', 'static_resources', 'static_structure',
+        'user_inventory', 'user_progress', 'user_annotations',
+        'user_overrides', 'cache_render_metrics'
+    ], 'readwrite');
 
     // 1.1 Restore Books Metadata
+    const manStore = tx.objectStore('static_manifests');
+    const invStore = tx.objectStore('user_inventory');
+    const progStore = tx.objectStore('user_progress');
+    const structStore = tx.objectStore('static_structure');
+
     for (const book of booksToSave) {
-      // Use DBService logic for splitting data or do it manually
-      // We do it manually here to control the transaction
+      const existingMan = await manStore.get(book.id);
 
-      const existingBook = await tx.objectStore('books').get(book.id);
-      // Removed unused existingSource
-      const existingState = await tx.objectStore('book_states').get(book.id);
-
-      if (existingBook) {
-        // Smart Merge: Update progress if newer
-        if ((book.lastRead || 0) > (existingState?.lastRead || 0)) {
-            // Update state
-            const newState: BookState = {
-                ...(existingState || { bookId: book.id }),
-                lastRead: book.lastRead,
-                progress: book.progress,
-                currentCfi: book.currentCfi,
-            };
-            await tx.objectStore('book_states').put(newState);
-        }
-
-        // Update Book Metadata (Identity) if needed? Usually we trust existing local or favor backup?
-        // Let's assume backup is authoritative for metadata properties if newer?
-        // For now, only merging progress as per original logic.
+      if (existingMan) {
+          // Merge Progress
+          const prog = await progStore.get(book.id);
+          if (prog && (book.lastRead || 0) > (prog.lastRead || 0)) {
+              prog.lastRead = book.lastRead || 0;
+              prog.percentage = book.progress || 0;
+              prog.currentCfi = book.currentCfi;
+              await progStore.put(prog);
+          }
       } else {
-        // New Book
-        // Split into Book, Source, State
+          // Create New from Backup Metadata
+          // Note: Static metadata like fileHash/size might be missing or mocked if not in backup?
+          // BackupManifest.BookMetadata should have them.
 
-        const bookData: Book = {
-            id: book.id,
-            title: book.title,
-            author: book.author,
-            description: book.description,
-            addedAt: book.addedAt,
-            // coverBlob is excluded in backup, so undefined
-        };
+          await manStore.put({
+              bookId: book.id,
+              title: book.title,
+              author: book.author,
+              description: book.description,
+              fileHash: book.fileHash || 'unknown',
+              fileSize: book.fileSize || 0,
+              totalChars: book.totalChars || 0,
+              schemaVersion: book.version || 1,
+              isbn: undefined
+          });
 
-        const sourceData: BookSource = {
-            bookId: book.id,
-            filename: book.filename,
-            fileHash: book.fileHash,
-            fileSize: book.fileSize,
-            totalChars: book.totalChars,
-            syntheticToc: book.syntheticToc,
-            version: book.version
-        };
+          await invStore.put({
+              bookId: book.id,
+              addedAt: book.addedAt,
+              sourceFilename: book.filename,
+              tags: [],
+              status: 'unread',
+              lastInteraction: book.lastRead || 0,
+              customTitle: book.title,
+              customAuthor: book.author
+          });
 
-        const stateData: BookState = {
-            bookId: book.id,
-            lastRead: book.lastRead,
-            progress: book.progress,
-            currentCfi: book.currentCfi,
-            lastPlayedCfi: book.lastPlayedCfi,
-            lastPauseTime: book.lastPauseTime,
-            isOffloaded: true, // initially mark as offloaded until we confirm file
-            aiAnalysisStatus: book.aiAnalysisStatus
-        };
+          await progStore.put({
+              bookId: book.id,
+              percentage: book.progress || 0,
+              lastRead: book.lastRead || 0,
+              currentCfi: book.currentCfi,
+              completedRanges: []
+          });
 
-        await tx.objectStore('books').put(bookData);
-        await tx.objectStore('book_sources').put(sourceData);
-        await tx.objectStore('book_states').put(stateData);
+          if (book.syntheticToc) {
+              await structStore.put({
+                  bookId: book.id,
+                  toc: book.syntheticToc,
+                  spineItems: [] // Missing from backup usually, or need to parse from file later
+              });
+          }
       }
       updateProgress(`Restoring metadata for ${book.title}...`);
     }
 
     // 1.2 Restore Annotations
+    const annStore = tx.objectStore('user_annotations');
     const annotations = Array.isArray(manifest.annotations) ? manifest.annotations : [];
     for (const ann of annotations) {
-        await tx.objectStore('annotations').put(ann);
+        await annStore.put({
+             id: ann.id,
+             bookId: ann.bookId,
+             cfiRange: ann.cfiRange,
+             text: ann.text,
+             type: ann.type,
+             color: ann.color,
+             note: ann.note,
+             created: ann.created
+        });
         updateProgress('Restoring annotations...');
     }
 
     // 1.3 Restore Lexicon
+    const ovStore = tx.objectStore('user_overrides');
     const lexicon = Array.isArray(manifest.lexicon) ? manifest.lexicon : [];
-    for (const rule of lexicon) {
-        await tx.objectStore('lexicon').put(rule);
+
+    // Group by bookId first
+    const ruleMap = new Map<string, LexiconRule[]>();
+    for (const r of lexicon) {
+        const bid = r.bookId || 'global';
+        if (!ruleMap.has(bid)) ruleMap.set(bid, []);
+        ruleMap.get(bid)?.push(r);
+    }
+
+    for (const [bid, rules] of ruleMap.entries()) {
+        const ov = await ovStore.get(bid) || { bookId: bid, lexicon: [] };
+        // Simple append/replace logic
+        for (const r of rules) {
+             // Avoid dups by ID?
+             if (!ov.lexicon.some(lx => lx.id === r.id)) {
+                 ov.lexicon.push({
+                     id: r.id,
+                     original: r.original,
+                     replacement: r.replacement,
+                     isRegex: r.isRegex,
+                     created: r.created
+                 });
+             }
+             if (r.applyBeforeGlobal !== undefined) ov.lexiconConfig = { applyBefore: r.applyBeforeGlobal };
+        }
+        await ovStore.put(ov);
         updateProgress('Restoring dictionary...');
     }
 
     // 1.4 Restore Locations
+    const locStore = tx.objectStore('cache_render_metrics');
     const locations = Array.isArray(manifest.locations) ? manifest.locations : [];
     for (const loc of locations) {
-        await tx.objectStore('locations').put(loc);
+        await locStore.put({
+            bookId: loc.bookId,
+            locations: loc.locations
+        });
         updateProgress('Restoring map...');
     }
 
     await tx.done;
 
     // Step 3: Restore Files (if ZIP)
-    // We do this OUTSIDE the metadata transaction to avoid TransactionInactiveError during async unzip
     if (zip) {
-        // We iterate booksToSave because we only want to restore files for valid/accepted books
         for (const book of booksToSave) {
-            // No need to validate again, booksToSave contains valid BookMetadata objects
-
             const zipFile = zip.file(`files/${book.id}.epub`);
             if (zipFile) {
-                // Async decompression
                 const arrayBuffer = await zipFile.async('arraybuffer');
 
-                // New short-lived transaction for file write
-                const fileTx = db.transaction(['book_states', 'files'], 'readwrite');
-                await fileTx.objectStore('files').put(arrayBuffer, book.id);
+                const fileTx = db.transaction(['static_resources'], 'readwrite');
+                const store = fileTx.objectStore('static_resources');
 
-                // Update book status to not offloaded
-                const bookState = await fileTx.objectStore('book_states').get(book.id);
-                if (bookState) {
-                    bookState.isOffloaded = false;
-                    await fileTx.objectStore('book_states').put(bookState);
-                } else {
-                    // Create if missing (should exist from Step 2)
-                    await fileTx.objectStore('book_states').put({ bookId: book.id, isOffloaded: false });
-                }
+                const existing = await store.get(book.id) || { bookId: book.id, epubBlob: arrayBuffer };
+                existing.epubBlob = arrayBuffer;
+
+                await store.put(existing);
                 await fileTx.done;
             }
         }

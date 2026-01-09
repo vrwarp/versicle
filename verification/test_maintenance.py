@@ -22,17 +22,21 @@ def test_orphan_repair(page: Page):
     print("Injecting orphans...")
     # Using window.indexedDB directly because window.idb might not be exposed globally in the bundle
     page.evaluate("""async () => {
-            // Use version 17 as we upgraded the DB
-            const req = window.indexedDB.open('EpubLibraryDB', 17);
+            // Use version 19 (current)
+            const req = window.indexedDB.open('EpubLibraryDB', 19);
         req.onsuccess = (e) => {
             const db = e.target.result;
-            const tx = db.transaction(['files', 'annotations'], 'readwrite');
+            // Updated store names for v19
+            const tx = db.transaction(['static_resources', 'user_annotations'], 'readwrite');
 
-            // Orphaned File
-            tx.objectStore('files').put(new ArrayBuffer(10), 'orphan-book-id');
+            // Orphaned File -> static_resources
+            tx.objectStore('static_resources').put({
+                bookId: 'orphan-book-id',
+                epubBlob: new ArrayBuffer(10)
+            });
 
-            // Orphaned Annotation
-            tx.objectStore('annotations').put({
+            // Orphaned Annotation -> user_annotations
+            tx.objectStore('user_annotations').put({
                 id: 'orphan-note',
                 bookId: 'orphan-book-id',
                 cfiRange: 'epubcfi(/6/2!/4/2)',
@@ -87,21 +91,21 @@ def test_orphan_repair(page: Page):
     print("Verifying cleanup...")
     orphans_exist = page.evaluate("""async () => {
         return new Promise((resolve, reject) => {
-            // Use version 17 as we upgraded the DB
-            const req = window.indexedDB.open('EpubLibraryDB', 17);
+            // Use version 19
+            const req = window.indexedDB.open('EpubLibraryDB', 19);
             req.onsuccess = (e) => {
                 const db = e.target.result;
-                const tx = db.transaction(['files', 'annotations'], 'readonly');
+                const tx = db.transaction(['static_resources', 'user_annotations'], 'readonly');
 
                 let fileExists = false;
                 let annExists = false;
 
-                const fileReq = tx.objectStore('files').get('orphan-book-id');
+                const fileReq = tx.objectStore('static_resources').get('orphan-book-id');
                 fileReq.onsuccess = () => {
                     if (fileReq.result) fileExists = true;
                 };
 
-                const annReq = tx.objectStore('annotations').get('orphan-note');
+                const annReq = tx.objectStore('user_annotations').get('orphan-note');
                 annReq.onsuccess = () => {
                     if (annReq.result) annExists = true;
                 };

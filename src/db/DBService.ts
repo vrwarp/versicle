@@ -1,9 +1,16 @@
 import { getDB } from './db';
-import type { BookMetadata, Book, BookSource, BookState, Annotation, CachedSegment, BookLocations, TTSState, ContentAnalysis, ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, TTSContent, SectionMetadata, TTSPosition, TableImage } from '../types/db';
+import type {
+    BookMetadata,
+    ReadingListEntry, ReadingHistoryEntry, ReadingEventType, TTSContent, SectionMetadata, TableImage,
+    // Legacy / Composite Types used in Service Layer
+    TTSState, Annotation, CachedSegment, BookLocations, ContentAnalysis,
+    CacheSessionState,
+    UserInventoryItem
+} from '../types/db';
+import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { processEpub, generateFileFingerprint } from '../lib/ingestion';
-import { validateBookMetadata } from './validators';
 import { mergeCfiRanges } from '../lib/cfi-utils';
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
@@ -34,44 +41,61 @@ class DBService {
 
   /**
    * Retrieves all books in the library.
-   * Joins data from 'books' (metadata) and 'book_states' (user progress).
-   *
-   * @returns A Promise resolving to an array of valid BookMetadata objects (Composite).
+   * JOINS: static_manifests, user_inventory, user_progress
    */
   async getLibrary(): Promise<BookMetadata[]> {
     try {
       const db = await this.getDB();
 
-      // Fetch both stores in parallel
-      const [books, states] = await Promise.all([
-          db.getAll('books'),
-          db.getAll('book_states')
+      const [manifests, inventory, progress] = await Promise.all([
+          db.getAll('static_manifests'),
+          db.getAll('user_inventory'),
+          db.getAll('user_progress')
       ]);
 
-      // Create a map of states for O(1) lookup
-      const stateMap = new Map<string, BookState>(states.map(s => [s.bookId, s]));
+      const invMap = new Map(inventory.map(i => [i.bookId, i]));
+      const progMap = new Map(progress.map(p => [p.bookId, p]));
 
       const library: BookMetadata[] = [];
 
-      for (const book of books) {
-          const state = stateMap.get(book.id) || {};
+      for (const man of manifests) {
+          const inv = invMap.get(man.bookId);
+          const prog = progMap.get(man.bookId);
 
-          // Construct the composite object
-          // Note: BookSource is not fetched for the list view to stay lightweight
+          if (!inv) continue;
+
           const composite: BookMetadata = {
-              ...book,
-              ...state
+              // Book Interface
+              id: man.bookId,
+              title: inv.customTitle || man.title,
+              author: inv.customAuthor || man.author,
+              description: man.description,
+              coverUrl: undefined, // Needs blob, managed by UI/SW
+              coverBlob: man.coverBlob, // Thumbnail is now in manifest
+              addedAt: inv.addedAt,
+              // BookSource Interface
+              bookId: man.bookId,
+              filename: inv.sourceFilename,
+              fileHash: man.fileHash,
+              fileSize: man.fileSize,
+              totalChars: man.totalChars,
+              version: man.schemaVersion,
+              // BookState Interface
+              lastRead: prog?.lastRead,
+              progress: prog?.percentage,
+              currentCfi: prog?.currentCfi,
+              lastPlayedCfi: prog?.lastPlayedCfi,
+              isOffloaded: false // Placeholder, see logic below
           };
-
-          // Validate
-          // We apply the same validation logic as before to ensure no corrupted data leaks into the UI.
-          const isValid = validateBookMetadata(composite);
-          if (!isValid) {
-            Logger.error('DBService', 'DB Integrity: Found corrupted book record', composite);
-            continue;
-          }
-
           library.push(composite);
+      }
+
+      // Optimization for isOffloaded: Get all keys from static_resources
+      const resourceKeys = await db.getAllKeys('static_resources');
+      const resourceSet = new Set(resourceKeys);
+
+      for (const book of library) {
+          book.isOffloaded = !resourceSet.has(book.id);
       }
 
       return library.sort((a, b) => b.addedAt - a.addedAt);
@@ -82,31 +106,44 @@ class DBService {
 
   /**
    * Retrieves a specific book and its file content.
-   *
-   * @param id - The unique identifier of the book.
-   * @returns A Promise resolving to an object containing metadata and file content.
    */
   async getBook(id: string): Promise<{ metadata: BookMetadata | undefined; file: Blob | ArrayBuffer | undefined }> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files'], 'readonly');
+      const tx = db.transaction(['static_manifests', 'static_resources', 'user_inventory', 'user_progress'], 'readonly');
 
-      const book = await tx.objectStore('books').get(id);
-      const source = await tx.objectStore('book_sources').get(id);
-      const state = await tx.objectStore('book_states').get(id);
-      const file = await tx.objectStore('files').get(id);
+      const manifest = await tx.objectStore('static_manifests').get(id);
+      const resource = await tx.objectStore('static_resources').get(id);
+      const inventory = await tx.objectStore('user_inventory').get(id);
+      const progress = await tx.objectStore('user_progress').get(id);
 
       await tx.done;
 
-      if (!book) return { metadata: undefined, file: undefined };
+      if (!manifest || !inventory) return { metadata: undefined, file: undefined };
 
       const metadata: BookMetadata = {
-          ...book,
-          ...(source || {}),
-          ...(state || {})
+          id: manifest.bookId,
+          title: inventory.customTitle || manifest.title,
+          author: inventory.customAuthor || manifest.author,
+          description: manifest.description,
+          coverBlob: manifest.coverBlob, // Use thumbnail
+          addedAt: inventory.addedAt,
+
+          bookId: manifest.bookId,
+          filename: inventory.sourceFilename,
+          fileHash: manifest.fileHash,
+          fileSize: manifest.fileSize,
+          totalChars: manifest.totalChars,
+          version: manifest.schemaVersion,
+
+          lastRead: progress?.lastRead,
+          progress: progress?.percentage,
+          currentCfi: progress?.currentCfi,
+          lastPlayedCfi: progress?.lastPlayedCfi,
+          isOffloaded: !resource?.epubBlob
       };
 
-      return { metadata, file };
+      return { metadata, file: resource?.epubBlob };
     } catch (error) {
       this.handleError(error);
     }
@@ -114,27 +151,42 @@ class DBService {
 
   /**
    * Retrieves only the metadata for a specific book.
-   *
-   * @param id - The unique identifier of the book.
-   * @returns A Promise resolving to the BookMetadata or undefined if not found.
    */
   async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readonly');
+          const tx = db.transaction(['static_manifests', 'static_resources', 'user_inventory', 'user_progress'], 'readonly');
 
-          const book = await tx.objectStore('books').get(id);
-          const source = await tx.objectStore('book_sources').get(id);
-          const state = await tx.objectStore('book_states').get(id);
+          const manifest = await tx.objectStore('static_manifests').get(id);
+          // Check existence of resource for isOffloaded
+          const resourceKey = await tx.objectStore('static_resources').getKey(id);
+          const inventory = await tx.objectStore('user_inventory').get(id);
+          const progress = await tx.objectStore('user_progress').get(id);
 
           await tx.done;
 
-          if (!book) return undefined;
+          if (!manifest || !inventory) return undefined;
 
           return {
-              ...book,
-              ...(source || {}),
-              ...(state || {})
+              id: manifest.bookId,
+              title: inventory.customTitle || manifest.title,
+              author: inventory.customAuthor || manifest.author,
+              description: manifest.description,
+              coverBlob: manifest.coverBlob, // Use thumbnail
+              addedAt: inventory.addedAt,
+
+              bookId: manifest.bookId,
+              filename: inventory.sourceFilename,
+              fileHash: manifest.fileHash,
+              fileSize: manifest.fileSize,
+              totalChars: manifest.totalChars,
+              version: manifest.schemaVersion,
+
+              lastRead: progress?.lastRead,
+              progress: progress?.percentage,
+              currentCfi: progress?.currentCfi,
+              lastPlayedCfi: progress?.lastPlayedCfi,
+              isOffloaded: !resourceKey
           };
       } catch (error) {
           this.handleError(error);
@@ -143,45 +195,30 @@ class DBService {
 
   /**
    * Updates only the metadata for a specific book.
-   * Handles splitting updates to appropriate stores.
-   *
-   * @param id - The unique identifier of the book.
-   * @param metadata - The partial metadata to update.
    */
   async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readwrite');
+      const tx = db.transaction(['user_inventory', 'user_progress'], 'readwrite');
 
-      // Helper to update if changed
-      const updateIfChanged = async <T>(storeName: 'books' | 'book_sources' | 'book_states', updates: Partial<T>) => {
-          const store = tx.objectStore(storeName);
-          // @ts-ignore
-          const existing = await store.get(id);
-          if (existing && updates && Object.keys(updates).length > 0) {
-              // @ts-ignore
-              await store.put({ ...existing, ...updates });
-          }
-      };
+      const invStore = tx.objectStore('user_inventory');
+      const progStore = tx.objectStore('user_progress');
 
-      // Split metadata
-      const bookUpdates: Partial<Book> = {};
-      const sourceUpdates: Partial<BookSource> = {};
-      const stateUpdates: Partial<BookState> = {};
+      const inventory = await invStore.get(id);
+      const progress = await progStore.get(id);
 
-      const bookKeys: (keyof Book)[] = ['title', 'author', 'description', 'coverUrl', 'coverBlob', 'addedAt'];
-      const sourceKeys: (keyof BookSource)[] = ['filename', 'fileHash', 'fileSize', 'totalChars', 'syntheticToc', 'version'];
-      const stateKeys: (keyof BookState)[] = ['lastRead', 'progress', 'currentCfi', 'lastPlayedCfi', 'lastPauseTime', 'isOffloaded', 'aiAnalysisStatus'];
-
-      for (const [key, value] of Object.entries(metadata)) {
-          if (bookKeys.includes(key as keyof Book)) bookUpdates[key as keyof Book] = value as any;
-          if (sourceKeys.includes(key as keyof BookSource)) sourceUpdates[key as keyof BookSource] = value as any;
-          if (stateKeys.includes(key as keyof BookState)) stateUpdates[key as keyof BookState] = value as any;
+      if (inventory) {
+          if (metadata.title) inventory.customTitle = metadata.title;
+          if (metadata.author) inventory.customAuthor = metadata.author;
+          await invStore.put(inventory);
       }
 
-      if (Object.keys(bookUpdates).length > 0) await updateIfChanged('books', bookUpdates);
-      if (Object.keys(sourceUpdates).length > 0) await updateIfChanged('book_sources', sourceUpdates);
-      if (Object.keys(stateUpdates).length > 0) await updateIfChanged('book_states', stateUpdates);
+      if (progress) {
+          if (metadata.progress !== undefined) progress.percentage = metadata.progress;
+          if (metadata.lastRead !== undefined) progress.lastRead = metadata.lastRead;
+          if (metadata.currentCfi !== undefined) progress.currentCfi = metadata.currentCfi;
+          await progStore.put(progress);
+      }
 
       await tx.done;
     } catch (error) {
@@ -191,30 +228,33 @@ class DBService {
 
   /**
    * Retrieves the file content for a specific book.
-   *
-   * @param id - The unique identifier of the book.
-   * @returns A Promise resolving to the file content (Blob or ArrayBuffer) or undefined.
    */
   async getBookFile(id: string): Promise<Blob | ArrayBuffer | undefined> {
       try {
           const db = await this.getDB();
-          return await db.get('files', id);
+          const res = await db.get('static_resources', id);
+          return res?.epubBlob;
       } catch (error) {
           this.handleError(error);
       }
   }
 
   /**
-   * Retrieves all sections for a book, ordered by playOrder.
-   *
-   * @param bookId - The book ID.
-   * @returns A Promise resolving to an array of SectionMetadata.
+   * Retrieves all sections for a book.
    */
   async getSections(bookId: string): Promise<SectionMetadata[]> {
       try {
           const db = await this.getDB();
-          const sections = await db.getAllFromIndex('sections', 'by_bookId', bookId);
-          return sections.sort((a, b) => a.playOrder - b.playOrder);
+          const structure = await db.get('static_structure', bookId);
+          if (!structure) return [];
+
+          return structure.spineItems.map(item => ({
+              id: `${bookId}-${item.id}`,
+              bookId: bookId,
+              sectionId: item.id,
+              characterCount: item.characterCount,
+              playOrder: item.index
+          })).sort((a, b) => a.playOrder - b.playOrder);
       } catch (error) {
           this.handleError(error);
       }
@@ -222,10 +262,6 @@ class DBService {
 
   /**
    * Adds a new book to the library.
-   *
-   * @param file - The EPUB file to add.
-   * @param ttsOptions - Optional TTS extraction settings.
-   * @returns A Promise that resolves when the book is added.
    */
   async addBook(
     file: File,
@@ -240,70 +276,47 @@ class DBService {
   }
 
   /**
-   * Deletes a book and all associated data (files, annotations, etc.) from the library.
-   *
-   * @param id - The unique identifier of the book to delete.
-   * @returns A Promise that resolves when the book is deleted.
+   * Deletes a book and all associated data.
    */
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'], 'readwrite');
+      // Delete from all stores
+      const tx = db.transaction([
+          'static_manifests', 'static_resources', 'static_structure',
+          'user_inventory', 'user_progress', 'user_annotations',
+          'user_overrides', 'user_journey', 'user_ai_inference',
+          'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation'
+      ], 'readwrite');
 
       await Promise.all([
-          tx.objectStore('books').delete(id),
-          tx.objectStore('book_sources').delete(id),
-          tx.objectStore('book_states').delete(id),
-          tx.objectStore('files').delete(id),
-          tx.objectStore('locations').delete(id),
-          tx.objectStore('tts_queue').delete(id),
-          tx.objectStore('tts_position').delete(id),
+          tx.objectStore('static_manifests').delete(id),
+          tx.objectStore('static_resources').delete(id),
+          tx.objectStore('static_structure').delete(id),
+          tx.objectStore('user_inventory').delete(id),
+          tx.objectStore('user_progress').delete(id),
+          tx.objectStore('user_overrides').delete(id),
+          tx.objectStore('cache_render_metrics').delete(id),
+          tx.objectStore('cache_session_state').delete(id),
       ]);
 
-      // Delete annotations
-      const annotationStore = tx.objectStore('annotations');
-      const annotationIndex = annotationStore.index('by_bookId');
-      let annotationCursor = await annotationIndex.openCursor(IDBKeyRange.only(id));
-      while (annotationCursor) {
-        await annotationCursor.delete();
-        annotationCursor = await annotationCursor.continue();
-      }
+      // Delete from index-based stores
+      const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
+          const store = tx.objectStore(storeName);
+          // @ts-expect-error - index() types are tricky with generic strings, casting or expect error is needed
+          const index = store.index(indexName);
+          let cursor = await index.openCursor(IDBKeyRange.only(id));
+          while (cursor) {
+              await cursor.delete();
+              cursor = await cursor.continue();
+          }
+      };
 
-      // Delete lexicon rules
-      const lexiconStore = tx.objectStore('lexicon');
-      const lexiconIndex = lexiconStore.index('by_bookId');
-      let lexiconCursor = await lexiconIndex.openCursor(IDBKeyRange.only(id));
-      while (lexiconCursor) {
-        await lexiconCursor.delete();
-        lexiconCursor = await lexiconCursor.continue();
-      }
-
-      // Delete content analysis
-      const analysisStore = tx.objectStore('content_analysis');
-      const analysisIndex = analysisStore.index('by_bookId');
-      let analysisCursor = await analysisIndex.openCursor(IDBKeyRange.only(id));
-      while (analysisCursor) {
-        await analysisCursor.delete();
-        analysisCursor = await analysisCursor.continue();
-      }
-
-      // Delete TTS content
-      const ttsContentStore = tx.objectStore('tts_content');
-      const ttsContentIndex = ttsContentStore.index('by_bookId');
-      let ttsContentCursor = await ttsContentIndex.openCursor(IDBKeyRange.only(id));
-      while (ttsContentCursor) {
-        await ttsContentCursor.delete();
-        ttsContentCursor = await ttsContentCursor.continue();
-      }
-
-      // Delete table images
-      const tableStore = tx.objectStore('table_images');
-      const tableIndex = tableStore.index('by_bookId');
-      let tableCursor = await tableIndex.openCursor(IDBKeyRange.only(id));
-      while (tableCursor) {
-        await tableCursor.delete();
-        tableCursor = await tableCursor.continue();
-      }
+      await deleteFromIndex('user_annotations', 'by_bookId');
+      await deleteFromIndex('user_journey', 'by_bookId');
+      await deleteFromIndex('user_ai_inference', 'by_bookId');
+      // Added index support for cache_tts_preparation
+      await deleteFromIndex('cache_tts_preparation', 'by_bookId');
 
       await tx.done;
     } catch (error) {
@@ -312,62 +325,16 @@ class DBService {
   }
 
   /**
-   * Offloads a book's file content to save space, keeping metadata and user data.
-   *
-   * @param id - The unique identifier of the book to offload.
-   * @returns A Promise that resolves when the book is offloaded.
+   * Offloads a book's file content.
    */
   async offloadBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files'], 'readwrite');
+      const tx = db.transaction(['static_resources', 'static_manifests'], 'readwrite');
 
-      const bookStore = tx.objectStore('books');
-      const sourceStore = tx.objectStore('book_sources');
-      const stateStore = tx.objectStore('book_states');
-
-      const book = await bookStore.get(id);
-      const source = await sourceStore.get(id);
-      const state = await stateStore.get(id);
-
-      if (!book) throw new Error('Book not found');
-
-      // If missing hash in source, calculate fingerprint from existing file before deleting
-      if (!source?.fileHash) {
-        const fileStore = tx.objectStore('files');
-        const fileData = await fileStore.get(id);
-        if (fileData) {
-          const blob = fileData instanceof Blob ? fileData : new Blob([fileData]);
-          const fileHash = await generateFileFingerprint(blob, {
-            title: book.title,
-            author: book.author,
-            filename: source?.filename || 'unknown.epub'
-          });
-
-          if (source) {
-              source.fileHash = fileHash;
-              await sourceStore.put(source);
-          } else {
-              // Create source if missing (unlikely)
-              await sourceStore.put({
-                  bookId: id,
-                  fileHash,
-                  filename: 'unknown.epub'
-              });
-          }
-        }
-      }
-
-      // Update state
-      if (state) {
-          state.isOffloaded = true;
-          await stateStore.put(state);
-      } else {
-          await stateStore.put({ bookId: id, isOffloaded: true });
-      }
-
-      // Delete file
-      await tx.objectStore('files').delete(id);
+      const resStore = tx.objectStore('static_resources');
+      // Delete the record entire to signal offloading (so getKey returns undefined)
+      await resStore.delete(id);
 
       await tx.done;
     } catch (error) {
@@ -376,65 +343,34 @@ class DBService {
   }
 
   /**
-   * Restores an offloaded book using a provided file.
-   * Verifies the file hash against the stored hash.
-   *
-   * @param id - The unique identifier of the book to restore.
-   * @param file - The EPUB file to restore from.
-   * @returns A Promise that resolves when the book is restored.
+   * Restores an offloaded book.
    */
   async restoreBook(id: string, file: File): Promise<void> {
     try {
       const db = await this.getDB();
 
-      // 1. Fetch metadata needed (read-only first, implicit or explicit)
-      let book: Book | undefined;
-      let source: BookSource | undefined;
-      let state: BookState | undefined;
+      const manifest = await db.get('static_manifests', id);
+      if (!manifest) throw new Error('Book metadata not found');
 
-      {
-        const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readonly');
-        book = await tx.objectStore('books').get(id);
-        source = await tx.objectStore('book_sources').get(id);
-        state = await tx.objectStore('book_states').get(id);
-        await tx.done;
-      }
-
-      if (!book) throw new Error('Book not found');
-
-      // 2. Perform async/expensive operation outside transaction
+      // Verify Hash
       const newFingerprint = await generateFileFingerprint(file, {
-        title: book.title,
-        author: book.author,
+        title: manifest.title,
+        author: manifest.author,
         filename: file.name
       });
 
-      if (source?.fileHash && source.fileHash !== newFingerprint) {
+      if (manifest.fileHash && manifest.fileHash !== newFingerprint) {
         throw new Error('File verification failed: Fingerprint mismatch.');
       }
 
-      // 3. Start write transaction to update DB
-      const tx = db.transaction(['book_sources', 'book_states', 'files'], 'readwrite');
-
-      // Update source if hash was missing
-      if (!source?.fileHash) {
-         const newSource = source ? { ...source } : { bookId: id, filename: file.name };
-         newSource.fileHash = newFingerprint;
-         await tx.objectStore('book_sources').put(newSource as BookSource);
-      }
-
-      // Store File (Blob)
-      await tx.objectStore('files').put(file, id);
-
-      // Update state
-      if (state) {
-          state.isOffloaded = false;
-          await tx.objectStore('book_states').put(state);
-      } else {
-          await tx.objectStore('book_states').put({ bookId: id, isOffloaded: false });
-      }
-
+      // Store File
+      const tx = db.transaction(['static_resources'], 'readwrite');
+      const store = tx.objectStore('static_resources');
+      const resource = await store.get(id) || { bookId: id, epubBlob: file };
+      resource.epubBlob = file;
+      await store.put(resource);
       await tx.done;
+
     } catch (error) {
       this.handleError(error);
     }
@@ -445,14 +381,6 @@ class DBService {
   private saveProgressTimeout: NodeJS.Timeout | null = null;
   private pendingProgress: { [key: string]: { cfi: string; progress: number } } = {};
 
-  /**
-   * Saves reading progress. Debounced to prevent frequent DB writes.
-   * Only updates 'book_states'.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param cfi - The Canonical Fragment Identifier (CFI) representing the current location.
-   * @param progress - The progress percentage (0.0 to 1.0).
-   */
   saveProgress(bookId: string, cfi: string, progress: number): void {
       this.pendingProgress[bookId] = { cfi, progress };
 
@@ -465,205 +393,182 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              // Include 'reading_list' and 'files' in the transaction
-              const tx = db.transaction(['books', 'book_sources', 'book_states', 'reading_list', 'files'], 'readwrite');
-              const bookStore = tx.objectStore('books');
-              const sourceStore = tx.objectStore('book_sources');
-              const stateStore = tx.objectStore('book_states');
-              const rlStore = tx.objectStore('reading_list');
-              const fileStore = tx.objectStore('files');
+              const tx = db.transaction(['user_progress', 'user_inventory'], 'readwrite');
+              const progStore = tx.objectStore('user_progress');
+              const invStore = tx.objectStore('user_inventory');
 
               for (const [id, data] of Object.entries(pending)) {
-                  const book = await bookStore.get(id);
-                  let state = await stateStore.get(id);
-                  const source = await sourceStore.get(id);
+                  let userProg = await progStore.get(id);
+                  if (!userProg) {
+                      // Should exist, but handle edge case
+                      userProg = {
+                          bookId: id, percentage: 0, lastRead: Date.now(), completedRanges: []
+                      };
+                  }
+                  userProg.currentCfi = data.cfi;
+                  userProg.percentage = data.progress;
+                  userProg.lastRead = Date.now();
+                  await progStore.put(userProg);
 
-                  if (book) {
-                      if (!state) {
-                          state = { bookId: id };
-                      }
-                      state.currentCfi = data.cfi;
-                      state.progress = data.progress;
-                      state.lastRead = Date.now();
-                      await stateStore.put(state);
-
-                      // Update Reading List Logic
-                      let filename = source?.filename;
-                      if (!filename) {
-                          // Try to recover filename from file store if missing
-                          try {
-                              const fileData = await fileStore.get(id);
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              if (fileData instanceof File || (fileData && (fileData as any).name)) {
-                                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                  filename = (fileData instanceof File) ? fileData.name : (fileData as any).name;
-                                  // Update source metadata
-                                  if (source) {
-                                      source.filename = filename;
-                                      await sourceStore.put(source);
-                                  } else {
-                                      await sourceStore.put({ bookId: id, filename });
-                                  }
-                              }
-                          } catch (e) {
-                              // Ignore file fetch errors
-                              Logger.warn('DBService', 'Failed to fetch file for filename recovery', e);
-                          }
-                      }
-
-                      if (filename) {
-                           // Fetch existing entry to preserve fields like rating/isbn that aren't in book metadata
-                           const existingEntry = await rlStore.get(filename);
-
-                           const entry: ReadingListEntry = {
-                               filename: filename,
-                               title: book.title,
-                               author: book.author,
-                               isbn: existingEntry?.isbn,
-                               rating: existingEntry?.rating,
-                               percentage: data.progress,
-                               lastUpdated: Date.now(),
-                               status: data.progress > 0.98 ? 'read' : 'currently-reading'
-                           };
-                           await rlStore.put(entry);
-                      }
+                  // Update Inventory Status
+                  const inv = await invStore.get(id);
+                  if (inv) {
+                      inv.lastInteraction = Date.now();
+                      if (data.progress > 0.98) inv.status = 'completed';
+                      else if (inv.status !== 'completed') inv.status = 'reading';
+                      await invStore.put(inv);
                   }
               }
               await tx.done;
           } catch (error) {
               Logger.error('DBService', 'Failed to save progress', error);
-              // We don't throw here to avoid interrupting the user flow,
-              // but we might want to surface this via a global error handler eventually.
           }
-      }, 1000); // 1 second debounce
+      }, 1000);
   }
 
-  // --- Reading List Operations ---
+  // --- Reading List Operations (Legacy/Mapped) ---
+  // Mapping UserInventory to ReadingListEntry for backward compatibility
 
-  /**
-   * Retrieves all entries in the reading list.
-   *
-   * @returns A Promise resolving to an array of ReadingListEntry objects.
-   */
   async getReadingList(): Promise<ReadingListEntry[]> {
     try {
       const db = await this.getDB();
-      return await db.getAll('reading_list');
+      const inventory = await db.getAll('user_inventory');
+      const manifests = await db.getAll('static_manifests');
+      const progress = await db.getAll('user_progress');
+
+      const manMap = new Map(manifests.map(m => [m.bookId, m]));
+      const progMap = new Map(progress.map(p => [p.bookId, p]));
+
+      return inventory.map(inv => {
+          const man = manMap.get(inv.bookId);
+          const prog = progMap.get(inv.bookId);
+          return {
+              filename: inv.sourceFilename || 'unknown',
+              title: inv.customTitle || man?.title || 'Unknown',
+              author: inv.customAuthor || man?.author || 'Unknown',
+              isbn: man?.isbn,
+              percentage: prog?.percentage || 0,
+              lastUpdated: inv.lastInteraction,
+              status: inv.status === 'completed' ? 'read' : (inv.status === 'reading' ? 'currently-reading' : 'to-read'),
+              rating: inv.rating
+          };
+      });
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Updates or adds a reading list entry.
-   *
-   * @param entry - The reading list entry to upsert.
-   */
   async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.put('reading_list', entry);
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
+      // Scan user_inventory for sourceFilename matches
+      const tx = db.transaction(['user_inventory', 'user_progress'], 'readwrite');
+      const invStore = tx.objectStore('user_inventory');
+      const progStore = tx.objectStore('user_progress');
 
-  /**
-   * Deletes a reading list entry.
-   *
-   * @param filename - The filename of the entry to delete.
-   */
-  async deleteReadingListEntry(filename: string): Promise<void> {
-    try {
-      const db = await this.getDB();
-      await db.delete('reading_list', filename);
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
+      let bookId: string | undefined;
+      let inventoryItem: UserInventoryItem | undefined;
 
-  /**
-   * Deletes multiple reading list entries.
-   *
-   * @param filenames - The filenames of the entries to delete.
-   */
-  async deleteReadingListEntries(filenames: string[]): Promise<void> {
-    try {
-      const db = await this.getDB();
-      const tx = db.transaction('reading_list', 'readwrite');
-      const store = tx.objectStore('reading_list');
+      let cursor = await invStore.openCursor();
+      while (cursor) {
+        if (cursor.value.sourceFilename === entry.filename) {
+          bookId = cursor.value.bookId;
+          inventoryItem = cursor.value;
+          break;
+        }
+        cursor = await cursor.continue();
+      }
 
-      await Promise.all(filenames.map(filename => store.delete(filename)));
+      if (bookId && inventoryItem) {
+        // Update Inventory
+        inventoryItem.customTitle = entry.title;
+        inventoryItem.customAuthor = entry.author;
+        inventoryItem.rating = entry.rating;
+        inventoryItem.lastInteraction = entry.lastUpdated;
+
+        // Map status
+        if (entry.status === 'read') inventoryItem.status = 'completed';
+        else if (entry.status === 'currently-reading') inventoryItem.status = 'reading';
+        else if (entry.status === 'to-read') inventoryItem.status = 'unread';
+
+        await invStore.put(inventoryItem);
+
+        // Update Progress
+        const prog = await progStore.get(bookId) || {
+          bookId, percentage: 0, lastRead: Date.now(), completedRanges: []
+        };
+        prog.percentage = entry.percentage;
+        prog.lastRead = entry.lastUpdated;
+        await progStore.put(prog);
+      } else {
+        Logger.warn('DBService', `Skipping upsertReadingListEntry: Book not found for filename ${entry.filename}`);
+      }
+
       await tx.done;
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Imports reading list entries and syncs progress to books.
-   *
-   * @param entries - The list of entries to import.
-   */
-  async importReadingList(entries: ReadingListEntry[]): Promise<void> {
-      try {
-          const db = await this.getDB();
-          const tx = db.transaction(['reading_list', 'book_sources', 'book_states'], 'readwrite');
-          const rlStore = tx.objectStore('reading_list');
-          const sourceStore = tx.objectStore('book_sources');
-          const stateStore = tx.objectStore('book_states');
-
-          // 1. Bulk upsert to reading_list
-          for (const entry of entries) {
-              await rlStore.put(entry);
-          }
-
-          // 2. Reconciliation with books (via sources which have filename)
-          // Iterate book_sources to find matches by filename
-          // Note: iterating all sources might be slow if library is huge, but it's likely fine.
-          let cursor = await sourceStore.openCursor();
-          while (cursor) {
-              const source = cursor.value;
-              if (source.filename) {
-                  const rlEntry = await rlStore.get(source.filename);
-                  if (rlEntry) {
-                      const state = await stateStore.get(source.bookId) || { bookId: source.bookId };
-
-                      if (rlEntry.percentage > (state.progress || 0)) {
-                          state.progress = rlEntry.percentage;
-                          state.lastRead = Date.now();
-                          await stateStore.put(state);
-                      }
-                  }
-              }
-              cursor = await cursor.continue();
-          }
-
-          await tx.done;
-      } catch (error) {
-          this.handleError(error);
+  async deleteReadingListEntry(filename: string): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const inv = await db.getAll('user_inventory');
+      const target = inv.find(i => i.sourceFilename === filename);
+      if (target) {
+        await this.deleteBook(target.bookId);
+      } else {
+        Logger.warn('DBService', `Cannot delete entry: Book not found for filename ${filename}`);
       }
+    } catch (error) {
+      this.handleError(error);
+    }
   }
 
-  /**
-   * Updates the last playback state for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param lastPlayedCfi - Optional CFI of the last played segment.
-   * @param lastPauseTime - Optional timestamp of when playback was paused.
-   * @returns A Promise that resolves when the state is updated.
-   */
+  async deleteReadingListEntries(filenames: string[]): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const inv = await db.getAll('user_inventory');
+      const set = new Set(filenames);
+      const targets = inv.filter(i => i.sourceFilename && set.has(i.sourceFilename));
+
+      for (const target of targets) {
+        await this.deleteBook(target.bookId);
+      }
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async importReadingList(entries: ReadingListEntry[]): Promise<void> {
+    for (const entry of entries) {
+      await this.upsertReadingListEntry(entry);
+    }
+  }
+
+  // --- Playback State ---
+
   async updatePlaybackState(bookId: string, lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction('book_states', 'readwrite');
-          const store = tx.objectStore('book_states');
-          const state = await store.get(bookId) || { bookId };
+          const tx = db.transaction(['user_progress', 'cache_session_state'], 'readwrite');
 
-          if (lastPlayedCfi !== undefined) state.lastPlayedCfi = lastPlayedCfi;
-          if (lastPauseTime !== undefined) state.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
+          if (lastPlayedCfi !== undefined) {
+              const progStore = tx.objectStore('user_progress');
+              const prog = await progStore.get(bookId);
+              if (prog) {
+                  prog.lastPlayedCfi = lastPlayedCfi;
+                  await progStore.put(prog);
+              }
+          }
 
-          await store.put(state);
+          if (lastPauseTime !== undefined) {
+              const sessionStore = tx.objectStore('cache_session_state');
+              const session = await sessionStore.get(bookId) || { bookId, playbackQueue: [], updatedAt: Date.now() };
+              session.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
+              await sessionStore.put(session);
+          }
+
           await tx.done;
       } catch (error) {
           this.handleError(error);
@@ -673,27 +578,17 @@ class DBService {
   // --- TTS State Operations ---
 
   private saveTTSStateTimeout: NodeJS.Timeout | null = null;
-  private pendingTTSState: { [bookId: string]: TTSState } = {};
+  private pendingTTSState: { [bookId: string]: CacheSessionState } = {};
 
-  private saveTTSPositionTimeout: NodeJS.Timeout | null = null;
-  private pendingTTSPosition: { [bookId: string]: TTSPosition } = {};
-
-  /**
-   * Saves TTS Queue and Index. Debounced.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param queue - The current TTS queue.
-   * @param currentIndex - The index of the currently playing item.
-   * @param sectionIndex - The index of the current section in the playlist (optional).
-   */
   saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number, sectionIndex?: number): void {
       this.pendingTTSState[bookId] = {
           bookId,
-          queue,
-          currentIndex,
-          sectionIndex,
+          playbackQueue: queue,
           updatedAt: Date.now()
       };
+
+      // Also update progress index
+      this.saveTTSPosition(bookId, currentIndex, sectionIndex);
 
       if (this.saveTTSStateTimeout) return;
 
@@ -704,8 +599,8 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              const tx = db.transaction('tts_queue', 'readwrite');
-              const store = tx.objectStore('tts_queue');
+              const tx = db.transaction('cache_session_state', 'readwrite');
+              const store = tx.objectStore('cache_session_state');
 
               for (const state of Object.values(pending)) {
                   await store.put(state);
@@ -714,24 +609,14 @@ class DBService {
           } catch (error) {
               Logger.error('DBService', 'Failed to save TTS state', error);
           }
-      }, 1000); // 1s debounce
+      }, 1000);
   }
 
-  /**
-   * Saves only the TTS playback position (lightweight).
-   * Debounced separately to allow more frequent updates without heavy serialization.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param currentIndex - The current index in the queue.
-   * @param sectionIndex - The index of the current section in the playlist (optional).
-   */
+  private saveTTSPositionTimeout: NodeJS.Timeout | null = null;
+  private pendingTTSPosition: { [bookId: string]: {idx: number, secIdx?: number} } = {};
+
   saveTTSPosition(bookId: string, currentIndex: number, sectionIndex?: number): void {
-      this.pendingTTSPosition[bookId] = {
-          bookId,
-          currentIndex,
-          sectionIndex,
-          updatedAt: Date.now()
-      };
+      this.pendingTTSPosition[bookId] = { idx: currentIndex, secIdx: sectionIndex };
 
       if (this.saveTTSPositionTimeout) return;
 
@@ -742,41 +627,40 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              const tx = db.transaction('tts_position', 'readwrite');
-              const store = tx.objectStore('tts_position');
+              const tx = db.transaction('user_progress', 'readwrite');
+              const store = tx.objectStore('user_progress');
 
-              for (const position of Object.values(pending)) {
-                  await store.put(position);
+              for (const [id, val] of Object.entries(pending)) {
+                  const prog = await store.get(id);
+                  if (prog) {
+                      prog.currentQueueIndex = val.idx;
+                      prog.currentSectionIndex = val.secIdx;
+                      await store.put(prog);
+                  }
               }
               await tx.done;
           } catch (error) {
               Logger.error('DBService', 'Failed to save TTS position', error);
           }
-      }, 500); // 500ms debounce
+      }, 500);
   }
 
-  /**
-   * Retrieves the saved TTS state for a book.
-   * Merges data from both `tts_queue` and `tts_position` stores.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to the TTSState or undefined.
-   */
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
       try {
           const db = await this.getDB();
-          const state = await db.get('tts_queue', bookId);
-          const position = await db.get('tts_position', bookId);
+          const session = await db.get('cache_session_state', bookId);
+          const progress = await db.get('user_progress', bookId);
 
-          if (state && position && position.updatedAt > state.updatedAt) {
+          if (session) {
               return {
-                  ...state,
-                  currentIndex: position.currentIndex,
-                  sectionIndex: position.sectionIndex !== undefined ? position.sectionIndex : state.sectionIndex
+                  bookId,
+                  queue: session.playbackQueue,
+                  currentIndex: progress?.currentQueueIndex || 0,
+                  sectionIndex: progress?.currentSectionIndex || 0,
+                  updatedAt: session.updatedAt
               };
           }
-
-          return state;
+          return undefined;
       } catch (error) {
           this.handleError(error);
       }
@@ -784,46 +668,38 @@ class DBService {
 
   // --- Annotation Operations ---
 
-  /**
-   * Adds a new annotation to the database.
-   *
-   * @param annotation - The annotation object to add.
-   * @returns A Promise that resolves when the annotation is saved.
-   */
   async addAnnotation(annotation: Annotation): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.put('annotations', annotation);
+      await db.put('user_annotations', {
+          id: annotation.id,
+          bookId: annotation.bookId,
+          cfiRange: annotation.cfiRange,
+          text: annotation.text,
+          type: annotation.type,
+          color: annotation.color,
+          note: annotation.note,
+          created: annotation.created
+      });
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Retrieves all annotations for a specific book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to an array of Annotation objects.
-   */
   async getAnnotations(bookId: string): Promise<Annotation[]> {
     try {
       const db = await this.getDB();
-      return await db.getAllFromIndex('annotations', 'by_bookId', bookId);
+      const anns = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
+      return anns as Annotation[];
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Deletes an annotation by its ID.
-   *
-   * @param id - The unique identifier of the annotation.
-   * @returns A Promise that resolves when the annotation is deleted.
-   */
   async deleteAnnotation(id: string): Promise<void> {
       try {
           const db = await this.getDB();
-          await db.delete('annotations', id);
+          await db.delete('user_annotations', id);
       } catch (error) {
           this.handleError(error);
       }
@@ -831,21 +707,12 @@ class DBService {
 
   // --- TTS Cache Operations ---
 
-  /**
-   * Retrieves a cached TTS segment.
-   *
-   * @param key - The cache key.
-   * @returns A Promise resolving to the CachedSegment or undefined.
-   */
   async getCachedSegment(key: string): Promise<CachedSegment | undefined> {
       try {
           const db = await this.getDB();
-          const segment = await db.get('tts_cache', key);
-
+          const segment = await db.get('cache_audio_blobs', key);
           if (segment) {
-              // Fire and forget update to lastAccessed
-              // We don't await this to keep read fast
-              db.put('tts_cache', { ...segment, lastAccessed: Date.now() }).catch((err) => Logger.error('DBService', 'Failed to update TTS cache lastAccessed', err));
+              db.put('cache_audio_blobs', { ...segment, lastAccessed: Date.now() }).catch(() => {});
           }
           return segment;
       } catch (error) {
@@ -853,26 +720,16 @@ class DBService {
       }
   }
 
-  /**
-   * Caches a TTS segment.
-   *
-   * @param key - The cache key.
-   * @param audio - The audio data.
-   * @param alignment - Optional alignment data.
-   * @returns A Promise that resolves when the segment is cached.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async cacheSegment(key: string, audio: ArrayBuffer, alignment?: any[]): Promise<void> {
+      async cacheSegment(key: string, audio: ArrayBuffer, alignment?: Timepoint[]): Promise<void> {
       try {
           const db = await this.getDB();
-          const segment: CachedSegment = {
+          await db.put('cache_audio_blobs', {
               key,
               audio,
-              alignment,
+              alignmentData: alignment,
               createdAt: Date.now(),
               lastAccessed: Date.now(),
-          };
-          await db.put('tts_cache', segment);
+          });
       } catch (error) {
           this.handleError(error);
       }
@@ -880,32 +737,25 @@ class DBService {
 
   // --- Locations ---
 
-  /**
-   * Retrieves stored locations for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to the BookLocations object or undefined.
-   */
   async getLocations(bookId: string): Promise<BookLocations | undefined> {
       try {
           const db = await this.getDB();
-          return await db.get('locations', bookId);
+          const metrics = await db.get('cache_render_metrics', bookId);
+          return metrics ? { bookId, locations: metrics.locations } : undefined;
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  /**
-   * Saves generated locations for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param locations - The locations string (JSON).
-   * @returns A Promise that resolves when the locations are saved.
-   */
   async saveLocations(bookId: string, locations: string): Promise<void> {
       try {
           const db = await this.getDB();
-          await db.put('locations', { bookId, locations });
+          const tx = db.transaction('cache_render_metrics', 'readwrite');
+          const store = tx.objectStore('cache_render_metrics');
+          const metrics = await store.get(bookId) || { bookId, locations: '' };
+          metrics.locations = locations;
+          await store.put(metrics);
+          await tx.done;
       } catch (error) {
           this.handleError(error);
       }
@@ -913,116 +763,64 @@ class DBService {
 
   // --- Reading History Operations ---
 
-  /**
-   * Retrieves the reading history for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to an array of CFI ranges.
-   */
   async getReadingHistory(bookId: string): Promise<string[]> {
       try {
           const db = await this.getDB();
-          const entry = await db.get('reading_history', bookId);
-          return entry ? entry.readRanges : [];
+          const prog = await db.get('user_progress', bookId);
+          return prog ? prog.completedRanges : [];
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  /**
-   * Retrieves the full reading history entry for a book.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @returns A Promise resolving to the ReadingHistoryEntry or undefined.
-   */
   async getReadingHistoryEntry(bookId: string): Promise<ReadingHistoryEntry | undefined> {
       try {
           const db = await this.getDB();
-          return await db.get('reading_history', bookId);
+          const prog = await db.get('user_progress', bookId);
+          const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
+
+          if (!prog) return undefined;
+
+          return {
+              bookId,
+              readRanges: prog.completedRanges,
+              sessions: journey.map(j => ({
+                  cfiRange: j.cfiRange,
+                  timestamp: j.startTimestamp,
+                  type: j.type === 'tts' ? 'tts' : 'page', // Map back
+                  label: undefined // Lost label unless we store it in UserJourneyStep
+              })),
+              lastUpdated: prog.lastRead
+          };
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  /**
-   * Updates the reading history for a book by merging a new range.
-   *
-   * @param bookId - The unique identifier of the book.
-   * @param newRange - The new CFI range to add.
-   * @param type - The source of the reading event.
-   * @param label - Optional contextual label.
-   * @returns A Promise that resolves when the history is updated.
-   */
-  async updateReadingHistory(bookId: string, newRange: string, type: ReadingEventType, label?: string, skipSession: boolean = false): Promise<void> {
+  async updateReadingHistory(bookId: string, newRange: string, type: ReadingEventType, _label?: string, skipSession: boolean = false): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction('reading_history', 'readwrite');
-          const store = tx.objectStore('reading_history');
-          const entry = await store.get(bookId);
+          const tx = db.transaction(['user_progress', 'user_journey'], 'readwrite');
+          const progStore = tx.objectStore('user_progress');
+          const journeyStore = tx.objectStore('user_journey');
 
-          let readRanges: string[] = [];
-          let sessions: ReadingSession[] = [];
+          const prog = await progStore.get(bookId) || { bookId, percentage: 0, lastRead: Date.now(), completedRanges: [] };
 
-          if (entry) {
-              readRanges = entry.readRanges;
-              if (entry.sessions) {
-                  sessions = entry.sessions;
-              }
-          }
+          prog.completedRanges = mergeCfiRanges(prog.completedRanges, newRange);
+          if (prog.completedRanges.length > 100) prog.completedRanges = prog.completedRanges.slice(-100);
 
-          let updatedRanges = mergeCfiRanges(readRanges, newRange);
-
-          // Enforce limit on history size to prevent unbounded growth
-          if (updatedRanges.length > 100) {
-              updatedRanges = updatedRanges.slice(updatedRanges.length - 100);
-          }
+          await progStore.put(prog);
 
           if (!skipSession) {
-              // Coalescing Logic
-              const newTimestamp = Date.now();
-              const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
-
-              let shouldCoalesce = false;
-
-              if (lastSession && lastSession.type === type && type !== 'tts') {
-                   const timeDiff = newTimestamp - lastSession.timestamp;
-                   // 5 minutes = 300,000 ms
-                   if (timeDiff < 300000) {
-                       shouldCoalesce = true;
-                   }
-              }
-
-              if (shouldCoalesce && lastSession) {
-                  // Update last session
-                  lastSession.cfiRange = newRange;
-                  lastSession.timestamp = newTimestamp;
-                  if (label) lastSession.label = label;
-
-                  // Update in array
-                  sessions[sessions.length - 1] = lastSession;
-              } else {
-                  // Add new session
-                  const newSession: ReadingSession = {
-                      cfiRange: newRange,
-                      timestamp: newTimestamp,
-                      type: type,
-                      label: label
-                  };
-                  sessions.push(newSession);
-              }
-
-              // Limit sessions size too
-              if (sessions.length > 100) {
-                 sessions = sessions.slice(sessions.length - 100);
-              }
+              await journeyStore.add({
+                  bookId,
+                  startTimestamp: Date.now(),
+                  endTimestamp: Date.now(),
+                  duration: 0,
+                  cfiRange: newRange,
+                  type: type === 'tts' ? 'tts' : 'visual'
+              });
           }
-
-          await store.put({
-              bookId,
-              readRanges: updatedRanges,
-              sessions,
-              lastUpdated: Date.now()
-          });
           await tx.done;
       } catch (error) {
           this.handleError(error);
@@ -1031,200 +829,180 @@ class DBService {
 
   // --- Content Analysis ---
 
-  /**
-   * Saves content analysis results.
-   *
-   * @param analysis - The analysis object to save.
-   * @returns A Promise that resolves when the analysis is saved.
-   */
   async saveContentAnalysis(analysis: ContentAnalysis): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.put('content_analysis', analysis);
+      await db.put('user_ai_inference', {
+          id: analysis.id,
+          bookId: analysis.bookId,
+          sectionId: analysis.sectionId,
+          semanticMap: analysis.contentTypes || [],
+          accessibilityLayers: (analysis.tableAdaptations || []).map(t => ({
+              type: 'table-adaptation' as const,
+              rootCfi: t.rootCfi,
+              content: t.text
+          })),
+          summary: analysis.summary,
+          structure: analysis.structure,
+          generatedAt: analysis.lastAnalyzed
+      });
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Retrieves content analysis for a specific section.
-   *
-   * @param bookId - The book ID.
-   * @param sectionId - The section ID.
-   * @returns A Promise resolving to the ContentAnalysis or undefined.
-   */
   async getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined> {
     try {
       const db = await this.getDB();
-      return await db.get('content_analysis', `${bookId}-${sectionId}`);
+      const ai = await db.get('user_ai_inference', `${bookId}-${sectionId}`);
+      if (!ai) return undefined;
+
+      return {
+          id: ai.id,
+          bookId: ai.bookId,
+          sectionId: ai.sectionId,
+          contentTypes: ai.semanticMap,
+          tableAdaptations: ai.accessibilityLayers.filter(l => l.type === 'table-adaptation').map(l => ({
+              rootCfi: l.rootCfi,
+              text: l.content
+          })),
+          summary: ai.summary,
+          structure: ai.structure || { footnoteMatches: [] },
+          lastAnalyzed: ai.generatedAt
+      };
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Saves content classifications for a section.
-   * Merges with existing analysis if present, or creates a new one.
-   *
-   * @param bookId - The book ID.
-   * @param sectionId - The section ID.
-   * @param classifications - The detected content types.
-   */
   async saveContentClassifications(bookId: string, sectionId: string, classifications: { rootCfi: string; type: ContentType }[]): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction('content_analysis', 'readwrite');
-          const store = tx.objectStore('content_analysis');
           const id = `${bookId}-${sectionId}`;
-          const existing = await store.get(id);
+          const tx = db.transaction('user_ai_inference', 'readwrite');
+          const store = tx.objectStore('user_ai_inference');
 
-          const analysis: ContentAnalysis = existing || {
-              id,
-              bookId,
-              sectionId,
-              structure: { footnoteMatches: [] }, // Default empty structure
-              lastAnalyzed: Date.now()
+          const existing = await store.get(id) || {
+              id, bookId, sectionId, semanticMap: [], accessibilityLayers: [], generatedAt: Date.now()
           };
 
-          analysis.contentTypes = classifications;
-          analysis.lastAnalyzed = Date.now();
+          existing.semanticMap = classifications;
+          existing.generatedAt = Date.now();
 
-          await store.put(analysis);
+          await store.put(existing);
           await tx.done;
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  /**
-   * Saves table adaptations for a section.
-   * Merges with existing analysis if present, or creates a new one.
-   *
-   * @param bookId - The book ID.
-   * @param sectionId - The section ID.
-   * @param adaptations - The generated adaptations.
-   */
   async saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction('content_analysis', 'readwrite');
-          const store = tx.objectStore('content_analysis');
           const id = `${bookId}-${sectionId}`;
-          const existing = await store.get(id);
+          const tx = db.transaction('user_ai_inference', 'readwrite');
+          const store = tx.objectStore('user_ai_inference');
 
-          const analysis: ContentAnalysis = existing || {
-              id,
-              bookId,
-              sectionId,
-              structure: { footnoteMatches: [] },
-              lastAnalyzed: Date.now()
+          const existing = await store.get(id) || {
+              id, bookId, sectionId, semanticMap: [], accessibilityLayers: [], generatedAt: Date.now()
           };
 
-          // Merge with existing adaptations
-          const existingAdaptations = analysis.tableAdaptations || [];
-          const newAdaptationsMap = new Map(existingAdaptations.map(a => [a.rootCfi, a]));
-
-          for (const adaptation of adaptations) {
-              newAdaptationsMap.set(adaptation.rootCfi, adaptation);
+          // Merge layers
+          const layerMap = new Map(existing.accessibilityLayers.map(l => [l.rootCfi, l]));
+          for (const adp of adaptations) {
+              layerMap.set(adp.rootCfi, {
+                  type: 'table-adaptation' as const, // Explicit literal type
+                  rootCfi: adp.rootCfi,
+                  content: adp.text
+              });
           }
+          existing.accessibilityLayers = Array.from(layerMap.values());
+          existing.generatedAt = Date.now();
 
-          analysis.tableAdaptations = Array.from(newAdaptationsMap.values());
-          analysis.lastAnalyzed = Date.now();
-
-          await store.put(analysis);
+          await store.put(existing);
           await tx.done;
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  /**
-   * Retrieves all content analysis entries for a book.
-   *
-   * @param bookId - The book ID.
-   * @returns A Promise resolving to an array of ContentAnalysis objects.
-   */
   async getBookAnalysis(bookId: string): Promise<ContentAnalysis[]> {
       try {
           const db = await this.getDB();
-          return await db.getAllFromIndex('content_analysis', 'by_bookId', bookId);
+          const ais = await db.getAllFromIndex('user_ai_inference', 'by_bookId', bookId);
+          return ais.map(ai => ({
+              id: ai.id,
+              bookId: ai.bookId,
+              sectionId: ai.sectionId,
+              contentTypes: ai.semanticMap,
+              tableAdaptations: ai.accessibilityLayers.filter(l => l.type === 'table-adaptation').map(l => ({
+                  rootCfi: l.rootCfi,
+                  text: l.content
+              })),
+              summary: ai.summary,
+              structure: ai.structure || { footnoteMatches: [] },
+              lastAnalyzed: ai.generatedAt
+          }));
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  /**
-   * Clears the entire content analysis cache.
-   *
-   * @returns A Promise that resolves when the cache is cleared.
-   */
   async clearContentAnalysis(): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.clear('content_analysis');
+      await db.clear('user_ai_inference');
     } catch (error) {
       this.handleError(error);
     }
   }
-
-  // --- Lexicon ---
-  // Adding minimal support for lexicon to match removeBook requirements,
-  // full service migration for LexiconManager can be done later or added here if needed.
 
   // --- TTS Content Operations ---
 
-  /**
-   * Saves extracted TTS content for a section.
-   *
-   * @param content - The TTS content to save.
-   * @returns A Promise that resolves when the content is saved.
-   */
   async saveTTSContent(content: TTSContent): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.put('tts_content', content);
+      await db.put('cache_tts_preparation', {
+          id: content.id,
+          bookId: content.bookId,
+          sectionId: content.sectionId,
+          sentences: content.sentences
+      });
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  /**
-   * Retrieves extracted TTS content for a specific section.
-   *
-   * @param bookId - The book ID.
-   * @param sectionId - The section ID.
-   * @returns A Promise resolving to the TTSContent or undefined.
-   */
   async getTTSContent(bookId: string, sectionId: string): Promise<TTSContent | undefined> {
     try {
       const db = await this.getDB();
-      return await db.get('tts_content', `${bookId}-${sectionId}`);
+      const prep = await db.get('cache_tts_preparation', `${bookId}-${sectionId}`);
+      if (!prep) return undefined;
+      return {
+          id: prep.id,
+          bookId: prep.bookId,
+          sectionId: prep.sectionId,
+          sentences: prep.sentences
+      };
     } catch (error) {
       this.handleError(error);
     }
   }
 
   // --- Table Images Operations ---
+  // Table images are now in cache_table_images or transient.
+  // Current implementation drops them in migration.
 
-  /**
-   * Retrieves all table images for a book.
-   *
-   * @param bookId - The book ID.
-   * @returns A Promise resolving to an array of TableImage objects.
-   */
   async getTableImages(bookId: string): Promise<TableImage[]> {
       try {
           const db = await this.getDB();
-          return await db.getAllFromIndex('table_images', 'by_bookId', bookId);
+          const images = await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId);
+          return images;
       } catch (error) {
           this.handleError(error);
       }
   }
 
-  /**
-   * Cleans up any pending operations/timeouts.
-   * Call this before deleting the database or when shutting down the service.
-   */
   cleanup(): void {
       if (this.saveProgressTimeout) {
           clearTimeout(this.saveProgressTimeout);
