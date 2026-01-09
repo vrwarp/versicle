@@ -159,6 +159,7 @@ export interface UserOverrides {
     original: string;
     replacement: string;
     isRegex?: boolean;
+    applyBeforeGlobal?: boolean;
     created: number;
   }[];
   /** Lexicon configuration. */

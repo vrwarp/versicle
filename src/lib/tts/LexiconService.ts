@@ -36,15 +36,17 @@ export class LexiconService {
         isRegex: r.isRegex,
         bookId: undefined,
         created: r.created,
-        order: undefined // Order is implicit in array, or need to restore?
-        // Legacy `LexiconRule` had `order` and `applyBeforeGlobal`.
-        // `user_overrides` has `lexiconConfig`.
+        applyBeforeGlobal: r.applyBeforeGlobal, // Explicitly load per-rule setting
+        order: undefined
     })) || [];
 
     // Fetch Book Specific Rules
     if (bookId) {
         const bookOverrides = await db.get('user_overrides', bookId);
         if (bookOverrides) {
+            // Legacy support: Check for old global config if per-rule setting is missing
+            const legacyDefault = bookOverrides.lexiconConfig?.applyBefore;
+
             const bookRules: LexiconRule[] = bookOverrides.lexicon.map(r => ({
                 id: r.id,
                 original: r.original,
@@ -52,36 +54,18 @@ export class LexiconService {
                 isRegex: r.isRegex,
                 bookId: bookId,
                 created: r.created,
-                applyBeforeGlobal: bookOverrides.lexiconConfig?.applyBefore
+                // Fallback to legacy config if undefined
+                applyBeforeGlobal: r.applyBeforeGlobal ?? legacyDefault
             }));
 
-            // Merge logic
-            if (bookOverrides.lexiconConfig?.applyBefore) {
-                rules = [...bookRules, ...rules];
-            } else {
-                rules = [...rules, ...bookRules];
-            }
+            // Merge logic: Per-rule priority
+            const beforeRules = bookRules.filter(r => r.applyBeforeGlobal);
+            const afterRules = bookRules.filter(r => !r.applyBeforeGlobal);
+
+            rules = [...beforeRules, ...rules, ...afterRules];
         }
     }
 
-    // Sort by length descending (default legacy behavior if explicit order missing)
-    // Legacy implementation sorted by order first, then length.
-    // In v18, array order in `user_overrides` IS the explicit order.
-    // So if we just concatenate, we might lose strict user ordering if they mixed global and book rules?
-    // Wait, the UI usually separates them or allows ordering.
-    // Legacy `getRules` sorted by group (priority) then order then length.
-
-    // For now, assume array order is sufficient or perform sort if needed.
-    // The legacy code:
-    // 1. Book rules with applyBeforeGlobal=true
-    // 2. Global rules
-    // 3. Book rules with applyBeforeGlobal=false
-
-    // My merge logic above handles 1, 2, 3 roughly.
-    // If book has applyBeforeGlobal=true, I put book rules first.
-    // Else, I put global rules first (implied 2 before 3).
-
-    // But within each group, we should probably respect array order (which is preserved from migration).
     return rules;
   }
 
@@ -103,19 +87,22 @@ export class LexiconService {
         original: rule.original.normalize('NFKD'),
         replacement: rule.replacement.normalize('NFKD'),
         isRegex: rule.isRegex,
-        created: Date.now()
+        created: Date.now(),
+        // Save the per-rule setting
+        applyBeforeGlobal: rule.applyBeforeGlobal
     };
 
     if (existingIdx >= 0) {
-        overrides.lexicon[existingIdx] = newRuleItem;
+        // Merge updates carefully
+        overrides.lexicon[existingIdx] = {
+             ...overrides.lexicon[existingIdx],
+             ...newRuleItem
+        };
     } else {
         overrides.lexicon.push(newRuleItem);
     }
 
-    // Update config if book specific
-    if (bookId !== 'global' && rule.applyBeforeGlobal !== undefined) {
-        overrides.lexiconConfig = { applyBefore: rule.applyBeforeGlobal };
-    }
+    // Note: We no longer update lexiconConfig, but we preserve it for legacy rules that haven't been updated yet.
 
     await store.put(overrides);
     await tx.done;
