@@ -154,15 +154,18 @@ export const initDB = () => {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // Create New Stores if they don't exist
         const createStore = (name: string, options?: IDBObjectStoreParameters) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           if (!db.objectStoreNames.contains(name as any)) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return db.createObjectStore(name as any, options);
           }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           return transaction.objectStore(name as any);
         };
 
         // Cache Table Images - New in v19
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const tableImages: any = createStore('cache_table_images', { keyPath: 'id' });
+        // @ts-expect-error - IDBObjectStore type mismatch during migration
+        const tableImages = createStore('cache_table_images', { keyPath: 'id' });
         if (!tableImages.indexNames.contains('by_bookId')) {
              tableImages.createIndex('by_bookId', 'bookId');
         }
@@ -176,18 +179,18 @@ export const initDB = () => {
         createStore('user_inventory', { keyPath: 'bookId' });
         createStore('user_progress', { keyPath: 'bookId' });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const userAnn: any = createStore('user_annotations', { keyPath: 'id' });
+        // @ts-expect-error - IDBObjectStore type mismatch during migration
+        const userAnn = createStore('user_annotations', { keyPath: 'id' });
         if (!userAnn.indexNames.contains('by_bookId')) userAnn.createIndex('by_bookId', 'bookId');
 
         createStore('user_overrides', { keyPath: 'bookId' });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const userJourney: any = createStore('user_journey', { keyPath: 'id', autoIncrement: true });
+        // @ts-expect-error - IDBObjectStore type mismatch during migration
+        const userJourney = createStore('user_journey', { keyPath: 'id', autoIncrement: true });
         if (!userJourney.indexNames.contains('by_bookId')) userJourney.createIndex('by_bookId', 'bookId');
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const userAi: any = createStore('user_ai_inference', { keyPath: 'id' });
+        // @ts-expect-error - IDBObjectStore type mismatch during migration
+        const userAi = createStore('user_ai_inference', { keyPath: 'id' });
         if (!userAi.indexNames.contains('by_bookId')) userAi.createIndex('by_bookId', 'bookId');
 
         // Cache
@@ -196,8 +199,8 @@ export const initDB = () => {
         createStore('cache_session_state', { keyPath: 'bookId' });
 
         // Cache TTS Prep - Added Index for cleanup
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const ttsPrep: any = createStore('cache_tts_preparation', { keyPath: 'id' });
+        // @ts-expect-error - IDBObjectStore type mismatch during migration
+        const ttsPrep = createStore('cache_tts_preparation', { keyPath: 'id' });
         if (!ttsPrep.indexNames.contains('by_bookId')) ttsPrep.createIndex('by_bookId', 'bookId');
 
         // App Level (Preserve)
@@ -218,15 +221,19 @@ export const initDB = () => {
           console.log('Migrating to v18 Data Architecture...');
 
           // Use 'any' casting for legacy store access within upgrade logic
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const tx: any = transaction;
+          // @ts-expect-error - Transaction type casting for legacy stores
+          const tx = transaction;
 
           // 1. Books (Metadata) & Sources & States & Files
-          if (db.objectStoreNames.contains('books' as any)) {
+          // @ts-expect-error - Legacy store name
+          if (db.objectStoreNames.contains('books')) {
              const booksStore = tx.objectStore('books');
-             const sourcesStore = db.objectStoreNames.contains('book_sources' as any) ? tx.objectStore('book_sources') : null;
-             const statesStore = db.objectStoreNames.contains('book_states' as any) ? tx.objectStore('book_states') : null;
-             const filesStore = db.objectStoreNames.contains('files' as any) ? tx.objectStore('files') : null;
+             // @ts-expect-error - Legacy store name
+             const sourcesStore = db.objectStoreNames.contains('book_sources') ? tx.objectStore('book_sources') : null;
+             // @ts-expect-error - Legacy store name
+             const statesStore = db.objectStoreNames.contains('book_states') ? tx.objectStore('book_states') : null;
+             // @ts-expect-error - Legacy store name
+             const filesStore = db.objectStoreNames.contains('files') ? tx.objectStore('files') : null;
 
              const newManifests = tx.objectStore('static_manifests');
              const newResources = tx.objectStore('static_resources');
@@ -314,7 +321,8 @@ export const initDB = () => {
               const spineMap = new Map<string, any[]>();
 
               while (cursor) {
-                  const section = cursor.value;
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const section = cursor.value as any;
                   if (!spineMap.has(section.bookId)) spineMap.set(section.bookId, []);
                   spineMap.get(section.bookId)?.push(section);
                   cursor = await cursor.continue();
@@ -531,7 +539,9 @@ export const initDB = () => {
           ];
 
           for (const store of oldStores) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               if (db.objectStoreNames.contains(store as any)) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   db.deleteObjectStore(store as any);
               }
           }

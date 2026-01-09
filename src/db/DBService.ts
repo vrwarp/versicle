@@ -301,8 +301,8 @@ class DBService {
       // Delete from index-based stores
       const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
           const store = tx.objectStore(storeName);
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const index = store.index(indexName as any);
+          // @ts-expect-error - index() types are tricky with generic strings, casting or expect error is needed
+          const index = store.index(indexName);
           let cursor = await index.openCursor(IDBKeyRange.only(id));
           while (cursor) {
               await cursor.delete();
@@ -650,7 +650,7 @@ class DBService {
       }
   }
 
-  async cacheSegment(key: string, audio: ArrayBuffer, alignment?: any[]): Promise<void> {
+      async cacheSegment(key: string, audio: ArrayBuffer, alignment?: Timepoint[]): Promise<void> {
       try {
           const db = await this.getDB();
           await db.put('cache_audio_blobs', {

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { dbService } from './DBService';
 import { initDB } from './db';
-import type { TTSContent, BookMetadata, StaticBookManifest, UserInventoryItem, UserProgress, UserOverrides } from '../types/db';
+import type { TTSContent, StaticBookManifest, UserInventoryItem, UserProgress } from '../types/db';
 import 'fake-indexeddb/auto';
 
 describe('DBService - TTS Content and Migration', () => {

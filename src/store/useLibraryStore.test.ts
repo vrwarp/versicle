@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useLibraryStore } from './useLibraryStore';
 import { getDB } from '../db/db';
-import type { BookMetadata, LexiconRule, StaticBookManifest, UserInventoryItem, UserProgress, UserOverrides } from '../types/db';
+import type { StaticBookManifest, UserInventoryItem, UserProgress, UserOverrides } from '../types/db';
 
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
@@ -32,27 +32,6 @@ vi.mock('../lib/ingestion', () => ({
 }));
 
 describe('useLibraryStore', () => {
-  // Expected composite after fetch
-  const mockBookComposite = {
-    id: 'test-id',
-    title: 'Test Book',
-    author: 'Test Author',
-    description: undefined,
-    coverBlob: undefined,
-    addedAt: 1234567890,
-    bookId: 'test-id',
-    filename: undefined,
-    fileHash: 'hash',
-    fileSize: 0,
-    totalChars: 0,
-    version: 1,
-    lastRead: 0,
-    progress: 0,
-    currentCfi: undefined,
-    lastPlayedCfi: undefined,
-    isOffloaded: false
-  };
-
   // Create a mock file
   const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
 

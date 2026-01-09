@@ -266,6 +266,7 @@ export async function processEpub(
       // ... other fields not strictly validated for content but for type
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const check = getSanitizedBookMetadata(candidateMetadata as any);
   if (check) {
       const s = check.sanitized;

@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
-import type { Book, BookSource, BookState, StaticBookManifest, UserInventoryItem, UserProgress, StaticResource } from '../types/db';
+import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource } from '../types/db';
 
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
