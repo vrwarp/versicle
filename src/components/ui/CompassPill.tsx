@@ -3,7 +3,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
-import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2 } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -58,6 +58,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   // Internal state for note editing
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Reset editing state when variant changes
@@ -73,6 +74,15 @@ export const CompassPill: React.FC<CompassPillProps> = ({
       textareaRef.current.focus();
     }
   }, [isEditingNote]);
+
+  // Clean up copy timeout
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    if (isCopied) {
+      timeoutId = setTimeout(() => setIsCopied(false), 2000);
+    }
+    return () => clearTimeout(timeoutId);
+  }, [isCopied]);
 
   // Optimize: Select only currentSectionTitle to prevent re-renders on progress/cfi updates
   const readerSectionTitle = useReaderStore(state => state.currentSectionTitle);
@@ -214,11 +224,14 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             variant="ghost"
             size="icon"
             className="rounded-full w-9 h-9"
-            onClick={() => onAnnotationAction?.('copy')}
+            onClick={() => {
+              setIsCopied(true);
+              onAnnotationAction?.('copy');
+            }}
             data-testid="popover-copy-button"
-            aria-label="Copy text"
+            aria-label={isCopied ? "Copied" : "Copy text"}
           >
-            <Copy size={18} />
+            {isCopied ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
           </Button>
 
           <div className="w-px h-6 bg-border mx-1" />
