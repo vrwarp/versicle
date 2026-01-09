@@ -3,6 +3,291 @@ import type { NavigationItem } from 'epubjs';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ContentType } from './content-analysis';
 
+// --- NEW V18 ARCHITECTURE TYPES ---
+
+// DOMAIN 1: STATIC (Immutable, Authoritative Source: File)
+
+/**
+ * Dublin Core metadata, file hashes, and immutable book properties.
+ * Store: 'static_manifests' (Key: bookId)
+ */
+export interface StaticBookManifest {
+  /** Unique identifier for the book (UUID). */
+  bookId: string;
+  /** The title of the book (from OPF). */
+  title: string;
+  /** The author(s) of the book (from OPF). */
+  author: string;
+  /** A short description or summary of the book. */
+  description?: string;
+  /** The ISBN of the book, if available. */
+  isbn?: string;
+  /** SHA-256 hash of the original EPUB file. */
+  fileHash: string;
+  /** The size of the file in bytes. */
+  fileSize: number;
+  /** Total number of characters in the book. */
+  totalChars: number;
+  /** The version of the ingestion pipeline used. */
+  schemaVersion: number;
+  /**
+   * The binary Blob of the cover image (thumbnail).
+   * Moved here to allow fast loading in library view without fetching heavy resources.
+   */
+  coverBlob?: Blob;
+}
+
+/**
+ * Heavy binary blobs.
+ * Store: 'static_resources' (Key: bookId)
+ */
+export interface StaticResource {
+  /** The unique identifier of the book. */
+  bookId: string;
+  /** The original EPUB file. */
+  epubBlob: Blob | ArrayBuffer;
+  /**
+   * The full cover image blob.
+   * Optional if thumbnail in manifest is sufficient, but kept for high-res needs.
+   */
+  coverBlob?: Blob;
+}
+
+/**
+ * Structural information (Spine, TOC).
+ * Store: 'static_structure' (Key: bookId)
+ */
+export interface StaticStructure {
+  /** The unique identifier of the book. */
+  bookId: string;
+  /** Synthetic Table of Contents. */
+  toc: NavigationItem[];
+  /** Flattened spine items with metadata. */
+  spineItems: {
+    /** The href/id of the section. */
+    id: string;
+    /** Character count of the section. */
+    characterCount: number;
+    /** Play order index. */
+    index: number;
+  }[];
+}
+
+// DOMAIN 2: USER (Mutable, Authoritative Source: User/Sync)
+
+/**
+ * Existence of book in library and user-customizable metadata.
+ * Store: 'user_inventory' (Key: bookId)
+ */
+export interface UserInventoryItem {
+  /** The unique identifier of the book. */
+  bookId: string;
+  /** Timestamp when the user added the book. */
+  addedAt: number;
+  /** Original filename (for reference/export). */
+  sourceFilename?: string;
+  /** User-defined tags. */
+  tags: string[];
+  /** Custom title override. */
+  customTitle?: string;
+  /** Custom author override. */
+  customAuthor?: string;
+  /** Reading status. */
+  status: 'unread' | 'reading' | 'completed' | 'abandoned';
+  /** User rating (1-5). */
+  rating?: number;
+  /** Timestamp of last user interaction. */
+  lastInteraction: number;
+}
+
+/**
+ * The "Bookmark" and progress state.
+ * Store: 'user_progress' (Key: bookId)
+ */
+export interface UserProgress {
+  /** The unique identifier of the book. */
+  bookId: string;
+  /** Reading progress as a percentage (0.0 to 1.0). */
+  percentage: number;
+  /** The current visual CFI position. */
+  currentCfi?: string;
+  /** The last spoken CFI (for TTS resume). */
+  lastPlayedCfi?: string;
+  /** Index of the current item in the playback queue. */
+  currentQueueIndex?: number;
+  /** Index of the current section. */
+  currentSectionIndex?: number;
+  /** Timestamp when the book was last read. */
+  lastRead: number;
+  /** Set of completed/read CFI ranges. */
+  completedRanges: string[];
+}
+
+/**
+ * Highlights and notes.
+ * Store: 'user_annotations' (Key: id)
+ */
+export interface UserAnnotation {
+  /** Unique identifier (UUID). */
+  id: string;
+  /** The book ID. */
+  bookId: string;
+  /** The CFI range of the annotation. */
+  cfiRange: string;
+  /** The selected text. */
+  text: string;
+  /** Type of annotation. */
+  type: 'highlight' | 'note';
+  /** Color code. */
+  color: string;
+  /** User note. */
+  note?: string;
+  /** Creation timestamp. */
+  created: number;
+}
+
+/**
+ * Book-specific settings and rules.
+ * Store: 'user_overrides' (Key: bookId | 'global')
+ */
+export interface UserOverrides {
+  /** The book ID or 'global'. */
+  bookId: string;
+  /** Lexicon/Pronunciation rules. */
+  lexicon: {
+    id: string;
+    original: string;
+    replacement: string;
+    isRegex?: boolean;
+    created: number;
+  }[];
+  /** Lexicon configuration. */
+  lexiconConfig?: {
+    applyBefore: boolean;
+  };
+  /** Per-book settings (font, theme overrides, etc - future proofing). */
+  settings?: Record<string, unknown>;
+}
+
+/**
+ * Chronological reading logs.
+ * Store: 'user_journey' (Key: id (Auto))
+ */
+export interface UserJourneyStep {
+  /** Auto-incrementing ID. */
+  id?: number;
+  /** The book ID. */
+  bookId: string;
+  /** Start timestamp. */
+  startTimestamp: number;
+  /** End timestamp. */
+  endTimestamp: number;
+  /** Duration in seconds. */
+  duration: number;
+  /** The CFI range covered. */
+  cfiRange: string;
+  /** Type of session. */
+  type: 'visual' | 'tts';
+}
+
+/**
+ * AI summaries and analysis (Synced due to high compute cost).
+ * Store: 'user_ai_inference' (Key: `${bookId}-${sectionId}`)
+ */
+export interface UserAiInference {
+  /** Composite key. */
+  id: string;
+  bookId: string;
+  sectionId: string;
+  /** Detected content types. */
+  semanticMap: {
+    rootCfi: string;
+    type: ContentType;
+  }[];
+  /** Accessibility layers (e.g. Table Adaptations). */
+  accessibilityLayers: {
+    type: 'table-adaptation' | 'image-description';
+    rootCfi: string;
+    content: string;
+  }[];
+  /** Section summary. */
+  summary?: string;
+  /** Extracted structure (footnotes, etc). */
+  structure?: {
+    title?: string;
+    footnoteMatches: string[];
+  };
+  /** Generation timestamp. */
+  generatedAt: number;
+}
+
+// DOMAIN 3: CACHE (Transient, Disposable)
+
+/**
+ * Epub.js locations and metrics.
+ * Store: 'cache_render_metrics' (Key: bookId)
+ */
+export interface CacheRenderMetrics {
+  /** The book ID. */
+  bookId: string;
+  /** Locations JSON string. */
+  locations: string;
+  /** Page count estimation. */
+  pageCount?: number;
+  /** Table snapshots (optional, if we cache them here). */
+  tableSnapshots?: Record<string, Blob>;
+}
+
+/**
+ * Synthesized audio files.
+ * Store: 'cache_audio_blobs' (Key: hash)
+ */
+export interface CacheAudioBlob {
+  /** SHA-256 hash key. */
+  key: string;
+  /** Audio data. */
+  audio: ArrayBuffer;
+  /** Alignment data. */
+  alignmentData?: Timepoint[];
+  /** Creation timestamp. */
+  createdAt: number;
+  /** Last access timestamp for LRU. */
+  lastAccessed: number;
+}
+
+/**
+ * Transient UI state (queue, active table snapshots).
+ * Store: 'cache_session_state' (Key: bookId)
+ */
+export interface CacheSessionState {
+  /** The book ID. */
+  bookId: string;
+  /** The active playback queue. */
+  playbackQueue: TTSQueueItem[];
+  /** Last pause timestamp. */
+  lastPauseTime?: number;
+  /** Update timestamp. */
+  updatedAt: number;
+}
+
+/**
+ * Extracted/sanitized sentences for TTS.
+ * Store: 'cache_tts_preparation' (Key: `${bookId}-${sectionId}`)
+ */
+export interface CacheTtsPreparation {
+  /** Composite key. */
+  id: string;
+  bookId: string;
+  sectionId: string;
+  /** Extracted sentences. */
+  sentences: {
+    text: string;
+    cfi: string;
+  }[];
+}
+
+// --- LEGACY TYPES (For Migration & Backward Compatibility) ---
+
 /**
  * 1. Core Book Identity & Display Metadata.
  * Essential metadata for displaying the book in the library (including offloaded state).

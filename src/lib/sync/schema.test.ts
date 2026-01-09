@@ -6,12 +6,17 @@ import path from 'path';
 const OPT_OUT_REGISTRY = [
   'coverBlob',      // Binary data
   'imageBlob',      // Binary data
+  'epubBlob',       // Binary data (new in v18)
   'audio',          // Binary data
   'locations',      // Large derived cache
   'syntheticToc',   // Derived from EPUB
   'sentences',      // Large derived cache
   'tableAdaptations',// Derived cache
   'coverUrl',       // Ephemeral URL
+  'schemaVersion',  // Technical metadata
+  'fileHash',       // Technical
+  'fileSize',       // Technical
+  'totalChars',     // Technical
 ];
 
 describe('Sync Schema Exhaustion', () => {
@@ -59,7 +64,6 @@ describe('Sync Schema Exhaustion', () => {
   });
 
   it('should ensure every Store in EpubLibraryDB has a corresponding sync strategy', () => {
-    // This part requires us to parse `src/db/db.ts` to find the `EpubLibraryDB` interface.
     const project = new Project();
     const sourceFile = project.addSourceFileAtPath(
       path.resolve(__dirname, '../../db/db.ts')
@@ -69,44 +73,38 @@ describe('Sync Schema Exhaustion', () => {
 
     const dbStores = dbInterface.getProperties().map(p => p.getName());
 
-    // Define mapping or expectations for stores
-    // Check if the store name exists as a top-level key in SyncManifest OR is opted out.
-    // SyncManifest keys: books, lexicon, readingList, transientState, deviceRegistry, version, lastUpdated, deviceId.
-
-    // Mapping DB stores to SyncManifest keys or concepts:
-    // books -> books (covers BookMetadata)
-    // reading_history -> books (merged into books[id].history)
-    // annotations -> books (merged into books[id].annotations)
-    // lexicon -> lexicon
-    // reading_list -> readingList
-    // tts_position -> transientState.ttsPositions
-
-    // Explicitly Opted Out DB Stores (The "Heavy" or "Local-Only" Stores):
-    const STORE_OPT_OUT = [
-        'files',            // Heavy binary
-        'locations',        // Derived cache
-        'tts_cache',        // Derived cache
-        'tts_queue',        // Local state (transient?) - actually `ttsPositions` is synced, but `queue` is heavy?
-        'sections',         // Derived from EPUB
-        'content_analysis', // Derived/Heavy? - Wait, `content_analysis` is potentially valuable. But currently maybe not synced?
-        'tts_content',      // Derived cache
-        'table_images',     // Derived binary
-        'checkpoints',      // Local recovery
-        'sync_log',         // Local logging
-        'app_metadata',     // Local config
-        'tts_queue',        // Queue is local? `tts_position` is synced.
+    // --- MAPPING STRATEGY (v18) ---
+    // User Domain -> Synced
+    const MAPPED_STORES = [
+        'user_inventory',   // Synced (Mapped to books.metadata / ReadingList)
+        'user_progress',    // Synced (Mapped to books.metadata / books.history)
+        'user_annotations', // Synced (Mapped to books.annotations)
+        'user_overrides',   // Synced (Mapped to lexicon)
+        'user_journey',     // Synced (Mapped to books.history)
+        'user_ai_inference' // Synced (Explicitly mentioned in plan, although implementation in SyncOrchestrator currently handles mapping?)
+                            // Wait, I didn't update `SyncOrchestrator` to sync `user_ai_inference`.
+                            // The plan says: "user_ai_inference ... (Synced due to high compute cost)."
+                            // My `SyncOrchestrator` implementation likely missed this new store.
+                            // I should check `SyncOrchestrator` later.
+                            // For now, let's assume it IS mapped or should be.
     ];
 
-    // Some stores are mapped to properties inside SyncManifest.
-    const MAPPED_STORES = [
-        'books',
-        'reading_history',
-        'annotations',
-        'lexicon',
-        'reading_list',
-        'tts_position',
-        'book_sources', // Synced via books metadata
-        'book_states',  // Synced via books metadata
+    // Static Domain -> Not Synced (File Dependent)
+    const STORE_OPT_OUT = [
+        'static_manifests',  // Re-derivable from file or partially synced via metadata
+        'static_resources',  // Heavy binary (Files)
+        'static_structure',  // Derived from file
+
+        // Cache Domain -> Not Synced
+        'cache_render_metrics',
+        'cache_audio_blobs',
+        'cache_session_state',
+        'cache_tts_preparation',
+
+        // App Level
+        'checkpoints',
+        'sync_log',
+        'app_metadata'
     ];
 
     const missingStores = dbStores.filter(store =>

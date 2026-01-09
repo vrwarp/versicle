@@ -2,7 +2,7 @@ import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { Book, BookSource, BookState, SectionMetadata, TTSContent, TableImage } from '../types/db';
+import type { SectionMetadata, TTSContent, TableImage, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
@@ -17,48 +17,21 @@ function cheapHash(buffer: ArrayBuffer): string {
   return (hash >>> 0).toString(16);
 }
 
-/**
- * Generates a unique fingerprint for a file based on metadata and content sampling.
- * This is much faster than a full cryptographic hash (SHA-256).
- *
- * @param file - The file (or blob) to fingerprint.
- * @param metadata - The metadata to include in the fingerprint (title, author, filename).
- * @returns A string fingerprint.
- */
 export async function generateFileFingerprint(
   file: Blob,
   metadata: { title: string; author: string; filename: string }
 ): Promise<string> {
-  // 1. Metadata: This acts as the primary filter.
-  // We use title/author/filename instead of volatile attributes like size/lastModified.
   const metaString = `${metadata.filename}-${metadata.title}-${metadata.author}`;
-
-  // 2. Head/Tail Sampling: Read the first 4KB and last 4KB of the file.
-  // The header usually contains file format signatures (magic bytes) and metadata.
-  // The footer often contains EOF markers or central directory records (in ZIP/EPUB).
   const headSize = Math.min(4096, file.size);
-
   const head = await file.slice(0, headSize).arrayBuffer();
-  // if file is smaller than 4096, tail overlaps head, which is fine for fingerprinting
   const tail = await file.slice(Math.max(0, file.size - 4096), file.size).arrayBuffer();
-
-  // 3. Fast non-crypto hash
   return `${metaString}-${cheapHash(head)}-${cheapHash(tail)}`;
 }
 
-/**
- * Validates that the file has a ZIP header (PK\x03\x04), which is required for EPUBs.
- * This prevents uploading random files or potential malware masked as EPUBs.
- * It checks the first 4 bytes for the Magic Number: 50 4B 03 04.
- *
- * @param file - The file to validate.
- * @returns A Promise resolving to true if valid, false otherwise.
- */
 export async function validateZipSignature(file: File): Promise<boolean> {
     try {
         const buffer = await file.slice(0, 4).arrayBuffer();
         const view = new DataView(buffer);
-        // PK\x03\x04 => 0x50 0x4B 0x03 0x04
         return view.getUint8(0) === 0x50 &&
                view.getUint8(1) === 0x4B &&
                view.getUint8(2) === 0x03 &&
@@ -69,44 +42,32 @@ export async function validateZipSignature(file: File): Promise<boolean> {
     }
 }
 
-/**
- * Reprocesses an existing book by re-extracting content from the source file.
- * This is useful for updating books after parser improvements.
- *
- * @param bookId - The ID of the book to reprocess.
- */
 export async function reprocessBook(bookId: string): Promise<void> {
   const db = await getDB();
-  // Use .get() instead of .getFrom() as IDBPDatabase doesn't have getFrom.
-  // (Assuming 'files' store returns a Blob or ArrayBuffer)
-  const file = await db.get('files', bookId);
+  // v18: Get from static_resources
+  const resource = await db.get('static_resources', bookId);
+  const file = resource?.epubBlob;
 
   if (!file) {
     throw new Error(`Book source file not found for ID: ${bookId}`);
   }
 
-  // Treat as blob if it's an ArrayBuffer (though it should be stored as Blob usually, or we cast it)
   const fileBlob = file instanceof Blob ? file : new Blob([file]);
-
-  // Extract content
   const chapters = await extractContentOffscreen(fileBlob, {});
 
-  // Prepare data (similar to processEpub)
   const syntheticToc: NavigationItem[] = [];
   const sections: SectionMetadata[] = [];
   const ttsContentBatches: TTSContent[] = [];
-  const tableImages: TableImage[] = [];
+  // Table images not supported in v18 persistence yet, skipping.
   let totalChars = 0;
 
   chapters.forEach((chapter, i) => {
-      // Synthetic TOC
       syntheticToc.push({
           id: `syn-toc-${i}`,
           href: chapter.href,
           label: chapter.title || `Chapter ${i+1}`
       });
 
-      // Section Metadata
       sections.push({
           id: `${bookId}-${chapter.href}`,
           bookId,
@@ -116,7 +77,6 @@ export async function reprocessBook(bookId: string): Promise<void> {
       });
       totalChars += chapter.textContent.length;
 
-      // TTS Content
       if (chapter.sentences.length > 0) {
           ttsContentBatches.push({
               id: `${bookId}-${chapter.href}`,
@@ -125,89 +85,64 @@ export async function reprocessBook(bookId: string): Promise<void> {
               sentences: chapter.sentences
           });
       }
-
-      // Collect Table Images
-      if (chapter.tables) {
-          chapter.tables.forEach(table => {
-              tableImages.push({
-                  id: `${bookId}-${table.cfi}`,
-                  bookId,
-                  sectionId: chapter.href,
-                  cfi: table.cfi,
-                  imageBlob: table.imageBlob
-              });
-          });
-      }
   });
 
-  // Transaction
-  const tx = db.transaction(['book_sources', 'sections', 'tts_content', 'table_images'], 'readwrite');
+  const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation'], 'readwrite');
 
-  // Helper to delete by index
-  const deleteByIndex = async (storeName: 'sections' | 'tts_content' | 'table_images') => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const store = tx.objectStore(storeName) as any;
-      const index = store.index('by_bookId');
-      const keys = await index.getAllKeys(bookId);
-      for (const key of keys) {
-          await store.delete(key);
-      }
-  };
-
-  await deleteByIndex('sections');
-  await deleteByIndex('tts_content');
-  await deleteByIndex('table_images');
-
-  // Update Book Source Metadata
-  const sourceStore = tx.objectStore('book_sources');
-  const source = await sourceStore.get(bookId);
-  if (source) {
-      source.totalChars = totalChars;
-      source.syntheticToc = syntheticToc;
-      source.version = CURRENT_BOOK_VERSION;
-      await sourceStore.put(source);
+  // Update Metadata
+  const manStore = tx.objectStore('static_manifests');
+  const manifest = await manStore.get(bookId);
+  if (manifest) {
+      manifest.totalChars = totalChars;
+      // manifest.syntheticToc? v18 puts this in static_structure.
+      manifest.schemaVersion = CURRENT_BOOK_VERSION;
+      await manStore.put(manifest);
   }
 
-  // Insert new data
-  const sectionsStore = tx.objectStore('sections');
-  for (const section of sections) {
-    await sectionsStore.add(section);
+  // Update Structure
+  const structStore = tx.objectStore('static_structure');
+  await structStore.put({
+      bookId,
+      toc: syntheticToc,
+      spineItems: sections.map(s => ({
+          id: s.sectionId,
+          characterCount: s.characterCount,
+          index: s.playOrder
+      }))
+  });
+
+  // Update TTS Preparation (Cache)
+  // Clean up old entries first
+  const prepStore = tx.objectStore('cache_tts_preparation');
+  // Requires index 'by_bookId' which we added
+  const prepIndex = prepStore.index('by_bookId');
+  const keys = await prepIndex.getAllKeys(bookId);
+  for (const key of keys) {
+      await prepStore.delete(key);
   }
 
-  const ttsStore = tx.objectStore('tts_content');
   for (const batch of ttsContentBatches) {
-      await ttsStore.add(batch);
-  }
-
-  const tableStore = tx.objectStore('table_images');
-  for (const table of tableImages) {
-      await tableStore.add(table);
+      await prepStore.put({
+          id: batch.id,
+          bookId: batch.bookId,
+          sectionId: batch.sectionId,
+          sentences: batch.sentences
+      });
   }
 
   await tx.done;
 }
 
-/**
- * Processes an EPUB file, extracting metadata and cover image, and storing it in the database.
- *
- * @param file - The EPUB file object to process.
- * @param ttsOptions - Configuration options for TTS sentence extraction.
- * @param onProgress - Callback for progress updates.
- * @returns A Promise that resolves to the UUID of the newly created book.
- * @throws Will throw an error if the file cannot be parsed or database operations fail.
- */
 export async function processEpub(
   file: File,
   ttsOptions?: ExtractionOptions,
   onProgress?: (progress: number, message: string) => void
 ): Promise<string> {
-  // 1. Security Check: Validate File Header
   const isValid = await validateZipSignature(file);
   if (!isValid) {
       throw new Error("Invalid file format. File must be a valid EPUB (ZIP archive).");
   }
 
-  // 2. Metadata & Cover (Fast pass)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const book = (ePub as any)(file);
   await book.ready;
@@ -223,12 +158,10 @@ export async function processEpub(
     try {
       const response = await fetch(coverUrl);
       coverBlob = await response.blob();
-
-      // Compress cover for thumbnail
       if (coverBlob) {
         try {
           thumbnailBlob = await imageCompression(coverBlob as File, {
-            maxSizeMB: 0.05, // 50KB
+            maxSizeMB: 0.05,
             maxWidthOrHeight: 300,
             useWebWorker: true,
           });
@@ -242,28 +175,23 @@ export async function processEpub(
     }
   }
 
-  // Destroy this instance as we will use a new one for offscreen rendering
   book.destroy();
 
-  // 3. Offscreen Extraction (Slow pass)
   const chapters = await extractContentOffscreen(file, ttsOptions, onProgress);
 
   const bookId = uuidv4();
   const syntheticToc: NavigationItem[] = [];
   const sections: SectionMetadata[] = [];
   const ttsContentBatches: TTSContent[] = [];
-  const tableImages: TableImage[] = [];
   let totalChars = 0;
 
   chapters.forEach((chapter, i) => {
-      // Synthetic TOC
       syntheticToc.push({
           id: `syn-toc-${i}`,
           href: chapter.href,
           label: chapter.title || `Chapter ${i+1}`
       });
 
-      // Section Metadata
       sections.push({
           id: `${bookId}-${chapter.href}`,
           bookId,
@@ -273,7 +201,6 @@ export async function processEpub(
       });
       totalChars += chapter.textContent.length;
 
-      // TTS Content
       if (chapter.sentences.length > 0) {
           ttsContentBatches.push({
               id: `${bookId}-${chapter.href}`,
@@ -282,94 +209,87 @@ export async function processEpub(
               sentences: chapter.sentences
           });
       }
-
-      // Collect Table Images
-      if (chapter.tables) {
-          chapter.tables.forEach(table => {
-              tableImages.push({
-                  id: `${bookId}-${table.cfi}`,
-                  bookId,
-                  sectionId: chapter.href,
-                  cfi: table.cfi,
-                  imageBlob: table.imageBlob
-              });
-          });
-      }
   });
 
-  // Calculate fingerprint
   const fileHash = await generateFileFingerprint(file, {
     title: metadata.title || 'Untitled',
     author: metadata.creator || 'Unknown Author',
     filename: file.name
   });
 
-  // Split into Book, Source, State
-  const bookData: Book = {
-    id: bookId,
-    title: metadata.title || 'Untitled',
-    author: metadata.creator || 'Unknown Author',
-    description: metadata.description || '',
-    addedAt: Date.now(),
-    coverBlob: thumbnailBlob || coverBlob, // Use thumbnail if available
-  };
-
-  const sourceData: BookSource = {
+  // Construct New Data Objects
+  const manifest: StaticBookManifest = {
       bookId,
-      filename: file.name,
+      title: metadata.title || 'Untitled',
+      author: metadata.creator || 'Unknown Author',
+      description: metadata.description || '',
       fileHash,
       fileSize: file.size,
-      syntheticToc,
       totalChars,
-      version: CURRENT_BOOK_VERSION
+      schemaVersion: CURRENT_BOOK_VERSION,
+      isbn: undefined,
+      coverBlob: thumbnailBlob || coverBlob // Store thumbnail in manifest
   };
 
-  const stateData: BookState = {
+  const resource: StaticResource = {
       bookId,
-      isOffloaded: false,
-      progress: 0,
-      status: 'new' // Assuming new status or just omitted
-  } as any; // Cast to any to allow 'status' if we added it, or stick to interface
+      epubBlob: file,
+      coverBlob: thumbnailBlob || coverBlob // Also store in resources (could be higher res if we separated them)
+  };
 
-  // Sanitize Book Metadata (Composite validation)
-  const candidateComposite = { ...bookData, ...sourceData, ...stateData };
-  const check = getSanitizedBookMetadata(candidateComposite);
+  const structure = {
+      bookId,
+      toc: syntheticToc,
+      spineItems: sections.map(s => ({
+          id: s.sectionId,
+          characterCount: s.characterCount,
+          index: s.playOrder
+      }))
+  };
 
-  if (check) {
-    const s = check.sanitized;
-    // Update fields from sanitized version
-    bookData.title = s.title;
-    bookData.author = s.author;
-    bookData.description = s.description;
-    if (check.wasModified) {
-       console.warn(`Metadata sanitized for "${bookData.title}":`, check.modifications);
-    }
-  }
+  const inventory: UserInventoryItem = {
+      bookId,
+      addedAt: Date.now(),
+      sourceFilename: file.name,
+      tags: [],
+      status: 'unread',
+      lastInteraction: Date.now()
+  };
+
+  const progress: UserProgress = {
+      bookId,
+      percentage: 0,
+      lastRead: 0,
+      completedRanges: []
+  };
+
+  const overrides: UserOverrides = {
+      bookId,
+      lexicon: []
+  };
 
   const db = await getDB();
+  const tx = db.transaction([
+      'static_manifests', 'static_resources', 'static_structure',
+      'user_inventory', 'user_progress', 'user_overrides',
+      'cache_tts_preparation'
+  ], 'readwrite');
 
-  const tx = db.transaction(['books', 'book_sources', 'book_states', 'files', 'sections', 'tts_content', 'table_images'], 'readwrite');
-  await tx.objectStore('books').add(bookData);
-  await tx.objectStore('book_sources').add(sourceData);
-  await tx.objectStore('book_states').add(stateData);
-  await tx.objectStore('files').add(file, bookId);
+  await tx.objectStore('static_manifests').add(manifest);
+  await tx.objectStore('static_resources').add(resource);
+  await tx.objectStore('static_structure').add(structure);
+  await tx.objectStore('user_inventory').add(inventory);
+  await tx.objectStore('user_progress').add(progress);
+  await tx.objectStore('user_overrides').add(overrides);
 
-  // Store section metadata
-  const sectionsStore = tx.objectStore('sections');
-  for (const section of sections) {
-    await sectionsStore.add(section);
-  }
-
-  // Store TTS content
-  const ttsStore = tx.objectStore('tts_content');
+  const ttsStore = tx.objectStore('cache_tts_preparation');
   for (const batch of ttsContentBatches) {
-      await ttsStore.add(batch);
-  }
-
-  // Store Table Images
-  const tableStore = tx.objectStore('table_images');
-  for (const table of tableImages) {
-      await tableStore.add(table);
+      await ttsStore.add({
+          id: batch.id,
+          bookId: batch.bookId,
+          sectionId: batch.sectionId,
+          sentences: batch.sentences
+      });
   }
 
   await tx.done;
