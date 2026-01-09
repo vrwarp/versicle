@@ -62,15 +62,24 @@ describe('ingestion', () => {
   beforeEach(async () => {
     vi.spyOn(window, 'confirm').mockImplementation(() => true);
     const db = await getDB();
-    // Update reset logic to include new stores
-    const stores = ['books', 'book_sources', 'book_states', 'files', 'sections', 'annotations', 'tts_content'];
-    const tx = db.transaction(stores, 'readwrite');
-    for (const store of stores) {
-        if (db.objectStoreNames.contains(store)) {
+    // Update reset logic to include new v18 stores
+    const stores = [
+        'static_manifests', 'static_resources', 'static_structure',
+        'user_inventory', 'user_progress', 'user_annotations',
+        'user_overrides', 'cache_tts_preparation'
+    ];
+
+    // Check stores exist before clearing (IDB safe)
+    const existingStores = Array.from(db.objectStoreNames);
+    const storesToClear = stores.filter(s => existingStores.includes(s));
+
+    if (storesToClear.length > 0) {
+        const tx = db.transaction(storesToClear, 'readwrite');
+        for (const store of storesToClear) {
             await tx.objectStore(store).clear();
         }
+        await tx.done;
     }
-    await tx.done;
   });
 
   afterEach(() => {
@@ -116,29 +125,32 @@ describe('ingestion', () => {
     expect(bookId).toBe('mock-uuid');
 
     const db = await getDB();
-    const book = await db.get('books', bookId);
-    const source = await db.get('book_sources', bookId);
-    const state = await db.get('book_states', bookId);
+    const manifest = await db.get('static_manifests', bookId);
+    const resource = await db.get('static_resources', bookId);
+    const inventory = await db.get('user_inventory', bookId);
+    const progress = await db.get('user_progress', bookId);
 
-    expect(book).toBeDefined();
-    expect(book?.title).toBe('Mock Title');
-    expect(book?.author).toBe('Mock Author');
-    expect(book?.description).toBe('Mock Description');
-    expect(book?.id).toBe('mock-uuid');
-    expect(book?.coverBlob).toBeDefined();
+    expect(manifest).toBeDefined();
+    expect(manifest?.title).toBe('Mock Title');
+    expect(manifest?.author).toBe('Mock Author');
+    expect(manifest?.description).toBe('Mock Description');
+    expect(manifest?.bookId).toBe('mock-uuid');
+    expect(manifest?.coverBlob).toBeDefined();
 
-    expect(source).toBeDefined();
-    expect(source?.fileHash).toBeDefined();
-    expect(source?.filename).toBe('test.epub');
+    // Check v18 mapping
+    expect(manifest?.fileHash).toBeDefined();
 
-    expect(state).toBeDefined();
-    expect(state?.isOffloaded).toBe(false);
+    expect(inventory).toBeDefined();
+    expect(inventory?.sourceFilename).toBe('test.epub');
 
-    const storedFile = await db.get('files', bookId);
-    expect(storedFile).toBeDefined();
+    expect(progress).toBeDefined();
+    // isOffloaded is derived, not stored directly in v18
 
-    // Verify TTS content
-    const ttsContent = await db.getAll('tts_content');
+    // File in static_resources
+    expect(resource?.epubBlob).toBeDefined();
+
+    // Verify TTS content (cache_tts_preparation)
+    const ttsContent = await db.getAll('cache_tts_preparation');
     expect(ttsContent.length).toBeGreaterThan(0);
     expect(ttsContent[0].bookId).toBe(bookId);
     expect(ttsContent[0].sentences.length).toBeGreaterThan(0);
@@ -164,11 +176,11 @@ describe('ingestion', () => {
     const bookId = await processEpub(mockFile);
 
     const db = await getDB();
-    const book = await db.get('books', bookId);
+    const manifest = await db.get('static_manifests', bookId);
 
-    expect(book).toBeDefined();
-    expect(book?.title).toBe('No Cover Book');
-    expect(book?.coverBlob).toBeUndefined();
+    expect(manifest).toBeDefined();
+    expect(manifest?.title).toBe('No Cover Book');
+    expect(manifest?.coverBlob).toBeUndefined();
   });
 
   it('should use default values when metadata is missing', async () => {
@@ -189,11 +201,11 @@ describe('ingestion', () => {
     const bookId = await processEpub(mockFile);
 
     const db = await getDB();
-    const book = await db.get('books', bookId);
+    const manifest = await db.get('static_manifests', bookId);
 
-    expect(book).toBeDefined();
-    expect(book?.title).toBe('Untitled');
-    expect(book?.author).toBe('Unknown Author');
+    expect(manifest).toBeDefined();
+    expect(manifest?.title).toBe('Untitled');
+    expect(manifest?.author).toBe('Unknown Author');
   });
 
   it('should always sanitize metadata', async () => {
@@ -222,11 +234,11 @@ describe('ingestion', () => {
      const bookId = await processEpub(mockFile);
 
      const db = await getDB();
-     const book = await db.get('books', bookId);
+     const manifest = await db.get('static_manifests', bookId);
 
      expect(confirmSpy).not.toHaveBeenCalled();
-     expect(book?.title.length).toBe(500);
-     expect(book?.title).not.toBe(longTitle);
+     expect(manifest?.title.length).toBe(500);
+     expect(manifest?.title).not.toBe(longTitle);
      consoleSpy.mockRestore();
   });
 });

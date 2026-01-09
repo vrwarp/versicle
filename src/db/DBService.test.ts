@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
-import type { Book, BookSource, BookState } from '../types/db';
+import type { Book, BookSource, BookState, StaticBookManifest, UserInventoryItem, UserProgress, StaticResource } from '../types/db';
 
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
@@ -48,21 +48,14 @@ describe('DBService', () => {
     it('should return sorted books', async () => {
       const db = await getDB();
 
-      const b1: Book = { id: '1', title: 'A', author: 'A', description: '', addedAt: 100 };
-      const s1: BookSource = { bookId: '1', filename: 'A.epub' };
-      const st1: BookState = { bookId: '1', isOffloaded: false };
+      // Seed using v18 stores
+      await db.put('static_manifests', { bookId: '1', title: 'A', author: 'A', schemaVersion: 1, fileHash: 'h1', fileSize: 0, totalChars: 0 } as StaticBookManifest);
+      await db.put('user_inventory', { bookId: '1', addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
+      await db.put('user_progress', { bookId: '1', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
 
-      const b2: Book = { id: '2', title: 'B', author: 'B', description: '', addedAt: 200 };
-      const s2: BookSource = { bookId: '2', filename: 'B.epub' };
-      const st2: BookState = { bookId: '2', isOffloaded: false };
-
-      await db.put('books', b1);
-      await db.put('book_sources', s1);
-      await db.put('book_states', st1);
-
-      await db.put('books', b2);
-      await db.put('book_sources', s2);
-      await db.put('book_states', st2);
+      await db.put('static_manifests', { bookId: '2', title: 'B', author: 'B', schemaVersion: 1, fileHash: 'h2', fileSize: 0, totalChars: 0 } as StaticBookManifest);
+      await db.put('user_inventory', { bookId: '2', addedAt: 200, status: 'unread', tags: [], lastInteraction: 200 } as UserInventoryItem);
+      await db.put('user_progress', { bookId: '2', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
 
       const library = await dbService.getLibrary();
       expect(library).toHaveLength(2);
@@ -75,16 +68,13 @@ describe('DBService', () => {
     it('should return book metadata and file', async () => {
       const db = await getDB();
       const id = '123';
-      const b: Book = { id, title: 'Test', author: 'A', description: '', addedAt: 100 };
-      const s: BookSource = { bookId: id, fileHash: 'h1', fileSize: 100 };
-      const st: BookState = { bookId: id, isOffloaded: false };
 
       const fileData = new TextEncoder().encode('data').buffer;
 
-      await db.put('books', b);
-      await db.put('book_sources', s);
-      await db.put('book_states', st);
-      await db.put('files', fileData, id);
+      await db.put('static_manifests', { bookId: id, title: 'Test', author: 'A', schemaVersion: 1, fileHash: 'h1', fileSize: 100, totalChars: 0 } as StaticBookManifest);
+      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
+      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
+      await db.put('static_resources', { bookId: id, epubBlob: fileData } as StaticResource);
 
       const result = await dbService.getBook(id);
       expect(result.metadata?.id).toBe(id);
@@ -104,23 +94,24 @@ describe('DBService', () => {
       const db = await getDB();
       const id = 'del-1';
 
-      await db.put('books', { id, title: 'Del', author: 'A', description: '', addedAt: 100 });
-      await db.put('book_sources', { bookId: id });
-      await db.put('book_states', { bookId: id });
-      await db.put('files', new ArrayBuffer(0), id);
-      await db.put('locations', { bookId: id, locations: 'loc' });
-      await db.put('tts_queue', { bookId: id, queue: [], currentIndex: 0, updatedAt: 0 });
-      await db.put('annotations', { id: 'ann-1', bookId: id, cfiRange: 'cfi', text: 'note', color: 'red', created: 0 });
+      await db.put('static_manifests', { bookId: id, title: 'Del', author: 'A', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
+      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
+      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
+      await db.put('static_resources', { bookId: id, epubBlob: new ArrayBuffer(0) } as StaticResource);
+
+      await db.put('cache_render_metrics', { bookId: id, locations: 'loc' });
+      await db.put('cache_session_state', { bookId: id, playbackQueue: [], updatedAt: 0 });
+      await db.put('user_annotations', { id: 'ann-1', bookId: id, cfiRange: 'cfi', text: 'note', color: 'red', created: 0, type: 'highlight' });
 
       await dbService.deleteBook(id);
 
-      expect(await db.get('books', id)).toBeUndefined();
-      expect(await db.get('book_sources', id)).toBeUndefined();
-      expect(await db.get('book_states', id)).toBeUndefined();
-      expect(await db.get('files', id)).toBeUndefined();
-      expect(await db.get('locations', id)).toBeUndefined();
-      expect(await db.get('tts_queue', id)).toBeUndefined();
-      expect(await db.get('annotations', 'ann-1')).toBeUndefined();
+      expect(await db.get('static_manifests', id)).toBeUndefined();
+      expect(await db.get('user_inventory', id)).toBeUndefined();
+      expect(await db.get('user_progress', id)).toBeUndefined();
+      expect(await db.get('static_resources', id)).toBeUndefined();
+      expect(await db.get('cache_render_metrics', id)).toBeUndefined();
+      expect(await db.get('cache_session_state', id)).toBeUndefined();
+      expect(await db.get('user_annotations', 'ann-1')).toBeUndefined();
     });
   });
 
@@ -130,16 +121,21 @@ describe('DBService', () => {
         const id = 'off-1';
         const fileContent = new Uint8Array([1, 2, 3]);
 
-        await db.put('books', { id, title: 'Off', author: 'A', description: '', addedAt: 100 });
-        await db.put('book_sources', { bookId: id, fileHash: 'existing-hash', filename: 'f.epub' });
-        await db.put('book_states', { bookId: id, isOffloaded: false });
-        await db.put('files', fileContent.buffer, id);
+        await db.put('static_manifests', { bookId: id, title: 'Off', author: 'A', schemaVersion: 1, fileHash: 'existing-hash', fileSize: 0, totalChars: 0 } as StaticBookManifest);
+        await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100, sourceFilename: 'f.epub' } as UserInventoryItem);
+        await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
+        await db.put('static_resources', { bookId: id, epubBlob: fileContent.buffer } as StaticResource);
 
         await dbService.offloadBook(id);
 
-        const updatedState = await db.get('book_states', id);
-        expect(updatedState?.isOffloaded).toBe(true);
-        expect(await db.get('files', id)).toBeUndefined();
+        const resource = await db.get('static_resources', id);
+
+        // After fix: resource blob is undefined
+        expect(resource?.epubBlob).toBeUndefined();
+
+        // Metadata helper check
+        const meta = await dbService.getBookMetadata(id);
+        expect(meta?.isOffloaded).toBe(true);
     });
   });
 
@@ -168,8 +164,9 @@ describe('DBService', () => {
       const db = await getDB();
       const id = 'prog-1';
 
-      await db.put('books', { id, title: 'P', author: 'A', description: '', addedAt: 100 });
-      await db.put('book_states', { bookId: id, progress: 0 });
+      await db.put('static_manifests', { bookId: id, title: 'P', author: 'A', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
+      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
+      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
 
       dbService.saveProgress(id, 'cfi1', 0.1);
       dbService.saveProgress(id, 'cfi2', 0.2);
@@ -177,9 +174,9 @@ describe('DBService', () => {
       // Wait > 1000ms
       await new Promise(resolve => setTimeout(resolve, 1100));
 
-      const updated = await db.get('book_states', id);
+      const updated = await db.get('user_progress', id);
       expect(updated?.currentCfi).toBe('cfi2');
-      expect(updated?.progress).toBe(0.2);
+      expect(updated?.percentage).toBe(0.2);
     });
   });
 
@@ -188,14 +185,15 @@ describe('DBService', () => {
       const db = await getDB();
       const id = 'clean-1';
 
-      await db.put('books', { id, title: 'Clean', author: 'A', description: '', addedAt: 100 });
-      await db.put('book_states', { bookId: id, progress: 0 });
+      await db.put('static_manifests', { bookId: id, title: 'Clean', author: 'A', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
+      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
+      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
 
       dbService.saveProgress(id, 'cfi-updated', 0.5);
 
       // Verify not yet written
-      let updated = await db.get('book_states', id);
-      expect(updated?.progress).toBe(0);
+      let updated = await db.get('user_progress', id);
+      expect(updated?.percentage).toBe(0);
 
       // Cleanup
       dbService.cleanup();
@@ -204,15 +202,15 @@ describe('DBService', () => {
       await new Promise(resolve => setTimeout(resolve, 1100));
 
       // Verify STILL not written
-      updated = await db.get('book_states', id);
-      expect(updated?.progress).toBe(0);
+      updated = await db.get('user_progress', id);
+      expect(updated?.percentage).toBe(0);
     });
 
     it('should prevent saveTTSState from writing if cleaned up', async () => {
        const db = await getDB();
        const id = 'tts-clean-1';
        // Ensure no previous state
-       await db.delete('tts_queue', id);
+       await db.delete('cache_session_state', id);
 
        dbService.saveTTSState(id, [], 1);
 
@@ -220,7 +218,7 @@ describe('DBService', () => {
 
        await new Promise(resolve => setTimeout(resolve, 1100));
 
-       const state = await db.get('tts_queue', id);
+       const state = await db.get('cache_session_state', id);
        expect(state).toBeUndefined();
     });
   });

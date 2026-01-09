@@ -16,14 +16,36 @@ describe('LexiconService', () => {
 
   describe('deleteRules', () => {
     it('should delete multiple rules', async () => {
+      const mockCursor = {
+        value: {
+          bookId: 'book1',
+          lexicon: [
+            { id: '1', original: 'a', replacement: 'b' },
+            { id: '2', original: 'c', replacement: 'd' },
+            { id: '3', original: 'e', replacement: 'f' }
+          ]
+        },
+        update: vi.fn(),
+        continue: vi.fn().mockResolvedValue(null) // Run once
+      };
+
       const db = {
         transaction: vi.fn().mockReturnValue({
           objectStore: vi.fn().mockReturnValue({
-            delete: vi.fn().mockResolvedValue(undefined),
+            openCursor: vi.fn()
+              .mockResolvedValueOnce(mockCursor) // First iteration returns cursor
+              .mockResolvedValueOnce(null),      // Second iteration (if loop logic was different)
           }),
           done: Promise.resolve(),
         }),
       };
+
+      // Fix circular reference in cursor loop simulation if needed,
+      // but here we just mock continue to return null or stop loop.
+      // The implementation awaits cursor.continue() which returns the next cursor (or null).
+      // We can make the cursor itself return a promise resolving to null on continue.
+      mockCursor.continue.mockResolvedValue(null);
+
       // Mock getDB to return our mock db
       const { getDB } = await import('../../db/db');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,10 +53,13 @@ describe('LexiconService', () => {
 
       await service.deleteRules(['1', '2']);
 
-      expect(db.transaction).toHaveBeenCalledWith('lexicon', 'readwrite');
-      const store = db.transaction().objectStore();
-      expect(store.delete).toHaveBeenCalledWith('1');
-      expect(store.delete).toHaveBeenCalledWith('2');
+      expect(db.transaction).toHaveBeenCalledWith('user_overrides', 'readwrite');
+      expect(mockCursor.update).toHaveBeenCalledWith({
+          bookId: 'book1',
+          lexicon: [
+            { id: '3', original: 'e', replacement: 'f' }
+          ]
+      });
     });
   });
 

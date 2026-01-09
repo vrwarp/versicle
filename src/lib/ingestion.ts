@@ -217,12 +217,35 @@ export async function processEpub(
     filename: file.name
   });
 
-  // Construct New Data Objects
-  const manifest: StaticBookManifest = {
-      bookId,
+  // Construct Sanitized Metadata Candidate
+  // We need to pass through sanitization logic (BookMetadata composite validator)
+  // even if we store them split.
+  const candidateMetadata = {
+      id: bookId, // for validation check
       title: metadata.title || 'Untitled',
       author: metadata.creator || 'Unknown Author',
       description: metadata.description || '',
+      addedAt: Date.now(),
+      // ... other fields not strictly validated for content but for type
+  };
+
+  const check = getSanitizedBookMetadata(candidateMetadata as any);
+  if (check) {
+      const s = check.sanitized;
+      candidateMetadata.title = s.title;
+      candidateMetadata.author = s.author;
+      candidateMetadata.description = s.description;
+      if (check.wasModified) {
+          console.warn(`Metadata sanitized for "${candidateMetadata.title}":`, check.modifications);
+      }
+  }
+
+  // Construct New Data Objects
+  const manifest: StaticBookManifest = {
+      bookId,
+      title: candidateMetadata.title,
+      author: candidateMetadata.author,
+      description: candidateMetadata.description,
       fileHash,
       fileSize: file.size,
       totalChars,
@@ -234,7 +257,7 @@ export async function processEpub(
   const resource: StaticResource = {
       bookId,
       epubBlob: file,
-      coverBlob: thumbnailBlob || coverBlob // Also store in resources (could be higher res if we separated them)
+      coverBlob: thumbnailBlob || coverBlob
   };
 
   const structure = {
@@ -249,7 +272,7 @@ export async function processEpub(
 
   const inventory: UserInventoryItem = {
       bookId,
-      addedAt: Date.now(),
+      addedAt: candidateMetadata.addedAt,
       sourceFilename: file.name,
       tags: [],
       status: 'unread',

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { dbService } from './DBService';
 import { initDB } from './db';
-import type { TTSContent, BookMetadata } from '../types/db';
+import type { TTSContent, BookMetadata, StaticBookManifest, UserInventoryItem, UserProgress, UserOverrides } from '../types/db';
 import 'fake-indexeddb/auto';
 
 describe('DBService - TTS Content and Migration', () => {
@@ -23,6 +23,7 @@ describe('DBService - TTS Content and Migration', () => {
     const objectStoreNames = db.objectStoreNames;
     const storeNames = Array.from(objectStoreNames);
     if (storeNames.length > 0) {
+        // IDB transaction requires at least one store name
         const tx = db.transaction(storeNames, 'readwrite');
         for (const storeName of storeNames) {
            await tx.objectStore(storeName).clear();
@@ -38,9 +39,22 @@ describe('DBService - TTS Content and Migration', () => {
   });
 
   it('should delete TTS content when book is deleted', async () => {
-    // Seed book and TTS content
+    // Seed book and TTS content using new v18 schema directly or helper
     const db = await initDB();
-    await db.put('books', { id: testBookId, title: 'Test Book', author: 'Tester', addedAt: Date.now() } as BookMetadata);
+    // Seeding DB manually to match v18 structure
+    await db.put('static_manifests', {
+        bookId: testBookId, title: 'Test Book', author: 'Tester', schemaVersion: 1, fileHash: 'abc', fileSize: 0, totalChars: 0
+    } as StaticBookManifest);
+
+    await db.put('user_inventory', {
+        bookId: testBookId, addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: Date.now()
+    } as UserInventoryItem);
+
+    await db.put('user_progress', {
+        bookId: testBookId, percentage: 0, lastRead: 0, completedRanges: []
+    } as UserProgress);
+
+    // Save TTS content (uses cache_tts_preparation)
     await dbService.saveTTSContent(testTTSContent);
 
     // Verify seeded

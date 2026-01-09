@@ -334,17 +334,8 @@ class DBService {
       const tx = db.transaction(['static_resources', 'static_manifests'], 'readwrite');
 
       const resStore = tx.objectStore('static_resources');
-      const resource = await resStore.get(id);
-
-      if (resource) {
-          // Keep coverBlob if it exists in resource (high-res), but remove epubBlob.
-          // Or just clear epubBlob.
-          resource.epubBlob = undefined as any;
-          // If we have cover in manifest, we might not need high-res cover in resources unless for reader view?
-          // Reader usually extracts cover from EPUB. If EPUB is gone, Reader can't get cover.
-          // So we should probably keep coverBlob in static_resources if it exists.
-          await resStore.put(resource);
-      }
+      // Delete the record entire to signal offloading (so getKey returns undefined)
+      await resStore.delete(id);
 
       await tx.done;
     } catch (error) {

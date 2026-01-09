@@ -66,7 +66,8 @@ describe('useAnnotationStore', () => {
       await result.current.loadAnnotations('book1');
     });
 
-    expect(mockDB.getAllFromIndex).toHaveBeenCalledWith('annotations', 'by_bookId', 'book1');
+    // Updated store name to user_annotations
+    expect(mockDB.getAllFromIndex).toHaveBeenCalledWith('user_annotations', 'by_bookId', 'book1');
     expect(result.current.annotations).toEqual(annotations);
   });
 
@@ -79,7 +80,8 @@ describe('useAnnotationStore', () => {
       await result.current.addAnnotation(newAnnotation as any);
     });
 
-    expect(mockDB.add).toHaveBeenCalledWith('annotations', expect.objectContaining({
+    // Updated store name to user_annotations
+    expect(mockDB.add).toHaveBeenCalledWith('user_annotations', expect.objectContaining({
       id: 'test-uuid',
       bookId: 'book1',
       cfiRange: 'cfi',
@@ -101,7 +103,8 @@ describe('useAnnotationStore', () => {
       await result.current.deleteAnnotation('test-uuid');
     });
 
-    expect(mockDB.delete).toHaveBeenCalledWith('annotations', 'test-uuid');
+    // Updated store name to user_annotations
+    expect(mockDB.delete).toHaveBeenCalledWith('user_annotations', 'test-uuid');
     expect(result.current.annotations).toHaveLength(0);
   });
 
@@ -116,7 +119,8 @@ describe('useAnnotationStore', () => {
       await result.current.updateAnnotation('test-uuid', { note: 'new note' });
     });
 
-    expect(mockDB.put).toHaveBeenCalledWith('annotations', expect.objectContaining({
+    // Updated store name to user_annotations
+    expect(mockDB.put).toHaveBeenCalledWith('user_annotations', expect.objectContaining({
         id: 'test-uuid',
         note: 'new note',
     }));

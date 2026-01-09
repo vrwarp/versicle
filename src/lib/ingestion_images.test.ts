@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processEpub } from './ingestion';
 import { dbService } from '../db/DBService';
 import imageCompression from 'browser-image-compression';
+import { getDB } from '../db/db';
 
 // Mock dependencies
 vi.mock('browser-image-compression', () => ({
@@ -52,12 +53,14 @@ describe('Ingestion Image Optimization', () => {
     (imageCompression as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockThumbnailBlob);
 
     // Clean DB
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = await (dbService as any).getDB();
-    await db.clear('books');
+    const db = await getDB();
+    await db.clear('static_manifests'); // Updated to use v18 store
+    await db.clear('user_inventory');
+    await db.clear('user_progress');
+    await db.clear('static_resources');
   });
 
-  it('should store thumbnail in books store', async () => {
+  it('should store thumbnail in books store (manifest)', async () => {
     const bookId = await processEpub(mockFile);
 
     // Verify compression was called
@@ -67,11 +70,14 @@ describe('Ingestion Image Optimization', () => {
     }));
 
     // Verify metadata has thumbnail
+    // DBService.getBookMetadata now returns composite from static_manifests
     const metadata = await dbService.getBookMetadata(bookId);
     expect(metadata).toBeDefined();
 
-    // Let's verifying they exist.
+    // Verify coverBlob is returned and defined
     expect(metadata?.coverBlob).toBeDefined();
+    // Ideally verify it is the thumbnail blob but blob equality might be tricky in mocks if not referentially stable
+    // But since we mock return value, we expect it to be passed through.
   });
 
   it('should fallback to original if compression fails', async () => {
