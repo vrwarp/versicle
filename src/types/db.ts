@@ -1,5 +1,6 @@
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { NavigationItem } from 'epubjs';
+import { type DBSchema } from 'idb';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ContentType } from './content-analysis';
 

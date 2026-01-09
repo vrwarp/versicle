@@ -304,7 +304,7 @@ class DBService {
       const deleteFromIndex = async (storeName: any, indexName: string) => {
           const store = tx.objectStore(storeName);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const index = store.index(indexName as any);
+          const index = (store as any).index(indexName);
           let cursor = await index.openCursor(IDBKeyRange.only(id));
           while (cursor) {
               await cursor.delete();
