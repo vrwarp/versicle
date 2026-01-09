@@ -56,13 +56,13 @@ describe('DBService', () => {
       const s2: BookSource = { bookId: '2', filename: 'B.epub' };
       const st2: BookState = { bookId: '2', isOffloaded: false };
 
-      await db.put('books', b1);
-      await db.put('book_sources', s1);
-      await db.put('book_states', st1);
+      await db.put('static_books', b1);
+      await db.put('static_book_sources', s1);
+      await db.put('user_book_states', st1);
 
-      await db.put('books', b2);
-      await db.put('book_sources', s2);
-      await db.put('book_states', st2);
+      await db.put('static_books', b2);
+      await db.put('static_book_sources', s2);
+      await db.put('user_book_states', st2);
 
       const library = await dbService.getLibrary();
       expect(library).toHaveLength(2);
@@ -81,10 +81,10 @@ describe('DBService', () => {
 
       const fileData = new TextEncoder().encode('data').buffer;
 
-      await db.put('books', b);
-      await db.put('book_sources', s);
-      await db.put('book_states', st);
-      await db.put('files', fileData, id);
+      await db.put('static_books', b);
+      await db.put('static_book_sources', s);
+      await db.put('user_book_states', st);
+      await db.put('static_files', fileData, id);
 
       const result = await dbService.getBook(id);
       expect(result.metadata?.id).toBe(id);
@@ -104,23 +104,23 @@ describe('DBService', () => {
       const db = await getDB();
       const id = 'del-1';
 
-      await db.put('books', { id, title: 'Del', author: 'A', description: '', addedAt: 100 });
-      await db.put('book_sources', { bookId: id });
-      await db.put('book_states', { bookId: id });
-      await db.put('files', new ArrayBuffer(0), id);
-      await db.put('locations', { bookId: id, locations: 'loc' });
-      await db.put('tts_queue', { bookId: id, queue: [], currentIndex: 0, updatedAt: 0 });
-      await db.put('annotations', { id: 'ann-1', bookId: id, cfiRange: 'cfi', text: 'note', color: 'red', created: 0 });
+      await db.put('static_books', { id, title: 'Del', author: 'A', description: '', addedAt: 100 });
+      await db.put('static_book_sources', { bookId: id });
+      await db.put('user_book_states', { bookId: id });
+      await db.put('static_files', new ArrayBuffer(0), id);
+      await db.put('cache_book_locations', { bookId: id, locations: 'loc' });
+      await db.put('cache_tts_queue', { bookId: id, queue: [], currentIndex: 0, updatedAt: 0 });
+      await db.put('user_annotations', { id: 'ann-1', bookId: id, cfiRange: 'cfi', text: 'note', color: 'red', created: 0 });
 
       await dbService.deleteBook(id);
 
-      expect(await db.get('books', id)).toBeUndefined();
-      expect(await db.get('book_sources', id)).toBeUndefined();
-      expect(await db.get('book_states', id)).toBeUndefined();
-      expect(await db.get('files', id)).toBeUndefined();
-      expect(await db.get('locations', id)).toBeUndefined();
-      expect(await db.get('tts_queue', id)).toBeUndefined();
-      expect(await db.get('annotations', 'ann-1')).toBeUndefined();
+      expect(await db.get('static_books', id)).toBeUndefined();
+      expect(await db.get('static_book_sources', id)).toBeUndefined();
+      expect(await db.get('user_book_states', id)).toBeUndefined();
+      expect(await db.get('static_files', id)).toBeUndefined();
+      expect(await db.get('cache_book_locations', id)).toBeUndefined();
+      expect(await db.get('cache_tts_queue', id)).toBeUndefined();
+      expect(await db.get('user_annotations', 'ann-1')).toBeUndefined();
     });
   });
 
@@ -130,16 +130,16 @@ describe('DBService', () => {
         const id = 'off-1';
         const fileContent = new Uint8Array([1, 2, 3]);
 
-        await db.put('books', { id, title: 'Off', author: 'A', description: '', addedAt: 100 });
-        await db.put('book_sources', { bookId: id, fileHash: 'existing-hash', filename: 'f.epub' });
-        await db.put('book_states', { bookId: id, isOffloaded: false });
-        await db.put('files', fileContent.buffer, id);
+        await db.put('static_books', { id, title: 'Off', author: 'A', description: '', addedAt: 100 });
+        await db.put('static_book_sources', { bookId: id, fileHash: 'existing-hash', filename: 'f.epub' });
+        await db.put('user_book_states', { bookId: id, isOffloaded: false });
+        await db.put('static_files', fileContent.buffer, id);
 
         await dbService.offloadBook(id);
 
-        const updatedState = await db.get('book_states', id);
+        const updatedState = await db.get('user_book_states', id);
         expect(updatedState?.isOffloaded).toBe(true);
-        expect(await db.get('files', id)).toBeUndefined();
+        expect(await db.get('static_files', id)).toBeUndefined();
     });
   });
 
@@ -168,8 +168,8 @@ describe('DBService', () => {
       const db = await getDB();
       const id = 'prog-1';
 
-      await db.put('books', { id, title: 'P', author: 'A', description: '', addedAt: 100 });
-      await db.put('book_states', { bookId: id, progress: 0 });
+      await db.put('static_books', { id, title: 'P', author: 'A', description: '', addedAt: 100 });
+      await db.put('user_book_states', { bookId: id, progress: 0 });
 
       dbService.saveProgress(id, 'cfi1', 0.1);
       dbService.saveProgress(id, 'cfi2', 0.2);
@@ -177,7 +177,7 @@ describe('DBService', () => {
       // Wait > 1000ms
       await new Promise(resolve => setTimeout(resolve, 1100));
 
-      const updated = await db.get('book_states', id);
+      const updated = await db.get('user_book_states', id);
       expect(updated?.currentCfi).toBe('cfi2');
       expect(updated?.progress).toBe(0.2);
     });
@@ -188,13 +188,13 @@ describe('DBService', () => {
       const db = await getDB();
       const id = 'clean-1';
 
-      await db.put('books', { id, title: 'Clean', author: 'A', description: '', addedAt: 100 });
-      await db.put('book_states', { bookId: id, progress: 0 });
+      await db.put('static_books', { id, title: 'Clean', author: 'A', description: '', addedAt: 100 });
+      await db.put('user_book_states', { bookId: id, progress: 0 });
 
       dbService.saveProgress(id, 'cfi-updated', 0.5);
 
       // Verify not yet written
-      let updated = await db.get('book_states', id);
+      let updated = await db.get('user_book_states', id);
       expect(updated?.progress).toBe(0);
 
       // Cleanup
@@ -204,7 +204,7 @@ describe('DBService', () => {
       await new Promise(resolve => setTimeout(resolve, 1100));
 
       // Verify STILL not written
-      updated = await db.get('book_states', id);
+      updated = await db.get('user_book_states', id);
       expect(updated?.progress).toBe(0);
     });
 
@@ -212,7 +212,7 @@ describe('DBService', () => {
        const db = await getDB();
        const id = 'tts-clean-1';
        // Ensure no previous state
-       await db.delete('tts_queue', id);
+       await db.delete('cache_tts_queue', id);
 
        dbService.saveTTSState(id, [], 1);
 
@@ -220,7 +220,7 @@ describe('DBService', () => {
 
        await new Promise(resolve => setTimeout(resolve, 1100));
 
-       const state = await db.get('tts_queue', id);
+       const state = await db.get('cache_tts_queue', id);
        expect(state).toBeUndefined();
     });
   });

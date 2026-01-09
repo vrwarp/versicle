@@ -83,30 +83,30 @@ describe('Sync Schema Exhaustion', () => {
 
     // Explicitly Opted Out DB Stores (The "Heavy" or "Local-Only" Stores):
     const STORE_OPT_OUT = [
-        'files',            // Heavy binary
-        'locations',        // Derived cache
-        'tts_cache',        // Derived cache
-        'tts_queue',        // Local state (transient?) - actually `ttsPositions` is synced, but `queue` is heavy?
-        'sections',         // Derived from EPUB
-        'content_analysis', // Derived/Heavy? - Wait, `content_analysis` is potentially valuable. But currently maybe not synced?
-        'tts_content',      // Derived cache
-        'table_images',     // Derived binary
-        'checkpoints',      // Local recovery
-        'sync_log',         // Local logging
-        'app_metadata',     // Local config
-        'tts_queue',        // Queue is local? `tts_position` is synced.
+        'static_files',            // Heavy binary
+        'cache_book_locations',    // Derived cache
+        'cache_tts',               // Derived cache
+        'cache_tts_queue',         // Local state (transient?) - actually `ttsPositions` is synced, but `queue` is heavy?
+        'static_sections',         // Derived from EPUB
+        'cache_content_analysis',  // Derived/Heavy? - Wait, `content_analysis` is potentially valuable. But currently maybe not synced?
+        'static_tts_content',      // Derived cache
+        'static_table_images',     // Derived binary
+        'user_checkpoints',        // Local recovery
+        'user_sync_log',           // Local logging
+        'user_app_metadata',       // Local config
+        'cache_tts_queue',         // Queue is local? `tts_position` is synced.
     ];
 
     // Some stores are mapped to properties inside SyncManifest.
     const MAPPED_STORES = [
-        'books',
-        'reading_history',
-        'annotations',
-        'lexicon',
-        'reading_list',
-        'tts_position',
-        'book_sources', // Synced via books metadata
-        'book_states',  // Synced via books metadata
+        'static_books',
+        'user_reading_history',
+        'user_annotations',
+        'user_lexicon',
+        'user_reading_list',
+        'user_tts_position',
+        'static_book_sources', // Synced via books metadata
+        'user_book_states',  // Synced via books metadata
     ];
 
     const missingStores = dbStores.filter(store =>

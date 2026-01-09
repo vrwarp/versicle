@@ -34,7 +34,7 @@ class DBService {
 
   /**
    * Retrieves all books in the library.
-   * Joins data from 'books' (metadata) and 'book_states' (user progress).
+   * Joins data from 'static_books' (metadata) and 'user_book_states' (user progress).
    *
    * @returns A Promise resolving to an array of valid BookMetadata objects (Composite).
    */
@@ -44,8 +44,8 @@ class DBService {
 
       // Fetch both stores in parallel
       const [books, states] = await Promise.all([
-          db.getAll('books'),
-          db.getAll('book_states')
+          db.getAll('static_books'),
+          db.getAll('user_book_states')
       ]);
 
       // Create a map of states for O(1) lookup
@@ -89,12 +89,12 @@ class DBService {
   async getBook(id: string): Promise<{ metadata: BookMetadata | undefined; file: Blob | ArrayBuffer | undefined }> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files'], 'readonly');
+      const tx = db.transaction(['static_books', 'static_book_sources', 'user_book_states', 'static_files'], 'readonly');
 
-      const book = await tx.objectStore('books').get(id);
-      const source = await tx.objectStore('book_sources').get(id);
-      const state = await tx.objectStore('book_states').get(id);
-      const file = await tx.objectStore('files').get(id);
+      const book = await tx.objectStore('static_books').get(id);
+      const source = await tx.objectStore('static_book_sources').get(id);
+      const state = await tx.objectStore('user_book_states').get(id);
+      const file = await tx.objectStore('static_files').get(id);
 
       await tx.done;
 
@@ -121,11 +121,11 @@ class DBService {
   async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readonly');
+          const tx = db.transaction(['static_books', 'static_book_sources', 'user_book_states'], 'readonly');
 
-          const book = await tx.objectStore('books').get(id);
-          const source = await tx.objectStore('book_sources').get(id);
-          const state = await tx.objectStore('book_states').get(id);
+          const book = await tx.objectStore('static_books').get(id);
+          const source = await tx.objectStore('static_book_sources').get(id);
+          const state = await tx.objectStore('user_book_states').get(id);
 
           await tx.done;
 
@@ -151,10 +151,10 @@ class DBService {
   async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readwrite');
+      const tx = db.transaction(['static_books', 'static_book_sources', 'user_book_states'], 'readwrite');
 
       // Helper to update if changed
-      const updateIfChanged = async <T>(storeName: 'books' | 'book_sources' | 'book_states', updates: Partial<T>) => {
+      const updateIfChanged = async <T>(storeName: 'static_books' | 'static_book_sources' | 'user_book_states', updates: Partial<T>) => {
           const store = tx.objectStore(storeName);
           // @ts-ignore
           const existing = await store.get(id);
@@ -179,9 +179,9 @@ class DBService {
           if (stateKeys.includes(key as keyof BookState)) stateUpdates[key as keyof BookState] = value as any;
       }
 
-      if (Object.keys(bookUpdates).length > 0) await updateIfChanged('books', bookUpdates);
-      if (Object.keys(sourceUpdates).length > 0) await updateIfChanged('book_sources', sourceUpdates);
-      if (Object.keys(stateUpdates).length > 0) await updateIfChanged('book_states', stateUpdates);
+      if (Object.keys(bookUpdates).length > 0) await updateIfChanged('static_books', bookUpdates);
+      if (Object.keys(sourceUpdates).length > 0) await updateIfChanged('static_book_sources', sourceUpdates);
+      if (Object.keys(stateUpdates).length > 0) await updateIfChanged('user_book_states', stateUpdates);
 
       await tx.done;
     } catch (error) {
@@ -198,7 +198,7 @@ class DBService {
   async getBookFile(id: string): Promise<Blob | ArrayBuffer | undefined> {
       try {
           const db = await this.getDB();
-          return await db.get('files', id);
+          return await db.get('static_files', id);
       } catch (error) {
           this.handleError(error);
       }
@@ -213,7 +213,7 @@ class DBService {
   async getSections(bookId: string): Promise<SectionMetadata[]> {
       try {
           const db = await this.getDB();
-          const sections = await db.getAllFromIndex('sections', 'by_bookId', bookId);
+          const sections = await db.getAllFromIndex('static_sections', 'by_bookId', bookId);
           return sections.sort((a, b) => a.playOrder - b.playOrder);
       } catch (error) {
           this.handleError(error);
@@ -248,20 +248,24 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files', 'annotations', 'locations', 'lexicon', 'tts_queue', 'tts_position', 'content_analysis', 'tts_content', 'table_images'], 'readwrite');
+      const tx = db.transaction([
+          'static_books', 'static_book_sources', 'user_book_states', 'static_files',
+          'user_annotations', 'cache_book_locations', 'user_lexicon', 'cache_tts_queue',
+          'user_tts_position', 'cache_content_analysis', 'static_tts_content', 'static_table_images'
+      ], 'readwrite');
 
       await Promise.all([
-          tx.objectStore('books').delete(id),
-          tx.objectStore('book_sources').delete(id),
-          tx.objectStore('book_states').delete(id),
-          tx.objectStore('files').delete(id),
-          tx.objectStore('locations').delete(id),
-          tx.objectStore('tts_queue').delete(id),
-          tx.objectStore('tts_position').delete(id),
+          tx.objectStore('static_books').delete(id),
+          tx.objectStore('static_book_sources').delete(id),
+          tx.objectStore('user_book_states').delete(id),
+          tx.objectStore('static_files').delete(id),
+          tx.objectStore('cache_book_locations').delete(id),
+          tx.objectStore('cache_tts_queue').delete(id),
+          tx.objectStore('user_tts_position').delete(id),
       ]);
 
       // Delete annotations
-      const annotationStore = tx.objectStore('annotations');
+      const annotationStore = tx.objectStore('user_annotations');
       const annotationIndex = annotationStore.index('by_bookId');
       let annotationCursor = await annotationIndex.openCursor(IDBKeyRange.only(id));
       while (annotationCursor) {
@@ -270,7 +274,7 @@ class DBService {
       }
 
       // Delete lexicon rules
-      const lexiconStore = tx.objectStore('lexicon');
+      const lexiconStore = tx.objectStore('user_lexicon');
       const lexiconIndex = lexiconStore.index('by_bookId');
       let lexiconCursor = await lexiconIndex.openCursor(IDBKeyRange.only(id));
       while (lexiconCursor) {
@@ -279,7 +283,7 @@ class DBService {
       }
 
       // Delete content analysis
-      const analysisStore = tx.objectStore('content_analysis');
+      const analysisStore = tx.objectStore('cache_content_analysis');
       const analysisIndex = analysisStore.index('by_bookId');
       let analysisCursor = await analysisIndex.openCursor(IDBKeyRange.only(id));
       while (analysisCursor) {
@@ -288,7 +292,7 @@ class DBService {
       }
 
       // Delete TTS content
-      const ttsContentStore = tx.objectStore('tts_content');
+      const ttsContentStore = tx.objectStore('static_tts_content');
       const ttsContentIndex = ttsContentStore.index('by_bookId');
       let ttsContentCursor = await ttsContentIndex.openCursor(IDBKeyRange.only(id));
       while (ttsContentCursor) {
@@ -297,7 +301,7 @@ class DBService {
       }
 
       // Delete table images
-      const tableStore = tx.objectStore('table_images');
+      const tableStore = tx.objectStore('static_table_images');
       const tableIndex = tableStore.index('by_bookId');
       let tableCursor = await tableIndex.openCursor(IDBKeyRange.only(id));
       while (tableCursor) {
@@ -320,11 +324,11 @@ class DBService {
   async offloadBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['books', 'book_sources', 'book_states', 'files'], 'readwrite');
+      const tx = db.transaction(['static_books', 'static_book_sources', 'user_book_states', 'static_files'], 'readwrite');
 
-      const bookStore = tx.objectStore('books');
-      const sourceStore = tx.objectStore('book_sources');
-      const stateStore = tx.objectStore('book_states');
+      const bookStore = tx.objectStore('static_books');
+      const sourceStore = tx.objectStore('static_book_sources');
+      const stateStore = tx.objectStore('user_book_states');
 
       const book = await bookStore.get(id);
       const source = await sourceStore.get(id);
@@ -334,7 +338,7 @@ class DBService {
 
       // If missing hash in source, calculate fingerprint from existing file before deleting
       if (!source?.fileHash) {
-        const fileStore = tx.objectStore('files');
+        const fileStore = tx.objectStore('static_files');
         const fileData = await fileStore.get(id);
         if (fileData) {
           const blob = fileData instanceof Blob ? fileData : new Blob([fileData]);
@@ -367,7 +371,7 @@ class DBService {
       }
 
       // Delete file
-      await tx.objectStore('files').delete(id);
+      await tx.objectStore('static_files').delete(id);
 
       await tx.done;
     } catch (error) {
@@ -393,10 +397,10 @@ class DBService {
       let state: BookState | undefined;
 
       {
-        const tx = db.transaction(['books', 'book_sources', 'book_states'], 'readonly');
-        book = await tx.objectStore('books').get(id);
-        source = await tx.objectStore('book_sources').get(id);
-        state = await tx.objectStore('book_states').get(id);
+        const tx = db.transaction(['static_books', 'static_book_sources', 'user_book_states'], 'readonly');
+        book = await tx.objectStore('static_books').get(id);
+        source = await tx.objectStore('static_book_sources').get(id);
+        state = await tx.objectStore('user_book_states').get(id);
         await tx.done;
       }
 
@@ -414,24 +418,24 @@ class DBService {
       }
 
       // 3. Start write transaction to update DB
-      const tx = db.transaction(['book_sources', 'book_states', 'files'], 'readwrite');
+      const tx = db.transaction(['static_book_sources', 'user_book_states', 'static_files'], 'readwrite');
 
       // Update source if hash was missing
       if (!source?.fileHash) {
          const newSource = source ? { ...source } : { bookId: id, filename: file.name };
          newSource.fileHash = newFingerprint;
-         await tx.objectStore('book_sources').put(newSource as BookSource);
+         await tx.objectStore('static_book_sources').put(newSource as BookSource);
       }
 
       // Store File (Blob)
-      await tx.objectStore('files').put(file, id);
+      await tx.objectStore('static_files').put(file, id);
 
       // Update state
       if (state) {
           state.isOffloaded = false;
-          await tx.objectStore('book_states').put(state);
+          await tx.objectStore('user_book_states').put(state);
       } else {
-          await tx.objectStore('book_states').put({ bookId: id, isOffloaded: false });
+          await tx.objectStore('user_book_states').put({ bookId: id, isOffloaded: false });
       }
 
       await tx.done;
@@ -447,7 +451,7 @@ class DBService {
 
   /**
    * Saves reading progress. Debounced to prevent frequent DB writes.
-   * Only updates 'book_states'.
+   * Only updates 'user_book_states'.
    *
    * @param bookId - The unique identifier of the book.
    * @param cfi - The Canonical Fragment Identifier (CFI) representing the current location.
@@ -465,13 +469,13 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              // Include 'reading_list' and 'files' in the transaction
-              const tx = db.transaction(['books', 'book_sources', 'book_states', 'reading_list', 'files'], 'readwrite');
-              const bookStore = tx.objectStore('books');
-              const sourceStore = tx.objectStore('book_sources');
-              const stateStore = tx.objectStore('book_states');
-              const rlStore = tx.objectStore('reading_list');
-              const fileStore = tx.objectStore('files');
+              // Include 'user_reading_list' and 'static_files' in the transaction
+              const tx = db.transaction(['static_books', 'static_book_sources', 'user_book_states', 'user_reading_list', 'static_files'], 'readwrite');
+              const bookStore = tx.objectStore('static_books');
+              const sourceStore = tx.objectStore('static_book_sources');
+              const stateStore = tx.objectStore('user_book_states');
+              const rlStore = tx.objectStore('user_reading_list');
+              const fileStore = tx.objectStore('static_files');
 
               for (const [id, data] of Object.entries(pending)) {
                   const book = await bookStore.get(id);
@@ -548,7 +552,7 @@ class DBService {
   async getReadingList(): Promise<ReadingListEntry[]> {
     try {
       const db = await this.getDB();
-      return await db.getAll('reading_list');
+      return await db.getAll('user_reading_list');
     } catch (error) {
       this.handleError(error);
     }
@@ -562,7 +566,7 @@ class DBService {
   async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.put('reading_list', entry);
+      await db.put('user_reading_list', entry);
     } catch (error) {
       this.handleError(error);
     }
@@ -576,7 +580,7 @@ class DBService {
   async deleteReadingListEntry(filename: string): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.delete('reading_list', filename);
+      await db.delete('user_reading_list', filename);
     } catch (error) {
       this.handleError(error);
     }
@@ -590,8 +594,8 @@ class DBService {
   async deleteReadingListEntries(filenames: string[]): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction('reading_list', 'readwrite');
-      const store = tx.objectStore('reading_list');
+      const tx = db.transaction('user_reading_list', 'readwrite');
+      const store = tx.objectStore('user_reading_list');
 
       await Promise.all(filenames.map(filename => store.delete(filename)));
       await tx.done;
@@ -608,10 +612,10 @@ class DBService {
   async importReadingList(entries: ReadingListEntry[]): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction(['reading_list', 'book_sources', 'book_states'], 'readwrite');
-          const rlStore = tx.objectStore('reading_list');
-          const sourceStore = tx.objectStore('book_sources');
-          const stateStore = tx.objectStore('book_states');
+          const tx = db.transaction(['user_reading_list', 'static_book_sources', 'user_book_states'], 'readwrite');
+          const rlStore = tx.objectStore('user_reading_list');
+          const sourceStore = tx.objectStore('static_book_sources');
+          const stateStore = tx.objectStore('user_book_states');
 
           // 1. Bulk upsert to reading_list
           for (const entry of entries) {
@@ -656,8 +660,8 @@ class DBService {
   async updatePlaybackState(bookId: string, lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction('book_states', 'readwrite');
-          const store = tx.objectStore('book_states');
+          const tx = db.transaction('user_book_states', 'readwrite');
+          const store = tx.objectStore('user_book_states');
           const state = await store.get(bookId) || { bookId };
 
           if (lastPlayedCfi !== undefined) state.lastPlayedCfi = lastPlayedCfi;
@@ -704,8 +708,8 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              const tx = db.transaction('tts_queue', 'readwrite');
-              const store = tx.objectStore('tts_queue');
+              const tx = db.transaction('cache_tts_queue', 'readwrite');
+              const store = tx.objectStore('cache_tts_queue');
 
               for (const state of Object.values(pending)) {
                   await store.put(state);
@@ -742,8 +746,8 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              const tx = db.transaction('tts_position', 'readwrite');
-              const store = tx.objectStore('tts_position');
+              const tx = db.transaction('user_tts_position', 'readwrite');
+              const store = tx.objectStore('user_tts_position');
 
               for (const position of Object.values(pending)) {
                   await store.put(position);
@@ -757,7 +761,7 @@ class DBService {
 
   /**
    * Retrieves the saved TTS state for a book.
-   * Merges data from both `tts_queue` and `tts_position` stores.
+   * Merges data from both `cache_tts_queue` and `user_tts_position` stores.
    *
    * @param bookId - The unique identifier of the book.
    * @returns A Promise resolving to the TTSState or undefined.
@@ -765,8 +769,8 @@ class DBService {
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
       try {
           const db = await this.getDB();
-          const state = await db.get('tts_queue', bookId);
-          const position = await db.get('tts_position', bookId);
+          const state = await db.get('cache_tts_queue', bookId);
+          const position = await db.get('user_tts_position', bookId);
 
           if (state && position && position.updatedAt > state.updatedAt) {
               return {
@@ -793,7 +797,7 @@ class DBService {
   async addAnnotation(annotation: Annotation): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.put('annotations', annotation);
+      await db.put('user_annotations', annotation);
     } catch (error) {
       this.handleError(error);
     }
@@ -808,7 +812,7 @@ class DBService {
   async getAnnotations(bookId: string): Promise<Annotation[]> {
     try {
       const db = await this.getDB();
-      return await db.getAllFromIndex('annotations', 'by_bookId', bookId);
+      return await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
     } catch (error) {
       this.handleError(error);
     }
@@ -823,7 +827,7 @@ class DBService {
   async deleteAnnotation(id: string): Promise<void> {
       try {
           const db = await this.getDB();
-          await db.delete('annotations', id);
+          await db.delete('user_annotations', id);
       } catch (error) {
           this.handleError(error);
       }
@@ -840,12 +844,12 @@ class DBService {
   async getCachedSegment(key: string): Promise<CachedSegment | undefined> {
       try {
           const db = await this.getDB();
-          const segment = await db.get('tts_cache', key);
+          const segment = await db.get('cache_tts', key);
 
           if (segment) {
               // Fire and forget update to lastAccessed
               // We don't await this to keep read fast
-              db.put('tts_cache', { ...segment, lastAccessed: Date.now() }).catch((err) => Logger.error('DBService', 'Failed to update TTS cache lastAccessed', err));
+              db.put('cache_tts', { ...segment, lastAccessed: Date.now() }).catch((err) => Logger.error('DBService', 'Failed to update TTS cache lastAccessed', err));
           }
           return segment;
       } catch (error) {
@@ -872,7 +876,7 @@ class DBService {
               createdAt: Date.now(),
               lastAccessed: Date.now(),
           };
-          await db.put('tts_cache', segment);
+          await db.put('cache_tts', segment);
       } catch (error) {
           this.handleError(error);
       }
@@ -889,7 +893,7 @@ class DBService {
   async getLocations(bookId: string): Promise<BookLocations | undefined> {
       try {
           const db = await this.getDB();
-          return await db.get('locations', bookId);
+          return await db.get('cache_book_locations', bookId);
       } catch (error) {
           this.handleError(error);
       }
@@ -905,7 +909,7 @@ class DBService {
   async saveLocations(bookId: string, locations: string): Promise<void> {
       try {
           const db = await this.getDB();
-          await db.put('locations', { bookId, locations });
+          await db.put('cache_book_locations', { bookId, locations });
       } catch (error) {
           this.handleError(error);
       }
@@ -922,7 +926,7 @@ class DBService {
   async getReadingHistory(bookId: string): Promise<string[]> {
       try {
           const db = await this.getDB();
-          const entry = await db.get('reading_history', bookId);
+          const entry = await db.get('user_reading_history', bookId);
           return entry ? entry.readRanges : [];
       } catch (error) {
           this.handleError(error);
@@ -938,7 +942,7 @@ class DBService {
   async getReadingHistoryEntry(bookId: string): Promise<ReadingHistoryEntry | undefined> {
       try {
           const db = await this.getDB();
-          return await db.get('reading_history', bookId);
+          return await db.get('user_reading_history', bookId);
       } catch (error) {
           this.handleError(error);
       }
@@ -956,8 +960,8 @@ class DBService {
   async updateReadingHistory(bookId: string, newRange: string, type: ReadingEventType, label?: string, skipSession: boolean = false): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction('reading_history', 'readwrite');
-          const store = tx.objectStore('reading_history');
+          const tx = db.transaction('user_reading_history', 'readwrite');
+          const store = tx.objectStore('user_reading_history');
           const entry = await store.get(bookId);
 
           let readRanges: string[] = [];
@@ -1040,7 +1044,7 @@ class DBService {
   async saveContentAnalysis(analysis: ContentAnalysis): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.put('content_analysis', analysis);
+      await db.put('cache_content_analysis', analysis);
     } catch (error) {
       this.handleError(error);
     }
@@ -1056,7 +1060,7 @@ class DBService {
   async getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined> {
     try {
       const db = await this.getDB();
-      return await db.get('content_analysis', `${bookId}-${sectionId}`);
+      return await db.get('cache_content_analysis', `${bookId}-${sectionId}`);
     } catch (error) {
       this.handleError(error);
     }
@@ -1073,8 +1077,8 @@ class DBService {
   async saveContentClassifications(bookId: string, sectionId: string, classifications: { rootCfi: string; type: ContentType }[]): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction('content_analysis', 'readwrite');
-          const store = tx.objectStore('content_analysis');
+          const tx = db.transaction('cache_content_analysis', 'readwrite');
+          const store = tx.objectStore('cache_content_analysis');
           const id = `${bookId}-${sectionId}`;
           const existing = await store.get(id);
 
@@ -1107,8 +1111,8 @@ class DBService {
   async saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): Promise<void> {
       try {
           const db = await this.getDB();
-          const tx = db.transaction('content_analysis', 'readwrite');
-          const store = tx.objectStore('content_analysis');
+          const tx = db.transaction('cache_content_analysis', 'readwrite');
+          const store = tx.objectStore('cache_content_analysis');
           const id = `${bookId}-${sectionId}`;
           const existing = await store.get(id);
 
@@ -1147,7 +1151,7 @@ class DBService {
   async getBookAnalysis(bookId: string): Promise<ContentAnalysis[]> {
       try {
           const db = await this.getDB();
-          return await db.getAllFromIndex('content_analysis', 'by_bookId', bookId);
+          return await db.getAllFromIndex('cache_content_analysis', 'by_bookId', bookId);
       } catch (error) {
           this.handleError(error);
       }
@@ -1161,7 +1165,7 @@ class DBService {
   async clearContentAnalysis(): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.clear('content_analysis');
+      await db.clear('cache_content_analysis');
     } catch (error) {
       this.handleError(error);
     }
@@ -1182,7 +1186,7 @@ class DBService {
   async saveTTSContent(content: TTSContent): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.put('tts_content', content);
+      await db.put('static_tts_content', content);
     } catch (error) {
       this.handleError(error);
     }
@@ -1198,7 +1202,7 @@ class DBService {
   async getTTSContent(bookId: string, sectionId: string): Promise<TTSContent | undefined> {
     try {
       const db = await this.getDB();
-      return await db.get('tts_content', `${bookId}-${sectionId}`);
+      return await db.get('static_tts_content', `${bookId}-${sectionId}`);
     } catch (error) {
       this.handleError(error);
     }
@@ -1215,7 +1219,7 @@ class DBService {
   async getTableImages(bookId: string): Promise<TableImage[]> {
       try {
           const db = await this.getDB();
-          return await db.getAllFromIndex('table_images', 'by_bookId', bookId);
+          return await db.getAllFromIndex('static_table_images', 'by_bookId', bookId);
       } catch (error) {
           this.handleError(error);
       }

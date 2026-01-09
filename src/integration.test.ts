@@ -26,20 +26,21 @@ vi.mock('./lib/ingestion', () => ({
         const db = await getDB();
         const bookId = 'mock-book-id';
 
-        await db.put('books', {
+        await db.put('static_books', {
             id: bookId,
             title: "Alice's Adventures in Wonderland",
             author: "Lewis Carroll",
             description: "Mock description",
             addedAt: Date.now(),
             coverBlob: new Blob(['mock-cover'], { type: 'image/jpeg' }),
-            fileHash: 'mock-hash'
         });
+        await db.put('static_book_sources', { bookId, fileHash: 'mock-hash' });
+        await db.put('user_book_states', { bookId });
 
         // Store file
         if (file.arrayBuffer) {
              const buffer = await file.arrayBuffer();
-             await db.put('files', buffer, bookId);
+             await db.put('static_files', buffer, bookId);
         }
 
         return bookId;
@@ -95,12 +96,14 @@ describe('Feature Integration Tests', () => {
   beforeEach(async () => {
     // Clear DB
     const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'annotations', 'sections', 'tts_content'], 'readwrite');
-    await tx.objectStore('books').clear();
-    await tx.objectStore('files').clear();
-    await tx.objectStore('annotations').clear();
-    await tx.objectStore('sections').clear();
-    await tx.objectStore('tts_content').clear();
+    const tx = db.transaction(['static_books', 'static_files', 'user_annotations', 'static_sections', 'static_tts_content', 'static_book_sources', 'user_book_states'], 'readwrite');
+    await tx.objectStore('static_books').clear();
+    await tx.objectStore('static_files').clear();
+    await tx.objectStore('user_annotations').clear();
+    await tx.objectStore('static_sections').clear();
+    await tx.objectStore('static_tts_content').clear();
+    await tx.objectStore('static_book_sources').clear();
+    await tx.objectStore('user_book_states').clear();
     await tx.done;
 
     // Reset stores
@@ -152,9 +155,9 @@ describe('Feature Integration Tests', () => {
 
     // Verify DB
     const db = await getDB();
-    const booksInDb = await db.getAll('books');
+    const booksInDb = await db.getAll('static_books');
     expect(booksInDb).toHaveLength(1);
-    const filesInDb = await db.getAll('files');
+    const filesInDb = await db.getAll('static_files');
     expect(filesInDb).toHaveLength(1);
 
     // 2. Delete Book
@@ -166,21 +169,22 @@ describe('Feature Integration Tests', () => {
     expect(finalStore.books).toHaveLength(0);
 
     // Verify DB empty
-    const booksInDbAfter = await db.getAll('books');
+    const booksInDbAfter = await db.getAll('static_books');
     expect(booksInDbAfter).toHaveLength(0);
-    const filesInDbAfter = await db.getAll('files');
+    const filesInDbAfter = await db.getAll('static_files');
     expect(filesInDbAfter).toHaveLength(0);
   });
 
   it('should persist data across store reloads', async () => {
     const db = await getDB();
     const bookId = 'test-id';
-    await db.put('books', {
+    await db.put('static_books', {
         id: bookId,
         title: 'Persisted Book',
         author: 'Me',
         addedAt: Date.now(),
     });
+    await db.put('user_book_states', { bookId });
 
     const store = useLibraryStore.getState();
     await store.fetchBooks();
@@ -203,19 +207,19 @@ describe('Feature Integration Tests', () => {
         createdAt: Date.now()
     };
 
-    const tx = db.transaction('annotations', 'readwrite');
-    await tx.objectStore('annotations').add(annotation);
+    const tx = db.transaction('user_annotations', 'readwrite');
+    await tx.objectStore('user_annotations').add(annotation);
     await tx.done;
 
-    const annotations = await db.getAllFromIndex('annotations', 'by_bookId', bookId);
+    const annotations = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
     expect(annotations).toHaveLength(1);
     expect(annotations[0].text).toBe('Selected text');
 
-    const tx2 = db.transaction('annotations', 'readwrite');
-    await tx2.objectStore('annotations').delete('ann-1');
+    const tx2 = db.transaction('user_annotations', 'readwrite');
+    await tx2.objectStore('user_annotations').delete('ann-1');
     await tx2.done;
 
-    const annotationsAfter = await db.getAllFromIndex('annotations', 'by_bookId', bookId);
+    const annotationsAfter = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
     expect(annotationsAfter).toHaveLength(0);
   });
 
@@ -227,14 +231,14 @@ describe('Feature Integration Tests', () => {
       const fixturePath = path.resolve(__dirname, './test/fixtures/alice.epub');
       const buffer = fs.readFileSync(fixturePath);
 
-      await db.put('books', {
+      await db.put('static_books', {
           id: bookId,
           title: 'Reader Test Book',
           author: 'Tester',
           addedAt: Date.now(),
-          progress: 0
       });
-      await db.put('files', buffer.buffer, bookId); // Store as ArrayBuffer with key
+      await db.put('user_book_states', { bookId, progress: 0 });
+      await db.put('static_files', buffer.buffer, bookId); // Store as ArrayBuffer with key
 
       // 2. Initialize Reader Store (simulating component mount)
       const readerStore = useReaderStore.getState();
@@ -254,14 +258,14 @@ describe('Feature Integration Tests', () => {
 
       // Simulate the persistence logic used in ReaderView
       const saveProgress = async (id: string, cfi: string, prog: number) => {
-        const tx = db.transaction('books', 'readwrite');
-        const store = tx.objectStore('books');
-        const book = await store.get(id);
-        if (book) {
-            book.currentCfi = cfi;
-            book.progress = prog;
-            book.lastRead = Date.now();
-            await store.put(book);
+        const tx = db.transaction('user_book_states', 'readwrite');
+        const store = tx.objectStore('user_book_states');
+        const state = await store.get(id);
+        if (state) {
+            state.currentCfi = cfi;
+            state.progress = prog;
+            state.lastRead = Date.now();
+            await store.put(state);
         }
         await tx.done;
       };
@@ -269,9 +273,9 @@ describe('Feature Integration Tests', () => {
       await saveProgress(bookId, 'cfi1', 0.5);
 
       // Verify DB persistence
-      const persistedBook = await db.get('books', bookId);
-      expect(persistedBook.currentCfi).toBe('cfi1');
-      expect(persistedBook.progress).toBe(0.5);
-      expect(persistedBook.lastRead).toBeDefined();
+      const persistedState = await db.get('user_book_states', bookId);
+      expect(persistedState.currentCfi).toBe('cfi1');
+      expect(persistedState.progress).toBe(0.5);
+      expect(persistedState.lastRead).toBeDefined();
   });
 });

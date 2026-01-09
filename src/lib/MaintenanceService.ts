@@ -17,27 +17,27 @@ export class MaintenanceService {
     tts_position: number;
   }> {
     const db = await getDB();
-    const books = await db.getAllKeys('books');
+    const books = await db.getAllKeys('static_books');
     const bookIds = new Set(books.map((k) => k.toString()));
 
     // Check files
-    const fileKeys = await db.getAllKeys('files');
+    const fileKeys = await db.getAllKeys('static_files');
     const orphanedFiles = fileKeys.filter((k) => !bookIds.has(k.toString()));
 
     // Check annotations
-    const annotations = await db.getAll('annotations');
+    const annotations = await db.getAll('user_annotations');
     const orphanedAnnotations = annotations.filter((a) => !bookIds.has(a.bookId));
 
     // Check locations
-    const locationKeys = await db.getAllKeys('locations');
+    const locationKeys = await db.getAllKeys('cache_book_locations');
     const orphanedLocations = locationKeys.filter((k) => !bookIds.has(k.toString()));
 
     // Check TTS positions
-    const ttsPositionKeys = await db.getAllKeys('tts_position');
+    const ttsPositionKeys = await db.getAllKeys('user_tts_position');
     const orphanedTTSPositions = ttsPositionKeys.filter((k) => !bookIds.has(k.toString()));
 
     // Check lexicon
-    const rules = await db.getAll('lexicon');
+    const rules = await db.getAll('user_lexicon');
     // Lexicon rules can be global (bookId is null/undefined), so only check if bookId is present
     const orphanedLexicon = rules.filter(
       (r) => r.bookId && !bookIds.has(r.bookId)
@@ -59,16 +59,16 @@ export class MaintenanceService {
    */
   async pruneOrphans(): Promise<void> {
     const db = await getDB();
-    const books = await db.getAllKeys('books');
+    const books = await db.getAllKeys('static_books');
     const bookIds = new Set(books.map((k) => k.toString()));
 
     const tx = db.transaction(
-      ['files', 'annotations', 'locations', 'lexicon', 'tts_position'],
+      ['static_files', 'user_annotations', 'cache_book_locations', 'user_lexicon', 'user_tts_position'],
       'readwrite'
     );
 
     // Prune files
-    const filesStore = tx.objectStore('files');
+    const filesStore = tx.objectStore('static_files');
     const fileKeys = await filesStore.getAllKeys();
     for (const key of fileKeys) {
       if (!bookIds.has(key.toString())) {
@@ -77,7 +77,7 @@ export class MaintenanceService {
     }
 
     // Prune annotations
-    const annotationsStore = tx.objectStore('annotations');
+    const annotationsStore = tx.objectStore('user_annotations');
     let annCursor = await annotationsStore.openCursor();
     while (annCursor) {
       if (!bookIds.has(annCursor.value.bookId)) {
@@ -87,7 +87,7 @@ export class MaintenanceService {
     }
 
     // Prune locations
-    const locationsStore = tx.objectStore('locations');
+    const locationsStore = tx.objectStore('cache_book_locations');
     const locationKeys = await locationsStore.getAllKeys();
     for (const key of locationKeys) {
       if (!bookIds.has(key.toString())) {
@@ -96,7 +96,7 @@ export class MaintenanceService {
     }
 
     // Prune TTS positions
-    const ttsPositionStore = tx.objectStore('tts_position');
+    const ttsPositionStore = tx.objectStore('user_tts_position');
     const ttsPositionKeys = await ttsPositionStore.getAllKeys();
     for (const key of ttsPositionKeys) {
       if (!bookIds.has(key.toString())) {
@@ -105,7 +105,7 @@ export class MaintenanceService {
     }
 
     // Prune lexicon
-    const lexiconStore = tx.objectStore('lexicon');
+    const lexiconStore = tx.objectStore('user_lexicon');
     let lexCursor = await lexiconStore.openCursor();
     while (lexCursor) {
       if (lexCursor.value.bookId && !bookIds.has(lexCursor.value.bookId)) {

@@ -25,8 +25,8 @@ export class CheckpointService {
     };
 
     // Use a transaction to ensure atomicity of add and prune
-    const tx = db.transaction('checkpoints', 'readwrite');
-    const store = tx.objectStore('checkpoints');
+    const tx = db.transaction('user_checkpoints', 'readwrite');
+    const store = tx.objectStore('user_checkpoints');
     const id = await store.add(checkpoint as SyncCheckpoint); // ID is auto-incremented
 
     // Prune old checkpoints
@@ -57,7 +57,7 @@ export class CheckpointService {
    */
   static async listCheckpoints(): Promise<SyncCheckpoint[]> {
     const db = await getDB();
-    const checkpoints = await db.getAll('checkpoints');
+    const checkpoints = await db.getAll('user_checkpoints');
     return checkpoints.sort((a, b) => b.timestamp - a.timestamp);
   }
 
@@ -66,7 +66,7 @@ export class CheckpointService {
    */
   static async getCheckpoint(id: number): Promise<SyncCheckpoint | undefined> {
     const db = await getDB();
-    return db.get('checkpoints', id);
+    return db.get('user_checkpoints', id);
   }
 
   /**

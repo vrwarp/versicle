@@ -32,7 +32,8 @@ describe('Normalization (NFKD)', () => {
         put: vi.fn(),
       };
       const { getDB } = await import('../../db/db');
-      vi.mocked(getDB).mockResolvedValue(db as unknown as IDBDatabase);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(getDB).mockResolvedValue(db as any);
 
       const nbsp = '\u00A0';
       const rule = {
@@ -42,7 +43,7 @@ describe('Normalization (NFKD)', () => {
 
       await service.saveRule(rule);
 
-      expect(db.put).toHaveBeenCalledWith('lexicon', expect.objectContaining({
+      expect(db.put).toHaveBeenCalledWith('user_lexicon', expect.objectContaining({
         original: 'Hello World',
         replacement: 'Good Day',
       }));

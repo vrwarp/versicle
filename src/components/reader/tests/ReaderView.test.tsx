@@ -14,7 +14,7 @@ vi.mock('../../../db/db', () => ({
   getDB: vi.fn(() => Promise.resolve({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get: vi.fn((store, id) => {
-      if (store === 'files') return Promise.resolve(new ArrayBuffer(10));
+      if (store === 'static_files') return Promise.resolve(new ArrayBuffer(10));
       // Add 'book_states' and 'book_sources' handling if ReaderView uses DBService directly (it mostly uses db.ts in DBService)
       // But here we are mocking `getDB` which DBService uses.
       // ReaderView uses DBService.getBook(id) -> which calls db.get('books', id), db.get('book_sources'), etc.
@@ -22,9 +22,9 @@ vi.mock('../../../db/db', () => ({
       // `dbService.getBook` calls `getDB()` then `transaction`.
 
       // If we are mocking getDB return value:
-      if (store === 'books') return Promise.resolve({ id: 'test-book-id', title: 'Test Book', author: 'Author' });
-      if (store === 'book_sources') return Promise.resolve({ bookId: 'test-book-id', version: CURRENT_BOOK_VERSION });
-      if (store === 'book_states') return Promise.resolve({ bookId: 'test-book-id', progress: 0 });
+      if (store === 'static_books') return Promise.resolve({ id: 'test-book-id', title: 'Test Book', author: 'Author' });
+      if (store === 'static_book_sources') return Promise.resolve({ bookId: 'test-book-id', version: CURRENT_BOOK_VERSION });
+      if (store === 'user_book_states') return Promise.resolve({ bookId: 'test-book-id', progress: 0 });
       return Promise.resolve(null);
     }),
     getAllFromIndex: vi.fn(() => Promise.resolve([])), // Mock annotations fetch
@@ -32,10 +32,10 @@ vi.mock('../../../db/db', () => ({
     transaction: vi.fn(() => ({
         objectStore: vi.fn((name) => ({
             get: vi.fn((id) => {
-               if (name === 'files') return Promise.resolve(new ArrayBuffer(10));
-               if (name === 'books') return Promise.resolve({ id: 'test-book-id', title: 'Test Book', author: 'Author' });
-               if (name === 'book_sources') return Promise.resolve({ bookId: 'test-book-id', version: CURRENT_BOOK_VERSION });
-               if (name === 'book_states') return Promise.resolve({ bookId: 'test-book-id', progress: 0 });
+               if (name === 'static_files') return Promise.resolve(new ArrayBuffer(10));
+               if (name === 'static_books') return Promise.resolve({ id: 'test-book-id', title: 'Test Book', author: 'Author' });
+               if (name === 'static_book_sources') return Promise.resolve({ bookId: 'test-book-id', version: CURRENT_BOOK_VERSION });
+               if (name === 'user_book_states') return Promise.resolve({ bookId: 'test-book-id', progress: 0 });
                return Promise.resolve(null);
             }),
             put: vi.fn()

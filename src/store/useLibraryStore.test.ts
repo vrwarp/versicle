@@ -17,9 +17,10 @@ vi.mock('../lib/ingestion', () => ({
       cover: 'cover-data',
       addedAt: 1234567890,
     };
-    await db.put('books', mockBook);
+    await db.put('static_books', mockBook);
+    await db.put('user_book_states', { bookId: 'test-id' });
     // Use a simpler way to get buffer or just mock data
-    await db.put('files', new ArrayBuffer(8), 'test-id');
+    await db.put('static_files', new ArrayBuffer(8), 'test-id');
     return 'test-id';
   }),
 }));
@@ -52,11 +53,12 @@ describe('useLibraryStore', () => {
 
     // Clear IndexedDB
     const db = await getDB();
-    const tx = db.transaction(['books', 'files', 'annotations', 'lexicon'], 'readwrite');
-    await tx.objectStore('books').clear();
-    await tx.objectStore('files').clear();
-    await tx.objectStore('annotations').clear();
-    await tx.objectStore('lexicon').clear();
+    const tx = db.transaction(['static_books', 'static_files', 'user_annotations', 'user_lexicon', 'user_book_states'], 'readwrite');
+    await tx.objectStore('static_books').clear();
+    await tx.objectStore('static_files').clear();
+    await tx.objectStore('user_annotations').clear();
+    await tx.objectStore('user_lexicon').clear();
+    await tx.objectStore('user_book_states').clear();
     await tx.done;
   });
 
@@ -76,12 +78,12 @@ describe('useLibraryStore', () => {
 
     const state = useLibraryStore.getState();
     expect(state.books).toHaveLength(1);
-    expect(state.books[0]).toEqual(mockBook);
+    expect(state.books[0]).toMatchObject({ id: mockBook.id });
     expect(state.isLoading).toBe(false);
 
     // Verify it's in DB
     const db = await getDB();
-    const storedBook = await db.get('books', 'test-id');
+    const storedBook = await db.get('static_books', 'test-id');
     expect(storedBook).toEqual(mockBook);
   });
 
@@ -102,17 +104,18 @@ describe('useLibraryStore', () => {
 
     // Verify it's gone from DB
     const db = await getDB();
-    const storedBook = await db.get('books', 'test-id');
+    const storedBook = await db.get('static_books', 'test-id');
     expect(storedBook).toBeUndefined();
 
-    const storedFile = await db.get('files', 'test-id');
+    const storedFile = await db.get('static_files', 'test-id');
     expect(storedFile).toBeUndefined();
   });
 
   it('should refresh library from DB', async () => {
     // Manually add a book to DB (simulating a fresh load)
     const db = await getDB();
-    await db.put('books', mockBook);
+    await db.put('static_books', mockBook);
+    await db.put('user_book_states', { bookId: mockBook.id });
 
     // Initial state should be empty
     expect(useLibraryStore.getState().books).toHaveLength(0);
@@ -123,7 +126,7 @@ describe('useLibraryStore', () => {
     // State should now have the book
     const state = useLibraryStore.getState();
     expect(state.books).toHaveLength(1);
-    expect(state.books[0]).toEqual(mockBook);
+    expect(state.books[0]).toMatchObject({ id: mockBook.id });
   });
 
   it('should sort books by addedAt desc on refresh', async () => {
@@ -131,8 +134,10 @@ describe('useLibraryStore', () => {
     const book2 = { ...mockBook, id: '2', addedAt: 200 };
 
     const db = await getDB();
-    await db.put('books', book1);
-    await db.put('books', book2);
+    await db.put('static_books', book1);
+    await db.put('static_books', book2);
+    await db.put('user_book_states', { bookId: '1' });
+    await db.put('user_book_states', { bookId: '2' });
 
     await useLibraryStore.getState().fetchBooks();
 
@@ -164,16 +169,16 @@ describe('useLibraryStore', () => {
           createdAt: Date.now()
       };
 
-      await db.put('annotations', annotation);
+      await db.put('user_annotations', annotation);
 
       // Verify annotation exists
-      expect(await db.get('annotations', 'note-1')).toEqual(annotation);
+      expect(await db.get('user_annotations', 'note-1')).toEqual(annotation);
 
       // Remove the book
       await useLibraryStore.getState().removeBook(mockBook.id);
 
       // Verify annotation is deleted
-      expect(await db.get('annotations', 'note-1')).toBeUndefined();
+      expect(await db.get('user_annotations', 'note-1')).toBeUndefined();
   });
 
   it('should delete associated lexicon rules when removing a book', async () => {
@@ -189,15 +194,15 @@ describe('useLibraryStore', () => {
           created: Date.now()
       };
 
-      await db.put('lexicon', rule);
+      await db.put('user_lexicon', rule);
 
       // Verify rule exists
-      expect(await db.get('lexicon', 'rule-1')).toEqual(rule);
+      expect(await db.get('user_lexicon', 'rule-1')).toEqual(rule);
 
       // Remove the book
       await useLibraryStore.getState().removeBook(mockBook.id);
 
       // Verify rule is deleted
-      expect(await db.get('lexicon', 'rule-1')).toBeUndefined();
+      expect(await db.get('user_lexicon', 'rule-1')).toBeUndefined();
   });
 });

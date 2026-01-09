@@ -78,8 +78,8 @@ export async function validateZipSignature(file: File): Promise<boolean> {
 export async function reprocessBook(bookId: string): Promise<void> {
   const db = await getDB();
   // Use .get() instead of .getFrom() as IDBPDatabase doesn't have getFrom.
-  // (Assuming 'files' store returns a Blob or ArrayBuffer)
-  const file = await db.get('files', bookId);
+  // (Assuming 'static_files' store returns a Blob or ArrayBuffer)
+  const file = await db.get('static_files', bookId);
 
   if (!file) {
     throw new Error(`Book source file not found for ID: ${bookId}`);
@@ -141,10 +141,10 @@ export async function reprocessBook(bookId: string): Promise<void> {
   });
 
   // Transaction
-  const tx = db.transaction(['book_sources', 'sections', 'tts_content', 'table_images'], 'readwrite');
+  const tx = db.transaction(['static_book_sources', 'static_sections', 'static_tts_content', 'static_table_images'], 'readwrite');
 
   // Helper to delete by index
-  const deleteByIndex = async (storeName: 'sections' | 'tts_content' | 'table_images') => {
+  const deleteByIndex = async (storeName: 'static_sections' | 'static_tts_content' | 'static_table_images') => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const store = tx.objectStore(storeName) as any;
       const index = store.index('by_bookId');
@@ -154,12 +154,12 @@ export async function reprocessBook(bookId: string): Promise<void> {
       }
   };
 
-  await deleteByIndex('sections');
-  await deleteByIndex('tts_content');
-  await deleteByIndex('table_images');
+  await deleteByIndex('static_sections');
+  await deleteByIndex('static_tts_content');
+  await deleteByIndex('static_table_images');
 
   // Update Book Source Metadata
-  const sourceStore = tx.objectStore('book_sources');
+  const sourceStore = tx.objectStore('static_book_sources');
   const source = await sourceStore.get(bookId);
   if (source) {
       source.totalChars = totalChars;
@@ -169,17 +169,17 @@ export async function reprocessBook(bookId: string): Promise<void> {
   }
 
   // Insert new data
-  const sectionsStore = tx.objectStore('sections');
+  const sectionsStore = tx.objectStore('static_sections');
   for (const section of sections) {
     await sectionsStore.add(section);
   }
 
-  const ttsStore = tx.objectStore('tts_content');
+  const ttsStore = tx.objectStore('static_tts_content');
   for (const batch of ttsContentBatches) {
       await ttsStore.add(batch);
   }
 
-  const tableStore = tx.objectStore('table_images');
+  const tableStore = tx.objectStore('static_table_images');
   for (const table of tableImages) {
       await tableStore.add(table);
   }
@@ -348,26 +348,26 @@ export async function processEpub(
 
   const db = await getDB();
 
-  const tx = db.transaction(['books', 'book_sources', 'book_states', 'files', 'sections', 'tts_content', 'table_images'], 'readwrite');
-  await tx.objectStore('books').add(bookData);
-  await tx.objectStore('book_sources').add(sourceData);
-  await tx.objectStore('book_states').add(stateData);
-  await tx.objectStore('files').add(file, bookId);
+  const tx = db.transaction(['static_books', 'static_book_sources', 'user_book_states', 'static_files', 'static_sections', 'static_tts_content', 'static_table_images'], 'readwrite');
+  await tx.objectStore('static_books').add(bookData);
+  await tx.objectStore('static_book_sources').add(sourceData);
+  await tx.objectStore('user_book_states').add(stateData);
+  await tx.objectStore('static_files').add(file, bookId);
 
   // Store section metadata
-  const sectionsStore = tx.objectStore('sections');
+  const sectionsStore = tx.objectStore('static_sections');
   for (const section of sections) {
     await sectionsStore.add(section);
   }
 
   // Store TTS content
-  const ttsStore = tx.objectStore('tts_content');
+  const ttsStore = tx.objectStore('static_tts_content');
   for (const batch of ttsContentBatches) {
       await ttsStore.add(batch);
   }
 
   // Store Table Images
-  const tableStore = tx.objectStore('table_images');
+  const tableStore = tx.objectStore('static_table_images');
   for (const table of tableImages) {
       await tableStore.add(table);
   }

@@ -31,7 +31,7 @@ describe('LexiconService', () => {
 
       await service.deleteRules(['1', '2']);
 
-      expect(db.transaction).toHaveBeenCalledWith('lexicon', 'readwrite');
+      expect(db.transaction).toHaveBeenCalledWith('user_lexicon', 'readwrite');
       const store = db.transaction().objectStore();
       expect(store.delete).toHaveBeenCalledWith('1');
       expect(store.delete).toHaveBeenCalledWith('2');

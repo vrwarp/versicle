@@ -121,12 +121,12 @@ export class BackupService {
     const db = await getDB();
 
     const [books, bookSources, bookStates, annotations, lexicon, locations] = await Promise.all([
-      db.getAll('books'),
-      db.getAll('book_sources'),
-      db.getAll('book_states'),
-      db.getAll('annotations'),
-      db.getAll('lexicon'),
-      db.getAll('locations')
+      db.getAll('static_books'),
+      db.getAll('static_book_sources'),
+      db.getAll('user_book_states'),
+      db.getAll('user_annotations'),
+      db.getAll('user_lexicon'),
+      db.getAll('cache_book_locations')
     ]);
 
     // Create lookup maps for source and state
@@ -242,16 +242,16 @@ export class BackupService {
     // --- PHASE 2: Database Operations ---
 
     // Metadata Transaction
-    const tx = db.transaction(['books', 'book_sources', 'book_states', 'annotations', 'locations', 'lexicon'], 'readwrite');
+    const tx = db.transaction(['static_books', 'static_book_sources', 'user_book_states', 'user_annotations', 'cache_book_locations', 'user_lexicon'], 'readwrite');
 
     // 1.1 Restore Books Metadata
     for (const book of booksToSave) {
       // Use DBService logic for splitting data or do it manually
       // We do it manually here to control the transaction
 
-      const existingBook = await tx.objectStore('books').get(book.id);
+      const existingBook = await tx.objectStore('static_books').get(book.id);
       // Removed unused existingSource
-      const existingState = await tx.objectStore('book_states').get(book.id);
+      const existingState = await tx.objectStore('user_book_states').get(book.id);
 
       if (existingBook) {
         // Smart Merge: Update progress if newer
@@ -263,7 +263,7 @@ export class BackupService {
                 progress: book.progress,
                 currentCfi: book.currentCfi,
             };
-            await tx.objectStore('book_states').put(newState);
+            await tx.objectStore('user_book_states').put(newState);
         }
 
         // Update Book Metadata (Identity) if needed? Usually we trust existing local or favor backup?
@@ -303,9 +303,9 @@ export class BackupService {
             aiAnalysisStatus: book.aiAnalysisStatus
         };
 
-        await tx.objectStore('books').put(bookData);
-        await tx.objectStore('book_sources').put(sourceData);
-        await tx.objectStore('book_states').put(stateData);
+        await tx.objectStore('static_books').put(bookData);
+        await tx.objectStore('static_book_sources').put(sourceData);
+        await tx.objectStore('user_book_states').put(stateData);
       }
       updateProgress(`Restoring metadata for ${book.title}...`);
     }
@@ -313,21 +313,21 @@ export class BackupService {
     // 1.2 Restore Annotations
     const annotations = Array.isArray(manifest.annotations) ? manifest.annotations : [];
     for (const ann of annotations) {
-        await tx.objectStore('annotations').put(ann);
+        await tx.objectStore('user_annotations').put(ann);
         updateProgress('Restoring annotations...');
     }
 
     // 1.3 Restore Lexicon
     const lexicon = Array.isArray(manifest.lexicon) ? manifest.lexicon : [];
     for (const rule of lexicon) {
-        await tx.objectStore('lexicon').put(rule);
+        await tx.objectStore('user_lexicon').put(rule);
         updateProgress('Restoring dictionary...');
     }
 
     // 1.4 Restore Locations
     const locations = Array.isArray(manifest.locations) ? manifest.locations : [];
     for (const loc of locations) {
-        await tx.objectStore('locations').put(loc);
+        await tx.objectStore('cache_book_locations').put(loc);
         updateProgress('Restoring map...');
     }
 
@@ -346,17 +346,17 @@ export class BackupService {
                 const arrayBuffer = await zipFile.async('arraybuffer');
 
                 // New short-lived transaction for file write
-                const fileTx = db.transaction(['book_states', 'files'], 'readwrite');
-                await fileTx.objectStore('files').put(arrayBuffer, book.id);
+                const fileTx = db.transaction(['user_book_states', 'static_files'], 'readwrite');
+                await fileTx.objectStore('static_files').put(arrayBuffer, book.id);
 
                 // Update book status to not offloaded
-                const bookState = await fileTx.objectStore('book_states').get(book.id);
+                const bookState = await fileTx.objectStore('user_book_states').get(book.id);
                 if (bookState) {
                     bookState.isOffloaded = false;
-                    await fileTx.objectStore('book_states').put(bookState);
+                    await fileTx.objectStore('user_book_states').put(bookState);
                 } else {
                     // Create if missing (should exist from Step 2)
-                    await fileTx.objectStore('book_states').put({ bookId: book.id, isOffloaded: false });
+                    await fileTx.objectStore('user_book_states').put({ bookId: book.id, isOffloaded: false });
                 }
                 await fileTx.done;
             }

@@ -254,12 +254,12 @@ export const GlobalSettingsDialog = () => {
             dbService.cleanup();
             // Clear IndexedDB
             const db = await getDB();
-            await db.clear('books');
-            await db.clear('files');
-            await db.clear('annotations');
-            await db.clear('tts_cache');
-            await db.clear('lexicon');
-            await db.clear('locations');
+            await db.clear('static_books');
+            await db.clear('static_files');
+            await db.clear('user_annotations');
+            await db.clear('cache_tts');
+            await db.clear('user_lexicon');
+            await db.clear('cache_book_locations');
 
             // Clear LocalStorage
             localStorage.clear();

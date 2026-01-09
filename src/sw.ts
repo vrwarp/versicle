@@ -14,7 +14,7 @@ precacheAndRoute(self.__WB_MANIFEST)
 
 const COVERS_ENDPOINT_PREFIX = '/__versicle__/covers/';
 const DB_NAME = 'EpubLibraryDB';
-const BOOKS_STORE = 'books';
+const BOOKS_STORE = 'static_books';
 
 // Helper to open DB - we can't easily share code with src/db/db.ts
 // because of module resolution in SW, so we keep it simple.

@@ -32,7 +32,7 @@ export class LexiconService {
    */
   async getRules(bookId?: string): Promise<LexiconRule[]> {
     const db = await getDB();
-    const allRules = await db.getAll('lexicon');
+    const allRules = await db.getAll('user_lexicon');
 
     const filtered = allRules.filter(rule =>
       !rule.bookId || (bookId && rule.bookId === bookId)
@@ -80,7 +80,7 @@ export class LexiconService {
       order: rule.order,
       created: Date.now(),
     };
-    await db.put('lexicon', newRule);
+    await db.put('user_lexicon', newRule);
   }
 
   /**
@@ -90,8 +90,8 @@ export class LexiconService {
    */
   async reorderRules(updates: { id: string; order: number }[]): Promise<void> {
     const db = await getDB();
-    const tx = db.transaction('lexicon', 'readwrite');
-    const store = tx.objectStore('lexicon');
+    const tx = db.transaction('user_lexicon', 'readwrite');
+    const store = tx.objectStore('user_lexicon');
 
     for (const { id, order } of updates) {
       const rule = await store.get(id);
@@ -111,7 +111,7 @@ export class LexiconService {
    */
   async deleteRule(id: string): Promise<void> {
     const db = await getDB();
-    await db.delete('lexicon', id);
+    await db.delete('user_lexicon', id);
   }
 
   /**
@@ -122,8 +122,8 @@ export class LexiconService {
    */
   async deleteRules(ids: string[]): Promise<void> {
     const db = await getDB();
-    const tx = db.transaction('lexicon', 'readwrite');
-    const store = tx.objectStore('lexicon');
+    const tx = db.transaction('user_lexicon', 'readwrite');
+    const store = tx.objectStore('user_lexicon');
     await Promise.all(ids.map(id => store.delete(id)));
     await tx.done;
   }

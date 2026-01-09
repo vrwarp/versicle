@@ -41,7 +41,7 @@ describe('DBService Reading History', () => {
 
             const result = await dbService.getReadingHistory('book1');
             expect(result).toEqual(ranges);
-            expect(mockDB.get).toHaveBeenCalledWith('reading_history', 'book1');
+            expect(mockDB.get).toHaveBeenCalledWith('user_reading_history', 'book1');
         });
 
         it('returns empty array if no history found', async () => {
@@ -84,7 +84,7 @@ describe('DBService Reading History', () => {
 
             await dbService.updateReadingHistory(bookId, newRange, 'page');
 
-            expect(mockDB.transaction).toHaveBeenCalledWith('reading_history', 'readwrite');
+            expect(mockDB.transaction).toHaveBeenCalledWith('user_reading_history', 'readwrite');
             const putArg = mockTx.objectStore().put.mock.calls[0][0];
             expect(putArg.bookId).toBe(bookId);
             expect(putArg.readRanges).toEqual(['range1', 'range2', 'range3']);

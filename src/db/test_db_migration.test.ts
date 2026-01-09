@@ -40,7 +40,7 @@ describe('DBService - TTS Content and Migration', () => {
   it('should delete TTS content when book is deleted', async () => {
     // Seed book and TTS content
     const db = await initDB();
-    await db.put('books', { id: testBookId, title: 'Test Book', author: 'Tester', addedAt: Date.now() } as BookMetadata);
+    await db.put('static_books', { id: testBookId, title: 'Test Book', author: 'Tester', addedAt: Date.now() } as BookMetadata);
     await dbService.saveTTSContent(testTTSContent);
 
     // Verify seeded

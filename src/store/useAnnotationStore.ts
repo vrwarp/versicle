@@ -80,7 +80,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
   loadAnnotations: async (bookId: string) => {
     try {
       const db = await getDB();
-      const annotations = await db.getAllFromIndex('annotations', 'by_bookId', bookId);
+      const annotations = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
       set({ annotations });
     } catch (error) {
       console.error('Failed to load annotations:', error);
@@ -96,7 +96,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
     try {
       const db = await getDB();
-      await db.add('annotations', newAnnotation);
+      await db.add('user_annotations', newAnnotation);
       set((state) => ({
         annotations: [...state.annotations, newAnnotation],
       }));
@@ -108,7 +108,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
   deleteAnnotation: async (id: string) => {
     try {
       const db = await getDB();
-      await db.delete('annotations', id);
+      await db.delete('user_annotations', id);
       set((state) => ({
         annotations: state.annotations.filter((a) => a.id !== id),
       }));
@@ -120,10 +120,10 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
   updateAnnotation: async (id: string, changes: Partial<Annotation>) => {
     try {
       const db = await getDB();
-      const annotation = await db.get('annotations', id);
+      const annotation = await db.get('user_annotations', id);
       if (annotation) {
         const updated = { ...annotation, ...changes };
-        await db.put('annotations', updated);
+        await db.put('user_annotations', updated);
         set((state) => ({
           annotations: state.annotations.map((a) => (a.id === id ? updated : a)),
         }));
