@@ -111,9 +111,12 @@ export const ReaderControlBar: React.FC = () => {
                 break;
             case 'copy':
                  if (popover.text) {
-                     navigator.clipboard.writeText(popover.text);
-                     showToast("Copied to clipboard", "success");
-                     hidePopover();
+                     navigator.clipboard.writeText(popover.text).then(() => {
+                         showToast("Copied to clipboard", "success");
+                         setTimeout(() => hidePopover(), 1000);
+                     }).catch(() => {
+                         showToast("Failed to copy", "error");
+                     });
                  }
                 break;
             case 'play':
