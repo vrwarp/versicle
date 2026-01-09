@@ -920,13 +920,39 @@ class DBService {
   }
 
   // --- Table Images Operations ---
-  // Table images are now in cache_render_metrics.tableSnapshots or transient.
-  // Current implementation drops them in migration.
-  // If we need them, we should implement tableSnapshots in CacheRenderMetrics.
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async getTableImages(_bookId: string): Promise<TableImage[]> {
-      return []; // Not implemented in v18
+  async getTableImages(bookId: string): Promise<TableImage[]> {
+      try {
+          const db = await this.getDB();
+          const metrics = await db.get('cache_render_metrics', bookId);
+
+          if (!metrics || !metrics.tableSnapshots) {
+              return [];
+          }
+
+          const images: TableImage[] = [];
+          for (const [key, blob] of Object.entries(metrics.tableSnapshots)) {
+              // Key format: `${sectionId}|${cfi}`
+              const parts = key.split('|');
+              if (parts.length >= 2) {
+                  const sectionId = parts[0];
+                  // Join rest in case CFI contained separator (unlikely but safe)
+                  const cfi = parts.slice(1).join('|');
+
+                  images.push({
+                      id: `${bookId}-${cfi}`,
+                      bookId,
+                      sectionId,
+                      cfi,
+                      imageBlob: blob
+                  });
+              }
+          }
+          return images;
+      } catch (error) {
+          this.handleError(error);
+          return [];
+      }
   }
 
   cleanup(): void {

@@ -66,7 +66,7 @@ describe('ingestion', () => {
     const stores = [
         'static_manifests', 'static_resources', 'static_structure',
         'user_inventory', 'user_progress', 'user_annotations',
-        'user_overrides', 'cache_tts_preparation'
+        'user_overrides', 'cache_tts_preparation', 'cache_render_metrics'
     ];
 
     // Check stores exist before clearing (IDB safe)

@@ -58,7 +58,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
   const syntheticToc: NavigationItem[] = [];
   const sections: SectionMetadata[] = [];
   const ttsContentBatches: TTSContent[] = [];
-  // Table images not supported in v18 persistence yet, skipping.
+  const tableSnapshots: Record<string, Blob> = {};
   let totalChars = 0;
 
   chapters.forEach((chapter, i) => {
@@ -85,9 +85,17 @@ export async function reprocessBook(bookId: string): Promise<void> {
               sentences: chapter.sentences
           });
       }
+
+      if (chapter.tables && chapter.tables.length > 0) {
+          for (const table of chapter.tables) {
+              // Key: sectionId|cfi
+              const key = `${chapter.href}|${table.cfi}`;
+              tableSnapshots[key] = table.imageBlob;
+          }
+      }
   });
 
-  const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation'], 'readwrite');
+  const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation', 'cache_render_metrics'], 'readwrite');
 
   // Update Metadata
   const manStore = tx.objectStore('static_manifests');
@@ -129,6 +137,12 @@ export async function reprocessBook(bookId: string): Promise<void> {
           sentences: batch.sentences
       });
   }
+
+  // Update Cache Render Metrics (Table Snapshots)
+  const metricsStore = tx.objectStore('cache_render_metrics');
+  const existingMetrics = await metricsStore.get(bookId) || { bookId, locations: '' };
+  existingMetrics.tableSnapshots = tableSnapshots;
+  await metricsStore.put(existingMetrics);
 
   await tx.done;
 }
@@ -183,6 +197,7 @@ export async function processEpub(
   const syntheticToc: NavigationItem[] = [];
   const sections: SectionMetadata[] = [];
   const ttsContentBatches: TTSContent[] = [];
+  const tableSnapshots: Record<string, Blob> = {};
   let totalChars = 0;
 
   chapters.forEach((chapter, i) => {
@@ -208,6 +223,13 @@ export async function processEpub(
               sectionId: chapter.href,
               sentences: chapter.sentences
           });
+      }
+
+      if (chapter.tables && chapter.tables.length > 0) {
+          for (const table of chapter.tables) {
+              const key = `${chapter.href}|${table.cfi}`;
+              tableSnapshots[key] = table.imageBlob;
+          }
       }
   });
 
@@ -295,7 +317,7 @@ export async function processEpub(
   const tx = db.transaction([
       'static_manifests', 'static_resources', 'static_structure',
       'user_inventory', 'user_progress', 'user_overrides',
-      'cache_tts_preparation'
+      'cache_tts_preparation', 'cache_render_metrics'
   ], 'readwrite');
 
   await tx.objectStore('static_manifests').add(manifest);
@@ -314,6 +336,12 @@ export async function processEpub(
           sentences: batch.sentences
       });
   }
+
+  await tx.objectStore('cache_render_metrics').add({
+      bookId,
+      locations: '', // Initial empty locations
+      tableSnapshots
+  });
 
   await tx.done;
 
