@@ -32,7 +32,20 @@ global.fetch = mockFetch;
 
 // Mock extractContentOffscreen
 vi.mock('./offscreen-renderer', () => ({
-  extractContentOffscreen: vi.fn().mockResolvedValue([]),
+  extractContentOffscreen: vi.fn().mockResolvedValue([
+    {
+      href: 'chapter1.xhtml',
+      sentences: [],
+      textContent: 'Chapter 1 content',
+      title: 'Chapter 1',
+      tables: [
+        {
+          cfi: 'epubcfi(/6/2[chapter1]!/4/2/1:0)',
+          imageBlob: new Blob(['table-image'], { type: 'image/webp' }),
+        }
+      ]
+    }
+  ]),
 }));
 
 describe('Ingestion Image Optimization', () => {
@@ -58,6 +71,11 @@ describe('Ingestion Image Optimization', () => {
     await db.clear('user_inventory');
     await db.clear('user_progress');
     await db.clear('static_resources');
+    // We can't clear cache_table_images if it doesn't exist yet in the test DB context if not fully migrated in test env
+    // But getDB() calls initDB() which should handle upgrade.
+    if (db.objectStoreNames.contains('cache_table_images')) {
+        await db.clear('cache_table_images');
+    }
   });
 
   it('should store thumbnail in books store (manifest)', async () => {
@@ -78,6 +96,23 @@ describe('Ingestion Image Optimization', () => {
     expect(metadata?.coverBlob).toBeDefined();
     // Ideally verify it is the thumbnail blob but blob equality might be tricky in mocks if not referentially stable
     // But since we mock return value, we expect it to be passed through.
+  });
+
+  it('should store table images in cache_table_images', async () => {
+    const bookId = await processEpub(mockFile);
+
+    const db = await getDB();
+    const tableImages = await db.getAll('cache_table_images');
+
+    expect(tableImages).toHaveLength(1);
+    expect(tableImages[0]).toEqual(expect.objectContaining({
+      bookId,
+      sectionId: 'chapter1.xhtml',
+      cfi: 'epubcfi(/6/2[chapter1]!/4/2/1:0)',
+    }));
+    expect(tableImages[0].imageBlob).toBeDefined();
+    // Check ID construction
+    expect(tableImages[0].id).toBe(`${bookId}-epubcfi(/6/2[chapter1]!/4/2/1:0)`);
   });
 
   it('should fallback to original if compression fails', async () => {

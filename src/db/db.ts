@@ -25,6 +25,7 @@ import type {
   CachedSegment,
   LexiconRule,
   TTSContent,
+  TableImage,
   // App Types
   SyncCheckpoint,
   SyncLogEntry
@@ -35,6 +36,16 @@ import type {
  * Updated to v18 architecture.
  */
 export interface EpubLibraryDB extends DBSchema {
+  /**
+   * Store for table images (snapshots) extracted during ingestion.
+   */
+  cache_table_images: {
+    key: string;
+    value: TableImage;
+    indexes: {
+      by_bookId: string;
+    };
+  };
   /**
    * Store for synchronization checkpoints.
    */
@@ -139,7 +150,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 18, {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 19, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // Create New Stores if they don't exist
         const createStore = (name: string, options?: IDBObjectStoreParameters) => {
@@ -148,6 +159,12 @@ export const initDB = () => {
           }
           return transaction.objectStore(name as any);
         };
+
+        // Cache Table Images - New in v19
+        const tableImages = createStore('cache_table_images', { keyPath: 'id' });
+        if (!tableImages.indexNames.contains('by_bookId')) {
+             tableImages.createIndex('by_bookId', 'bookId');
+        }
 
         // Static
         createStore('static_manifests', { keyPath: 'bookId' });
