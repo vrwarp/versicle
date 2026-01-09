@@ -39,19 +39,19 @@ describe('BackupService', () => {
   describe('createLightBackup', () => {
     it('should create a JSON backup of metadata', async () => {
       mockDB.getAll.mockImplementation((store) => {
-        if (store === 'books') return Promise.resolve([{ id: 'b1', title: 'Book 1' }]);
-        if (store === 'book_sources') return Promise.resolve([{ bookId: 'b1' }]);
-        if (store === 'book_states') return Promise.resolve([{ bookId: 'b1' }]);
-        if (store === 'annotations') return Promise.resolve([]);
-        if (store === 'lexicon') return Promise.resolve([]);
-        if (store === 'locations') return Promise.resolve([]);
+        if (store === 'static_books') return Promise.resolve([{ id: 'b1', title: 'Book 1' }]);
+        if (store === 'static_book_sources') return Promise.resolve([{ bookId: 'b1' }]);
+        if (store === 'user_book_states') return Promise.resolve([{ bookId: 'b1' }]);
+        if (store === 'user_annotations') return Promise.resolve([]);
+        if (store === 'user_lexicon') return Promise.resolve([]);
+        if (store === 'cache_locations') return Promise.resolve([]);
         return Promise.resolve([]);
       });
 
       await service.createLightBackup();
 
-      expect(mockDB.getAll).toHaveBeenCalledWith('books');
-      expect(mockDB.getAll).toHaveBeenCalledWith('annotations');
+      expect(mockDB.getAll).toHaveBeenCalledWith('static_books');
+      expect(mockDB.getAll).toHaveBeenCalledWith('user_annotations');
       expect(saveAs).toHaveBeenCalled();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,8 +69,8 @@ describe('BackupService', () => {
   describe('createFullBackup', () => {
     it('should create a ZIP backup with files', async () => {
       mockDB.getAll.mockImplementation((store) => {
-        if (store === 'books') return Promise.resolve([{ id: 'b1', title: 'Book 1' }]);
-        if (store === 'book_states') return Promise.resolve([{ bookId: 'b1', isOffloaded: false }]);
+        if (store === 'static_books') return Promise.resolve([{ id: 'b1', title: 'Book 1' }]);
+        if (store === 'user_book_states') return Promise.resolve([{ bookId: 'b1', isOffloaded: false }]);
         return Promise.resolve([]);
       });
 
@@ -92,8 +92,8 @@ describe('BackupService', () => {
 
     it('should skip offloaded books', async () => {
       mockDB.getAll.mockImplementation((store) => {
-          if (store === 'books') return Promise.resolve([{ id: 'b1', title: 'Book 1' }]);
-          if (store === 'book_states') return Promise.resolve([{ bookId: 'b1', isOffloaded: true }]);
+          if (store === 'static_books') return Promise.resolve([{ id: 'b1', title: 'Book 1' }]);
+          if (store === 'user_book_states') return Promise.resolve([{ bookId: 'b1', isOffloaded: true }]);
           return Promise.resolve([]);
       });
 
@@ -132,10 +132,10 @@ describe('BackupService', () => {
       await service.restoreBackup(file);
 
       // Verify splitting
-      expect(mockTx.objectStore).toHaveBeenCalledWith('books');
+      expect(mockTx.objectStore).toHaveBeenCalledWith('static_books');
       expect(putMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Restored Book' }));
 
-      expect(mockTx.objectStore).toHaveBeenCalledWith('book_states');
+      expect(mockTx.objectStore).toHaveBeenCalledWith('user_book_states');
       expect(putMock).toHaveBeenCalledWith(expect.objectContaining({ isOffloaded: true }));
     });
 
@@ -173,8 +173,8 @@ describe('BackupService', () => {
 
         const mockTx = {
           objectStore: vi.fn((store) => {
-              if (store === 'books') return booksStoreMock;
-              if (store === 'book_states') return statesStoreMock;
+              if (store === 'static_books') return booksStoreMock;
+              if (store === 'user_book_states') return statesStoreMock;
               return genericStoreMock;
           }),
           done: Promise.resolve(),
@@ -184,7 +184,7 @@ describe('BackupService', () => {
         await service.restoreBackup(file);
 
         // Should update book_states with newer progress
-        expect(mockTx.objectStore).toHaveBeenCalledWith('book_states');
+        expect(mockTx.objectStore).toHaveBeenCalledWith('user_book_states');
         expect(statesStoreMock.put).toHaveBeenCalledWith(expect.objectContaining({
             bookId: 'b1',
             lastRead: 200,

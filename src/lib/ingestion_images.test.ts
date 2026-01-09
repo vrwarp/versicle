@@ -54,10 +54,11 @@ describe('Ingestion Image Optimization', () => {
     // Clean DB
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db = await (dbService as any).getDB();
-    await db.clear('books');
+    await db.clear('static_books');
+    await db.clear('cache_covers');
   });
 
-  it('should store thumbnail in books store', async () => {
+  it('should store thumbnail in cache_covers store', async () => {
     const bookId = await processEpub(mockFile);
 
     // Verify compression was called
@@ -67,6 +68,7 @@ describe('Ingestion Image Optimization', () => {
     }));
 
     // Verify metadata has thumbnail
+    // Note: getBookMetadata joins coverBlob from cache_covers
     const metadata = await dbService.getBookMetadata(bookId);
     expect(metadata).toBeDefined();
 

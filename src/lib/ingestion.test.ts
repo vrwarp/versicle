@@ -63,7 +63,16 @@ describe('ingestion', () => {
     vi.spyOn(window, 'confirm').mockImplementation(() => true);
     const db = await getDB();
     // Update reset logic to include new stores
-    const stores = ['books', 'book_sources', 'book_states', 'files', 'sections', 'annotations', 'tts_content'];
+    const stores = [
+        'static_books',
+        'static_book_sources',
+        'user_book_states',
+        'static_files',
+        'static_sections',
+        'user_annotations',
+        'static_tts_content',
+        'cache_covers'
+    ];
     const tx = db.transaction(stores, 'readwrite');
     for (const store of stores) {
         if (db.objectStoreNames.contains(store)) {
@@ -116,16 +125,20 @@ describe('ingestion', () => {
     expect(bookId).toBe('mock-uuid');
 
     const db = await getDB();
-    const book = await db.get('books', bookId);
-    const source = await db.get('book_sources', bookId);
-    const state = await db.get('book_states', bookId);
+    const book = await db.get('static_books', bookId);
+    const source = await db.get('static_book_sources', bookId);
+    const state = await db.get('user_book_states', bookId);
+    const cover = await db.get('cache_covers', bookId);
 
     expect(book).toBeDefined();
     expect(book?.title).toBe('Mock Title');
     expect(book?.author).toBe('Mock Author');
     expect(book?.description).toBe('Mock Description');
     expect(book?.id).toBe('mock-uuid');
-    expect(book?.coverBlob).toBeDefined();
+
+    // Cover is now separate
+    expect(cover).toBeDefined();
+    expect(book?.coverBlob).toBeUndefined(); // Assuming raw fetch from static_books doesn't join cover
 
     expect(source).toBeDefined();
     expect(source?.fileHash).toBeDefined();
@@ -134,11 +147,11 @@ describe('ingestion', () => {
     expect(state).toBeDefined();
     expect(state?.isOffloaded).toBe(false);
 
-    const storedFile = await db.get('files', bookId);
+    const storedFile = await db.get('static_files', bookId);
     expect(storedFile).toBeDefined();
 
     // Verify TTS content
-    const ttsContent = await db.getAll('tts_content');
+    const ttsContent = await db.getAll('static_tts_content');
     expect(ttsContent.length).toBeGreaterThan(0);
     expect(ttsContent[0].bookId).toBe(bookId);
     expect(ttsContent[0].sentences.length).toBeGreaterThan(0);
@@ -164,11 +177,12 @@ describe('ingestion', () => {
     const bookId = await processEpub(mockFile);
 
     const db = await getDB();
-    const book = await db.get('books', bookId);
+    const book = await db.get('static_books', bookId);
+    const cover = await db.get('cache_covers', bookId);
 
     expect(book).toBeDefined();
     expect(book?.title).toBe('No Cover Book');
-    expect(book?.coverBlob).toBeUndefined();
+    expect(cover).toBeUndefined();
   });
 
   it('should use default values when metadata is missing', async () => {
@@ -189,7 +203,7 @@ describe('ingestion', () => {
     const bookId = await processEpub(mockFile);
 
     const db = await getDB();
-    const book = await db.get('books', bookId);
+    const book = await db.get('static_books', bookId);
 
     expect(book).toBeDefined();
     expect(book?.title).toBe('Untitled');
@@ -222,7 +236,7 @@ describe('ingestion', () => {
      const bookId = await processEpub(mockFile);
 
      const db = await getDB();
-     const book = await db.get('books', bookId);
+     const book = await db.get('static_books', bookId);
 
      expect(confirmSpy).not.toHaveBeenCalled();
      expect(book?.title.length).toBe(500);

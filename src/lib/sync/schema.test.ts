@@ -73,40 +73,32 @@ describe('Sync Schema Exhaustion', () => {
     // Check if the store name exists as a top-level key in SyncManifest OR is opted out.
     // SyncManifest keys: books, lexicon, readingList, transientState, deviceRegistry, version, lastUpdated, deviceId.
 
-    // Mapping DB stores to SyncManifest keys or concepts:
-    // books -> books (covers BookMetadata)
-    // reading_history -> books (merged into books[id].history)
-    // annotations -> books (merged into books[id].annotations)
-    // lexicon -> lexicon
-    // reading_list -> readingList
-    // tts_position -> transientState.ttsPositions
-
     // Explicitly Opted Out DB Stores (The "Heavy" or "Local-Only" Stores):
     const STORE_OPT_OUT = [
-        'files',            // Heavy binary
-        'locations',        // Derived cache
-        'tts_cache',        // Derived cache
-        'tts_queue',        // Local state (transient?) - actually `ttsPositions` is synced, but `queue` is heavy?
-        'sections',         // Derived from EPUB
-        'content_analysis', // Derived/Heavy? - Wait, `content_analysis` is potentially valuable. But currently maybe not synced?
-        'tts_content',      // Derived cache
-        'table_images',     // Derived binary
-        'checkpoints',      // Local recovery
-        'sync_log',         // Local logging
-        'app_metadata',     // Local config
-        'tts_queue',        // Queue is local? `tts_position` is synced.
+        'static_files',            // Heavy binary
+        'cache_locations',        // Derived cache
+        'cache_tts_audio',        // Derived cache
+        'cache_tts_queue',        // Local state (transient?) - actually `ttsPositions` is synced, but `queue` is heavy?
+        'static_sections',         // Derived from EPUB
+        'cache_content_analysis', // Derived/Heavy? - Wait, `content_analysis` is potentially valuable. But currently maybe not synced?
+        'static_tts_content',      // Derived cache
+        'cache_table_images',     // Derived binary
+        'user_checkpoints',      // Local recovery
+        'user_sync_log',         // Local logging
+        'user_app_metadata',     // Local config
+        'cache_covers',          // Cache
     ];
 
     // Some stores are mapped to properties inside SyncManifest.
     const MAPPED_STORES = [
-        'books',
-        'reading_history',
-        'annotations',
-        'lexicon',
-        'reading_list',
-        'tts_position',
-        'book_sources', // Synced via books metadata
-        'book_states',  // Synced via books metadata
+        'static_books', // Mapped to books
+        'user_reading_history',
+        'user_annotations',
+        'user_lexicon',
+        'user_reading_list',
+        'user_tts_position',
+        'static_book_sources', // Synced via books metadata
+        'user_book_states',  // Synced via books metadata
     ];
 
     const missingStores = dbStores.filter(store =>

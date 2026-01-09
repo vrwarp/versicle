@@ -6,12 +6,12 @@ import type { ReadingListEntry } from '../types/db';
 describe('DBService Reading List', () => {
     beforeEach(async () => {
         const db = await getDB();
-        await db.clear('reading_list');
+        await db.clear('user_reading_list');
         // Clear all book-related stores
-        await db.clear('books');
-        await db.clear('book_sources');
-        await db.clear('book_states');
-        await db.clear('files');
+        await db.clear('static_books');
+        await db.clear('static_book_sources');
+        await db.clear('user_book_states');
+        await db.clear('static_files');
     });
 
     it('should upsert and get reading list entries', async () => {
@@ -43,9 +43,9 @@ describe('DBService Reading List', () => {
         // Setup existing book
         const bookId = 'book-1';
         // Need to populate new split stores
-        await db.put('books', { id: bookId, title: 'Sync Test', author: 'Author', addedAt: 100, coverBlob: undefined });
-        await db.put('book_sources', { bookId, filename: 'sync_test.epub', fileHash: 'h', fileSize: 10, syntheticToc: [], totalChars: 0, version: 1 });
-        await db.put('book_states', { bookId, progress: 0.1, isOffloaded: false });
+        await db.put('static_books', { id: bookId, title: 'Sync Test', author: 'Author', addedAt: 100 });
+        await db.put('static_book_sources', { bookId, filename: 'sync_test.epub', fileHash: 'h', fileSize: 10, syntheticToc: [], totalChars: 0, version: 1 });
+        await db.put('user_book_states', { bookId, progress: 0.1, isOffloaded: false });
 
         // Import entry with higher progress
         const entries: ReadingListEntry[] = [{
@@ -59,7 +59,7 @@ describe('DBService Reading List', () => {
 
         await dbService.importReadingList(entries);
 
-        const updatedState = await db.get('book_states', bookId);
+        const updatedState = await db.get('user_book_states', bookId);
         expect(updatedState?.progress).toBe(0.9);
     });
 
@@ -67,9 +67,9 @@ describe('DBService Reading List', () => {
         const db = await getDB();
 
         const bookId = 'book-2';
-        await db.put('books', { id: bookId, title: 'Lower Test', author: 'Author', addedAt: 100 });
-        await db.put('book_sources', { bookId, filename: 'lower_test.epub', fileHash: 'h' });
-        await db.put('book_states', { bookId, progress: 0.8, isOffloaded: false });
+        await db.put('static_books', { id: bookId, title: 'Lower Test', author: 'Author', addedAt: 100 });
+        await db.put('static_book_sources', { bookId, filename: 'lower_test.epub', fileHash: 'h' });
+        await db.put('user_book_states', { bookId, progress: 0.8, isOffloaded: false });
 
         const entries: ReadingListEntry[] = [{
             filename: 'lower_test.epub',
@@ -82,7 +82,7 @@ describe('DBService Reading List', () => {
 
         await dbService.importReadingList(entries);
 
-        const updatedState = await db.get('book_states', bookId);
+        const updatedState = await db.get('user_book_states', bookId);
         expect(updatedState?.progress).toBe(0.8);
     });
 
@@ -91,9 +91,9 @@ describe('DBService Reading List', () => {
         const bookId = 'prog-sync-1';
         const filename = 'prog_sync.epub';
 
-        await db.put('books', { id: bookId, title: 'Prog Sync', author: 'Author', addedAt: 100 });
-        await db.put('book_sources', { bookId, filename: filename, fileHash: 'h' });
-        await db.put('book_states', { bookId, progress: 0, isOffloaded: false });
+        await db.put('static_books', { id: bookId, title: 'Prog Sync', author: 'Author', addedAt: 100 });
+        await db.put('static_book_sources', { bookId, filename: filename, fileHash: 'h' });
+        await db.put('user_book_states', { bookId, progress: 0, isOffloaded: false });
 
         dbService.saveProgress(bookId, 'cfi1', 0.45);
 
@@ -112,9 +112,9 @@ describe('DBService Reading List', () => {
         const bookId = 'preserve-1';
         const filename = 'preserve.epub';
 
-        await db.put('books', { id: bookId, title: 'Preserve', author: 'Author', addedAt: 100 });
-        await db.put('book_sources', { bookId, filename: filename, fileHash: 'h' });
-        await db.put('book_states', { bookId, progress: 0, isOffloaded: false });
+        await db.put('static_books', { id: bookId, title: 'Preserve', author: 'Author', addedAt: 100 });
+        await db.put('static_book_sources', { bookId, filename: filename, fileHash: 'h' });
+        await db.put('user_book_states', { bookId, progress: 0, isOffloaded: false });
 
         // Pre-existing entry with rating/isbn
         const entry: ReadingListEntry = {
@@ -127,7 +127,7 @@ describe('DBService Reading List', () => {
             lastUpdated: 0,
             status: 'currently-reading'
         };
-        await db.put('reading_list', entry);
+        await db.put('user_reading_list', entry);
 
         // Update progress
         dbService.saveProgress(bookId, 'cfi1', 0.5);
