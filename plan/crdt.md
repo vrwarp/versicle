@@ -1,92 +1,105 @@
 # Design Document: Versicle "Store-First" Architecture (Yjs)
 
-**Status:** Draft
+**Status:** Draft / Detailed Design
 **Target Architecture:** Local-First / Store-First using Yjs & Zustand
 
 ## 1. The Core Architectural Shift
 
-Currently, Versicle uses a "Database-First" architecture:
-*   **State Source:** IndexedDB (`idb`) is the source of truth.
+Currently, Versicle uses a **"Database-First"** architecture:
+*   **State Source:** IndexedDB (`idb`) is the source of truth (`user_*` stores in `EpubLibraryDB`).
 *   **Read:** Zustand stores (`useLibraryStore`, etc.) fetch data via `DBService` to populate their state.
 *   **Write:** Actions call `DBService` to write to IDB, then manually update local state.
 
 The Migration moves to a **"Store-First" (Local-First)** architecture:
-*   **State Source:** The `Y.Doc` (held in memory and persisted via `y-indexeddb`) becomes the source of truth for user data.
+*   **State Source:** The `Y.Doc` (held in memory and persisted via `y-indexeddb` to a *separate* IDB database named `versicle-yjs`) becomes the source of truth for user data.
 *   **Read/Write:** Zustand stores read/write directly to the Yjs structure via `zustand-middleware-yjs`.
     *   *Note:* We will use the fork located at [https://github.com/vrwarp/zustand-middleware-yjs](https://github.com/vrwarp/zustand-middleware-yjs) which supports modern Zustand versions.
-*   **Persistence:** The middleware and Yjs provider handle the saving to disk (IndexedDB) and syncing to peers automatically.
+*   **Persistence:** The middleware and `y-indexeddb` provider handle the saving to disk and syncing to peers automatically.
 
 ## 2. Data Segmentation Strategy
 
-We separate data into two distinct categories to optimize performance. Yjs is excellent for JSON-serializable metadata but poor for large binary blobs.
+We separate data into two distinct domains to optimize performance. Yjs is excellent for JSON-serializable metadata but poor for large binary blobs.
 
-### A. Remains in Legacy IDB (DBService)
-These stores contain large files or reconstitutable cache. They are **not** migrated to Yjs.
-*   `static_manifests` (Source of truth for immutable book metadata)
-*   `static_resources` (The .epub blobs)
-*   `static_structure` (TOC, Spine)
-*   `cache_*` stores (Generated assets)
+### A. Remains in Legacy IDB (DBService / `EpubLibraryDB`)
+These stores contain large files or reconstitutable cache. They are **not** migrated to Yjs and remain managed by `src/db/DBService.ts`.
+*   `static_manifests`: Immutable book metadata (Title, Author, Hash).
+*   `static_resources`: The `.epub` binary blobs.
+*   `static_structure`: TOC and Spine data (large arrays).
+*   `cache_*`: Generated assets (`cache_render_metrics`, `cache_audio_blobs`, `cache_table_images`).
 
 ### B. Migrates to Yjs (User Data)
-These will be removed from `DBService` write logic and handled strictly by Zustand+Yjs.
-*   `user_inventory` → `Y.Map<BookId, InventoryItem>` (User-specific metadata like rating, added date)
-*   `user_progress` → `Y.Map<BookId, ProgressItem>` (CFI, progress percentage)
-*   `user_annotations` → `Y.Map<AnnotationId, Annotation>`
-*   `user_overrides` → `Y.Map<BookId, Overrides>` (Lexicon rules, covers)
-*   `user_journey` → `Y.Array<JourneyEntry>` (Append-only log)
-*   `app_metadata` → `Y.Map<Key, Value>` (Settings)
+These will be removed from `DBService` *write logic* and handled strictly by Zustand+Yjs.
 
-## 3. High-Level Migration Plan
+| Yjs Shared Type (Key) | Type | Corresponds to Legacy Store | Description |
+| :--- | :--- | :--- | :--- |
+| `inventory` | `Y.Map<string, UserInventoryItem>` | `user_inventory` | User metadata (rating, tags, status, addedAt). Key: `bookId`. |
+| `progress` | `Y.Map<string, UserProgress>` | `user_progress` | Reading position (CFI, percentage). Key: `bookId`. |
+| `annotations` | `Y.Map<string, UserAnnotation>` | `user_annotations` | Highlights and notes. Key: `annotationId` (UUID). |
+| `overrides` | `Y.Map<string, UserOverrides>` | `user_overrides` | Lexicon rules and per-book settings. Key: `bookId` (or 'global'). |
+| `journey` | `Y.Array<UserJourneyStep>` | `user_journey` | Reading history log. **Risk:** Potential unbound growth. |
+| `settings` | `Y.Map<string, any>` | `app_metadata` | Global app settings (theme, font preference). |
+
+## 3. Schema Definitions & Integrity
+
+To ensure type safety, we will strictly type the Yjs maps using the existing interfaces from `src/types/db.ts`.
+
+**Validation Strategy:**
+Before writing to the `Y.Doc` (especially during sync/merge or migration), data must be validated against `Zod` schemas (to be created in `src/lib/sync/validators.ts`) or strictly typed interfaces.
+
+### Shared Type Interfaces (Reference)
+
+```typescript
+// See src/types/db.ts for full definitions
+
+type YjsSchema = {
+  inventory: Y.Map<UserInventoryItem>;
+  progress: Y.Map<UserProgress>;
+  annotations: Y.Map<UserAnnotation>;
+  overrides: Y.Map<UserOverrides>;
+  journey: Y.Array<UserJourneyStep>; // Append-only
+  settings: Y.Map<any>;
+}
+```
+
+## 4. High-Level Migration Plan
 
 ### Step 1: Initialize the Yjs Runtime
-*   Create a central singleton `src/store/yjs-provider.ts`.
-*   Initialize a single `Y.Doc`.
-*   Connect `y-indexeddb` to persist this doc to a new IDB database (e.g., `versicle-yjs`).
-*   (Future) Connect `y-webrtc` or similar for real-time sync.
+*   Create `src/store/yjs-provider.ts` singleton.
+*   Initialize `Y.Doc`.
+*   Connect `y-indexeddb` (Database: `versicle-yjs`).
 
 ### Step 2: Store Refactoring (Split & Bind)
-`zustand-middleware-yjs` warns against mixing transient UI state with synced state.
-
-**Refactoring `useReaderStore`:**
-*   **Split into:**
-    *   `useReaderUIStore` (Transient): `isLoading`, `viewMode`, `immersiveMode`, `toc`, `currentBookId`.
-    *   `useReaderSyncStore` (Synced): `currentCfi`, `progress`, `customTheme`, `fontFamily`, `fontSize`, `lineHeight`.
-*   **Binding:** `useReaderSyncStore` binds to a shared Y.Map named `reader-settings`.
-
-**Refactoring `useLibraryStore`:**
-*   **Structure:** Bind a `books` map to a Y.Map named `inventory`.
-*   **Logic:** `addBook` calls `DBService` (for blobs) -> then mutates Zustand state (`set(state => ...)`). The middleware handles persistence.
-
-**Refactoring `useAnnotationStore`:**
-*   Bind to a Y.Map named `annotations`.
-*   Use UUIDs as keys for fast lookups.
+*   **`useReaderStore`:** Split into `useReaderUIStore` (Transient) and `useReaderSyncStore` (Synced).
+*   **`useLibraryStore`:** Bind `inventory` map. Remove `fetchBooks`.
+*   **`useAnnotationStore`:** Bind `annotations` map.
 
 ### Step 3: The "Great Migration" Script
-*   Create a startup service (`MigrationService`).
-*   **Check:** Is `inventory` in Yjs empty?
-*   **If Empty:**
-    *   Pull data from `DBService.getLibrary()`, `getAnnotations()`, etc.
-    *   Batch insert into Zustand/Yjs stores.
-*   **Cleanup:** (Optional) Delete old `user_*` IDB stores after verification.
+*   **Service:** `src/lib/migration/MigrationService.ts`.
+*   **Logic:**
+    1.  Check `app_metadata` (Legacy IDB) or `settings` (Yjs) for `migration_v2_status`.
+    2.  If pending:
+        *   Read all data from `user_*` stores in `EpubLibraryDB`.
+        *   Batch write to `Y.Doc`.
+        *   Set flag `migration_v2_status = 'complete'`.
+    3.  (Future) Delete `user_*` stores from `EpubLibraryDB`.
 
 ### Step 4: Dismantling DBService Write Logic
-*   **Keep:** `addBook` (blob processing), `deleteBook` (blob cleanup).
-*   **Remove:** `updateBookMetadata`, `saveProgress`, `addAnnotation`, `saveContentAnalysis`.
-*   **Update:** `addBook` returns metadata to the store; it does *not* write to `user_inventory`.
+*   **Modify `addBook`:** Returns `BookMetadata` instead of writing `user_inventory`.
+*   **Remove:** `updateBookMetadata`, `saveProgress`, `addAnnotation`, `deleteAnnotation`.
 
-## 4. Key Challenges & Solutions
+## 5. Key Challenges & Solutions
 
 ### Large Datasets (`user_journey`)
-*   **Problem:** Infinite growth of history logs.
-*   **Solution:** Use `Y.Array`. If performance degrades (>100k items), implement lazy loading or archiving to a separate IDB store.
+*   **Problem:** `Y.Array` history grows indefinitely.
+*   **Solution:** For Phase 1-3, we will migrate it as is. In Phase 4 (Optimization), we can implement a "Rolling Window" where items older than X months are archived to a local-only IDB store and removed from the Yjs array.
 
 ### Referencing Static Assets
 *   **Flow:**
-    1.  `useLibraryStore` (Yjs) has Book ID `123`.
-    2.  User opens book.
-    3.  `useReaderUIStore` sets `currentBookId = 123`.
-    4.  Component calls `dbService.getBookFile('123')` (Legacy IDB) for the blob.
+    1.  `useLibraryStore` (Yjs) provides `BookId`.
+    2.  `useReaderUIStore` sets `currentBookId`.
+    3.  Component calls `dbService.getBookFile(id)` (Legacy IDB) to get the Blob.
+    *   *Constraint:* If `static_manifests` is missing the book (deleted from device but present in cloud sync), the UI must show a "Download" state.
 
 ### Conflict Resolution
-*   **Strategy:** Last-Write-Wins (LWW) for scalar values (progress).
-*   **Strategy:** Map keys (UUIDs) for distinct items (annotations) to prevent collisions.
+*   **Inventory/Progress:** `Y.Map` uses Last-Write-Wins (LWW) based on Lamport timestamps.
+*   **Annotations:** Keyed by UUID. No merge conflicts, only add/remove races (handled by CRDT set semantics).
