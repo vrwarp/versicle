@@ -47,14 +47,16 @@ class DBService {
     try {
       const db = await this.getDB();
 
-      const [manifests, inventory, progress] = await Promise.all([
+      const [manifests, inventory, progress, readingList] = await Promise.all([
           db.getAll('static_manifests'),
           db.getAll('user_inventory'),
-          db.getAll('user_progress')
+          db.getAll('user_progress'),
+          db.getAll('user_reading_list')
       ]);
 
       const invMap = new Map(inventory.map(i => [i.bookId, i]));
       const progMap = new Map(progress.map(p => [p.bookId, p]));
+      const rlMap = new Map(readingList.map(r => [r.filename, r]));
 
       const library: BookMetadata[] = [];
 
@@ -63,6 +65,14 @@ class DBService {
           const prog = progMap.get(man.bookId);
 
           if (!inv) continue;
+
+          // Resolve Reading List entry via filename
+          const rlEntry = inv.sourceFilename ? rlMap.get(inv.sourceFilename) : undefined;
+
+          // Calculate Display Progress (Highest Wins)
+          const localPct = prog?.percentage || 0;
+          const rlPct = rlEntry?.percentage || 0;
+          const displayPct = Math.max(localPct, rlPct);
 
           const composite: BookMetadata = {
               // Book Interface
@@ -82,7 +92,7 @@ class DBService {
               version: man.schemaVersion,
               // BookState Interface
               lastRead: prog?.lastRead,
-              progress: prog?.percentage,
+              progress: displayPct,
               currentCfi: prog?.currentCfi,
               lastPlayedCfi: prog?.lastPlayedCfi,
               isOffloaded: false // Placeholder, see logic below
@@ -110,16 +120,27 @@ class DBService {
   async getBook(id: string): Promise<{ metadata: BookMetadata | undefined; file: Blob | ArrayBuffer | undefined }> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['static_manifests', 'static_resources', 'user_inventory', 'user_progress'], 'readonly');
+      const tx = db.transaction(['static_manifests', 'static_resources', 'user_inventory', 'user_progress', 'user_reading_list'], 'readonly');
 
       const manifest = await tx.objectStore('static_manifests').get(id);
       const resource = await tx.objectStore('static_resources').get(id);
       const inventory = await tx.objectStore('user_inventory').get(id);
       const progress = await tx.objectStore('user_progress').get(id);
 
+      // Fetch Reading List Entry if possible
+      let readingListEntry;
+      if (inventory?.sourceFilename) {
+          readingListEntry = await tx.objectStore('user_reading_list').get(inventory.sourceFilename);
+      }
+
       await tx.done;
 
       if (!manifest || !inventory) return { metadata: undefined, file: undefined };
+
+      // Determine progress: prefer local if > 0, else fallback to reading list
+      const localPct = progress?.percentage || 0;
+      const rlPct = readingListEntry?.percentage || 0;
+      const displayPct = (localPct > 0) ? localPct : rlPct;
 
       const metadata: BookMetadata = {
           id: manifest.bookId,
@@ -137,7 +158,7 @@ class DBService {
           version: manifest.schemaVersion,
 
           lastRead: progress?.lastRead,
-          progress: progress?.percentage,
+          progress: displayPct,
           currentCfi: progress?.currentCfi,
           lastPlayedCfi: progress?.lastPlayedCfi,
           isOffloaded: !resource?.epubBlob
