@@ -582,14 +582,26 @@ export const initDB = () => {
                     const bookId = invMap.get(entry.filename);
 
                     if (bookId) {
-                        const prog = await progStore.get(bookId);
-                        if (prog) {
-                            // Recover Progress if missing
-                            if ((!prog.percentage || prog.percentage === 0) && entry.percentage > 0) {
-                                prog.percentage = entry.percentage;
-                                prog.lastRead = Math.max(prog.lastRead, entry.lastUpdated);
-                                await progStore.put(prog);
-                            }
+                        let prog = await progStore.get(bookId);
+                        if (!prog) {
+                            // Create new progress record if missing
+                            prog = {
+                                bookId,
+                                percentage: 0,
+                                lastRead: 0,
+                                completedRanges: []
+                                // currentCfi left undefined as we don't have it
+                            };
+                        }
+
+                        // Recover Progress
+                        if ((!prog.percentage || prog.percentage === 0) && entry.percentage > 0) {
+                            prog.percentage = entry.percentage;
+                            prog.lastRead = Math.max(prog.lastRead, entry.lastUpdated);
+                            await progStore.put(prog);
+                        } else if (!await progStore.get(bookId)) {
+                             // If it was missing and we didn't update percentage, we still save it initialized
+                             await progStore.put(prog);
                         }
 
                         const inv = await invStore.get(bookId);
