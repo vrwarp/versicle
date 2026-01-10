@@ -329,15 +329,15 @@ export async function processEpub(
   };
 
   const db = await getDB();
-  // Include reading_list for history tracking
+  // Include user_reading_list for history tracking
   const tx = db.transaction([
       'static_manifests', 'static_resources', 'static_structure',
       'user_inventory', 'user_progress', 'user_overrides',
-      'cache_tts_preparation', 'cache_table_images', 'reading_list'
+      'cache_tts_preparation', 'cache_table_images', 'user_reading_list'
   ], 'readwrite');
 
   // Check for existing reading history (Restore Sync)
-  const rlStore = tx.objectStore('reading_list');
+  const rlStore = tx.objectStore('user_reading_list');
   const existingHistory = await rlStore.get(inventory.sourceFilename || '');
 
   if (existingHistory) {

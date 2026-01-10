@@ -219,7 +219,7 @@ export interface UserAiInference {
 
 /**
  * Represents an entry in the reading list (lightweight, portable history).
- * Store: 'reading_list' (Key: filename)
+ * Store: 'user_reading_list' (Key: filename)
  */
 export interface ReadingListEntry {
   /** The filename of the book (Primary Key). */

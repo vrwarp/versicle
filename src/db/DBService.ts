@@ -396,11 +396,11 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              // Includes 'reading_list' for history tracking
-              const tx = db.transaction(['user_progress', 'user_inventory', 'static_manifests', 'reading_list'], 'readwrite');
+              // Includes 'user_reading_list' for history tracking
+              const tx = db.transaction(['user_progress', 'user_inventory', 'static_manifests', 'user_reading_list'], 'readwrite');
               const progStore = tx.objectStore('user_progress');
               const invStore = tx.objectStore('user_inventory');
-              const rlStore = tx.objectStore('reading_list');
+              const rlStore = tx.objectStore('user_reading_list');
               const manStore = tx.objectStore('static_manifests');
 
               for (const [id, data] of Object.entries(pending)) {
@@ -454,7 +454,7 @@ class DBService {
   async getReadingList(): Promise<ReadingListEntry[]> {
     try {
       const db = await this.getDB();
-      return db.getAll('reading_list');
+      return db.getAll('user_reading_list');
     } catch (error) {
       this.handleError(error);
     }
@@ -463,10 +463,10 @@ class DBService {
   async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['reading_list', 'user_inventory', 'user_progress'], 'readwrite');
+      const tx = db.transaction(['user_reading_list', 'user_inventory', 'user_progress'], 'readwrite');
 
-      // 1. Always update reading_list (Source of Truth for History)
-      await tx.objectStore('reading_list').put(entry);
+      // 1. Always update user_reading_list (Source of Truth for History)
+      await tx.objectStore('user_reading_list').put(entry);
 
       // 2. If Book Exists, Sync Back (Reverse Sync)
       const invStore = tx.objectStore('user_inventory');
@@ -523,7 +523,7 @@ class DBService {
       const db = await this.getDB();
       // Only delete from reading list history.
       // Do NOT delete the actual book file/inventory if it exists (Policy: Decoupled).
-      await db.delete('reading_list', filename);
+      await db.delete('user_reading_list', filename);
     } catch (error) {
       this.handleError(error);
     }
@@ -532,8 +532,8 @@ class DBService {
   async deleteReadingListEntries(filenames: string[]): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction('reading_list', 'readwrite');
-      const store = tx.objectStore('reading_list');
+      const tx = db.transaction('user_reading_list', 'readwrite');
+      const store = tx.objectStore('user_reading_list');
       for (const filename of filenames) {
         await store.delete(filename);
       }

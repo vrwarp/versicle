@@ -95,7 +95,7 @@ describe('Sync Schema Exhaustion', () => {
         'user_overrides',   // Mapped to lexicon
         'user_journey',     // Mapped to books.history.sessions
         'user_ai_inference', // Mapped to books.aiInference
-        'reading_list'      // Mapped to readingList
+        'user_reading_list' // Mapped to readingList
     ];
 
     const missingStores = dbStores.filter(store =>

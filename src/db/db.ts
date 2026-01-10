@@ -128,7 +128,7 @@ export interface EpubLibraryDB extends DBSchema {
    * Independent reading list store for history persistence.
    * Restored in v21.
    */
-  reading_list: {
+  user_reading_list: {
     key: string; // filename
     value: ReadingListEntry;
   };
@@ -202,13 +202,13 @@ export const initDB = () => {
         const userAi = createStore('user_ai_inference', { keyPath: 'id' }) as any;
         if (!userAi.indexNames.contains('by_bookId')) userAi.createIndex('by_bookId', 'bookId');
 
-        // Reading List (Restored in v21)
-        // Only create here if we are NOT running the V20 migration which deletes it.
-        // If we are upgrading from < 20, the v20 block will handle deletion,
-        // and the v21 block will handle re-creation.
-        if (oldVersion >= 20) {
-           createStore('reading_list', { keyPath: 'filename' });
-        }
+        // Reading List (Restored in v21 as user_reading_list)
+        // Only create here if we are NOT running the V20 migration which deletes 'reading_list'.
+        // Actually, we are renaming it to 'user_reading_list', so collision with legacy 'reading_list' is less of an issue,
+        // EXCEPT that v20 deletes 'reading_list'.
+        // v21 creates 'user_reading_list'.
+
+        createStore('user_reading_list', { keyPath: 'filename' });
 
         // Cache
         createStore('cache_render_metrics', { keyPath: 'bookId' });
@@ -640,19 +640,19 @@ export const initDB = () => {
         // --- MIGRATION LOGIC (v20 -> v21) ---
         // Restore reading_list from user_inventory and user_progress
         if (oldVersion < 21) {
-             console.log('Migrating to v21: Restoring Independent Reading List...');
+             console.log('Migrating to v21: Restoring Independent Reading List as user_reading_list...');
 
-             // Ensure store exists (it might have been deleted by v20 logic or skipped at top)
+             // Ensure store exists
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             if (!db.objectStoreNames.contains('reading_list' as any)) {
+             if (!db.objectStoreNames.contains('user_reading_list' as any)) {
                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                 db.createObjectStore('reading_list' as any, { keyPath: 'filename' });
+                 db.createObjectStore('user_reading_list' as any, { keyPath: 'filename' });
              }
 
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
              const tx: any = transaction;
 
-             const rlStore = tx.objectStore('reading_list');
+             const rlStore = tx.objectStore('user_reading_list');
              const invStore = tx.objectStore('user_inventory');
              const progStore = tx.objectStore('user_progress');
              const manStore = tx.objectStore('static_manifests');
