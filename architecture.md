@@ -258,7 +258,7 @@ Enhances the reading experience using LLMs.
 
 *   **Goal**: Enhance the reading and listening experience using LLMs (Gemini).
 *   **Logic**:
-    *   **Free Tier Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite`, `gemini-2.5-flash`, `gemini-3-flash`) to maximize quota. Automatically retries with a different model upon `429 RESOURCE_EXHAUSTED` errors.
+    *   **Free Tier Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite`, `gemini-2.5-flash`) to maximize quota. Automatically retries with a different model upon `429 RESOURCE_EXHAUSTED` errors.
     *   **Multimodal Input**: Accepts text and images (blobs) for tasks like table interpretation.
     *   **Structured Output**: Enforces strict JSON schemas for all responses (e.g., Content Type classification, Table Adaptation).
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets/images are sent to Google's servers.

@@ -64,7 +64,7 @@ describe('GenAIService Rotation Logic', () => {
     await genAIService.generateContent('prompt');
 
     const callArgs = mocks.getGenerativeModel.mock.calls[0][0];
-    const ROTATION_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3-flash'];
+    const ROTATION_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
     expect(ROTATION_MODELS).toContain(callArgs.model);
   });
 
@@ -121,7 +121,7 @@ describe('GenAIService Rotation Logic', () => {
 
     await expect(genAIService.generateContent('prompt')).rejects.toThrow('429');
 
-    // Should try all 3 models
-    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(3);
+    // Should try all 2 models
+    expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(2);
   });
 });

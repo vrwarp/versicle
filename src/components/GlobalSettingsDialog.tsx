@@ -765,7 +765,7 @@ export const GlobalSettingsDialog = () => {
                                                 <div className="space-y-0.5">
                                                     <label htmlFor="genai-rotation" className="text-sm font-medium">Free Tier Rotation</label>
                                                     <p className="text-xs text-muted-foreground max-w-sm">
-                                                        Maximizes free quota by randomly rotating between gemini-2.5-flash-lite, gemini-2.5-flash, and gemini-3-flash on each request. Retries with a different model if one is exhausted (429).
+                                                        Maximizes free quota by randomly rotating between gemini-2.5-flash-lite and gemini-2.5-flash on each request. Retries with a different model if one is exhausted (429).
                                                     </p>
                                                 </div>
                                                 <Switch
