@@ -13,6 +13,7 @@ Currently, Versicle uses a "Database-First" architecture:
 The Migration moves to a **"Store-First" (Local-First)** architecture:
 *   **State Source:** The `Y.Doc` (held in memory and persisted via `y-indexeddb`) becomes the source of truth for user data.
 *   **Read/Write:** Zustand stores read/write directly to the Yjs structure via `zustand-middleware-yjs`.
+    *   *Note:* We will use the fork located at [https://github.com/vrwarp/zustand-middleware-yjs](https://github.com/vrwarp/zustand-middleware-yjs) which supports modern Zustand versions.
 *   **Persistence:** The middleware and Yjs provider handle the saving to disk (IndexedDB) and syncing to peers automatically.
 
 ## 2. Data Segmentation Strategy
