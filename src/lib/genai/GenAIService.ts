@@ -15,7 +15,7 @@ class GenAIService {
   private genAI: GoogleGenerativeAI | null = null;
   private modelId: string = 'gemini-flash-lite-latest';
   private isRotationEnabled: boolean = false;
-  private readonly ROTATION_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-3-flash'];
+  private readonly ROTATION_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
   private logCallback: ((entry: GenAILogEntry) => void) | null = null;
 
   private constructor() {}
