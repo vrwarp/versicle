@@ -5,6 +5,7 @@
 ## 1. Install Dependencies
 *   Install `yjs` (CRDT implementation).
 *   Install `zustand-middleware-yjs` (Zustand binding).
+    *   *Note:* Use the fork at `https://github.com/vrwarp/zustand-middleware-yjs` to support modern Zustand versions.
 *   Install `y-indexeddb` (Local persistence).
 *   *Note:* Ensure peer dependencies for `zustand` are compatible.
 
