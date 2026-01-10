@@ -116,7 +116,7 @@ export class AudioContentPipeline {
                 // -----------------------------------------------------------
                 const genAISettings = useGenAIStore.getState();
                 const skipTypes = genAISettings.contentFilterSkipTypes;
-                const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled;
+                const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled && genAISettings.isEnabled;
 
                 if (isContentAnalysisEnabled) {
                      if (skipTypes.length > 0 && onMaskFound) {
@@ -131,7 +131,7 @@ export class AudioContentPipeline {
                      }
                 }
 
-                if (onAdaptationsFound && genAISettings.isTableAdaptationEnabled) {
+                if (onAdaptationsFound && genAISettings.isTableAdaptationEnabled && genAISettings.isEnabled) {
                     // Trigger table adaptations
                     this.processTableAdaptations(bookId, section.sectionId, workingSentences, onAdaptationsFound)
                         .catch(err => console.warn("Background table adaptation failed", err));
@@ -181,7 +181,7 @@ export class AudioContentPipeline {
      */
     async triggerNextChapterAnalysis(bookId: string, currentSectionIndex: number, playlist: SectionMetadata[]) {
         const genAISettings = useGenAIStore.getState();
-        if (!genAISettings.isContentAnalysisEnabled || genAISettings.contentFilterSkipTypes.length === 0) {
+        if (!genAISettings.isEnabled || !genAISettings.isContentAnalysisEnabled || genAISettings.contentFilterSkipTypes.length === 0) {
             return;
         }
 
@@ -323,7 +323,7 @@ export class AudioContentPipeline {
             if (workSet.length === 0) return;
 
             // 4. Check if GenAI is configured
-             const canUseGenAI = genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+             const canUseGenAI = genAISettings.isEnabled && (genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
              if (!canUseGenAI) return;
 
              // Ensure service is configured
@@ -458,7 +458,7 @@ export class AudioContentPipeline {
 
             // 2. If not found, detect with GenAI
             const aiStore = useGenAIStore.getState();
-            const canUseGenAI = genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse'));
+            const canUseGenAI = aiStore.isEnabled && (genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
 
             if (!canUseGenAI) {
                 return null;

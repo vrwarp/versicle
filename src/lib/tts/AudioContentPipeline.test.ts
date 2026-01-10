@@ -29,6 +29,7 @@ vi.mock('../../store/useGenAIStore', () => ({
         getState: vi.fn(() => ({
             contentFilterSkipTypes: [],
             isContentAnalysisEnabled: false,
+            isEnabled: true, // Default enabled
             apiKey: null
         }))
     }
@@ -140,6 +141,7 @@ describe('AudioContentPipeline', () => {
             (useGenAIStore.getState as any).mockReturnValue({
                 contentFilterSkipTypes: ['table'],
                 isContentAnalysisEnabled: true,
+                isEnabled: true,
                 apiKey: 'test-key'
             });
 
