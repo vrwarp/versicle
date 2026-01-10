@@ -2,7 +2,7 @@ import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage } from '../types/db';
+import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
@@ -328,11 +328,23 @@ export async function processEpub(
       lexicon: []
   };
 
+  const readingListEntry: ReadingListEntry = {
+      filename: file.name,
+      title: candidateMetadata.title,
+      author: candidateMetadata.author,
+      isbn: undefined,
+      percentage: 0,
+      lastUpdated: Date.now(),
+      status: 'to-read',
+      rating: undefined
+  };
+
   const db = await getDB();
   const tx = db.transaction([
       'static_manifests', 'static_resources', 'static_structure',
       'user_inventory', 'user_progress', 'user_overrides',
-      'cache_tts_preparation', 'cache_table_images'
+      'cache_tts_preparation', 'cache_table_images',
+      'user_reading_list'
   ], 'readwrite');
 
   await tx.objectStore('static_manifests').add(manifest);
@@ -341,6 +353,7 @@ export async function processEpub(
   await tx.objectStore('user_inventory').add(inventory);
   await tx.objectStore('user_progress').add(progress);
   await tx.objectStore('user_overrides').add(overrides);
+  await tx.objectStore('user_reading_list').add(readingListEntry);
 
   const ttsStore = tx.objectStore('cache_tts_preparation');
   for (const batch of ttsContentBatches) {
