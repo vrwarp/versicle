@@ -20,6 +20,7 @@ import type {
   BookState,
   Annotation,
   ReadingHistoryEntry,
+  ReadingListEntry,
   ContentAnalysis,
   BookLocations,
   CachedSegment,
@@ -94,6 +95,10 @@ export interface EpubLibraryDB extends DBSchema {
     key: string;
     value: UserInventoryItem;
   };
+  user_reading_list: {
+    key: string;
+    value: ReadingListEntry;
+  };
   user_progress: {
     key: string;
     value: UserProgress;
@@ -150,7 +155,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 20, {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 21, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // Create New Stores if they don't exist
         const createStore = (name: string, options?: IDBObjectStoreParameters) => {
@@ -177,6 +182,7 @@ export const initDB = () => {
 
         // User
         createStore('user_inventory', { keyPath: 'bookId' });
+        createStore('user_reading_list', { keyPath: 'filename' });
         createStore('user_progress', { keyPath: 'bookId' });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -558,9 +564,19 @@ export const initDB = () => {
         // --- MIGRATION LOGIC (v19 -> v20) ---
         if (oldVersion < 20) {
             console.log('Migrating to v20: Fixing Reading List Progress...');
+            // ... (Previous v20 Logic remains but we don't need to duplicate it here if it's already executed)
+            // However, since we are moving to v21, we can actually clean up the v20 block if we want,
+            // but for safety we leave it.
+            // Wait, if I am defining the DB as v21, I need to keep v20 logic for users upgrading from v19 -> v21 directly.
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             if (db.objectStoreNames.contains('reading_list' as any)) {
+                 // The old v20 logic deleted reading_list.
+                 // We are now re-creating it as user_reading_list in v21.
+                 // So we can let v20 logic run as is (migrate to inventory, delete old store).
+                 // Then v21 logic will seed user_reading_list from inventory.
+
+                 // COPY PASTE v20 Logic
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const tx: any = transaction;
                 const rlStore = tx.objectStore('reading_list');
@@ -584,35 +600,29 @@ export const initDB = () => {
                     if (bookId) {
                         let prog = await progStore.get(bookId);
                         if (!prog) {
-                            // Create new progress record if missing
                             prog = {
                                 bookId,
                                 percentage: 0,
                                 lastRead: 0,
                                 completedRanges: []
-                                // currentCfi left undefined as we don't have it
                             };
                         }
 
-                        // Recover Progress
                         if ((!prog.percentage || prog.percentage === 0) && entry.percentage > 0) {
                             prog.percentage = entry.percentage;
                             prog.lastRead = Math.max(prog.lastRead, entry.lastUpdated);
                             await progStore.put(prog);
                         } else if (!await progStore.get(bookId)) {
-                             // If it was missing and we didn't update percentage, we still save it initialized
                              await progStore.put(prog);
                         }
 
                         const inv = await invStore.get(bookId);
                         if (inv) {
                             let dirty = false;
-                            // Recover Status
                             if (inv.status === 'unread' && (entry.status === 'reading' || entry.status === 'read' || entry.status === 'currently-reading')) {
                                 inv.status = (entry.status === 'read' || entry.status === 'completed') ? 'completed' : 'reading';
                                 dirty = true;
                             }
-                            // Recover Rating
                             if (!inv.rating && entry.rating) {
                                 inv.rating = entry.rating;
                                 dirty = true;
@@ -622,10 +632,44 @@ export const initDB = () => {
                     }
                     cursor = await cursor.continue();
                 }
-
-                // Delete reading_list after successful migration
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 db.deleteObjectStore('reading_list' as any);
+            }
+        }
+
+        // --- MIGRATION LOGIC (v20 -> v21) ---
+        if (oldVersion < 21) {
+            console.log('Migrating to v21: Seeding User Reading List...');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const tx: any = transaction;
+            const invStore = tx.objectStore('user_inventory');
+            const progStore = tx.objectStore('user_progress');
+            const manStore = tx.objectStore('static_manifests');
+            const rlStore = tx.objectStore('user_reading_list');
+
+            const allInv = await invStore.getAll();
+            const allProg = await progStore.getAll();
+            const allMan = await manStore.getAll();
+
+            const progMap = new Map(allProg.map((p: UserProgress) => [p.bookId, p]));
+            const manMap = new Map(allMan.map((m: StaticBookManifest) => [m.bookId, m]));
+
+            for (const inv of allInv as UserInventoryItem[]) {
+                if (!inv.sourceFilename) continue;
+
+                const prog = progMap.get(inv.bookId);
+                const man = manMap.get(inv.bookId);
+
+                await rlStore.put({
+                    filename: inv.sourceFilename,
+                    title: inv.customTitle || man?.title || 'Unknown',
+                    author: inv.customAuthor || man?.author || 'Unknown',
+                    isbn: man?.isbn,
+                    percentage: prog?.percentage || 0,
+                    lastUpdated: inv.lastInteraction || Date.now(),
+                    status: inv.status === 'completed' ? 'read' : (inv.status === 'reading' ? 'currently-reading' : 'to-read'),
+                    rating: inv.rating
+                });
             }
         }
 

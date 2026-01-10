@@ -1,65 +1,74 @@
 # Reading List v2 Plan
 
 ## Context
-The original Reading List feature (archived in `plan/archive/completed/reading-list.md`) was designed to provide a persistent history of books even after their binary files were deleted. It relied on a separate `reading_list` object store.
+The Reading List feature is intended to be a lightweight, portable record of reading history (Title, Author, ISBN, Progress) that persists even if the book files are deleted.
 
-In the v18+ architecture (and v20 migration), the `reading_list` store was removed, and data was migrated to `user_inventory` and `user_progress`. However, the current implementation of `upsertReadingListEntry` fails when importing entries for books that do not already exist in the library. This breaks the use case of importing a reading history (e.g., from Goodreads) containing books the user has not yet uploaded.
+The v18+ architecture removed the dedicated `reading_list` store, migrating data to `user_inventory`. However, this broke the ability to import reading history for books that are not physically present in the library ("Ghost Books"). A previous attempt using "Shell Books" (placeholder inventory items) was rejected as it cluttered the main library view.
 
 ## Goal
-Restore the ability to maintain "Ghost" or "Shell" books—entries that track metadata and progress but lack the actual EPUB file—within the strict v18+ data architecture.
+Restore the original design where the **Reading List** is a distinct, persistent store separate from the **Library Inventory**.
 
-## Strategy: Shell Books
-Instead of re-introducing a separate store, we will utilize the existing `static_manifests`, `user_inventory`, and `user_progress` stores to represent these entries.
+## Architecture: Dedicated Store
 
-### 1. Data Structure for Shell Books
-A "Shell Book" is defined as:
-- **`static_manifests`**: Contains `title`, `author`, `bookId`.
-    - `fileHash`: Set to a special sentinel value `'PLACEHOLDER'`.
-    - `fileSize`: 0.
-    - `totalChars`: 0.
-- **`user_inventory`**: Contains `sourceFilename`, `status`, `rating`.
-- **`user_progress`**: Contains `percentage` (from CSV).
-- **`static_resources`**: **MISSING** (This key will not exist).
+### 1. New Store: `user_reading_list`
+We will re-introduce a store to the `EpubLibraryDB` schema (v21).
+- **Store Name**: `user_reading_list`
+- **Key**: `filename` (matches `user_inventory.sourceFilename`)
+- **Value**: `ReadingListEntry`
+  ```typescript
+  interface ReadingListEntry {
+      filename: string;
+      title: string;
+      author: string;
+      isbn?: string;
+      percentage: number;
+      lastUpdated: number;
+      status?: 'read' | 'currently-reading' | 'to-read';
+      rating?: number;
+  }
+  ```
 
-### 2. Logic Updates
+### 2. Synchronization Strategy
 
-#### `DBService.upsertReadingListEntry`
-- **Current Behavior**: Updates existing inventory if found; logs warning and aborts if not found.
-- **New Behavior**:
-    1. Check if book exists (by filename match in `user_inventory`).
-    2. If found: Update as before.
-    3. If **NOT found**:
-        - Generate a new UUID for `bookId`.
-        - Create `StaticBookManifest` with:
-            - `fileHash: 'PLACEHOLDER'`
-            - `title`, `author` from entry.
-        - Create `UserInventoryItem` with status and rating.
-        - Create `UserProgress` with percentage.
+The `ReadingListDialog` views `user_reading_list`. The `LibraryView` views `user_inventory`. They are kept in sync via the following rules:
 
-#### `DBService.restoreBook`
-- **Current Behavior**: Throws error if uploaded file's fingerprint doesn't match `manifest.fileHash`.
-- **New Behavior**:
-    - If `manifest.fileHash === 'PLACEHOLDER'`:
-        - **Allow** the restore.
-        - **Update** `manifest.fileHash`, `manifest.fileSize`, `manifest.totalChars` with the new file's real values.
-        - Proceed to save file to `static_resources`.
+#### A. Live Sync (Read -> List)
+When the user reads a book (`saveProgress`):
+1.  Update `user_progress` (as usual).
+2.  **Upsert** the entry to `user_reading_list`.
+    -   This ensures that any book read in the library is automatically backed up to the history list.
 
-#### `DBService.getLibrary` / `getBook`
-- These methods already calculate `isOffloaded` based on the absence of `static_resources`.
-- Shell books will naturally appear as `isOffloaded: true`.
-- The UI will display them with the cloud icon, which is the desired behavior for "books I don't have on device".
+#### B. Restore Sync (List -> Read / Import)
+When the user imports a CSV or manually updates a reading list entry (`upsertReadingListEntry`):
+1.  **Upsert** to `user_reading_list` (always).
+2.  **Check** `user_inventory` for a matching `sourceFilename`.
+3.  **If Found** (Book exists in Library):
+    -   Update `user_inventory` (Status, Rating).
+    -   Update `user_progress` *if* the imported percentage is higher than the current local percentage ("Highest Wins").
+4.  **If Not Found** (Ghost Book):
+    -   **Stop.** Do *not* create a "Shell Book" in `user_inventory`.
+    -   The entry remains in `user_reading_list` and is visible in the `ReadingListDialog`, but does not clutter the Library.
+
+#### C. Persistence
+-   **`deleteBook` (Library)**: Deleting a book from the Library (Inventory) must **NOT** delete the corresponding entry from `user_reading_list`. This preserves history.
+-   **`deleteReadingListEntry` (List)**: Deleting an entry from the Reading List Dialog must **only** delete from `user_reading_list`. It should *not* delete the book from the Library. (This is a change from previous behavior which nuked the book; separation means separation).
 
 ## Implementation Details
 
-### Validation
-- **Unit Tests**:
-    - `upsertReadingListEntry`: Verify it creates a shell book when one doesn't exist.
-    - `restoreBook`: Verify it accepts a file for a shell book and updates the hash.
-    - `getLibrary`: Verify shell books appear and are marked `isOffloaded`.
+### Migration (v21)
+On upgrade to v21, we must populate `user_reading_list` to prevent data loss (or rather, "history loss") for existing users.
+-   Iterate all `user_inventory`.
+-   Join with `user_progress` and `static_manifests`.
+-   Create corresponding `ReadingListEntry` in `user_reading_list`.
 
-### Migration
-- No new migration needed for the DB schema itself. The code changes will handle new imports. Existing "lost" reading list entries from before v20 are already gone (migrated or deleted), so this fixes *future* imports and re-enables the feature.
+### DBService Updates
+-   `getReadingList`: Query `user_reading_list` directly.
+-   `upsertReadingListEntry`: Implement the "Restore Sync" logic.
+-   `saveProgress`: Add the "Live Sync" side-effect.
+-   `deleteBook`: Remove the logic that touches reading list.
+-   `deleteReadingListEntry`: Only delete from reading list.
 
 ## Risks
-- **Duplicate Shells**: If a user imports a CSV multiple times with different filenames for the same book, we might create duplicates because we only match on `sourceFilename`.
-    - *Mitigation*: We could attempt to match on `ISBN` if provided in the CSV, but `user_inventory` doesn't strictly index ISBN. `static_manifests` has it but we'd need to scan all manifests. For now, filename matching is the legacy behavior and acceptable MVP.
+-   **Filename Collisions**: Using `filename` as a primary key works for restoring *file-based* history, but if a user has two different books with the same filename (rare but possible), they might overwrite each other's history. This is an acceptable trade-off for the "Restore" capability which relies on filename matching.
+-   **Stale Data**: If a user updates metadata (Title/Author) in the Library, it might not immediately reflect in `user_reading_list` unless we hook into `updateBookMetadata` as well.
+    -   *Mitigation*: We should add a hook in `updateBookMetadata` to sync changes to `user_reading_list` if the entry exists.

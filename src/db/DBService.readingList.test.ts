@@ -6,51 +6,23 @@ import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResourc
 describe('DBService Reading List', () => {
     beforeEach(async () => {
         const db = await getDB();
-        // v18: reading_list is deprecated, but DBService mimics it via UserInventory.
-        // Or if we implemented reading_list store removal?
-        // Wait, initDB DELETED reading_list store in v18 migration.
-        // So `getReadingList` implementation in DBService maps from user_inventory.
-        // So we should verify against user_inventory.
-
         await db.clear('user_inventory');
         await db.clear('user_progress');
         await db.clear('static_manifests');
         await db.clear('static_resources');
+        await db.clear('user_reading_list');
     });
 
-    it('should upsert reading list entries', async () => {
+    it('should upsert reading list entries (syncing with inventory)', async () => {
         const db = await getDB();
 
-        // Seed initial data
+        // Seed Inventory
         await db.put('user_inventory', {
-            bookId: 'b1',
-            sourceFilename: 'test.epub',
-            customTitle: 'Old Title',
-            customAuthor: 'Old Author',
-            addedAt: 100,
-            status: 'unread',
-            lastInteraction: 100,
-            tags: []
+            bookId: 'b1', sourceFilename: 'test.epub', customTitle: 'Old Title', addedAt: 100, status: 'unread', lastInteraction: 100, tags: []
         } as UserInventoryItem);
+        await db.put('user_progress', { bookId: 'b1', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
 
-        await db.put('user_progress', {
-            bookId: 'b1',
-            percentage: 0,
-            lastRead: 0,
-            completedRanges: []
-        } as UserProgress);
-
-        await db.put('static_manifests', {
-            bookId: 'b1',
-            title: 'Orig Title',
-            author: 'Orig Author',
-            schemaVersion: 1,
-            fileHash: 'hash',
-            fileSize: 100,
-            totalChars: 1000
-        } as StaticBookManifest);
-
-        // Perform upsert
+        // Upsert Reading List
         await dbService.upsertReadingListEntry({
             filename: 'test.epub',
             title: 'New Title',
@@ -61,211 +33,89 @@ describe('DBService Reading List', () => {
             rating: 4
         });
 
-        // Verify user_inventory updated
-        const inv = await db.get('user_inventory', 'b1');
-        expect(inv?.customTitle).toBe('New Title');
-        expect(inv?.customAuthor).toBe('New Author');
-        expect(inv?.status).toBe('reading');
-        expect(inv?.rating).toBe(4);
-        expect(inv?.lastInteraction).toBe(200);
-
-        // Verify user_progress updated
-        const prog = await db.get('user_progress', 'b1');
-        expect(prog?.percentage).toBe(0.5);
-        expect(prog?.lastRead).toBe(200);
-
-        // Verify getReadingList reflects changes
+        // 1. Verify Entry in user_reading_list
         const list = await dbService.getReadingList();
         expect(list).toHaveLength(1);
         expect(list[0].title).toBe('New Title');
-        expect(list[0].status).toBe('currently-reading');
+
+        // 2. Verify Sync to Inventory
+        const inv = await db.get('user_inventory', 'b1');
+        expect(inv?.customTitle).toBe('New Title'); // Synced
+        expect(inv?.rating).toBe(4); // Synced
+
+        // 3. Verify Sync to Progress
+        const prog = await db.get('user_progress', 'b1');
+        expect(prog?.percentage).toBe(0.5); // Synced (highest)
     });
 
-    it('should delete reading list entry', async () => {
-        const db = await getDB();
-
-        await db.put('user_inventory', {
-            bookId: 'del-1', sourceFilename: 'del.epub', addedAt: 100, status: 'unread', lastInteraction: 100, tags: []
-        } as UserInventoryItem);
-        await db.put('static_manifests', {
-            bookId: 'del-1', title: 'Del', author: 'Auth', schemaVersion: 1, fileHash: 'h', fileSize: 1, totalChars: 1
-        } as StaticBookManifest);
-        // Need store dependent tables to ensure no crash
-        await db.put('user_progress', { bookId: 'del-1', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-        await db.put('static_resources', { bookId: 'del-1', epubBlob: new Blob([]) } as StaticResource);
-        await db.put('static_structure', { bookId: 'del-1', toc: [], spineItems: [] } as StaticStructure);
-
-        await dbService.deleteReadingListEntry('del.epub');
-
-        const inv = await db.get('user_inventory', 'del-1');
-        expect(inv).toBeUndefined();
-    });
-
-    it('should import reading list (batch upsert)', async () => {
-        const db = await getDB();
-
-        // Seed
-        await db.put('user_inventory', {
-            bookId: 'imp-1', sourceFilename: 'imp1.epub', addedAt: 100, status: 'unread', lastInteraction: 100, tags: []
-        } as UserInventoryItem);
-         await db.put('static_manifests', {
-            bookId: 'imp-1', title: 'Imp 1', author: 'Auth', schemaVersion: 1, fileHash: 'h', fileSize: 1, totalChars: 1
-        } as StaticBookManifest);
-        await db.put('user_progress', { bookId: 'imp-1', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-
-        await dbService.importReadingList([{
-            filename: 'imp1.epub',
-            title: 'Imported Title',
-            author: 'Imported Author',
-            percentage: 0.8,
-            lastUpdated: 300,
-            status: 'read',
-            rating: 5
-        }]);
-
-        const inv = await db.get('user_inventory', 'imp-1');
-        expect(inv?.customTitle).toBe('Imported Title');
-        expect(inv?.status).toBe('completed');
-
-        const prog = await db.get('user_progress', 'imp-1');
-        expect(prog?.percentage).toBe(0.8);
-    });
-
-    it('should create Shell Book for non-existent reading list entry', async () => {
+    it('should handle "Ghost Books" (Reading List only)', async () => {
         const db = await getDB();
         const filename = 'ghost.epub';
 
-        // Ensure clean state
-        const initialInv = await db.getAll('user_inventory');
-        expect(initialInv).toHaveLength(0);
-
         await dbService.upsertReadingListEntry({
-            filename: filename,
+            filename,
             title: 'Ghost Book',
-            author: 'Ghost Author',
-            percentage: 0.3,
-            lastUpdated: 400,
-            status: 'currently-reading',
-            rating: 3,
-            isbn: '999-999'
-        });
-
-        // Verify Shell Book Created
-        const inv = await db.getAll('user_inventory');
-        expect(inv).toHaveLength(1);
-        const ghostBook = inv[0];
-        expect(ghostBook.sourceFilename).toBe(filename);
-        expect(ghostBook.customTitle).toBe('Ghost Book');
-        expect(ghostBook.status).toBe('reading');
-
-        const bookId = ghostBook.bookId;
-
-        // Verify Manifest
-        const man = await db.get('static_manifests', bookId);
-        expect(man).toBeDefined();
-        expect(man?.title).toBe('Ghost Book');
-        expect(man?.fileHash).toBe('PLACEHOLDER');
-        expect(man?.isbn).toBe('999-999');
-
-        // Verify Progress
-        const prog = await db.get('user_progress', bookId);
-        expect(prog).toBeDefined();
-        expect(prog?.percentage).toBe(0.3);
-
-        // Verify NO Resources
-        const res = await db.get('static_resources', bookId);
-        expect(res).toBeUndefined();
-
-        // Verify Library sees it as Offloaded
-        const library = await dbService.getLibrary();
-        expect(library).toHaveLength(1);
-        expect(library[0].id).toBe(bookId);
-        expect(library[0].isOffloaded).toBe(true);
-    });
-
-    it('should restore Shell Book with real file', async () => {
-        const db = await getDB();
-        const filename = 'restore-ghost.epub';
-
-        // 1. Create Shell Book
-        await dbService.upsertReadingListEntry({
-            filename: filename,
-            title: 'Ghost To Real',
-            author: 'Author',
-            percentage: 0.0,
+            author: 'Ghost',
+            percentage: 0.8,
             lastUpdated: 100,
-            status: 'to-read'
+            status: 'read'
         });
 
-        const inv = await db.getAll('user_inventory');
-        const bookId = inv[0].bookId;
+        // 1. Verify Entry in user_reading_list
+        const list = await dbService.getReadingList();
+        expect(list).toHaveLength(1);
+        expect(list[0].title).toBe('Ghost Book');
 
-        // 2. Prepare "Real" File
-        const fileContent = new ArrayBuffer(10);
-        const file = new File([fileContent], filename, { type: 'application/epub+zip' });
-
-        // Mock generateFileFingerprint logic?
-        // restoreBook calls generateFileFingerprint which hashes the file.
-        // We can trust the real implementation or mock it.
-        // DBService mocks are not active here, it uses real DB.
-        // generateFileFingerprint is imported from '../lib/ingestion'.
-        // We might need to ensure crypto works. Vitest environment 'jsdom' should support it.
-
-        // 3. Restore
-        await dbService.restoreBook(bookId, file);
-
-        // 4. Verify Manifest Updated
-        const man = await db.get('static_manifests', bookId);
-        expect(man?.fileHash).not.toBe('PLACEHOLDER');
-        expect(man?.fileHash).toBeTruthy();
-        expect(man?.fileSize).toBe(10);
-
-        // 5. Verify Resource Exists
-        const res = await db.get('static_resources', bookId);
-        expect(res).toBeDefined();
-        expect(res?.epubBlob).toBeDefined();
-
-        // 6. Verify isOffloaded is now false
+        // 2. Verify NOT in Library (getLibrary)
         const library = await dbService.getLibrary();
-        expect(library[0].isOffloaded).toBe(false);
+        expect(library).toHaveLength(0); // Should be empty
+
+        // 3. Verify NOT in user_inventory directly
+        const inv = await db.getAll('user_inventory');
+        expect(inv).toHaveLength(0);
     });
 
-    /*
-    it('should NOT sync progress if imported progress is lower', async () => {
-        // Skipped
-    });
-    */
-
-    it('should save to reading list (user_inventory) when saving progress', async () => {
+    it('should delete reading list entry WITHOUT deleting library book', async () => {
         const db = await getDB();
-        const bookId = 'prog-sync-1';
-        const filename = 'prog_sync.epub';
 
-        await db.put('static_manifests', {
-            bookId, title: 'Prog Sync', author: 'Author',
-            schemaVersion: 1, fileHash: 'hash', fileSize: 0, totalChars: 0
-        } as StaticBookManifest);
-        await db.put('user_inventory', {
-            bookId, sourceFilename: filename, customTitle: 'Prog Sync', addedAt: 100, status: 'reading', lastInteraction: 0,
-            tags: []
-        } as UserInventoryItem);
-        await db.put('user_progress', {
-            bookId, percentage: 0, lastRead: 0, completedRanges: []
-        } as UserProgress);
+        // Seed Inventory + Reading List
+        await db.put('user_inventory', { bookId: 'b1', sourceFilename: 'keep.epub', addedAt: 100, status: 'reading', lastInteraction: 100, tags: [] } as UserInventoryItem);
+        await db.put('static_manifests', { bookId: 'b1', title: 'Keep', author: 'Me', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
+        await db.put('user_reading_list', { filename: 'keep.epub', title: 'Keep', author: 'Me', percentage: 0.5, lastUpdated: 100, status: 'reading' });
 
-        dbService.saveProgress(bookId, 'cfi1', 0.45);
+        // Delete from Reading List
+        await dbService.deleteReadingListEntry('keep.epub');
 
-        // Wait for debounce
+        // 1. Verify Reading List Empty
+        const list = await dbService.getReadingList();
+        expect(list).toHaveLength(0);
+
+        // 2. Verify Library Still Exists
+        const lib = await dbService.getLibrary();
+        expect(lib).toHaveLength(1);
+        expect(lib[0].id).toBe('b1');
+    });
+
+    it('should sync progress FROM Library TO Reading List (Live Sync)', async () => {
+        const db = await getDB();
+        const bookId = 'live-sync-1';
+        const filename = 'live.epub';
+
+        await db.put('static_manifests', { bookId, title: 'Live', author: 'Sync', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0, isbn: '999' } as StaticBookManifest);
+        await db.put('user_inventory', { bookId, sourceFilename: filename, addedAt: 100, status: 'reading', lastInteraction: 100, tags: [] } as UserInventoryItem);
+        await db.put('user_progress', { bookId, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
+
+        // Simulate reading
+        dbService.saveProgress(bookId, 'cfi', 0.15);
+
         await new Promise(resolve => setTimeout(resolve, 1100));
 
-        // In v18, saving progress updates user_inventory status/lastInteraction?
-        // Yes, DBService.saveProgress updates status.
-        // And getReadingList maps user_inventory.
-
+        // Verify Reading List Created/Updated
         const list = await dbService.getReadingList();
         expect(list).toHaveLength(1);
         expect(list[0].filename).toBe(filename);
-        expect(list[0].percentage).toBe(0.45);
+        expect(list[0].percentage).toBe(0.15);
+        expect(list[0].isbn).toBe('999'); // Should pick up ISBN from manifest
     });
 
     /*
