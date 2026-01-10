@@ -53,7 +53,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     # DEBUG: Check DB content on Device A
     db_count = page_a.evaluate("""
         async () => {
-            const req = window.indexedDB.open('EpubLibraryDB', 19);
+            const req = window.indexedDB.open('EpubLibraryDB', 20);
             return new Promise((resolve, reject) => {
                 req.onsuccess = (event) => {
                     const db = event.target.result;
@@ -150,7 +150,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
         # Check IndexedDB 'user_overrides' store (key: global)
         rule_count = page_b.evaluate("""
             async () => {
-                const req = window.indexedDB.open('EpubLibraryDB', 19);
+                const req = window.indexedDB.open('EpubLibraryDB', 20);
                 return new Promise((resolve, reject) => {
                     req.onsuccess = (event) => {
                         const database = event.target.result;
