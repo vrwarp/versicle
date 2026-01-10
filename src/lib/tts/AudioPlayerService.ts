@@ -225,9 +225,11 @@ export class AudioPlayerService {
 
                 // Determine target visual section
                 let visualSectionIndex = -1;
-                if (book?.currentCfi) {
+                const currentCfi = book?.currentCfi;
+
+                if (currentCfi) {
                      // Try to map CFI to section index using playlist/spine info
-                     visualSectionIndex = this.getSectionIndexFromCfi(book.currentCfi);
+                     visualSectionIndex = this.getSectionIndexFromCfi(currentCfi);
                 }
 
                 // Logic: Prioritize visual location if significantly different from saved TTS state
@@ -237,8 +239,8 @@ export class AudioPlayerService {
                     if (!state || state.sectionIndex !== visualSectionIndex) {
                         // Load visual section
                         const loaded = await this.loadSectionInternal(visualSectionIndex, false); // No autoplay
-                        if (loaded && book.currentCfi) {
-                             const qIndex = findClosestQueueItemIndex(this.stateManager.queue as TTSQueueItem[], book.currentCfi);
+                        if (loaded && currentCfi) {
+                             const qIndex = findClosestQueueItemIndex(this.stateManager.queue as TTSQueueItem[], currentCfi);
                              if (qIndex !== -1) this.stateManager.jumpTo(qIndex);
                         }
                         return;
@@ -251,8 +253,8 @@ export class AudioPlayerService {
 
                         // Check if visual CFI is significantly ahead/behind or just different?
                         // If user read visually, we usually want to resume from there.
-                        if (book.currentCfi) {
-                             const qIndex = findClosestQueueItemIndex(state.queue, book.currentCfi);
+                        if (currentCfi) {
+                             const qIndex = findClosestQueueItemIndex(state.queue, currentCfi);
                              // If found and different from saved index, jump to it.
                              if (qIndex !== -1 && qIndex !== state.currentIndex) {
                                  this.stateManager.jumpTo(qIndex);
