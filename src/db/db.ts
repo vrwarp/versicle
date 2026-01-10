@@ -651,8 +651,8 @@ export const initDB = () => {
             const allProg = await progStore.getAll();
             const allMan = await manStore.getAll();
 
-            const progMap = new Map(allProg.map((p: UserProgress) => [p.bookId, p]));
-            const manMap = new Map(allMan.map((m: StaticBookManifest) => [m.bookId, m]));
+            const progMap = new Map((allProg as UserProgress[]).map((p: UserProgress) => [p.bookId, p]));
+            const manMap = new Map((allMan as StaticBookManifest[]).map((m: StaticBookManifest) => [m.bookId, m]));
 
             for (const inv of allInv as UserInventoryItem[]) {
                 if (!inv.sourceFilename) continue;
