@@ -155,7 +155,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 21, {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 22, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // Create New Stores if they don't exist
         const createStore = (name: string, options?: IDBObjectStoreParameters) => {
@@ -671,6 +671,64 @@ export const initDB = () => {
                     rating: inv.rating
                 });
             }
+        }
+
+        // --- MIGRATION LOGIC (v21 -> v22) ---
+        if (oldVersion < 22) {
+          console.log('Migrating to v22: Repairing corrupted filenames...');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const tx: any = transaction;
+          const invStore = tx.objectStore('user_inventory');
+          const resStore = tx.objectStore('static_resources');
+          const rlStore = tx.objectStore('user_reading_list');
+          const progStore = tx.objectStore('user_progress');
+          const manStore = tx.objectStore('static_manifests');
+
+          let cursor = await invStore.openCursor();
+          let fixedCount = 0;
+
+          while (cursor) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const inv = cursor.value as any;
+
+            // Detect Corruption
+            if (!inv.sourceFilename) {
+              // 1. Attempt Recovery
+              const resource = await resStore.get(inv.bookId);
+
+              // Check if resource exists and has a name (assuming File object)
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              if (resource && resource.epubBlob && (resource.epubBlob as any).name) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const recoveredName = (resource.epubBlob as any).name;
+                console.log(`v22 Repair: Recovered "${recoveredName}" for book ${inv.bookId}`);
+
+                // 2. Fix Inventory
+                inv.sourceFilename = recoveredName;
+                await cursor.update(inv);
+                fixedCount++;
+
+                // 3. Backfill Reading List (The missed v21 step)
+                const prog = await progStore.get(inv.bookId);
+                const man = await manStore.get(inv.bookId);
+
+                await rlStore.put({
+                    filename: recoveredName,
+                    title: inv.customTitle || man?.title || 'Unknown',
+                    author: inv.customAuthor || man?.author || 'Unknown',
+                    isbn: man?.isbn,
+                    percentage: prog?.percentage || 0,
+                    lastUpdated: inv.lastInteraction || Date.now(),
+                    status: inv.status === 'completed' ? 'read' : (inv.status === 'reading' ? 'currently-reading' : 'to-read'),
+                    rating: inv.rating
+                });
+              } else {
+                console.warn(`v22 Repair Failed: Could not recover filename for ${inv.bookId} (Resource missing or not a File).`);
+              }
+            }
+            cursor = await cursor.continue();
+          }
+          console.log(`v22 Migration Complete. Repaired ${fixedCount} books.`);
         }
 
       },
