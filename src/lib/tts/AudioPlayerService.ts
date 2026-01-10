@@ -160,6 +160,14 @@ export class AudioPlayerService {
 
     setBookId(bookId: string | null) {
         if (this.currentBookId !== bookId) {
+            // Immediately stop playback and reset state to prevent leakage of old book state
+            if (this.status !== 'stopped') {
+                this.setStatus('stopped');
+                this.providerManager.stop();
+                this.platformIntegration.stop().catch(console.error);
+            }
+            this.stateManager.reset();
+
             this.currentBookId = bookId;
             this.sessionRestored = false;
             this.stateManager.setBookId(bookId);
@@ -170,10 +178,8 @@ export class AudioPlayerService {
                     this.restoreQueue(bookId);
                 }).catch(e => console.error("Failed to load playlist", e));
             } else {
-                this.stateManager.reset();
                 this.playlist = [];
                 this.playlistPromise = null;
-                this.setStatus('stopped');
             }
 
             this.activeLexiconRules = null;
