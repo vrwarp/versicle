@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getCoverFromDB, createCoverResponse, DB_NAME, STATIC_MANIFESTS_STORE, BOOKS_STORE } from './sw-utils';
+import { getCoverFromDB, createCoverResponse, STATIC_MANIFESTS_STORE, BOOKS_STORE } from './sw-utils';
 import * as idb from 'idb';
 
 vi.mock('idb', () => ({
@@ -17,7 +17,7 @@ describe('Service Worker Database Utils', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (idb.openDB as any).mockResolvedValue(mockDb);
+        vi.mocked(idb.openDB).mockResolvedValue(mockDb as unknown as idb.IDBPDatabase);
     });
 
     it('retrieves cover from static_manifests in v18 architecture', async () => {
@@ -94,14 +94,17 @@ describe('Service Worker Database Utils', () => {
 
         const originalResponse = global.Response;
         global.Response = class MockResponse {
-             constructor(body, init) {
+             body: unknown;
+             status: number;
+             _headers: Map<string, string>;
+             constructor(body: unknown, init: { status?: number; headers?: Record<string, string> } | undefined) {
                  this.body = body;
                  this.status = init?.status || 200;
-                 this.headers = new Map(Object.entries(init?.headers || {}));
+                 this._headers = new Map(Object.entries(init?.headers || {}));
              }
              get headers() { return this._headers; }
              set headers(h) { this._headers = h; }
-        } as any;
+        } as unknown as typeof Response;
 
         try {
             const response = await createCoverResponse('abc');

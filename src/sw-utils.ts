@@ -36,7 +36,7 @@ export async function createCoverResponse(bookId: string): Promise<Response> {
   try {
     const coverBlob = await getCoverFromDB(bookId);
 
-    if (coverBlob && (coverBlob instanceof Blob || (coverBlob as any).size > 0)) {
+    if (coverBlob && (coverBlob instanceof Blob || (coverBlob as { size: number }).size > 0)) {
        // Check for blob-like object since instanceof might be flaky in tests
       return new Response(coverBlob, {
         headers: {
