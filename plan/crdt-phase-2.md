@@ -68,7 +68,21 @@
         1.  `set(state => { delete state.books[id] })`.
         2.  Call `await dbService.deleteBook(id)` (to clear blobs).
 
-## 4. Refactor `DBService` (The Dismantling)
+## 4. Refactor `useReadingListStore`
+
+**File:** `src/store/useReadingListStore.ts`
+
+**Action:** Create a new store to manage the persistent reading history (Shadow Inventory).
+
+*   **Shared Type:** `yDoc.getMap('reading_list')`.
+*   **State Interface:**
+    *   `entries: Record<string, ReadingListEntry>`.
+*   **Actions:**
+    *   `upsertEntry(entry: ReadingListEntry)`: Updates the Yjs map.
+    *   `removeEntry(filename: string)`: Removes from Yjs map.
+    *   `getEntry(filename: string)`: Selector to retrieve entry.
+
+## 5. Refactor `DBService` (The Dismantling)
 
 **File:** `src/db/DBService.ts`
 
@@ -96,7 +110,7 @@ async addBook(file: File, ...): Promise<BookMetadata> {
 }
 ```
 
-## 5. Component Updates (Consumers)
+## 6. Component Updates (Consumers)
 
 *   **`ReaderView.tsx`:** Update to read `toc` from `ReaderUIStore` and `theme` from `ReaderSyncStore`.
 *   **`LibraryView.tsx`:** Update to observe `useLibraryStore.books` (Yjs map) instead of array.

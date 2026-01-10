@@ -33,6 +33,7 @@ These will be removed from `DBService` *write logic* and handled strictly by Zus
 | Yjs Shared Type (Key) | Type | Corresponds to Legacy Store | Description |
 | :--- | :--- | :--- | :--- |
 | `inventory` | `Y.Map<string, UserInventoryItem>` | `user_inventory` | User metadata (rating, tags, status, addedAt). Key: `bookId`. |
+| `reading_list` | `Y.Map<string, ReadingListEntry>` | `user_reading_list` | Persistent history of all books ever interacted with. Key: `filename`. |
 | `progress` | `Y.Map<string, UserProgress>` | `user_progress` | Reading position (CFI, percentage). Key: `bookId`. |
 | `annotations` | `Y.Map<string, UserAnnotation>` | `user_annotations` | Highlights and notes. Key: `annotationId` (UUID). |
 | `overrides` | `Y.Map<string, UserOverrides>` | `user_overrides` | Lexicon rules and per-book settings. Key: `bookId` (or 'global'). |
@@ -53,6 +54,7 @@ Before writing to the `Y.Doc` (especially during sync/merge or migration), data 
 
 type YjsSchema = {
   inventory: Y.Map<UserInventoryItem>;
+  reading_list: Y.Map<ReadingListEntry>;
   progress: Y.Map<UserProgress>;
   annotations: Y.Map<UserAnnotation>;
   overrides: Y.Map<UserOverrides>;
