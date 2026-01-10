@@ -16,6 +16,7 @@ describe('DBService Reading List', () => {
         await db.clear('user_progress');
         await db.clear('static_manifests');
         await db.clear('static_resources');
+        await db.clear('reading_list');
     });
 
     it('should upsert reading list entries', async () => {
@@ -95,10 +96,23 @@ describe('DBService Reading List', () => {
         await db.put('static_resources', { bookId: 'del-1', epubBlob: new Blob([]) } as StaticResource);
         await db.put('static_structure', { bookId: 'del-1', toc: [], spineItems: [] } as StaticStructure);
 
+        // Populate reading list
+        await db.put('reading_list', {
+            filename: 'del.epub',
+            title: 'Del',
+            author: 'Auth',
+            percentage: 0,
+            lastUpdated: 100
+        });
+
         await dbService.deleteReadingListEntry('del.epub');
 
         const inv = await db.get('user_inventory', 'del-1');
-        expect(inv).toBeUndefined();
+        // Decoupled architecture: Deleting reading list entry should NOT delete the book
+        expect(inv).toBeDefined();
+
+        const rl = await db.get('reading_list', 'del.epub');
+        expect(rl).toBeUndefined();
     });
 
     it('should import reading list (batch upsert)', async () => {
