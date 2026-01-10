@@ -89,7 +89,8 @@ describe('Sync Schema Exhaustion', () => {
 
     // Some stores are mapped to properties inside SyncManifest.
     const MAPPED_STORES = [
-        'user_inventory',   // Mapped to books.metadata + readingList
+        'user_inventory',   // Mapped to books.metadata
+        'user_reading_list',// Mapped to readingList
         'user_progress',    // Mapped to books.metadata + history
         'user_annotations', // Mapped to books.annotations
         'user_overrides',   // Mapped to lexicon
