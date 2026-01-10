@@ -46,3 +46,10 @@ You need to use `sudo` to run docker.
 
 # Project README.md
 Whenever you update the project `README.md` file, make sure to include as a preamble an explanation for what `Google Jules` is and that `Versicle` is an experimental project implemented almost entirely with `Jules`.
+
+# Updating the EpubLibraryDB versions
+Whenever you update the `EpubLibraryDB` version located in `src/db/db.ts`, you must update the version found in these two verification tests:
+1. verification/test_journey_sync.py
+2. verification/test_maintenance.py
+
+
