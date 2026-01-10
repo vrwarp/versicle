@@ -250,17 +250,6 @@ export const initDB = () => {
                const state: BookState = statesStore ? await statesStore.get(book.id) : {};
                const file: Blob | ArrayBuffer = filesStore ? await filesStore.get(book.id) : null;
 
-               // Migration Fix: Check Reading List for progress if missing in BookState
-               let progress = state.progress || 0;
-               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-               if (progress === 0 && source.filename && db.objectStoreNames.contains('reading_list' as any)) {
-                   const rlStore = tx.objectStore('reading_list');
-                   const rlEntry = await rlStore.get(source.filename);
-                   if (rlEntry && rlEntry.percentage > 0) {
-                        progress = rlEntry.percentage;
-                   }
-               }
-
                // A. Static Manifest
                await newManifests.put({
                  bookId: book.id,
@@ -300,7 +289,7 @@ export const initDB = () => {
                    tags: [],
                    customTitle: undefined,
                    customAuthor: undefined,
-                   status: progress > 0.98 ? 'completed' : (progress > 0 ? 'reading' : 'unread'),
+                   status: state.progress && state.progress > 0.98 ? 'completed' : (state.progress && state.progress > 0 ? 'reading' : 'unread'),
                    rating: undefined,
                    lastInteraction: state.lastRead || book.addedAt
                });
@@ -308,7 +297,7 @@ export const initDB = () => {
                // E. User Progress
                await newProgress.put({
                    bookId: book.id,
-                   percentage: progress,
+                   percentage: state.progress || 0,
                    currentCfi: state.currentCfi,
                    lastPlayedCfi: state.lastPlayedCfi,
                    currentQueueIndex: 0,
