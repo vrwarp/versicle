@@ -62,7 +62,7 @@ vi.mock('../../db/DBService', () => ({
     updatePlaybackState: vi.fn().mockResolvedValue(undefined),
     getTTSState: vi.fn().mockResolvedValue(null),
     saveTTSState: vi.fn(),
-    updateReadingHistory: vi.fn(),
+    updateReadingHistory: vi.fn().mockResolvedValue(undefined),
     getSections: vi.fn().mockResolvedValue([
         { sectionId: 'sec1', characterCount: 100 },
         { sectionId: 'sec2', characterCount: 0 }, // Empty section
@@ -312,6 +312,40 @@ describe('AudioPlayerService', () => {
 
         // Check if GenAI detection was triggered
         expect(genAIService.detectContentTypes).toHaveBeenCalled();
+    });
+
+    it('should synchronously stop playback and reset state when switching book IDs', async () => {
+        // 1. Setup initial state: Book 1 playing
+        service.setBookId('book1');
+        await service.setQueue([{ text: "Book 1", cfi: "cfi1" }]);
+        // @ts-expect-error Access private
+        service.setStatus('playing');
+
+        // Verify initial state
+        // @ts-expect-error Access private
+        expect(service.currentBookId).toBe('book1');
+        // @ts-expect-error Access private
+        expect(service.status).toBe('playing');
+        expect(service.getQueue().length).toBe(1);
+
+        // Mock notifyListeners to verify cleared state is broadcasted
+        // @ts-expect-error Access private
+        const notifySpy = vi.spyOn(service, 'notifyListeners');
+
+        // 2. Switch to Book 2
+        service.setBookId('book2');
+
+        // 3. Verify synchronous reset
+        // @ts-expect-error Access private
+        expect(service.status).toBe('stopped');
+        // @ts-expect-error Access private
+        expect(service.currentBookId).toBe('book2');
+
+        // Queue should be empty immediately (before restoreQueue completes)
+        expect(service.getQueue().length).toBe(0);
+
+        // Should have notified listeners with null CFI (cleared state)
+        expect(notifySpy).toHaveBeenCalledWith(null);
     });
 
     describe('Grouping Logic', () => {
