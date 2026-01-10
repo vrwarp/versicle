@@ -201,7 +201,10 @@ export class AudioContentPipeline {
 
                 // 2. Fetch Table CFIs for Grouping
                 const tableImages = await dbService.getTableImages(bookId);
-                const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
+                // OPTIMIZATION: Filter table images by the current section ID to avoid checking irrelevant tables.
+                // This reduces getParentCfi complexity from O(N_sentences * N_total_book_tables) to O(N_sentences * N_section_tables).
+                const sectionTableImages = tableImages.filter(img => img.sectionId === nextSection.sectionId);
+                const tableCfis = sectionTableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
                 // 3. Group (Using raw sentences to ensure correct parent mapping)
                 const groups = this.groupSentencesByRoot(ttsContent.sentences, tableCfis);
@@ -238,7 +241,10 @@ export class AudioContentPipeline {
 
              // Fetch Table CFIs for Grouping
             const tableImages = await dbService.getTableImages(bookId);
-            const tableCfis = tableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
+            // OPTIMIZATION: Filter table images by the current section ID to avoid checking irrelevant tables.
+            // This reduces getParentCfi complexity from O(N_sentences * N_total_book_tables) to O(N_sentences * N_section_tables).
+            const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
+            const tableCfis = sectionTableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
             // Group sentences by Root Node
             const groups = this.groupSentencesByRoot(targetSentences, tableCfis);
