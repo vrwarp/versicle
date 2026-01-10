@@ -1,106 +1,111 @@
-Design Document: CRDT Phase 3 - Cloud Binary Delta Sync
-=======================================================
+# Phase 3: The Great Migration & Cleanup
 
-**Target:** Refactor the `SyncOrchestrator` to exchange Yjs binary update blocks via Google Drive, moving away from JSON manifests to achieve true mathematical convergence across high-latency devices.
+**Goal:** Migrate existing user data from Legacy IDB (`EpubLibraryDB`) to Yjs (`versicle-yjs`) and cleanup legacy stores.
 
-1\. Transport Minutia: From Manifests to Deltas
------------------------------------------------
+## 1. Create Migration Service
 
-In the legacy system, we uploaded a single `sync_manifest.json`. In Phase 3, we move to a "State Vector" handshake protocol.
+**File:** `src/lib/migration/MigrationService.ts`
 
-### 1.1 The Handshake Protocol
+**Responsibilities:**
+1.  Detect if migration is needed.
+2.  Read legacy data.
+3.  Transform to Yjs schema.
+4.  Write to Yjs.
+5.  Mark complete.
 
-1.  **State Vector Fetch:** The client fetches the current `remote_state_vector.bin` from the user's Google Drive. This is a tiny binary file (~sub-KB) describing the remote's knowledge (logical clock positions).
+**Detailed Logic:**
 
-2.  **Diff Generation:** The client calculates the local diff using `Y.encodeStateAsUpdate(localDoc, remoteStateVector)`. This contains *only* the bytes the remote is missing.
+```typescript
+import { yDoc, waitForYjsSync } from '../../store/yjs-provider';
+import { dbService } from '../../db/DBService';
 
-3.  **The Atomic Push:** The client uploads the diff to a `pending_updates/` folder as a unique file (e.g., `${deviceId}_${timestamp}.delta`).
+export const checkAndMigrate = async () => {
+    await waitForYjsSync();
 
-4.  **The Merge (Brokerless):** On the next fetch, every device reads all files in `pending_updates/`, applies them locally using `Y.applyUpdate`.
-    *   **Reactivity:** Because our stores are bound via `zustand-middleware-yjs` (Phase 2), `Y.applyUpdate` immediately updates the `Y.Doc`. This triggers the middleware, which automatically updates the React state. No manual dispatch is required.
+    const settingsMap = yDoc.getMap('settings');
+    if (settingsMap.get('migration_v19_yjs_complete')) {
+        return; // Already done
+    }
 
-2\. Storage Minutia: Cloud Log Management
------------------------------------------
+    console.log('🚀 Starting Migration to Yjs...');
 
-Unlike IndexedDB, Google Drive API calls are expensive and rate-limited. We cannot treat it as a live socket.
+    // 1. Fetch Legacy Data
+    const books = await dbService.getLibrary(); // Joins manifests + inventory + progress
+    // Note: We need raw access to `user_annotations` since DBService.getAnnotations requires ID
+    const db = await dbService.getDB();
+    const annotations = await db.getAll('user_annotations');
 
-### 2.1 The "Shadow Update" Strategy
+    // 2. Transact with Y.Doc
+    yDoc.transact(() => {
+        const invMap = yDoc.getMap('inventory');
+        const progMap = yDoc.getMap('progress');
+        const annMap = yDoc.getMap('annotations');
 
-To optimize for the Tesla browser's erratic connection, we will implement a two-tier push:
+        // Migrate Books & Progress
+        for (const book of books) {
+            // Inventory
+            invMap.set(book.id, {
+                bookId: book.id,
+                addedAt: book.addedAt,
+                sourceFilename: book.filename,
+                status: book.progress > 0.98 ? 'completed' : 'reading', // simplified
+                title: book.title, // User custom title logic needs checking
+                author: book.author,
+                lastInteraction: book.lastRead || Date.now()
+            });
 
--   **Tier 1 (High Frequency):** Write tiny delta files to `appDataFolder`.
+            // Progress
+            progMap.set(book.id, {
+                bookId: book.id,
+                percentage: book.progress || 0,
+                currentCfi: book.currentCfi,
+                lastRead: book.lastRead || 0,
+                // ... map other fields
+            });
+        }
 
--   **Tier 2 (Snapshot):** Every 24 hours, or when the number of delta files exceeds 50, the "Primary Device" (the one with the most recent logical clock) will perform a **Cloud Consolidation**. It merges all deltas into a single `root_state.bin` and deletes the old delta files.
+        // Migrate Annotations
+        for (const ann of annotations) {
+            annMap.set(ann.id, ann);
+        }
 
-3\. The "Split-Brain" Resolution
---------------------------------
+        // Mark Complete
+        settingsMap.set('migration_v19_yjs_complete', true);
+    });
 
-Because we lack a central server, we must handle the scenario where Device A and Device B both try to "Snapshot" the cloud log simultaneously.
+    console.log('✅ Migration Complete');
+};
+```
 
-### 3.1 Conflict-Free Snapshotting
+## 2. Application Entrypoint Integration
 
--   **Logic:** Snapshots are written as new files with a version suffix.
+**File:** `src/main.tsx` (or top-level App component).
 
--   **Tie-breaking:** If Device A and B both create `root_state_v12.bin`, the client will fetch both, call `Y.applyUpdate` for both, and then continue. Yjs is designed to handle redundant updates gracefully (they are idempotent).
+*   **Action:** Call `MigrationService.checkAndMigrate()` immediately after `ReactDOM.createRoot`.
+*   **Blocking:** Consider showing a `<LoadingSpinner text="Upgrading Database..." />` if the migration promise is pending.
 
-4\. Minutia: Bandwidth & Binary Compression
--------------------------------------------
+## 3. Verification
 
-Binary update blocks are already compact, but for large libraries with extensive reading history, the logical clock overhead can add up.
+**Manual Test Plan:**
+1.  **Setup:** Load the app on the *current branch* (Legacy IDB). Add 3 books. Read one to 50%. Add 2 highlights.
+2.  **Switch Branch:** Checkout the Yjs migration branch.
+3.  **Launch:** Open the app.
+4.  **Verify:**
+    *   Books appear in Library? (Checks `inventory` migration).
+    *   Reading progress preserved? (Checks `progress` migration).
+    *   Highlights appear? (Checks `annotations` migration).
+    *   DevTools > IndexedDB > `versicle-yjs` > Contains blobs?
 
-### 4.1 V2 Encoding
+## 4. Cleanup (Deferred)
 
-We will use Yjs **V2 Encoding** (`Y.encodeStateAsUpdateV2`).
+**Phase 3.5:**
+After 1-2 release cycles, we will remove the `user_*` stores from `src/db/db.ts` to reclaim space.
 
--   *Rationale:* V2 is optimized for even smaller footprints and is significantly faster to parse on low-powered mobile devices. This is critical for keeping the "instant handoff" feel while on a 4G/LTE car connection.
-
-5\. Security & Validation (The "Deep Defense")
-----------------------------------------------
-
-A single corrupt binary block synced from the cloud could break every connected device.
-
-### 5.1 Pre-Application Verification
-
-Before `Y.applyUpdate(remoteBlob)` is called, the binary blob is checked:
-
-1.  **Checksum:** Validate the CRC32 of the block.
-
-2.  **Dry Run:** Apply the update to a *temporary* in-memory `Y.Doc`.
-
-3.  **Schema Check:** Run `src/db/validators.ts` on the temporary doc.
-
-4.  **Commit:** Only if the dry run is valid is the update applied to the primary "Moral Doc."
-
-6\. Phase 3 Checklist (The "Convergence Test")
-----------------------------------------------
-
-1.  [ ] Refactor `GoogleDriveProvider.ts` to support binary upload/download.
-
-2.  [ ] Implement the `StateVector` handshake logic in `SyncOrchestrator`.
-
-3.  [ ] Build the "Cloud Compactor" service to periodically consolidate deltas.
-
-4.  [ ] Implement "Ejection Logic": If a device's logical clock is > 10,000 steps behind, force a full `root_state.bin` redownload rather than a delta sync.
-
-5.  [ ] Stress Test: Simulate two devices offline for 1 hour, performing concurrent annotations, and verify merge on reconnection.
-
-7\. Risks & Mitigations
------------------------
-
-### 7.1 Logical Clock Overflow
-
-If a device's clock counter grows too high, it could theoretically cause integer issues or massive state vectors.
-
--   **Mitigation:** The Phase 3 "Consolidation" process will involve a `Y.encodeStateAsUpdate` without a state vector, which resets the internal structure while preserving the data state, effectively "garbage collecting" the history.
-
-### 7.2 Google Drive API Quota
-
-Fetching 50 tiny delta files might hit API limits.
-
--   **Mitigation:** We will use the Google Drive `files.list` with a specific query for the `appDataFolder` to get metadata for all deltas in a single request, then batch-fetch the contents only when necessary.
-
-### 7.3 The "Dead Device" Problem
-
-A device that is destroyed or never synced again leaves "holes" in the logical clock understanding.
-
--   **Mitigation:** We will implement a "Device TTL." Any device not seen in the `deviceRegistry` (shared Yjs type) for > 30 days is ignored during delta calculations to keep the state vector small.
+**Action:**
+*   In `src/db/db.ts` `upgrade` callback:
+    *   `if (oldVersion < 20)`:
+        *   `db.deleteObjectStore('user_inventory')`
+        *   `db.deleteObjectStore('user_progress')`
+        *   `db.deleteObjectStore('user_annotations')`
+        *   `db.deleteObjectStore('user_overrides')`
+        *   `db.deleteObjectStore('user_journey')`

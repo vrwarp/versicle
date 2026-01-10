@@ -1,122 +1,105 @@
-Design Document: Versicle CRDT-Based State Syncing (Yjs)
-========================================================
+# Design Document: Versicle "Store-First" Architecture (Yjs)
 
-**Author:** Gemini (Revised by Jules)
+**Status:** Draft / Detailed Design
+**Target Architecture:** Local-First / Store-First using Yjs & Zustand
 
-**Status:** Draft / Conceptual
+## 1. The Core Architectural Shift
 
-**Target:** Replace manual LWW/CFI merging with Yjs CRDTs for absolute data consistency across high-latency or high-concurrency environments.
+Currently, Versicle uses a **"Database-First"** architecture:
+*   **State Source:** IndexedDB (`idb`) is the source of truth (`user_*` stores in `EpubLibraryDB`).
+*   **Read:** Zustand stores (`useLibraryStore`, etc.) fetch data via `DBService` to populate their state.
+*   **Write:** Actions call `DBService` to write to IDB, then manually update local state.
 
-1\. Motivation & Problem Statement
-----------------------------------
+The Migration moves to a **"Store-First" (Local-First)** architecture:
+*   **State Source:** The `Y.Doc` (held in memory and persisted via `y-indexeddb` to a *separate* IDB database named `versicle-yjs`) becomes the source of truth for user data.
+*   **Read/Write:** Zustand stores read/write directly to the Yjs structure via `zustand-middleware-yjs`.
+    *   *Note:* We will use the fork located at [https://github.com/vrwarp/zustand-middleware-yjs](https://github.com/vrwarp/zustand-middleware-yjs) which supports modern Zustand versions.
+*   **Persistence:** The middleware and `y-indexeddb` provider handle the saving to disk and syncing to peers automatically.
 
-The current manual sync implementation (v1) relies on a JSON `SyncManifest`. While functional, it has two primary risks:
+## 2. Data Segmentation Strategy
 
-1.  **Last-Write-Wins (LWW) Data Loss:** If two devices update the same book metadata (e.g., changing a title on a laptop and reading progress on a phone) simultaneously, the older update might be clobbered depending on timestamp precision and sync timing.
+We separate data into two distinct domains to optimize performance. Yjs is excellent for JSON-serializable metadata but poor for large binary blobs.
 
-2.  **Maintenance Complexity:** Every new data type added to Versicle requires a manual update to `SyncManager.mergeManifests`.
+### A. Remains in Legacy IDB (DBService / `EpubLibraryDB`)
+These stores contain large files or reconstitutable cache. They are **not** migrated to Yjs and remain managed by `src/db/DBService.ts`.
+*   `static_manifests`: Immutable book metadata (Title, Author, Hash).
+*   `static_resources`: The `.epub` binary blobs.
+*   `static_structure`: TOC and Spine data (large arrays).
+*   `cache_*`: Generated assets (`cache_render_metrics`, `cache_audio_blobs`, `cache_table_images`).
 
-3.  **Bandwidth Overhead:** v1 uploads the entire manifest (~1MB for large libraries). Yjs allows syncing only the incremental binary diffs.
+### B. Migrates to Yjs (User Data)
+These will be removed from `DBService` *write logic* and handled strictly by Zustand+Yjs.
 
-2\. Technical Architecture
---------------------------
+| Yjs Shared Type (Key) | Type | Corresponds to Legacy Store | Description |
+| :--- | :--- | :--- | :--- |
+| `inventory` | `Y.Map<string, UserInventoryItem>` | `user_inventory` | User metadata (rating, tags, status, addedAt). Key: `bookId`. |
+| `progress` | `Y.Map<string, UserProgress>` | `user_progress` | Reading position (CFI, percentage). Key: `bookId`. |
+| `annotations` | `Y.Map<string, UserAnnotation>` | `user_annotations` | Highlights and notes. Key: `annotationId` (UUID). |
+| `overrides` | `Y.Map<string, UserOverrides>` | `user_overrides` | Lexicon rules and per-book settings. Key: `bookId` (or 'global'). |
+| `journey` | `Y.Array<UserJourneyStep>` | `user_journey` | Reading history log. **Risk:** Potential unbound growth. |
+| `settings` | `Y.Map<string, any>` | `app_metadata` | Global app settings (theme, font preference). |
 
-### 2.1 The "Moral Doc" Structure
+## 3. Schema Definitions & Integrity
 
-Instead of a JSON object, the system state is represented by a `Y.Doc`. Within this document, we define a structured hierarchy of shared types:
+To ensure type safety, we will strictly type the Yjs maps using the existing interfaces from `src/types/db.ts`.
 
-```
-// Shared Types Map
-{
-  "books": Y.Map<Y.Map<any>>,         // Keyed by bookId. Inner map holds metadata.
-  "annotations": Y.Array<Annotation>, // Global append-only array of user highlights.
-  "lexicon": Y.Array<LexiconRule>,    // Ordered global/book pronunciation rules.
-  "history": Y.Map<Y.Array<string>>,  // Keyed by bookId. Array of CFI ranges.
-  "readingList": Y.Map<ReadingListEntry>, // Keyed by filename.
-  "transient": Y.Map<TTSPosition>,    // High-frequency playback positions.
+**Validation Strategy:**
+Before writing to the `Y.Doc` (especially during sync/merge or migration), data must be validated against `Zod` schemas (to be created in `src/lib/sync/validators.ts`) or strictly typed interfaces.
+
+### Shared Type Interfaces (Reference)
+
+```typescript
+// See src/types/db.ts for full definitions
+
+type YjsSchema = {
+  inventory: Y.Map<UserInventoryItem>;
+  progress: Y.Map<UserProgress>;
+  annotations: Y.Map<UserAnnotation>;
+  overrides: Y.Map<UserOverrides>;
+  journey: Y.Array<UserJourneyStep>; // Append-only
+  settings: Y.Map<any>;
 }
-
 ```
 
-### 2.2 Persistence Layer (`y-indexeddb`)
+## 4. High-Level Migration Plan
 
-We will utilize the `y-indexeddb` provider. This creates a dedicated IndexedDB store (e.g., `versicle-state`) where Yjs stores incremental update blocks.
+### Step 1: Initialize the Yjs Runtime
+*   Create `src/store/yjs-provider.ts` singleton.
+*   Initialize `Y.Doc`.
+*   Connect `y-indexeddb` (Database: `versicle-yjs`).
 
--   **Initialization:** On app boot, the provider reads all blocks from IndexedDB and reconstructs the `Y.Doc` state in-memory. This is non-blocking for UI interactions.
+### Step 2: Store Refactoring (Split & Bind)
+*   **`useReaderStore`:** Split into `useReaderUIStore` (Transient) and `useReaderSyncStore` (Synced).
+*   **`useLibraryStore`:** Bind `inventory` map. Remove `fetchBooks`.
+*   **`useAnnotationStore`:** Bind `annotations` map.
 
--   **Auto-Commit:** Any change made to the `Y.Doc` via `yjsDoc.getMap('...').set(...)` is automatically persisted to IndexedDB as a binary update block by the provider.
+### Step 3: The "Great Migration" Script
+*   **Service:** `src/lib/migration/MigrationService.ts`.
+*   **Logic:**
+    1.  Check `app_metadata` (Legacy IDB) or `settings` (Yjs) for `migration_v2_status`.
+    2.  If pending:
+        *   Read all data from `user_*` stores in `EpubLibraryDB`.
+        *   Batch write to `Y.Doc`.
+        *   Set flag `migration_v2_status = 'complete'`.
+    3.  (Future) Delete `user_*` stores from `EpubLibraryDB`.
 
-3\. Implementation Details: The Delicate Bits
----------------------------------------------
+### Step 4: Dismantling DBService Write Logic
+*   **Modify `addBook`:** Returns `BookMetadata` instead of writing `user_inventory`.
+*   **Remove:** `updateBookMetadata`, `saveProgress`, `addAnnotation`, `deleteAnnotation`.
 
-### 3.1 Handling "Offline-First" Convergent History
+## 5. Key Challenges & Solutions
 
-One of the most complex parts of Versicle is `reading_history`.
+### Large Datasets (`user_journey`)
+*   **Problem:** `Y.Array` history grows indefinitely.
+*   **Solution:** For Phase 1-3, we will migrate it as is. In Phase 4 (Optimization), we can implement a "Rolling Window" where items older than X months are archived to a local-only IDB store and removed from the Yjs array.
 
--   **Current (v1):** `mergeCfiRanges` is called on sync to union arrays.
+### Referencing Static Assets
+*   **Flow:**
+    1.  `useLibraryStore` (Yjs) provides `BookId`.
+    2.  `useReaderUIStore` sets `currentBookId`.
+    3.  Component calls `dbService.getBookFile(id)` (Legacy IDB) to get the Blob.
+    *   *Constraint:* If `static_manifests` is missing the book (deleted from device but present in cloud sync), the UI must show a "Download" state.
 
--   **CRDT (v2):** `history` becomes a `Y.Array` of CFI strings. If Device A adds `Range1` and Device B adds `Range2`, the Yjs array simply contains both. A **computed getter** in Versicle will then pass the `Y.Array.toArray()` results through the existing `mergeCfiRanges` utility for UI rendering.
-
-### 3.2 Metadata Collisions
-
-For fields like `lastRead` or `progress`, we use `Y.Map`. Yjs handles map updates using Lamport timestamps.
-
--   If User A sets progress to 50% and User B (offline) sets it to 60%, when they sync, Yjs determines the winner based on its internal logical clock. This eliminates the "split-brain" timestamp issues inherent in standard `Date.now()` checks.
-
-### 3.3 Transport Layer (Google Drive as a Binary Log)
-
-Since we don't have a central Web Socket server (Tesla browser limitations), Google Drive remains our "Intermittent Broker."
-
-1.  **State Vector:** Every sync starts by generating a `State Vector` (a small binary signature of what the local device knows).
-
-2.  **The Diff:** We fetch the remote state from Google Drive.
-
-3.  **The Update:** We call `Y.encodeStateAsUpdate(localDoc, remoteStateVector)` to get only the bytes missing from the remote.
-
-4.  **The Push:** We upload the new merged binary blob to Google Drive.
-
-4\. The Migration Strategy (The "Bridge" Phase)
------------------------------------------------
-
-Because this change is "invasive," we cannot simply delete the old IndexedDB stores. We must perform a **One-Way-Hydration**:
-
-1.  **Detection:** On first launch of the CRDT version, check if the Yjs store is empty but the old `books` store is not.
-
-2.  **Hydration:**
-
-    -   Read all data from existing `books`, `annotations`, `lexicon`, etc.
-
-    -   Batch write these into the `Y.Doc`.
-
-    -   Mark the hydration as complete in `app_metadata`.
-
-3.  **Deprecation:** The standard stores (`books`, `annotations`) are no longer the primary source of truth. They are kept as "Legacy Backups" for one version cycle, then deleted.
-
-4.  **Reactive Store Integration (Revised):**
-
-    -   Instead of manual observers, we will utilize `zustand-middleware-yjs`.
-    -   We will split "Data Stores" (e.g., `useBookStore`) from "UI Stores" (e.g., `useLibraryStore`).
-    -   The Data Stores will use the middleware to automatically bind to the Yjs shared types.
-    -   Changes to the store (e.g., `setBook(id, data)`) automatically update the Y.Doc.
-    -   Changes to the Y.Doc (via sync) automatically update the store.
-
-5\. Risks and Mitigations
--------------------------
-
-| Risk | Mitigation |
-| :--- | :--- |
-| **Storage Bloat** | Yjs keeps a history of changes. We must periodically call `Y.encodeStateAsUpdate` and write a "Clean Snapshot" back to the database to prune the incremental update log. |
-| **Schema Incompatibility** | Yjs is very flexible with types. We must use a robust **Validator** (like the existing `src/db/validators.ts`) before applying updates to the `Y.Doc` to prevent corrupted state from syncing. |
-| **Initial Load Time** | For extremely large libraries (1000+ books), reconstructing the doc from IndexedDB might take >100ms. We will use a "Loading State" during the `y-indexeddb` ready event. |
-| **Sync Loops** | Bi-directional binding can cause infinite loops. The `zustand-middleware-yjs` handles this by ensuring updates originating from Yjs do not trigger a write-back to Yjs. |
-
-6\. Development Roadmap
------------------------
-
-1.  **Phase 1 (Proof of Concept):** Implement a standalone `Y.Doc` in a test environment and verify that two separate tabs can sync via a shared binary blob.
-
-2.  **Phase 2 (The Bridge):** Implement the `HydrationService` to move v1 data into Yjs.
-
-3.  **Phase 3 (Apply Middleware):** Refactor `useLibraryStore` and `useAnnotationStore` to use `zustand-middleware-yjs`. This involves separating persistent data state from transient UI state.
-
-4.  **Phase 4 (Cloud Sync):** Refactor `SyncOrchestrator` to use `Y.applyUpdate` instead of `SyncManager.mergeManifests`.
+### Conflict Resolution
+*   **Inventory/Progress:** `Y.Map` uses Last-Write-Wins (LWW) based on Lamport timestamps.
+*   **Annotations:** Keyed by UUID. No merge conflicts, only add/remove races (handled by CRDT set semantics).

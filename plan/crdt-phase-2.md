@@ -1,124 +1,103 @@
-Design Document: CRDT Phase 2 - Data Migration & Store Integration
-==================================================================
+# Phase 2: Store Refactoring & Migration
 
-**Target:** Execute a non-destructive migration from legacy IndexedDB stores to the Yjs "Moral Doc" and refactor Zustand stores to become reactive Yjs observers.
+**Goal:** Split stores into Transient/Sync, bind them to Yjs, and refactor DBService to stop writing user data.
 
-1\. Migration Minutia: The Hydration Service
---------------------------------------------
+## 1. Refactor `useReaderStore` (The Split)
 
-We cannot simply "import" data. We must bridge the gap between static IndexedDB records and an event-based log.
+**File:** `src/store/useReaderStore.ts`
 
-### 1.1 Detection Logic
+**Action:** Break the existing monolithic store into two.
 
-The system must determine if a migration is needed without relying on a brittle version number.
+### A. `useReaderUIStore` (Transient)
+*   **Persistence:** `localStorage` (via standard `persist` middleware) or purely memory.
+*   **State Properties:**
+    *   `isLoading`: boolean
+    *   `currentBookId`: string | null
+    *   `toc`: NavigationItem[] (Static, heavy)
+    *   `viewMode`: 'paginated' | 'scrolled'
+    *   `immersiveMode`: boolean
+    *   `shouldForceFont`: boolean
+    *   `currentSectionTitle`: string | null
+    *   `currentSectionId`: string | null
 
--   **Condition:** `y-indexeddb` has 0 blocks AND the primary `books` store has > 0 records.
+### B. `useReaderSyncStore` (Synced)
+*   **Persistence:** `yjs` middleware (bound to `reader-settings` map or individual user properties).
+*   **Binding:** `yDoc.getMap('reader-settings')` (Global) OR `yDoc.getMap('progress')` (Per-book).
+    *   *Decision:* Global settings (font, theme) go to `settings` map. Progress goes to `progress` map.
+    *   *Refinement:* Let's keep `useReaderSyncStore` for **Global Preferences** first.
+*   **State Properties:**
+    *   `currentTheme`: 'light' | 'dark' | 'sepia'
+    *   `customTheme`: { bg: string; fg: string }
+    *   `fontFamily`: string
+    *   `fontSize`: number
+    *   `lineHeight`: number
 
--   **Locking:** We must set a `MIGRATION_IN_PROGRESS` flag in `app_metadata` to prevent partial hydration if the user refreshes during the process.
+**Note:** **Reading Progress** (currentCfi) is strictly tied to a `bookId`. It should likely be accessed via a selector on the `inventory` or `progress` map, or a dedicated hook `useBookProgress(bookId)`, rather than a global store property.
+*   *Implementation Detail:* `useReaderUIStore` will hold the *active* book ID. Components will subscribe to `useLibraryStore` (Yjs) -> `progress` map -> `get(activeBookId)`.
 
-### 1.2 The One-Way Valve
+## 2. Refactor `useAnnotationStore`
 
-Migration will happen in a strict sequential order to maintain referential integrity:
+**File:** `src/store/useAnnotationStore.ts`
 
-1.  **Books Metadata:** Populate `yDoc.getMap('books')`.
+**Action:** Replace `zustand/persist` with `zustand-middleware-yjs`.
 
-2.  **Reading History:** Convert `ReadingHistoryEntry` arrays into `Y.Array` instances within the `history` map.
+*   **Shared Type:** `yDoc.getMap('annotations')`.
+*   **State Interface:**
+    *   `annotations: Record<string, UserAnnotation>` (The middleware typically maps Y.Map to a JS Object).
+*   **Actions:**
+    *   `addAnnotation`: `set(state => { state.annotations[id] = newAnn })` (Middleware handles Proxy wrap).
+    *   `deleteAnnotation`: `set(state => { delete state.annotations[id] })`.
 
-3.  **Annotations:** Push legacy array to `Y.Array`.
+## 3. Refactor `useLibraryStore`
 
-4.  **Lexicon:** Map current rules to the ordered `lexicon` `Y.Array`.
+**File:** `src/store/useLibraryStore.ts`
 
-5.  **Transient State:** Copy `tts_position` to the `transient` map.
+**Action:** Replace manual `DBService.getLibrary()` fetching with Yjs binding.
 
-### 1.3 Validation & Checkpoint
+*   **Shared Type:** `yDoc.getMap('inventory')`.
+*   **State Interface:**
+    *   `books: Record<string, UserInventoryItem>`.
+*   **Derived State (Selectors):**
+    *   `bookList`: `Object.values(books).sort(...)`
+*   **Modified Actions:**
+    *   `fetchBooks`: **Remove**.
+    *   `addBook(file)`:
+        1.  Call `const metadata = await dbService.addBook(file)`.
+        2.  `set(state => { state.books[metadata.id] = mapMetadataToInventory(metadata) })`.
+    *   `removeBook(id)`:
+        1.  `set(state => { delete state.books[id] })`.
+        2.  Call `await dbService.deleteBook(id)` (to clear blobs).
 
-Before a single byte is written to the `Y.Doc`, a full legacy backup (v1 JSON manifest) is created and stored in the `checkpoints` store as `pre-crdt-migration-backup`.
+## 4. Refactor `DBService` (The Dismantling)
 
-2\. Store Refactor: The "Observer" Pattern
-------------------------------------------
+**File:** `src/db/DBService.ts`
 
-Our current Zustand stores (e.g., `useLibraryStore`) pull from IndexedDB and push to IndexedDB. In v2, they will instead "wrap" the Yjs types.
+**Action:** Remove write responsibilities for user-domain data.
 
-### 2.1 The Two-Way Binding
+### Method Updates:
+1.  **`addBook(file)`:**
+    *   **Old:** Returns `void`. Writes to `static_*` AND `user_inventory`.
+    *   **New:** Returns `Promise<BookMetadata>`. Writes **ONLY** to `static_*` stores.
+2.  **`deleteBook(id)`:**
+    *   **Keep:** Needs to delete `static_*` and `cache_*` stores.
+    *   **Remove:** Deletion of `user_*` stores (handled by Yjs, though we might keep `user_*` cleanup for legacy hygiene temporarily).
+3.  **`updateBookMetadata`:** **Delete**. (Handled by Store).
+4.  **`saveProgress`:** **Delete**. (Handled by Store).
+5.  **`addAnnotation` / `deleteAnnotation`:** **Delete**. (Handled by Store).
+6.  **`getLibrary`:** **Keep for Phase 3 Migration**, then Deprecate.
 
--   **Yjs → Zustand (Incoming):** We use `yDoc.observeDeep((events) => { ... })`. When Yjs updates (locally or via future sync), we compute the new state and call the Zustand `set()` function.
+**Reference - New `addBook` signature:**
+```typescript
+async addBook(file: File, ...): Promise<BookMetadata> {
+    // ... extract metadata ...
+    // ... write to static_manifests ...
+    // ... write to static_resources ...
+    return metadata; // Do NOT write to user_inventory
+}
+```
 
--   **Zustand → Yjs (Outgoing):** Store actions (like `addAnnotation`) will no longer call `db.put`. They will call `yArray.push()`.
+## 5. Component Updates (Consumers)
 
-### 2.2 Handling Proxies
-
-Yjs types are live objects. We must ensure we only store **serializable snapshots** in the Zustand state to prevent React from attempting to proxy a Yjs proxy, which leads to massive performance degradation.
-
-3\. Data Integrity Minutia: Conflict Resolution in Phase 2
-----------------------------------------------------------
-
-Even though Phase 2 is "Local," multiple tabs constitute a distributed system.
-
-### 3.1 The "Tab War" Scenario
-
-If a user has two Versicle tabs open during migration:
-
--   **Tab A** starts migration.
-
--   **Tab B** is still writing to legacy IndexedDB.
-
--   **Mitigation:** Tab A must emit a `BroadcastChannel` message: `CRDT_MIGRATION_STARTED`. Tab B must immediately freeze all writes and show a "Database Upgrading" overlay.
-
-### 3.2 CFI Re-Normalization
-
-Legacy CFI ranges in `reading_history` might be messy. During hydration, we will pass every range through `src/lib/cfi-utils.ts` to ensure the Yjs log starts with a "clean" state.
-
-4\. Performance: The "Write-Heavy" Problem
-------------------------------------------
-
-Zustand and React are optimized for discrete state changes. Yjs updates can be extremely granular (one character at a time).
-
-### 4.1 Transaction Batching
-
-We will wrap all multi-step updates in `ydoc.transact(() => { ... })`.
-
--   *Rationale:* This ensures that a "Batch Add" of 50 annotations only triggers **one** Zustand state update and **one** IndexedDB write, preventing UI stutter.
-
-5\. Phase 2 Checklist (The "Safe-to-Ship")
-------------------------------------------
-
-1.  $$$$
-
-    Implement `MigrationService.ts` with "Legacy → CRDT" mapping logic.
-
-2.  $$$$
-
-    Add `ydoc.observeDeep` to `useLibraryStore`.
-
-3.  $$$$
-
-    Refactor `useReaderStore` to update `yMap('books').get(id).set('progress')`.
-
-4.  $$$$
-
-    Verify "Multi-Tab Lockdown" during migration.
-
-5.  $$$$
-
-    Stress Test: Migrate a library with 500 books and 2,000 annotations. Measure hydration time (Goal: < 2s).
-
-6\. Risks & Mitigations
------------------------
-
-### 6.1 Partial Hydration
-
-If the browser crashes during the `Y.Array` push, the user might lose half their annotations.
-
--   **Mitigation:** We will use a `migration_status` key. If it isn't `COMPLETED`, the system will wipe the CRDT doc and restart the migration on the next boot.
-
-### 6.2 Recursive Observation Loops
-
-Zustand update -> Yjs update -> Yjs Observer -> Zustand update.
-
--   **Mitigation:** We will use the `transaction.origin` property in the Yjs observer. If the origin is `zustand-internal`, the observer will ignore the event to prevent infinite loops.
-
-### 6.3 Schema Drifts
-
-If the `Annotation` interface changes in the code but not in the hydration logic, we sync garbage.
-
--   **Mitigation:** The `MigrationService` will share the same `Validator` functions used in `src/db/validators.ts` to "wash" data before it enters the CRDT.
+*   **`ReaderView.tsx`:** Update to read `toc` from `ReaderUIStore` and `theme` from `ReaderSyncStore`.
+*   **`LibraryView.tsx`:** Update to observe `useLibraryStore.books` (Yjs map) instead of array.
+*   **`ReaderControlBar.tsx`:** Update font/theme setters to use `ReaderSyncStore`.
