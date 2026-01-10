@@ -45,8 +45,13 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
             )}
 
             {book.isOffloaded && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20" data-testid="offloaded-overlay">
-                    <Cloud className="w-12 h-12 text-white drop-shadow-md" />
+                <div
+                    className="absolute inset-0 flex items-center justify-center bg-black/20"
+                    data-testid="offloaded-overlay"
+                    title="Offloaded - Click to restore"
+                >
+                    <Cloud className="w-12 h-12 text-white drop-shadow-md" aria-hidden="true" />
+                    <span className="sr-only">Offloaded</span>
                 </div>
             )}
 

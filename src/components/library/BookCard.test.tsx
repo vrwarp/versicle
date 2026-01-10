@@ -78,6 +78,16 @@ describe('BookCard', () => {
     expect(screen.getByText('Aa')).toBeInTheDocument();
   });
 
+  it('should render offloaded overlay with accessibility attributes', () => {
+    const offloadedBook = { ...mockBook, isOffloaded: true };
+    renderCard(offloadedBook);
+
+    const overlay = screen.getByTestId('offloaded-overlay');
+    expect(overlay).toBeInTheDocument();
+    expect(overlay).toHaveAttribute('title', 'Offloaded - Click to restore');
+    expect(screen.getByText('Offloaded')).toHaveClass('sr-only');
+  });
+
   it('should render progress bar when progress > 0', () => {
     const bookWithProgress = { ...mockBook, progress: 0.45 };
     renderCard(bookWithProgress);
