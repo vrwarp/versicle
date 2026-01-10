@@ -99,8 +99,10 @@ graph TD
 
     subgraph Storage [IndexedDB]
         DBService[DBService]
-        IDB[(IndexedDB)]
-        Checkpoints[(Checkpoints)]
+        StaticStores[Static & Resources]
+        UserStores[User Data & Progress]
+        CacheStores[Cache & Tables]
+        AppStores[Checkpoints & Logs]
     end
 
     App --> Library
@@ -130,7 +132,7 @@ graph TD
     Orchestrator --> Checkpoint
     Orchestrator --> Provider
     Orchestrator --> AndroidBackup
-    Checkpoint --> Checkpoints
+    Checkpoint --> DBService
     Manager --> DBService
 
     APS --> Pipeline
@@ -162,7 +164,10 @@ graph TD
     Ingestion --> DBService
     TTSCache --> DBService
 
-    DBService --> IDB
+    DBService --> StaticStores
+    DBService --> UserStores
+    DBService --> CacheStores
+    DBService --> AppStores
 ```
 
 ## 3. Detailed Module Reference
@@ -174,23 +179,32 @@ The data layer is built on **IndexedDB** using the `idb` library. It is accessed
 #### `src/db/DBService.ts`
 The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
 
-**Key Stores (Schema v17):**
-*   **Book Data (Split for Performance):**
-    *   `books`: Lightweight Metadata (Title, Author, Cover).
-    *   `book_sources`: Technical File Info (Hash, Size, Filename).
-    *   `book_states`: User Progress (CFI, Percentage, Last Read).
-*   `files`: The raw binary EPUB files (large).
-*   `table_images`: Stores `webp` snapshots of tables captured during ingestion. Keyed by `${bookId}-${cfi}`.
-*   `content_analysis`: Stores GenAI classification results (e.g., this block is a footnote) and table adaptations.
-*   `tts_cache`: Stores generated audio segments.
-*   `tts_queue` / `tts_position`: Persistent playback queue and lightweight position tracking.
-*   `checkpoints`: Stores `SyncManifest` snapshots for recovery.
-*   `sync_log`: Logs sync operations for debugging.
-*   `app_metadata`: Global app configuration.
+**Key Stores (Schema v19):**
+*   **Domain 1: Static (Immutable/Heavy)**
+    *   `static_manifests`: Lightweight metadata (Title, Author, Cover Thumbnail) for listing books.
+    *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
+    *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
+*   **Domain 2: User (Mutable/Syncable)**
+    *   `user_inventory`: User-specific metadata (Added Date, Custom Title, Tags, Status, Rating).
+    *   `user_progress`: Reading state (CFI, Percentage, Last Read Timestamp, Queue Position).
+    *   `user_annotations`: Highlights and notes.
+    *   `user_overrides`: Custom settings like Lexicon rules (pronunciation overrides).
+    *   `user_journey`: Granular reading history sessions.
+    *   `user_ai_inference`: Expensive AI-derived data (Summaries, Accessibility Layers).
+*   **Domain 3: Cache (Transient/Regenerable)**
+    *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
+    *   `cache_audio_blobs`: Generated TTS audio segments.
+    *   `cache_render_metrics`: Layout calculation results.
+*   **App Level (System)**:
+    *   `checkpoints`: Snapshots of the SyncManifest for "Safety Net" rollbacks.
+    *   `sync_log`: Audit logs for sync operations.
+    *   `app_metadata`: Global application configuration.
+*   **Legacy/Migration**:
+    *   Includes logic to migrate from Schema v17 (monolithic `books`/`files` stores) to the v19 Domain Model.
 
 **Key Functions:**
-*   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position. Updates `book_states`.
-*   **`offloadBook(id)`**: Deletes the large binary EPUB file (`files` store) to save space but keeps metadata (`books`), source info (`book_sources`), and user state (`book_states`).
+*   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position. Updates `user_progress`.
+*   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations).
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
@@ -207,6 +221,7 @@ Versicle implements a "Serverless Sync" model using personal cloud storage (Goog
 The controller for synchronization. It manages the sync lifecycle and integrates with the UI.
 
 *   **Logic**:
+    *   **Manifest-Based**: Generates a `SyncManifest` JSON containing all User Domain data.
     *   **Last-Write-Wins (LWW)**: Merges local and remote manifests based on timestamps.
     *   **Debounced Push**: Reading progress updates are debounced (60s) to avoid API rate limits.
     *   **Force Push**: Critical actions (Pause, Bookmark) trigger immediate sync.
@@ -217,7 +232,7 @@ The controller for synchronization. It manages the sync lifecycle and integrates
 
 #### `CheckpointService.ts` ("The Moral Layer")
 *   **Goal**: Safety net for sync operations.
-*   **Logic**: Creates a local snapshot of the `SyncManifest` before every sync operation. Allows the user to roll back to a previous state if a bad sync occurs.
+*   **Logic**: Creates a local snapshot of the `SyncManifest` (stored in `checkpoints` store) before every sync operation. Allows the user to roll back to a previous state if a bad sync occurs.
 
 #### `AndroidBackupService.ts`
 *   **Goal**: Native Android backup integration.
@@ -236,7 +251,7 @@ Handles the complex task of importing an EPUB file.
 
 *   **`reprocessBook(bookId)`**:
     *   **Goal**: Update book content (e.g., better text extraction, new table snapshots) without losing reading progress or annotations.
-    *   **Logic**: Re-reads the source file from the `files` store, re-runs the extraction pipeline, and performs a transactional update of `sections`, `tts_content`, and `table_images`.
+    *   **Logic**: Re-reads the source file from `static_resources`, re-runs the extraction pipeline, and performs a transactional update of structure and caches.
 
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs.
@@ -260,13 +275,13 @@ Implements full-text search off the main thread.
 Handles database health.
 
 *   **Goal**: Ensure the database is free of orphaned records (files, annotations) that no longer have a parent book.
-*   **Logic**: Scans all object stores and compares IDs against the `books` store.
+*   **Logic**: Scans all object stores and compares IDs against the `static_manifests` store.
 
 #### Backup (`src/lib/BackupService.ts`)
 Manages internal state backup and restoration.
 
 *   **`createLightBackup()`**: JSON-only export (metadata, settings, history).
-*   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files.
+*   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files (reconstructed from `static_resources`).
 *   **`restoreBackup()`**: Implements a smart merge strategy (keeps newer progress).
 
 ---
@@ -335,10 +350,10 @@ Local WASM Neural TTS.
 
 State is managed using **Zustand**.
 
-*   **`useReaderStore`**: Persists visual preferences and reading state (font size, theme, current location) to **localStorage**.
+*   **`useReaderStore`**: Persists visual preferences and reading state (font size, theme, current location) to **localStorage** (UI) and **IndexedDB** (Progress). Syncs via `SyncOrchestrator`.
 *   **`useTTSStore`**: Persists TTS settings (voice, speed, provider) to **localStorage**.
 *   **`useGenAIStore`**: Persists AI settings and usage stats to **localStorage**.
-*   **`useLibraryStore`**: Transient UI state. Actual book data is persisted in **IndexedDB** via `DBService`, but the store itself hydrates from DB on mount.
+*   **`useLibraryStore`**: Transient UI state. Hydrates book lists from `DBService` (IndexedDB) on mount.
 *   **`useSyncStore`**: Persists Sync credentials and settings to **localStorage**.
 
 ### UI Layer
