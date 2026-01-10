@@ -71,6 +71,7 @@ describe('Ingestion Image Optimization', () => {
     await db.clear('user_inventory');
     await db.clear('user_progress');
     await db.clear('static_resources');
+    await db.clear('user_reading_list');
     // We can't clear cache_table_images if it doesn't exist yet in the test DB context if not fully migrated in test env
     // But getDB() calls initDB() which should handle upgrade.
     if (db.objectStoreNames.contains('cache_table_images')) {
