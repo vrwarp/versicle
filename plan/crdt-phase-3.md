@@ -34,12 +34,19 @@ export const checkAndMigrate = async () => {
     // Note: We need raw access to `user_annotations` since DBService.getAnnotations requires ID
     const db = await dbService.getDB();
     const annotations = await db.getAll('user_annotations');
+    const readingList = await db.getAll('user_reading_list');
 
     // 2. Transact with Y.Doc
     yDoc.transact(() => {
         const invMap = yDoc.getMap('inventory');
+        const rlMap = yDoc.getMap('reading_list');
         const progMap = yDoc.getMap('progress');
         const annMap = yDoc.getMap('annotations');
+
+        // Migrate Reading List
+        for (const entry of readingList) {
+            rlMap.set(entry.filename, entry);
+        }
 
         // Migrate Books & Progress
         for (const book of books) {
@@ -105,6 +112,7 @@ After 1-2 release cycles, we will remove the `user_*` stores from `src/db/db.ts`
 *   In `src/db/db.ts` `upgrade` callback:
     *   `if (oldVersion < 20)`:
         *   `db.deleteObjectStore('user_inventory')`
+        *   `db.deleteObjectStore('user_reading_list')`
         *   `db.deleteObjectStore('user_progress')`
         *   `db.deleteObjectStore('user_annotations')`
         *   `db.deleteObjectStore('user_overrides')`

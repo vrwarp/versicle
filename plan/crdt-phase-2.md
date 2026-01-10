@@ -101,3 +101,17 @@ async addBook(file: File, ...): Promise<BookMetadata> {
 *   **`ReaderView.tsx`:** Update to read `toc` from `ReaderUIStore` and `theme` from `ReaderSyncStore`.
 *   **`LibraryView.tsx`:** Update to observe `useLibraryStore.books` (Yjs map) instead of array.
 *   **`ReaderControlBar.tsx`:** Update font/theme setters to use `ReaderSyncStore`.
+
+## 6. New Store: `useReadingListStore`
+
+**File:** `src/store/useReadingListStore.ts`
+
+**Action:** Create a new store to manage the persistent reading history (Shadow Inventory).
+
+*   **Shared Type:** `yDoc.getMap('reading_list')`.
+*   **State Interface:**
+    *   `entries: Record<string, ReadingListEntry>`.
+*   **Actions:**
+    *   `upsertEntry(entry: ReadingListEntry)`: Updates the Yjs map.
+    *   `removeEntry(filename: string)`: Removes from Yjs map.
+    *   `getEntry(filename: string)`: Selector to retrieve entry.
