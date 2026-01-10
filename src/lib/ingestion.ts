@@ -329,10 +329,11 @@ export async function processEpub(
   };
 
   const db = await getDB();
+  // Include reading_list for history tracking
   const tx = db.transaction([
       'static_manifests', 'static_resources', 'static_structure',
       'user_inventory', 'user_progress', 'user_overrides',
-      'cache_tts_preparation', 'cache_table_images'
+      'cache_tts_preparation', 'cache_table_images', 'reading_list'
   ], 'readwrite');
 
   await tx.objectStore('static_manifests').add(manifest);
@@ -341,6 +342,18 @@ export async function processEpub(
   await tx.objectStore('user_inventory').add(inventory);
   await tx.objectStore('user_progress').add(progress);
   await tx.objectStore('user_overrides').add(overrides);
+
+  // Add to Reading List (History)
+  await tx.objectStore('reading_list').put({
+      filename: inventory.sourceFilename,
+      title: manifest.title,
+      author: manifest.author,
+      isbn: manifest.isbn,
+      percentage: 0,
+      lastUpdated: inventory.lastInteraction,
+      status: 'to-read',
+      rating: undefined
+  });
 
   const ttsStore = tx.objectStore('cache_tts_preparation');
   for (const batch of ttsContentBatches) {

@@ -28,12 +28,13 @@ import type {
   TableImage,
   // App Types
   SyncCheckpoint,
-  SyncLogEntry
+  SyncLogEntry,
+  ReadingListEntry
 } from '../types/db';
 
 /**
  * Interface defining the schema for the IndexedDB database.
- * Updated to v18 architecture.
+ * Updated to v21 architecture (Restoring reading_list).
  */
 export interface EpubLibraryDB extends DBSchema {
   /**
@@ -123,6 +124,14 @@ export interface EpubLibraryDB extends DBSchema {
       by_bookId: string;
     };
   };
+  /**
+   * Independent reading list store for history persistence.
+   * Restored in v21.
+   */
+  reading_list: {
+    key: string; // filename
+    value: ReadingListEntry;
+  };
 
   // --- DOMAIN 3: CACHE ---
   cache_render_metrics: {
@@ -150,7 +159,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 20, {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 21, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // Create New Stores if they don't exist
         const createStore = (name: string, options?: IDBObjectStoreParameters) => {
@@ -193,6 +202,14 @@ export const initDB = () => {
         const userAi = createStore('user_ai_inference', { keyPath: 'id' }) as any;
         if (!userAi.indexNames.contains('by_bookId')) userAi.createIndex('by_bookId', 'bookId');
 
+        // Reading List (Restored in v21)
+        // Only create here if we are NOT running the V20 migration which deletes it.
+        // If we are upgrading from < 20, the v20 block will handle deletion,
+        // and the v21 block will handle re-creation.
+        if (oldVersion >= 20) {
+           createStore('reading_list', { keyPath: 'filename' });
+        }
+
         // Cache
         createStore('cache_render_metrics', { keyPath: 'bookId' });
         createStore('cache_audio_blobs', { keyPath: 'key' });
@@ -219,8 +236,9 @@ export const initDB = () => {
         // --- MIGRATION LOGIC (v17 -> v18) ---
         if (oldVersion < 18) {
           console.log('Migrating to v18 Data Architecture...');
-
-          // Use 'any' casting for legacy store access within upgrade logic
+            // ... (keeping existing v18 migration logic truncated for brevity as it was correct in previous file) ...
+            // RE-INSERTING v18 logic which is critical for fresh installs or upgrades from older versions
+            // Use 'any' casting for legacy store access within upgrade logic
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const tx: any = transaction;
 
@@ -527,17 +545,6 @@ export const initDB = () => {
               }
           }
 
-           // 10. Reading List (Shadow Inventory) -> UserInventory
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           if (db.objectStoreNames.contains('reading_list' as any)) {
-               const rlStore = tx.objectStore('reading_list');
-               let cursor = await rlStore.openCursor();
-               while (cursor) {
-                   // Just skipping logic as per previous plan to avoid complexity
-                   cursor = await cursor.continue();
-               }
-           }
-
           // Delete Old Stores
           const oldStores = [
             'books', 'book_sources', 'book_states', 'files',
@@ -558,6 +565,13 @@ export const initDB = () => {
         // --- MIGRATION LOGIC (v19 -> v20) ---
         if (oldVersion < 20) {
             console.log('Migrating to v20: Fixing Reading List Progress...');
+            // In v20 we merged reading_list into user_inventory.
+            // If the user skipped v20 and went straight to v21, this logic is moot
+            // because reading_list was deleted. But for upgraders, we need to respect history.
+
+            // NOTE: Since v21 restores reading_list, we don't need to delete it here if we are jumping versions,
+            // but `upgrade` runs sequentially. So if we are at v19, this runs, deletes it, and then v21 runs and creates it.
+            // That's fine, provided v20 logic synced data correctly.
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             if (db.objectStoreNames.contains('reading_list' as any)) {
@@ -584,35 +598,29 @@ export const initDB = () => {
                     if (bookId) {
                         let prog = await progStore.get(bookId);
                         if (!prog) {
-                            // Create new progress record if missing
                             prog = {
                                 bookId,
                                 percentage: 0,
                                 lastRead: 0,
                                 completedRanges: []
-                                // currentCfi left undefined as we don't have it
                             };
                         }
 
-                        // Recover Progress
                         if ((!prog.percentage || prog.percentage === 0) && entry.percentage > 0) {
                             prog.percentage = entry.percentage;
                             prog.lastRead = Math.max(prog.lastRead, entry.lastUpdated);
                             await progStore.put(prog);
                         } else if (!await progStore.get(bookId)) {
-                             // If it was missing and we didn't update percentage, we still save it initialized
                              await progStore.put(prog);
                         }
 
                         const inv = await invStore.get(bookId);
                         if (inv) {
                             let dirty = false;
-                            // Recover Status
                             if (inv.status === 'unread' && (entry.status === 'reading' || entry.status === 'read' || entry.status === 'currently-reading')) {
                                 inv.status = (entry.status === 'read' || entry.status === 'completed') ? 'completed' : 'reading';
                                 dirty = true;
                             }
-                            // Recover Rating
                             if (!inv.rating && entry.rating) {
                                 inv.rating = entry.rating;
                                 dirty = true;
@@ -627,6 +635,49 @@ export const initDB = () => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 db.deleteObjectStore('reading_list' as any);
             }
+        }
+
+        // --- MIGRATION LOGIC (v20 -> v21) ---
+        // Restore reading_list from user_inventory and user_progress
+        if (oldVersion < 21) {
+             console.log('Migrating to v21: Restoring Independent Reading List...');
+
+             // Ensure store exists (it might have been deleted by v20 logic or skipped at top)
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             if (!db.objectStoreNames.contains('reading_list' as any)) {
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 db.createObjectStore('reading_list' as any, { keyPath: 'filename' });
+             }
+
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             const tx: any = transaction;
+
+             const rlStore = tx.objectStore('reading_list');
+             const invStore = tx.objectStore('user_inventory');
+             const progStore = tx.objectStore('user_progress');
+             const manStore = tx.objectStore('static_manifests');
+
+             const inventories = await invStore.getAll();
+
+             for (const inv of inventories) {
+                 if (!inv.sourceFilename) continue;
+
+                 const prog = await progStore.get(inv.bookId);
+                 const man = await manStore.get(inv.bookId);
+
+                 const entry: ReadingListEntry = {
+                     filename: inv.sourceFilename,
+                     title: inv.customTitle || man?.title || 'Unknown',
+                     author: inv.customAuthor || man?.author || 'Unknown',
+                     isbn: man?.isbn, // manifest might have isbn
+                     percentage: prog?.percentage || 0,
+                     lastUpdated: inv.lastInteraction || Date.now(),
+                     status: inv.status === 'completed' ? 'read' : (inv.status === 'reading' ? 'currently-reading' : 'to-read'),
+                     rating: inv.rating
+                 };
+
+                 await rlStore.put(entry);
+             }
         }
 
       },

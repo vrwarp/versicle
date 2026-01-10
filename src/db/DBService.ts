@@ -318,6 +318,9 @@ class DBService {
       // Added index support for cache_tts_preparation
       await deleteFromIndex('cache_tts_preparation', 'by_bookId');
 
+      // NOTE: We do NOT delete from 'reading_list' here.
+      // The reading list is designed to outlive the book deletion for history preservation.
+
       await tx.done;
     } catch (error) {
       this.handleError(error);
@@ -393,9 +396,12 @@ class DBService {
 
           try {
               const db = await this.getDB();
-              const tx = db.transaction(['user_progress', 'user_inventory'], 'readwrite');
+              // Includes 'reading_list' for history tracking
+              const tx = db.transaction(['user_progress', 'user_inventory', 'static_manifests', 'reading_list'], 'readwrite');
               const progStore = tx.objectStore('user_progress');
               const invStore = tx.objectStore('user_inventory');
+              const rlStore = tx.objectStore('reading_list');
+              const manStore = tx.objectStore('static_manifests');
 
               for (const [id, data] of Object.entries(pending)) {
                   let userProg = await progStore.get(id);
@@ -417,6 +423,22 @@ class DBService {
                       if (data.progress > 0.98) inv.status = 'completed';
                       else if (inv.status !== 'completed') inv.status = 'reading';
                       await invStore.put(inv);
+
+                      // Update Reading List (History)
+                      if (inv.sourceFilename) {
+                           const man = await manStore.get(id);
+                           const entry: ReadingListEntry = {
+                               filename: inv.sourceFilename,
+                               title: inv.customTitle || man?.title || 'Unknown',
+                               author: inv.customAuthor || man?.author || 'Unknown',
+                               isbn: man?.isbn,
+                               percentage: data.progress,
+                               lastUpdated: Date.now(),
+                               status: inv.status === 'completed' ? 'read' : (inv.status === 'reading' ? 'currently-reading' : 'to-read'),
+                               rating: inv.rating
+                           };
+                           await rlStore.put(entry);
+                      }
                   }
               }
               await tx.done;
@@ -426,33 +448,13 @@ class DBService {
       }, 1000);
   }
 
-  // --- Reading List Operations (Legacy/Mapped) ---
-  // Mapping UserInventory to ReadingListEntry for backward compatibility
+  // --- Reading List Operations ---
+  // Restored Independent Store Logic
 
   async getReadingList(): Promise<ReadingListEntry[]> {
     try {
       const db = await this.getDB();
-      const inventory = await db.getAll('user_inventory');
-      const manifests = await db.getAll('static_manifests');
-      const progress = await db.getAll('user_progress');
-
-      const manMap = new Map(manifests.map(m => [m.bookId, m]));
-      const progMap = new Map(progress.map(p => [p.bookId, p]));
-
-      return inventory.map(inv => {
-          const man = manMap.get(inv.bookId);
-          const prog = progMap.get(inv.bookId);
-          return {
-              filename: inv.sourceFilename || 'unknown',
-              title: inv.customTitle || man?.title || 'Unknown',
-              author: inv.customAuthor || man?.author || 'Unknown',
-              isbn: man?.isbn,
-              percentage: prog?.percentage || 0,
-              lastUpdated: inv.lastInteraction,
-              status: inv.status === 'completed' ? 'read' : (inv.status === 'reading' ? 'currently-reading' : 'to-read'),
-              rating: inv.rating
-          };
-      });
+      return db.getAll('reading_list');
     } catch (error) {
       this.handleError(error);
     }
@@ -461,14 +463,19 @@ class DBService {
   async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
     try {
       const db = await this.getDB();
-      // Scan user_inventory for sourceFilename matches
-      const tx = db.transaction(['user_inventory', 'user_progress'], 'readwrite');
+      const tx = db.transaction(['reading_list', 'user_inventory', 'user_progress'], 'readwrite');
+
+      // 1. Always update reading_list (Source of Truth for History)
+      await tx.objectStore('reading_list').put(entry);
+
+      // 2. If Book Exists, Sync Back (Reverse Sync)
       const invStore = tx.objectStore('user_inventory');
       const progStore = tx.objectStore('user_progress');
 
       let bookId: string | undefined;
       let inventoryItem: UserInventoryItem | undefined;
 
+      // TODO: Index on sourceFilename would be better, but full scan is okay for now given inventory size
       let cursor = await invStore.openCursor();
       while (cursor) {
         if (cursor.value.sourceFilename === entry.filename) {
@@ -481,10 +488,10 @@ class DBService {
 
       if (bookId && inventoryItem) {
         // Update Inventory
-        inventoryItem.customTitle = entry.title;
-        inventoryItem.customAuthor = entry.author;
-        inventoryItem.rating = entry.rating;
-        inventoryItem.lastInteraction = entry.lastUpdated;
+        if (entry.title) inventoryItem.customTitle = entry.title;
+        if (entry.author) inventoryItem.customAuthor = entry.author;
+        if (entry.rating) inventoryItem.rating = entry.rating;
+        inventoryItem.lastInteraction = Math.max(inventoryItem.lastInteraction, entry.lastUpdated);
 
         // Map status
         if (entry.status === 'read') inventoryItem.status = 'completed';
@@ -493,15 +500,16 @@ class DBService {
 
         await invStore.put(inventoryItem);
 
-        // Update Progress
+        // Update Progress (Only if higher?) - Policy: Highest Wins
         const prog = await progStore.get(bookId) || {
           bookId, percentage: 0, lastRead: Date.now(), completedRanges: []
         };
-        prog.percentage = entry.percentage;
-        prog.lastRead = entry.lastUpdated;
-        await progStore.put(prog);
-      } else {
-        Logger.warn('DBService', `Skipping upsertReadingListEntry: Book not found for filename ${entry.filename}`);
+
+        if (entry.percentage > prog.percentage) {
+            prog.percentage = entry.percentage;
+            prog.lastRead = Math.max(prog.lastRead, entry.lastUpdated);
+            await progStore.put(prog);
+        }
       }
 
       await tx.done;
@@ -513,13 +521,9 @@ class DBService {
   async deleteReadingListEntry(filename: string): Promise<void> {
     try {
       const db = await this.getDB();
-      const inv = await db.getAll('user_inventory');
-      const target = inv.find(i => i.sourceFilename === filename);
-      if (target) {
-        await this.deleteBook(target.bookId);
-      } else {
-        Logger.warn('DBService', `Cannot delete entry: Book not found for filename ${filename}`);
-      }
+      // Only delete from reading list history.
+      // Do NOT delete the actual book file/inventory if it exists (Policy: Decoupled).
+      await db.delete('reading_list', filename);
     } catch (error) {
       this.handleError(error);
     }
@@ -528,13 +532,12 @@ class DBService {
   async deleteReadingListEntries(filenames: string[]): Promise<void> {
     try {
       const db = await this.getDB();
-      const inv = await db.getAll('user_inventory');
-      const set = new Set(filenames);
-      const targets = inv.filter(i => i.sourceFilename && set.has(i.sourceFilename));
-
-      for (const target of targets) {
-        await this.deleteBook(target.bookId);
+      const tx = db.transaction('reading_list', 'readwrite');
+      const store = tx.objectStore('reading_list');
+      for (const filename of filenames) {
+        await store.delete(filename);
       }
+      await tx.done;
     } catch (error) {
       this.handleError(error);
     }
