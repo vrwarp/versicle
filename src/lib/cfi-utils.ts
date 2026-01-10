@@ -34,6 +34,81 @@ export function parseCfiRange(range: string): CfiRangeData | null {
 }
 
 /**
+ * Extracts the spine index from a CFI string.
+ * Assumes standard epub.js structure where the package spine is child 6 (e.g., /6/14...).
+ *
+ * @param cfi The CFI string.
+ * @returns The spine index (0-based) or -1 if extraction fails.
+ */
+export function getSpineIndexFromCfi(cfi: string): number {
+    if (!cfi) return -1;
+    // Remove "epubcfi(" wrapper
+    const clean = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+    // Split by ! (indirection) or / (steps)
+    // Standard CFI: /6/14[id]!/4/2/1:0
+
+    // We expect /6/N...
+    const parts = clean.split('/');
+    // parts[0] is usually empty (leading /)
+    // parts[1] is 6 (package spine)
+    // parts[2] is the itemref index (e.g. 14)
+
+    if (parts.length >= 3 && parts[1] === '6') {
+        const step = parseInt(parts[2]);
+        if (!isNaN(step)) {
+             return (step / 2) - 1;
+        }
+    }
+    return -1;
+}
+
+/**
+ * Finds the index of the queue item closest to the target CFI.
+ *
+ * @param queue The list of items, each having a 'cfi' property.
+ * @param targetCfi The target CFI to find.
+ * @returns The index of the closest item, or -1 if not found.
+ */
+export function findClosestQueueItemIndex(queue: { cfi: string | null }[], targetCfi: string): number {
+    if (!targetCfi || !queue.length) return -1;
+
+    // Try exact string match first
+    const exact = queue.findIndex(q => q.cfi === targetCfi);
+    if (exact !== -1) return exact;
+
+    // Use EpubCFI comparison
+    try {
+        const cfi = new EpubCFI();
+        // Find the last item that is <= targetCfi (or closest match logic)
+        // Since queue items are usually Point CFIs or Ranges.
+
+        let bestIndex = -1;
+
+        for (let i = 0; i < queue.length; i++) {
+            const itemCfi = queue[i].cfi;
+            if (!itemCfi) continue;
+
+            // compare(a, b): -1 if a < b, 1 if a > b, 0 if equal
+            const cmp = cfi.compare(itemCfi, targetCfi);
+
+            if (cmp === 0) return i;
+            if (cmp < 0) {
+                // item is before target
+                bestIndex = i;
+            } else {
+                // item is after target. Since queue is sorted (chronological),
+                // we can assume the previous one was the closest start point.
+                break;
+            }
+        }
+        return bestIndex;
+    } catch (e) {
+        console.warn("CFI comparison failed", e);
+        return -1;
+    }
+}
+
+/**
  * Extracts the parent block-level CFI from a given CFI string.
  * This handles both range CFIs and point/standard CFIs.
  * 

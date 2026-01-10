@@ -11,6 +11,7 @@ import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
 import { SyncOrchestrator } from '../sync/SyncOrchestrator';
+import { getSpineIndexFromCfi, findClosestQueueItemIndex } from '../cfi-utils';
 
 /**
  * Defines the possible states of the TTS playback.
@@ -214,18 +215,71 @@ export class AudioPlayerService {
     private async restoreQueue(bookId: string) {
         this.enqueue(async () => {
             try {
-                const state = await dbService.getTTSState(bookId);
+                // Fetch both TTS State and Book Metadata (for currentCfi)
+                const [state, book] = await Promise.all([
+                    dbService.getTTSState(bookId),
+                    dbService.getBookMetadata(bookId)
+                ]);
+
                 if (this.currentBookId !== bookId) return;
 
+                // Determine target visual section
+                let visualSectionIndex = -1;
+                if (book?.currentCfi) {
+                     // Try to map CFI to section index using playlist/spine info
+                     visualSectionIndex = this.getSectionIndexFromCfi(book.currentCfi);
+                }
+
+                // Logic: Prioritize visual location if significantly different from saved TTS state
+                // Case 1: Saved state exists but in a different section than visual location
+                // Case 2: No saved state, but visual location exists
+                if (visualSectionIndex !== -1 && visualSectionIndex < this.playlist.length) {
+                    if (!state || state.sectionIndex !== visualSectionIndex) {
+                        // Load visual section
+                        const loaded = await this.loadSectionInternal(visualSectionIndex, false); // No autoplay
+                        if (loaded && book.currentCfi) {
+                             const qIndex = findClosestQueueItemIndex(this.stateManager.queue as TTSQueueItem[], book.currentCfi);
+                             if (qIndex !== -1) this.stateManager.jumpTo(qIndex);
+                        }
+                        return;
+                    }
+
+                    // Case 3: Same section, but check if we should align to visual CFI within the section
+                    if (state && state.sectionIndex === visualSectionIndex && state.queue && state.queue.length > 0) {
+                        // Restore saved queue first
+                        this.stateManager.setQueue(state.queue, state.currentIndex || 0, state.sectionIndex ?? -1);
+
+                        // Check if visual CFI is significantly ahead/behind or just different?
+                        // If user read visually, we usually want to resume from there.
+                        if (book.currentCfi) {
+                             const qIndex = findClosestQueueItemIndex(state.queue, book.currentCfi);
+                             // If found and different from saved index, jump to it.
+                             if (qIndex !== -1 && qIndex !== state.currentIndex) {
+                                 this.stateManager.jumpTo(qIndex);
+                             }
+                        }
+                        return;
+                    }
+                }
+
+                // Fallback: Restore saved state exactly if no better visual match
                 if (state && state.queue && state.queue.length > 0) {
                     await this.stopInternal();
                     this.stateManager.setQueue(state.queue, state.currentIndex || 0, state.sectionIndex ?? -1);
-                    // Subscription handles metadata and listeners
                 }
             } catch (e) {
                 console.error("Failed to restore TTS queue", e);
             }
         });
+    }
+
+    private getSectionIndexFromCfi(cfi: string): number {
+        const spineIndex = getSpineIndexFromCfi(cfi);
+        if (spineIndex === -1) return -1;
+
+        // Map spine index to playlist (which is sorted by playOrder/index)
+        // Assuming playlist item.playOrder corresponds to spine index.
+        return this.playlist.findIndex(s => s.playOrder === spineIndex);
     }
 
     private updateMediaSessionMetadata() {
@@ -377,10 +431,7 @@ export class AudioPlayerService {
             try {
                 const book = await dbService.getBookMetadata(this.currentBookId);
                 if (book) {
-                    if (book.lastPlayedCfi && this.stateManager.currentIndex === 0) {
-                        const index = this.stateManager.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
-                        if (index >= 0) this.stateManager.jumpTo(index);
-                    }
+                    // Check logic moved to restoreQueue mostly, but keep this for pause resume
                     if (book.lastPauseTime) return this.resumeInternal();
                 }
             } catch (e) {
