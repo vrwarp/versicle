@@ -359,8 +359,20 @@ class DBService {
         filename: file.name
       });
 
-      if (manifest.fileHash && manifest.fileHash !== newFingerprint) {
+      if (manifest.fileHash && manifest.fileHash !== 'PLACEHOLDER' && manifest.fileHash !== newFingerprint) {
         throw new Error('File verification failed: Fingerprint mismatch.');
+      }
+
+      // Update Manifest if it was a placeholder
+      if (manifest.fileHash === 'PLACEHOLDER') {
+          const mTx = db.transaction('static_manifests', 'readwrite');
+          manifest.fileHash = newFingerprint;
+          manifest.fileSize = file.size;
+          // We can't easily get totalChars without full processing, but this is better than nothing.
+          // Full processing might be needed if we want to restore fully.
+          // For now, restoreBook primarily puts the file back.
+          await mTx.objectStore('static_manifests').put(manifest);
+          await mTx.done;
       }
 
       // Store File
@@ -462,7 +474,7 @@ class DBService {
     try {
       const db = await this.getDB();
       // Scan user_inventory for sourceFilename matches
-      const tx = db.transaction(['user_inventory', 'user_progress'], 'readwrite');
+      const tx = db.transaction(['user_inventory', 'user_progress', 'static_manifests'], 'readwrite');
       const invStore = tx.objectStore('user_inventory');
       const progStore = tx.objectStore('user_progress');
 
@@ -501,7 +513,45 @@ class DBService {
         prog.lastRead = entry.lastUpdated;
         await progStore.put(prog);
       } else {
-        Logger.warn('DBService', `Skipping upsertReadingListEntry: Book not found for filename ${entry.filename}`);
+        // Create Shell Book
+        const newBookId = crypto.randomUUID();
+        const manifestStore = tx.objectStore('static_manifests');
+
+        await manifestStore.put({
+          bookId: newBookId,
+          title: entry.title,
+          author: entry.author,
+          description: '',
+          isbn: entry.isbn,
+          fileHash: 'PLACEHOLDER',
+          fileSize: 0,
+          totalChars: 0,
+          schemaVersion: 1,
+          coverBlob: undefined
+        });
+
+        await invStore.put({
+          bookId: newBookId,
+          addedAt: Date.now(),
+          sourceFilename: entry.filename,
+          tags: [],
+          customTitle: entry.title,
+          customAuthor: entry.author,
+          status: entry.status === 'read' ? 'completed' : (entry.status === 'currently-reading' ? 'reading' : 'unread'),
+          rating: entry.rating,
+          lastInteraction: entry.lastUpdated
+        });
+
+        await progStore.put({
+          bookId: newBookId,
+          percentage: entry.percentage,
+          lastRead: entry.lastUpdated,
+          completedRanges: [],
+          currentQueueIndex: 0,
+          currentSectionIndex: 0
+        });
+
+        Logger.info('DBService', `Created Shell Book for ${entry.filename}`);
       }
 
       await tx.done;

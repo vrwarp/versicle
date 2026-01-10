@@ -131,6 +131,105 @@ describe('DBService Reading List', () => {
         expect(prog?.percentage).toBe(0.8);
     });
 
+    it('should create Shell Book for non-existent reading list entry', async () => {
+        const db = await getDB();
+        const filename = 'ghost.epub';
+
+        // Ensure clean state
+        const initialInv = await db.getAll('user_inventory');
+        expect(initialInv).toHaveLength(0);
+
+        await dbService.upsertReadingListEntry({
+            filename: filename,
+            title: 'Ghost Book',
+            author: 'Ghost Author',
+            percentage: 0.3,
+            lastUpdated: 400,
+            status: 'currently-reading',
+            rating: 3,
+            isbn: '999-999'
+        });
+
+        // Verify Shell Book Created
+        const inv = await db.getAll('user_inventory');
+        expect(inv).toHaveLength(1);
+        const ghostBook = inv[0];
+        expect(ghostBook.sourceFilename).toBe(filename);
+        expect(ghostBook.customTitle).toBe('Ghost Book');
+        expect(ghostBook.status).toBe('reading');
+
+        const bookId = ghostBook.bookId;
+
+        // Verify Manifest
+        const man = await db.get('static_manifests', bookId);
+        expect(man).toBeDefined();
+        expect(man?.title).toBe('Ghost Book');
+        expect(man?.fileHash).toBe('PLACEHOLDER');
+        expect(man?.isbn).toBe('999-999');
+
+        // Verify Progress
+        const prog = await db.get('user_progress', bookId);
+        expect(prog).toBeDefined();
+        expect(prog?.percentage).toBe(0.3);
+
+        // Verify NO Resources
+        const res = await db.get('static_resources', bookId);
+        expect(res).toBeUndefined();
+
+        // Verify Library sees it as Offloaded
+        const library = await dbService.getLibrary();
+        expect(library).toHaveLength(1);
+        expect(library[0].id).toBe(bookId);
+        expect(library[0].isOffloaded).toBe(true);
+    });
+
+    it('should restore Shell Book with real file', async () => {
+        const db = await getDB();
+        const filename = 'restore-ghost.epub';
+
+        // 1. Create Shell Book
+        await dbService.upsertReadingListEntry({
+            filename: filename,
+            title: 'Ghost To Real',
+            author: 'Author',
+            percentage: 0.0,
+            lastUpdated: 100,
+            status: 'to-read'
+        });
+
+        const inv = await db.getAll('user_inventory');
+        const bookId = inv[0].bookId;
+
+        // 2. Prepare "Real" File
+        const fileContent = new ArrayBuffer(10);
+        const file = new File([fileContent], filename, { type: 'application/epub+zip' });
+
+        // Mock generateFileFingerprint logic?
+        // restoreBook calls generateFileFingerprint which hashes the file.
+        // We can trust the real implementation or mock it.
+        // DBService mocks are not active here, it uses real DB.
+        // generateFileFingerprint is imported from '../lib/ingestion'.
+        // We might need to ensure crypto works. Vitest environment 'jsdom' should support it.
+
+        // 3. Restore
+        await dbService.restoreBook(bookId, file);
+
+        // 4. Verify Manifest Updated
+        const man = await db.get('static_manifests', bookId);
+        expect(man?.fileHash).not.toBe('PLACEHOLDER');
+        expect(man?.fileHash).toBeTruthy();
+        expect(man?.fileSize).toBe(10);
+
+        // 5. Verify Resource Exists
+        const res = await db.get('static_resources', bookId);
+        expect(res).toBeDefined();
+        expect(res?.epubBlob).toBeDefined();
+
+        // 6. Verify isOffloaded is now false
+        const library = await dbService.getLibrary();
+        expect(library[0].isOffloaded).toBe(false);
+    });
+
     /*
     it('should NOT sync progress if imported progress is lower', async () => {
         // Skipped
