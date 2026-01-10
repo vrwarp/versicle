@@ -297,6 +297,11 @@ export class AudioPlayerService {
             if (this.playlistPromise) await this.playlistPromise;
             const index = this.playlist.findIndex(s => s.sectionId === sectionId);
             if (index !== -1) {
+                // Optimization: If the section is already loaded (e.g. from restore) and we are not forcing playback,
+                // keep the current state (including current index/progress).
+                if (!autoPlay && this.stateManager.currentSectionIndex === index && this.stateManager.queue.length > 0) {
+                    return;
+                }
                 await this.loadSectionInternal(index, autoPlay, sectionTitle);
             }
         });
