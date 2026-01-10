@@ -357,7 +357,7 @@ export const LibraryView: React.FC = () => {
               onValueChange={(val) => setSortOrder(val as SortOption)}
             >
               <SelectTrigger
-                className="w-[180px] bg-transparent border-none focus:ring-0 p-0 h-auto font-medium text-foreground shadow-none justify-end gap-2"
+                className="w-[180px] text-foreground"
                 data-testid="sort-select"
               >
                 <SelectValue />
