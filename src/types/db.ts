@@ -217,6 +217,29 @@ export interface UserAiInference {
   generatedAt: number;
 }
 
+/**
+ * Represents an entry in the reading list (lightweight, portable history).
+ * Store: 'reading_list' (Key: filename)
+ */
+export interface ReadingListEntry {
+  /** The filename of the book (Primary Key). */
+  filename: string;
+  /** The title of the book. */
+  title: string;
+  /** The author(s) of the book. */
+  author: string;
+  /** The ISBN of the book, if available. */
+  isbn?: string;
+  /** Reading progress as a percentage (0.0 to 1.0). */
+  percentage: number;
+  /** Timestamp when the entry was last updated. */
+  lastUpdated: number;
+  /** Reading status derived from percentage or set by user. */
+  status?: 'read' | 'currently-reading' | 'to-read';
+  /** User rating (1-5). */
+  rating?: number;
+}
+
 // DOMAIN 3: CACHE (Transient, Disposable)
 
 /**
@@ -568,28 +591,6 @@ export interface ReadingHistoryEntry {
   sessions: ReadingSession[];
   /** Timestamp when the history was last updated. */
   lastUpdated: number;
-}
-
-/**
- * Represents an entry in the reading list (lightweight, portable history).
- */
-export interface ReadingListEntry {
-  /** The filename of the book (Primary Key). */
-  filename: string;
-  /** The title of the book. */
-  title: string;
-  /** The author(s) of the book. */
-  author: string;
-  /** The ISBN of the book, if available. */
-  isbn?: string;
-  /** Reading progress as a percentage (0.0 to 1.0). */
-  percentage: number;
-  /** Timestamp when the entry was last updated. */
-  lastUpdated: number;
-  /** Reading status derived from percentage or set by user. */
-  status?: 'read' | 'currently-reading' | 'to-read';
-  /** User rating (1-5). */
-  rating?: number;
 }
 
 /**

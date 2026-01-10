@@ -336,24 +336,51 @@ export async function processEpub(
       'cache_tts_preparation', 'cache_table_images', 'reading_list'
   ], 'readwrite');
 
+  // Check for existing reading history (Restore Sync)
+  const rlStore = tx.objectStore('reading_list');
+  const existingHistory = await rlStore.get(inventory.sourceFilename || '');
+
+  if (existingHistory) {
+      // RESTORE: Use history to populate initial user state
+      if (existingHistory.percentage > 0) {
+          progress.percentage = existingHistory.percentage;
+          progress.lastRead = existingHistory.lastUpdated;
+          // Note: we cannot restore exact CFI from percentage, but user will be at 0 CFI with % shown.
+      }
+
+      // Update Inventory based on history
+      if (existingHistory.status) {
+          if (existingHistory.status === 'read') inventory.status = 'completed';
+          else if (existingHistory.status === 'currently-reading') inventory.status = 'reading';
+      }
+      if (existingHistory.rating) {
+          inventory.rating = existingHistory.rating;
+      }
+      inventory.lastInteraction = Math.max(inventory.lastInteraction, existingHistory.lastUpdated);
+
+      // We do NOT overwrite reading_list here, effectively merging "new file" with "old history".
+      // But we might want to update metadata in reading list if the new file has better metadata?
+      // Let's stick to "Highest Progress Wins" / "History is sacred".
+  } else {
+      // NEW ENTRY: Create fresh history
+      await rlStore.put({
+          filename: inventory.sourceFilename!,
+          title: manifest.title,
+          author: manifest.author,
+          isbn: manifest.isbn,
+          percentage: 0,
+          lastUpdated: inventory.lastInteraction,
+          status: 'to-read',
+          rating: undefined
+      });
+  }
+
   await tx.objectStore('static_manifests').add(manifest);
   await tx.objectStore('static_resources').add(resource);
   await tx.objectStore('static_structure').add(structure);
   await tx.objectStore('user_inventory').add(inventory);
   await tx.objectStore('user_progress').add(progress);
   await tx.objectStore('user_overrides').add(overrides);
-
-  // Add to Reading List (History)
-  await tx.objectStore('reading_list').put({
-      filename: inventory.sourceFilename,
-      title: manifest.title,
-      author: manifest.author,
-      isbn: manifest.isbn,
-      percentage: 0,
-      lastUpdated: inventory.lastInteraction,
-      status: 'to-read',
-      rating: undefined
-  });
 
   const ttsStore = tx.objectStore('cache_tts_preparation');
   for (const batch of ttsContentBatches) {
