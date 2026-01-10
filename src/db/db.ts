@@ -234,6 +234,21 @@ export const initDB = () => {
              const statesStore = db.objectStoreNames.contains('book_states' as any) ? tx.objectStore('book_states') : null;
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
              const filesStore = db.objectStoreNames.contains('files' as any) ? tx.objectStore('files') : null;
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             const readingListStore = db.objectStoreNames.contains('reading_list' as any) ? tx.objectStore('reading_list') : null;
+
+             // Optimization: Load reading list into memory map
+             const readingListMap = new Map<string, number>();
+             if (readingListStore) {
+                 let rlCursor = await readingListStore.openCursor();
+                 while (rlCursor) {
+                     const entry = rlCursor.value as ReadingListEntry;
+                     if (entry.filename && entry.percentage > 0) {
+                         readingListMap.set(entry.filename, entry.percentage);
+                     }
+                     rlCursor = await rlCursor.continue();
+                 }
+             }
 
              const newManifests = tx.objectStore('static_manifests');
              const newResources = tx.objectStore('static_resources');
@@ -295,9 +310,16 @@ export const initDB = () => {
                });
 
                // E. User Progress
+               let percentage = state.progress || 0;
+
+               // Fallback: If progress is 0, check legacy reading_list
+               if (percentage === 0 && source.filename && readingListMap.has(source.filename)) {
+                   percentage = readingListMap.get(source.filename) || 0;
+               }
+
                await newProgress.put({
                    bookId: book.id,
-                   percentage: state.progress || 0,
+                   percentage,
                    currentCfi: state.currentCfi,
                    lastPlayedCfi: state.lastPlayedCfi,
                    currentQueueIndex: 0,
@@ -539,10 +561,11 @@ export const initDB = () => {
            }
 
           // Delete Old Stores
+          // Note: reading_list is preserved for v19 fix migration
           const oldStores = [
             'books', 'book_sources', 'book_states', 'files',
             'annotations', 'lexicon', 'sections', 'content_analysis',
-            'reading_history', 'reading_list', 'tts_queue', 'tts_position',
+            'reading_history', 'tts_queue', 'tts_position',
             'tts_cache', 'locations', 'tts_content', 'table_images'
           ];
 
@@ -553,6 +576,51 @@ export const initDB = () => {
                   db.deleteObjectStore(store as any);
               }
           }
+        }
+
+        // --- FIX MIGRATION (v18 -> v19) ---
+        if (oldVersion < 19) {
+             console.log('Migrating to v19: Fix Reading List Progress...');
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             const tx: any = transaction;
+
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             if (db.objectStoreNames.contains('reading_list' as any)) {
+                 const readingListStore = tx.objectStore('reading_list');
+                 const progressStore = tx.objectStore('user_progress');
+                 const inventoryStore = tx.objectStore('user_inventory');
+
+                 // Optimization: Load reading list into memory
+                 const readingListMap = new Map<string, number>();
+                 let rlCursor = await readingListStore.openCursor();
+                 while (rlCursor) {
+                     const entry = rlCursor.value as ReadingListEntry;
+                     if (entry.filename && entry.percentage > 0) {
+                         readingListMap.set(entry.filename, entry.percentage);
+                     }
+                     rlCursor = await rlCursor.continue();
+                 }
+
+                 // Iterate over all progress entries
+                 let cursor = await progressStore.openCursor();
+                 while (cursor) {
+                     const progress = cursor.value as UserProgress;
+                     if (progress.percentage === 0) {
+                         const inv = await inventoryStore.get(progress.bookId);
+                         if (inv && inv.sourceFilename && readingListMap.has(inv.sourceFilename)) {
+                              const restoredPct = readingListMap.get(inv.sourceFilename);
+                              console.log(`Restoring progress for ${inv.sourceFilename}: ${restoredPct}`);
+                              progress.percentage = restoredPct || 0;
+                              await cursor.update(progress);
+                         }
+                     }
+                     cursor = await cursor.continue();
+                 }
+
+                 // Now it is safe to delete reading_list
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 db.deleteObjectStore('reading_list' as any);
+             }
         }
       },
     });
