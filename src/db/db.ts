@@ -150,7 +150,7 @@ let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
 export const initDB = () => {
   if (!dbPromise) {
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 19, {
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 20, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
         // Create New Stores if they don't exist
         const createStore = (name: string, options?: IDBObjectStoreParameters) => {
@@ -554,6 +554,69 @@ export const initDB = () => {
               }
           }
         }
+
+        // --- MIGRATION LOGIC (v19 -> v20) ---
+        if (oldVersion < 20) {
+            console.log('Migrating to v20: Fixing Reading List Progress...');
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (db.objectStoreNames.contains('reading_list' as any)) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const tx: any = transaction;
+                const rlStore = tx.objectStore('reading_list');
+                const invStore = tx.objectStore('user_inventory');
+                const progStore = tx.objectStore('user_progress');
+
+                // Map filename -> bookId
+                const invMap = new Map<string, string>();
+                const allInv = await invStore.getAll();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                for (const item of (allInv as any[])) {
+                    if (item.sourceFilename) invMap.set(item.sourceFilename, item.bookId);
+                }
+
+                let cursor = await rlStore.openCursor();
+                while (cursor) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const entry = cursor.value as any;
+                    const bookId = invMap.get(entry.filename);
+
+                    if (bookId) {
+                        const prog = await progStore.get(bookId);
+                        if (prog) {
+                            // Recover Progress if missing
+                            if ((!prog.percentage || prog.percentage === 0) && entry.percentage > 0) {
+                                prog.percentage = entry.percentage;
+                                prog.lastRead = Math.max(prog.lastRead, entry.lastUpdated);
+                                await progStore.put(prog);
+                            }
+                        }
+
+                        const inv = await invStore.get(bookId);
+                        if (inv) {
+                            let dirty = false;
+                            // Recover Status
+                            if (inv.status === 'unread' && (entry.status === 'reading' || entry.status === 'read' || entry.status === 'currently-reading')) {
+                                inv.status = (entry.status === 'read' || entry.status === 'completed') ? 'completed' : 'reading';
+                                dirty = true;
+                            }
+                            // Recover Rating
+                            if (!inv.rating && entry.rating) {
+                                inv.rating = entry.rating;
+                                dirty = true;
+                            }
+                            if (dirty) await invStore.put(inv);
+                        }
+                    }
+                    cursor = await cursor.continue();
+                }
+
+                // Delete reading_list after successful migration
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                db.deleteObjectStore('reading_list' as any);
+            }
+        }
+
       },
     });
   }
