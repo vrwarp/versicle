@@ -11,6 +11,8 @@ vi.mock('../../../lib/tts/LexiconService', () => {
     deleteRule: vi.fn().mockResolvedValue(undefined),
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     applyLexicon: vi.fn((text, _rules) => text),
+    getBibleLexiconPreference: vi.fn().mockResolvedValue('default'),
+    setBibleLexiconPreference: vi.fn().mockResolvedValue(undefined),
   };
   return {
     LexiconService: {

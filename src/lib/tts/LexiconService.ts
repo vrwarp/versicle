@@ -1,7 +1,6 @@
 import { getDB } from '../../db/db';
 import type { LexiconRule } from '../../types/db';
 import { v4 as uuidv4 } from 'uuid';
-import { useTTSStore } from '../../store/useTTSStore';
 import { BIBLE_LEXICON_RULES } from '../../data/bible-lexicon';
 
 /**
@@ -78,7 +77,21 @@ export class LexiconService {
     }
 
     // Determine if we should apply Bible Lexicon rules
-    const globalEnabled = useTTSStore.getState().isBibleLexiconEnabled;
+    // Circular Dependency Fix: We cannot import useTTSStore here because it imports AudioPlayerService which imports LexiconService.
+    // Instead, we will dynamically require it or assume it's available via a global/window if needed, or pass it in.
+    // For now, let's use a dynamic import which is async, matching the async nature of getRules.
+    // However, vitest/bundlers might still hoist it.
+    // A safer way is to check the store state from a global accessor or move the store config to a separate file.
+    // Let's try dynamic import first.
+    let globalEnabled = true;
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { useTTSStore } = await import('../../store/useTTSStore');
+        globalEnabled = useTTSStore.getState().isBibleLexiconEnabled;
+    } catch (e) {
+        console.warn('LexiconService: Failed to access useTTSStore, defaulting bible lexicon to enabled.', e);
+    }
+
     const shouldApplyBible = bibleLexiconEnabled === 'on' || (bibleLexiconEnabled === 'default' && globalEnabled);
 
     if (shouldApplyBible) {

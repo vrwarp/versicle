@@ -19,6 +19,14 @@ describe('LexiconService Sorting', () => {
   beforeEach(() => {
     service = LexiconService.getInstance();
     vi.clearAllMocks();
+
+    // Mock dynamic import for useTTSStore to disable Bible Lexicon by default in these tests
+    // This assumes the dynamic import in LexiconService will use this mock.
+    vi.mock('../../store/useTTSStore', () => ({
+        useTTSStore: {
+            getState: () => ({ isBibleLexiconEnabled: false })
+        }
+    }));
   });
 
   it('should prioritize Book rules before Global rules when applyBefore is true', async () => {

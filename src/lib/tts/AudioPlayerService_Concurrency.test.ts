@@ -32,6 +32,7 @@ vi.mock('./LexiconService', () => ({
             getRules: vi.fn().mockResolvedValue([]),
             applyLexicon: vi.fn((text) => text),
             getRulesHash: vi.fn().mockResolvedValue('hash'),
+            getBibleLexiconPreference: vi.fn().mockResolvedValue('default'),
         })
     }
 }));
