@@ -1,4 +1,5 @@
 import { EpubCFI, type Book } from 'epubjs';
+import { getCachedSegmenter } from './tts/segmenter-cache';
 
 export interface CfiRangeData {
   parent: string;
@@ -304,9 +305,9 @@ export async function snapCfiToSentence(book: Book, cfi: string): Promise<string
 
         const text = startNode.textContent || '';
 
-        // Use Intl.Segmenter if available
-        if (typeof Intl !== 'undefined' && Intl.Segmenter) {
-             const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' });
+        // Use cached segmenter if available
+        const segmenter = getCachedSegmenter('en');
+        if (segmenter) {
              const segments = segmenter.segment(text);
              let bestStart = 0;
              for (const segment of segments) {
