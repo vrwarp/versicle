@@ -7,6 +7,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '../ui/DropdownMenu';
+import { cn } from '../../lib/utils';
 
 interface BookActionMenuProps {
     book: BookMetadata;
@@ -54,6 +55,13 @@ export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuPro
         onRestore();
     };
 
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        // Prevent key events from bubbling to parent (e.g. BookCard opening on Enter)
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.stopPropagation();
+        }
+    };
+
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -67,9 +75,14 @@ export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuPro
                         // Default Radix DropdownMenuTrigger pointer-down behavior can capture scroll events.
                         e.stopPropagation();
                     }}
+                    onKeyDown={handleKeyDown}
                     role="button"
+                    tabIndex={0}
                     aria-label="Book actions"
-                    className="inline-block"
+                    className={cn(
+                        "inline-block rounded-md",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    )}
                 >
                     {children}
                 </div>
