@@ -81,6 +81,7 @@ export class AudioPlayerService {
     private sessionRestored: boolean = false;
     private prerollEnabled: boolean = false;
     private isPreviewing: boolean = false;
+    private hasCover: boolean = false;
 
     private constructor() {
         this.syncEngine = new SyncEngine();
@@ -170,9 +171,14 @@ export class AudioPlayerService {
 
             this.currentBookId = bookId;
             this.sessionRestored = false;
+            this.hasCover = false;
             this.stateManager.setBookId(bookId);
 
             if (bookId) {
+                dbService.getBookMetadata(bookId).then(meta => {
+                    this.hasCover = !!meta?.coverBlob;
+                }).catch(e => console.error("Failed to load book metadata", e));
+
                 this.playlistPromise = dbService.getSections(bookId).then(sections => {
                     this.playlist = sections;
                     this.restoreQueue(bookId);
@@ -188,11 +194,14 @@ export class AudioPlayerService {
 
     private async engageBackgroundMode(item: TTSQueueItem): Promise<boolean> {
         try {
+            const coverUrl = item.coverUrl ||
+                (this.hasCover && this.currentBookId ? `/__versicle__/covers/${this.currentBookId}` : undefined);
+
             this.platformIntegration.updateMetadata({
                 title: item.title || 'Chapter Text',
                 artist: item.author || 'Versicle',
                 album: item.bookTitle || '',
-                artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
+                artwork: coverUrl ? [{ src: coverUrl }] : [],
                 sectionIndex: this.stateManager.currentSectionIndex,
                 totalSections: this.playlist.length
             });
@@ -237,11 +246,14 @@ export class AudioPlayerService {
     private updateMediaSessionMetadata() {
         const item = this.stateManager.getCurrentItem();
         if (item) {
+            const coverUrl = item.coverUrl ||
+                (this.hasCover && this.currentBookId ? `/__versicle__/covers/${this.currentBookId}` : undefined);
+
             this.platformIntegration.updateMetadata({
                 title: item.title || 'Chapter Text',
                 artist: item.author || 'Versicle',
                 album: item.bookTitle || '',
-                artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
+                artwork: coverUrl ? [{ src: coverUrl }] : [],
                 sectionIndex: this.stateManager.currentSectionIndex,
                 totalSections: this.playlist.length
             });
