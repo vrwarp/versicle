@@ -57,14 +57,14 @@ def test_journey_bible_lexicon(page: Page):
 
     # Verify Bible Preference Buttons (Default / On / Off)
     print("Verifying Preference Buttons...")
-    expect(page.get_by_role("button", name="Default")).to_be_visible()
-    expect(page.get_by_role("button", name="On", exact=True)).to_be_visible()
-    expect(page.get_by_role("button", name="Off", exact=True)).to_be_visible()
+    expect(page.get_by_test_id("lexicon-pref-default")).to_be_visible()
+    expect(page.get_by_test_id("lexicon-pref-on")).to_be_visible()
+    expect(page.get_by_test_id("lexicon-pref-off")).to_be_visible()
 
     # 7. Test Bible Lexicon OFF logic
     print("Testing Bible Lexicon OFF replacement...")
     # Turn OFF
-    page.get_by_role("button", name="Off", exact=True).click()
+    page.get_by_test_id("lexicon-pref-off").click()
 
     # Input test text
     page.get_by_test_id("lexicon-test-input").fill("Matt. 5:15")
@@ -79,7 +79,7 @@ def test_journey_bible_lexicon(page: Page):
     # 8. Test Bible Lexicon ON logic
     print("Testing Bible Lexicon ON replacement...")
     # Turn ON
-    page.get_by_role("button", name="On", exact=True).click()
+    page.get_by_test_id("lexicon-pref-on").click()
 
     # Click All Rules (input remains from previous step)
     page.get_by_test_id("lexicon-test-all-btn").click()

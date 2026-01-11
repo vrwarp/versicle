@@ -325,18 +325,21 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                       </div>
                       <div className="flex bg-muted rounded p-1">
                           <button
+                              data-testid="lexicon-pref-default"
                               onClick={() => handleBiblePreferenceChange('default')}
                               className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'default' ? 'bg-background shadow-sm font-medium' : 'hover:bg-background/50 text-muted-foreground'}`}
                           >
                               Default
                           </button>
                           <button
+                              data-testid="lexicon-pref-on"
                               onClick={() => handleBiblePreferenceChange('on')}
                               className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'on' ? 'bg-background shadow-sm font-medium text-green-600' : 'hover:bg-background/50 text-muted-foreground'}`}
                           >
                               On
                           </button>
                           <button
+                              data-testid="lexicon-pref-off"
                               onClick={() => handleBiblePreferenceChange('off')}
                               className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'off' ? 'bg-background shadow-sm font-medium text-red-600' : 'hover:bg-background/50 text-muted-foreground'}`}
                           >
