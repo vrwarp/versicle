@@ -61,6 +61,7 @@ vi.mock('../lib/tts/LexiconService', () => ({
     getInstance: vi.fn().mockReturnValue({
         getRules: vi.fn().mockResolvedValue([]),
         applyLexicon: vi.fn((text) => text),
+        getBibleLexiconPreference: vi.fn().mockResolvedValue('default'),
     }),
   },
 }));

@@ -47,7 +47,8 @@ vi.mock('./LexiconService', () => ({
         getInstance: vi.fn(() => ({
             getRules: vi.fn().mockResolvedValue([]),
             applyLexicon: vi.fn((text) => text),
-            getRulesHash: vi.fn().mockResolvedValue('hash')
+            getRulesHash: vi.fn().mockResolvedValue('hash'),
+            getBibleLexiconPreference: vi.fn().mockResolvedValue('default')
         }))
     }
 }));
@@ -89,7 +90,8 @@ vi.mock('../../store/useTTSStore', () => ({
         customAbbreviations: [],
         alwaysMerge: [],
         sentenceStarters: [],
-        minSentenceLength: 0
+        minSentenceLength: 0,
+        isBibleLexiconEnabled: false
     })
   }
 }));

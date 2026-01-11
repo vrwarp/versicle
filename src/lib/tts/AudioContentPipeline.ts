@@ -8,6 +8,8 @@ import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
 import type { SentenceNode } from '../tts';
+import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';
+import { LexiconService } from './LexiconService';
 
 /**
  * Manages the transformation of raw book content into a playable TTS queue.
@@ -74,9 +76,20 @@ export class AudioContentPipeline {
 
                 // Dynamic Refinement: Merge segments based on current settings
                 const settings = useTTSStore.getState();
+                let abbreviations = settings.customAbbreviations;
+
+                // Inject Bible abbreviations if enabled
+                const biblePref = await LexiconService.getInstance().getBibleLexiconPreference(bookId);
+                const shouldIncludeBible = biblePref === 'on' || (biblePref === 'default' && settings.isBibleLexiconEnabled);
+
+                if (shouldIncludeBible) {
+                    // Create a new array to avoid mutating the store state or cached array
+                    abbreviations = [...abbreviations, ...BIBLE_ABBREVIATIONS];
+                }
+
                 const finalSentences = TextSegmenter.refineSegments(
                     workingSentences,
-                    settings.customAbbreviations,
+                    abbreviations,
                     settings.alwaysMerge,
                     settings.sentenceStarters,
                     settings.minSentenceLength

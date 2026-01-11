@@ -26,9 +26,9 @@ def test_abbrev_settings(page: Page):
 
     # 3. Verify TTS/Abbreviation settings are visible.
     # The header has changed from "Sentence Segmentation" to specific sections like "Abbreviations"
-    expect(page.get_by_role("heading", name="Abbreviations")).to_be_visible(timeout=5000)
-    expect(page.get_by_role("heading", name="Always Merge")).to_be_visible(timeout=5000)
-    expect(page.get_by_role("heading", name="Sentence Starters")).to_be_visible(timeout=5000)
+    expect(page.get_by_role("heading", name="Abbreviations", exact=True)).to_be_visible(timeout=5000)
+    expect(page.get_by_role("heading", name="Always Merge", exact=True)).to_be_visible(timeout=5000)
+    expect(page.get_by_role("heading", name="Sentence Starters", exact=True)).to_be_visible(timeout=5000)
 
     # Check for Export/Import buttons (we have 3 sets now)
     expect(page.locator("button[title='Download CSV']")).to_have_count(3, timeout=5000)
