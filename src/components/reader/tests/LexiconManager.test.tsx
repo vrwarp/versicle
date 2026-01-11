@@ -38,6 +38,11 @@ vi.mock('../../store/useReaderStore', () => ({
   useReaderStore: (selector: any) => selector({ currentBookId: 'book1' }),
 }));
 
+// Mock export
+vi.mock('../../../lib/export', () => ({
+  exportFile: vi.fn(),
+}));
+
 describe('LexiconManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -105,6 +110,46 @@ describe('LexiconManager', () => {
 
     await waitFor(() => {
         expect(screen.getByTestId('lexicon-test-current-btn')).toBeDisabled();
+    });
+  });
+
+  it('should call exportFile when export button is clicked', async () => {
+    const { exportFile } = await import('../../../lib/export');
+    render(
+      <LexiconManager
+        open={true}
+        onOpenChange={vi.fn()}
+      />
+    );
+
+    const exportBtn = screen.getByTestId('lexicon-export');
+    expect(exportBtn).toBeInTheDocument();
+
+    // Simulate click
+    exportBtn.click();
+
+    await waitFor(() => {
+        expect(exportFile).toHaveBeenCalled();
+    });
+  });
+
+  it('should call exportFile when download sample button is clicked', async () => {
+    const { exportFile } = await import('../../../lib/export');
+    render(
+      <LexiconManager
+        open={true}
+        onOpenChange={vi.fn()}
+      />
+    );
+
+    const sampleBtn = screen.getByTestId('lexicon-download-sample');
+    expect(sampleBtn).toBeInTheDocument();
+
+    // Simulate click
+    sampleBtn.click();
+
+    await waitFor(() => {
+        expect(exportFile).toHaveBeenCalled();
     });
   });
 });

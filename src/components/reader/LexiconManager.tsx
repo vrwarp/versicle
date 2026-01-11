@@ -8,6 +8,7 @@ import { Dialog as UiDialog } from '../ui/Dialog';
 import { useReaderStore } from '../../store/useReaderStore';
 import { LEXICON_SAMPLE_CSV } from '../../lib/tts/lexiconSample';
 import { LexiconCSV } from '../../lib/tts/CsvUtils';
+import { exportFile } from '../../lib/export';
 
 interface LexiconManagerProps {
   /** Whether the dialog is open. */
@@ -187,29 +188,22 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     }
   };
 
-  const handleDownloadSample = () => {
-    const blob = new Blob([LEXICON_SAMPLE_CSV], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'lexicon_sample.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const handleDownloadSample = async () => {
+    await exportFile({
+      filename: 'lexicon_sample.csv',
+      data: LEXICON_SAMPLE_CSV,
+      mimeType: 'text/csv'
+    });
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     const csv = LexiconCSV.generate(rules);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `lexicon_${scope}${scope === 'book' ? '_' + currentBookId : ''}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const filename = `lexicon_${scope}${scope === 'book' ? '_' + currentBookId : ''}.csv`;
+    await exportFile({
+      filename,
+      data: csv,
+      mimeType: 'text/csv'
+    });
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
