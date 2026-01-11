@@ -1,6 +1,6 @@
 # Design Document: Versicle "Store-First" Architecture (Yjs)
 
-**Status:** Draft / Detailed Design
+**Status:** Implementation In Progress (Phase 1 Complete)
 **Target Architecture:** Local-First / Store-First using Yjs & Zustand
 
 ## 1. The Core Architectural Shift
@@ -65,10 +65,10 @@ type YjsSchema = {
 
 ## 4. High-Level Migration Plan
 
-### Step 1: Initialize the Yjs Runtime
-*   Create `src/store/yjs-provider.ts` singleton.
-*   Initialize `Y.Doc`.
-*   Connect `y-indexeddb` (Database: `versicle-yjs`).
+### Step 1: Initialize the Yjs Runtime (Completed)
+*   **Installed:** `yjs`, `y-indexeddb`, `zustand-middleware-yjs`.
+*   **Created:** `src/store/yjs-provider.ts` singleton.
+*   **Verified:** Persistence tested via `YjsTest` component and unit tests.
 
 ### Step 2: Store Refactoring (Split & Bind)
 *   **`useReaderStore`:** Split into `useReaderUIStore` (Transient) and `useReaderSyncStore` (Synced).
