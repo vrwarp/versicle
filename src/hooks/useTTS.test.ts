@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useTTS } from './useTTS';
 import { useTTSStore } from '../store/useTTSStore';
-import { useReaderStore } from '../store/useReaderStore';
+import { useReaderUIStore } from '../store/useReaderUIStore';
 
 // Hoist mocks
 const { mockPlayerInstance, mockLoadVoices } = vi.hoisted(() => {
@@ -46,7 +46,7 @@ vi.mock('../store/useTTSStore', () => {
     return { useTTSStore };
 });
 
-vi.mock('../store/useReaderStore', () => {
+vi.mock('../store/useReaderUIStore', () => { // Fixed path: was useReaderStore
     const mockGetState = vi.fn(() => ({
         currentBookId: 'book1',
         currentSectionId: 'section1',
@@ -54,14 +54,14 @@ vi.mock('../store/useReaderStore', () => {
     }));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const useReaderStore = vi.fn((selector?: any) => {
+    const useReaderUIStore = vi.fn((selector?: any) => {
         const state = mockGetState();
         return selector ? selector(state) : state;
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useReaderStore as any).getState = mockGetState;
+    (useReaderUIStore as any).getState = mockGetState;
 
-    return { useReaderStore };
+    return { useReaderUIStore };
 });
 
 describe('useTTS', () => {
@@ -77,12 +77,23 @@ describe('useTTS', () => {
             status: 'stopped'
         });
 
-        // Setup Reader Store mock
+        // Setup Reader UI Store mock
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (useReaderStore.getState as any).mockReturnValue({
-             currentBookId: 'book1',
-             currentSectionId: 'section1',
-             currentSectionTitle: 'Chapter 1'
+        (useReaderUIStore.getState as any).mockReturnValue({
+            currentBookId: 'book1',
+            currentSectionId: 'section1',
+            currentSectionTitle: 'Chapter 1'
+        });
+
+        // Also update hook implementation default return
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (useReaderUIStore as any).mockImplementation((selector: any) => {
+            const bg = {
+                currentBookId: 'book1',
+                currentSectionId: 'section1',
+                currentSectionTitle: 'Chapter 1'
+            };
+            return selector ? selector(bg) : bg;
         });
     });
 

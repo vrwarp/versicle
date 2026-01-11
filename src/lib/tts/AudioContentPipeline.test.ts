@@ -45,9 +45,9 @@ vi.mock('../genai/GenAIService', () => ({
 
 // Mock TextSegmenter explicitly
 vi.mock('./TextSegmenter', () => ({
-  TextSegmenter: {
-    refineSegments: vi.fn((segments) => segments)
-  }
+    TextSegmenter: {
+        refineSegments: vi.fn((segments) => segments)
+    }
 }));
 
 describe('AudioContentPipeline', () => {
@@ -80,22 +80,22 @@ describe('AudioContentPipeline', () => {
         });
 
         it('should handle empty chapters gracefully', async () => {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             const mockSection = { sectionId: 's1', characterCount: 0 } as any;
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (dbService.getTTSContent as any).mockResolvedValue({ sentences: [] });
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (dbService.getBookMetadata as any).mockResolvedValue({});
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mockSection = { sectionId: 's1', characterCount: 0 } as any;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (dbService.getTTSContent as any).mockResolvedValue({ sentences: [] });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (dbService.getBookMetadata as any).mockResolvedValue({});
 
-             const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
+            const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
 
-             // If the chapter is empty, the pipeline should return a single queue item
-             // which is a "Preroll" (informational message) stating the chapter is empty.
-             expect(result).toHaveLength(1);
-             expect(result![0].isPreroll).toBe(true);
+            // If the chapter is empty, the pipeline should return a single queue item
+            // which is a "Preroll" (informational message) stating the chapter is empty.
+            expect(result).toHaveLength(1);
+            expect(result![0].isPreroll).toBe(true);
         });
 
-         it('should generate preroll when enabled', async () => {
+        it('should generate preroll when enabled', async () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockSection = { sectionId: 's1', characterCount: 500 } as any;
             const mockSentences = [{ text: 'Hello', cfi: 'cfi1' }];
@@ -114,7 +114,7 @@ describe('AudioContentPipeline', () => {
     });
 
     describe('Content Filtering', () => {
-         it('should trigger onMaskFound with skipped indices when filtering is enabled', async () => {
+        it('should trigger onMaskFound with skipped indices when filtering is enabled', async () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockSection = { sectionId: 's1', characterCount: 500 } as any;
 
@@ -122,17 +122,17 @@ describe('AudioContentPipeline', () => {
             // s1 is the content we want to keep.
             // s2 is the content we want to filter out (e.g. a table).
             // We use distinct paths (/2/2/2 vs /2/2/4) to ensure they don't get merged into a single group.
-             const s1 = { text: 'Keep me', cfi: 'epubcfi(/2/2/2:0)', sourceIndices: [0] };
-             const s2 = { text: 'Skip me', cfi: 'epubcfi(/2/2/4:0)', sourceIndices: [1] };
+            const s1 = { text: 'Keep me', cfi: 'epubcfi(/2/2/2:0)', sourceIndices: [0] };
+            const s2 = { text: 'Skip me', cfi: 'epubcfi(/2/2/4:0)', sourceIndices: [1] };
 
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (dbService.getTTSContent as any).mockResolvedValue({ sentences: [s1, s2] });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (dbService.getTTSContent as any).mockResolvedValue({ sentences: [s1, s2] });
 
-             // Mock content analysis results to classify s2 as a 'table'.
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (dbService.getContentAnalysis as any).mockResolvedValue({
+            // Mock content analysis results to classify s2 as a 'table'.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (dbService.getContentAnalysis as any).mockResolvedValue({
                 contentTypes: [
-                    { rootCfi: 'epubcfi(/2/2/4:0,,)', type: 'table' } // Matching s2 group
+                    { rootCfi: 'epubcfi(/2/2/4)', type: 'table' } // Matching s2 group via parent
                 ]
             });
 

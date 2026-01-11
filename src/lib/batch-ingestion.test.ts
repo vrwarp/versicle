@@ -2,6 +2,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { extractEpubsFromZip, processBatchImport } from './batch-ingestion';
 import { processEpub } from './ingestion';
+import { getDB } from '../db/db';
+
+// Mock DB (Safety net)
+vi.mock('../db/db', () => ({
+    getDB: vi.fn(),
+}));
 
 // Mock dependencies
 vi.mock('./ingestion', () => ({
@@ -35,8 +41,12 @@ global.FileReader = class {
 describe('batch-ingestion', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.spyOn(console, 'error').mockImplementation(() => {});
-        vi.spyOn(console, 'log').mockImplementation(() => {});
+        vi.spyOn(console, 'error').mockImplementation(() => { });
+        vi.spyOn(console, 'log').mockImplementation(() => { });
+
+        // Mock DB setup
+        const mockDB = { put: vi.fn(), get: vi.fn(), getAll: vi.fn() };
+        (getDB as any).mockResolvedValue(mockDB);
     });
 
     describe('extractEpubsFromZip', () => {
@@ -80,35 +90,30 @@ describe('batch-ingestion', () => {
         });
 
         it('should report progress when onProgress is provided', async () => {
-             const zipFile = new File(['dummy zip content'], 'books.zip', { type: 'application/zip' });
-             const onProgress = vi.fn();
+            const zipFile = new File(['dummy zip content'], 'books.zip', { type: 'application/zip' });
+            const onProgress = vi.fn();
 
-             // Override mock FileReader to support progress testing if needed,
-             // but here we just check if it runs without crashing given our global mock.
-             // Our simple global mock calls onload immediately, skipping progress events unless we enhance it.
-             // Enhancing global mock for this test:
+            const originalFileReader = global.FileReader;
+            global.FileReader = class {
+                readAsArrayBuffer() {
+                    // @ts-expect-error Mocking FileReader internals
+                    if (this.onprogress) this.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
+                    // @ts-expect-error Mocking FileReader internals
+                    this.onload({ target: { result: new ArrayBuffer(8) } });
+                }
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any;
 
-             const originalFileReader = global.FileReader;
-             global.FileReader = class {
-                 readAsArrayBuffer() {
-                     // @ts-expect-error Mocking FileReader internals
-                     if (this.onprogress) this.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
-                     // @ts-expect-error Mocking FileReader internals
-                     this.onload({ target: { result: new ArrayBuffer(8) } });
-                 }
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             } as any;
+            mockLoadAsync.mockResolvedValue({
+                files: {},
+                forEach: () => { }
+            });
 
-             mockLoadAsync.mockResolvedValue({
-                 files: {},
-                 forEach: () => {}
-             });
+            await extractEpubsFromZip(zipFile, onProgress);
 
-             await extractEpubsFromZip(zipFile, onProgress);
+            expect(onProgress).toHaveBeenCalled();
 
-             expect(onProgress).toHaveBeenCalled();
-
-             global.FileReader = originalFileReader;
+            global.FileReader = originalFileReader;
         });
     });
 
@@ -117,7 +122,7 @@ describe('batch-ingestion', () => {
             const file1 = new File(['content'], 'book1.epub');
             const file2 = new File(['content'], 'book2.epub');
 
-            await processBatchImport([file1, file2]);
+            await processBatchImport([file1, file2], {});
 
             expect(processEpub).toHaveBeenCalledTimes(2);
             expect(processEpub).toHaveBeenCalledWith(file1, undefined);
@@ -125,50 +130,48 @@ describe('batch-ingestion', () => {
         });
 
         it('should unzip and process files from zips', async () => {
-             const zipFile = new File(['zip content'], 'archive.zip');
-             const epubFile = new File(['epub content'], 'standalone.epub');
+            const zipFile = new File(['zip content'], 'archive.zip');
+            const epubFile = new File(['epub content'], 'standalone.epub');
 
-             const files = {
-                 'inside.epub': { dir: false, name: 'inside.epub', async: mockAsync }
-             };
+            const files = {
+                'inside.epub': { dir: false, name: 'inside.epub', async: mockAsync }
+            };
 
-             const mockZipObject = {
-                 files,
-                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                 forEach: (cb: any) => {
-                     Object.keys(files).forEach((key) => {
-                         // @ts-expect-error Mocking JSZip internals
-                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                         cb(key, (files as any)[key]);
-                     });
-                 }
-             };
+            const mockZipObject = {
+                files,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                forEach: (cb: any) => {
+                    Object.keys(files).forEach((key) => {
+                        // @ts-expect-error Mocking JSZip internals
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        cb(key, (files as any)[key]);
+                    });
+                }
+            };
 
-             mockLoadAsync.mockResolvedValue(mockZipObject);
-             mockAsync.mockResolvedValue(new Blob(['inside content']));
+            mockLoadAsync.mockResolvedValue(mockZipObject);
+            mockAsync.mockResolvedValue(new Blob(['inside content']));
 
-             await processBatchImport([zipFile, epubFile]);
+            await processBatchImport([zipFile, epubFile], {});
 
-             expect(processEpub).toHaveBeenCalledTimes(2);
-             // One call for extracted file (we can't easily check equality of the file object created inside, but we know it's there)
-             // One call for standalone.epub
-             expect(processEpub).toHaveBeenCalledWith(epubFile, undefined);
+            expect(processEpub).toHaveBeenCalledTimes(2);
+            expect(processEpub).toHaveBeenCalledWith(epubFile, undefined);
         });
 
         it('should continue if one file fails', async () => {
-             const file1 = new File(['content'], 'good.epub');
-             const file2 = new File(['content'], 'bad.epub');
+            const file1 = new File(['content'], 'good.epub');
+            const file2 = new File(['content'], 'bad.epub');
 
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (processEpub as any).mockImplementation((file: File) => {
-                 if (file.name === 'bad.epub') throw new Error('Failed');
-                 return Promise.resolve('book-id');
-             });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (processEpub as any).mockImplementation((file: File) => {
+                if (file.name === 'bad.epub') throw new Error('Failed');
+                return Promise.resolve('book-id');
+            });
 
-             const successCount = await processBatchImport([file1, file2]);
+            const successCount = await processBatchImport([file1, file2], {});
 
-             expect(processEpub).toHaveBeenCalledTimes(2);
-             expect(successCount).toBe(1);
+            expect(processEpub).toHaveBeenCalledTimes(2);
+            expect(successCount).toBe(1);
         });
 
         it('should report import progress', async () => {
@@ -176,7 +179,7 @@ describe('batch-ingestion', () => {
             const file2 = new File(['content'], 'book2.epub');
             const onProgress = vi.fn();
 
-            await processBatchImport([file1, file2], undefined, onProgress);
+            await processBatchImport([file1, file2], {}, onProgress);
 
             expect(onProgress).toHaveBeenCalledTimes(2);
             expect(onProgress).toHaveBeenCalledWith(0, 2, 'book1.epub');
@@ -187,7 +190,7 @@ describe('batch-ingestion', () => {
             const file1 = new File(['content'], 'book1.epub');
             const onUploadProgress = vi.fn();
 
-            await processBatchImport([file1], undefined, undefined, onUploadProgress);
+            await processBatchImport([file1], {}, undefined, onUploadProgress);
 
             expect(onUploadProgress).toHaveBeenCalled();
             expect(onUploadProgress).toHaveBeenLastCalledWith(100, expect.stringContaining('All files processed'));

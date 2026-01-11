@@ -3,6 +3,7 @@ import { render, act } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { useInventoryStore } from '../../store/useInventoryStore';
 import { MemoryRouter } from 'react-router-dom';
 
 // NOTE: Even though LibraryView doesn't currently use react-window,
@@ -33,10 +34,14 @@ vi.mock('./EmptyLibrary', () => ({ EmptyLibrary: () => <div>EmptyLibrary</div> }
 describe('LibraryView Performance', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        useInventoryStore.setState({
+            books: {
+                '1': { bookId: '1', customTitle: 'B1' } as any
+            }
+        });
         useLibraryStore.setState({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            books: [{ id: '1', title: 'B1' } as any],
-            isLoading: false,
+            // books: [], // Removed
+            // isLoading: false, // Removed
             error: null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             fetchBooks: vi.fn().mockResolvedValue(undefined) as any,

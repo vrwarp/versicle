@@ -3,41 +3,30 @@ import { useLibraryStore } from './useLibraryStore';
 import { getDB } from '../db/db';
 import type { StaticBookManifest, UserInventoryItem, UserProgress, UserOverrides } from '../types/db';
 
-// Mock ingestion
-vi.mock('../lib/ingestion', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  processEpub: vi.fn(async (file: File) => {
-    // Mock implementation of processEpub that just puts a dummy book in DB (v18 style)
-    const db = await getDB();
-    const bookId = 'test-id';
-
-    await db.put('static_manifests', {
-        bookId, title: 'Test Book', author: 'Test Author', schemaVersion: 1, fileHash: 'hash', fileSize: 0, totalChars: 0
-    } as StaticBookManifest);
-
-    await db.put('user_inventory', {
-        bookId, addedAt: 1234567890, status: 'unread', tags: [], lastInteraction: 1234567890
-    } as UserInventoryItem);
-
-    await db.put('user_progress', {
-        bookId, percentage: 0, lastRead: 0, completedRanges: []
-    } as UserProgress);
-
-    await db.put('static_resources', {
-        bookId, epubBlob: new ArrayBuffer(8)
-    });
-
-    return bookId;
-  }),
+// Mock DBService
+vi.mock('../db/DBService', () => ({
+  dbService: {
+    addBook: vi.fn(async (file: File) => {
+      // Return mock metadata
+      return {
+        id: 'test-id',
+        title: 'Test Book',
+        author: 'Test Author',
+        filename: file.name,
+        addedAt: Date.now(),
+      };
+    }),
+    deleteBook: vi.fn(),
+    offloadBook: vi.fn(),
+    restoreBook: vi.fn(),
+  }
 }));
 
 describe('useLibraryStore', () => {
-  // Create a mock file
   const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
 
-  // Polyfill arrayBuffer if missing (JSDOM/Vitest issue sometimes)
   if (!mockFile.arrayBuffer) {
-      mockFile.arrayBuffer = async () => new ArrayBuffer(8);
+    mockFile.arrayBuffer = async () => new ArrayBuffer(8);
   }
 
   beforeEach(async () => {
@@ -45,23 +34,13 @@ describe('useLibraryStore', () => {
     useLibraryStore.setState({
       books: [],
       isLoading: false,
-      sortOrder: 'last_read', // Default
+      sortOrder: 'last_read',
+      error: null
     });
 
-    // Clear IndexedDB (v18 stores)
-    const db = await getDB();
-    const tx = db.transaction([
-        'static_manifests', 'static_resources', 'user_inventory',
-        'user_progress', 'user_annotations', 'user_overrides'
-    ], 'readwrite');
-
-    await tx.objectStore('static_manifests').clear();
-    await tx.objectStore('static_resources').clear();
-    await tx.objectStore('user_inventory').clear();
-    await tx.objectStore('user_progress').clear();
-    await tx.objectStore('user_annotations').clear();
-    await tx.objectStore('user_overrides').clear();
-    await tx.done;
+    // Clear other stores
+    const { useInventoryStore } = await import('./useInventoryStore');
+    useInventoryStore.setState({ books: {} });
   });
 
   afterEach(() => {
@@ -119,16 +98,16 @@ describe('useLibraryStore', () => {
     const db = await getDB();
     const bookId = 'test-id';
     await db.put('static_manifests', {
-        bookId, title: 'Test Book', author: 'Test Author', schemaVersion: 1, fileHash: 'hash', fileSize: 0, totalChars: 0
+      bookId, title: 'Test Book', author: 'Test Author', schemaVersion: 1, fileHash: 'hash', fileSize: 0, totalChars: 0
     } as StaticBookManifest);
     await db.put('user_inventory', {
-        bookId, addedAt: 1234567890, status: 'unread', tags: [], lastInteraction: 1234567890
+      bookId, addedAt: 1234567890, status: 'unread', tags: [], lastInteraction: 1234567890
     } as UserInventoryItem);
     await db.put('user_progress', {
-        bookId, percentage: 0, lastRead: 0, completedRanges: []
+      bookId, percentage: 0, lastRead: 0, completedRanges: []
     } as UserProgress);
     await db.put('static_resources', {
-        bookId, epubBlob: new ArrayBuffer(8)
+      bookId, epubBlob: new ArrayBuffer(8)
     });
 
     // Initial state should be empty
@@ -175,53 +154,53 @@ describe('useLibraryStore', () => {
   });
 
   it('should handle annotations deletion when removing a book', async () => {
-      // Add a book
-      await useLibraryStore.getState().addBook(mockFile);
+    // Add a book
+    await useLibraryStore.getState().addBook(mockFile);
 
-      const db = await getDB();
-      const annotation = {
-          id: 'note-1',
-          bookId: 'test-id',
-          cfiRange: 'epubcfi(...)',
-          text: 'Note text',
-          type: 'note' as const, // Fix literal type
-          color: 'yellow',
-          created: Date.now()
-      };
+    const db = await getDB();
+    const annotation = {
+      id: 'note-1',
+      bookId: 'test-id',
+      cfiRange: 'epubcfi(...)',
+      text: 'Note text',
+      type: 'note' as const, // Fix literal type
+      color: 'yellow',
+      created: Date.now()
+    };
 
-      await db.put('user_annotations', annotation);
+    await db.put('user_annotations', annotation);
 
-      // Verify annotation exists
-      expect(await db.get('user_annotations', 'note-1')).toEqual(annotation);
+    // Verify annotation exists
+    expect(await db.get('user_annotations', 'note-1')).toEqual(annotation);
 
-      // Remove the book
-      await useLibraryStore.getState().removeBook('test-id');
+    // Remove the book
+    await useLibraryStore.getState().removeBook('test-id');
 
-      // Verify annotation is deleted
-      expect(await db.get('user_annotations', 'note-1')).toBeUndefined();
+    // Verify annotation is deleted
+    expect(await db.get('user_annotations', 'note-1')).toBeUndefined();
   });
 
   it('should delete associated lexicon rules when removing a book', async () => {
-      // Add a book
-      await useLibraryStore.getState().addBook(mockFile);
+    // Add a book
+    await useLibraryStore.getState().addBook(mockFile);
 
-      const db = await getDB();
-      const overrides: UserOverrides = {
-          bookId: 'test-id',
-          lexicon: [
-              { id: 'rule-1', original: 'hello', replacement: 'hi', created: Date.now() }
-          ]
-      };
+    const db = await getDB();
+    const overrides: UserOverrides = {
+      bookId: 'test-id',
+      lexicon: [
+        { id: 'rule-1', original: 'hello', replacement: 'hi', created: Date.now() }
+      ]
+    };
 
-      await db.put('user_overrides', overrides);
+    await db.put('user_overrides', overrides);
 
-      // Verify rules exist
-      expect(await db.get('user_overrides', 'test-id')).toBeDefined();
+    // Verify rules exist
+    expect(await db.get('user_overrides', 'test-id')).toBeDefined();
 
-      // Remove the book
-      await useLibraryStore.getState().removeBook('test-id');
+    // Remove the book
+    await useLibraryStore.getState().removeBook('test-id');
 
-      // Verify rules are deleted
-      expect(await db.get('user_overrides', 'test-id')).toBeUndefined();
+    // Verify rules are deleted
+    expect(await db.get('user_overrides', 'test-id')).toBeUndefined();
   });
 });

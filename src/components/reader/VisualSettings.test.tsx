@@ -2,11 +2,16 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VisualSettings } from './VisualSettings';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useReaderSyncStore } from '../../store/useReaderSyncStore';
 
-// Mock zustand store
-vi.mock('../../store/useReaderStore', () => ({
-  useReaderStore: vi.fn(),
+// Mock stores
+vi.mock('../../store/useReaderUIStore', () => ({
+  useReaderUIStore: vi.fn(),
+}));
+
+vi.mock('../../store/useReaderSyncStore', () => ({
+  useReaderSyncStore: vi.fn(),
 }));
 
 // Mock zustand shallow
@@ -15,7 +20,7 @@ vi.mock('zustand/react/shallow', () => ({
   useShallow: (selector: any) => selector,
 }));
 
-// Mock Popover components since they depend on Radix Context
+// Mock Popover components
 vi.mock('../ui/Popover', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   PopoverContent: ({ children, className }: any) => <div className={className} data-testid="popover-content">{children}</div>,
@@ -23,17 +28,17 @@ vi.mock('../ui/Popover', () => ({
   PopoverClose: ({ children }: any) => <div data-testid="close-button">{children}</div>,
 }));
 
-// Mock Tabs since they depend on Radix Context
+// Mock Tabs
 vi.mock('../ui/Tabs', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Tabs: ({ value, onValueChange, children }: any) => (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     <div data-testid="tabs" data-value={value} onClick={(e: any) => {
-        if (e.target.dataset.value && e.target.dataset.value !== value) {
-            onValueChange(e.target.dataset.value);
-        }
+      if (e.target.dataset.value && e.target.dataset.value !== value) {
+        onValueChange(e.target.dataset.value);
+      }
     }}>
-        {children}
+      {children}
     </div>
   ),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,7 +46,7 @@ vi.mock('../ui/Tabs', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   TabsTrigger: ({ value, children }: any) => (
     <button data-value={value} type="button">
-        {children}
+      {children}
     </button>
   ),
 }));
@@ -56,20 +61,27 @@ describe('VisualSettings', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Mock ReaderUIStore
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useReaderStore as any).mockImplementation((selector: any) => selector({
+    (useReaderUIStore as any).mockImplementation((selector: any) => selector({
+      viewMode: 'paginated',
+      setViewMode: mockSetViewMode,
+      shouldForceFont: false,
+      setShouldForceFont: mockSetShouldForceFont,
+    }));
+
+    // Mock ReaderSyncStore
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useReaderSyncStore as any).mockImplementation((selector: any) => selector({
       currentTheme: 'light',
       setTheme: mockSetTheme,
       fontSize: 100,
       setFontSize: mockSetFontSize,
       fontFamily: 'serif',
       setFontFamily: mockSetFontFamily,
-      viewMode: 'paginated',
-      setViewMode: mockSetViewMode,
       lineHeight: 1.5,
       setLineHeight: mockSetLineHeight,
-      shouldForceFont: false,
-      setShouldForceFont: mockSetShouldForceFont,
     }));
   });
 

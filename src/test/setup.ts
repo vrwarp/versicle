@@ -4,6 +4,28 @@ import 'fake-indexeddb/auto';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
+// Mock localStorage for Zustand persist middleware
+const localStorageMock = (function () {
+  let store: Record<string, string> = {};
+  return {
+    getItem: vi.fn((key: string) => store[key] || null),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value.toString();
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: vi.fn(() => {
+      store = {};
+    }),
+    key: vi.fn((index: number) => Object.keys(store)[index] || null),
+    get length() {
+      return Object.keys(store).length;
+    }
+  };
+})();
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+
 // Mock window.speechSynthesis
 Object.defineProperty(window, 'speechSynthesis', {
   value: {
@@ -75,7 +97,7 @@ if (!Element.prototype.releasePointerCapture) {
 // Polyfill Blob.prototype.text for JSDOM 20+ which might still lack it or if env issues
 if (!Blob.prototype.text) {
   Object.defineProperty(Blob.prototype, 'text', {
-    value: function() {
+    value: function () {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -91,7 +113,7 @@ if (!Blob.prototype.text) {
 
 // Polyfill Blob.prototype.arrayBuffer
 if (!Blob.prototype.arrayBuffer) {
-  Blob.prototype.arrayBuffer = function() {
+  Blob.prototype.arrayBuffer = function () {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as ArrayBuffer);
@@ -117,19 +139,19 @@ if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
 
 // Also check for arrayBuffer on File prototype in JSDOM
 if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
-    Object.defineProperty(File.prototype, 'arrayBuffer', {
-        value: function() {
-             return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as ArrayBuffer);
-                reader.onerror = reject;
-                reader.readAsArrayBuffer(this);
-             });
-        },
-        writable: true,
-        configurable: true,
-        enumerable: false
-    });
+  Object.defineProperty(File.prototype, 'arrayBuffer', {
+    value: function () {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as ArrayBuffer);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(this);
+      });
+    },
+    writable: true,
+    configurable: true,
+    enumerable: false
+  });
 }
 
 
@@ -149,4 +171,5 @@ if (typeof HTMLElement !== 'undefined' && !Object.getOwnPropertyDescriptor(HTMLE
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  localStorage.clear();
 });

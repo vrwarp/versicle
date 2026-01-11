@@ -660,6 +660,11 @@ class DBService {
         'cache_tts_preparation', 'cache_table_images'
       ], 'readwrite');
 
+      if (this.saveTTSStateTimeout) {
+        clearTimeout(this.saveTTSStateTimeout);
+        this.saveTTSStateTimeout = null;
+      }
+
       await Promise.all([
         tx.objectStore('cache_audio_blobs').clear(),
         tx.objectStore('cache_render_metrics').clear(),

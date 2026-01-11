@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { useInventoryStore } from '../../store/useInventoryStore';
 import { MemoryRouter } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
 
@@ -28,13 +29,15 @@ describe('LibraryView Search', () => {
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
 
+        useInventoryStore.setState({
+            books: {
+                '1': { bookId: '1', customTitle: 'The Great Gatsby', customAuthor: 'F. Scott Fitzgerald', addedAt: 100 } as any,
+                '2': { bookId: '2', customTitle: '1984', customAuthor: 'George Orwell', addedAt: 200 } as any,
+                '3': { bookId: '3', customTitle: 'Brave New World', customAuthor: 'Aldous Huxley', addedAt: 150 } as any
+            }
+        });
+
         useLibraryStore.setState({
-            books: [
-                { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', addedAt: 100 },
-                { id: '2', title: '1984', author: 'George Orwell', addedAt: 200 },
-                { id: '3', title: 'Brave New World', author: 'Aldous Huxley', addedAt: 150 }
-            ] as unknown as BookMetadata[],
-            isLoading: false,
             error: null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             fetchBooks: vi.fn().mockResolvedValue(undefined) as any,
@@ -114,11 +117,11 @@ describe('LibraryView Search', () => {
 
         // Add a new book that matches
         act(() => {
-            useLibraryStore.setState({
-                books: [
-                    ...useLibraryStore.getState().books,
-                    { id: '4', title: 'New Moon', author: 'Stephenie Meyer', addedAt: 300 } as unknown as BookMetadata
-                ]
+            useInventoryStore.setState({
+                books: {
+                    ...useInventoryStore.getState().books,
+                    '4': { bookId: '4', customTitle: 'New Moon', customAuthor: 'Stephenie Meyer', addedAt: 300 } as any
+                }
             });
         });
 
