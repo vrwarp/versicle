@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { useProgressStore } from '../../store/useProgressStore';
 import { useShallow } from 'zustand/react/shallow';
 import { CompassPill } from '../ui/CompassPill';
 import { SatelliteFAB } from './SatelliteFAB';
@@ -13,8 +14,12 @@ export const AudioReaderHUD: React.FC = () => {
         isPlaying: state.isPlaying,
         pause: state.pause
     })));
-    const immersiveMode = useReaderStore(state => state.immersiveMode);
-    const books = useLibraryStore(state => state.books);
+    const immersiveMode = useReaderUIStore(state => state.immersiveMode);
+
+    // Subscribe to both Inventory and Progress
+    const booksMap = useLibraryStore(state => state.books);
+    const progressMap = useProgressStore();
+
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -28,19 +33,32 @@ export const AudioReaderHUD: React.FC = () => {
         }
     }, [isLibrary, isPlaying, pause]);
 
+    // Derived last read book
     const lastReadBook = useMemo(() => {
-        if (!books || books.length === 0) return null;
-        const startedBooks = books.filter(b => b.lastRead && b.progress && b.progress > 0);
-        if (startedBooks.length === 0) return null;
-        return startedBooks.sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
-    }, [books]);
+        if (!booksMap || !progressMap) return null;
+
+        // Find progress entry with max timestamp
+        const progressEntries = Object.values(progressMap);
+        if (progressEntries.length === 0) return null;
+
+        const lastProgress = progressEntries.sort((a, b) => b.lastRead - a.lastRead)[0];
+        if (!lastProgress) return null;
+
+        // Match with Inventory
+        const book = booksMap[lastProgress.bookId];
+        if (!book) return null; // Orphaned progress
+
+        return {
+            id: book.bookId,
+            title: book.customTitle || "Unknown Book",
+            progress: lastProgress.percentage
+        };
+    }, [booksMap, progressMap]);
 
     // Show last read book if in library and not playing audio
     const showLastRead = isLibrary && !isPlaying && lastReadBook;
 
     // Don't render if nothing in queue AND no last read book in library
-    // If showLastRead is true, we render.
-    // If showLastRead is false, we only render if queue has items.
     if ((!queue || queue.length === 0) && !showLastRead) {
         return null;
     }

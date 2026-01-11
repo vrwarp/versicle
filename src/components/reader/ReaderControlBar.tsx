@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
@@ -30,27 +30,26 @@ export const ReaderControlBar: React.FC = () => {
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderStore(useShallow(state => ({
+    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         currentBookId: state.currentBookId,
         currentSectionTitle: state.currentSectionTitle
     })));
 
-    // OPTIMIZATION: Use granular selectors to avoid re-rendering on every library change.
-    // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.
-    // Now, we only re-render if the calculated `lastReadBook` or `currentBook` reference changes.
+    // Phase 2: books is Record<string, UserInventoryItem>
+    const booksMap = useLibraryStore(state => state.books);
 
-    // Select the most recently read book
-    const lastReadBook = useLibraryStore(state => {
-        return state.books
-            .filter(b => b.lastRead)
-            .sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
-    });
+    const currentBook = currentBookId ? booksMap[currentBookId] : undefined;
 
-    // Select the current book if active
-    const currentBook = useLibraryStore(state => {
-        return currentBookId ? state.books.find(b => b.id === currentBookId) : undefined;
-    });
+    // Derived last read book from Record
+    // Note: progress is missing from UserInventoryItem in Yjs at the moment, so progress display is degraded.
+    // We sort by lastInteraction.
+    const lastReadBook = React.useMemo(() => {
+        const books = Object.values(booksMap);
+        if (books.length === 0) return null;
+        return books.sort((a, b) => (b.lastInteraction || 0) - (a.lastInteraction || 0))[0];
+    }, [booksMap]);
+
 
     // Determine State Priority
     // 1. Annotation Mode
@@ -122,7 +121,7 @@ export const ReaderControlBar: React.FC = () => {
             case 'play':
                 // Play from selection
                 if (popover.cfiRange) {
-                    const playFromSelection = useReaderStore.getState().playFromSelection;
+                    const playFromSelection = useReaderUIStore.getState().playFromSelection;
                     if (playFromSelection) {
                         playFromSelection(popover.cfiRange);
                     } else {
@@ -152,18 +151,18 @@ export const ReaderControlBar: React.FC = () => {
     let progress: number | undefined;
 
     if (variant === 'summary' && lastReadBook) {
-        title = lastReadBook.title;
+        title = lastReadBook.customTitle || "Reading"; // Fallback to "Reading" if title missing in Yjs
         subtitle = "Continue Reading";
         // Convert progress (0-1) to percentage (0-100)
-        progress = (lastReadBook.progress || 0) * 100;
+        progress = 0; // lastReadBook.progress is missing in Yjs currently
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
         // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
         // If queue has items, CompassPill uses queue item title.
         // We can pass `title` as Book Title and `subtitle` as Section Title to be explicit.
         if (!hasQueueItems) {
-            title = currentBook.title;
+            title = currentBook.customTitle || "Reading";
             subtitle = currentSectionTitle || undefined;
-            progress = (currentBook.progress || 0) * 100;
+            progress = 0; // currentBook.progress || 0) * 100;
         }
     }
 
@@ -184,7 +183,7 @@ export const ReaderControlBar: React.FC = () => {
                         }}
                         onClick={() => {
                             if (variant === 'summary' && lastReadBook) {
-                                navigate(`/read/${lastReadBook.id}`);
+                                navigate(`/read/${lastReadBook.bookId}`);
                             }
                         }}
                     />

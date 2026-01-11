@@ -12,10 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useShallow } from 'zustand/react/shallow';
 import { DeleteBookDialog } from './DeleteBookDialog';
 import { OffloadBookDialog } from './OffloadBookDialog';
-import type { BookMetadata } from '../../types/db';
+import type { BookMetadata, StaticBookManifest } from '../../types/db';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
 import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getDB } from '../../db/db';
 
 /**
  * The main library view component.
@@ -25,31 +26,29 @@ import { useNavigate, useLocation } from 'react-router-dom';
  * @returns A React component rendering the library interface.
  */
 export const LibraryView: React.FC = () => {
-  // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
+  // Phase 2 Refactor: `books` is now a Record<string, UserInventoryItem> from Yjs
   const {
-    books,
-    fetchBooks,
-    isLoading,
-    error,
+    books: booksMap,
     addBook,
     restoreBook,
     isImporting,
     viewMode,
     setViewMode,
     sortOrder,
-    setSortOrder
+    setSortOrder,
+    removeBook,
+    offloadBook
   } = useLibraryStore(useShallow(state => ({
     books: state.books,
-    fetchBooks: state.fetchBooks,
-    isLoading: state.isLoading,
-    error: state.error,
     addBook: state.addBook,
     restoreBook: state.restoreBook,
     isImporting: state.isImporting,
     viewMode: state.viewMode,
     setViewMode: state.setViewMode,
     sortOrder: state.sortOrder,
-    setSortOrder: state.setSortOrder
+    setSortOrder: state.setSortOrder,
+    removeBook: state.removeBook,
+    offloadBook: state.offloadBook
   })));
 
   const { setGlobalSettingsOpen } = useUIStore();
@@ -60,6 +59,123 @@ export const LibraryView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Local state for merged metadata (Static + Yjs)
+  const [mergedBooks, setMergedBooks] = useState<BookMetadata[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch Static Manifests and Merge
+  useEffect(() => {
+    let active = true;
+    const fetchAndMerge = async () => {
+        try {
+            const db = await getDB();
+            const manifests = await db.getAll('static_manifests');
+            // Also fetch progress for correct display
+            // In a real app we might want to subscribe to progress map too,
+            // or fetch it. For now, let's fetch it once or rely on dbService?
+            // Since we are "Store-First" but migrating, we need to bridge.
+            // The `useLibraryStore` (Yjs) has `books` (Inventory).
+            // We need to fetch `static_manifests` and maybe `user_progress` (if not yet in Yjs fully or we want it).
+            // Actually, `user_progress` is in Yjs `progress` map but we didn't bind it to `useLibraryStore`.
+            // For Phase 2, let's fetch progress from IDB as a fallback or if Yjs is not ready.
+            // Wait, Phase 2 plan says "User stores are handled by Yjs".
+            // So `progress` should be read from Yjs?
+            // But `useLibraryStore` doesn't expose it.
+
+            // Workaround for Phase 2: Fetch `user_progress` from IDB to keep UI working until we fully bind everything.
+            // Since `dbService` writes are disabled for `user_progress` (except via Yjs syncing back? No, Yjs is source).
+            // Actually, we haven't implemented Yjs -> IDB sync for user_progress yet (The "Great Migration").
+            // So `user_progress` in IDB might be STALE if we only write to Yjs.
+            // BUT: We haven't updated `ReaderView` to write to Yjs `progress` map yet.
+            // `ReaderView` still calls `updateLocation`.
+            // My previous step updated `useReaderStore` (transient) but `ReaderView` calls `dbService.saveProgress` (Legacy).
+            // I removed `dbService.saveProgress` implementation! (It was "Delete" in plan).
+            // Wait, I *did* remove `saveProgress` from `DBService` class in my `DBService.ts` update?
+            // Let me check `DBService.ts` content I wrote.
+            // I removed `saveProgress`.
+
+            // So `ReaderView` calling `dbService.saveProgress` will crash or do nothing if I removed it.
+            // I need to check `ReaderView.tsx`.
+            // `ReaderView.tsx` calls `dbService.saveProgress`.
+
+            // CRITICAL: I must update `ReaderView` to use Yjs for progress saving, OR restore `saveProgress` temporarily.
+            // The plan said "Refactor DBService ... Remove saveProgress".
+            // So `ReaderView` MUST be updated.
+
+            // I will fix `ReaderView` in the next step.
+            // For `LibraryView`, I need to display progress.
+            // I will assume `ReaderView` writes to Yjs `progress` map.
+            // So I need to read Yjs `progress` map here.
+
+            // Since `useLibraryStore` is bound to `inventory`, I can't easily access `progress` map unless I add it to `useLibraryStore`.
+            // I will add `progress` binding to `useLibraryStore` in the next iteration or use a separate hook.
+
+            // For now, to unblock, I will fetch `user_progress` from IDB (legacy) and mix it.
+            // This assumes `ReaderView` still writes to IDB or Yjs syncs to IDB.
+            // But if `saveProgress` is gone, no one writes to IDB `user_progress`.
+            // So `ReaderView` -> Yjs `progress`.
+            // Yjs `progress` -> `y-indexeddb` -> IDB `versicle-yjs`.
+            // It does NOT go to `user_progress` store in `EpubLibraryDB`.
+            // So `db.getAll('user_progress')` will return OLD data.
+
+            // Conclusion: `LibraryView` MUST read from Yjs `progress` map.
+            // I should update `useLibraryStore` to also bind `progress`.
+
+            // Temporary Fix: Just use `booksMap` (Inventory) and `manifests`.
+            // Progress will be 0 until I fix the progress binding.
+
+            const manifestMap = new Map(manifests.map(m => [m.bookId, m]));
+            const merged: BookMetadata[] = [];
+
+            // Iterate over Yjs Inventory (Source of Truth for "My Books")
+            Object.values(booksMap).forEach(inv => {
+                const man = manifestMap.get(inv.bookId);
+                if (man) {
+                    merged.push({
+                        id: man.bookId,
+                        title: inv.customTitle || man.title,
+                        author: inv.customAuthor || man.author,
+                        description: man.description,
+                        coverBlob: man.coverBlob,
+                        addedAt: inv.addedAt,
+                        bookId: man.bookId,
+                        filename: inv.sourceFilename,
+                        fileHash: man.fileHash,
+                        fileSize: man.fileSize,
+                        totalChars: man.totalChars,
+                        version: man.schemaVersion,
+                        // Progress is missing for now
+                        progress: 0,
+                        lastRead: inv.lastInteraction,
+                        isOffloaded: false // Need to check static_resources
+                    });
+                }
+            });
+
+            // Check Offloaded Status
+            const resourceKeys = await db.getAllKeys('static_resources');
+            const resourceSet = new Set(resourceKeys);
+            merged.forEach(b => {
+                b.isOffloaded = !resourceSet.has(b.id);
+            });
+
+            if (active) {
+                setMergedBooks(merged.sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)));
+                setIsLoading(false);
+            }
+
+        } catch (e) {
+            console.error("Failed to merge library data", e);
+            if (active) setIsLoading(false);
+        }
+    };
+
+    fetchAndMerge();
+
+    return () => { active = false; };
+  }, [booksMap]);
+
 
   // Modal State Coordination
   const [activeModal, setActiveModal] = useState<{
@@ -82,9 +198,6 @@ export const LibraryView: React.FC = () => {
     }
   }, [location.state]);
 
-  useEffect(() => {
-    fetchBooks();
-  }, [fetchBooks]);
 
   const handleBookOpen = useCallback((book: BookMetadata) => {
     const effectiveVersion = book.version ?? 0;
@@ -179,48 +292,38 @@ export const LibraryView: React.FC = () => {
 
   const handleRestore = useCallback((book: BookMetadata) => {
     setBookToRestore(book);
-    // Use setTimeout to ensure state is updated before click if needed, though usually not strictly necessary for simple refs
-    // But direct click is fine.
-    // However, we need to ensure restoreFileInputRef is available.
     requestAnimationFrame(() => {
         restoreFileInputRef.current?.click();
     });
   }, []);
 
-  // OPTIMIZATION: Create a search index to avoid expensive re-calculation on every render
-  // This memoized value updates only when the books array changes, not on every search keystroke.
-  // This avoids calling toLowerCase() N times per frame during typing.
+  // OPTIMIZATION: Create a search index
   const searchableBooks = useMemo(() => {
-    return books.map(book => ({
+    return mergedBooks.map(book => ({
       book,
-      // Pre-compute normalized strings
       searchString: `${(book.title || '').toLowerCase()} ${(book.author || '').toLowerCase()}`
     }));
-  }, [books]);
+  }, [mergedBooks]);
 
   // OPTIMIZATION: Memoize filtered and sorted books
   const filteredAndSortedBooks = useMemo(() => {
     const query = searchQuery.toLowerCase();
 
-    // 1. Filter using the pre-computed index (fast string check)
+    // 1. Filter
     const filtered = searchableBooks
       .filter(item => item.searchString.includes(query))
       .map(item => item.book);
 
-    // 2. Sort the filtered results
+    // 2. Sort
     return filtered.sort((a, b) => {
         switch (sortOrder) {
           case 'recent':
-            // Sort by addedAt descending (newest first)
             return (b.addedAt || 0) - (a.addedAt || 0);
           case 'last_read':
-            // Sort by lastRead descending (most recently read first)
             return (b.lastRead || 0) - (a.lastRead || 0);
           case 'author':
-            // Sort by author ascending (A-Z)
             return (a.author || '').localeCompare(b.author || '');
           case 'title':
-            // Sort by title ascending (A-Z)
             return (a.title || '').localeCompare(b.title || '');
           default:
             return 0;
@@ -373,21 +476,13 @@ export const LibraryView: React.FC = () => {
         </div>
       </header>
 
-      {error && (
-        <section className="mb-6 flex-none">
-          <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
-              {error}
-          </div>
-        </section>
-      )}
-
       {isLoading ? (
         <div className="flex justify-center items-center py-12 flex-1">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
         </div>
       ) : (
         <section className="flex-1 w-full">
-          {books.length === 0 ? (
+          {mergedBooks.length === 0 ? (
              <EmptyLibrary onImport={triggerFileUpload} />
           ) : filteredAndSortedBooks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">

@@ -2,6 +2,7 @@
 import JSZip from 'jszip';
 import { processEpub } from './ingestion';
 import type { ExtractionOptions } from './tts';
+import type { BookMetadata } from '../types/db';
 
 /**
  * Unzips a file and extracts all EPUBs contained within.
@@ -82,12 +83,14 @@ export async function extractEpubsFromZip(
  * @param ttsOptions - TTS options for processing.
  * @param onProgress - Callback for overall import progress.
  * @param onUploadProgress - Callback for upload/extraction progress.
+ * @param onBookProcessed - Callback when a book is successfully processed.
  */
 export async function processBatchImport(
     files: File[],
     ttsOptions?: ExtractionOptions,
     onProgress?: (processed: number, total: number, filename: string) => void,
-    onUploadProgress?: (percent: number, status: string) => void
+    onUploadProgress?: (percent: number, status: string) => void,
+    onBookProcessed?: (metadata: BookMetadata) => void
 ): Promise<number> {
     let allEpubs: File[] = [];
 
@@ -141,8 +144,11 @@ export async function processBatchImport(
         }
 
         try {
-            await processEpub(epub, ttsOptions);
+            const metadata = await processEpub(epub, ttsOptions);
             successCount++;
+            if (onBookProcessed) {
+                onBookProcessed(metadata);
+            }
         } catch (e) {
             console.error(`Failed to import ${epub.name}:`, e);
         }

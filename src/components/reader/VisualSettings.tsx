@@ -1,4 +1,5 @@
-import { useReaderStore } from "../../store/useReaderStore"
+import { useReaderSyncStore } from "../../store/useReaderSyncStore"
+import { useReaderUIStore } from "../../store/useReaderUIStore"
 import { useShallow } from 'zustand/react/shallow';
 import { PopoverContent, PopoverClose } from "../ui/Popover"
 import { Button } from "../ui/Button"
@@ -21,20 +22,24 @@ export const VisualSettings = () => {
     currentTheme, setTheme,
     fontSize, setFontSize,
     fontFamily, setFontFamily,
-    viewMode, setViewMode,
-    lineHeight, setLineHeight,
-    shouldForceFont, setShouldForceFont
-  } = useReaderStore(useShallow(state => ({
+    lineHeight, setLineHeight
+  } = useReaderSyncStore(useShallow(state => ({
     currentTheme: state.currentTheme,
     setTheme: state.setTheme,
     fontSize: state.fontSize,
     setFontSize: state.setFontSize,
     fontFamily: state.fontFamily,
     setFontFamily: state.setFontFamily,
-    viewMode: state.viewMode,
-    setViewMode: state.setViewMode,
     lineHeight: state.lineHeight,
     setLineHeight: state.setLineHeight,
+  })));
+
+  const {
+    viewMode, setViewMode,
+    shouldForceFont, setShouldForceFont
+  } = useReaderUIStore(useShallow(state => ({
+    viewMode: state.viewMode,
+    setViewMode: state.setViewMode,
     shouldForceFont: state.shouldForceFont,
     setShouldForceFont: state.setShouldForceFont
   })));

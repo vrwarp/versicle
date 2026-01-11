@@ -8,7 +8,7 @@ import type { Rendition } from 'epubjs';
 import { useToastStore } from '../../store/useToastStore';
 import { dbService } from '../../db/DBService';
 import type { TableImage } from '../../types/db';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { reprocessBook } from '../../lib/ingestion';
 
 interface ContentAnalysisLegendProps {
@@ -37,7 +37,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
   // State for rendering
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
 
-  const currentBookId = useReaderStore(state => state.currentBookId);
+  const currentBookId = useReaderUIStore(state => state.currentBookId);
 
   // Helper to clear URLs
   const clearUrls = () => {

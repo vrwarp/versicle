@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { getDB } from '../db/db';
-import type { Annotation } from '../types/db';
+import type { UserAnnotation } from '../types/db';
+import { useAnnotationsSyncStore } from './useAnnotationsSyncStore';
 
 interface PopoverState {
   visible: boolean;
@@ -12,20 +12,20 @@ interface PopoverState {
 }
 
 interface AnnotationState {
-  annotations: Annotation[];
+  annotations: Record<string, UserAnnotation>;
   popover: PopoverState;
 
-  loadAnnotations: (bookId: string) => Promise<void>;
-  addAnnotation: (annotation: Omit<Annotation, 'id' | 'created'>) => Promise<void>;
-  deleteAnnotation: (id: string) => Promise<void>;
-  updateAnnotation: (id: string, changes: Partial<Annotation>) => Promise<void>;
+  // Actions
+  addAnnotation: (annotation: Omit<UserAnnotation, 'id' | 'created'>) => void;
+  deleteAnnotation: (id: string) => void;
+  updateAnnotation: (id: string, changes: Partial<UserAnnotation>) => void;
 
   showPopover: (x: number, y: number, cfiRange: string, text: string) => void;
   hidePopover: () => void;
 }
 
 export const useAnnotationStore = create<AnnotationState>((set) => ({
-  annotations: [],
+  annotations: {}, // Initial state
   popover: {
     visible: false,
     x: 0,
@@ -34,63 +34,24 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     text: '',
   },
 
-  loadAnnotations: async (bookId: string) => {
-    try {
-      const db = await getDB();
-      // Updated to use 'user_annotations' store
-      const annotations = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
-      set({ annotations });
-    } catch (error) {
-      console.error('Failed to load annotations:', error);
-    }
-  },
-
-  addAnnotation: async (partialAnnotation) => {
-    const newAnnotation: Annotation = {
+  addAnnotation: (partialAnnotation) => {
+    const id = uuidv4();
+    const newAnnotation: UserAnnotation = {
       ...partialAnnotation,
-      id: uuidv4(),
+      id,
       created: Date.now(),
     };
-
-    try {
-      const db = await getDB();
-      // Updated to use 'user_annotations' store
-      await db.add('user_annotations', newAnnotation);
-      set((state) => ({
-        annotations: [...state.annotations, newAnnotation],
-      }));
-    } catch (error) {
-      console.error('Failed to add annotation:', error);
-    }
+    useAnnotationsSyncStore.setState({ [id]: newAnnotation });
   },
 
-  deleteAnnotation: async (id: string) => {
-    try {
-      const db = await getDB();
-      // Updated to use 'user_annotations' store
-      await db.delete('user_annotations', id);
-      set((state) => ({
-        annotations: state.annotations.filter((a) => a.id !== id),
-      }));
-    } catch (error) {
-      console.error('Failed to delete annotation:', error);
-    }
+  deleteAnnotation: (id) => {
+    useAnnotationsSyncStore.setState({ [id]: undefined as unknown as UserAnnotation });
   },
 
-  updateAnnotation: async (id: string, changes: Partial<Annotation>) => {
-    try {
-      const db = await getDB();
-      // Updated to use 'user_annotations' store
-      const annotation = await db.get('user_annotations', id);
-      if (annotation) {
-        const updated = { ...annotation, ...changes };
-        await db.put('user_annotations', updated);
-        set((state) => ({
-          annotations: state.annotations.map((a) => (a.id === id ? updated : a)),
-        }));
-      }
-    } catch (error) {
-      console.error('Failed to update annotation:', error);
+  updateAnnotation: (id, changes) => {
+    const current = useAnnotationsSyncStore.getState()[id];
+    if (current) {
+        useAnnotationsSyncStore.setState({ [id]: { ...current, ...changes } });
     }
   },
 
@@ -108,10 +69,12 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
   hidePopover: () => {
     set((state) => ({
-      popover: {
-        ...state.popover,
-        visible: false,
-      },
+        popover: { ...state.popover, visible: false }
     }));
   },
 }));
+
+// Wiring: Sync AnnotationsSyncStore -> AnnotationStore
+useAnnotationsSyncStore.subscribe((annotations) => {
+    useAnnotationStore.setState({ annotations });
+});

@@ -115,3 +115,36 @@ async addBook(file: File, ...): Promise<BookMetadata> {
 *   **`ReaderView.tsx`:** Update to read `toc` from `ReaderUIStore` and `theme` from `ReaderSyncStore`.
 *   **`LibraryView.tsx`:** Update to observe `useLibraryStore.books` (Yjs map) instead of array.
 *   **`ReaderControlBar.tsx`:** Update font/theme setters to use `ReaderSyncStore`.
+
+---
+
+## Status Update (Implemented)
+
+### Stores
+*   **`useReaderUIStore`** (Transient) created. Persists to localStorage (settings only).
+*   **`useReaderSyncStore`** (Synced) created. Binds to Yjs `settings` map.
+*   **`useLibraryStore`** (Synced) updated. Binds to Yjs `inventory` map.
+    *   *Note:* Currently returns `Record<string, UserInventoryItem>`. `LibraryView` manually merges with `static_manifests` from IDB to display covers/titles.
+*   **`useAnnotationStore`** (Synced) updated. Binds to Yjs `annotations` map.
+*   **`useReadingListStore`** (Synced) created. Binds to Yjs `reading_list` map.
+*   **`useReaderStore`** (Deprecated) updated to export a facade of UI + Sync stores, logging a warning on use.
+
+### DBService
+*   **`addBook`**: Returns `BookMetadata`, writes only to static stores.
+*   **`deleteBook`**: Only deletes static/cache stores (and `user_ai_inference` for now). User stores (`inventory`, `progress`) are managed by Yjs.
+*   **Removed**: `saveProgress`, `updateBookMetadata`, `addAnnotation`, `deleteAnnotation`.
+*   **`getLibrary`**: Marked deprecated but kept for potential legacy migration needs.
+
+### Components
+*   **`LibraryView`**: Updated to use `useLibraryStore` (Yjs) and fetch `static_manifests` to merge data. Handles missing progress gracefully for now.
+*   **`ReaderView`**: Updated to use `useReaderUIStore` and `useReaderSyncStore`.
+    *   *Warning:* Progress saving logic (Yjs write) is currently disabled/stubbed because `dbService.saveProgress` was removed and Yjs writing logic is not yet centralized in a helper/store action. Resume functionality may be temporarily impaired until Phase 3 or a patch.
+*   **`ReaderControlBar`**: Updated to use new stores.
+*   **`VisualSettings`**: Updated to use `useReaderSyncStore`.
+*   **`LexiconManager`**: Updated to use `useReaderUIStore` for `currentBookId`.
+*   **`ContentAnalysisLegend`**: Updated to use `useReaderUIStore`.
+*   **`AudioReaderHUD`**: Updated (Stubbed logic for `lastReadBook` pending progress sync restoration).
+
+### Next Steps (Phase 3 & Fixes)
+1.  **Fix Progress Sync**: Implement `updateProgress` action in `useLibraryStore` (or `useProgressStore`) that writes to Yjs `progress` map. Update `ReaderView` to call this instead of `dbService.saveProgress`.
+2.  **Great Migration**: Implement the script to move existing IDB `user_*` data to Yjs maps.

@@ -2,7 +2,7 @@ import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry } from '../types/db';
+import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, TableImage, BookMetadata } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
@@ -161,7 +161,7 @@ export async function processEpub(
   file: File,
   ttsOptions?: ExtractionOptions,
   onProgress?: (progress: number, message: string) => void
-): Promise<string> {
+): Promise<BookMetadata> {
   const isValid = await validateZipSignature(file);
   if (!isValid) {
       throw new Error("Invalid file format. File must be a valid EPUB (ZIP archive).");
@@ -255,15 +255,12 @@ export async function processEpub(
   });
 
   // Construct Sanitized Metadata Candidate
-  // We need to pass through sanitization logic (BookMetadata composite validator)
-  // even if we store them split.
   const candidateMetadata = {
-      id: bookId, // for validation check
+      id: bookId,
       title: metadata.title || 'Untitled',
       author: metadata.creator || 'Unknown Author',
       description: metadata.description || '',
       addedAt: Date.now(),
-      // ... other fields not strictly validated for content but for type
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -307,53 +304,16 @@ export async function processEpub(
       }))
   };
 
-  const inventory: UserInventoryItem = {
-      bookId,
-      addedAt: candidateMetadata.addedAt,
-      sourceFilename: file.name,
-      tags: [],
-      status: 'unread',
-      lastInteraction: Date.now()
-  };
-
-  const progress: UserProgress = {
-      bookId,
-      percentage: 0,
-      lastRead: 0,
-      completedRanges: []
-  };
-
-  const overrides: UserOverrides = {
-      bookId,
-      lexicon: []
-  };
-
-  const readingListEntry: ReadingListEntry = {
-      filename: file.name,
-      title: candidateMetadata.title,
-      author: candidateMetadata.author,
-      isbn: undefined,
-      percentage: 0,
-      lastUpdated: Date.now(),
-      status: 'to-read',
-      rating: undefined
-  };
-
   const db = await getDB();
+  // Phase 2: Write ONLY to Static/Cache stores. User stores are now handled by Yjs (via consumers).
   const tx = db.transaction([
       'static_manifests', 'static_resources', 'static_structure',
-      'user_inventory', 'user_progress', 'user_overrides',
       'cache_tts_preparation', 'cache_table_images',
-      'user_reading_list'
   ], 'readwrite');
 
   await tx.objectStore('static_manifests').add(manifest);
   await tx.objectStore('static_resources').add(resource);
   await tx.objectStore('static_structure').add(structure);
-  await tx.objectStore('user_inventory').add(inventory);
-  await tx.objectStore('user_progress').add(progress);
-  await tx.objectStore('user_overrides').add(overrides);
-  await tx.objectStore('user_reading_list').add(readingListEntry);
 
   const ttsStore = tx.objectStore('cache_tts_preparation');
   for (const batch of ttsContentBatches) {
@@ -372,5 +332,25 @@ export async function processEpub(
 
   await tx.done;
 
-  return bookId;
+  // Return BookMetadata for Yjs Store binding
+  return {
+    id: bookId,
+    title: manifest.title,
+    author: manifest.author,
+    description: manifest.description,
+    addedAt: candidateMetadata.addedAt,
+    coverBlob: manifest.coverBlob,
+    bookId: manifest.bookId,
+    filename: file.name,
+    fileHash: manifest.fileHash,
+    fileSize: manifest.fileSize,
+    totalChars: manifest.totalChars,
+    version: manifest.schemaVersion,
+    // Initial State defaults
+    progress: 0,
+    isOffloaded: false,
+    lastRead: undefined,
+    currentCfi: undefined,
+    lastPlayedCfi: undefined
+  };
 }

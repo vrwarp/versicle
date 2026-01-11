@@ -58,8 +58,7 @@
     "vite-plugin-pwa": "^1.2.0",
     "y-indexeddb": "^9.0.12",
     "yjs": "^13.6.29",
-    "zustand": "^5.0.9",
-    "zustand-middleware-yjs": "github:vrwarp/zustand-middleware-yjs"
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",
