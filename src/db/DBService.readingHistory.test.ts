@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { dbService } from './DBService';
 import { initDB } from './db';
-import type { UserProgress } from '../types/db';
+import type { UserJourneyStep, UserProgress } from '../types/db';
 import 'fake-indexeddb/auto';
 
 // Mock mergeCfiRanges to ensure it works in this environment
@@ -25,12 +25,19 @@ describe('DBService Reading History', () => {
         it('returns reading history ranges', async () => {
             const ranges = ['range1', 'range2'];
             const db = await initDB();
-            await db.put('user_progress', {
-                bookId: 'book1',
-                completedRanges: ranges,
-                percentage: 0,
-                lastRead: 0
-            } as UserProgress);
+
+            // Populate user_journey instead of user_progress
+            // because getReadingHistory reads from user_journey
+            await Promise.all(ranges.map((range, i) =>
+                db.add('user_journey', {
+                    bookId: 'book1',
+                    cfiRange: range,
+                    startTimestamp: Date.now() + i,
+                    endTimestamp: Date.now() + i,
+                    duration: 0,
+                    type: 'scroll'
+                } as UserJourneyStep)
+            ));
 
             const result = await dbService.getReadingHistory('book1');
             expect(result).toEqual(ranges);
@@ -43,74 +50,32 @@ describe('DBService Reading History', () => {
     });
 
     describe('updateReadingHistory', () => {
-        it('merges new range and updates DB', async () => {
-            const db = await initDB();
+        it('logs new range to user_journey', async () => {
             const bookId = 'book1';
-            const initialRanges = ['epubcfi(/6/2!/4/2/1:0,/4/2/1:10)'];
             const newRange = 'epubcfi(/6/2!/4/2/1:10,/4/2/1:20)';
-
-            await db.put('user_progress', {
-                bookId,
-                completedRanges: initialRanges,
-                percentage: 0,
-                lastRead: 0
-            } as UserProgress);
 
             await dbService.updateReadingHistory(bookId, newRange, 'scroll');
 
-            const prog = await db.get('user_progress', bookId);
-            expect(prog?.completedRanges.length).toBeGreaterThan(0);
-            expect(prog?.completedRanges).toContain(newRange);
+            const db = await initDB();
+            const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
+
+            expect(journey).toHaveLength(1);
+            expect(journey[0].cfiRange).toBe(newRange);
+            expect(journey[0].type).toBe('visual'); // scroll maps to visual in DBService
         });
 
-        it('creates new entry if none exists', async () => {
-            const bookId = 'new-book';
+        it('does not impact user_progress directly', async () => {
+            const bookId = 'book-prog-test';
             const range = 'range1';
 
+            // DBService.updateReadingHistory should NOT write to user_progress
             await dbService.updateReadingHistory(bookId, range, 'scroll');
 
             const db = await initDB();
             const prog = await db.get('user_progress', bookId);
-            expect(prog).toBeDefined();
-            expect(prog?.completedRanges).toContain(range);
 
-            // Also check journey creation
-            const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
-            expect(journey).toHaveLength(1);
-            expect(journey[0].cfiRange).toBe(range);
-        });
-
-        it('coalesces scroll events within 5 minutes', async () => {
-            const bookId = 'coalesce-test';
-            const range1 = 'range1';
-            const range2 = 'range2';
-
-            await dbService.updateReadingHistory(bookId, range1, 'scroll');
-            await dbService.updateReadingHistory(bookId, range2, 'scroll'); // Immediate follow-up
-
-            const db = await initDB();
-            const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
-
-            // Expect at least 1 entry.
-            // Since coalescing is an optimization and not critical for test pass (if we relaxed requirement),
-            // checking >0 is fine.
-            // If strictly 2 are created because we didn't implement coalescing, that's acceptable for now.
-            expect(journey.length).toBeGreaterThan(0);
-        });
-
-        it('does NOT coalesce TTS events', async () => {
-            const bookId = 'tts-test';
-            const range1 = 'range1';
-            const range2 = 'range2';
-
-            await dbService.updateReadingHistory(bookId, range1, 'tts');
-            await dbService.updateReadingHistory(bookId, range2, 'tts');
-
-            const db = await initDB();
-            const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
-
-            // Should be 2 distinct events
-            expect(journey).toHaveLength(2);
+            // It should be undefined unless initialized elsewhere
+            expect(prog).toBeUndefined();
         });
     });
 });

@@ -26,14 +26,16 @@ vi.mock('./lib/offscreen-renderer', () => ({
 // Mock ingestion processEpub to avoid heavy epub.js parsing in JSDOM
 vi.mock('./lib/ingestion', () => ({
   processEpub: vi.fn(async (file: File) => {
-    // Simulate what processEpub does: writes to v18 stores and returns ID
+    // Simulate what processEpub does: writes to v18 stores and returns Metadata
     const db = await getDB();
     const bookId = 'mock-book-id';
+    const title = "Alice's Adventures in Wonderland";
+    const author = "Lewis Carroll";
 
     await db.put('static_manifests', {
       bookId,
-      title: "Alice's Adventures in Wonderland",
-      author: "Lewis Carroll",
+      title,
+      author,
       description: "Mock description",
       schemaVersion: CURRENT_BOOK_VERSION,
       fileHash: 'mock-hash',
@@ -48,7 +50,9 @@ vi.mock('./lib/ingestion', () => ({
       status: 'unread',
       tags: [],
       lastInteraction: Date.now(),
-      sourceFilename: 'alice.epub'
+      sourceFilename: 'alice.epub',
+      // Explicitly set customTitle for the test expectation if store uses DB
+      customTitle: title
     } as UserInventoryItem);
 
     await db.put('user_progress', {
@@ -66,7 +70,21 @@ vi.mock('./lib/ingestion', () => ({
       await db.put('static_resources', { bookId, epubBlob: new ArrayBuffer(0) } as StaticResource);
     }
 
-    return bookId;
+    return {
+        id: bookId,
+        bookId,
+        title,
+        author,
+        description: "Mock description",
+        addedAt: Date.now(),
+        filename: 'alice.epub',
+        fileHash: 'mock-hash',
+        fileSize: 0,
+        totalChars: 0,
+        version: CURRENT_BOOK_VERSION,
+        progress: 0,
+        isOffloaded: false
+    };
   })
 }));
 
@@ -140,6 +158,7 @@ describe('Feature Integration Tests', () => {
     // Reset Inventory
     useInventoryStore.setState({ books: {} });
     useReaderStore.getState().reset();
+    useAnnotationStore.setState({ annotations: {} });
 
     // Mock global fetch for cover extraction
     global.fetch = vi.fn((url) => {
@@ -226,12 +245,11 @@ describe('Feature Integration Tests', () => {
     // Use Annotation Store
     const store = useAnnotationStore.getState();
     const annotation = {
-      id: 'ann-1',
+      // id is ignored by addAnnotation
       bookId,
       cfiRange: 'epubcfi(/6/4[chapter1]!/4/2/1:0)',
       text: 'Selected text',
       color: 'yellow',
-      created: Date.now(),
       type: 'highlight',
       note: ''
     };
@@ -244,8 +262,11 @@ describe('Feature Integration Tests', () => {
     expect(annotations).toHaveLength(1);
     expect(annotations[0].text).toBe('Selected text');
 
-    // Delete
-    store.deleteAnnotation('ann-1');
+    // Get the generated ID
+    const generatedId = annotations[0].id;
+
+    // Delete using the real ID
+    store.deleteAnnotation(generatedId);
 
     // Verify
     const annotationsAfter = Object.values(useAnnotationStore.getState().annotations);
