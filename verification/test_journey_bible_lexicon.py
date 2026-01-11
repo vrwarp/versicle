@@ -61,5 +61,31 @@ def test_journey_bible_lexicon(page: Page):
     expect(page.get_by_role("button", name="On", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Off", exact=True)).to_be_visible()
 
+    # 7. Test Bible Lexicon OFF logic
+    print("Testing Bible Lexicon OFF replacement...")
+    # Turn OFF
+    page.get_by_role("button", name="Off", exact=True).click()
+
+    # Input test text
+    page.get_by_test_id("lexicon-test-input").fill("Matt. 5:15")
+
+    # Click All Rules
+    page.get_by_test_id("lexicon-test-all-btn").click()
+
+    # Expect NO replacement (Matt. -> Matt.) because Lexicon is OFF
+    # The output text should be "Matt. 5:15"
+    expect(page.locator("text=Processed: Matt. 5:15")).to_be_visible()
+
+    # 8. Test Bible Lexicon ON logic
+    print("Testing Bible Lexicon ON replacement...")
+    # Turn ON
+    page.get_by_role("button", name="On", exact=True).click()
+
+    # Click All Rules (input remains from previous step)
+    page.get_by_test_id("lexicon-test-all-btn").click()
+
+    # Expect replacement (Matt. -> Matthew) because Lexicon is ON
+    expect(page.locator("text=Processed: Matthew 5:15")).to_be_visible()
+
     utils.capture_screenshot(page, "bible_lexicon_book_override")
     print("Verification Complete.")

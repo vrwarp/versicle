@@ -127,60 +127,80 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     loadRules();
   };
 
-  const getTempRules = (useAllRules: boolean) => {
-    // If we only use current entry, we ignore the main 'rules' array and only use 'editingRule'
+  const performReplacement = async (useAllRules: boolean) => {
+    let rulesToApply: LexiconRule[] = [];
+
     if (!useAllRules) {
-      if (editingRule && editingRule.original && editingRule.replacement) {
-        return [{
-          id: editingRule.id || 'temp',
-          original: editingRule.original,
-          replacement: editingRule.replacement,
-          isRegex: editingRule.isRegex,
-          bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
-          applyBeforeGlobal: editingRule.applyBeforeGlobal,
-          created: 0,
-          order: 0
-        } as LexiconRule];
-      }
-      return [];
+        // Only use the current rule being edited
+        if (editingRule && editingRule.original && editingRule.replacement) {
+            rulesToApply = [{
+                id: editingRule.id || 'temp',
+                original: editingRule.original,
+                replacement: editingRule.replacement,
+                isRegex: editingRule.isRegex,
+                bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+                applyBeforeGlobal: editingRule.applyBeforeGlobal,
+                created: 0,
+                order: 0
+            } as LexiconRule];
+        }
+    } else {
+        // Use all rules (including global/bible if applicable), merging edits
+        let baseRules: LexiconRule[] = [];
+
+        if (scope === 'global') {
+            baseRules = await lexiconService.getRules();
+        } else if (currentBookId) {
+            baseRules = await lexiconService.getRules(currentBookId);
+        }
+
+        rulesToApply = [...baseRules];
+
+        // Apply editing rule override
+        if (editingRule && editingRule.original && editingRule.replacement) {
+            const idx = rulesToApply.findIndex(r => r.id === editingRule.id);
+            const r = {
+                id: editingRule.id || 'temp',
+                original: editingRule.original,
+                replacement: editingRule.replacement,
+                isRegex: editingRule.isRegex,
+                bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+                applyBeforeGlobal: editingRule.applyBeforeGlobal,
+                created: 0,
+                // Preserve order if replacing, else append (simplified)
+                order: idx >= 0 ? rulesToApply[idx].order : rulesToApply.length
+            } as LexiconRule;
+
+            if (idx >= 0) {
+                rulesToApply[idx] = r;
+            } else {
+                // If it's a new rule, where it goes depends on logic.
+                // For simplicity, we push it. But if it's a "before global" rule in book scope,
+                // it might need to go earlier. However, LexiconService handles sort.
+                // Since this is a temporary list for verification, pushing to end is safer
+                // unless we re-sort. But we don't have easy access to re-sort logic here without duplicating code.
+                // Given `LexiconService.getRules` returns sorted, and we append,
+                // it might be effectively lower priority if `applyLexicon` is order-dependent.
+                // But typically user edits new rules which are high priority.
+                // Let's rely on standard array if it's new.
+                rulesToApply.push(r);
+            }
+        }
     }
 
-    // Use all rules, merging current editing rule
-    const tempRules = [...rules];
-    if (editingRule && editingRule.original && editingRule.replacement) {
-      const idx = tempRules.findIndex(r => r.id === editingRule.id);
-      const r = {
-        id: editingRule.id || 'temp',
-        original: editingRule.original,
-        replacement: editingRule.replacement,
-        isRegex: editingRule.isRegex,
-        bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
-        applyBeforeGlobal: editingRule.applyBeforeGlobal,
-        created: 0,
-        order: idx >= 0 ? tempRules[idx].order : tempRules.length
-      } as LexiconRule;
-
-      if (idx >= 0) tempRules[idx] = r;
-      else tempRules.push(r);
-    }
-    return tempRules;
-  };
-
-  const performReplacement = (useAllRules: boolean) => {
-    const tempRules = getTempRules(useAllRules);
-    const result = lexiconService.applyLexicon(testInput, tempRules);
+    const result = lexiconService.applyLexicon(testInput, rulesToApply);
     setTestOutput(result);
     return result;
   };
 
-  const handleReplaceCurrent = () => performReplacement(false);
-  const handleReplaceAll = () => performReplacement(true);
+  const handleReplaceCurrent = async () => { await performReplacement(false); };
+  const handleReplaceAll = async () => { await performReplacement(true); };
 
-  const handlePlay = () => {
+  const handlePlay = async () => {
     let textToPlay = testOutput;
     // If output is empty, replace using all rules first
     if (!textToPlay) {
-      textToPlay = performReplacement(true);
+      textToPlay = await performReplacement(true);
     }
 
     if (textToPlay) {
