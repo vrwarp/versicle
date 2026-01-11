@@ -127,60 +127,73 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     loadRules();
   };
 
-  const getTempRules = (useAllRules: boolean) => {
-    // If we only use current entry, we ignore the main 'rules' array and only use 'editingRule'
+  const performReplacement = async (useAllRules: boolean) => {
+    let rulesToApply: LexiconRule[] = [];
+
     if (!useAllRules) {
-      if (editingRule && editingRule.original && editingRule.replacement) {
-        return [{
-          id: editingRule.id || 'temp',
-          original: editingRule.original,
-          replacement: editingRule.replacement,
-          isRegex: editingRule.isRegex,
-          bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
-          applyBeforeGlobal: editingRule.applyBeforeGlobal,
-          created: 0,
-          order: 0
-        } as LexiconRule];
-      }
-      return [];
+        // Only use the current rule being edited
+        if (editingRule && editingRule.original && editingRule.replacement) {
+            rulesToApply = [{
+                id: editingRule.id || 'temp',
+                original: editingRule.original,
+                replacement: editingRule.replacement,
+                isRegex: editingRule.isRegex,
+                bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+                applyBeforeGlobal: editingRule.applyBeforeGlobal,
+                created: 0,
+                order: 0
+            } as LexiconRule];
+        }
+    } else {
+        // Use all rules (including global/bible if applicable), merging edits
+        let baseRules: LexiconRule[] = [];
+
+        if (scope === 'global') {
+            baseRules = await lexiconService.getRules();
+        } else if (currentBookId) {
+            baseRules = await lexiconService.getRules(currentBookId);
+        }
+
+        rulesToApply = [...baseRules];
+
+        // Apply editing rule override
+        if (editingRule && editingRule.original && editingRule.replacement) {
+            const idx = rulesToApply.findIndex(r => r.id === editingRule.id);
+            const r = {
+                id: editingRule.id || 'temp',
+                original: editingRule.original,
+                replacement: editingRule.replacement,
+                isRegex: editingRule.isRegex,
+                bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
+                applyBeforeGlobal: editingRule.applyBeforeGlobal,
+                created: 0,
+                // Preserve order if replacing, else append (simplified)
+                order: idx >= 0 ? rulesToApply[idx].order : rulesToApply.length
+            } as LexiconRule;
+
+            if (idx >= 0) {
+                rulesToApply[idx] = r;
+            } else {
+                // Append new rules to the end for testing purposes.
+                // In production, LexiconService handles sorting/priority.
+                rulesToApply.push(r);
+            }
+        }
     }
 
-    // Use all rules, merging current editing rule
-    const tempRules = [...rules];
-    if (editingRule && editingRule.original && editingRule.replacement) {
-      const idx = tempRules.findIndex(r => r.id === editingRule.id);
-      const r = {
-        id: editingRule.id || 'temp',
-        original: editingRule.original,
-        replacement: editingRule.replacement,
-        isRegex: editingRule.isRegex,
-        bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
-        applyBeforeGlobal: editingRule.applyBeforeGlobal,
-        created: 0,
-        order: idx >= 0 ? tempRules[idx].order : tempRules.length
-      } as LexiconRule;
-
-      if (idx >= 0) tempRules[idx] = r;
-      else tempRules.push(r);
-    }
-    return tempRules;
-  };
-
-  const performReplacement = (useAllRules: boolean) => {
-    const tempRules = getTempRules(useAllRules);
-    const result = lexiconService.applyLexicon(testInput, tempRules);
+    const result = lexiconService.applyLexicon(testInput, rulesToApply);
     setTestOutput(result);
     return result;
   };
 
-  const handleReplaceCurrent = () => performReplacement(false);
-  const handleReplaceAll = () => performReplacement(true);
+  const handleReplaceCurrent = async () => { await performReplacement(false); };
+  const handleReplaceAll = async () => { await performReplacement(true); };
 
-  const handlePlay = () => {
+  const handlePlay = async () => {
     let textToPlay = testOutput;
     // If output is empty, replace using all rules first
     if (!textToPlay) {
-      textToPlay = performReplacement(true);
+      textToPlay = await performReplacement(true);
     }
 
     if (textToPlay) {
@@ -305,18 +318,21 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                       </div>
                       <div className="flex bg-muted rounded p-1">
                           <button
+                              data-testid="lexicon-pref-default"
                               onClick={() => handleBiblePreferenceChange('default')}
                               className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'default' ? 'bg-background shadow-sm font-medium' : 'hover:bg-background/50 text-muted-foreground'}`}
                           >
                               Default
                           </button>
                           <button
+                              data-testid="lexicon-pref-on"
                               onClick={() => handleBiblePreferenceChange('on')}
                               className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'on' ? 'bg-background shadow-sm font-medium text-green-600' : 'hover:bg-background/50 text-muted-foreground'}`}
                           >
                               On
                           </button>
                           <button
+                              data-testid="lexicon-pref-off"
                               onClick={() => handleBiblePreferenceChange('off')}
                               className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'off' ? 'bg-background shadow-sm font-medium text-red-600' : 'hover:bg-background/50 text-muted-foreground'}`}
                           >
