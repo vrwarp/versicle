@@ -5,7 +5,7 @@ import type { LexiconRule } from '../../types/db';
 import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw, CornerDownRight } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { LEXICON_SAMPLE_CSV } from '../../lib/tts/lexiconSample';
 import { LexiconCSV } from '../../lib/tts/CsvUtils';
 
@@ -31,7 +31,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
   const [isAdding, setIsAdding] = useState(false);
   const lexiconService = LexiconService.getInstance();
 
-  const currentBookId = useReaderStore(state => state.currentBookId);
+  const currentBookId = useReaderUIStore(state => state.currentBookId);
   const [scope, setScope] = useState<'global' | 'book'>('global');
 
   const [testInput, setTestInput] = useState('');

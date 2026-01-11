@@ -18,8 +18,8 @@ vi.mock('../../store/useToastStore', () => ({
     useToastStore: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('../../store/useReaderStore', () => ({
-    useReaderStore: vi.fn(() => vi.fn()),
+vi.mock('../../store/useReaderUIStore', () => ({
+    useReaderUIStore: vi.fn(() => vi.fn()),
 }));
 
 describe('BookListItem', () => {

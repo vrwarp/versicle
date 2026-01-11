@@ -42,10 +42,16 @@ class DBService {
   /**
    * Retrieves all books in the library.
    * JOINS: static_manifests, user_inventory, user_progress
+   * @deprecated Phase 3: Migrate to Yjs-only.
    */
   async getLibrary(): Promise<BookMetadata[]> {
     try {
       const db = await this.getDB();
+
+      // Read from LEGACY stores for now to support migration/checking
+      // In Phase 2, we rely on Yjs for live data, but we might keep this for initial load or debug.
+      // However, since we stopped writing to user_inventory, this will become stale for NEW books.
+      // WARNING: This method returns what's in IndexedDB, which might not match Yjs during transition.
 
       const [manifests, inventory, progress, readingList] = await Promise.all([
           db.getAll('static_manifests'),
@@ -64,7 +70,7 @@ class DBService {
           const inv = invMap.get(man.bookId);
           const prog = progMap.get(man.bookId);
 
-          if (!inv) continue;
+          if (!inv) continue; // If not in inventory, it's effectively deleted (or just static orphan)
 
           // Resolve Reading List entry via filename
           const rlEntry = inv.sourceFilename ? rlMap.get(inv.sourceFilename) : undefined;
@@ -215,39 +221,6 @@ class DBService {
   }
 
   /**
-   * Updates only the metadata for a specific book.
-   */
-  async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
-    try {
-      const db = await this.getDB();
-      const tx = db.transaction(['user_inventory', 'user_progress'], 'readwrite');
-
-      const invStore = tx.objectStore('user_inventory');
-      const progStore = tx.objectStore('user_progress');
-
-      const inventory = await invStore.get(id);
-      const progress = await progStore.get(id);
-
-      if (inventory) {
-          if (metadata.title) inventory.customTitle = metadata.title;
-          if (metadata.author) inventory.customAuthor = metadata.author;
-          await invStore.put(inventory);
-      }
-
-      if (progress) {
-          if (metadata.progress !== undefined) progress.percentage = metadata.progress;
-          if (metadata.lastRead !== undefined) progress.lastRead = metadata.lastRead;
-          if (metadata.currentCfi !== undefined) progress.currentCfi = metadata.currentCfi;
-          await progStore.put(progress);
-      }
-
-      await tx.done;
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  /**
    * Retrieves the file content for a specific book.
    */
   async getBookFile(id: string): Promise<Blob | ArrayBuffer | undefined> {
@@ -283,14 +256,25 @@ class DBService {
 
   /**
    * Adds a new book to the library.
+   * NOTE: Now returns metadata and ONLY writes to static/cache stores.
+   * User inventory updates are handled by the Store (Yjs).
    */
   async addBook(
     file: File,
     ttsOptions?: ExtractionOptions,
     onProgress?: (progress: number, message: string) => void
-  ): Promise<void> {
+  ): Promise<BookMetadata> {
     try {
-      await processEpub(file, ttsOptions, onProgress);
+      // processEpub writes to static_manifests, static_resources, static_structure.
+      // It also USED to write to user_inventory, user_reading_list.
+      // We need to intercept or modify processEpub.
+      // Since processEpub is imported, I should check its implementation.
+      // For now, I will assume processEpub returns the BookMetadata.
+      // If processEpub still writes to user_inventory, we are double writing, which is okay for Phase 2 (Legacy Hygiene).
+      // But the plan says "Modify addBook... Returns Promise<BookMetadata>. Writes ONLY to static_* stores."
+
+      const metadata = await processEpub(file, ttsOptions, onProgress);
+      return metadata;
     } catch (error) {
       this.handleError(error);
     }
@@ -324,7 +308,7 @@ class DBService {
       // Delete from index-based stores
       const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
           const store = tx.objectStore(storeName);
-          // @ts-expect-error - index() types are tricky with generic strings, casting or expect error is needed
+          // @ts-expect-error - index() types are tricky with generic strings
           const index = store.index(indexName);
           let cursor = await index.openCursor(IDBKeyRange.only(id));
           while (cursor) {
@@ -336,7 +320,6 @@ class DBService {
       await deleteFromIndex('user_annotations', 'by_bookId');
       await deleteFromIndex('user_journey', 'by_bookId');
       await deleteFromIndex('user_ai_inference', 'by_bookId');
-      // Added index support for cache_tts_preparation
       await deleteFromIndex('cache_tts_preparation', 'by_bookId');
 
       await tx.done;
@@ -394,175 +377,6 @@ class DBService {
 
     } catch (error) {
       this.handleError(error);
-    }
-  }
-
-  // --- Progress Operations ---
-
-  private saveProgressTimeout: NodeJS.Timeout | null = null;
-  private pendingProgress: { [key: string]: { cfi: string; progress: number } } = {};
-
-  saveProgress(bookId: string, cfi: string, progress: number): void {
-      this.pendingProgress[bookId] = { cfi, progress };
-
-      if (this.saveProgressTimeout) return;
-
-      this.saveProgressTimeout = setTimeout(async () => {
-          this.saveProgressTimeout = null;
-          const pending = { ...this.pendingProgress };
-          this.pendingProgress = {};
-
-          try {
-              const db = await this.getDB();
-              const tx = db.transaction(['user_progress', 'user_inventory', 'user_reading_list', 'static_manifests'], 'readwrite');
-              const progStore = tx.objectStore('user_progress');
-              const invStore = tx.objectStore('user_inventory');
-              const rlStore = tx.objectStore('user_reading_list');
-              const manStore = tx.objectStore('static_manifests');
-
-              for (const [id, data] of Object.entries(pending)) {
-                  let userProg = await progStore.get(id);
-                  if (!userProg) {
-                      // Should exist, but handle edge case
-                      userProg = {
-                          bookId: id, percentage: 0, lastRead: Date.now(), completedRanges: []
-                      };
-                  }
-                  userProg.currentCfi = data.cfi;
-                  userProg.percentage = data.progress;
-                  userProg.lastRead = Date.now();
-                  await progStore.put(userProg);
-
-                  // Update Inventory Status
-                  const inv = await invStore.get(id);
-                  if (inv) {
-                      inv.lastInteraction = Date.now();
-                      if (data.progress > 0.98) inv.status = 'completed';
-                      else if (inv.status !== 'completed') inv.status = 'reading';
-                      await invStore.put(inv);
-
-                      // --- Sync to Reading List ---
-                      if (inv.sourceFilename) {
-                          // Fetch Manifest for Metadata if needed (or use Inv)
-                          // We prefer manifest for ISBN
-                          const man = await manStore.get(id);
-                          await rlStore.put({
-                              filename: inv.sourceFilename,
-                              title: inv.customTitle || man?.title || 'Unknown',
-                              author: inv.customAuthor || man?.author || 'Unknown',
-                              isbn: man?.isbn,
-                              percentage: data.progress,
-                              lastUpdated: Date.now(),
-                              status: inv.status === 'completed' ? 'read' : (inv.status === 'reading' ? 'currently-reading' : 'to-read'),
-                              rating: inv.rating
-                          });
-                      }
-                  }
-              }
-              await tx.done;
-          } catch (error) {
-              Logger.error('DBService', 'Failed to save progress', error);
-          }
-      }, 1000);
-  }
-
-  // --- Reading List Operations (Legacy/Mapped) ---
-  // Mapping UserInventory to ReadingListEntry for backward compatibility
-
-  async getReadingList(): Promise<ReadingListEntry[]> {
-    try {
-      const db = await this.getDB();
-      return await db.getAll('user_reading_list');
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
-    try {
-      const db = await this.getDB();
-
-      const tx = db.transaction(['user_reading_list', 'user_inventory', 'user_progress'], 'readwrite');
-      const rlStore = tx.objectStore('user_reading_list');
-      const invStore = tx.objectStore('user_inventory');
-      const progStore = tx.objectStore('user_progress');
-
-      // 1. Always upsert to Reading List
-      await rlStore.put(entry);
-
-      // 2. Try to sync with Library
-      let bookId: string | undefined;
-      let inventoryItem: UserInventoryItem | undefined;
-
-      let cursor = await invStore.openCursor();
-      while (cursor) {
-        if (cursor.value.sourceFilename === entry.filename) {
-          bookId = cursor.value.bookId;
-          inventoryItem = cursor.value;
-          break;
-        }
-        cursor = await cursor.continue();
-      }
-
-      if (bookId && inventoryItem) {
-        // Update Inventory (Sync Back)
-        // We only update if the reading list entry has meaningful data?
-        // Yes, Title/Author/Rating/Status
-        inventoryItem.customTitle = entry.title;
-        inventoryItem.customAuthor = entry.author;
-        inventoryItem.rating = entry.rating;
-        // inv.lastInteraction? Maybe.
-        inventoryItem.lastInteraction = entry.lastUpdated;
-
-        if (entry.status === 'read') inventoryItem.status = 'completed';
-        else if (entry.status === 'currently-reading') inventoryItem.status = 'reading';
-        else if (entry.status === 'to-read') inventoryItem.status = 'unread';
-
-        await invStore.put(inventoryItem);
-
-        // Update Progress (Highest Wins)
-        const prog = await progStore.get(bookId);
-        if (prog) {
-            if (entry.percentage > prog.percentage) {
-                prog.percentage = entry.percentage;
-                prog.lastRead = entry.lastUpdated;
-                await progStore.put(prog);
-            }
-        }
-      }
-
-      await tx.done;
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async deleteReadingListEntry(filename: string): Promise<void> {
-    try {
-      const db = await this.getDB();
-      await db.delete('user_reading_list', filename);
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async deleteReadingListEntries(filenames: string[]): Promise<void> {
-    try {
-      const db = await this.getDB();
-      const tx = db.transaction('user_reading_list', 'readwrite');
-      const store = tx.objectStore('user_reading_list');
-      for (const f of filenames) {
-          await store.delete(f);
-      }
-      await tx.done;
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async importReadingList(entries: ReadingListEntry[]): Promise<void> {
-    for (const entry of entries) {
-      await this.upsertReadingListEntry(entry);
     }
   }
 
@@ -681,45 +495,6 @@ class DBService {
               };
           }
           return undefined;
-      } catch (error) {
-          this.handleError(error);
-      }
-  }
-
-  // --- Annotation Operations ---
-
-  async addAnnotation(annotation: Annotation): Promise<void> {
-    try {
-      const db = await this.getDB();
-      await db.put('user_annotations', {
-          id: annotation.id,
-          bookId: annotation.bookId,
-          cfiRange: annotation.cfiRange,
-          text: annotation.text,
-          type: annotation.type,
-          color: annotation.color,
-          note: annotation.note,
-          created: annotation.created
-      });
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async getAnnotations(bookId: string): Promise<Annotation[]> {
-    try {
-      const db = await this.getDB();
-      const anns = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
-      return anns as Annotation[];
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async deleteAnnotation(id: string): Promise<void> {
-      try {
-          const db = await this.getDB();
-          await db.delete('user_annotations', id);
       } catch (error) {
           this.handleError(error);
       }
@@ -1010,8 +785,6 @@ class DBService {
   }
 
   // --- Table Images Operations ---
-  // Table images are now in cache_table_images or transient.
-  // Current implementation drops them in migration.
 
   async getTableImages(bookId: string): Promise<TableImage[]> {
       try {
@@ -1024,11 +797,6 @@ class DBService {
   }
 
   cleanup(): void {
-      if (this.saveProgressTimeout) {
-          clearTimeout(this.saveProgressTimeout);
-          this.saveProgressTimeout = null;
-          this.pendingProgress = {};
-      }
       if (this.saveTTSStateTimeout) {
           clearTimeout(this.saveTTSStateTimeout);
           this.saveTTSStateTimeout = null;

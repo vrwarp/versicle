@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useShallow } from 'zustand/react/shallow';
 import { CompassPill } from '../ui/CompassPill';
@@ -13,8 +13,8 @@ export const AudioReaderHUD: React.FC = () => {
         isPlaying: state.isPlaying,
         pause: state.pause
     })));
-    const immersiveMode = useReaderStore(state => state.immersiveMode);
-    const books = useLibraryStore(state => state.books);
+    const immersiveMode = useReaderUIStore(state => state.immersiveMode);
+    const books = useLibraryStore(state => Object.values(state.books)); // Convert Map to Array for filtering
     const location = useLocation();
     const navigate = useNavigate();
 

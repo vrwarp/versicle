@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
-import { useReaderStore } from '../store/useReaderStore';
+import { useReaderSyncStore } from '../store/useReaderSyncStore';
 
 /**
  * Synchronizes the reader theme with the document root class.
  * This ensures that Tailwind's dark mode and custom CSS variables work correctly.
  */
 export const ThemeSynchronizer = () => {
-  const currentTheme = useReaderStore(state => state.currentTheme);
+  const currentTheme = useReaderSyncStore(state => state.currentTheme);
 
   useEffect(() => {
     const root = window.document.documentElement;

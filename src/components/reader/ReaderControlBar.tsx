@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
@@ -30,7 +30,7 @@ export const ReaderControlBar: React.FC = () => {
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderStore(useShallow(state => ({
+    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         currentBookId: state.currentBookId,
         currentSectionTitle: state.currentSectionTitle
@@ -42,14 +42,14 @@ export const ReaderControlBar: React.FC = () => {
 
     // Select the most recently read book
     const lastReadBook = useLibraryStore(state => {
-        return state.books
-            .filter(b => b.lastRead)
-            .sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
+        return Object.values(state.books)
+            .filter(b => b.lastInteraction) // Using lastInteraction as proxy or check status
+            .sort((a, b) => (b.lastInteraction || 0) - (a.lastInteraction || 0))[0];
     });
 
     // Select the current book if active
     const currentBook = useLibraryStore(state => {
-        return currentBookId ? state.books.find(b => b.id === currentBookId) : undefined;
+        return currentBookId ? state.books[currentBookId] : undefined;
     });
 
     // Determine State Priority
@@ -122,7 +122,7 @@ export const ReaderControlBar: React.FC = () => {
             case 'play':
                 // Play from selection
                 if (popover.cfiRange) {
-                    const playFromSelection = useReaderStore.getState().playFromSelection;
+                    const playFromSelection = useReaderUIStore.getState().playFromSelection;
                     if (playFromSelection) {
                         playFromSelection(popover.cfiRange);
                     } else {

@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { NavigationItem } from 'epubjs';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useReaderSyncStore } from '../../store/useReaderSyncStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -52,11 +53,6 @@ export const ReaderView: React.FC = () => {
   const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
 
   const {
-    currentTheme,
-    customTheme,
-    fontFamily,
-    lineHeight,
-    fontSize,
     updateLocation,
     toc,
     setToc,
@@ -70,12 +66,7 @@ export const ReaderView: React.FC = () => {
     immersiveMode,
     setImmersiveMode,
     setPlayFromSelection
-  } = useReaderStore(useShallow(state => ({
-    currentTheme: state.currentTheme,
-    customTheme: state.customTheme,
-    fontFamily: state.fontFamily,
-    lineHeight: state.lineHeight,
-    fontSize: state.fontSize,
+  } = useReaderUIStore(useShallow(state => ({
     updateLocation: state.updateLocation,
     toc: state.toc,
     setToc: state.setToc,
@@ -89,6 +80,20 @@ export const ReaderView: React.FC = () => {
     immersiveMode: state.immersiveMode,
     setImmersiveMode: state.setImmersiveMode,
     setPlayFromSelection: state.setPlayFromSelection
+  })));
+
+  const {
+      currentTheme,
+      customTheme,
+      fontFamily,
+      lineHeight,
+      fontSize,
+  } = useReaderSyncStore(useShallow(state => ({
+      currentTheme: state.currentTheme,
+      customTheme: state.customTheme,
+      fontFamily: state.fontFamily,
+      lineHeight: state.lineHeight,
+      fontSize: state.fontSize,
   })));
 
   // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
@@ -152,14 +157,14 @@ export const ReaderView: React.FC = () => {
          hasPromptedForImport.current = true; // Ensure we only check once per session
 
          // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
-         if (location.start.cfi === useReaderStore.getState().currentCfi) return;
+         if (location.start.cfi === useReaderUIStore.getState().currentCfi) return;
 
          // Reading History
          if (id && previousLocation.current) {
              const prevStart = previousLocation.current.start;
              const prevEnd = previousLocation.current.end;
              const duration = Date.now() - previousLocation.current.timestamp;
-             const mode = useReaderStore.getState().viewMode;
+             const mode = useReaderUIStore.getState().viewMode;
              const isScroll = mode === 'scrolled';
              const shouldSave = isScroll ? duration > 2000 : true;
 
@@ -172,7 +177,7 @@ export const ReaderView: React.FC = () => {
                      ]).then(([snappedStart, snappedEnd]) => {
                          const range = generateCfiRange(snappedStart, snappedEnd);
                          const type = isScroll ? 'scroll' : 'page';
-                         const label = useReaderStore.getState().currentSectionTitle || undefined;
+                         const label = useReaderUIStore.getState().currentSectionTitle || undefined;
 
                          dbService.updateReadingHistory(id, range, type, label)
                             .then(() => setHistoryTick(t => t + 1))
@@ -308,9 +313,9 @@ export const ReaderView: React.FC = () => {
                  // which might be destroyed during unmount, causing crashes.
                  // This ensures reading history is saved even if the reader is tearing down.
                  const range = generateCfiRange(prevStart, prevEnd);
-                 const mode = useReaderStore.getState().viewMode;
+                 const mode = useReaderUIStore.getState().viewMode;
                  const type = mode === 'scrolled' ? 'scroll' : 'page';
-                 const label = useReaderStore.getState().currentSectionTitle || undefined;
+                 const label = useReaderUIStore.getState().currentSectionTitle || undefined;
                  dbService.updateReadingHistory(id, range, type, label).catch(console.error);
              }
           }
@@ -381,8 +386,8 @@ export const ReaderView: React.FC = () => {
       setShowImportJumpDialog(false);
       setIsWaitingForJump(false);
       // Explicitly save current position (0) to mark as "started"
-      if (id && useReaderStore.getState().currentCfi) {
-          const state = useReaderStore.getState();
+      if (id && useReaderUIStore.getState().currentCfi) {
+          const state = useReaderUIStore.getState();
           if (state.currentCfi) {
              dbService.saveProgress(id, state.currentCfi, state.progress);
           }
