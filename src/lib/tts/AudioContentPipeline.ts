@@ -237,7 +237,7 @@ export class AudioContentPipeline {
                 targetSentences = ttsContent?.sentences || [];
             }
 
-            if (targetSentences.length === 0) return indicesToSkip;
+            if (!targetSentences || targetSentences.length === 0) return indicesToSkip;
 
             // Fetch Table CFIs for Grouping
             const tableImages = await dbService.getTableImages(bookId);
@@ -300,7 +300,9 @@ export class AudioContentPipeline {
             // 1. Check DB for existing adaptations
             const analysis = await dbService.getContentAnalysis(bookId, sectionId);
             const existingAdaptations = new Map<string, string>(
-                analysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+                analysis?.accessibilityLayers
+                    ?.filter(l => l.type === 'table-adaptation')
+                    .map(a => [a.rootCfi, a.content]) || []
             );
 
             // Notify with cached data immediately if available
@@ -348,7 +350,9 @@ export class AudioContentPipeline {
                 // 6. Notify listeners with updated full set
                 const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
                 const finalAdaptations = new Map<string, string>(
-                    updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+                    updatedAnalysis?.accessibilityLayers
+                        ?.filter(l => l.type === 'table-adaptation')
+                        .map(a => [a.rootCfi, a.content]) || []
                 );
 
                 const finalResult = this.mapSentencesToAdaptations(targetSentences, finalAdaptations);
@@ -452,8 +456,8 @@ export class AudioContentPipeline {
             const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
 
             // If we have stored content types, return them
-            if (contentAnalysis?.contentTypes) {
-                return contentAnalysis.contentTypes;
+            if (contentAnalysis?.semanticMap) {
+                return contentAnalysis.semanticMap;
             }
 
             // 2. If not found, detect with GenAI

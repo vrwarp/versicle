@@ -20,11 +20,12 @@ export const ReaderControlBar: React.FC = () => {
     const [lexiconText, setLexiconText] = React.useState('');
 
     // Store Subscriptions
-    const { popover, addAnnotation, hidePopover } = useAnnotationStore(useShallow(state => ({
+    const { popover, hidePopover } = useReaderUIStore(useShallow(state => ({
         popover: state.popover,
-        addAnnotation: state.addAnnotation,
         hidePopover: state.hidePopover,
     })));
+
+    const addAnnotation = useAnnotationStore(state => state.addAnnotation);
 
     // Optimization: We only need to know if the queue has items to determine variant,
     // and if queue is empty to set title/subtitle manually.

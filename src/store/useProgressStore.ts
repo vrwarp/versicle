@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { yjs } from 'zustand-middleware-yjs';
+import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
 import type { UserProgress } from '../types/db';
 
@@ -19,29 +19,33 @@ export const useProgressStore = create<ProgressState>()(
         (set) => ({
             progress: {},
 
-            updateProgress: (bookId, percentage, cfi) =>
-                set((state) => {
+            updateProgress: (bookId: string, percentage: number, cfi: string) =>
+                set((state: ProgressState) => {
                     const current = state.progress[bookId];
                     const now = Date.now();
-                    if (current) {
-                        // Update if newer or further (logic can be refined)
-                        // LWW handled by Yjs, but we want to update the fields.
-                        state.progress[bookId] = {
+                    const newProgress = current
+                        ? {
                             ...current,
                             percentage,
                             currentCfi: cfi,
-                            lastRead: now
-                        };
-                    } else {
-                        state.progress[bookId] = {
+                            lastRead: now,
+                        }
+                        : {
                             bookId,
                             percentage,
-                            currentCfi: cfi, // Updated to include required fields
+                            currentCfi: cfi,
                             lastRead: now,
-                            completedRanges: []
+                            completedRanges: [],
                         };
-                    }
+
+                    return {
+                        progress: {
+                            ...state.progress,
+                            [bookId]: newProgress,
+                        },
+                    };
                 }),
         })
     )
 );
+

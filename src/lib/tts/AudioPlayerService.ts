@@ -575,7 +575,7 @@ export class AudioPlayerService {
                 if (this.currentBookId) {
                     const item = this.stateManager.getCurrentItem();
                     if (item && item.cfi && !item.isPreroll) {
-                        dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, true).catch(console.error);
+                        dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text).catch(console.error);
                     }
                 }
 
@@ -600,7 +600,7 @@ export class AudioPlayerService {
             if (this.currentBookId) {
                 const item = this.stateManager.getCurrentItem();
                 if (item && item.cfi && !item.isPreroll) {
-                    dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, false).catch(console.error);
+                    dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text).catch(console.error);
                 }
             }
         }

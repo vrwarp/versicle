@@ -15,6 +15,7 @@ import { processEpub, generateFileFingerprint } from '../lib/ingestion';
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
+import type { ContentType } from '../types/content-analysis';
 
 class DBService {
   private async getDB() {
@@ -217,6 +218,106 @@ class DBService {
     }
   }
 
+  async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const tx = db.transaction(['user_inventory', 'static_structure'], 'readwrite');
+
+      // Update User Inventory (Custom Metadata)
+      const invStore = tx.objectStore('user_inventory');
+      const invItem = await invStore.get(id);
+      if (invItem) {
+        if (metadata.title) invItem.customTitle = metadata.title;
+        if (metadata.author) invItem.customAuthor = metadata.author;
+        // invItem.aiAnalysisStatus = metadata.aiAnalysisStatus; // Not in UserInventoryItem yet, ignoring for now or strict typing
+        await invStore.put(invItem);
+      }
+
+      // Update Synthetic TOC (Static Structure)
+      if (metadata.syntheticToc) {
+        const structStore = tx.objectStore('static_structure');
+        const struct = await structStore.get(id);
+        if (struct) {
+          struct.toc = metadata.syntheticToc;
+          await structStore.put(struct);
+        }
+      }
+
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  // --- TTS Content (Cache) ---
+
+  async getTTSContent(bookId: string, sectionId: string): Promise<any | undefined> {
+    try {
+      const db = await this.getDB();
+      return await db.get('cache_tts_preparation', `${bookId}-${sectionId}`);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  // --- AI Inference Actions ---
+
+  async saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const id = `${bookId}-${sectionId}`;
+      const store = 'user_ai_inference';
+
+      const existing = await db.get(store, id) || {
+        id,
+        bookId,
+        sectionId,
+        semanticMap: [],
+        accessibilityLayers: [],
+        generatedAt: Date.now()
+      };
+
+      // Filter out existing table adaptations to replace them
+      const otherLayers = existing.accessibilityLayers.filter(l => l.type !== 'table-adaptation');
+      const newLayers = adaptations.map(a => ({
+        type: 'table-adaptation' as const,
+        rootCfi: a.rootCfi,
+        content: a.text
+      }));
+
+      existing.accessibilityLayers = [...otherLayers, ...newLayers];
+      existing.generatedAt = Date.now();
+
+      await db.put(store, existing);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async saveContentClassifications(bookId: string, sectionId: string, classifications: { rootCfi: string; type: ContentType }[]): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const id = `${bookId}-${sectionId}`;
+      const store = 'user_ai_inference';
+
+      const existing = await db.get(store, id) || {
+        id,
+        bookId,
+        sectionId,
+        semanticMap: [],
+        accessibilityLayers: [],
+        generatedAt: Date.now()
+      };
+
+      existing.semanticMap = classifications;
+      existing.generatedAt = Date.now();
+
+      await db.put(store, existing);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
   async deleteBook(id: string): Promise<void> {
     try {
       const db = await this.getDB();
@@ -404,7 +505,7 @@ class DBService {
 
   // --- Reading History (Event Log) Operations ---
 
-  async updateReadingHistory(bookId: string, cfiRange: string, type: 'scroll' | 'page' = 'scroll', label?: string): Promise<void> {
+  async updateReadingHistory(bookId: string, cfiRange: string, type: 'scroll' | 'page' | 'tts' = 'scroll', label?: string): Promise<void> {
     try {
       const db = await this.getDB();
       await db.add('user_journey', {
@@ -413,9 +514,50 @@ class DBService {
         startTimestamp: Date.now(),
         endTimestamp: Date.now(), // Estimate
         duration: 0,
-        type: 'visual', // Map 'scroll'/'page' to 'visual'
-        label: label || (type === 'scroll' ? 'Scroll' : 'Page Turn')
+        type: type === 'tts' ? 'tts' : 'visual',
+        label: label || (type === 'scroll' ? 'Scroll' : type === 'page' ? 'Page Turn' : 'TTS')
       });
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async saveTTSPosition(bookId: string, currentIndex: number, sectionIndex: number): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const tx = db.transaction('cache_session_state', 'readwrite');
+      const store = tx.objectStore('cache_session_state');
+      const state = await store.get(bookId);
+      if (state) {
+        state.currentIndex = currentIndex;
+        state.sectionIndex = sectionIndex;
+        state.updatedAt = Date.now();
+        await store.put(state);
+      }
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async updatePlaybackState(bookId: string, lastPlayedCfi?: string, _lastPauseTime?: number | null): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const tx = db.transaction('user_progress', 'readwrite');
+      const store = tx.objectStore('user_progress');
+      const progress = await store.get(bookId);
+      if (progress) {
+        if (lastPlayedCfi) progress.lastPlayedCfi = lastPlayedCfi;
+        // user_progress doesn't explicitly store lastPauseTime in the interface we saw earlier,
+        // but we can add it or ignore if not present.
+        // Checking src/types/db.ts: UserProgress has lastPlayedCfi. It does NOT have lastPauseTime.
+        // Logic typically uses lastRead as timestamp?
+        // Legacy BookState had lastPauseTime.
+        // We'll just update lastPlayedCfi and lastRead.
+        progress.lastRead = Date.now();
+        await store.put(progress);
+      }
+      await tx.done;
     } catch (error) {
       this.handleError(error);
     }

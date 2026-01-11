@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { yjs } from 'zustand-middleware-yjs';
+import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
 import type { ReadingListEntry } from '../types/db';
 
@@ -14,19 +14,25 @@ export const useReadingListStore = create<ReadingListState>()(
     yjs(
         yDoc,
         'reading_list',
-        (set, get) => ({
+        (set) => ({
             entries: {},
 
-            upsertEntry: (entry) =>
-                set((state) => {
-                    // Use filename as the key
-                    state.entries[entry.filename] = entry;
-                }),
+            upsertEntry: (entry: ReadingListEntry) =>
+                set((state: ReadingListState) => ({
+                    entries: {
+                        ...state.entries,
+                        [entry.filename]: entry,
+                    },
+                })),
 
-            removeEntry: (filename) =>
-                set((state) => {
-                    delete state.entries[filename];
+            removeEntry: (filename: string) =>
+                set((state: ReadingListState) => {
+                    const newEntries = { ...state.entries };
+                    delete newEntries[filename];
+                    return { entries: newEntries };
                 }),
         })
     )
 );
+
+

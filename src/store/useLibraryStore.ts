@@ -52,7 +52,7 @@ const mapMetadataToInventory = (metadata: BookMetadata): UserInventoryItem => ({
 
 export const useLibraryStore = create<LibraryUIState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       isImporting: false,
       importProgress: 0,
       importStatus: '',

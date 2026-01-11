@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { yjs } from 'zustand-middleware-yjs';
+import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
 import type { UserInventoryItem } from '../types/db';
 
@@ -20,15 +20,22 @@ export const useInventoryStore = create<InventoryState>()(
         (set) => ({
             books: {},
 
-            upsertBook: (book) =>
-                set((state) => {
-                    state.books[book.bookId] = book;
-                }),
+            upsertBook: (book: UserInventoryItem) =>
+                set((state: InventoryState) => ({
+                    books: {
+                        ...state.books,
+                        [book.bookId]: book,
+                    },
+                })),
 
-            removeBook: (bookId) =>
-                set((state) => {
-                    delete state.books[bookId];
+            removeBook: (bookId: string) =>
+                set((state: InventoryState) => {
+                    const newBooks = { ...state.books };
+                    delete newBooks[bookId];
+                    return { books: newBooks };
                 }),
         })
     )
 );
+
+

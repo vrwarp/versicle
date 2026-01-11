@@ -113,7 +113,6 @@ export const ReaderView: React.FC = () => {
 
     const {
         annotations,
-        loadAnnotations
     } = useAnnotationStore();
 
     const [historyTick, setHistoryTick] = useState(0);
@@ -205,7 +204,7 @@ export const ReaderView: React.FC = () => {
             updateLocation(location.start.cfi, percentage);
             updateSection(title ?? null, sectionId ?? null);
             if (id) {
-                useProgressStore.getState().updateProgress(id, location.start.cfi, percentage);
+                useProgressStore.getState().updateProgress(id, percentage, location.start.cfi);
             }
         },
         onTocLoaded: (newToc) => setToc(newToc),
@@ -364,11 +363,7 @@ export const ReaderView: React.FC = () => {
     // to prevent unnecessary re-renders of the main ReaderView.
 
     // Load Annotations from DB
-    useEffect(() => {
-        if (id) {
-            loadAnnotations(id);
-        }
-    }, [id, loadAnnotations]);
+    // Handled by Yjs middleware automatically
 
     const handleJumpConfirm = async () => {
         if (areLocationsReady) {
@@ -398,7 +393,7 @@ export const ReaderView: React.FC = () => {
         if (id && useReaderUIStore.getState().currentCfi) {
             const state = useReaderUIStore.getState();
             if (state.currentCfi) {
-                useProgressStore.getState().updateProgress(id, state.currentCfi, state.progress);
+                useProgressStore.getState().updateProgress(id, state.progress, state.currentCfi);
             }
         }
     };
@@ -452,7 +447,7 @@ export const ReaderView: React.FC = () => {
     useEffect(() => {
         if (rendition && isRenditionReady) {
             // Add new annotations
-            annotations.forEach(annotation => {
+            Object.values(annotations).forEach(annotation => {
                 if (!addedAnnotations.current.has(annotation.id)) {
                     const className = annotation.color === 'yellow' ? 'highlight-yellow' :
                         annotation.color === 'green' ? 'highlight-green' :
@@ -520,8 +515,8 @@ export const ReaderView: React.FC = () => {
                 const analysis = await dbService.getContentAnalysis(id!, section.href);
                 if (!analysis) return;
 
-                if (analysis.contentTypes) {
-                    const items = analysis.contentTypes;
+                if (analysis.semanticMap) {
+                    const items = analysis.semanticMap;
                     for (let i = 0; i < items.length; i++) {
                         const item = items[i];
                         // Skip if already added

@@ -39,14 +39,16 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
     setEditingId(null);
   };
 
-  if (annotations.length === 0) {
+  const annotationList = React.useMemo(() => Object.values(annotations), [annotations]);
+
+  if (annotationList.length === 0) {
     return <div className="p-4 text-sm text-gray-500 text-center">No annotations yet. Select text to highlight.</div>;
   }
 
   return (
     <div className="flex-1 overflow-y-auto">
       <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-        {annotations.map((annotation) => (
+        {annotationList.map((annotation) => (
           <li key={annotation.id} data-testid={`annotation-item-${annotation.id}`} className="p-3 hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer group" onClick={() => onNavigate(annotation.cfiRange)}>
             <div className="flex justify-between items-start gap-2">
               <div className="flex-1 min-w-0">

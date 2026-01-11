@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import { yjs } from 'zustand-middleware-yjs';
+import yjs from 'zustand-middleware-yjs';
 import { v4 as uuidv4 } from 'uuid';
 import { yDoc } from './yjs-provider';
-import type { Annotation, UserAnnotation } from '../types/db';
+import type { UserAnnotation } from '../types/db';
 
 interface AnnotationState {
   /**
@@ -30,28 +30,43 @@ export const useAnnotationStore = create<AnnotationState>()(
     (set) => ({
       annotations: {},
 
-      addAnnotation: (partialAnnotation) =>
-        set((state) => {
+      addAnnotation: (partialAnnotation: Omit<UserAnnotation, 'id' | 'created'>) =>
+        set((state: AnnotationState) => {
           const id = uuidv4();
           const newAnnotation: UserAnnotation = {
             ...partialAnnotation,
             id,
             created: Date.now(),
           };
-          state.annotations[id] = newAnnotation;
+          return {
+            annotations: {
+              ...state.annotations,
+              [id]: newAnnotation,
+            },
+          };
         }),
 
-      deleteAnnotation: (id) =>
-        set((state) => {
-          delete state.annotations[id];
+      deleteAnnotation: (id: string) =>
+        set((state: AnnotationState) => {
+          const newAnnotations = { ...state.annotations };
+          delete newAnnotations[id];
+          return { annotations: newAnnotations };
         }),
 
-      updateAnnotation: (id, changes) =>
-        set((state) => {
-          if (state.annotations[id]) {
-            Object.assign(state.annotations[id], changes);
-          }
+      updateAnnotation: (id: string, changes: Partial<UserAnnotation>) =>
+        set((state: AnnotationState) => {
+          if (!state.annotations[id]) return {};
+          return {
+            annotations: {
+              ...state.annotations,
+              [id]: {
+                ...state.annotations[id],
+                ...changes,
+              },
+            },
+          };
         }),
     })
   )
 );
+

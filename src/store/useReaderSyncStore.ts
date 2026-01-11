@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { yjs } from 'zustand-middleware-yjs';
+import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
 
 /**
@@ -41,11 +41,12 @@ export const useReaderSyncStore = create<ReaderSyncState>()(
             lineHeight: 1.5,
             fontSize: 100,
 
-            setTheme: (theme) => set({ currentTheme: theme }),
-            setCustomTheme: (customTheme) => set({ customTheme }),
-            setFontFamily: (fontFamily) => set({ fontFamily }),
-            setLineHeight: (lineHeight) => set({ lineHeight }),
-            setFontSize: (size) => set({ fontSize: size }),
+            setTheme: (theme: 'light' | 'dark' | 'sepia') => set({ currentTheme: theme }),
+            setCustomTheme: (customTheme: { bg: string; fg: string }) => set({ customTheme }),
+            setFontFamily: (fontFamily: string) => set({ fontFamily }),
+            setLineHeight: (lineHeight: number) => set({ lineHeight }),
+            setFontSize: (size: number) => set({ fontSize: size }),
         })
     )
 );
+

@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
-import { dbService } from '../db/DBService';
 import type { ReadingListEntry } from '../types/db';
 import { ArrowUpDown, Trash2, Edit2, Download, CheckSquare, Square } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
+import { useReadingListStore } from '../store/useReadingListStore';
 
 interface ReadingListDialogProps {
     open: boolean;
@@ -17,20 +17,16 @@ interface ReadingListDialogProps {
  * Also provides access to individual entry editing.
  */
 export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOpenChange }) => {
-    const [entries, setEntries] = useState<ReadingListEntry[]>([]);
     const [sortField, setSortField] = useState<keyof ReadingListEntry>('lastUpdated');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
     const [editEntry, setEditEntry] = useState<ReadingListEntry | null>(null);
 
-    const refreshEntries = () => {
-        dbService.getReadingList().then(list => setEntries(list || []));
-    };
+    const { entries: entriesRecord, removeEntry, upsertEntry } = useReadingListStore();
+    const entries = Object.values(entriesRecord);
 
     useEffect(() => {
-        if (open) {
-            refreshEntries();
-        }
+        // Entries are auto-synced via Yjs
     }, [open]);
 
     // Wrap the original onOpenChange to reset selection when closing
@@ -96,21 +92,19 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
 
     const handleDelete = async (filename: string) => {
         if (confirm('Are you sure you want to delete this entry?')) {
-            await dbService.deleteReadingListEntry(filename);
+            removeEntry(filename);
             setSelectedEntries(prev => {
                 const newSet = new Set(prev);
                 newSet.delete(filename);
                 return newSet;
             });
-            refreshEntries();
         }
     };
 
     const handleBatchDelete = async () => {
         if (confirm(`Are you sure you want to delete ${selectedEntries.size} entries?`)) {
-            await dbService.deleteReadingListEntries(Array.from(selectedEntries));
+            selectedEntries.forEach(filename => removeEntry(filename));
             setSelectedEntries(new Set());
-            refreshEntries();
         }
     };
 
@@ -150,8 +144,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     };
 
     const handleEditSave = async (updatedEntry: ReadingListEntry) => {
-        await dbService.upsertReadingListEntry(updatedEntry);
-        refreshEntries();
+        upsertEntry(updatedEntry);
     };
 
     return (
@@ -208,22 +201,22 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                             </div>
                                         </th>
                                         <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('title')}>
-                                            <div className="flex items-center gap-1">Title <ArrowUpDown className="w-3 h-3"/></div>
+                                            <div className="flex items-center gap-1">Title <ArrowUpDown className="w-3 h-3" /></div>
                                         </th>
                                         <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('author')}>
-                                             <div className="flex items-center gap-1">Author <ArrowUpDown className="w-3 h-3"/></div>
+                                            <div className="flex items-center gap-1">Author <ArrowUpDown className="w-3 h-3" /></div>
                                         </th>
                                         <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('status')}>
-                                             <div className="flex items-center gap-1">Status <ArrowUpDown className="w-3 h-3"/></div>
+                                            <div className="flex items-center gap-1">Status <ArrowUpDown className="w-3 h-3" /></div>
                                         </th>
                                         <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('percentage')}>
-                                             <div className="flex items-center gap-1">Progress <ArrowUpDown className="w-3 h-3"/></div>
+                                            <div className="flex items-center gap-1">Progress <ArrowUpDown className="w-3 h-3" /></div>
                                         </th>
                                         <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('rating')}>
-                                             <div className="flex items-center gap-1">Rating <ArrowUpDown className="w-3 h-3"/></div>
+                                            <div className="flex items-center gap-1">Rating <ArrowUpDown className="w-3 h-3" /></div>
                                         </th>
                                         <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('lastUpdated')}>
-                                             <div className="flex items-center gap-1">Last Read <ArrowUpDown className="w-3 h-3"/></div>
+                                            <div className="flex items-center gap-1">Last Read <ArrowUpDown className="w-3 h-3" /></div>
                                         </th>
                                         <th className="px-4 py-3 text-right">Actions</th>
                                     </tr>
@@ -256,13 +249,12 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                             <td className="px-4 py-3 font-medium">{entry.title}</td>
                                             <td className="px-4 py-3 text-muted-foreground">{entry.author}</td>
                                             <td className="px-4 py-3">
-                                                <span className={`px-2 py-0.5 rounded text-xs border ${
-                                                    entry.status === 'read' ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' :
+                                                <span className={`px-2 py-0.5 rounded text-xs border ${entry.status === 'read' ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' :
                                                     entry.status === 'currently-reading' ? 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800' :
-                                                    'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
-                                                }`}>
+                                                        'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
+                                                    }`}>
                                                     {entry.status === 'currently-reading' ? 'Reading' :
-                                                     entry.status === 'to-read' ? 'To Read' : 'Read'}
+                                                        entry.status === 'to-read' ? 'To Read' : 'Read'}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3">
