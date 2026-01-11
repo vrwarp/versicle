@@ -113,3 +113,20 @@ type YjsSchema = {
 *   **Implemented Provider:** Created `src/store/yjs-provider.ts` exporting the singleton `yDoc` and `persistence`.
 *   **Validation:** Added unit tests (`src/store/yjs-provider.test.ts`) to verify singleton export and sync waiting logic.
 *   **Status:** The Yjs runtime is initialized and persisting to a separate IndexedDB database (`versicle-yjs`).
+
+### Phase 2: Store Refactoring & Migration (Completed)
+*   **Store Refactoring:**
+    *   **`useReaderStore` Split:** Successfully split into `useReaderUIStore` (transient UI state like `isLoading`, `toc`) and `useReaderSyncStore` (synced settings like `theme`, `fontFamily`). Updated all consumers to import from the correct store.
+    *   **`useLibraryStore` Migration:** Converted to use `yjsMiddleware` bound to the `inventory` map. Removed `fetchBooks` (now reactive). Updated `addBook` to write metadata to Yjs after DB ingestion.
+    *   **`useAnnotationStore` Migration:** Converted to use `yjsMiddleware` bound to the `annotations` map.
+    *   **`useReadingListStore` Creation:** Created a new store for the reading list bound to the `reading_list` map.
+*   **DBService Refactoring:**
+    *   Updated `addBook` to return `BookMetadata` and stop writing to `user_inventory` (mostly).
+    *   Deprecated direct writes to user stores in favor of Zustand/Yjs updates.
+*   **Middleware Vendoring:**
+    *   Due to issues with the `zustand-middleware-yjs` package build in the environment, the source code was manually vendored into `src/store/middleware/`.
+*   **Verification:**
+    *   Updated unit tests for stores and hooks to reflect the new architecture.
+    *   Verified that `addBook` updates the local Yjs state.
+*   **Known Issues:**
+    *   `useLibraryStore.addBooks` (batch import) currently does not update the Yjs inventory for each added book because `processBatchImport` does not return the metadata list. This is a TODO for the next phase or a quick follow-up.

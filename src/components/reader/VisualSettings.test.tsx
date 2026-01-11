@@ -2,11 +2,15 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VisualSettings } from './VisualSettings';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useReaderSyncStore } from '../../store/useReaderSyncStore';
 
 // Mock zustand store
-vi.mock('../../store/useReaderStore', () => ({
-  useReaderStore: vi.fn(),
+vi.mock('../../store/useReaderUIStore', () => ({
+  useReaderUIStore: vi.fn(),
+}));
+vi.mock('../../store/useReaderSyncStore', () => ({
+  useReaderSyncStore: vi.fn(),
 }));
 
 // Mock zustand shallow
@@ -57,19 +61,21 @@ describe('VisualSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useReaderStore as any).mockImplementation((selector: any) => selector({
+    (useReaderUIStore as any).mockImplementation((selector: any) => selector({
+      viewMode: 'paginated',
+      setViewMode: mockSetViewMode,
+      shouldForceFont: false,
+      setShouldForceFont: mockSetShouldForceFont
+    }));
+    (useReaderSyncStore as any).mockImplementation((selector: any) => selector({
       currentTheme: 'light',
       setTheme: mockSetTheme,
       fontSize: 100,
       setFontSize: mockSetFontSize,
       fontFamily: 'serif',
       setFontFamily: mockSetFontFamily,
-      viewMode: 'paginated',
-      setViewMode: mockSetViewMode,
       lineHeight: 1.5,
       setLineHeight: mockSetLineHeight,
-      shouldForceFont: false,
-      setShouldForceFont: mockSetShouldForceFont,
     }));
   });
 

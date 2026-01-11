@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
-import { useReaderStore } from '../store/useReaderStore';
+import { useReaderUIStore } from '../store/useReaderUIStore';
 import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 
 /**
@@ -12,8 +12,8 @@ export const useTTS = () => {
     loadVoices
   } = useTTSStore();
 
-  const currentBookId = useReaderStore(state => state.currentBookId);
-  const currentSectionId = useReaderStore(state => state.currentSectionId);
+  const currentBookId = useReaderUIStore(state => state.currentBookId);
+  const currentSectionId = useReaderUIStore(state => state.currentSectionId);
 
   const player = AudioPlayerService.getInstance();
 
@@ -37,7 +37,7 @@ export const useTTS = () => {
          // If audio is stopped, we assume the user wants the "Play" button to start
          // from the currently visible chapter.
          // We load it without auto-playing.
-         const currentSectionTitle = useReaderStore.getState().currentSectionTitle;
+         const currentSectionTitle = useReaderUIStore.getState().currentSectionTitle;
          player.loadSectionBySectionId(currentSectionId, false, currentSectionTitle || undefined);
     };
 

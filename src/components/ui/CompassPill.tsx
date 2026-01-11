@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
 import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check } from 'lucide-react';
@@ -85,7 +85,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   }, [isCopied]);
 
   // Optimize: Select only currentSectionTitle to prevent re-renders on progress/cfi updates
-  const readerSectionTitle = useReaderStore(state => state.currentSectionTitle);
+  const readerSectionTitle = useReaderUIStore(state => state.currentSectionTitle);
 
   const { timeRemaining, progress: hookProgress } = useSectionDuration();
 
