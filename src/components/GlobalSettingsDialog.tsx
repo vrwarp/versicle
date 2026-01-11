@@ -349,7 +349,7 @@ export const GlobalSettingsDialog = () => {
         }
     };
 
-    const handleDownloadGenAILogs = () => {
+    const handleDownloadGenAILogs = async () => {
         const content = genAILogs.map(log =>
             `[${new Date(log.timestamp).toISOString()}] ${log.type.toUpperCase()} (${log.method})\n` +
             JSON.stringify(log.payload, null, 2) +

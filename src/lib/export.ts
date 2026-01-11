@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { saveAs } from 'file-saver';
 
 interface ExportOptions {
   filename: string;
@@ -50,14 +51,7 @@ export async function exportFile({ filename, data, mimeType = 'text/plain' }: Ex
   } else {
     // Web Fallback
     const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    saveAs(blob, filename);
   }
 }
 
