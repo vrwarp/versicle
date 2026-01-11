@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
-import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, StaticStructure } from '../types/db';
+import type { StaticBookManifest, UserInventoryItem, UserProgress } from '../types/db';
 
 describe('DBService Reading List', () => {
     beforeEach(async () => {

@@ -85,7 +85,6 @@ export class LexiconService {
     // Let's try dynamic import first.
     let globalEnabled = true;
     try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { useTTSStore } = await import('../../store/useTTSStore');
         globalEnabled = useTTSStore.getState().isBibleLexiconEnabled;
     } catch (e) {

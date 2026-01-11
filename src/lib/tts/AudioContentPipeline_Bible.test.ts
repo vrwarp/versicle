@@ -5,6 +5,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { TextSegmenter } from './TextSegmenter';
 import { LexiconService } from './LexiconService';
 import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';
+import type { BookMetadata, TTSContentAnalysis } from '../../types/db';
 
 vi.mock('../../db/DBService');
 vi.mock('./TextSegmenter');
@@ -51,27 +52,28 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
         pipeline = new AudioContentPipeline();
 
         // Default Mocks
-        (dbService.getTTSContent as any).mockResolvedValue({ sentences: [{ text: 'Test.', cfi: 'cfi' }] });
-        (dbService.getBookMetadata as any).mockResolvedValue({});
-        (dbService.getContentAnalysis as any).mockResolvedValue({});
+        vi.mocked(dbService.getTTSContent).mockResolvedValue({ sentences: [{ text: 'Test.', cfi: 'cfi' }] } as unknown as { sentences: { text: string, cfi: string }[] });
+        vi.mocked(dbService.getBookMetadata).mockResolvedValue({} as BookMetadata);
+        vi.mocked(dbService.getContentAnalysis).mockResolvedValue({} as TTSContentAnalysis);
 
         // Ensure getState returns fresh default values
-        (useTTSStore.getState as any).mockReturnValue({
+        vi.mocked(useTTSStore.getState).mockReturnValue({
             customAbbreviations: ['Dr.'],
             alwaysMerge: ['Mr.'],
             sentenceStarters: ['The'],
             minSentenceLength: 50,
-            isBibleLexiconEnabled: true
-        });
+            isBibleLexiconEnabled: true,
+            // Add other required properties to satisfy the type if needed, or cast as any only if necessary
+        } as unknown as ReturnType<typeof useTTSStore.getState>);
 
-        (LexiconService.getInstance as any).mockReturnValue({
+        vi.mocked(LexiconService.getInstance).mockReturnValue({
             getBibleLexiconPreference: vi.fn().mockResolvedValue('default')
-        });
-        (TextSegmenter.refineSegments as any).mockReturnValue([]);
+        } as unknown as LexiconService);
+        vi.mocked(TextSegmenter.refineSegments).mockReturnValue([]);
     });
 
     it('should inject bible abbreviations when enabled globally', async () => {
-        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as any, 0, false, 1.0);
+        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as BookMetadata['spineItems'][0], 0, false, 1.0);
 
         expect(TextSegmenter.refineSegments).toHaveBeenCalledWith(
             expect.anything(),
@@ -83,15 +85,15 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
     });
 
     it('should NOT inject bible abbreviations when disabled globally', async () => {
-        (useTTSStore.getState as any).mockReturnValue({
+        vi.mocked(useTTSStore.getState).mockReturnValue({
             customAbbreviations: ['Dr.'],
             alwaysMerge: ['Mr.'],
             sentenceStarters: ['The'],
             minSentenceLength: 50,
             isBibleLexiconEnabled: false
-        });
+        } as unknown as ReturnType<typeof useTTSStore.getState>);
 
-        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as any, 0, false, 1.0);
+        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as BookMetadata['spineItems'][0], 0, false, 1.0);
 
         expect(TextSegmenter.refineSegments).toHaveBeenCalledWith(
             expect.anything(),
@@ -103,18 +105,18 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
     });
 
     it('should inject bible abbreviations when disabled globally but enabled for book', async () => {
-        (useTTSStore.getState as any).mockReturnValue({
+        vi.mocked(useTTSStore.getState).mockReturnValue({
             customAbbreviations: ['Dr.'],
             alwaysMerge: ['Mr.'],
             sentenceStarters: ['The'],
             minSentenceLength: 50,
             isBibleLexiconEnabled: false
-        });
-        (LexiconService.getInstance as any).mockReturnValue({
+        } as unknown as ReturnType<typeof useTTSStore.getState>);
+        vi.mocked(LexiconService.getInstance).mockReturnValue({
             getBibleLexiconPreference: vi.fn().mockResolvedValue('on')
-        });
+        } as unknown as LexiconService);
 
-        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as any, 0, false, 1.0);
+        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as BookMetadata['spineItems'][0], 0, false, 1.0);
 
         expect(TextSegmenter.refineSegments).toHaveBeenCalledWith(
             expect.anything(),
