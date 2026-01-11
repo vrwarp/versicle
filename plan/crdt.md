@@ -1,6 +1,6 @@
 # Design Document: Versicle "Store-First" Architecture (Yjs)
 
-**Status:** Implementation In Progress (Phase 1 Complete)
+**Status:** Draft / Detailed Design
 **Target Architecture:** Local-First / Store-First using Yjs & Zustand
 
 ## 1. The Core Architectural Shift
@@ -65,10 +65,10 @@ type YjsSchema = {
 
 ## 4. High-Level Migration Plan
 
-### Step 1: Initialize the Yjs Runtime (Completed)
-*   **Installed:** `yjs`, `y-indexeddb`, `zustand-middleware-yjs`.
-*   **Created:** `src/store/yjs-provider.ts` singleton.
-*   **Verified:** Persistence tested via `YjsTest` component and unit tests.
+### Step 1: Initialize the Yjs Runtime
+*   Create `src/store/yjs-provider.ts` singleton.
+*   Initialize `Y.Doc`.
+*   Connect `y-indexeddb` (Database: `versicle-yjs`).
 
 ### Step 2: Store Refactoring (Split & Bind)
 *   **`useReaderStore`:** Split into `useReaderUIStore` (Transient) and `useReaderSyncStore` (Synced).
@@ -105,3 +105,11 @@ type YjsSchema = {
 ### Conflict Resolution
 *   **Inventory/Progress:** `Y.Map` uses Last-Write-Wins (LWW) based on Lamport timestamps.
 *   **Annotations:** Keyed by UUID. No merge conflicts, only add/remove races (handled by CRDT set semantics).
+
+## Execution Log
+
+### Phase 1: Foundation & Dependencies (Completed)
+*   **Installed Dependencies:** `yjs`, `y-indexeddb`, and `zustand-middleware-yjs` (fork).
+*   **Implemented Provider:** Created `src/store/yjs-provider.ts` exporting the singleton `yDoc` and `persistence`.
+*   **Validation:** Added unit tests (`src/store/yjs-provider.test.ts`) to verify singleton export and sync waiting logic.
+*   **Status:** The Yjs runtime is initialized and persisting to a separate IndexedDB database (`versicle-yjs`).
