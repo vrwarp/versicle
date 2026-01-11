@@ -174,15 +174,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             if (idx >= 0) {
                 rulesToApply[idx] = r;
             } else {
-                // If it's a new rule, where it goes depends on logic.
-                // For simplicity, we push it. But if it's a "before global" rule in book scope,
-                // it might need to go earlier. However, LexiconService handles sort.
-                // Since this is a temporary list for verification, pushing to end is safer
-                // unless we re-sort. But we don't have easy access to re-sort logic here without duplicating code.
-                // Given `LexiconService.getRules` returns sorted, and we append,
-                // it might be effectively lower priority if `applyLexicon` is order-dependent.
-                // But typically user edits new rules which are high priority.
-                // Let's rely on standard array if it's new.
+                // Append new rules to the end for testing purposes.
+                // In production, LexiconService handles sorting/priority.
                 rulesToApply.push(r);
             }
         }
