@@ -1,57 +1,88 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ReaderView } from '../ReaderView';
-import { useReaderUIStore } from '../../../store/useReaderUIStore';
-import { useReaderSyncStore } from '../../../store/useReaderSyncStore';
-import { useTTSStore } from '../../../store/useTTSStore';
 import ePub from 'epubjs';
 import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { CURRENT_BOOK_VERSION } from '../../../lib/constants';
 
+// Hoist helper for store creation
+const { createMockStore, mockUIStore, mockSyncStore, mockTTSStore } = vi.hoisted(() => {
+  const createMockStore = (initialState: any) => {
+    let state = { ...initialState };
+    const listeners = new Set();
+
+    const getState = () => state;
+    const setState = (partial: any) => {
+      state = { ...state, ...partial };
+      listeners.forEach((l: any) => l(state));
+    };
+    return { getState, setState, listeners };
+  };
+
+  const mockUIStore = createMockStore({
+    viewMode: 'paginated',
+    shouldForceFont: false,
+    immersiveMode: false,
+    toc: [],
+    popover: { visible: false },
+    currentSectionTitle: 'Chapter 1',
+    currentSectionId: 'chap1.html',
+    updateLocation: vi.fn(),
+    updateSection: vi.fn(),
+    setToc: vi.fn(),
+    setIsLoading: vi.fn(),
+    setCurrentBookId: vi.fn(),
+    reset: vi.fn(),
+    setImmersiveMode: vi.fn((val: boolean) => mockUIStore.setState({ immersiveMode: val })),
+    showPopover: vi.fn(),
+    hidePopover: vi.fn(),
+    setPlayFromSelection: vi.fn()
+  });
+
+  const mockSyncStore = createMockStore({
+    currentTheme: 'light',
+    customTheme: null,
+    fontFamily: 'serif',
+    fontSize: 100,
+    lineHeight: 1.5,
+    setTheme: vi.fn((val: string) => mockSyncStore.setState({ currentTheme: val })),
+    setFontSize: vi.fn(),
+    setFontFamily: vi.fn(),
+    setLineHeight: vi.fn(),
+    setShouldForceFont: vi.fn((val: boolean) => mockUIStore.setState({ shouldForceFont: val }))
+  });
+
+  const mockTTSStore = createMockStore({
+    isPlaying: false,
+    activeCfi: null,
+    lastError: null,
+    clearError: vi.fn(),
+    voices: [],
+    loadVoices: vi.fn()
+  });
+
+  return { createMockStore, mockUIStore, mockSyncStore, mockTTSStore };
+});
+
 // Mock dependencies
 vi.mock('epubjs');
 vi.mock('../../../db/db', () => ({
   getDB: vi.fn(() => Promise.resolve({
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get: vi.fn((store, _id) => {
       if (store === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
-
       if (store === 'static_manifests') return Promise.resolve({
         bookId: 'test-book-id', title: 'Test Book', author: 'Author',
         fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION,
         coverBlob: new Blob([''])
       });
-
-      if (store === 'user_inventory') return Promise.resolve({
-        bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
-      });
-
-      if (store === 'user_progress') return Promise.resolve({
-        bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
-      });
-
       return Promise.resolve(null);
     }),
     getAllFromIndex: vi.fn(() => Promise.resolve([])),
     put: vi.fn(() => Promise.resolve()),
     transaction: vi.fn(() => ({
       objectStore: vi.fn((name) => ({
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        get: vi.fn((_id) => {
-          if (name === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
-          if (name === 'static_manifests') return Promise.resolve({
-            bookId: 'test-book-id', title: 'Test Book', author: 'Author',
-            fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION
-          });
-          if (name === 'user_inventory') return Promise.resolve({
-            bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
-          });
-          if (name === 'user_progress') return Promise.resolve({
-            bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
-          });
-          return Promise.resolve(null);
-        }),
+        get: vi.fn((_id) => Promise.resolve(null)),
         put: vi.fn()
       })),
       done: Promise.resolve()
@@ -59,17 +90,27 @@ vi.mock('../../../db/db', () => ({
   })),
 }));
 
-// Mock searchClient
+vi.mock('../../../hooks/useTTS', () => ({
+  useTTS: () => ({
+    voices: [],
+    speak: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    cancel: vi.fn(),
+    isPlaying: false,
+    isPaused: false,
+  })
+}));
+
 vi.mock('../../../lib/search', () => ({
   searchClient: {
     indexBook: vi.fn().mockResolvedValue(undefined),
     search: vi.fn().mockResolvedValue([]),
     terminate: vi.fn(),
-    isIndexed: vi.fn().mockReturnValue(true) // prevent indexing loop
+    isIndexed: vi.fn().mockReturnValue(true)
   }
 }));
 
-// Mock UnifiedInputController
 vi.mock('../UnifiedInputController', () => ({
   UnifiedInputController: ({ onPrev, onNext }: { onPrev: () => void, onNext: () => void }) => (
     <div data-testid="unified-input-controller">
@@ -79,86 +120,71 @@ vi.mock('../UnifiedInputController', () => ({
   )
 }));
 
-// Mock Stores (so we can assert on them)
-// We need to use real Zustand stores OR mock them with state?
-// Since we want integration test style where components update stores, let's use actual stores or a factory that behaves like them.
-// Actually, vitest mocks for modules will replace the module exports.
-// If we want the component to USE the store AND we want to assert on it, better not to mock the module completely returning undefined, 
-// but use the actual store implementation if possible, OR mock with a state container.
-// Given strict mocking in previous tests, let's mock with a simple state implementation.
-
-const createMockStore = (initialState: any) => {
-  let state = { ...initialState };
-  const listeners = new Set();
-
-  const fn = (selector?: any) => {
-    return selector ? selector(state) : state;
-  }
-  fn.getState = () => state;
-  fn.setState = (partial: any) => {
-    state = { ...state, ...partial };
-    listeners.forEach((l: any) => l(state));
+// Reactive Mocks using safe function updates and refs for selectors
+const createSafeHook = (store: any) => async () => {
+  const React = await import('react');
+  return {
+    // Dynamic
   };
-  fn.subscribe = (l: any) => {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  };
-  return fn;
 };
 
-// Hoisted store mocks
-const mockUseReaderUIStore = createMockStore({
-  viewMode: 'paginated',
-  shouldForceFont: false,
-  immersiveMode: false,
-  toc: [],
-  popover: { visible: false },
-  currentSectionTitle: 'Chapter 1',
-  currentSectionId: 'chap1.html',
-  updateLocation: vi.fn(),
-  updateSection: vi.fn(),
-  setToc: vi.fn(),
-  setIsLoading: vi.fn(),
-  setCurrentBookId: vi.fn(),
-  reset: vi.fn(),
-  setImmersiveMode: vi.fn((val: boolean) => mockUseReaderUIStore.setState({ immersiveMode: val })),
-  showPopover: vi.fn(),
-  hidePopover: vi.fn(),
-  setPlayFromSelection: vi.fn()
-});
-
-const mockUseReaderSyncStore = createMockStore({
-  currentTheme: 'light',
-  customTheme: null,
-  fontFamily: 'serif',
-  fontSize: 100,
-  lineHeight: 1.5,
-  setTheme: vi.fn((val: string) => mockUseReaderSyncStore.setState({ currentTheme: val })),
-  setFontSize: vi.fn(),
-  setFontFamily: vi.fn(),
-  setLineHeight: vi.fn(),
-  setShouldForceFont: vi.fn((val: boolean) => mockUseReaderUIStore.setState({ shouldForceFont: val })) // Note: Force font usually in UI store? VisualSettings.tsx line 23 says UIStore.
-});
-// Correction: VisualSettings.tsx line 23: { ... setShouldForceFont } = useReaderUIStore
-// So force font is in UI Store.
-
-vi.mock('../../../store/useReaderUIStore', () => ({
-  useReaderUIStore: (selector: any) => mockUseReaderUIStore(selector)
-}));
-
-vi.mock('../../../store/useReaderSyncStore', () => ({
-  useReaderSyncStore: (selector: any) => mockUseReaderSyncStore(selector)
-}));
-
-vi.mock('../../../store/useTTSStore', () => {
-  const store = createMockStore({
-    isPlaying: false,
-    activeCfi: null,
-    lastError: null,
-    clearError: vi.fn()
-  });
+vi.mock('../../../store/useReaderUIStore', async () => {
+  const React = await import('react');
   return {
-    useTTSStore: (selector: any) => store(selector)
+    useReaderUIStore: (selector: any) => {
+        const selectorRef = React.useRef(selector);
+        selectorRef.current = selector;
+        const [val, setVal] = React.useState(() => selector(mockUIStore.getState()));
+        React.useEffect(() => {
+            const cb = () => {
+                const next = selectorRef.current(mockUIStore.getState());
+                setVal(() => next);
+            };
+            mockUIStore.listeners.add(cb);
+            return () => mockUIStore.listeners.delete(cb);
+        }, []);
+        return val;
+    }
+  };
+});
+
+vi.mock('../../../store/useReaderSyncStore', async () => {
+  const React = await import('react');
+  return {
+    useReaderSyncStore: (selector: any) => {
+        const selectorRef = React.useRef(selector);
+        selectorRef.current = selector;
+        const [val, setVal] = React.useState(() => selector(mockSyncStore.getState()));
+        React.useEffect(() => {
+            const cb = () => {
+                const next = selectorRef.current(mockSyncStore.getState());
+                setVal(() => next);
+            };
+            mockSyncStore.listeners.add(cb);
+            return () => mockSyncStore.listeners.delete(cb);
+        }, []);
+        return val;
+    }
+  };
+});
+
+vi.mock('../../../store/useTTSStore', async () => {
+  const React = await import('react');
+  return {
+    useTTSStore: (selector: any) => {
+        const selectorRef = React.useRef(selector);
+        selectorRef.current = selector;
+        const [val, setVal] = React.useState(() => selector(mockTTSStore.getState()));
+        React.useEffect(() => {
+            const cb = () => {
+                const next = selectorRef.current(mockTTSStore.getState());
+                setVal(() => next);
+            };
+            mockTTSStore.listeners.add(cb);
+            return () => mockTTSStore.listeners.delete(cb);
+        }, []);
+        return val;
+    }
   };
 });
 
@@ -182,8 +208,7 @@ describe('ReaderView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Reset store states
-    mockUseReaderUIStore.setState({
+    mockUIStore.setState({
       viewMode: 'paginated',
       shouldForceFont: false,
       immersiveMode: false,
@@ -192,12 +217,17 @@ describe('ReaderView', () => {
       currentSectionTitle: 'Chapter 1',
       currentSectionId: 'chap1.html',
     });
-    mockUseReaderSyncStore.setState({
+    mockSyncStore.setState({
       currentTheme: 'light',
       fontSize: 100,
     });
+    mockTTSStore.setState({
+      isPlaying: false,
+      activeCfi: null,
+      lastError: null,
+      voices: [],
+    });
 
-    // Mock epubjs instance
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (ePub as any).mockReturnValue({
       renderTo: mockRenderTo.mockReturnValue({
@@ -219,14 +249,9 @@ describe('ReaderView', () => {
         flow: vi.fn(),
         resize: vi.fn(),
         hooks: {
-          content: {
-            register: vi.fn(),
-            deregister: vi.fn()
-          }
+          content: { register: vi.fn(), deregister: vi.fn() }
         },
-        manager: {
-          container: { clientWidth: 1000 }
-        },
+        manager: { container: { clientWidth: 1000 } },
         locations: {
           generate: vi.fn().mockResolvedValue(['cfi1']),
           percentageFromCfi: vi.fn(() => 0.5),
@@ -274,11 +299,8 @@ describe('ReaderView', () => {
     renderComponent();
 
     await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
-
-    // Wait for the mock component to appear
     await waitFor(() => expect(screen.getByTestId('unified-input-controller')).toBeInTheDocument());
 
-    // Click mock buttons exposed by UnifiedInputController mock
     const prevBtn = screen.getByTestId('mock-prev');
     const nextBtn = screen.getByTestId('mock-next');
 
@@ -293,9 +315,8 @@ describe('ReaderView', () => {
     renderComponent();
     await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
 
-    // Reset immersive mode to false so header buttons are visible
     act(() => {
-      mockUseReaderUIStore.setState({ immersiveMode: false });
+      mockUIStore.setState({ immersiveMode: false });
     });
 
     const tocBtn = screen.getByLabelText('Table of Contents');
@@ -310,26 +331,21 @@ describe('ReaderView', () => {
     renderComponent();
     await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
 
-    // Reset immersive mode to false so header buttons are visible
     act(() => {
-      mockUseReaderUIStore.setState({ immersiveMode: false });
+      mockUIStore.setState({ immersiveMode: false });
     });
 
-    // Open Visual Settings (Theme, Font, etc.)
     const visualSettingsBtn = screen.getByLabelText('Visual Settings');
     fireEvent.click(visualSettingsBtn);
 
-    // Change Theme
     const darkThemeBtn = await screen.findByLabelText('Select Dark theme');
     fireEvent.click(darkThemeBtn);
 
-    expect(mockUseReaderSyncStore.getState().currentTheme).toBe('dark');
+    expect(mockSyncStore.getState().currentTheme).toBe('dark');
 
-    // Toggle Force Theme
-    // We use getByRole for switch as it might not be labeled by text directly in a way JSDOM likes with Radix
     const forceThemeSwitch = screen.getByRole('switch', { name: 'Force Theme' });
     fireEvent.click(forceThemeSwitch);
 
-    expect(mockUseReaderUIStore.getState().shouldForceFont).toBe(true);
+    expect(mockUIStore.getState().shouldForceFont).toBe(true);
   });
 });
