@@ -69,6 +69,9 @@ interface TTSState {
   /** Whether to enable text sanitization (remove URLs, page numbers, etc.) */
   sanitizationEnabled: boolean;
 
+  /** Whether to enable Bible abbreviations and lexicon globally. */
+  isBibleLexiconEnabled: boolean;
+
   /** Local Provider Settings */
   backgroundAudioMode: 'silence' | 'noise' | 'off';
   whiteNoiseVolume: number;
@@ -91,6 +94,7 @@ interface TTSState {
   setEnableCostWarning: (enable: boolean) => void;
   setPrerollEnabled: (enable: boolean) => void;
   setSanitizationEnabled: (enable: boolean) => void;
+  setBibleLexiconEnabled: (enable: boolean) => void;
   loadVoices: () => Promise<void>;
   downloadVoice: (voiceId: string) => Promise<void>;
   deleteVoice: (voiceId: string) => Promise<void>;
@@ -171,6 +175,7 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: true,
             prerollEnabled: false,
             sanitizationEnabled: true,
+            isBibleLexiconEnabled: true, // Default to true
             backgroundAudioMode: 'silence',
             whiteNoiseVolume: 0.1,
             customAbbreviations: [
@@ -240,6 +245,9 @@ export const useTTSStore = create<TTSState>()(
             },
             setSanitizationEnabled: (enable) => {
                 set({ sanitizationEnabled: enable });
+            },
+            setBibleLexiconEnabled: (enable) => {
+                set({ isBibleLexiconEnabled: enable });
             },
             setBackgroundAudioMode: (mode) => {
                 set({ backgroundAudioMode: mode });
@@ -341,6 +349,7 @@ export const useTTSStore = create<TTSState>()(
             enableCostWarning: state.enableCostWarning,
             prerollEnabled: state.prerollEnabled,
             sanitizationEnabled: state.sanitizationEnabled,
+            isBibleLexiconEnabled: state.isBibleLexiconEnabled,
             backgroundAudioMode: state.backgroundAudioMode,
             whiteNoiseVolume: state.whiteNoiseVolume,
         }),

@@ -1008,9 +1008,9 @@ export const GlobalSettingsDialog = () => {
                             </div>
 
                             <div className="border-t pt-4 space-y-4">
-                                <h3 className="text-lg font-medium">Text Segmentation</h3>
+                                <h3 className="text-lg font-medium">Text Segmentation & Abbreviations</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Define abbreviations that should not trigger a sentence break.
+                                    Define abbreviations that should not trigger a sentence break, and enable built-in lexicon packs.
                                 </p>
                                 <TTSAbbreviationSettings />
                             </div>

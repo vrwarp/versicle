@@ -243,6 +243,11 @@ export const TTSAbbreviationSettings: React.FC = () => {
         setSentenceStarters: state.setSentenceStarters
     })));
 
+    const { isBibleLexiconEnabled, setBibleLexiconEnabled } = useTTSStore(useShallow(state => ({
+        isBibleLexiconEnabled: state.isBibleLexiconEnabled,
+        setBibleLexiconEnabled: state.setBibleLexiconEnabled
+    })));
+
     const defaultAbbreviations = [
         'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
         'e.g.', 'i.e.'
@@ -258,6 +263,24 @@ export const TTSAbbreviationSettings: React.FC = () => {
 
     return (
         <div className="space-y-4">
+             <div className="flex items-center justify-between p-2 rounded bg-muted/20">
+                <div className="space-y-0.5">
+                    <label htmlFor="bible-lexicon-toggle" className="text-sm font-medium">Enable Bible Abbreviations & Lexicon</label>
+                    <p className="text-xs text-muted-foreground">
+                        Automatically expands 80+ biblical abbreviations (e.g., "Gen. 1:1" → "Genesis 1:1") and prevents pauses.
+                    </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <input
+                        id="bible-lexicon-toggle"
+                        type="checkbox"
+                        checked={isBibleLexiconEnabled}
+                        onChange={(e) => setBibleLexiconEnabled(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                </div>
+            </div>
+
             <StringListManager
                 title="Abbreviations"
                 description="These abbreviations will not trigger a new sentence when followed by a period."

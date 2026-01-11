@@ -34,6 +34,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
   const currentBookId = useReaderStore(state => state.currentBookId);
   const [scope, setScope] = useState<'global' | 'book'>('global');
+  const [biblePreference, setBiblePreference] = useState<'on' | 'off' | 'default'>('default');
 
   const [testInput, setTestInput] = useState('');
   const [testOutput, setTestOutput] = useState('');
@@ -42,10 +43,12 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
   const loadRules = useCallback(async () => {
     if (scope === 'global') {
         const globals = await lexiconService.getRules();
-        setRules(globals);
+        setRules(globals.filter(r => !r.id.startsWith('bible-')));
     } else if (currentBookId) {
         const all = await lexiconService.getRules(currentBookId);
         setRules(all.filter(r => r.bookId === currentBookId));
+        const pref = await lexiconService.getBibleLexiconPreference(currentBookId);
+        setBiblePreference(pref);
     } else {
         setRules([]);
     }
@@ -53,20 +56,10 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
   useEffect(() => {
     if (open) {
-      // Inline load logic to avoid linter confusion or wrap in async IIFE explicitely
-      (async () => {
-          if (scope === 'global') {
-              const globals = await lexiconService.getRules();
-              setRules(globals);
-          } else if (currentBookId) {
-              const all = await lexiconService.getRules(currentBookId);
-              setRules(all.filter(r => r.bookId === currentBookId));
-          } else {
-              setRules([]);
-          }
-      })();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void loadRules();
     }
-  }, [open, scope, currentBookId, lexiconService]);
+  }, [open, loadRules]);
 
   const [initializedTerm, setInitializedTerm] = useState<string | null>(null);
 
@@ -82,6 +75,13 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
       setTestInput(initialTerm);
       setInitializedTerm(initialTerm);
   }
+
+  const handleBiblePreferenceChange = async (pref: 'on' | 'off' | 'default') => {
+      if (currentBookId) {
+          await lexiconService.setBibleLexiconPreference(currentBookId, pref);
+          setBiblePreference(pref);
+      }
+  };
 
   const handleSave = async () => {
     if (!editingRule?.original || !editingRule?.replacement) return;
@@ -296,6 +296,37 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         </div>
 
         <div data-testid="lexicon-list-container" className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
+          {scope === 'book' && currentBookId && (
+               <div className="mb-4 p-3 bg-muted/20 border rounded flex flex-col gap-2">
+                  <div className="flex justify-between items-center">
+                      <div>
+                          <h4 className="text-sm font-semibold">Bible Abbreviations & Lexicon</h4>
+                          <p className="text-xs text-muted-foreground">Override global setting for this book.</p>
+                      </div>
+                      <div className="flex bg-muted rounded p-1">
+                          <button
+                              onClick={() => handleBiblePreferenceChange('default')}
+                              className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'default' ? 'bg-background shadow-sm font-medium' : 'hover:bg-background/50 text-muted-foreground'}`}
+                          >
+                              Default
+                          </button>
+                          <button
+                              onClick={() => handleBiblePreferenceChange('on')}
+                              className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'on' ? 'bg-background shadow-sm font-medium text-green-600' : 'hover:bg-background/50 text-muted-foreground'}`}
+                          >
+                              On
+                          </button>
+                          <button
+                              onClick={() => handleBiblePreferenceChange('off')}
+                              className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'off' ? 'bg-background shadow-sm font-medium text-red-600' : 'hover:bg-background/50 text-muted-foreground'}`}
+                          >
+                              Off
+                          </button>
+                      </div>
+                  </div>
+               </div>
+          )}
+
           {/* List */}
           <div data-testid="lexicon-rules-list" className="space-y-2">
             {rules.map((rule, index) => (

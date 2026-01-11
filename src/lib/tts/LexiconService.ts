@@ -1,6 +1,8 @@
 import { getDB } from '../../db/db';
 import type { LexiconRule } from '../../types/db';
 import { v4 as uuidv4 } from 'uuid';
+import { useTTSStore } from '../../store/useTTSStore';
+import { BIBLE_LEXICON_RULES } from '../../data/bible-lexicon';
 
 /**
  * Service for managing pronunciation lexicon rules.
@@ -41,9 +43,18 @@ export class LexiconService {
     })) || [];
 
     // Fetch Book Specific Rules
+    let bibleLexiconEnabled: 'on' | 'off' | 'default' = 'default';
+
     if (bookId) {
         const bookOverrides = await db.get('user_overrides', bookId);
         if (bookOverrides) {
+            // Check for bible lexicon override
+            // We use 'settings' property in UserOverrides, or a dedicated property if we typed it explicitly.
+            // Since UserOverrides has 'settings' as Record<string, unknown>, we can use that.
+            if (bookOverrides.settings && bookOverrides.settings.bibleLexiconEnabled) {
+                bibleLexiconEnabled = bookOverrides.settings.bibleLexiconEnabled as 'on' | 'off' | 'default';
+            }
+
             // Legacy support: Check for old global config if per-rule setting is missing
             const legacyDefault = bookOverrides.lexiconConfig?.applyBefore;
 
@@ -64,6 +75,42 @@ export class LexiconService {
 
             rules = [...beforeRules, ...rules, ...afterRules];
         }
+    }
+
+    // Determine if we should apply Bible Lexicon rules
+    const globalEnabled = useTTSStore.getState().isBibleLexiconEnabled;
+    const shouldApplyBible = bibleLexiconEnabled === 'on' || (bibleLexiconEnabled === 'default' && globalEnabled);
+
+    if (shouldApplyBible) {
+        const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES.map((r, i) => ({
+            id: `bible-${i}`,
+            original: r.original,
+            replacement: r.replacement,
+            isRegex: r.isRegex,
+            applyBeforeGlobal: false, // Generally Bible rules should apply after user custom rules? Or maybe before?
+            // Usually system rules are lower priority than user overrides.
+            // But if user wants to override "Gen." they should be able to.
+            // So we put Bible rules *after* book rules (which might contain overrides).
+            // Wait, rules are applied in order. First match? No, replaceAll.
+            // LexiconService.applyLexicon iterates and does replace.
+            // So later rules replace what earlier rules might have produced?
+            // Or earlier rules replace original text.
+            // If I have "Gen." -> "Genesis".
+            // If I run that first, "Gen. 1" -> "Genesis 1".
+            // If user has "Genesis" -> "Start", then "Start 1".
+            // So order matters.
+            // If we want user rules to take precedence (i.e. override system behavior),
+            // user rules should probably run *before* system rules if they are fixing system output?
+            // Or *instead* of system rules?
+            // If I want "Gen." to be "General", and system says "Genesis".
+            // If system runs first: "Genesis" -> user rule for "Gen." won't match.
+            // So user rules for "Gen." must run first.
+            created: 0
+        }));
+
+        // Append Bible rules at the end (lowest priority / applied last)
+        // This means user rules (both global and book specific) run first.
+        rules = [...rules, ...bibleRules];
     }
 
     return rules;
@@ -106,6 +153,31 @@ export class LexiconService {
 
     await store.put(overrides);
     await tx.done;
+  }
+
+  async setBibleLexiconPreference(bookId: string, preference: 'on' | 'off' | 'default'): Promise<void> {
+      const db = await getDB();
+      const tx = db.transaction('user_overrides', 'readwrite');
+      const store = tx.objectStore('user_overrides');
+
+      const overrides = await store.get(bookId) || { bookId, lexicon: [] };
+
+      overrides.settings = {
+          ...overrides.settings,
+          bibleLexiconEnabled: preference
+      };
+
+      await store.put(overrides);
+      await tx.done;
+  }
+
+  async getBibleLexiconPreference(bookId: string): Promise<'on' | 'off' | 'default'> {
+      const db = await getDB();
+      const overrides = await db.get('user_overrides', bookId);
+      if (overrides?.settings && overrides.settings.bibleLexiconEnabled) {
+          return overrides.settings.bibleLexiconEnabled as 'on' | 'off' | 'default';
+      }
+      return 'default';
   }
 
   async reorderRules(updates: { id: string; order: number }[]): Promise<void> {
