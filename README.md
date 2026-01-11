@@ -62,7 +62,7 @@
     *   **Checkpoints**: Automatic "Moral Layer" snapshots protect against data loss during sync.
     *   **Android Backup**: Native integration with Android's Backup Manager.
 *   **Reading History**: Detailed session tracking with timeline visualization.
-*   **Reading List**: Track status (Read, Reading, Want to Read) and Rating. Export to CSV (Goodreads compatible).
+*   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted. Export/Import to CSV (Goodreads compatible).
 *   **Backups**:
     *   **Light**: JSON export of metadata/settings.
     *   **Full**: ZIP archive including all book files.

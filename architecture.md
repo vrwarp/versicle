@@ -179,13 +179,14 @@ The data layer is built on **IndexedDB** using the `idb` library. It is accessed
 #### `src/db/DBService.ts`
 The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
 
-**Key Stores (Schema v19):**
+**Key Stores (Schema v22):**
 *   **Domain 1: Static (Immutable/Heavy)**
     *   `static_manifests`: Lightweight metadata (Title, Author, Cover Thumbnail) for listing books.
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
     *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
 *   **Domain 2: User (Mutable/Syncable)**
     *   `user_inventory`: User-specific metadata (Added Date, Custom Title, Tags, Status, Rating).
+    *   `user_reading_list`: Persistent reading history and status (Read/Reading/Want to Read), separate from inventory to allow "Shadow Inventory" (tracking books not currently on device).
     *   `user_progress`: Reading state (CFI, Percentage, Last Read Timestamp, Queue Position).
     *   `user_annotations`: Highlights and notes.
     *   `user_overrides`: Custom settings like Lexicon rules (pronunciation overrides).
@@ -201,6 +202,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `app_metadata`: Global application configuration.
 *   **Legacy/Migration**:
     *   Includes logic to migrate from Schema v17 (monolithic `books`/`files` stores) to the v19 Domain Model.
+    *   **v22 Repair & Resync**: Includes self-healing logic to recover missing filenames in `user_inventory` by cross-referencing `static_resources` and backfilling `user_reading_list`.
 
 **Key Functions:**
 *   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position. Updates `user_progress`.
@@ -283,6 +285,13 @@ Manages internal state backup and restoration.
 *   **`createLightBackup()`**: JSON-only export (metadata, settings, history).
 *   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files (reconstructed from `static_resources`).
 *   **`restoreBackup()`**: Implements a smart merge strategy (keeps newer progress).
+
+#### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
+*   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks and async flows.
+*   **Logic**:
+    *   Uses a **Generator** pattern (`function*`) instead of standard `async/await`.
+    *   The runner iterates the generator, yielding Promises. If `cancel()` is called, it throws a `CancellationError` into the generator, triggering `finally` blocks for cleanup and preventing subsequent code execution.
+*   **Trade-off**: Requires writing async logic as generators, which is non-standard syntax for many developers.
 
 ---
 
