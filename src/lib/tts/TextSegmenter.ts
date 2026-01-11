@@ -1,5 +1,6 @@
 import { generateCfiRange, parseCfiRange } from '../cfi-utils';
 import type { SentenceNode } from '../tts';
+import { getCachedSegmenter } from './segmenter-cache';
 
 /**
  * Represents a segment of text (e.g., a sentence) with its location.
@@ -100,9 +101,7 @@ export class TextSegmenter {
      * @param locale - The locale for Intl.Segmenter (default 'en').
      */
     constructor(locale: string = 'en') {
-        if (typeof Intl !== 'undefined' && Intl.Segmenter) {
-            this.segmenter = new Intl.Segmenter(locale, { granularity: 'sentence' });
-        }
+        this.segmenter = getCachedSegmenter(locale);
     }
 
     /**
