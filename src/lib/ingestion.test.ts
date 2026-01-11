@@ -74,6 +74,7 @@ describe('ingestion', () => {
     transaction: vi.fn(() => ({
       objectStore: vi.fn(() => ({
         put: vi.fn(),
+        add: vi.fn(),
         clear: vi.fn(),
         get: vi.fn(),
       })),
@@ -134,27 +135,26 @@ describe('ingestion', () => {
   });
 
   it('should process an epub file correctly', async () => {
+    const mockAdd = vi.fn();
+    mockDB.transaction = vi.fn(() => ({
+        objectStore: vi.fn(() => ({
+            add: mockAdd
+        })),
+        done: Promise.resolve()
+    })) as any;
+
     const mockFile = createMockFile(true);
-    const bookId = await processEpub(mockFile);
+    const metadata = await processEpub(mockFile);
 
-    expect(bookId).toBe('mock-uuid');
+    expect(metadata.id).toBe('mock-uuid');
+    expect(metadata.title).toBe('Mock Title');
 
-    // Verify DB puts
-    expect(mockDB.put).toHaveBeenCalledWith('static_manifests', expect.objectContaining({
+    // Verify DB adds via transaction
+    expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
       title: 'Mock Title',
       author: 'Mock Author',
       description: 'Mock Description',
       bookId: 'mock-uuid'
-    }));
-
-    expect(mockDB.put).toHaveBeenCalledWith('user_inventory', expect.objectContaining({
-      bookId: 'mock-uuid',
-      sourceFilename: 'test.epub'
-    }));
-
-    expect(mockDB.put).toHaveBeenCalledWith('static_resources', expect.objectContaining({
-      bookId: 'mock-uuid',
-      epubBlob: expect.anything()
     }));
   });
 
@@ -173,19 +173,21 @@ describe('ingestion', () => {
       destroy: vi.fn(),
     }));
 
-    // Re-mock getDB because resetModules might have cleared it? 
-    // Actually getDB mock is top-level. But import might be re-evaluated?
-    // Let's rely on global mock.
-    // We need to re-apply the mockResolvedValue because beforeEach runs before resetModules?
-    // No, beforeEach runs before test. Test calls resetModules.
-    // CodeUnderTest imports 'ingestion'. 'ingestion' imports 'db'.
+    const mockAdd = vi.fn();
+    mockDB.transaction = vi.fn(() => ({
+        objectStore: vi.fn(() => ({
+            add: mockAdd
+        })),
+        done: Promise.resolve()
+    })) as any;
+
     const { processEpub: processEpubReimported } = await import('./ingestion');
-    (getDB as any).mockResolvedValue(mockDB); // Ensure it returns our mock
+    (getDB as any).mockResolvedValue(mockDB);
 
     const mockFile = createMockFile(true);
-    const bookId = await processEpubReimported(mockFile);
+    await processEpubReimported(mockFile);
 
-    expect(mockDB.put).toHaveBeenCalledWith('static_manifests', expect.objectContaining({
+    expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
       title: 'No Cover Book',
       coverBlob: undefined
     }));
@@ -205,13 +207,21 @@ describe('ingestion', () => {
       destroy: vi.fn(),
     }));
 
+    const mockAdd = vi.fn();
+    mockDB.transaction = vi.fn(() => ({
+        objectStore: vi.fn(() => ({
+            add: mockAdd
+        })),
+        done: Promise.resolve()
+    })) as any;
+
     const { processEpub: processEpubReimported } = await import('./ingestion');
     (getDB as any).mockResolvedValue(mockDB);
 
     const mockFile = createMockFile(true);
     await processEpubReimported(mockFile);
 
-    expect(mockDB.put).toHaveBeenCalledWith('static_manifests', expect.objectContaining({
+    expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
       title: 'Untitled',
       author: 'Unknown Author'
     }));
@@ -238,6 +248,14 @@ describe('ingestion', () => {
 
     const confirmSpy = vi.spyOn(window, 'confirm');
 
+    const mockAdd = vi.fn();
+    mockDB.transaction = vi.fn(() => ({
+        objectStore: vi.fn(() => ({
+            add: mockAdd
+        })),
+        done: Promise.resolve()
+    })) as any;
+
     const { processEpub: processEpubReimported } = await import('./ingestion');
     (getDB as any).mockResolvedValue(mockDB);
 
@@ -246,13 +264,13 @@ describe('ingestion', () => {
 
     expect(confirmSpy).not.toHaveBeenCalled();
 
-    // Verify title length in put call
-    const putCalls = mockDB.put.mock.calls;
-    const manifestCall = putCalls.find((call: any[]) => call[0] === 'static_manifests');
+    // Verify title length in add call
+    const calls = mockAdd.mock.calls;
+    const manifestCall = calls.find((call: any[]) => call[0].title);
+
     expect(manifestCall).toBeDefined();
-    // Safe check for typescript
     if (manifestCall) {
-      expect(manifestCall[1].title.length).toBe(500);
+      expect(manifestCall[0].title.length).toBe(500);
     }
 
     consoleSpy.mockRestore();

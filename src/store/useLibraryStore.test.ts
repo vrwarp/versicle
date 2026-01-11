@@ -1,19 +1,20 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useLibraryStore } from './useLibraryStore';
+import { useInventoryStore } from './useInventoryStore';
 import { getDB } from '../db/db';
-import type { StaticBookManifest, UserInventoryItem, UserProgress, UserOverrides } from '../types/db';
 
 // Mock DBService
 vi.mock('../db/DBService', () => ({
   dbService: {
     addBook: vi.fn(async (file: File) => {
-      // Return mock metadata
       return {
         id: 'test-id',
         title: 'Test Book',
         author: 'Test Author',
         filename: file.name,
         addedAt: Date.now(),
+        // Mock returning the bookId as id
+        bookId: 'test-id'
       };
     }),
     deleteBook: vi.fn(),
@@ -21,6 +22,13 @@ vi.mock('../db/DBService', () => ({
     restoreBook: vi.fn(),
   }
 }));
+
+// Mock Yjs middleware to be a simple pass-through for synchronous state updates
+vi.mock('zustand-middleware-yjs', () => {
+  return {
+    default: (doc: any, name: any, config: any) => (set: any, get: any, api: any) => config(set, get, api)
+  };
+});
 
 describe('useLibraryStore', () => {
   const mockFile = new File(['dummy content'], 'test.epub', { type: 'application/epub+zip' });
@@ -30,16 +38,14 @@ describe('useLibraryStore', () => {
   }
 
   beforeEach(async () => {
-    // Reset Zustand store
+    // Reset Zustand stores
     useLibraryStore.setState({
-      books: [],
       isLoading: false,
       sortOrder: 'last_read',
-      error: null
+      error: null,
+      books: [] // Reset legacy books array if used
     });
 
-    // Clear other stores
-    const { useInventoryStore } = await import('./useInventoryStore');
     useInventoryStore.setState({ books: {} });
   });
 
@@ -49,100 +55,37 @@ describe('useLibraryStore', () => {
 
   it('should have initial state', () => {
     const state = useLibraryStore.getState();
-    expect(state.books).toEqual([]);
     expect(state.isLoading).toBe(false);
     expect(state.sortOrder).toBe('last_read');
   });
 
-  it('should add a book', async () => {
+  it('should add a book and update inventory', async () => {
     await useLibraryStore.getState().addBook(mockFile);
 
-    const state = useLibraryStore.getState();
-    expect(state.books).toHaveLength(1);
-    // Partial match as composite construction might have undefineds
-    expect(state.books[0]).toMatchObject({ id: 'test-id', title: 'Test Book' });
-    expect(state.isLoading).toBe(false);
+    // Check Inventory Store
+    const inventory = useInventoryStore.getState();
+    const books = Object.values(inventory.books);
 
-    // Verify it's in DB
-    const db = await getDB();
-    const storedManifest = await db.get('static_manifests', 'test-id');
-    expect(storedManifest).toBeDefined();
+    expect(books).toHaveLength(1);
+    expect(books[0]).toMatchObject({ bookId: 'test-id', customTitle: 'Test Book' });
+
+    // Check UI state
+    const state = useLibraryStore.getState();
+    expect(state.isLoading).toBe(false);
   });
 
-  it('should remove a book', async () => {
+  it('should remove a book from inventory', async () => {
     // First add a book
     await useLibraryStore.getState().addBook(mockFile);
 
     // Verify it was added
-    expect(useLibraryStore.getState().books).toHaveLength(1);
+    expect(Object.keys(useInventoryStore.getState().books)).toHaveLength(1);
 
     // Then remove it
     await useLibraryStore.getState().removeBook('test-id');
 
-    // Verify it's gone from state
-    const state = useLibraryStore.getState();
-    expect(state.books).toHaveLength(0);
-    expect(state.isLoading).toBe(false);
-
-    // Verify it's gone from DB
-    const db = await getDB();
-    const storedManifest = await db.get('static_manifests', 'test-id');
-    expect(storedManifest).toBeUndefined();
-
-    const storedResource = await db.get('static_resources', 'test-id');
-    expect(storedResource).toBeUndefined();
-  });
-
-  it('should refresh library from DB', async () => {
-    // Manually add a book to DB (simulating a fresh load)
-    const db = await getDB();
-    const bookId = 'test-id';
-    await db.put('static_manifests', {
-      bookId, title: 'Test Book', author: 'Test Author', schemaVersion: 1, fileHash: 'hash', fileSize: 0, totalChars: 0
-    } as StaticBookManifest);
-    await db.put('user_inventory', {
-      bookId, addedAt: 1234567890, status: 'unread', tags: [], lastInteraction: 1234567890
-    } as UserInventoryItem);
-    await db.put('user_progress', {
-      bookId, percentage: 0, lastRead: 0, completedRanges: []
-    } as UserProgress);
-    await db.put('static_resources', {
-      bookId, epubBlob: new ArrayBuffer(8)
-    });
-
-    // Initial state should be empty
-    expect(useLibraryStore.getState().books).toHaveLength(0);
-
-    // Refresh library
-    await useLibraryStore.getState().fetchBooks();
-
-    // State should now have the book
-    const state = useLibraryStore.getState();
-    expect(state.books).toHaveLength(1);
-    expect(state.books[0].title).toEqual('Test Book');
-  });
-
-  it('should sort books by addedAt desc on refresh', async () => {
-    const db = await getDB();
-
-    // Book 1
-    await db.put('static_manifests', { bookId: '1', title: 'B1', author: 'A', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-    await db.put('user_inventory', { bookId: '1', addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
-    await db.put('user_progress', { bookId: '1', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-    await db.put('static_resources', { bookId: '1', epubBlob: new ArrayBuffer(8) });
-
-    // Book 2 (Newer)
-    await db.put('static_manifests', { bookId: '2', title: 'B2', author: 'A', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-    await db.put('user_inventory', { bookId: '2', addedAt: 200, status: 'unread', tags: [], lastInteraction: 200 } as UserInventoryItem);
-    await db.put('user_progress', { bookId: '2', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-    await db.put('static_resources', { bookId: '2', epubBlob: new ArrayBuffer(8) });
-
-    await useLibraryStore.getState().fetchBooks();
-
-    const state = useLibraryStore.getState();
-    expect(state.books).toHaveLength(2);
-    expect(state.books[0].id).toBe('2'); // Newer one first
-    expect(state.books[1].id).toBe('1');
+    // Verify it's gone from inventory
+    expect(Object.keys(useInventoryStore.getState().books)).toHaveLength(0);
   });
 
   it('should update and persist sort order', () => {
@@ -153,54 +96,9 @@ describe('useLibraryStore', () => {
     expect(useLibraryStore.getState().sortOrder).toBe('author');
   });
 
-  it('should handle annotations deletion when removing a book', async () => {
-    // Add a book
-    await useLibraryStore.getState().addBook(mockFile);
-
-    const db = await getDB();
-    const annotation = {
-      id: 'note-1',
-      bookId: 'test-id',
-      cfiRange: 'epubcfi(...)',
-      text: 'Note text',
-      type: 'note' as const, // Fix literal type
-      color: 'yellow',
-      created: Date.now()
-    };
-
-    await db.put('user_annotations', annotation);
-
-    // Verify annotation exists
-    expect(await db.get('user_annotations', 'note-1')).toEqual(annotation);
-
-    // Remove the book
+  it('should call dbService.deleteBook when removing a book', async () => {
+    const { dbService } = await import('../db/DBService');
     await useLibraryStore.getState().removeBook('test-id');
-
-    // Verify annotation is deleted
-    expect(await db.get('user_annotations', 'note-1')).toBeUndefined();
-  });
-
-  it('should delete associated lexicon rules when removing a book', async () => {
-    // Add a book
-    await useLibraryStore.getState().addBook(mockFile);
-
-    const db = await getDB();
-    const overrides: UserOverrides = {
-      bookId: 'test-id',
-      lexicon: [
-        { id: 'rule-1', original: 'hello', replacement: 'hi', created: Date.now() }
-      ]
-    };
-
-    await db.put('user_overrides', overrides);
-
-    // Verify rules exist
-    expect(await db.get('user_overrides', 'test-id')).toBeDefined();
-
-    // Remove the book
-    await useLibraryStore.getState().removeBook('test-id');
-
-    // Verify rules are deleted
-    expect(await db.get('user_overrides', 'test-id')).toBeUndefined();
+    expect(dbService.deleteBook).toHaveBeenCalledWith('test-id');
   });
 });

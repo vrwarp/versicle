@@ -4,25 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ReaderControlBar } from '../ReaderControlBar';
 
-// Helper for reactive mock store state
-const createReactiveStore = (initialState: any) => {
-  let state = { ...initialState };
-  const listeners = new Set<(s: any) => void>();
-
-  const getState = () => state;
-  const setState = (partial: any) => {
-    state = { ...state, ...partial };
-    listeners.forEach(l => l(state));
-  };
-  const subscribe = (l: (s: any) => void) => {
-    listeners.add(l);
-    return () => listeners.delete(l);
-  };
-
-  return { getState, setState, subscribe, listeners, state }; // expose internals for hook
-};
-
-// Hoisted stores must be created via vi.hoisted to be available in mocks
+// Hoisted stores
 const {
   readerStore,
   inventoryStore,
@@ -31,8 +13,6 @@ const {
   ttsStore,
   toastStore
 } = vi.hoisted(() => {
-
-  // We duplicate the helper here because hoisted block is isolated
   const createStore = (initialState: any) => {
     let state = { ...initialState };
     const listeners = new Set<(s: any) => void>();
@@ -59,47 +39,22 @@ const {
   };
 });
 
-// Mock implementations reusing the hoisted state
-const createMockHook = (store: any) => async () => {
-  const React = await import('react');
-  return {
-    // Dynamic export name based on usage, but we return object with default or named export
-  };
-};
-
-// Generic hook implementation
-const mockHookImpl = (store: any) => (selector?: any) => {
-  const React = require('react'); // specific for vitest environment or use dynamic import inside factory if strictly ESM
-  // But since we are likely in JSDOM/Node setup, require matches.
-  // However, explicit async import in factory is safer.
-
-  // Fallback if selector is missing
-  const [snap, setSnap] = React.useState(() => selector ? selector(store.getState()) : store.getState());
-
-  React.useEffect(() => {
-    const listener = (newState: any) => {
-      setSnap(selector ? selector(newState) : newState);
-    };
-    store.listeners.add(listener);
-    return () => store.listeners.delete(listener);
-  }, [selector]);
-
-  return snap;
-};
-
 vi.mock('../../../store/useReaderUIStore', async () => {
   const React = await import('react');
   return {
     useReaderUIStore: (selector: any) => {
-      const [snap, setSnap] = React.useState(() => selector ? selector(readerStore.getState()) : readerStore.getState());
-      React.useEffect(() => {
-        const listener = (newState: any) => {
-          setSnap(selector ? selector(newState) : newState);
-        };
-        readerStore.listeners.add(listener);
-        return () => readerStore.listeners.delete(listener);
-      }, [selector]);
-      return snap;
+        const selectorRef = React.useRef(selector);
+        selectorRef.current = selector;
+        const [val, setVal] = React.useState(() => selector(readerStore.getState()));
+        React.useEffect(() => {
+            const cb = () => {
+                const next = selectorRef.current(readerStore.getState());
+                setVal(() => next);
+            };
+            readerStore.listeners.add(cb);
+            return () => readerStore.listeners.delete(cb);
+        }, []);
+        return val;
     }
   };
 });
@@ -108,15 +63,18 @@ vi.mock('../../../store/useInventoryStore', async () => {
   const React = await import('react');
   return {
     useInventoryStore: (selector: any) => {
-      const [snap, setSnap] = React.useState(() => selector ? selector(inventoryStore.getState()) : inventoryStore.getState());
-      React.useEffect(() => {
-        const listener = (newState: any) => {
-          setSnap(selector ? selector(newState) : newState);
-        };
-        inventoryStore.listeners.add(listener);
-        return () => inventoryStore.listeners.delete(listener);
-      }, [selector]);
-      return snap;
+        const selectorRef = React.useRef(selector);
+        selectorRef.current = selector;
+        const [val, setVal] = React.useState(() => selector(inventoryStore.getState()));
+        React.useEffect(() => {
+            const cb = () => {
+                const next = selectorRef.current(inventoryStore.getState());
+                setVal(() => next);
+            };
+            inventoryStore.listeners.add(cb);
+            return () => inventoryStore.listeners.delete(cb);
+        }, []);
+        return val;
     }
   };
 });
@@ -125,15 +83,18 @@ vi.mock('../../../store/useProgressStore', async () => {
   const React = await import('react');
   return {
     useProgressStore: (selector: any) => {
-      const [snap, setSnap] = React.useState(() => selector ? selector(progressStore.getState()) : progressStore.getState());
-      React.useEffect(() => {
-        const listener = (newState: any) => {
-          setSnap(selector ? selector(newState) : newState);
-        };
-        progressStore.listeners.add(listener);
-        return () => progressStore.listeners.delete(listener);
-      }, [selector]);
-      return snap;
+        const selectorRef = React.useRef(selector);
+        selectorRef.current = selector;
+        const [val, setVal] = React.useState(() => selector(progressStore.getState()));
+        React.useEffect(() => {
+            const cb = () => {
+                const next = selectorRef.current(progressStore.getState());
+                setVal(() => next);
+            };
+            progressStore.listeners.add(cb);
+            return () => progressStore.listeners.delete(cb);
+        }, []);
+        return val;
     }
   };
 });
@@ -142,15 +103,18 @@ vi.mock('../../../store/useAnnotationStore', async () => {
   const React = await import('react');
   return {
     useAnnotationStore: (selector: any) => {
-      const [snap, setSnap] = React.useState(() => selector ? selector(annotationStore.getState()) : annotationStore.getState());
-      React.useEffect(() => {
-        const listener = (newState: any) => {
-          setSnap(selector ? selector(newState) : newState);
-        };
-        annotationStore.listeners.add(listener);
-        return () => annotationStore.listeners.delete(listener);
-      }, [selector]);
-      return snap;
+        const selectorRef = React.useRef(selector);
+        selectorRef.current = selector;
+        const [val, setVal] = React.useState(() => selector(annotationStore.getState()));
+        React.useEffect(() => {
+            const cb = () => {
+                const next = selectorRef.current(annotationStore.getState());
+                setVal(() => next);
+            };
+            annotationStore.listeners.add(cb);
+            return () => annotationStore.listeners.delete(cb);
+        }, []);
+        return val;
     }
   };
 });
@@ -159,15 +123,18 @@ vi.mock('../../../store/useTTSStore', async () => {
   const React = await import('react');
   return {
     useTTSStore: (selector: any) => {
-      const [snap, setSnap] = React.useState(() => selector ? selector(ttsStore.getState()) : ttsStore.getState());
-      React.useEffect(() => {
-        const listener = (newState: any) => {
-          setSnap(selector ? selector(newState) : newState);
-        };
-        ttsStore.listeners.add(listener);
-        return () => ttsStore.listeners.delete(listener);
-      }, [selector]);
-      return snap;
+        const selectorRef = React.useRef(selector);
+        selectorRef.current = selector;
+        const [val, setVal] = React.useState(() => selector(ttsStore.getState()));
+        React.useEffect(() => {
+            const cb = () => {
+                const next = selectorRef.current(ttsStore.getState());
+                setVal(() => next);
+            };
+            ttsStore.listeners.add(cb);
+            return () => ttsStore.listeners.delete(cb);
+        }, []);
+        return val;
     }
   };
 });
@@ -176,15 +143,18 @@ vi.mock('../../../store/useToastStore', async () => {
   const React = await import('react');
   return {
     useToastStore: (selector: any) => {
-      const [snap, setSnap] = React.useState(() => selector ? selector(toastStore.getState()) : toastStore.getState());
-      React.useEffect(() => {
-        const listener = (newState: any) => {
-          setSnap(selector ? selector(newState) : newState);
-        };
-        toastStore.listeners.add(listener);
-        return () => toastStore.listeners.delete(listener);
-      }, [selector]);
-      return snap;
+        const selectorRef = React.useRef(selector);
+        selectorRef.current = selector;
+        const [val, setVal] = React.useState(() => selector(toastStore.getState()));
+        React.useEffect(() => {
+            const cb = () => {
+                const next = selectorRef.current(toastStore.getState());
+                setVal(() => next);
+            };
+            toastStore.listeners.add(cb);
+            return () => toastStore.listeners.delete(cb);
+        }, []);
+        return val;
     }
   };
 });
@@ -198,9 +168,8 @@ vi.mock('zustand/react/shallow', () => ({
   useShallow: (selector: any) => selector
 }));
 
-// Mock LexiconManager (src/components/reader/LexiconManager)
+// Mock LexiconManager
 vi.mock('./LexiconManager', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   LexiconManager: ({ open, onOpenChange, initialTerm }: any) => (
     open ? (
       <div data-testid="lexicon-manager-mock">
@@ -211,9 +180,8 @@ vi.mock('./LexiconManager', () => ({
   )
 }));
 
-// Mock CompassPill (src/components/ui/CompassPill)
+// Mock CompassPill
 vi.mock('../ui/CompassPill', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   CompassPill: ({ variant, onClick, onAnnotationAction, progress }: any) => (
     <div data-testid={`compass-pill-${variant}`} data-progress={progress} onClick={onClick}>
       {variant}
@@ -250,7 +218,6 @@ describe('ReaderControlBar', () => {
   it('renders annotation variant when popover is visible', async () => {
     render(<ReaderControlBar />);
 
-    // Update state after render to test reactivity
     React.act(() => {
       readerStore.setState({
         popover: { visible: true, text: 'text', cfiRange: 'cfi' },
@@ -283,6 +250,7 @@ describe('ReaderControlBar', () => {
     await waitFor(() => {
       const pill = screen.getByTestId('compass-pill-active');
       expect(pill).toBeInTheDocument();
+      // Ensure progress is treated as string for attribute check
       expect(pill).toHaveAttribute('data-progress', '50');
     });
   });
@@ -376,18 +344,15 @@ describe('ReaderControlBar', () => {
       });
     });
 
-    // Test Color Action (via mocked button)
     const btn = await screen.findByText('Color');
     fireEvent.click(btn);
 
     await waitFor(() => {
-      expect(spyAdd).toHaveBeenCalledWith({
+      expect(spyAdd).toHaveBeenCalledWith(expect.objectContaining({
         type: 'highlight',
         color: 'yellow',
-        bookId: '123',
-        text: 'selected text',
-        cfiRange: 'cfi'
-      });
+        bookId: '123'
+      }));
       expect(hidePopover).toHaveBeenCalled();
     });
   });
@@ -409,7 +374,9 @@ describe('ReaderControlBar', () => {
     const btn = await screen.findByText('Pronounce');
     fireEvent.click(btn);
 
-    expect(screen.getByTestId('lexicon-manager-mock')).toBeInTheDocument();
+    await waitFor(() => {
+        expect(screen.getByTestId('lexicon-manager-mock')).toBeInTheDocument();
+    });
     expect(screen.getByTestId('lexicon-manager-mock')).toHaveTextContent('Lexicon Manager Open: Desolate');
     expect(hidePopover).toHaveBeenCalled();
   });

@@ -68,6 +68,7 @@ describe('Ingestion Image Optimization', () => {
     transaction: vi.fn(() => ({
       objectStore: vi.fn(() => ({
         put: vi.fn(),
+        add: vi.fn(),
         clear: vi.fn(),
         get: vi.fn(),
       })),
@@ -112,23 +113,48 @@ describe('Ingestion Image Optimization', () => {
   });
 
   it('should store thumbnail in books store (manifest)', async () => {
-    const bookId = await processEpub(mockFile);
+    const mockAdd = vi.fn();
+    mockDB.transaction = vi.fn(() => ({
+      objectStore: vi.fn(() => ({
+        add: mockAdd
+      })),
+      done: Promise.resolve()
+    })) as any;
+
+    const metadata = await processEpub(mockFile);
+    const bookId = metadata.id;
 
     // Verify compression was called
     expect(imageCompression).toHaveBeenCalled();
 
     // Verify metadata has thumbnail in static_manifests put call
-    expect(mockDB.put).toHaveBeenCalledWith('static_manifests', expect.objectContaining({
+    // Note: processEpub uses transaction.objectStore().add() for manifests
+    expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
       bookId,
       coverBlob: mockThumbnailBlob
     }));
   });
 
   it('should store table images in cache_table_images', async () => {
-    const bookId = await processEpub(mockFile);
+    // Setup transaction mock
+    const mockAdd = vi.fn();
+    const mockPut = vi.fn();
+    mockDB.transaction = vi.fn(() => ({
+      objectStore: vi.fn(() => ({
+        add: mockAdd,
+        put: mockPut
+      })),
+      done: Promise.resolve()
+    })) as any;
 
-    // Verify calls to put for cache_table_images
-    expect(mockDB.put).toHaveBeenCalledWith('cache_table_images', expect.objectContaining({
+    const metadata = await processEpub(mockFile);
+    const bookId = metadata.id;
+
+    // processEpub iterates tables and uses tableStore.add(table)
+    // tableStore is derived from transaction.objectStore('cache_table_images')
+    // Since our mock returns the same object with mockAdd for ALL stores, we just check mockAdd.
+
+    expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
       bookId,
       sectionId: 'chapter1.xhtml',
       cfi: 'epubcfi(/6/2[chapter1]!/4/2/1:0)',
@@ -141,10 +167,19 @@ describe('Ingestion Image Optimization', () => {
     // Setup compression failure
     (imageCompression as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Compression failed'));
 
-    const bookId = await processEpub(mockFile);
+    const mockAdd = vi.fn();
+    mockDB.transaction = vi.fn(() => ({
+      objectStore: vi.fn(() => ({
+        add: mockAdd
+      })),
+      done: Promise.resolve()
+    })) as any;
+
+    const metadata = await processEpub(mockFile);
+    const bookId = metadata.id;
 
     // Check manifest uses original cover blob
-    expect(mockDB.put).toHaveBeenCalledWith('static_manifests', expect.objectContaining({
+    expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
       bookId,
       coverBlob: mockCoverBlob
     }));
