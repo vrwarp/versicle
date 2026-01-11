@@ -105,3 +105,11 @@ type YjsSchema = {
 ### Conflict Resolution
 *   **Inventory/Progress:** `Y.Map` uses Last-Write-Wins (LWW) based on Lamport timestamps.
 *   **Annotations:** Keyed by UUID. No merge conflicts, only add/remove races (handled by CRDT set semantics).
+
+## Execution Log
+
+### Phase 1: Foundation & Dependencies (Completed)
+*   **Installed Dependencies:** `yjs`, `y-indexeddb`, and `zustand-middleware-yjs` (fork).
+*   **Implemented Provider:** Created `src/store/yjs-provider.ts` exporting the singleton `yDoc` and `persistence`.
+*   **Validation:** Added unit tests (`src/store/yjs-provider.test.ts`) to verify singleton export and sync waiting logic.
+*   **Status:** The Yjs runtime is initialized and persisting to a separate IndexedDB database (`versicle-yjs`).
