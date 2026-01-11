@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
-import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource } from '../types/db';
+import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, ReadingListEntry } from '../types/db';
 
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
@@ -72,7 +72,7 @@ describe('DBService', () => {
       // Local progress 10%
       await db.put('user_progress', { bookId: id, percentage: 0.1, lastRead: 0, completedRanges: [] } as UserProgress);
       // Reading list progress 50%
-      await db.put('user_reading_list', { filename: 'book.epub', title: 'A', author: 'A', percentage: 0.5, lastUpdated: 0 } as any);
+      await db.put('user_reading_list', { filename: 'book.epub', title: 'A', author: 'A', percentage: 0.5, lastUpdated: 0 } as ReadingListEntry);
 
       const library = await dbService.getLibrary();
       expect(library[0].progress).toBe(0.5);
@@ -113,7 +113,7 @@ describe('DBService', () => {
       // Local progress 0%
       await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
       // Reading list progress 50%
-      await db.put('user_reading_list', { filename: 'book.epub', title: 'A', author: 'A', percentage: 0.5, lastUpdated: 0 } as any);
+      await db.put('user_reading_list', { filename: 'book.epub', title: 'A', author: 'A', percentage: 0.5, lastUpdated: 0 } as ReadingListEntry);
       await db.put('static_resources', { bookId: id, epubBlob: fileData } as StaticResource);
 
       const result = await dbService.getBook(id);
@@ -131,7 +131,7 @@ describe('DBService', () => {
       // Local progress 10%
       await db.put('user_progress', { bookId: id, percentage: 0.1, lastRead: 0, completedRanges: [] } as UserProgress);
       // Reading list progress 50%
-      await db.put('user_reading_list', { filename: 'book.epub', title: 'A', author: 'A', percentage: 0.5, lastUpdated: 0 } as any);
+      await db.put('user_reading_list', { filename: 'book.epub', title: 'A', author: 'A', percentage: 0.5, lastUpdated: 0 } as ReadingListEntry);
       await db.put('static_resources', { bookId: id, epubBlob: fileData } as StaticResource);
 
       const result = await dbService.getBook(id);
