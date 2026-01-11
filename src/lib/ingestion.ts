@@ -2,30 +2,30 @@ import ePub, { type NavigationItem } from 'epubjs';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry } from '../types/db';
+import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, TableImage, BookMetadata } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from './constants';
 
 function cheapHash(buffer: ArrayBuffer): string {
-  const view = new Uint8Array(buffer);
-  let hash = 5381;
-  for (let i = 0; i < view.length; i++) {
-    hash = ((hash << 5) + hash) + view[i]; /* hash * 33 + c */
-  }
-  return (hash >>> 0).toString(16);
+    const view = new Uint8Array(buffer);
+    let hash = 5381;
+    for (let i = 0; i < view.length; i++) {
+        hash = ((hash << 5) + hash) + view[i]; /* hash * 33 + c */
+    }
+    return (hash >>> 0).toString(16);
 }
 
 export async function generateFileFingerprint(
-  file: Blob,
-  metadata: { title: string; author: string; filename: string }
+    file: Blob,
+    metadata: { title: string; author: string; filename: string }
 ): Promise<string> {
-  const metaString = `${metadata.filename}-${metadata.title}-${metadata.author}`;
-  const headSize = Math.min(4096, file.size);
-  const head = await file.slice(0, headSize).arrayBuffer();
-  const tail = await file.slice(Math.max(0, file.size - 4096), file.size).arrayBuffer();
-  return `${metaString}-${cheapHash(head)}-${cheapHash(tail)}`;
+    const metaString = `${metadata.filename}-${metadata.title}-${metadata.author}`;
+    const headSize = Math.min(4096, file.size);
+    const head = await file.slice(0, headSize).arrayBuffer();
+    const tail = await file.slice(Math.max(0, file.size - 4096), file.size).arrayBuffer();
+    return `${metaString}-${cheapHash(head)}-${cheapHash(tail)}`;
 }
 
 export async function validateZipSignature(file: File): Promise<boolean> {
@@ -33,9 +33,9 @@ export async function validateZipSignature(file: File): Promise<boolean> {
         const buffer = await file.slice(0, 4).arrayBuffer();
         const view = new DataView(buffer);
         return view.getUint8(0) === 0x50 &&
-               view.getUint8(1) === 0x4B &&
-               view.getUint8(2) === 0x03 &&
-               view.getUint8(3) === 0x04;
+            view.getUint8(1) === 0x4B &&
+            view.getUint8(2) === 0x03 &&
+            view.getUint8(3) === 0x04;
     } catch (e) {
         console.error("File validation failed", e);
         return false;
@@ -43,334 +43,321 @@ export async function validateZipSignature(file: File): Promise<boolean> {
 }
 
 export async function reprocessBook(bookId: string): Promise<void> {
-  const db = await getDB();
-  // v18: Get from static_resources
-  const resource = await db.get('static_resources', bookId);
-  const file = resource?.epubBlob;
+    const db = await getDB();
+    // v18: Get from static_resources
+    const resource = await db.get('static_resources', bookId);
+    const file = resource?.epubBlob;
 
-  if (!file) {
-    throw new Error(`Book source file not found for ID: ${bookId}`);
-  }
+    if (!file) {
+        throw new Error(`Book source file not found for ID: ${bookId}`);
+    }
 
-  const fileBlob = file instanceof Blob ? file : new Blob([file]);
-  const chapters = await extractContentOffscreen(fileBlob, {});
+    const fileBlob = file instanceof Blob ? file : new Blob([file]);
+    const chapters = await extractContentOffscreen(fileBlob, {});
 
-  const syntheticToc: NavigationItem[] = [];
-  const sections: SectionMetadata[] = [];
-  const ttsContentBatches: TTSContent[] = [];
-  const tableBatches: TableImage[] = [];
-  let totalChars = 0;
+    const syntheticToc: NavigationItem[] = [];
+    const sections: SectionMetadata[] = [];
+    const ttsContentBatches: TTSContent[] = [];
+    const tableBatches: TableImage[] = [];
+    let totalChars = 0;
 
-  chapters.forEach((chapter, i) => {
-      syntheticToc.push({
-          id: `syn-toc-${i}`,
-          href: chapter.href,
-          label: chapter.title || `Chapter ${i+1}`
-      });
+    chapters.forEach((chapter, i) => {
+        syntheticToc.push({
+            id: `syn-toc-${i}`,
+            href: chapter.href,
+            label: chapter.title || `Chapter ${i + 1}`
+        });
 
-      sections.push({
-          id: `${bookId}-${chapter.href}`,
-          bookId,
-          sectionId: chapter.href,
-          characterCount: chapter.textContent.length,
-          playOrder: i
-      });
-      totalChars += chapter.textContent.length;
+        sections.push({
+            id: `${bookId}-${chapter.href}`,
+            bookId,
+            sectionId: chapter.href,
+            characterCount: chapter.textContent.length,
+            playOrder: i
+        });
+        totalChars += chapter.textContent.length;
 
-      if (chapter.sentences.length > 0) {
-          ttsContentBatches.push({
-              id: `${bookId}-${chapter.href}`,
-              bookId,
-              sectionId: chapter.href,
-              sentences: chapter.sentences
-          });
-      }
+        if (chapter.sentences.length > 0) {
+            ttsContentBatches.push({
+                id: `${bookId}-${chapter.href}`,
+                bookId,
+                sectionId: chapter.href,
+                sentences: chapter.sentences
+            });
+        }
 
-      if (chapter.tables && chapter.tables.length > 0) {
-          chapter.tables.forEach(table => {
-             tableBatches.push({
-                 id: `${bookId}-${table.cfi}`,
-                 bookId,
-                 sectionId: chapter.href,
-                 cfi: table.cfi,
-                 imageBlob: table.imageBlob
-             });
-          });
-      }
-  });
+        if (chapter.tables && chapter.tables.length > 0) {
+            chapter.tables.forEach(table => {
+                tableBatches.push({
+                    id: `${bookId}-${table.cfi}`,
+                    bookId,
+                    sectionId: chapter.href,
+                    cfi: table.cfi,
+                    imageBlob: table.imageBlob
+                });
+            });
+        }
+    });
 
-  const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation', 'cache_table_images'], 'readwrite');
+    const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation', 'cache_table_images'], 'readwrite');
 
-  // Update Metadata
-  const manStore = tx.objectStore('static_manifests');
-  const manifest = await manStore.get(bookId);
-  if (manifest) {
-      manifest.totalChars = totalChars;
-      // manifest.syntheticToc? v18 puts this in static_structure.
-      manifest.schemaVersion = CURRENT_BOOK_VERSION;
-      await manStore.put(manifest);
-  }
+    // Update Metadata
+    const manStore = tx.objectStore('static_manifests');
+    const manifest = await manStore.get(bookId);
+    if (manifest) {
+        manifest.totalChars = totalChars;
+        // manifest.syntheticToc? v18 puts this in static_structure.
+        manifest.schemaVersion = CURRENT_BOOK_VERSION;
+        await manStore.put(manifest);
+    }
 
-  // Update Structure
-  const structStore = tx.objectStore('static_structure');
-  await structStore.put({
-      bookId,
-      toc: syntheticToc,
-      spineItems: sections.map(s => ({
-          id: s.sectionId,
-          characterCount: s.characterCount,
-          index: s.playOrder
-      }))
-  });
+    // Update Structure
+    const structStore = tx.objectStore('static_structure');
+    await structStore.put({
+        bookId,
+        toc: syntheticToc,
+        spineItems: sections.map(s => ({
+            id: s.sectionId,
+            characterCount: s.characterCount,
+            index: s.playOrder
+        }))
+    });
 
-  // Update TTS Preparation (Cache)
-  // Clean up old entries first
-  const prepStore = tx.objectStore('cache_tts_preparation');
-  // Requires index 'by_bookId' which we added
-  const prepIndex = prepStore.index('by_bookId');
-  const keys = await prepIndex.getAllKeys(bookId);
-  for (const key of keys) {
-      await prepStore.delete(key);
-  }
+    // Update TTS Preparation (Cache)
+    // Clean up old entries first
+    const prepStore = tx.objectStore('cache_tts_preparation');
+    // Requires index 'by_bookId' which we added
+    const prepIndex = prepStore.index('by_bookId');
+    const keys = await prepIndex.getAllKeys(bookId);
+    for (const key of keys) {
+        await prepStore.delete(key);
+    }
 
-  for (const batch of ttsContentBatches) {
-      await prepStore.put({
-          id: batch.id,
-          bookId: batch.bookId,
-          sectionId: batch.sectionId,
-          sentences: batch.sentences
-      });
-  }
+    for (const batch of ttsContentBatches) {
+        await prepStore.put({
+            id: batch.id,
+            bookId: batch.bookId,
+            sectionId: batch.sectionId,
+            sentences: batch.sentences
+        });
+    }
 
-  // Update Table Images (Cache)
-  const tableStore = tx.objectStore('cache_table_images');
-  const tableIndex = tableStore.index('by_bookId');
-  const tableKeys = await tableIndex.getAllKeys(bookId);
-  for (const key of tableKeys) {
-      await tableStore.delete(key);
-  }
+    // Update Table Images (Cache)
+    const tableStore = tx.objectStore('cache_table_images');
+    const tableIndex = tableStore.index('by_bookId');
+    const tableKeys = await tableIndex.getAllKeys(bookId);
+    for (const key of tableKeys) {
+        await tableStore.delete(key);
+    }
 
-  for (const table of tableBatches) {
-      await tableStore.put(table);
-  }
+    for (const table of tableBatches) {
+        await tableStore.put(table);
+    }
 
-  await tx.done;
+    await tx.done;
 }
 
+/**
+ * Ingests a new EPUB file.
+ * Returns the BookMetadata composite so the caller can update the user's Yjs store.
+ * NOTE: This function ONLY writes to static_* and cache_* stores. It DOES NOT write to user_* stores.
+ */
 export async function processEpub(
-  file: File,
-  ttsOptions?: ExtractionOptions,
-  onProgress?: (progress: number, message: string) => void
-): Promise<string> {
-  const isValid = await validateZipSignature(file);
-  if (!isValid) {
-      throw new Error("Invalid file format. File must be a valid EPUB (ZIP archive).");
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const book = (ePub as any)(file);
-  await book.ready;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const metadata = await (book.loaded as any).metadata;
-  const coverUrl = await book.coverUrl();
-
-  let coverBlob: Blob | undefined;
-  let thumbnailBlob: Blob | undefined;
-
-  if (coverUrl) {
-    try {
-      const response = await fetch(coverUrl);
-      coverBlob = await response.blob();
-      if (coverBlob) {
-        try {
-          thumbnailBlob = await imageCompression(coverBlob as File, {
-            maxSizeMB: 0.05,
-            maxWidthOrHeight: 300,
-            useWebWorker: true,
-          });
-        } catch (error) {
-          console.warn('Failed to compress cover image, using original:', error);
-          thumbnailBlob = coverBlob;
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to retrieve cover blob:', error);
+    file: File,
+    ttsOptions?: ExtractionOptions,
+    onProgress?: (progress: number, message: string) => void
+): Promise<BookMetadata> {
+    const isValid = await validateZipSignature(file);
+    if (!isValid) {
+        throw new Error("Invalid file format. File must be a valid EPUB (ZIP archive).");
     }
-  }
 
-  book.destroy();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const book = (ePub as any)(file);
+    await book.ready;
 
-  const chapters = await extractContentOffscreen(file, ttsOptions, onProgress);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const metadata = await (book.loaded as any).metadata;
+    const coverUrl = await book.coverUrl();
 
-  const bookId = uuidv4();
-  const syntheticToc: NavigationItem[] = [];
-  const sections: SectionMetadata[] = [];
-  const ttsContentBatches: TTSContent[] = [];
-  const tableBatches: TableImage[] = [];
-  let totalChars = 0;
+    let coverBlob: Blob | undefined;
+    let thumbnailBlob: Blob | undefined;
 
-  chapters.forEach((chapter, i) => {
-      syntheticToc.push({
-          id: `syn-toc-${i}`,
-          href: chapter.href,
-          label: chapter.title || `Chapter ${i+1}`
-      });
+    if (coverUrl) {
+        try {
+            const response = await fetch(coverUrl);
+            coverBlob = await response.blob();
+            if (coverBlob) {
+                try {
+                    thumbnailBlob = await imageCompression(coverBlob as File, {
+                        maxSizeMB: 0.05,
+                        maxWidthOrHeight: 300,
+                        useWebWorker: true,
+                    });
+                } catch (error) {
+                    console.warn('Failed to compress cover image, using original:', error);
+                    thumbnailBlob = coverBlob;
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to retrieve cover blob:', error);
+        }
+    }
 
-      sections.push({
-          id: `${bookId}-${chapter.href}`,
-          bookId,
-          sectionId: chapter.href,
-          characterCount: chapter.textContent.length,
-          playOrder: i
-      });
-      totalChars += chapter.textContent.length;
+    book.destroy();
 
-      if (chapter.sentences.length > 0) {
-          ttsContentBatches.push({
-              id: `${bookId}-${chapter.href}`,
-              bookId,
-              sectionId: chapter.href,
-              sentences: chapter.sentences
-          });
-      }
+    const chapters = await extractContentOffscreen(file, ttsOptions, onProgress);
 
-      if (chapter.tables && chapter.tables.length > 0) {
-          chapter.tables.forEach(table => {
-             tableBatches.push({
-                 id: `${bookId}-${table.cfi}`,
-                 bookId,
-                 sectionId: chapter.href,
-                 cfi: table.cfi,
-                 imageBlob: table.imageBlob
-             });
-          });
-      }
-  });
+    const bookId = uuidv4();
+    const syntheticToc: NavigationItem[] = [];
+    const sections: SectionMetadata[] = [];
+    const ttsContentBatches: TTSContent[] = [];
+    const tableBatches: TableImage[] = [];
+    let totalChars = 0;
 
-  const fileHash = await generateFileFingerprint(file, {
-    title: metadata.title || 'Untitled',
-    author: metadata.creator || 'Unknown Author',
-    filename: file.name
-  });
+    chapters.forEach((chapter, i) => {
+        syntheticToc.push({
+            id: `syn-toc-${i}`,
+            href: chapter.href,
+            label: chapter.title || `Chapter ${i + 1}`
+        });
 
-  // Construct Sanitized Metadata Candidate
-  // We need to pass through sanitization logic (BookMetadata composite validator)
-  // even if we store them split.
-  const candidateMetadata = {
-      id: bookId, // for validation check
-      title: metadata.title || 'Untitled',
-      author: metadata.creator || 'Unknown Author',
-      description: metadata.description || '',
-      addedAt: Date.now(),
-      // ... other fields not strictly validated for content but for type
-  };
+        sections.push({
+            id: `${bookId}-${chapter.href}`,
+            bookId,
+            sectionId: chapter.href,
+            characterCount: chapter.textContent.length,
+            playOrder: i
+        });
+        totalChars += chapter.textContent.length;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const check = getSanitizedBookMetadata(candidateMetadata as any);
-  if (check) {
-      const s = check.sanitized;
-      candidateMetadata.title = s.title;
-      candidateMetadata.author = s.author;
-      candidateMetadata.description = s.description;
-      if (check.wasModified) {
-          console.warn(`Metadata sanitized for "${candidateMetadata.title}":`, check.modifications);
-      }
-  }
+        if (chapter.sentences.length > 0) {
+            ttsContentBatches.push({
+                id: `${bookId}-${chapter.href}`,
+                bookId,
+                sectionId: chapter.href,
+                sentences: chapter.sentences
+            });
+        }
 
-  // Construct New Data Objects
-  const manifest: StaticBookManifest = {
-      bookId,
-      title: candidateMetadata.title,
-      author: candidateMetadata.author,
-      description: candidateMetadata.description,
-      fileHash,
-      fileSize: file.size,
-      totalChars,
-      schemaVersion: CURRENT_BOOK_VERSION,
-      isbn: undefined,
-      coverBlob: thumbnailBlob || coverBlob // Store thumbnail in manifest
-  };
+        if (chapter.tables && chapter.tables.length > 0) {
+            chapter.tables.forEach(table => {
+                tableBatches.push({
+                    id: `${bookId}-${table.cfi}`,
+                    bookId,
+                    sectionId: chapter.href,
+                    cfi: table.cfi,
+                    imageBlob: table.imageBlob
+                });
+            });
+        }
+    });
 
-  const resource: StaticResource = {
-      bookId,
-      epubBlob: file
-  };
+    const fileHash = await generateFileFingerprint(file, {
+        title: metadata.title || 'Untitled',
+        author: metadata.creator || 'Unknown Author',
+        filename: file.name
+    });
 
-  const structure = {
-      bookId,
-      toc: syntheticToc,
-      spineItems: sections.map(s => ({
-          id: s.sectionId,
-          characterCount: s.characterCount,
-          index: s.playOrder
-      }))
-  };
+    // Construct Sanitized Metadata Candidate
+    const candidateMetadata = {
+        id: bookId,
+        title: metadata.title || 'Untitled',
+        author: metadata.creator || 'Unknown Author',
+        description: metadata.description || '',
+        addedAt: Date.now(),
+    };
 
-  const inventory: UserInventoryItem = {
-      bookId,
-      addedAt: candidateMetadata.addedAt,
-      sourceFilename: file.name,
-      tags: [],
-      status: 'unread',
-      lastInteraction: Date.now()
-  };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const check = getSanitizedBookMetadata(candidateMetadata as any);
+    if (check) {
+        const s = check.sanitized;
+        candidateMetadata.title = s.title;
+        candidateMetadata.author = s.author;
+        candidateMetadata.description = s.description;
+        if (check.wasModified) {
+            console.warn(`Metadata sanitized for "${candidateMetadata.title}":`, check.modifications);
+        }
+    }
 
-  const progress: UserProgress = {
-      bookId,
-      percentage: 0,
-      lastRead: 0,
-      completedRanges: []
-  };
+    // Construct Data Objects
+    const manifest: StaticBookManifest = {
+        bookId,
+        title: candidateMetadata.title,
+        author: candidateMetadata.author,
+        description: candidateMetadata.description,
+        fileHash,
+        fileSize: file.size,
+        totalChars,
+        schemaVersion: CURRENT_BOOK_VERSION,
+        isbn: undefined,
+        coverBlob: thumbnailBlob || coverBlob // Store thumbnail in manifest
+    };
 
-  const overrides: UserOverrides = {
-      bookId,
-      lexicon: []
-  };
+    const resource: StaticResource = {
+        bookId,
+        epubBlob: file
+    };
 
-  const readingListEntry: ReadingListEntry = {
-      filename: file.name,
-      title: candidateMetadata.title,
-      author: candidateMetadata.author,
-      isbn: undefined,
-      percentage: 0,
-      lastUpdated: Date.now(),
-      status: 'to-read',
-      rating: undefined
-  };
+    const structure = {
+        bookId,
+        toc: syntheticToc,
+        spineItems: sections.map(s => ({
+            id: s.sectionId,
+            characterCount: s.characterCount,
+            index: s.playOrder
+        }))
+    };
 
-  const db = await getDB();
-  const tx = db.transaction([
-      'static_manifests', 'static_resources', 'static_structure',
-      'user_inventory', 'user_progress', 'user_overrides',
-      'cache_tts_preparation', 'cache_table_images',
-      'user_reading_list'
-  ], 'readwrite');
+    // Only write to Static and Cache stores
+    const db = await getDB();
+    const tx = db.transaction([
+        'static_manifests', 'static_resources', 'static_structure',
+        'cache_tts_preparation', 'cache_table_images'
+    ], 'readwrite');
 
-  await tx.objectStore('static_manifests').add(manifest);
-  await tx.objectStore('static_resources').add(resource);
-  await tx.objectStore('static_structure').add(structure);
-  await tx.objectStore('user_inventory').add(inventory);
-  await tx.objectStore('user_progress').add(progress);
-  await tx.objectStore('user_overrides').add(overrides);
-  await tx.objectStore('user_reading_list').add(readingListEntry);
+    await tx.objectStore('static_manifests').add(manifest);
+    await tx.objectStore('static_resources').add(resource);
+    await tx.objectStore('static_structure').add(structure);
 
-  const ttsStore = tx.objectStore('cache_tts_preparation');
-  for (const batch of ttsContentBatches) {
-      await ttsStore.add({
-          id: batch.id,
-          bookId: batch.bookId,
-          sectionId: batch.sectionId,
-          sentences: batch.sentences
-      });
-  }
+    const ttsStore = tx.objectStore('cache_tts_preparation');
+    for (const batch of ttsContentBatches) {
+        await ttsStore.add({
+            id: batch.id,
+            bookId: batch.bookId,
+            sectionId: batch.sectionId,
+            sentences: batch.sentences
+        });
+    }
 
-  const tableStore = tx.objectStore('cache_table_images');
-  for (const table of tableBatches) {
-      await tableStore.add(table);
-  }
+    const tableStore = tx.objectStore('cache_table_images');
+    for (const table of tableBatches) {
+        await tableStore.add(table);
+    }
 
-  await tx.done;
+    await tx.done;
 
-  return bookId;
+    // Return Composite Metadata for Store/Yjs to consume
+    return {
+        id: bookId,
+        title: manifest.title,
+        author: manifest.author,
+        description: manifest.description,
+        coverBlob: manifest.coverBlob,
+        addedAt: candidateMetadata.addedAt,
+
+        // BookSource
+        bookId,
+        filename: file.name,
+        fileHash: manifest.fileHash,
+        fileSize: manifest.fileSize,
+        totalChars: manifest.totalChars,
+        version: manifest.schemaVersion,
+
+        // Initial State defaults (Caller should use these to init Yjs)
+        lastRead: 0,
+        progress: 0,
+        isOffloaded: false,
+        aiAnalysisStatus: 'none'
+    };
 }

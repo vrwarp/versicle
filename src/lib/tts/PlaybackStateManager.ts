@@ -82,7 +82,7 @@ export class PlaybackStateManager {
     applySkippedMask(rawSkippedIndices: Set<number>, sectionId?: string) {
         // Validation of sectionId can be added here if needed, currently implicitly handled by caller
         if (sectionId && this.currentSectionIndex === -1) {
-             // Optional: validate section ID
+            // Optional: validate section ID
         }
         let changed = false;
 
@@ -93,7 +93,7 @@ export class PlaybackStateManager {
             // Only skip if ALL source indices are in the skipped set
             let shouldSkip = false;
             if (item.sourceIndices && item.sourceIndices.length > 0) {
-                 shouldSkip = item.sourceIndices.every(idx => rawSkippedIndices.has(idx));
+                shouldSkip = item.sourceIndices.every(idx => rawSkippedIndices.has(idx));
             }
 
             if (item.isSkipped !== shouldSkip) {
@@ -136,11 +136,11 @@ export class PlaybackStateManager {
 
                 const item = newQueue[i];
                 if (item.sourceIndices && item.sourceIndices.length > 0) {
-                     // Check if all source indices of this item are in the adaptation's set
-                     const isMatch = item.sourceIndices.every(idx => adaptIndicesSet.has(idx));
-                     if (isMatch) {
-                         matchingQueueIndices.push(i);
-                     }
+                    // Check if all source indices of this item are in the adaptation's set
+                    const isMatch = item.sourceIndices.every(idx => adaptIndicesSet.has(idx));
+                    if (isMatch) {
+                        matchingQueueIndices.push(i);
+                    }
                 }
             }
 
@@ -151,12 +151,12 @@ export class PlaybackStateManager {
                 // 1. Update the first item (Anchor)
                 const firstIdx = matchingQueueIndices[0];
                 if (newQueue[firstIdx].text !== adaptation.text || newQueue[firstIdx].isSkipped) {
-                     newQueue[firstIdx] = {
-                         ...newQueue[firstIdx],
-                         text: adaptation.text,
-                         isSkipped: false
-                     };
-                     changed = true;
+                    newQueue[firstIdx] = {
+                        ...newQueue[firstIdx],
+                        text: adaptation.text,
+                        isSkipped: false
+                    };
+                    changed = true;
                 }
 
                 // 2. Mark others as skipped
@@ -368,10 +368,10 @@ export class PlaybackStateManager {
      * @returns {number} Total duration in seconds.
      */
     getTotalDuration(): number {
-         if (!this._queue.length || !this.prefixSums.length) return 0;
-         const charsPerSecond = this.calculateCharsPerSecond();
-         if (charsPerSecond === 0) return 0;
-         return this.prefixSums[this._queue.length] / charsPerSecond;
+        if (!this._queue.length || !this.prefixSums.length) return 0;
+        const charsPerSecond = this.calculateCharsPerSecond();
+        if (charsPerSecond === 0) return 0;
+        return this.prefixSums[this._queue.length] / charsPerSecond;
     }
 
     /**

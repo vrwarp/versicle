@@ -184,6 +184,8 @@ export interface UserJourneyStep {
   cfiRange: string;
   /** Type of session. */
   type: 'visual' | 'tts';
+  /** Optional label for the session (e.g., Chapter Title). */
+  label?: string;
 }
 
 /**
@@ -258,6 +260,10 @@ export interface CacheSessionState {
   bookId: string;
   /** The active playback queue. */
   playbackQueue: TTSQueueItem[];
+  /** The current index in the queue. */
+  currentIndex: number;
+  /** The index of the current section in the playlist. */
+  sectionIndex?: number;
   /** Last pause timestamp. */
   lastPauseTime?: number;
   /** Update timestamp. */
@@ -404,8 +410,8 @@ export interface ContentAnalysis {
   };
   /** Detected content types for sections (CFI -> Type). */
   contentTypes?: {
-      rootCfi: string;
-      type: ContentType;
+    rootCfi: string;
+    type: ContentType;
   }[];
   tableAdaptations?: TableAdaptation[];
   /** Summary of the section. */

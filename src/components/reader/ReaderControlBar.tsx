@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useInventoryStore } from '../../store/useInventoryStore';
+import { useProgressStore } from '../../store/useProgressStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
 import type { ActionType } from '../ui/CompassPill';
@@ -30,27 +31,48 @@ export const ReaderControlBar: React.FC = () => {
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderStore(useShallow(state => ({
+    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         currentBookId: state.currentBookId,
         currentSectionTitle: state.currentSectionTitle
     })));
 
-    // OPTIMIZATION: Use granular selectors to avoid re-rendering on every library change.
-    // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.
-    // Now, we only re-render if the calculated `lastReadBook` or `currentBook` reference changes.
+    const inventory = useInventoryStore(state => state.books);
+    const progressMap = useProgressStore(state => state.progress);
 
     // Select the most recently read book
-    const lastReadBook = useLibraryStore(state => {
-        return state.books
-            .filter(b => b.lastRead)
-            .sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
-    });
+    const lastReadBook = useMemo(() => {
+        const sortedProgress = Object.values(progressMap)
+            .filter(p => p.lastRead)
+            .sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0));
+
+        if (sortedProgress.length > 0) {
+            const best = sortedProgress[0];
+            const book = inventory[best.bookId];
+            if (book) {
+                return {
+                    id: book.bookId,
+                    title: book.customTitle || 'Untitled',
+                    progress: best.percentage
+                };
+            }
+        }
+        return null;
+    }, [inventory, progressMap]);
 
     // Select the current book if active
-    const currentBook = useLibraryStore(state => {
-        return currentBookId ? state.books.find(b => b.id === currentBookId) : undefined;
-    });
+    const currentBook = useMemo(() => {
+        if (!currentBookId) return undefined;
+        const book = inventory[currentBookId];
+        const prog = progressMap[currentBookId];
+        if (book) {
+            return {
+                title: book.customTitle || 'Untitled',
+                progress: prog?.percentage || 0
+            };
+        }
+        return undefined;
+    }, [currentBookId, inventory, progressMap]);
 
     // Determine State Priority
     // 1. Annotation Mode
@@ -110,19 +132,19 @@ export const ReaderControlBar: React.FC = () => {
                 }
                 break;
             case 'copy':
-                 if (popover.text) {
-                     navigator.clipboard.writeText(popover.text).then(() => {
-                         showToast("Copied to clipboard", "success");
-                         setTimeout(() => hidePopover(), 1000);
-                     }).catch(() => {
-                         showToast("Failed to copy", "error");
-                     });
-                 }
+                if (popover.text) {
+                    navigator.clipboard.writeText(popover.text).then(() => {
+                        showToast("Copied to clipboard", "success");
+                        setTimeout(() => hidePopover(), 1000);
+                    }).catch(() => {
+                        showToast("Failed to copy", "error");
+                    });
+                }
                 break;
             case 'play':
                 // Play from selection
                 if (popover.cfiRange) {
-                    const playFromSelection = useReaderStore.getState().playFromSelection;
+                    const playFromSelection = useReaderUIStore.getState().playFromSelection;
                     if (playFromSelection) {
                         playFromSelection(popover.cfiRange);
                     } else {

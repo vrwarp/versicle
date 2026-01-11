@@ -1,117 +1,57 @@
 import { create } from 'zustand';
+import { yjs } from 'zustand-middleware-yjs';
 import { v4 as uuidv4 } from 'uuid';
-import { getDB } from '../db/db';
-import type { Annotation } from '../types/db';
-
-interface PopoverState {
-  visible: boolean;
-  x: number;
-  y: number;
-  cfiRange: string;
-  text: string;
-}
+import { yDoc } from './yjs-provider';
+import type { Annotation, UserAnnotation } from '../types/db';
 
 interface AnnotationState {
-  annotations: Annotation[];
-  popover: PopoverState;
+  /**
+   * Map of annotations keyed by their UUID.
+   * Bound to Yjs map 'annotations' -> 'annotations'.
+   */
+  annotations: Record<string, UserAnnotation>;
 
-  loadAnnotations: (bookId: string) => Promise<void>;
-  addAnnotation: (annotation: Omit<Annotation, 'id' | 'created'>) => Promise<void>;
-  deleteAnnotation: (id: string) => Promise<void>;
-  updateAnnotation: (id: string, changes: Partial<Annotation>) => Promise<void>;
+  addAnnotation: (annotation: Omit<UserAnnotation, 'id' | 'created'>) => void;
+  deleteAnnotation: (id: string) => void;
 
-  showPopover: (x: number, y: number, cfiRange: string, text: string) => void;
-  hidePopover: () => void;
+  // Note: updateAnnotation logic is handled by modifying the object in the map directly
+  // via set function in Zustand-Yjs, which proxies changes.
+  updateAnnotation: (id: string, changes: Partial<UserAnnotation>) => void;
 }
 
-export const useAnnotationStore = create<AnnotationState>((set) => ({
-  annotations: [],
-  popover: {
-    visible: false,
-    x: 0,
-    y: 0,
-    cfiRange: '',
-    text: '',
-  },
+/**
+ * Zustand store for managing user annotations (highlights, notes).
+ * Synced via Yjs.
+ */
+export const useAnnotationStore = create<AnnotationState>()(
+  yjs(
+    yDoc,
+    'annotations',
+    (set) => ({
+      annotations: {},
 
-  loadAnnotations: async (bookId: string) => {
-    try {
-      const db = await getDB();
-      // Updated to use 'user_annotations' store
-      const annotations = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
-      set({ annotations });
-    } catch (error) {
-      console.error('Failed to load annotations:', error);
-    }
-  },
+      addAnnotation: (partialAnnotation) =>
+        set((state) => {
+          const id = uuidv4();
+          const newAnnotation: UserAnnotation = {
+            ...partialAnnotation,
+            id,
+            created: Date.now(),
+          };
+          state.annotations[id] = newAnnotation;
+        }),
 
-  addAnnotation: async (partialAnnotation) => {
-    const newAnnotation: Annotation = {
-      ...partialAnnotation,
-      id: uuidv4(),
-      created: Date.now(),
-    };
+      deleteAnnotation: (id) =>
+        set((state) => {
+          delete state.annotations[id];
+        }),
 
-    try {
-      const db = await getDB();
-      // Updated to use 'user_annotations' store
-      await db.add('user_annotations', newAnnotation);
-      set((state) => ({
-        annotations: [...state.annotations, newAnnotation],
-      }));
-    } catch (error) {
-      console.error('Failed to add annotation:', error);
-    }
-  },
-
-  deleteAnnotation: async (id: string) => {
-    try {
-      const db = await getDB();
-      // Updated to use 'user_annotations' store
-      await db.delete('user_annotations', id);
-      set((state) => ({
-        annotations: state.annotations.filter((a) => a.id !== id),
-      }));
-    } catch (error) {
-      console.error('Failed to delete annotation:', error);
-    }
-  },
-
-  updateAnnotation: async (id: string, changes: Partial<Annotation>) => {
-    try {
-      const db = await getDB();
-      // Updated to use 'user_annotations' store
-      const annotation = await db.get('user_annotations', id);
-      if (annotation) {
-        const updated = { ...annotation, ...changes };
-        await db.put('user_annotations', updated);
-        set((state) => ({
-          annotations: state.annotations.map((a) => (a.id === id ? updated : a)),
-        }));
-      }
-    } catch (error) {
-      console.error('Failed to update annotation:', error);
-    }
-  },
-
-  showPopover: (x, y, cfiRange, text) => {
-    set({
-      popover: {
-        visible: true,
-        x,
-        y,
-        cfiRange,
-        text,
-      },
-    });
-  },
-
-  hidePopover: () => {
-    set((state) => ({
-      popover: {
-        ...state.popover,
-        visible: false,
-      },
-    }));
-  },
-}));
+      updateAnnotation: (id, changes) =>
+        set((state) => {
+          if (state.annotations[id]) {
+            Object.assign(state.annotations[id], changes);
+          }
+        }),
+    })
+  )
+);

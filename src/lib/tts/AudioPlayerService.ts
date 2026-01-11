@@ -109,15 +109,15 @@ export class AudioPlayerService {
                 this.playNext();
             },
             onError: (error) => {
-                 if (error?.type === 'fallback') {
-                      console.warn("Falling back to local provider due to cloud error");
-                      this.playInternal(true);
-                      return;
-                 }
+                if (error?.type === 'fallback') {
+                    console.warn("Falling back to local provider due to cloud error");
+                    this.playInternal(true);
+                    return;
+                }
 
-                 console.error("TTS Provider Error", error);
-                 this.setStatus('stopped');
-                 this.notifyError("Playback Error: " + (error?.message || "Unknown error"));
+                console.error("TTS Provider Error", error);
+                this.setStatus('stopped');
+                this.notifyError("Playback Error: " + (error?.message || "Unknown error"));
             },
             onTimeUpdate: (currentTime) => {
                 this.syncEngine?.updateTime(currentTime);
@@ -127,12 +127,12 @@ export class AudioPlayerService {
                 // Optionally update sync engine or progress
             },
             onMeta: (alignment) => {
-                 if (this.syncEngine) {
-                     this.syncEngine.loadAlignment(alignment);
-                 }
+                if (this.syncEngine) {
+                    this.syncEngine.loadAlignment(alignment);
+                }
             },
             onDownloadProgress: (voiceId, percent, status) => {
-                 this.notifyDownloadProgress(voiceId, percent, status);
+                this.notifyDownloadProgress(voiceId, percent, status);
             }
         });
 
@@ -252,7 +252,7 @@ export class AudioPlayerService {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public setBackgroundAudioMode(mode: any) {
-         this.platformIntegration.setBackgroundAudioMode(mode, this.status === 'playing' || this.status === 'loading');
+        this.platformIntegration.setBackgroundAudioMode(mode, this.status === 'playing' || this.status === 'loading');
     }
 
     public setBackgroundVolume(volume: number) {

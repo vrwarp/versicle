@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
 import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check } from 'lucide-react';
@@ -45,12 +45,12 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     play,
     pause
   } = useTTSStore(useShallow(state => ({
-      isPlaying: state.isPlaying,
-      status: state.status,
-      queue: state.queue,
-      currentIndex: state.currentIndex,
-      play: state.play,
-      pause: state.pause
+    isPlaying: state.isPlaying,
+    status: state.status,
+    queue: state.queue,
+    currentIndex: state.currentIndex,
+    play: state.play,
+    pause: state.pause
   })));
 
   const isLoading = status === 'loading';
@@ -85,7 +85,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   }, [isCopied]);
 
   // Optimize: Select only currentSectionTitle to prevent re-renders on progress/cfi updates
-  const readerSectionTitle = useReaderStore(state => state.currentSectionTitle);
+  const readerSectionTitle = useReaderUIStore(state => state.currentSectionTitle);
 
   const { timeRemaining, progress: hookProgress } = useSectionDuration();
 
@@ -100,12 +100,12 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   };
 
   const handleTogglePlay = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (isPlaying) {
-          pause();
-      } else {
-          play();
-      }
+    e.stopPropagation();
+    if (isPlaying) {
+      pause();
+    } else {
+      play();
+    }
   };
 
   // Format time remaining: -MM:SS
@@ -253,140 +253,140 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   // Summary Mode
   if (variant === 'summary') {
-      return (
-          <div
-            data-testid="compass-pill-summary"
-            className={`relative flex flex-col items-center justify-center w-full max-w-sm px-4 py-2 mx-auto overflow-hidden text-center transition-all border shadow-lg h-24 rounded-xl bg-background/75 backdrop-blur-md border-border ${onClick ? 'cursor-pointer hover:bg-background/90' : ''}`}
-            onClick={onClick}
-          >
-              <div className="text-xs font-bold truncate w-full opacity-90">
-                  {displayTitle}
-              </div>
-              <div className="text-xs font-medium truncate w-full opacity-80 my-1">
-                  {displaySubtitle}
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                   {Math.round(progress)}% complete
-              </div>
-              {/* Progress Bar Background */}
-               <div
-                  className="absolute bottom-0 left-0 h-1 bg-primary/20 transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-              />
-          </div>
-      );
+    return (
+      <div
+        data-testid="compass-pill-summary"
+        className={`relative flex flex-col items-center justify-center w-full max-w-sm px-4 py-2 mx-auto overflow-hidden text-center transition-all border shadow-lg h-24 rounded-xl bg-background/75 backdrop-blur-md border-border ${onClick ? 'cursor-pointer hover:bg-background/90' : ''}`}
+        onClick={onClick}
+      >
+        <div className="text-xs font-bold truncate w-full opacity-90">
+          {displayTitle}
+        </div>
+        <div className="text-xs font-medium truncate w-full opacity-80 my-1">
+          {displaySubtitle}
+        </div>
+        <div className="text-[10px] text-muted-foreground">
+          {Math.round(progress)}% complete
+        </div>
+        {/* Progress Bar Background */}
+        <div
+          className="absolute bottom-0 left-0 h-1 bg-primary/20 transition-all duration-300"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    );
   }
 
   // Compact Mode
   if (variant === 'compact') {
-      return (
-          <div data-testid="compass-pill-compact" className="relative z-40 flex items-center justify-center gap-1 w-fit h-14 px-2 mx-auto transition-all border shadow-lg rounded-full bg-background/75 backdrop-blur-md border-border">
-                {/* Prev Button */}
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-                    onClick={() => handleChapterNav('prev')}
-                    aria-label="Previous"
-                >
-                    <ChevronsLeft size={18} />
-                </Button>
+    return (
+      <div data-testid="compass-pill-compact" className="relative z-40 flex items-center justify-center gap-1 w-fit h-14 px-2 mx-auto transition-all border shadow-lg rounded-full bg-background/75 backdrop-blur-md border-border">
+        {/* Prev Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
+          onClick={() => handleChapterNav('prev')}
+          aria-label="Previous"
+        >
+          <ChevronsLeft size={18} />
+        </Button>
 
-                {/* Play/Pause Button */}
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className={cn(
-                        "h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation",
-                        isLoading && "cursor-wait"
-                    )}
-                    onClick={handleTogglePlay}
-                    aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
-                >
-                    {isLoading ? (
-                        <Loader2 size={20} className="animate-spin" />
-                    ) : isPlaying ? (
-                        <Pause size={20} className="fill-current" />
-                    ) : (
-                        <Play size={20} className="fill-current ml-0.5" />
-                    )}
-                </Button>
+        {/* Play/Pause Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation",
+            isLoading && "cursor-wait"
+          )}
+          onClick={handleTogglePlay}
+          aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
+        >
+          {isLoading ? (
+            <Loader2 size={20} className="animate-spin" />
+          ) : isPlaying ? (
+            <Pause size={20} className="fill-current" />
+          ) : (
+            <Play size={20} className="fill-current ml-0.5" />
+          )}
+        </Button>
 
-                {/* Next Button */}
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-                    onClick={() => handleChapterNav('next')}
-                    aria-label="Next"
-                >
-                     <ChevronsRight size={18} />
-                </Button>
-          </div>
-      );
+        {/* Next Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
+          onClick={() => handleChapterNav('next')}
+          aria-label="Next"
+        >
+          <ChevronsRight size={18} />
+        </Button>
+      </div>
+    );
   }
 
   // Active Mode
   return (
     <div data-testid="compass-pill-active" className="relative z-40 flex items-center justify-between w-full max-w-md h-14 px-4 mx-auto overflow-hidden transition-all border shadow-lg rounded-full bg-background/75 backdrop-blur-md border-border">
-        {/* Background Progress */}
-        <div
-            className="absolute inset-y-0 left-0 bg-primary/10 -z-10 transition-all duration-300"
-            style={{ width: `${progress}%` }}
-        />
+      {/* Background Progress */}
+      <div
+        className="absolute inset-y-0 left-0 bg-primary/10 -z-10 transition-all duration-300"
+        style={{ width: `${progress}%` }}
+      />
 
-        {/* Left Button */}
-        <Button
-            variant="ghost"
-            className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-            onClick={() => handleChapterNav('prev')}
-            aria-label="Previous chapter"
-        >
-            <ChevronsLeft size={24} />
-        </Button>
+      {/* Left Button */}
+      <Button
+        variant="ghost"
+        className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
+        onClick={() => handleChapterNav('prev')}
+        aria-label="Previous chapter"
+      >
+        <ChevronsLeft size={24} />
+      </Button>
 
-        {/* Center Info */}
-        <div
-            className={cn(
-                "flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg",
-                isLoading && "cursor-wait"
-            )}
-            onClick={handleTogglePlay}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleTogglePlay(e as unknown as React.MouseEvent);
-                }
-            }}
-            role="button"
-            tabIndex={0}
-            data-testid="compass-active-toggle"
-            aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
-        >
-             <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center flex items-center justify-center gap-1.5">
-                {isLoading ? (
-                   <Loader2 size={10} className="animate-spin opacity-70" data-testid="active-loader-icon" />
-                ) : isPlaying ? (
-                   <Pause size={10} className="fill-current opacity-70" data-testid="active-pause-icon" />
-                ) : (
-                   <Play size={10} className="fill-current opacity-70 ml-0.5" data-testid="active-play-icon" />
-                )}
-                <span className="truncate">{sectionTitle}</span>
-             </div>
-             <div className="text-xs font-mono text-muted-foreground">
-                {formatTime(timeRemaining)}
-             </div>
+      {/* Center Info */}
+      <div
+        className={cn(
+          "flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg",
+          isLoading && "cursor-wait"
+        )}
+        onClick={handleTogglePlay}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleTogglePlay(e as unknown as React.MouseEvent);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        data-testid="compass-active-toggle"
+        aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
+      >
+        <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center flex items-center justify-center gap-1.5">
+          {isLoading ? (
+            <Loader2 size={10} className="animate-spin opacity-70" data-testid="active-loader-icon" />
+          ) : isPlaying ? (
+            <Pause size={10} className="fill-current opacity-70" data-testid="active-pause-icon" />
+          ) : (
+            <Play size={10} className="fill-current opacity-70 ml-0.5" data-testid="active-play-icon" />
+          )}
+          <span className="truncate">{sectionTitle}</span>
         </div>
+        <div className="text-xs font-mono text-muted-foreground">
+          {formatTime(timeRemaining)}
+        </div>
+      </div>
 
-        {/* Right Button */}
-        <Button
-            variant="ghost"
-            className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
-            onClick={() => handleChapterNav('next')}
-            aria-label="Next chapter"
-        >
-             <ChevronsRight size={24} />
-        </Button>
+      {/* Right Button */}
+      <Button
+        variant="ghost"
+        className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
+        onClick={() => handleChapterNav('next')}
+        aria-label="Next chapter"
+      >
+        <ChevronsRight size={24} />
+      </Button>
     </div>
   );
 };

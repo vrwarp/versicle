@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
+import { useInventoryStore } from '../../store/useInventoryStore';
+import { useProgressStore } from '../../store/useProgressStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
@@ -19,17 +21,12 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 /**
  * The main library view component.
- * Displays the user's collection of books in a responsive grid or list and allows importing new books.
- * Handles fetching books from the store.
- *
- * @returns A React component rendering the library interface.
+ * Displays the user's collection of books by composing data from Inventory and Progress stores.
  */
 export const LibraryView: React.FC = () => {
-  // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
+  // UI State & Actions
   const {
-    books,
-    fetchBooks,
-    isLoading,
+    fetchBooks, // Legacy/Stub
     error,
     addBook,
     restoreBook,
@@ -39,9 +36,7 @@ export const LibraryView: React.FC = () => {
     sortOrder,
     setSortOrder
   } = useLibraryStore(useShallow(state => ({
-    books: state.books,
     fetchBooks: state.fetchBooks,
-    isLoading: state.isLoading,
     error: state.error,
     addBook: state.addBook,
     restoreBook: state.restoreBook,
@@ -51,6 +46,47 @@ export const LibraryView: React.FC = () => {
     sortOrder: state.sortOrder,
     setSortOrder: state.setSortOrder
   })));
+
+  // Data Stores
+  const inventory = useInventoryStore(state => state.books);
+  const progressMap = useProgressStore(state => state.progress);
+
+  // Compose Books
+  const books = useMemo<BookMetadata[]>(() => {
+    return Object.values(inventory).map(item => {
+      const prog = progressMap[item.bookId];
+      return {
+        id: item.bookId,
+        title: item.customTitle || 'Untitled',
+        author: item.customAuthor || 'Unknown User',
+        description: '',
+        addedAt: item.addedAt,
+        bookId: item.bookId,
+        filename: item.sourceFilename,
+
+        // Map other fields if available in item.tags or similar?
+        // For now, minimal mapping for UI
+        coverBlob: undefined, // Cover blobs are in static_manifests/resources, likely need a hook or component to fetch
+        // Actually BookCard fetches cover. Mapping here just needs ID/Title.
+
+        // Progress
+        lastRead: prog?.lastRead,
+        progress: prog?.percentage || 0,
+        currentCfi: prog?.currentCfi,
+
+        // Schema Fields
+        fileHash: undefined, // In static_manifests
+        fileSize: 0,
+        totalChars: 0,
+        version: CURRENT_BOOK_VERSION, // Assume current or checking needed?
+        // NOTE: Version checking relying on metadata might be tricky if we don't assume sync.
+        // ReaderView checks version from useEpubReader hook which loads from file.
+        // So here we can pass 0 or undefined.
+
+        isOffloaded: false // TODO: Check via dbService or separate store?
+      };
+    });
+  }, [inventory, progressMap]);
 
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
@@ -75,10 +111,8 @@ export const LibraryView: React.FC = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const state = location.state as any;
     if (state && state.reprocessBookId) {
-        // Clear state to prevent reopening on reload/navigation
-        window.history.replaceState({}, document.title);
-        // Defer state update to avoid triggering cascading renders
-        setTimeout(() => setReprocessingBookId(state.reprocessBookId), 0);
+      window.history.replaceState({}, document.title);
+      setTimeout(() => setReprocessingBookId(state.reprocessBookId), 0);
     }
   }, [location.state]);
 
@@ -87,12 +121,10 @@ export const LibraryView: React.FC = () => {
   }, [fetchBooks]);
 
   const handleBookOpen = useCallback((book: BookMetadata) => {
-    const effectiveVersion = book.version ?? 0;
-    if (effectiveVersion < CURRENT_BOOK_VERSION) {
-        setReprocessingBookId(book.id);
-    } else {
-        navigate(`/read/${book.id}`);
-    }
+    // Version check relies on BookMetadata having version. 
+    // Since we construct it from Inventory (which lacks version), we might skip check or assume OK.
+    // ReaderView performs the definitive check.
+    navigate(`/read/${book.id}`);
   }, [navigate]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,7 +135,6 @@ export const LibraryView: React.FC = () => {
         showToast(`Import failed: ${err.message}`, "error");
       });
     }
-    // Reset input so same file can be selected again if needed
     if (e.target.value) {
       e.target.value = '';
     }
@@ -111,17 +142,17 @@ export const LibraryView: React.FC = () => {
 
   const handleRestoreFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0] && bookToRestore) {
-        restoreBook(bookToRestore.id, e.target.files[0]).then(() => {
-            showToast(`Restored "${bookToRestore.title}"`, 'success');
-        }).catch((err) => {
-            console.error("Restore failed", err);
-            showToast("Failed to restore book", "error");
-        }).finally(() => {
-            setBookToRestore(null);
-        });
+      restoreBook(bookToRestore.id, e.target.files[0]).then(() => {
+        showToast(`Restored "${bookToRestore.title}"`, 'success');
+      }).catch((err) => {
+        console.error("Restore failed", err);
+        showToast("Failed to restore book", "error");
+      }).finally(() => {
+        setBookToRestore(null);
+      });
     }
     if (e.target.value) {
-        e.target.value = '';
+      e.target.value = '';
     }
   };
 
@@ -150,13 +181,13 @@ export const LibraryView: React.FC = () => {
     setDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-       const file = e.dataTransfer.files[0];
-       if (!file.name.toLowerCase().endsWith('.epub')) {
-           showToast("Only .epub files are supported", "error");
-           return;
-       }
+      const file = e.dataTransfer.files[0];
+      if (!file.name.toLowerCase().endsWith('.epub')) {
+        showToast("Only .epub files are supported", "error");
+        return;
+      }
 
-       addBook(file).then(() => {
+      addBook(file).then(() => {
         showToast("Book imported successfully", "success", 5000);
       }).catch((err) => {
         showToast(`Import failed: ${err.message}`, "error");
@@ -168,7 +199,6 @@ export const LibraryView: React.FC = () => {
     fileInputRef.current?.click();
   };
 
-  // Action Handlers
   const handleDelete = useCallback((book: BookMetadata) => {
     setActiveModal({ type: 'delete', book });
   }, []);
@@ -179,21 +209,15 @@ export const LibraryView: React.FC = () => {
 
   const handleRestore = useCallback((book: BookMetadata) => {
     setBookToRestore(book);
-    // Use setTimeout to ensure state is updated before click if needed, though usually not strictly necessary for simple refs
-    // But direct click is fine.
-    // However, we need to ensure restoreFileInputRef is available.
     requestAnimationFrame(() => {
-        restoreFileInputRef.current?.click();
+      restoreFileInputRef.current?.click();
     });
   }, []);
 
   // OPTIMIZATION: Create a search index to avoid expensive re-calculation on every render
-  // This memoized value updates only when the books array changes, not on every search keystroke.
-  // This avoids calling toLowerCase() N times per frame during typing.
   const searchableBooks = useMemo(() => {
     return books.map(book => ({
       book,
-      // Pre-compute normalized strings
       searchString: `${(book.title || '').toLowerCase()} ${(book.author || '').toLowerCase()}`
     }));
   }, [books]);
@@ -202,30 +226,24 @@ export const LibraryView: React.FC = () => {
   const filteredAndSortedBooks = useMemo(() => {
     const query = searchQuery.toLowerCase();
 
-    // 1. Filter using the pre-computed index (fast string check)
     const filtered = searchableBooks
       .filter(item => item.searchString.includes(query))
       .map(item => item.book);
 
-    // 2. Sort the filtered results
     return filtered.sort((a, b) => {
-        switch (sortOrder) {
-          case 'recent':
-            // Sort by addedAt descending (newest first)
-            return (b.addedAt || 0) - (a.addedAt || 0);
-          case 'last_read':
-            // Sort by lastRead descending (most recently read first)
-            return (b.lastRead || 0) - (a.lastRead || 0);
-          case 'author':
-            // Sort by author ascending (A-Z)
-            return (a.author || '').localeCompare(b.author || '');
-          case 'title':
-            // Sort by title ascending (A-Z)
-            return (a.title || '').localeCompare(b.title || '');
-          default:
-            return 0;
-        }
-      });
+      switch (sortOrder) {
+        case 'recent':
+          return (b.addedAt || 0) - (a.addedAt || 0);
+        case 'last_read':
+          return (b.lastRead || 0) - (a.lastRead || 0);
+        case 'author':
+          return (a.author || '').localeCompare(b.author || '');
+        case 'title':
+          return (a.title || '').localeCompare(b.title || '');
+        default:
+          return 0;
+      }
+    });
   }, [searchableBooks, searchQuery, sortOrder]);
 
   return (
@@ -246,7 +264,7 @@ export const LibraryView: React.FC = () => {
         data-testid="hidden-file-input"
       />
 
-       <input
+      <input
         type="file"
         ref={restoreFileInputRef}
         onChange={handleRestoreFileSelect}
@@ -258,10 +276,10 @@ export const LibraryView: React.FC = () => {
       {/* Drag Overlay */}
       {dragActive && (
         <div className="absolute inset-4 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center border-4 border-primary border-dashed rounded-xl transition-all duration-200 pointer-events-none">
-            <div className="flex flex-col items-center gap-4 text-primary animate-in zoom-in-95 duration-200">
-                <FilePlus className="w-20 h-20" />
-                <p className="text-3xl font-bold">Drop EPUB to import</p>
-            </div>
+          <div className="flex flex-col items-center gap-4 text-primary animate-in zoom-in-95 duration-200">
+            <FilePlus className="w-20 h-20" />
+            <p className="text-3xl font-bold">Drop EPUB to import</p>
+          </div>
         </div>
       )}
 
@@ -280,9 +298,9 @@ export const LibraryView: React.FC = () => {
         isOpen={!!reprocessingBookId}
         bookId={reprocessingBookId}
         onComplete={() => {
-            const id = reprocessingBookId;
-            setReprocessingBookId(null);
-            if (id) navigate(`/read/${id}`);
+          const id = reprocessingBookId;
+          setReprocessingBookId(null);
+          if (id) navigate(`/read/${id}`);
         }}
         onClose={() => setReprocessingBookId(null)}
       />
@@ -296,14 +314,14 @@ export const LibraryView: React.FC = () => {
 
           <div className="flex gap-2">
             <Button
-                variant="secondary"
-                size="icon"
-                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="shadow-sm"
-                aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
-                data-testid="view-toggle-button"
+              variant="secondary"
+              size="icon"
+              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+              className="shadow-sm"
+              aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
+              data-testid="view-toggle-button"
             >
-                {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
+              {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
             </Button>
             <Button
               variant="secondary"
@@ -335,7 +353,6 @@ export const LibraryView: React.FC = () => {
 
         {/* Combined Row: Search and Sort */}
         <div className="flex flex-col gap-4 md:flex-row-reverse md:items-center md:justify-between">
-          {/* Search Bar */}
           <div className="w-full md:w-72">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -349,7 +366,6 @@ export const LibraryView: React.FC = () => {
             </div>
           </div>
 
-          {/* Sort By */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="whitespace-nowrap">Sort by:</span>
             <Select
@@ -376,66 +392,65 @@ export const LibraryView: React.FC = () => {
       {error && (
         <section className="mb-6 flex-none">
           <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
-              {error}
+            {error}
           </div>
         </section>
       )}
 
-      {isLoading ? (
-        <div className="flex justify-center items-center py-12 flex-1">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        </div>
-      ) : (
-        <section className="flex-1 w-full">
-          {books.length === 0 ? (
-             <EmptyLibrary onImport={triggerFileUpload} />
-          ) : filteredAndSortedBooks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <p className="text-lg">No books found matching "{searchQuery}"</p>
-              <Button
-                variant="link"
-                onClick={() => setSearchQuery('')}
-                className="mt-2"
-              >
-                Clear search
-              </Button>
-            </div>
-          ) : (
-            <>
-              {viewMode === 'grid' ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
-                  {filteredAndSortedBooks.map((book) => (
-                    <div key={book.id} className="flex justify-center">
-                      <BookCard
-                        book={book}
-                        onOpen={handleBookOpen}
-                        onDelete={handleDelete}
-                        onOffload={handleOffload}
-                        onRestore={handleRestore}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 w-full">
-                  {filteredAndSortedBooks.map((book) => (
-                    <BookListItem
-                        key={book.id}
-                        book={book}
-                        onOpen={handleBookOpen}
-                        onDelete={handleDelete}
-                        onOffload={handleOffload}
-                        onRestore={handleRestore}
+      {/* Basic Loading check? Yjs sync is separate */}
+      {/* If books len is 0, we show empty library. 
+          If syncing takes time, it might flash empty. 
+          Ideally we check yjs status via provider or store.
+          For now, just render books. */}
+
+      <section className="flex-1 w-full">
+        {books.length === 0 ? (
+          <EmptyLibrary onImport={triggerFileUpload} />
+        ) : filteredAndSortedBooks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <p className="text-lg">No books found matching "{searchQuery}"</p>
+            <Button
+              variant="link"
+              onClick={() => setSearchQuery('')}
+              className="mt-2"
+            >
+              Clear search
+            </Button>
+          </div>
+        ) : (
+          <>
+            {viewMode === 'grid' ? (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
+                {filteredAndSortedBooks.map((book) => (
+                  <div key={book.id} className="flex justify-center">
+                    <BookCard
+                      book={book}
+                      onOpen={handleBookOpen}
+                      onDelete={handleDelete}
+                      onOffload={handleOffload}
+                      onRestore={handleRestore}
                     />
-                  ))}
-                </div>
-              )}
-              {/* Spacer for bottom navigation or just breathing room */}
-              <div className="h-24" />
-            </>
-          )}
-        </section>
-      )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 w-full">
+                {filteredAndSortedBooks.map((book) => (
+                  <BookListItem
+                    key={book.id}
+                    book={book}
+                    onOpen={handleBookOpen}
+                    onDelete={handleDelete}
+                    onOffload={handleOffload}
+                    onRestore={handleRestore}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="h-24" />
+          </>
+        )}
+      </section>
     </div>
   );
 };

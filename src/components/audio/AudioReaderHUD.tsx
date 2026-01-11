@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useInventoryStore } from '../../store/useInventoryStore';
+import { useProgressStore } from '../../store/useProgressStore';
 import { useShallow } from 'zustand/react/shallow';
 import { CompassPill } from '../ui/CompassPill';
 import { SatelliteFAB } from './SatelliteFAB';
@@ -13,8 +14,11 @@ export const AudioReaderHUD: React.FC = () => {
         isPlaying: state.isPlaying,
         pause: state.pause
     })));
-    const immersiveMode = useReaderStore(state => state.immersiveMode);
-    const books = useLibraryStore(state => state.books);
+    const immersiveMode = useReaderUIStore(state => state.immersiveMode);
+
+    const inventory = useInventoryStore(state => state.books);
+    const progressMap = useProgressStore(state => state.progress);
+
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -29,11 +33,24 @@ export const AudioReaderHUD: React.FC = () => {
     }, [isLibrary, isPlaying, pause]);
 
     const lastReadBook = useMemo(() => {
-        if (!books || books.length === 0) return null;
-        const startedBooks = books.filter(b => b.lastRead && b.progress && b.progress > 0);
-        if (startedBooks.length === 0) return null;
-        return startedBooks.sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
-    }, [books]);
+        const sortedProgress = Object.values(progressMap)
+            .filter(p => p.lastRead && p.percentage > 0)
+            .sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0));
+
+        if (sortedProgress.length > 0) {
+            const best = sortedProgress[0];
+            const book = inventory[best.bookId];
+            if (book) {
+                return {
+                    id: book.bookId,
+                    title: book.customTitle || 'Untitled',
+                    progress: best.percentage
+                };
+            }
+        }
+        return null;
+    }, [inventory, progressMap]);
+
 
     // Show last read book if in library and not playing audio
     const showLastRead = isLibrary && !isPlaying && lastReadBook;
@@ -47,17 +64,17 @@ export const AudioReaderHUD: React.FC = () => {
 
     return (
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-[40] flex flex-col items-center justify-end pb-6">
-             <div className="relative w-full max-w-md mx-auto pointer-events-auto">
-                 {/* FAB Container - Absolute positioned relative to the wrapper */}
-                 {!isLibrary && !immersiveMode && (
-                     <div className="absolute bottom-20 right-4 z-50">
-                         <SatelliteFAB />
-                     </div>
-                 )}
+            <div className="relative w-full max-w-md mx-auto pointer-events-auto">
+                {/* FAB Container - Absolute positioned relative to the wrapper */}
+                {!isLibrary && !immersiveMode && (
+                    <div className="absolute bottom-20 right-4 z-50">
+                        <SatelliteFAB />
+                    </div>
+                )}
 
-                 {/* Pill Container */}
-                 <div className="mb-4">
-                     {showLastRead ? (
+                {/* Pill Container */}
+                <div className="mb-4">
+                    {showLastRead ? (
                         <CompassPill
                             key="summary"
                             variant="summary"
@@ -66,14 +83,14 @@ export const AudioReaderHUD: React.FC = () => {
                             progress={(lastReadBook!.progress || 0) * 100}
                             onClick={() => navigate(`/read/${lastReadBook!.id}`)}
                         />
-                     ) : (
+                    ) : (
                         <CompassPill
                             key={immersiveMode ? 'compact' : (isLibrary ? 'summary' : 'active')}
                             variant={immersiveMode ? 'compact' : (isLibrary ? 'summary' : 'active')}
                         />
-                     )}
-                 </div>
-             </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 };

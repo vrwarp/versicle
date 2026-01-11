@@ -81,6 +81,15 @@ interface ReaderState {
  * Zustand store for managing the state of the book reader.
  * Controls settings like theme and font size, as well as tracking reading progress and location.
  */
+/**
+ * @deprecated This store is being refactored into smaller stores:
+ * - useReaderUIStore (transient UI state)
+ * - useReaderSyncStore (synced preferences)
+ * - useProgressStore (reading progress)
+ * - useInventoryStore (book metadata)
+ *
+ * Please use the specific stores instead.
+ */
 export const useReaderStore = create<ReaderState>()(
   persist(
     (set) => ({
