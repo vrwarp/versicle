@@ -25,6 +25,7 @@ import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
 import { SyncOrchestrator } from '../lib/sync/SyncOrchestrator';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
+import { exportFile } from '../lib/export';
 import { ReadingListDialog } from './ReadingListDialog';
 import { Trash2, Download, Loader2, RotateCcw } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
@@ -92,15 +93,13 @@ export const GlobalSettingsDialog = () => {
                 return;
             }
             const csv = exportReadingListToCSV(list);
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `versicle_reading_list_${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const filename = `versicle_reading_list_${new Date().toISOString().split('T')[0]}.csv`;
+
+            await exportFile({
+                filename,
+                data: csv,
+                mimeType: 'text/csv'
+            });
         } catch (e) {
             console.error(e);
             alert('Failed to export reading list.');
@@ -350,22 +349,20 @@ export const GlobalSettingsDialog = () => {
         }
     };
 
-    const handleDownloadGenAILogs = () => {
+    const handleDownloadGenAILogs = async () => {
         const content = genAILogs.map(log =>
             `[${new Date(log.timestamp).toISOString()}] ${log.type.toUpperCase()} (${log.method})\n` +
             JSON.stringify(log.payload, null, 2) +
             `\n${'-'.repeat(40)}\n`
         ).join('\n');
 
-        const blob = new Blob([content], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `genai_logs_${new Date().toISOString()}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const filename = `genai_logs_${new Date().toISOString()}.txt`;
+
+        await exportFile({
+            filename,
+            data: content,
+            mimeType: 'text/plain'
+        });
     };
 
     const handleRestoreCheckpoint = async (id: number) => {

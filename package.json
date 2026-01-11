@@ -20,6 +20,7 @@
     "@capacitor/android": "^7.0.0",
     "@capacitor/core": "^7.0.0",
     "@capacitor/filesystem": "^7.1.6",
+    "@capacitor/share": "^7.0.3",
     "@capawesome-team/capacitor-android-battery-optimization": "7.0.0",
     "@google/generative-ai": "^0.24.1",
     "@jofr/capacitor-media-session": "^4.0.0",

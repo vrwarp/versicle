@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
+import { exportFile } from './export';
 import { dbService } from '../db/DBService';
 import type { BookMetadata, Annotation, LexiconRule, BookLocations } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
@@ -32,9 +32,14 @@ export class BackupService {
 
   async createLightBackup(): Promise<void> {
     const manifest = await this.generateManifest();
-    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+    const jsonString = JSON.stringify(manifest, null, 2);
     const filename = `versicle_backup_light_${new Date().toISOString().split('T')[0]}.json`;
-    saveAs(blob, filename);
+
+    await exportFile({
+      filename,
+      data: jsonString,
+      mimeType: 'application/json'
+    });
   }
 
   async createFullBackup(onProgress?: (percent: number, message: string) => void): Promise<void> {
@@ -80,7 +85,13 @@ export class BackupService {
     });
 
     const filename = `versicle_backup_full_${new Date().toISOString().split('T')[0]}.zip`;
-    saveAs(content, filename);
+
+    await exportFile({
+      filename,
+      data: content,
+      mimeType: 'application/zip'
+    });
+
     onProgress?.(100, 'Done!');
   }
 

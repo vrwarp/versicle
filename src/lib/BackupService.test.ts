@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BackupService, BackupManifest } from './BackupService';
 import { dbService } from '../db/DBService';
-import { saveAs } from 'file-saver';
+import { exportFile } from './export';
 
 // Mock DB
 const mockDB = {
@@ -20,9 +20,9 @@ vi.mock('../db/DBService', () => ({
   },
 }));
 
-// Mock file-saver
-vi.mock('file-saver', () => ({
-  saveAs: vi.fn(),
+// Mock export
+vi.mock('./export', () => ({
+  exportFile: vi.fn(),
 }));
 
 describe('BackupService', () => {
@@ -52,14 +52,14 @@ describe('BackupService', () => {
 
       expect(mockDB.getAll).toHaveBeenCalledWith('static_manifests');
       expect(mockDB.getAll).toHaveBeenCalledWith('user_annotations');
-      expect(saveAs).toHaveBeenCalled();
+      expect(exportFile).toHaveBeenCalled();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const blob = (saveAs as any).mock.calls[0][0];
-      expect(blob).toBeInstanceOf(Blob);
+      const { data, filename, mimeType } = (exportFile as any).mock.calls[0][0];
+      expect(filename).toContain('.json');
+      expect(mimeType).toBe('application/json');
 
-      const text = await blob.text();
-      const manifest: BackupManifest = JSON.parse(text);
+      const manifest: BackupManifest = JSON.parse(data as string);
       expect(manifest.books).toHaveLength(1);
       expect(manifest.books[0].title).toBe('Book 1');
       expect(manifest.version).toBe(1);
@@ -86,12 +86,14 @@ describe('BackupService', () => {
       await service.createFullBackup(onProgress);
 
       expect(dbService.getBookFile).toHaveBeenCalledWith('b1');
-      expect(saveAs).toHaveBeenCalled();
+      expect(exportFile).toHaveBeenCalled();
       expect(onProgress).toHaveBeenCalled();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const blob = (saveAs as any).mock.calls[0][0];
-      expect(blob).toBeInstanceOf(Blob);
+      const { data, filename, mimeType } = (exportFile as any).mock.calls[0][0];
+      expect(data).toBeInstanceOf(Blob);
+      expect(filename).toContain('.zip');
+      expect(mimeType).toBe('application/zip');
     });
 
     // v18 implementation hardcodes isOffloaded: false in generateManifest.
