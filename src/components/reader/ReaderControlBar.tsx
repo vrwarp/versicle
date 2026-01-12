@@ -44,7 +44,7 @@ export const ReaderControlBar: React.FC = () => {
 
     // Get all books with merged static metadata
     const allBooks = useAllBooks();
-    
+
     // Select the most recently read book
     const lastReadBook = useMemo(() => {
         const progress = useReadingStateStore.getState().progress;

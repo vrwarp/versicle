@@ -4,6 +4,7 @@ import type { NavigationItem } from 'epubjs';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { useBook } from '../../store/useLibraryStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -97,18 +98,27 @@ export const ReaderView: React.FC = () => {
 
     const {
         updateLocation,
-        setCurrentBookId,
-        resetReadingState
+        setCurrentBookId
     } = useReadingStateStore(useShallow(state => ({
         updateLocation: state.updateLocation,
         setCurrentBookId: state.setCurrentBookId,
-        resetReadingState: state.reset
     })));
+
+    // Select current book metadata and progress from stores (Phase 2)
+    const rawBookMetadata = useBook(id || null);
+    const bookMetadata = useMemo(() => {
+        if (!rawBookMetadata) return null;
+        return {
+            ...rawBookMetadata,
+            coverBlob: rawBookMetadata.coverBlob || undefined // Convert null to undefined for compatibility
+        };
+    }, [rawBookMetadata]);
+    const progress = useReadingStateStore(useShallow(state => id ? state.progress[id] : undefined));
 
     const reset = useCallback(() => {
         resetUI();
-        resetReadingState();
-    }, [resetUI, resetReadingState]);
+        // Do NOT reset reading state (progress), as that wipes user data!
+    }, [resetUI]);
 
     // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
     const isPlaying = useTTSStore(state => state.isPlaying);
@@ -143,6 +153,8 @@ export const ReaderView: React.FC = () => {
         fontSize,
         lineHeight,
         shouldForceFont,
+        initialLocation: progress?.currentCfi,
+        metadata: bookMetadata,
         onLocationChange: (location, percentage, title, sectionId) => {
             // Initialize previousLocation if it's null (e.g. initial load), so we can track subsequent moves
             if (!previousLocation.current) {
@@ -342,6 +354,7 @@ export const ReaderView: React.FC = () => {
     useEffect(() => {
         return () => {
             searchClient.terminate();
+            setCurrentBookId(null);
             reset();
             // Ensure popover is hidden when leaving the reader
             hidePopover();
@@ -915,7 +928,7 @@ export const ReaderView: React.FC = () => {
 
             {/* Header */}
             {!immersiveMode && (
-                <header className="flex items-center justify-between px-2 md:px-8 py-2 bg-surface shadow-sm z-10">
+                <header data-testid="reader-header" className="flex items-center justify-between px-2 md:px-8 py-2 bg-surface shadow-sm z-10">
                     <div className="flex items-center gap-1 md:gap-2">
                         <Button
                             variant="ghost"

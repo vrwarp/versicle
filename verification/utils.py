@@ -1,3 +1,4 @@
+from typing import Optional
 import os
 from playwright.sync_api import Page, Frame, expect
 
@@ -158,7 +159,7 @@ def capture_screenshot(page: Page, name: str, hide_tts_status: bool = False):
     if hide_tts_status:
         page.evaluate("const el = document.getElementById('tts-debug'); if (el) el.style.visibility = 'visible';")
 
-def get_reader_frame(page: Page) -> Frame | None:
+def get_reader_frame(page: Page) -> Optional[Frame]:
     """
     Retrieves the iframe containing the epub.js reader.
 

@@ -1,9 +1,8 @@
 #!/bin/bash
 set -e
 
-# Build the verification image
-echo "🔨 Building verification Docker image..."
-docker build -t versicle-verify -f Dockerfile.verification .
+# Build the test image (forcing clean build to pick up code changes)
+docker build --no-cache -t versicle-verify -f Dockerfile.verification .
 
 # Create screenshots directory if it doesn't exist
 mkdir -p verification/screenshots

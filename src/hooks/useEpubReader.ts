@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
 import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
-import { parseCfiRange } from '../lib/cfi-utils';
 import { sanitizeContent } from '../lib/sanitizer';
 import { runCancellable, CancellationError } from '../lib/cancellable-task-runner';
 
@@ -64,6 +63,10 @@ export interface EpubReaderOptions {
   onClick?: (event: MouseEvent) => void;
   /** Callback when an error occurs. */
   onError?: (error: string) => void;
+  /** Optional: Initial CFI location to start reading at. Overrides metadata.currentCfi. */
+  initialLocation?: string;
+  /** Optional: Book metadata. If not provided, some features like initial location inference may be limited. */
+  metadata?: BookMetadata | null;
 }
 
 /**
@@ -135,13 +138,16 @@ export function useEpubReader(
       setAreLocationsReady(false);
 
       try {
-        const { file: fileData, metadata: meta } = yield dbService.getBook(currentBookId);
+        // Phase 2: Get file blob from static resources only. Metadata comes from props (Store).
+        const fileData = yield dbService.getBookFile(currentBookId);
 
         if (!fileData) {
           throw new Error('Book file not found');
         }
 
-        setMetadata(meta || null);
+        // Use metadata passed in options if available
+        const meta = optionsRef.current.metadata || null;
+        setMetadata(meta);
 
         // Cleanup previous instance
         if (bookRef.current) {
@@ -225,32 +231,9 @@ export function useEpubReader(
         });
 
         // Display at saved location or start
-        let startLocation = meta?.currentCfi || undefined;
+        let startLocation = optionsRef.current.initialLocation || meta?.currentCfi || undefined;
 
-        // Try to infer better start location from reading history (end of last session)
-        try {
-          const entry = yield dbService.getReadingHistoryEntry(currentBookId);
-          if (entry) {
-            // Prefer chronological sessions
-            if (entry.sessions && entry.sessions.length > 0) {
-              const lastSession = entry.sessions[entry.sessions.length - 1];
-              const parsed = parseCfiRange(lastSession.cfiRange);
-              // Use fullStart to resume AT the location
-              if (parsed && parsed.fullStart) {
-                startLocation = parsed.fullStart;
-              }
-            } else if (entry.readRanges && entry.readRanges.length > 0) {
-              // Fallback to spatial end (legacy behavior)
-              const lastRange = entry.readRanges[entry.readRanges.length - 1];
-              const parsed = parseCfiRange(lastRange);
-              if (parsed && parsed.fullEnd) {
-                startLocation = parsed.fullEnd;
-              }
-            }
-          }
-        } catch (e) {
-          console.error("Failed to load history for start location", e);
-        }
+        // Legacy reading history fallback removed as Phase 2 relies on Stores (passed via options)
 
         yield newRendition.display(startLocation);
 

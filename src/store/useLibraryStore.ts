@@ -376,7 +376,8 @@ export const useAllBooks = () => {
     title: staticMetadata[book.bookId]?.title || book.title,
     author: staticMetadata[book.bookId]?.author || book.author,
     coverBlob: staticMetadata[book.bookId]?.coverBlob || undefined,
-    coverUrl: staticMetadata[book.bookId]?.coverBlob
+    version: staticMetadata[book.bookId]?.schemaVersion || undefined,
+    coverUrl: (staticMetadata[book.bookId]?.coverBlob instanceof Blob)
       ? URL.createObjectURL(staticMetadata[book.bookId]!.coverBlob!)
       : undefined,
     // Add other static fields for compatibility
@@ -401,9 +402,10 @@ export const useBook = (id: string | null) => {
     title: staticMeta?.title || book.title,
     author: staticMeta?.author || book.author,
     coverBlob: staticMeta?.coverBlob || null,
-    coverUrl: staticMeta?.coverBlob ? URL.createObjectURL(staticMeta.coverBlob!) : undefined,
+    coverUrl: (staticMeta?.coverBlob instanceof Blob) ? URL.createObjectURL(staticMeta.coverBlob!) : undefined,
     fileHash: staticMeta?.fileHash,
     fileSize: staticMeta?.fileSize,
-    totalChars: staticMeta?.totalChars
+    totalChars: staticMeta?.totalChars,
+    version: staticMeta?.schemaVersion || undefined
   };
 };
