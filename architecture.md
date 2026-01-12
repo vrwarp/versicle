@@ -68,8 +68,9 @@ graph TD
         Maint[MaintenanceService]
         GenAI[GenAIService]
         CostEst[CostEstimator]
+        TaskSeq[TaskSequencer]
+        Export[export.ts]
         TaskRunner[cancellable-task-runner.ts]
-        MediaSession[MediaSessionManager]
     end
 
     subgraph SyncSubsystem [Sync & Cloud]
@@ -89,7 +90,7 @@ graph TD
         Providers[ITTSProvider]
         Piper[PiperProvider]
         PiperUtils[piper-utils.ts]
-        BG[BackgroundAudio]
+        Platform[PlatformIntegration]
     end
 
     subgraph Workers [Web Workers]
@@ -124,6 +125,7 @@ graph TD
     LibStore --> BatchIngestion
     LibStore --> Backup
     LibStore --> Maint
+    LibStore --> Export
 
     ReaderStore --> Orchestrator
     SyncStore --> Orchestrator
@@ -142,6 +144,7 @@ graph TD
     Pipeline --> DBService
 
     APS --> Orchestrator
+    APS --> TaskSeq
 
     APS --> Providers
     APS --> Segmenter
@@ -150,8 +153,7 @@ graph TD
     APS --> Sync
     APS --> Piper
     APS --> CostEst
-    APS --> BG
-    APS --> MediaSession
+    APS --> Platform
 
     Piper --> PiperUtils
 
@@ -190,23 +192,22 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `user_progress`: Reading state (CFI, Percentage, Last Read Timestamp, Queue Position).
     *   `user_annotations`: Highlights and notes.
     *   `user_overrides`: Custom settings like Lexicon rules (pronunciation overrides).
-    *   `user_journey`: Granular reading history sessions.
+    *   `user_journey`: Granular reading history sessions (Append-Only Log).
     *   `user_ai_inference`: Expensive AI-derived data (Summaries, Accessibility Layers).
 *   **Domain 3: Cache (Transient/Regenerable)**
     *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
     *   `cache_audio_blobs`: Generated TTS audio segments.
     *   `cache_render_metrics`: Layout calculation results.
+    *   `cache_session_state`: Ephemeral TTS playback queue and state.
+    *   `cache_tts_preparation`: Stored sentence segmentations.
 *   **App Level (System)**:
     *   `checkpoints`: Snapshots of the SyncManifest for "Safety Net" rollbacks.
     *   `sync_log`: Audit logs for sync operations.
     *   `app_metadata`: Global application configuration.
-*   **Legacy/Migration**:
-    *   Includes logic to migrate from Schema v17 (monolithic `books`/`files` stores) to the v19 Domain Model.
-    *   **v22 Repair & Resync**: Includes self-healing logic to recover missing filenames in `user_inventory` by cross-referencing `static_resources` and backfilling `user_reading_list`.
 
 **Key Functions:**
 *   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position. Updates `user_progress`.
-*   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations).
+*   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations) and `user_reading_list` entries.
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
@@ -286,12 +287,25 @@ Manages internal state backup and restoration.
 *   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files (reconstructed from `static_resources`).
 *   **`restoreBackup()`**: Implements a smart merge strategy (keeps newer progress).
 
+#### Unified Export (`src/lib/export.ts`)
+*   **Goal**: Provide a consistent export experience across Web and Native.
+*   **Logic**:
+    *   **Web**: Uses `FileSaver` to download files.
+    *   **Native**: Writes to the Capacitor Cache Directory and invokes the Native Share Sheet.
+
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
 *   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks and async flows.
 *   **Logic**:
     *   Uses a **Generator** pattern (`function*`) instead of standard `async/await`.
     *   The runner iterates the generator, yielding Promises. If `cancel()` is called, it throws a `CancellationError` into the generator, triggering `finally` blocks for cleanup and preventing subsequent code execution.
 *   **Trade-off**: Requires writing async logic as generators, which is non-standard syntax for many developers.
+
+#### Task Sequencer (`src/lib/tts/TaskSequencer.ts`)
+*   **Goal**: Ensure thread safety for the `AudioPlayerService` singleton.
+*   **Logic**:
+    *   Implements a Promise chaining queue.
+    *   Every public method in `AudioPlayerService` is wrapped in `enqueue(() => ...)`.
+    *   Ensures that playback commands (e.g., `play`, `stop`, `seek`) are executed serially, preventing race conditions where the internal state (queue, index) becomes inconsistent with the audio driver.
 
 ---
 
@@ -301,8 +315,8 @@ Manages internal state backup and restoration.
 The Orchestrator. Manages playback state, provider selection, and UI updates.
 
 *   **Logic**:
-    *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state management to `PlaybackStateManager`.
-    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods.
+    *   **Delegation**: Offloads content loading to `AudioContentPipeline`, state management to `PlaybackStateManager`, and platform hooks to `PlatformIntegration`.
+    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize all public state-mutating methods. This prevents race conditions when rapid UI actions occur.
 
 #### `src/lib/tts/AudioContentPipeline.ts`
 The Data Pipeline for TTS.
@@ -329,6 +343,10 @@ Manages the virtual playback timeline.
     *   **Table Adaptation Strategy (Anchor + Skip)**:
         *   When a table adaptation is applied, the *first* matching queue item (Anchor) gets its text replaced with the AI narrative.
         *   All *subsequent* items belonging to that table are marked `isSkipped`.
+
+#### `src/lib/tts/PlatformIntegration.ts`
+*   **Goal**: Unified interface for OS-level media controls.
+*   **Logic**: Wraps `MediaSession` (Web/Android) and `BackgroundAudio` (Capacitor) to provide consistent media notifications and control handling.
 
 #### `src/lib/tts/providers/CapacitorTTSProvider.ts`
 Native mobile TTS integration.

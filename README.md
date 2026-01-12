@@ -66,6 +66,7 @@
 *   **Backups**:
     *   **Light**: JSON export of metadata/settings.
     *   **Full**: ZIP archive including all book files.
+*   **Unified Export**: Export files using native sharing on mobile or direct download on web.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
 
