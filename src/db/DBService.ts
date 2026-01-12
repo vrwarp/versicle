@@ -6,7 +6,8 @@ import type {
   TTSState, Annotation, CachedSegment, BookLocations, ContentAnalysis,
   CacheSessionState,
   CacheTtsPreparation,
-  UserInventoryItem
+  UserInventoryItem,
+  StaticBookManifest
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
@@ -284,30 +285,35 @@ class DBService {
   }
 
   /**
-   * Adds a new book to the library.
+   * Adds a new book to the library (Phase 2: Pure Ingestion).
+   * Returns the StaticBookManifest for the caller to create UserInventoryItem.
+   * Only writes to static_* and cache_* stores. Does NOT write user_inventory.
    */
   async addBook(
     file: File,
     ttsOptions?: ExtractionOptions,
     onProgress?: (progress: number, message: string) => void
-  ): Promise<void> {
+  ): Promise<StaticBookManifest> {
     try {
       const data = await extractBookData(file, ttsOptions, onProgress);
       await this.ingestBook(data);
+      return data.manifest;
     } catch (error) {
       this.handleError(error);
     }
   }
 
   /**
-   * Ingests extracted book data into the database.
+   * Ingests extracted book data into the database (Phase 2: Static Only).
+   * Only writes to static_*, cache_*, and minimal legacy stores.
+   * Does NOT write user_inventory - caller (Yjs store action) handles that.
    */
   async ingestBook(data: BookExtractionData): Promise<void> {
     try {
       const db = await this.getDB();
       const tx = db.transaction([
         'static_manifests', 'static_resources', 'static_structure',
-        'user_inventory', 'user_progress', 'user_overrides',
+        'user_progress', 'user_overrides',
         'cache_tts_preparation', 'cache_table_images',
         'user_reading_list'
       ], 'readwrite');
@@ -315,7 +321,7 @@ class DBService {
       await tx.objectStore('static_manifests').add(data.manifest);
       await tx.objectStore('static_resources').add(data.resource);
       await tx.objectStore('static_structure').add(data.structure);
-      await tx.objectStore('user_inventory').add(data.inventory);
+      // Phase 2: user_inventory NO LONGER written here - Yjs store handles it
       await tx.objectStore('user_progress').add(data.progress);
       await tx.objectStore('user_overrides').add(data.overrides);
       await tx.objectStore('user_reading_list').add(data.readingListEntry);

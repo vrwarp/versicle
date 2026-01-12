@@ -1,55 +1,106 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { SyncOrchestrator } from '../lib/sync/SyncOrchestrator';
+import yjs from 'zustand-middleware-yjs';
+import { yDoc } from './yjs-provider';
+import type { UserProgress } from '../types/db';
 
+/**
+ * Reading state store.
+ * 
+ * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
+ * - `progress` (Record): Synced to yDoc.getMap('progress'), keyed by bookId
+ * - `currentBookId`: Transient (device-specific, not synced)
+ * - Actions (functions): Not synced, local-only
+ */
 interface ReadingState {
-    currentBookId: string | null;
-    /** Current Canonical Fragment Identifier (CFI) representing the reading position. */
-    currentCfi: string | null;
-    /** Reading progress percentage (0-100). */
-    progress: number;
+    // === SYNCED STATE (persisted to Yjs) ===
+    /** Map of reading progress keyed by bookId. */
+    progress: Record<string, UserProgress>;
 
+    // === TRANSIENT STATE (local-only, not synced) ===
+    /** The currently active book on this device. */
+    currentBookId: string | null;
+
+    // === ACTIONS (not synced to Yjs) ===
+    /**
+     * Sets the currently active book.
+     * @param id - The book ID, or null to clear.
+     */
     setCurrentBookId: (id: string | null) => void;
 
     /**
-     * Updates the current reading location.
+     * Updates the reading location for a book.
+     * @param bookId - The book ID.
      * @param cfi - The new CFI location.
-     * @param progress - The new progress percentage.
+     * @param percentage - The new progress percentage (0-1).
      */
-    updateLocation: (cfi: string, progress: number) => void;
+    updateLocation: (bookId: string, cfi: string, percentage: number) => void;
 
+    /**
+     * Gets the progress for a specific book.
+     * @param bookId - The book ID.
+     * @returns The progress object, or null if not found.
+     */
+    getProgress: (bookId: string) => UserProgress | null;
+
+    /**
+     * Resets all state (used for testing/debugging).
+     */
     reset: () => void;
 }
 
+/**
+ * Zustand store for reading progress and state.
+ * Wrapped with yjs() middleware for automatic CRDT synchronization.
+ */
 export const useReadingStateStore = create<ReadingState>()(
-    persist(
-        (set) => ({
-            currentBookId: null,
-            currentCfi: null,
-            progress: 0,
+    yjs(
+        yDoc,
+        'progress',
+        (set, get) => ({
+            // Synced state
+            progress: {},
 
+            // Transient state
+            currentBookId: null,
+
+            // Actions
             setCurrentBookId: (id) => set({ currentBookId: id }),
 
-            updateLocation: (cfi, progress) => {
-                set({ currentCfi: cfi, progress });
-                // Trigger sync whenever location updates
-                SyncOrchestrator.get()?.scheduleSync();
+            updateLocation: (bookId, cfi, percentage) => {
+                set((state) => ({
+                    progress: {
+                        ...state.progress,
+                        [bookId]: {
+                            bookId,
+                            currentCfi: cfi,
+                            percentage,
+                            lastRead: Date.now(),
+                            completedRanges: state.progress[bookId]?.completedRanges || []
+                        }
+                    }
+                }));
+            },
+
+            getProgress: (bookId) => {
+                const { progress } = get();
+                return progress[bookId] || null;
             },
 
             reset: () => set({
-                currentBookId: null,
-                currentCfi: null,
-                progress: 0
+                progress: {},
+                currentBookId: null
             })
-        }),
-        {
-            name: 'reading-state',
-            storage: createJSONStorage(() => localStorage),
-            partialize: (state) => ({
-                currentBookId: state.currentBookId, // In Phase 0 we persist this here. In Yjs it might be different.
-                currentCfi: state.currentCfi,
-                progress: state.progress
-            }),
-        }
+        })
     )
 );
+
+/**
+ * Hook to get progress for a specific book.
+ * @param bookId - The book ID, or null.
+ * @returns The progress object, or null if not found.
+ */
+export const useBookProgress = (bookId: string | null) => {
+    return useReadingStateStore(state =>
+        bookId ? state.progress[bookId] || null : null
+    );
+};

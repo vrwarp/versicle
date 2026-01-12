@@ -326,6 +326,8 @@ export async function extractBookData(
 
     const inventory: UserInventoryItem = {
         bookId,
+        title: candidateMetadata.title,
+        author: candidateMetadata.author,
         addedAt: candidateMetadata.addedAt,
         sourceFilename: file.name,
         tags: [],

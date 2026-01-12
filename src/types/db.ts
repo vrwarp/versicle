@@ -73,12 +73,32 @@ export interface StaticStructure {
 /**
  * Existence of book in library and user-customizable metadata.
  * Store: 'user_inventory' (Key: bookId)
+ * 
+ * Note: In Phase 2+ (Yjs migration), this is synced via zustand-middleware-yjs.
+ * The title and author fields are "Ghost Book" metadata snapshots that allow
+ * displaying books on devices that have synced inventory but not the actual
+ * EPUB file from static_resources.
  */
 export interface UserInventoryItem {
   /** The unique identifier of the book. */
   bookId: string;
+
+  /** 
+   * Ghost Book metadata: Title snapshot from static manifest.
+   * Synced to Yjs to enable cross-device display without the EPUB file.
+   */
+  title: string;
+
+  /** 
+   * Ghost Book metadata: Author snapshot from static manifest.
+   * Synced to Yjs to enable cross-device display without the EPUB file.
+   */
+  author: string;
+
   /** Timestamp when the user added the book. */
   addedAt: number;
+  /** Timestamp of last user interaction. */
+  lastInteraction: number;
   /** Original filename (for reference/export). */
   sourceFilename?: string;
   /** User-defined tags. */
@@ -91,8 +111,6 @@ export interface UserInventoryItem {
   status: 'unread' | 'reading' | 'completed' | 'abandoned';
   /** User rating (1-5). */
   rating?: number;
-  /** Timestamp of last user interaction. */
-  lastInteraction: number;
 }
 
 /**
