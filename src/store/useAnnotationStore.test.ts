@@ -1,5 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
-import { useAnnotationStore } from './useAnnotationStore';
+import { createAnnotationStore } from './useAnnotationStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getDB } from '../db/db';
 
@@ -20,9 +20,9 @@ describe('useAnnotationStore', () => {
     put: vi.fn(),
   };
 
-  beforeEach(() => {
-    useAnnotationStore.setState({ annotations: [], popover: { visible: false, x: 0, y: 0, cfiRange: '', text: '' } });
+  let useAnnotationStore: ReturnType<typeof createAnnotationStore>;
 
+  beforeEach(() => {
     // Ensure all DB methods return promises
     mockDB.getAllFromIndex.mockResolvedValue([]);
     mockDB.add.mockResolvedValue(undefined);
@@ -30,8 +30,9 @@ describe('useAnnotationStore', () => {
     mockDB.get.mockResolvedValue(undefined);
     mockDB.put.mockResolvedValue(undefined);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (getDB as any).mockResolvedValue(mockDB);
+    useAnnotationStore = createAnnotationStore(async () => mockDB);
+    useAnnotationStore.setState({ annotations: [], popover: { visible: false, x: 0, y: 0, cfiRange: '', text: '' } });
+
     vi.clearAllMocks();
   });
 
@@ -121,8 +122,8 @@ describe('useAnnotationStore', () => {
 
     // Updated store name to user_annotations
     expect(mockDB.put).toHaveBeenCalledWith('user_annotations', expect.objectContaining({
-        id: 'test-uuid',
-        note: 'new note',
+      id: 'test-uuid',
+      note: 'new note',
     }));
     expect(result.current.annotations[0].note).toBe('new note');
   });

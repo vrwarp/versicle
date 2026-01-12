@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ReaderView } from '../ReaderView';
-import { useReaderStore } from '../../../store/useReaderStore';
+import { useReaderUIStore } from '../../../store/useReaderUIStore';
+import { useReadingStateStore } from '../../../store/useReadingStateStore';
+import { usePreferencesStore } from '../../../store/usePreferencesStore';
 import { useTTSStore } from '../../../store/useTTSStore';
 import ePub from 'epubjs';
 import React from 'react';
@@ -17,17 +19,17 @@ vi.mock('../../../db/db', () => ({
       if (store === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
 
       if (store === 'static_manifests') return Promise.resolve({
-          bookId: 'test-book-id', title: 'Test Book', author: 'Author',
-          fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION,
-          coverBlob: new Blob([''])
+        bookId: 'test-book-id', title: 'Test Book', author: 'Author',
+        fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION,
+        coverBlob: new Blob([''])
       });
 
       if (store === 'user_inventory') return Promise.resolve({
-          bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
+        bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
       });
 
       if (store === 'user_progress') return Promise.resolve({
-          bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
+        bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
       });
 
       return Promise.resolve(null);
@@ -35,46 +37,46 @@ vi.mock('../../../db/db', () => ({
     getAllFromIndex: vi.fn(() => Promise.resolve([])),
     put: vi.fn(() => Promise.resolve()),
     transaction: vi.fn(() => ({
-        objectStore: vi.fn((name) => ({
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            get: vi.fn((_id) => {
-               if (name === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
-               if (name === 'static_manifests') return Promise.resolve({
-                   bookId: 'test-book-id', title: 'Test Book', author: 'Author',
-                   fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION
-               });
-               if (name === 'user_inventory') return Promise.resolve({
-                   bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
-               });
-               if (name === 'user_progress') return Promise.resolve({
-                   bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
-               });
-               return Promise.resolve(null);
-            }),
-            put: vi.fn()
-        })),
-        done: Promise.resolve()
+      objectStore: vi.fn((name) => ({
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        get: vi.fn((_id) => {
+          if (name === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
+          if (name === 'static_manifests') return Promise.resolve({
+            bookId: 'test-book-id', title: 'Test Book', author: 'Author',
+            fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION
+          });
+          if (name === 'user_inventory') return Promise.resolve({
+            bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
+          });
+          if (name === 'user_progress') return Promise.resolve({
+            bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
+          });
+          return Promise.resolve(null);
+        }),
+        put: vi.fn()
+      })),
+      done: Promise.resolve()
     }))
   })),
 }));
 
 // Mock searchClient
 vi.mock('../../../lib/search', () => ({
-    searchClient: {
-        indexBook: vi.fn().mockResolvedValue(undefined),
-        search: vi.fn().mockResolvedValue([]),
-        terminate: vi.fn(),
-    }
+  searchClient: {
+    indexBook: vi.fn().mockResolvedValue(undefined),
+    search: vi.fn().mockResolvedValue([]),
+    terminate: vi.fn(),
+  }
 }));
 
 // Mock UnifiedInputController to isolate ReaderView testing
 vi.mock('../UnifiedInputController', () => ({
-    UnifiedInputController: ({ onPrev, onNext }: { onPrev: () => void, onNext: () => void }) => (
-        <div data-testid="unified-input-controller">
-            <button data-testid="mock-prev" onClick={onPrev}>Prev</button>
-            <button data-testid="mock-next" onClick={onNext}>Next</button>
-        </div>
-    )
+  UnifiedInputController: ({ onPrev, onNext }: { onPrev: () => void, onNext: () => void }) => (
+    <div data-testid="unified-input-controller">
+      <button data-testid="mock-prev" onClick={onPrev}>Prev</button>
+      <button data-testid="mock-next" onClick={onNext}>Next</button>
+    </div>
+  )
 }));
 
 describe('ReaderView', () => {
@@ -120,7 +122,7 @@ describe('ReaderView', () => {
           }
         },
         manager: {
-            container: { clientWidth: 1000 }
+          container: { clientWidth: 1000 }
         }
       }),
       ready: Promise.resolve(),
@@ -128,35 +130,46 @@ describe('ReaderView', () => {
         navigation: Promise.resolve({ toc: [{ id: '1', label: 'Chapter 1', href: 'chap1.html' }] })
       },
       locations: {
-          generate: vi.fn().mockResolvedValue(['cfi1']),
-          percentageFromCfi: vi.fn(() => 0.5),
-          save: vi.fn(() => '["cfi1"]'),
-          load: vi.fn()
+        generate: vi.fn().mockResolvedValue(['cfi1']),
+        percentageFromCfi: vi.fn(() => 0.5),
+        save: vi.fn(() => '["cfi1"]'),
+        load: vi.fn()
       },
       spine: {
-          get: vi.fn(() => ({ label: 'Chapter 1' }))
+        get: vi.fn(() => ({ label: 'Chapter 1' }))
       },
       destroy: vi.fn(),
     });
 
-    useReaderStore.setState({
+    useReadingStateStore.setState({
       currentBookId: null,
+      currentCfi: null,
+      progress: 0,
+      saveProgress: vi.fn(), // Mock saveProgress if needed or let it use default
+    });
+
+    useReaderUIStore.setState({
       isLoading: false,
+      toc: [],
+      viewMode: 'paginated',
+      immersiveMode: false,
+      currentSectionTitle: null,
+      currentSectionId: null,
+      resetUI: vi.fn(),
+      setToc: (toc) => useReaderUIStore.setState({ toc }),
+      setIsLoading: (isLoading) => useReaderUIStore.setState({ isLoading }),
+      setCurrentSection: (title, id) => useReaderUIStore.setState({ currentSectionTitle: title, currentSectionId: id }),
+    });
+
+    usePreferencesStore.setState({
       currentTheme: 'light',
       fontSize: 100,
-      toc: [],
-      reset: vi.fn(),
-      setToc: (toc) => useReaderStore.setState({ toc }),
-      updateLocation: vi.fn(),
-      setIsLoading: (isLoading) => useReaderStore.setState({ isLoading }),
-      setCurrentBookId: (id) => useReaderStore.setState({ currentBookId: id }),
-      viewMode: 'paginated', // Default for tests
-      immersiveMode: false, // Default to false so header is visible
+      shouldForceFont: false,
     });
 
     useTTSStore.setState({
-        isPlaying: false,
-        activeCfi: null
+      isPlaying: false,
+      activeCfi: null
     });
   });
 
@@ -209,41 +222,41 @@ describe('ReaderView', () => {
 
     // Reset immersive mode to false so header buttons are visible
     act(() => {
-        useReaderStore.setState({ immersiveMode: false });
+      useReaderUIStore.setState({ immersiveMode: false });
     });
 
     const tocBtn = screen.getByLabelText('Table of Contents');
     fireEvent.click(tocBtn);
 
     await waitFor(() => {
-        expect(screen.getByText('Chapter 1')).toBeInTheDocument();
+      expect(screen.getByText('Chapter 1')).toBeInTheDocument();
     });
   });
 
   it('updates settings', async () => {
-      renderComponent();
-      await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+    renderComponent();
+    await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
 
-      // Reset immersive mode to false so header buttons are visible
-      act(() => {
-          useReaderStore.setState({ immersiveMode: false });
-      });
+    // Reset immersive mode to false so header buttons are visible
+    act(() => {
+      useReaderUIStore.setState({ immersiveMode: false });
+    });
 
-      // Open Visual Settings (Theme, Font, etc.)
-      const visualSettingsBtn = screen.getByLabelText('Visual Settings');
-      fireEvent.click(visualSettingsBtn);
+    // Open Visual Settings (Theme, Font, etc.)
+    const visualSettingsBtn = screen.getByLabelText('Visual Settings');
+    fireEvent.click(visualSettingsBtn);
 
-      // Change Theme
-      const darkThemeBtn = await screen.findByLabelText('Select Dark theme');
-      fireEvent.click(darkThemeBtn);
+    // Change Theme
+    const darkThemeBtn = await screen.findByLabelText('Select Dark theme');
+    fireEvent.click(darkThemeBtn);
 
-      expect(useReaderStore.getState().currentTheme).toBe('dark');
+    expect(usePreferencesStore.getState().currentTheme).toBe('dark');
 
-      // Toggle Force Theme
-      // We use getByRole for switch as it might not be labeled by text directly in a way JSDOM likes with Radix
-      const forceThemeSwitch = screen.getByRole('switch', { name: 'Force Theme' });
-      fireEvent.click(forceThemeSwitch);
+    // Toggle Force Theme
+    // We use getByRole for switch as it might not be labeled by text directly in a way JSDOM likes with Radix
+    const forceThemeSwitch = screen.getByRole('switch', { name: 'Force Theme' });
+    fireEvent.click(forceThemeSwitch);
 
-      expect(useReaderStore.getState().shouldForceFont).toBe(true);
+    expect(usePreferencesStore.getState().shouldForceFont).toBe(true);
   });
 });

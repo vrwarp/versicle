@@ -3,7 +3,7 @@ import type { BookMetadata } from '../../types/db';
 import { BookOpen, HardDriveDownload, MoreVertical } from 'lucide-react';
 import { useToastStore } from '../../store/useToastStore';
 import { cn } from '../../lib/utils';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { Progress } from '../ui/Progress';
 import { BookActionMenu } from './BookActionMenu';
 
@@ -49,7 +49,7 @@ const formatDuration = (chars?: number): string => {
  */
 export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onRestore }: BookListItemProps) => {
     const showToast = useToastStore(state => state.showToast);
-    const setBookId = useReaderStore(state => state.setCurrentBookId);
+    const setBookId = useReadingStateStore(state => state.setCurrentBookId);
 
     const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
 
@@ -113,10 +113,10 @@ export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onR
                             </>
                         )}
                         {progressPercent === 0 && (
-                             <>
+                            <>
                                 <span>•</span>
                                 <span>0%</span>
-                             </>
+                            </>
                         )}
 
                         {durationString ? (
@@ -133,7 +133,7 @@ export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onR
                             )
                         )}
 
-                         {book.isOffloaded && (
+                        {book.isOffloaded && (
                             <span className="text-amber-500 font-medium ml-1">(Offloaded)</span>
                         )}
                     </div>
@@ -147,7 +147,7 @@ export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onR
                         onOffload={() => onOffload(book)}
                         onRestore={() => onRestore(book)}
                     >
-                         <div
+                        <div
                             className={cn(
                                 "p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors focus:opacity-100 touch-manipulation cursor-pointer",
                                 "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile

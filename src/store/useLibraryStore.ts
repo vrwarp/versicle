@@ -76,11 +76,16 @@ interface LibraryState {
   restoreBook: (id: string, file: File) => Promise<void>;
 }
 
-/**
- * Zustand store for managing the user's library of books.
- * Handles fetching, adding, and removing books from IndexedDB.
- */
-export const useLibraryStore = create<LibraryState>()(
+// DB Service Interface for injection
+interface IDBService {
+  getLibrary: () => Promise<BookMetadata[]>;
+  addBook: (file: File, options: any, onProgress: (progress: number, message: string) => void) => Promise<void>;
+  deleteBook: (id: string) => Promise<void>;
+  offloadBook: (id: string) => Promise<void>;
+  restoreBook: (id: string, file: File) => Promise<void>;
+}
+
+export const createLibraryStore = (injectedDB: IDBService = dbService) => create<LibraryState>()(
   persist(
     (set, get) => ({
       books: {},
@@ -100,7 +105,7 @@ export const useLibraryStore = create<LibraryState>()(
       fetchBooks: async () => {
         set({ isLoading: true, error: null });
         try {
-          const booksArray = await dbService.getLibrary();
+          const booksArray = await injectedDB.getLibrary();
           const booksRecord: Record<string, BookMetadata> = {};
           booksArray.forEach(book => {
             booksRecord[book.id] = book;
@@ -125,7 +130,7 @@ export const useLibraryStore = create<LibraryState>()(
           const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
           // Maximal Splitting: Ingest with empty abbreviations to maximize segments.
           // Merging will happen dynamically during playback.
-          await dbService.addBook(file, {
+          await injectedDB.addBook(file, {
             abbreviations: [],
             alwaysMerge: [],
             sentenceStarters,
@@ -211,7 +216,7 @@ export const useLibraryStore = create<LibraryState>()(
 
       removeBook: async (id: string) => {
         try {
-          await dbService.deleteBook(id);
+          await injectedDB.deleteBook(id);
           // Optimistic update
           set(state => {
             const newBooks = { ...state.books };
@@ -227,7 +232,7 @@ export const useLibraryStore = create<LibraryState>()(
 
       offloadBook: async (id: string) => {
         try {
-          await dbService.offloadBook(id);
+          await injectedDB.offloadBook(id);
           await get().fetchBooks();
         } catch (err) {
           console.error('Failed to offload book:', err);
@@ -238,7 +243,7 @@ export const useLibraryStore = create<LibraryState>()(
       restoreBook: async (id: string, file: File) => {
         set({ isImporting: true, error: null });
         try {
-          await dbService.restoreBook(id, file);
+          await injectedDB.restoreBook(id, file);
           await get().fetchBooks();
           set({ isImporting: false });
         } catch (err) {
@@ -257,6 +262,12 @@ export const useLibraryStore = create<LibraryState>()(
     }
   )
 );
+
+/**
+ * Zustand store for managing the user's library of books.
+ * Handles fetching, adding, and removing books from IndexedDB.
+ */
+export const useLibraryStore = createLibraryStore();
 
 // Selectors
 export const useAllBooks = () => {

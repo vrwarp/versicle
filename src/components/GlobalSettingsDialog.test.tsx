@@ -10,7 +10,7 @@ vi.mock('./ui/Modal', () => {
         Modal: ({ open, children }: { open: boolean, children: React.ReactNode }) => open ? <div role="dialog">{children}</div> : null,
         ModalContent: ({ children, 'aria-describedby': ariaDescribedBy }: { children: React.ReactNode, className?: string, 'aria-describedby'?: string }) => (
             <div>
-                 {/* Ensure accessibility elements are present in tests */}
+                {/* Ensure accessibility elements are present in tests */}
                 <h1>Global Settings</h1>
                 <p id={ariaDescribedBy || "dialog-desc"}>Global application settings including appearance, TTS configuration, and data management.</p>
                 {children}
@@ -46,6 +46,60 @@ const mockSetVoice = vi.fn();
 const mockDownloadVoice = vi.fn();
 const mockCheckVoiceDownloaded = vi.fn().mockResolvedValue(false);
 const mockSetProviderId = vi.fn();
+
+vi.mock('../store/usePreferencesStore', () => ({
+    usePreferencesStore: vi.fn(() => ({
+        currentTheme: 'light',
+        setTheme: vi.fn(),
+        fontFamily: 'serif',
+        lineHeight: 1.5,
+        fontSize: 100,
+        shouldForceFont: false
+    }))
+}));
+
+vi.mock('../store/useLibraryStore', () => ({
+    useLibraryStore: vi.fn(() => ({
+        addBooks: vi.fn(),
+        fetchBooks: vi.fn(),
+        isImporting: false,
+        importProgress: 0,
+        importStatus: '',
+        uploadProgress: 0,
+        uploadStatus: ''
+    }))
+}));
+
+vi.mock('../db/DBService', () => ({
+    dbService: {
+        getReadingList: vi.fn().mockResolvedValue([]),
+        getReadingHistory: vi.fn().mockResolvedValue([]),
+        importReadingList: vi.fn(),
+        clearContentAnalysis: vi.fn(),
+        cleanup: vi.fn()
+    }
+}));
+
+vi.mock('../lib/sync/hooks/useSyncStore', () => ({
+    useSyncStore: () => ({
+        googleClientId: '',
+        googleApiKey: '',
+        setGoogleCredentials: vi.fn(),
+        isSyncEnabled: false,
+        setSyncEnabled: vi.fn()
+    })
+}));
+
+vi.mock('../lib/sync/CheckpointService', () => ({
+    CheckpointService: {
+        listCheckpoints: vi.fn().mockResolvedValue([]),
+        restoreCheckpoint: vi.fn()
+    }
+}));
+
+vi.mock('../store/useToastStore', () => ({
+    useToastStore: (selector: any) => selector ? selector({ showToast: vi.fn() }) : { showToast: vi.fn() }
+}));
 
 vi.mock('../store/useTTSStore', () => ({
     useTTSStore: vi.fn()

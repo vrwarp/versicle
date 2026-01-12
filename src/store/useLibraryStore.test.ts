@@ -1,17 +1,16 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { useLibraryStore } from './useLibraryStore';
-import { dbService } from '../db/DBService';
+import { createLibraryStore } from './useLibraryStore';
 import type { BookMetadata } from '../types/db';
 
 // Mock DBService
-vi.mock('../db/DBService', () => ({
-  dbService: {
-    getLibrary: vi.fn(),
-    addBook: vi.fn(),
-    deleteBook: vi.fn(),
-    ingestBook: vi.fn(),
-  }
-}));
+const mockDBService = {
+  getLibrary: vi.fn(),
+  addBook: vi.fn(),
+  deleteBook: vi.fn(),
+  ingestBook: vi.fn(),
+  offloadBook: vi.fn(),
+  restoreBook: vi.fn(),
+};
 
 // Mock zustand persistence
 vi.mock('zustand/middleware', async (importOriginal) => {
@@ -25,6 +24,7 @@ vi.mock('zustand/middleware', async (importOriginal) => {
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
   extractBookData: vi.fn(),
+  processBatchImport: vi.fn(), // Mock processBatchImport as it is used in addBooks
 }));
 
 // Mock AudioPlayerService
@@ -35,6 +35,17 @@ vi.mock('../lib/tts/AudioPlayerService', () => ({
     }),
   },
 }));
+
+// Mock TTS Store (referenced in addBooks)
+vi.mock('./useTTSStore', () => ({
+  useTTSStore: {
+    getState: () => ({
+      sentenceStarters: [],
+      sanitizationEnabled: false
+    })
+  }
+}));
+
 
 describe('useLibraryStore', () => {
   const mockFile = new File([''], 'test.epub', { type: 'application/epub+zip' });
@@ -57,8 +68,11 @@ describe('useLibraryStore', () => {
     isOffloaded: false,
   };
 
+  let useLibraryStore: ReturnType<typeof createLibraryStore>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    useLibraryStore = createLibraryStore(mockDBService as any);
     useLibraryStore.setState({
       books: {},
       isLoading: false,
@@ -79,14 +93,14 @@ describe('useLibraryStore', () => {
 
   it('should add a book calling dbService', async () => {
     // Mock successful add
-    vi.mocked(dbService.addBook).mockResolvedValue(undefined);
+    vi.mocked(mockDBService.addBook).mockResolvedValue(undefined);
     // Mock fetchBooks after add
-    vi.mocked(dbService.getLibrary).mockResolvedValue([mockBook]);
+    vi.mocked(mockDBService.getLibrary).mockResolvedValue([mockBook]);
 
     await useLibraryStore.getState().addBook(mockFile);
 
-    expect(dbService.addBook).toHaveBeenCalledWith(mockFile, expect.anything(), expect.anything());
-    expect(dbService.getLibrary).toHaveBeenCalled();
+    expect(mockDBService.addBook).toHaveBeenCalledWith(mockFile, expect.anything(), expect.anything());
+    expect(mockDBService.getLibrary).toHaveBeenCalled();
 
     // State should be updated via fetchBooks
     const state = useLibraryStore.getState();
@@ -96,7 +110,7 @@ describe('useLibraryStore', () => {
 
   it('should handle add book error', async () => {
     const error = new Error('Add failed');
-    vi.mocked(dbService.addBook).mockRejectedValue(error);
+    vi.mocked(mockDBService.addBook).mockRejectedValue(error);
 
     await expect(useLibraryStore.getState().addBook(mockFile)).rejects.toThrow('Add failed');
 
@@ -110,21 +124,21 @@ describe('useLibraryStore', () => {
     // Setup initial state
     useLibraryStore.setState({ books: { 'test-id': mockBook } });
 
-    vi.mocked(dbService.deleteBook).mockResolvedValue(undefined);
+    vi.mocked(mockDBService.deleteBook).mockResolvedValue(undefined);
 
     await useLibraryStore.getState().removeBook('test-id');
 
-    expect(dbService.deleteBook).toHaveBeenCalledWith('test-id');
+    expect(mockDBService.deleteBook).toHaveBeenCalledWith('test-id');
     const state = useLibraryStore.getState();
     expect(state.books['test-id']).toBeUndefined();
   });
 
   it('should refresh library from DB', async () => {
-    vi.mocked(dbService.getLibrary).mockResolvedValue([mockBook]);
+    vi.mocked(mockDBService.getLibrary).mockResolvedValue([mockBook]);
 
     await useLibraryStore.getState().fetchBooks();
 
-    expect(dbService.getLibrary).toHaveBeenCalled();
+    expect(mockDBService.getLibrary).toHaveBeenCalled();
     const state = useLibraryStore.getState();
     expect(state.books['test-id']).toEqual(mockBook);
   });

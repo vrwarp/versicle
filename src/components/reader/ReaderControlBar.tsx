@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
+import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
@@ -30,11 +31,12 @@ export const ReaderControlBar: React.FC = () => {
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderStore(useShallow(state => ({
+    const { immersiveMode, currentSectionTitle } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
-        currentBookId: state.currentBookId,
         currentSectionTitle: state.currentSectionTitle
     })));
+
+    const currentBookId = useReadingStateStore(state => state.currentBookId);
 
     // OPTIMIZATION: Use granular selectors to avoid re-rendering on every library change.
     // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.
@@ -122,7 +124,7 @@ export const ReaderControlBar: React.FC = () => {
             case 'play':
                 // Play from selection
                 if (popover.cfiRange) {
-                    const playFromSelection = useReaderStore.getState().playFromSelection;
+                    const playFromSelection = useReaderUIStore.getState().playFromSelection;
                     if (playFromSelection) {
                         playFromSelection(popover.cfiRange);
                     } else {

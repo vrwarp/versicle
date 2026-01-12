@@ -24,7 +24,7 @@ def test_theme(page: Page):
     # 3. Verify Dark Theme
     print("Switching to Dark Theme via localStorage...")
 
-    # Need to structure it exactly as zustand persist expects
+    # Matches usePreferencesStore structure
     dark_state = {
         "state": {
             "currentTheme": "dark",
@@ -32,19 +32,14 @@ def test_theme(page: Page):
             "fontFamily": "serif",
             "lineHeight": 1.5,
             "fontSize": 100,
-            "toc": [],
-            "isLoading": False,
-            "currentBookId": None,
-            "currentCfi": None,
-            "currentChapterTitle": None,
-            "progress": 0
+            "shouldForceFont": False
         },
         "version": 0
     }
 
     json_state = json.dumps(dark_state)
 
-    page.evaluate(f"localStorage.setItem('reader-storage', '{json_state}')")
+    page.evaluate(f"localStorage.setItem('reader-preferences', '{json_state}')")
     page.reload()
 
     # Verify Dark Class
@@ -56,7 +51,7 @@ def test_theme(page: Page):
     # 4. Verify Sepia Theme
     print("Switching to Sepia Theme via localStorage...")
     sepia_state = json_state.replace("dark", "sepia")
-    page.evaluate(f"localStorage.setItem('reader-storage', '{sepia_state}')")
+    page.evaluate(f"localStorage.setItem('reader-preferences', '{sepia_state}')")
     page.reload()
 
     # Verify Sepia Class

@@ -24,7 +24,11 @@ interface AnnotationState {
   hidePopover: () => void;
 }
 
-export const useAnnotationStore = create<AnnotationState>((set) => ({
+/**
+ * Factory to create the Annotation store with dependency injection.
+ * @param dbProvider - Function that returns a Promise resolving to the IDBPDatabase instance.
+ */
+export const createAnnotationStore = (dbProvider: () => Promise<any>) => create<AnnotationState>((set) => ({
   annotations: [],
   popover: {
     visible: false,
@@ -36,7 +40,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
   loadAnnotations: async (bookId: string) => {
     try {
-      const db = await getDB();
+      const db = await dbProvider();
       // Updated to use 'user_annotations' store
       const annotations = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
       set({ annotations });
@@ -53,7 +57,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     };
 
     try {
-      const db = await getDB();
+      const db = await dbProvider();
       // Updated to use 'user_annotations' store
       await db.add('user_annotations', newAnnotation);
       set((state) => ({
@@ -66,7 +70,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
   deleteAnnotation: async (id: string) => {
     try {
-      const db = await getDB();
+      const db = await dbProvider();
       // Updated to use 'user_annotations' store
       await db.delete('user_annotations', id);
       set((state) => ({
@@ -79,7 +83,7 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
 
   updateAnnotation: async (id: string, changes: Partial<Annotation>) => {
     try {
-      const db = await getDB();
+      const db = await dbProvider();
       // Updated to use 'user_annotations' store
       const annotation = await db.get('user_annotations', id);
       if (annotation) {
@@ -115,3 +119,5 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
     }));
   },
 }));
+
+export const useAnnotationStore = createAnnotationStore(getDB);

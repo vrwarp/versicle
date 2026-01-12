@@ -2,11 +2,15 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VisualSettings } from './VisualSettings';
-import { useReaderStore } from '../../store/useReaderStore';
+import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 
 // Mock zustand store
-vi.mock('../../store/useReaderStore', () => ({
-  useReaderStore: vi.fn(),
+vi.mock('../../store/usePreferencesStore', () => ({
+  usePreferencesStore: vi.fn(),
+}));
+vi.mock('../../store/useReaderUIStore', () => ({
+  useReaderUIStore: vi.fn(),
 }));
 
 // Mock zustand shallow
@@ -29,11 +33,11 @@ vi.mock('../ui/Tabs', () => ({
   Tabs: ({ value, onValueChange, children }: any) => (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     <div data-testid="tabs" data-value={value} onClick={(e: any) => {
-        if (e.target.dataset.value && e.target.dataset.value !== value) {
-            onValueChange(e.target.dataset.value);
-        }
+      if (e.target.dataset.value && e.target.dataset.value !== value) {
+        onValueChange(e.target.dataset.value);
+      }
     }}>
-        {children}
+      {children}
     </div>
   ),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,7 +45,7 @@ vi.mock('../ui/Tabs', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   TabsTrigger: ({ value, children }: any) => (
     <button data-value={value} type="button">
-        {children}
+      {children}
     </button>
   ),
 }));
@@ -57,19 +61,24 @@ describe('VisualSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useReaderStore as any).mockImplementation((selector: any) => selector({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (usePreferencesStore as any).mockImplementation((selector: any) => selector({
       currentTheme: 'light',
       setTheme: mockSetTheme,
       fontSize: 100,
       setFontSize: mockSetFontSize,
       fontFamily: 'serif',
       setFontFamily: mockSetFontFamily,
-      viewMode: 'paginated',
-      setViewMode: mockSetViewMode,
       lineHeight: 1.5,
       setLineHeight: mockSetLineHeight,
       shouldForceFont: false,
       setShouldForceFont: mockSetShouldForceFont,
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useReaderUIStore as any).mockImplementation((selector: any) => selector({
+      viewMode: 'paginated',
+      setViewMode: mockSetViewMode,
     }));
   });
 

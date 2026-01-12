@@ -52,15 +52,18 @@ vi.mock('./store/useToastStore', () => {
   return { useToastStore: useToastStoreMock };
 });
 
-vi.mock('./store/useReaderStore', () => {
-  return {
-    useReaderStore: (selector: any) => selector({
-      immersiveMode: false,
-      currentBookId: null,
-      currentSectionTitle: null,
-    }),
-  };
-});
+vi.mock('./store/useReaderUIStore', () => ({
+  useReaderUIStore: (selector: any) => selector({
+    immersiveMode: false,
+    currentSectionTitle: null,
+  }),
+}));
+
+vi.mock('./store/useReadingStateStore', () => ({
+  useReadingStateStore: (selector: any) => selector({
+    currentBookId: null,
+  }),
+}));
 
 vi.mock('./store/useLibraryStore', () => ({
   useLibraryStore: (selector: any) => selector({ books: {} }),

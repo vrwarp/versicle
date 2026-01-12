@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { getDB } from './db/db';
 import { useLibraryStore } from './store/useLibraryStore';
-import { useReaderStore } from './store/useReaderStore';
+import { useReaderUIStore } from './store/useReaderUIStore';
+import { useReadingStateStore } from './store/useReadingStateStore';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { StaticBookManifest, StaticResource, UserInventoryItem, UserProgress } from './types/db';
@@ -138,7 +139,8 @@ describe('Feature Integration Tests', () => {
 
     // Reset stores
     useLibraryStore.setState({ books: {}, isLoading: false, isImporting: false, error: null });
-    useReaderStore.getState().reset();
+    useReaderUIStore.getState().reset();
+    useReadingStateStore.setState({ currentBookId: null, currentCfi: null, progress: 0 });
 
     // Mock global fetch for cover extraction
     global.fetch = vi.fn((url) => {
@@ -276,20 +278,23 @@ describe('Feature Integration Tests', () => {
     await db.put('static_resources', { bookId, epubBlob: buffer.buffer } as StaticResource);
 
     // 2. Initialize Reader Store (simulating component mount)
-    const readerStore = useReaderStore.getState();
-    readerStore.setCurrentBookId(bookId);
+    const readingState = useReadingStateStore.getState();
+    const uiStore = useReaderUIStore.getState();
+    readingState.setCurrentBookId(bookId);
 
-    readerStore.updateLocation('cfi1', 0.5, 'Chapter 5');
+    readingState.updateLocation('cfi1', 0.5);
+    uiStore.setCurrentSection('Chapter 5', 'section1');
 
-    const state = useReaderStore.getState();
+    const state = useReadingStateStore.getState();
+    const uiState = useReaderUIStore.getState();
     expect(state.currentCfi).toBe('cfi1');
     expect(state.progress).toBe(0.5);
-    expect(state.currentSectionTitle).toBe('Chapter 5');
+    expect(uiState.currentSectionTitle).toBe('Chapter 5');
 
     // Test TOC setting
     const mockToc = [{ id: '1', href: 'chap1.html', label: 'Chapter 1' }];
-    readerStore.setToc(mockToc);
-    expect(useReaderStore.getState().toc).toEqual(mockToc);
+    useReaderUIStore.getState().setToc(mockToc);
+    expect(useReaderUIStore.getState().toc).toEqual(mockToc);
 
     // Simulate the persistence logic used in ReaderView/DBService
     const saveProgress = async (id: string, cfi: string, prog: number) => {
