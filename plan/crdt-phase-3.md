@@ -9,17 +9,25 @@
 **Responsibilities:**
 1.  Detect if migration is needed.
 2.  Read legacy data.
-3.  Transform to Yjs schema.
-4.  Write to Yjs.
-5.  Mark complete.
+3.  Transform to Yjs schema with validation.
+4.  Write to Yjs with idempotency checks.
+5.  Mark complete and verify.
 
 **Detailed Logic:**
 
 ```typescript
 import { yDoc, waitForYjsSync } from '../../store/yjs-provider';
 import { dbService } from '../../db/DBService';
+import { Logger } from '../logger';
+import { 
+    validateInventory, 
+    validateProgress, 
+    validateAnnotation, 
+    validateReadingListEntry 
+} from '../sync/validators'; // Planned in Phase 1
 
 export const checkAndMigrate = async () => {
+    // 0. Ensure Yjs is ready and hasn't already received this data from sync
     await waitForYjsSync();
 
     const settingsMap = yDoc.getMap('settings');
@@ -27,71 +35,92 @@ export const checkAndMigrate = async () => {
         return; // Already done
     }
 
-    console.log('🚀 Starting Migration to Yjs...');
-
-    // 1. Fetch Legacy Data
-    const books = await dbService.getLibrary(); // Joins manifests + inventory + progress
-    // Note: We need raw access to `user_annotations` since DBService.getAnnotations requires ID
-    const db = await dbService.getDB();
-    const annotations = await db.getAll('user_annotations');
-    const readingList = await db.getAll('user_reading_list');
-
-    // 2. Validate Data (Dry Run)
-    const validationErrors = validateMigrationData(books, annotations, readingList);
-    if (validationErrors.length > 0) {
-        console.error('❌ Migration Aborted due to validation errors:', validationErrors);
-        // Optionally upload error report
-        return; 
+    // Check if map already has data (e.g., from another device's sync)
+    const invMap = yDoc.getMap('inventory');
+    if (invMap.size > 0 && !settingsMap.get('migration_v19_yjs_started')) {
+        Logger.info('Migration', 'Yjs already has data, skipping legacy migration.');
+        settingsMap.set('migration_v19_yjs_complete', true);
+        return;
     }
 
-    // 3. Transact with Y.Doc (All or Nothing)
+    Logger.info('Migration', '🚀 Starting Migration to Yjs...');
+    settingsMap.set('migration_v19_yjs_started', true);
+
     try {
+        // 1. Fetch Legacy Data
+        const books = await dbService.getLibrary(); 
+        const db = await dbService.getDB();
+        const annotations = await db.getAll('user_annotations');
+        const readingList = await db.getAll('user_reading_list');
+        const journey = await db.getAll('user_journey');
+
+        // 2. Transact with Y.Doc
         yDoc.transact(() => {
-            const invMap = yDoc.getMap('inventory');
             const rlMap = yDoc.getMap('reading_list');
             const progMap = yDoc.getMap('progress');
             const annMap = yDoc.getMap('annotations');
+            const journeyArray = yDoc.getArray('journey');
 
             // Migrate Reading List
             for (const entry of readingList) {
-                rlMap.set(entry.filename, entry);
+                if (validateReadingListEntry(entry)) {
+                    rlMap.set(entry.filename, entry);
+                }
             }
 
             // Migrate Books & Progress
             for (const book of books) {
-                // Inventory
-                invMap.set(book.id, {
+                // Determine source filename for RL link
+                const filename = book.filename || 'unknown_migration';
+
+                const inventoryItem = {
                     bookId: book.id,
                     addedAt: book.addedAt,
-                    sourceFilename: book.filename,
-                    status: book.progress > 0.98 ? 'completed' : 'reading', // simplified
-                    title: book.title, // User custom title logic needs checking
-                    author: book.author,
-                    lastInteraction: book.lastRead || Date.now()
-                });
+                    sourceFilename: filename,
+                    status: book.progress > 0.98 ? 'completed' : (book.progress > 0 ? 'reading' : 'unread'),
+                    tags: [], // Metadata might not have had tags in all versions
+                    lastInteraction: book.lastRead || book.addedAt
+                };
 
-                // Progress
-                progMap.set(book.id, {
+                const progressItem = {
                     bookId: book.id,
                     percentage: book.progress || 0,
                     currentCfi: book.currentCfi,
+                    lastPlayedCfi: book.lastPlayedCfi,
                     lastRead: book.lastRead || 0,
-                    // ... map other fields
-                });
+                    completedRanges: [] // History handled below/separately
+                };
+
+                if (validateInventory(inventoryItem)) {
+                    invMap.set(book.id, inventoryItem);
+                }
+                if (validateProgress(progressItem)) {
+                    progMap.set(book.id, progressItem);
+                }
             }
 
             // Migrate Annotations
             for (const ann of annotations) {
-                annMap.set(ann.id, ann);
+                if (validateAnnotation(ann)) {
+                    annMap.set(ann.id, ann);
+                }
+            }
+
+            // Migrate Journey (Append-only, limited for perf)
+            // Strategy: Migrate most recent 500 entries to Yjs, leave rest in Legacy/IDB
+            const recentJourney = journey.slice(-500);
+            for (const step of recentJourney) {
+                journeyArray.push([step]);
             }
 
             // Mark Complete
             settingsMap.set('migration_v19_yjs_complete', true);
         });
-        console.log('✅ Migration Complete');
+
+        Logger.info('Migration', '✅ Migration Complete');
     } catch (e) {
-        console.error('❌ Migration Failed during transaction:', e);
-        // Yjs transaction rollback is implicit if error thrown, but we must ensure we didn't set 'complete'
+        Logger.error('Migration', '❌ Migration Failed:', e);
+        // We do NOT set complete, so it will retry next startup
     }
 };
 ```
@@ -101,28 +130,31 @@ export const checkAndMigrate = async () => {
 **File:** `src/main.tsx` (or top-level App component).
 
 *   **Action:** Call `MigrationService.checkAndMigrate()` immediately after `ReactDOM.createRoot`.
-*   **Blocking:** Consider showing a `<LoadingSpinner text="Upgrading Database..." />` if the migration promise is pending.
+*   **Blocking:** Show a `<LoadingSpinner text="Upgrading Database..." />` while the promise is pending.
 
 ## 3. Verification
 
 **Manual Test Plan:**
-1.  **Setup:** Load the app on the *current branch* (Legacy IDB). Add 3 books. Read one to 50%. Add 2 highlights.
-2.  **Switch Branch:** Checkout the Yjs migration branch.
-3.  **Launch:** Open the app.
-4.  **Verify:**
-    *   Books appear in Library? (Checks `inventory` migration).
-    *   Reading progress preserved? (Checks `progress` migration).
-    *   Highlights appear? (Checks `annotations` migration).
-    *   DevTools > IndexedDB > `versicle-yjs` > Contains blobs?
+1.  **Setup:** Use Legacy branch. Add 3 books, 5 highlights, 10 reading sessions.
+2.  **Launch:** Open Migration branch.
+3.  **Verify:**
+    *   Books appear in Library?
+    *   Reading progress preserved?
+    *   Highlights appear?
+    *   Check `user_journey` in Yjs DevTools (Verify it's limited or complete).
+    *   Verify `migration_v19_yjs_complete: true` in `versicle-yjs` settings map.
 
 ## 4. Cleanup (Deferred)
 
 **Phase 3.5:**
-After 1-2 release cycles, we will remove the `user_*` stores from `src/db/db.ts` to reclaim space.
+After 1-2 release cycles, we will remove the `user_*` stores from `src/db/db.ts` via an IDB version upgrade (v23+).
+
+> [!WARNING]
+> Do NOT delete legacy stores until the migration is proven stable in production.
 
 **Action:**
 *   In `src/db/db.ts` `upgrade` callback:
-    *   `if (oldVersion < 20)`:
+    *   `if (oldVersion < 23)`:
         *   `db.deleteObjectStore('user_inventory')`
         *   `db.deleteObjectStore('user_reading_list')`
         *   `db.deleteObjectStore('user_progress')`
