@@ -59,14 +59,19 @@ vi.mock('./store/useReaderUIStore', () => ({
   }),
 }));
 
-vi.mock('./store/useReadingStateStore', () => ({
-  useReadingStateStore: (selector: any) => selector({
+vi.mock('./store/useReadingStateStore', () => {
+  const useReadingStateStore = (selector: any) => selector({
     currentBookId: null,
-  }),
-}));
+  });
+  useReadingStateStore.getState = vi.fn().mockReturnValue({ progress: {} });
+  useReadingStateStore.setState = vi.fn();
+  useReadingStateStore.subscribe = vi.fn();
+  return { useReadingStateStore };
+});
 
 vi.mock('./store/useLibraryStore', () => ({
   useLibraryStore: (selector: any) => selector({ books: {} }),
+  useAllBooks: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('./store/useAnnotationStore', () => ({

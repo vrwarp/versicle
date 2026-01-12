@@ -56,7 +56,7 @@ describe('AnnotationList', () => {
       { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', color: 'yellow', created: Date.now() },
     ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useAnnotationStore.setState({ annotations: annotations as any, deleteAnnotation: deleteAnnotationMock });
+    useAnnotationStore.setState({ annotations: annotations as any, remove: deleteAnnotationMock });
     window.confirm = vi.fn(() => true);
 
     render(<AnnotationList onNavigate={vi.fn()} />);
@@ -71,7 +71,7 @@ describe('AnnotationList', () => {
       { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', color: 'yellow', created: Date.now() },
     ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useAnnotationStore.setState({ annotations: annotations as any, updateAnnotation: updateAnnotationMock });
+    useAnnotationStore.setState({ annotations: annotations as any, update: updateAnnotationMock });
 
     render(<AnnotationList onNavigate={vi.fn()} />);
 

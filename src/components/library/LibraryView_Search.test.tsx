@@ -39,14 +39,14 @@ describe('LibraryView Search', () => {
 
         useLibraryStore.setState({
             books: {
-                '1': { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', addedAt: 100 },
-                '2': { id: '2', title: '1984', author: 'George Orwell', addedAt: 200 },
-                '3': { id: '3', title: 'Brave New World', author: 'Aldous Huxley', addedAt: 150 }
-            } as unknown as Record<string, BookMetadata>,
+                '1': { id: '1', bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', addedAt: 100 },
+                '2': { id: '2', bookId: '2', title: '1984', author: 'George Orwell', addedAt: 200 },
+                '3': { id: '3', bookId: '3', title: 'Brave New World', author: 'Aldous Huxley', addedAt: 150 }
+            } as unknown as any,
             isLoading: false,
             error: null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            fetchBooks: vi.fn().mockResolvedValue(undefined) as any,
+            // fetchBooks removed
             isImporting: false,
             viewMode: 'grid',
             sortOrder: 'recent'
@@ -126,7 +126,7 @@ describe('LibraryView Search', () => {
             useLibraryStore.setState((state) => ({
                 books: {
                     ...state.books,
-                    '4': { id: '4', title: 'New Moon', author: 'Stephenie Meyer', addedAt: 300 } as unknown as BookMetadata
+                    '4': { id: '4', bookId: '4', title: 'New Moon', author: 'Stephenie Meyer', addedAt: 300 } as any
                 }
             }));
         });

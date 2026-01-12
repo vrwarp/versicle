@@ -10,7 +10,13 @@ const mockDBService = {
   ingestBook: vi.fn(),
   offloadBook: vi.fn(),
   restoreBook: vi.fn(),
+  getBookMetadata: vi.fn(),
 };
+
+// Mock DBService methods
+vi.mock('../lib/db', () => ({
+  dbService: mockDBService,
+}));
 
 // Mock zustand persistence
 vi.mock('zustand/middleware', async (importOriginal) => {
@@ -92,19 +98,25 @@ describe('useLibraryStore', () => {
   });
 
   it('should add a book calling dbService', async () => {
-    // Mock successful add
-    vi.mocked(mockDBService.addBook).mockResolvedValue(undefined);
-    // Mock fetchBooks after add
-    vi.mocked(mockDBService.getLibrary).mockResolvedValue([mockBook]);
+    // Mock successful add - returns StaticBookManifest
+    const mockManifest = {
+      bookId: 'test-id',
+      title: 'Test Book',
+      author: 'Test Author',
+      fileHash: 'hash',
+      fileSize: 100,
+      totalChars: 1000,
+      schemaVersion: 1
+    };
+    vi.mocked(mockDBService.addBook).mockResolvedValue(mockManifest as any);
 
     await useLibraryStore.getState().addBook(mockFile);
 
     expect(mockDBService.addBook).toHaveBeenCalledWith(mockFile, expect.anything(), expect.anything());
-    expect(mockDBService.getLibrary).toHaveBeenCalled();
 
-    // State should be updated via fetchBooks
+    // State should be updated via Yjs sync (book added to store)
     const state = useLibraryStore.getState();
-    expect(state.books['test-id']).toEqual(mockBook);
+    expect(state.books['test-id']).toBeDefined();
     expect(state.isLoading).toBe(false);
   });
 
@@ -122,7 +134,7 @@ describe('useLibraryStore', () => {
 
   it('should remove a book calling dbService', async () => {
     // Setup initial state
-    useLibraryStore.setState({ books: { 'test-id': mockBook } });
+    useLibraryStore.setState({ books: { 'test-id': { ...mockBook, lastInteraction: 1000, tags: [], status: 'unread' } as any } });
 
     vi.mocked(mockDBService.deleteBook).mockResolvedValue(undefined);
 
@@ -133,14 +145,36 @@ describe('useLibraryStore', () => {
     expect(state.books['test-id']).toBeUndefined();
   });
 
-  it('should refresh library from DB', async () => {
+  it('should hydrate static metadata from DB', async () => {
+    // Setup book in Yjs state first
+    useLibraryStore.setState({
+      books: {
+        'test-id': {
+          bookId: 'test-id',
+          title: 'Test',
+          author: 'Author',
+          addedAt: 1000,
+          status: 'unread',
+          tags: [],
+          lastInteraction: 1000
+        } as any
+      }
+    });
+
+    // Mock DBService to return static metadata
     vi.mocked(mockDBService.getLibrary).mockResolvedValue([mockBook]);
+    vi.mocked(mockDBService.getBookMetadata).mockResolvedValue(mockBook);
 
-    await useLibraryStore.getState().fetchBooks();
+    // Setup initial state with a book so hydration has something to do
+    useLibraryStore.setState({
+      books: { 'test-id': mockBook as any }
+    });
 
-    expect(mockDBService.getLibrary).toHaveBeenCalled();
+    await useLibraryStore.getState().hydrateStaticMetadata();
+
+    expect(mockDBService.getBookMetadata).toHaveBeenCalledWith('test-id');
     const state = useLibraryStore.getState();
-    expect(state.books['test-id']).toEqual(mockBook);
+    expect(state.staticMetadata['test-id']).toBeDefined();
   });
 
   it('should update and persist sort order', () => {

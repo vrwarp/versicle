@@ -31,12 +31,21 @@ vi.mock('../../../store/useReaderUIStore', () => ({
 
 vi.mock('../../../store/useReadingStateStore', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useReadingStateStore: (selector: any) => mockUseReadingStateStore(selector),
+  useReadingStateStore: Object.assign(
+    (selector: any) => mockUseReadingStateStore(selector),
+    {
+      getState: () => mockUseReadingStateStore.getState?.() || {},
+      setState: (state: any) => mockUseReadingStateStore.setState?.(state),
+      subscribe: (listener: any) => mockUseReadingStateStore.subscribe?.(listener),
+    }
+  )
 }));
 
 vi.mock('../../../store/useLibraryStore', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useLibraryStore: (selector: any) => mockUseLibraryStore(selector),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  useAllBooks: () => mockUseLibraryStore({ name: 'useAllBooks' }),
 }));
 
 vi.mock('../../../store/useToastStore', () => ({
@@ -90,7 +99,7 @@ describe('ReaderControlBar', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
       popover: { visible: false, text: 'selected text', cfiRange: 'cfi' },
-      addAnnotation: vi.fn(),
+      add: vi.fn(),
       hidePopover: vi.fn(),
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,10 +118,19 @@ describe('ReaderControlBar', () => {
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
       currentBookId: null,
     }));
+    mockUseReadingStateStore.getState = vi.fn().mockReturnValue({ progress: {} });
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockUseLibraryStore.mockImplementation((selector: any) => selector({
-      books: {}
-    }));
+    mockUseLibraryStore.mockImplementation((selector: any) => {
+      if (typeof selector === 'function') {
+        return selector({ books: {} });
+      }
+      // Return books array by default for useAllBooks or direct access
+      return [
+        { bookId: '123', id: '123', title: 'Book 1' },
+        { bookId: '1', id: '1', title: 'Last Read Book' }
+      ];
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseToastStore.mockImplementation((selector: any) => selector({
       showToast: vi.fn()
@@ -128,7 +146,7 @@ describe('ReaderControlBar', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
       popover: { visible: true },
-      addAnnotation: vi.fn(),
+      add: vi.fn(),
       hidePopover: vi.fn(),
     }));
     render(<ReaderControlBar />);
@@ -147,9 +165,30 @@ describe('ReaderControlBar', () => {
       currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockUseLibraryStore.mockImplementation((selector: any) => selector({
-      books: { '123': { id: '123', title: 'Book 1', progress: 0.5 } }
-    }));
+    mockUseLibraryStore.mockImplementation((selector: any) => {
+      // Mock useAllBooks hook
+      if (selector && selector.name === 'useAllBooks') {
+        return [{ bookId: '123', id: '123', title: 'Book 1' }];
+      }
+      // If it's the useLibraryStore selector
+      return selector ? selector({ books: {} }) : { books: {} };
+    });
+    mockUseReadingStateStore.mockImplementation((selector: any) => {
+      const state = {
+        currentBookId: '123',
+        progress: { '123': { percentage: 0.5, lastRead: 1000 } }
+      };
+      // If the component selects progress (e.g. s => s.progress), return it
+      // This covers the case where the component uses the hook for reactivity
+      return selector(state);
+    });
+    mockUseReadingStateStore.getState.mockReturnValue({
+      progress: { '123': { percentage: 0.5, lastRead: 1000 } }
+    });
+
+    // Explicitly debug the hook return in the test
+    // console.log('Hook selector output:', mockUseReadingStateStore.mock.results); // Can't easily access
+
     render(<ReaderControlBar />);
     const pill = screen.getByTestId('compass-pill-active');
     expect(pill).toBeInTheDocument();
@@ -169,9 +208,18 @@ describe('ReaderControlBar', () => {
       currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockUseLibraryStore.mockImplementation((selector: any) => selector({
-      books: { '123': { id: '123', title: 'Book 1', progress: 0.75 } }
+    mockUseLibraryStore.mockImplementation((selector: any) => {
+      if (selector.name === 'useAllBooks') {
+        return [{ bookId: '123', id: '123', title: 'Book 1' }];
+      }
+      return selector({ books: {} });
+    });
+    mockUseReadingStateStore.mockImplementation((selector: any) => selector({
+      currentBookId: '123',
     }));
+    mockUseReadingStateStore.getState.mockReturnValue({
+      progress: { '123': { percentage: 0.75 } }
+    });
     render(<ReaderControlBar />);
     const pill = screen.getByTestId('compass-pill-compact');
     expect(pill).toBeInTheDocument();
@@ -181,35 +229,61 @@ describe('ReaderControlBar', () => {
 
   it('renders summary variant when on home and has last read book', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockUseLibraryStore.mockImplementation((selector: any) => selector({
-      books: { '1': { id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 } }
+    mockUseLibraryStore.mockImplementation((selector: any) => {
+      if (selector && selector.name === 'useAllBooks') {
+        return [{ bookId: '123', id: '123', title: 'Book 123' }];
+      }
+      return selector({ books: {} });
+    });
+    mockUseReadingStateStore.mockImplementation((selector: any) => selector({
+      currentBookId: null,
+      progress: { '123': { percentage: 0.25, lastRead: 1000 } }
     }));
+    mockUseReadingStateStore.getState.mockReturnValue({
+      progress: { '123': { percentage: 0.25, lastRead: 1000 } }
+    });
+
     render(<ReaderControlBar />);
+
+    // console.log(screen.debug());
     const pill = screen.getByTestId('compass-pill-summary');
     expect(pill).toBeInTheDocument();
     // Check progress conversion: 0.25 * 100 = 25
     expect(pill).toHaveAttribute('data-progress', '25');
+
+    // Verify getState was called (component uses it in useMemo)
+    expect(mockUseReadingStateStore.getState).toHaveBeenCalled();
   });
 
   it('navigates to book when clicking summary pill', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockUseLibraryStore.mockImplementation((selector: any) => selector({
-      books: { '1': { id: '1', title: 'Book 1', lastRead: 1000, progress: 0.25 } }
+    mockUseLibraryStore.mockImplementation((selector: any) => {
+      if (selector && selector.name === 'useAllBooks') {
+        return [{ bookId: '123', id: '123', title: 'Book 1' }];
+      }
+      return selector({ books: {} });
+    });
+    mockUseReadingStateStore.mockImplementation((selector: any) => selector({
+      currentBookId: null,
+      progress: { '123': { percentage: 0.25, lastRead: 1000 } }
     }));
+    mockUseReadingStateStore.getState.mockReturnValue({
+      progress: { '123': { percentage: 0.25, lastRead: 1000 } }
+    });
+
     render(<ReaderControlBar />);
     fireEvent.click(screen.getByTestId('compass-pill-summary'));
-    expect(mockUseNavigate).toHaveBeenCalledWith('/read/1');
+    expect(mockUseNavigate).toHaveBeenCalledWith('/read/123');
   });
 
   it('handles annotation actions', () => {
-    const addAnnotation = vi.fn();
+    const add = vi.fn();
     const hidePopover = vi.fn();
     const showToast = vi.fn();
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
       popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
-      addAnnotation,
+      add,
       hidePopover,
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -222,8 +296,14 @@ describe('ReaderControlBar', () => {
       currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockUseLibraryStore.mockImplementation((selector: any) => selector({
-      books: { '123': { id: '123', title: 'Book 1' } }
+    mockUseLibraryStore.mockImplementation((selector: any) => {
+      if (selector.name === 'useAllBooks') {
+        return [{ bookId: '123', id: '123', title: 'Book 1' }];
+      }
+      return selector({ books: {} });
+    });
+    mockUseReadingStateStore.mockImplementation((selector: any) => selector({
+      currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseToastStore.mockImplementation((selector: any) => selector({
@@ -234,7 +314,7 @@ describe('ReaderControlBar', () => {
 
     // Test Color Action (via mocked button)
     fireEvent.click(screen.getByText('Color'));
-    expect(addAnnotation).toHaveBeenCalledWith({
+    expect(add).toHaveBeenCalledWith({
       type: 'highlight',
       color: 'yellow',
       bookId: '123',
@@ -249,7 +329,7 @@ describe('ReaderControlBar', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
       popover: { visible: true, text: 'Desolate', cfiRange: 'cfi' },
-      addAnnotation: vi.fn(),
+      add: vi.fn(),
       hidePopover,
     }));
 

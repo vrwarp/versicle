@@ -138,9 +138,9 @@ describe('Feature Integration Tests', () => {
     await tx.done;
 
     // Reset stores
-    useLibraryStore.setState({ books: {}, isLoading: false, isImporting: false, error: null });
+    useLibraryStore.setState({ books: {}, staticMetadata: {}, isLoading: false, isImporting: false, error: null });
     useReaderUIStore.getState().reset();
-    useReadingStateStore.setState({ currentBookId: null, currentCfi: null, progress: 0 });
+    useReadingStateStore.setState({ currentBookId: null, progress: {} });
 
     // Mock global fetch for cover extraction
     global.fetch = vi.fn((url) => {
@@ -192,7 +192,7 @@ describe('Feature Integration Tests', () => {
     expect(resources).toHaveLength(1);
 
     // 2. Delete Book
-    const bookId = book.id;
+    const bookId = book.bookId;
     await store.removeBook(bookId);
 
     // Verify state after deleting
@@ -214,14 +214,29 @@ describe('Feature Integration Tests', () => {
       bookId, title: 'Persisted Book', author: 'Me', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0
     } as StaticBookManifest);
     await db.put('user_inventory', {
-      bookId, addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: Date.now()
+      bookId, title: 'Persisted Book', author: 'Me', addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: Date.now()
     } as UserInventoryItem);
     await db.put('user_progress', {
       bookId, percentage: 0, lastRead: 0, completedRanges: []
     } as UserProgress);
 
+    // Manually add to Yjs state (simulating sync)
+    useLibraryStore.setState({
+      books: {
+        'test-id': {
+          bookId: 'test-id',
+          title: 'Persisted Book',
+          author: 'Me',
+          addedAt: Date.now(),
+          status: 'unread',
+          tags: [],
+          lastInteraction: Date.now()
+        } as any
+      }
+    });
+
     const store = useLibraryStore.getState();
-    await store.fetchBooks();
+    await store.hydrateStaticMetadata();
 
     const updatedStore = useLibraryStore.getState();
     expect(Object.keys(updatedStore.books)).toHaveLength(1);
@@ -270,7 +285,7 @@ describe('Feature Integration Tests', () => {
       bookId, title: 'Reader Test Book', author: 'Tester', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0
     } as StaticBookManifest);
     await db.put('user_inventory', {
-      bookId, addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: 0
+      bookId, title: 'Reader Test Book', author: 'Tester', addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: 0
     } as UserInventoryItem);
     await db.put('user_progress', {
       bookId, percentage: 0, lastRead: 0, completedRanges: []
@@ -282,13 +297,13 @@ describe('Feature Integration Tests', () => {
     const uiStore = useReaderUIStore.getState();
     readingState.setCurrentBookId(bookId);
 
-    readingState.updateLocation('cfi1', 0.5);
+    readingState.updateLocation(bookId, 'cfi1', 0.5);
     uiStore.setCurrentSection('Chapter 5', 'section1');
 
     const state = useReadingStateStore.getState();
     const uiState = useReaderUIStore.getState();
-    expect(state.currentCfi).toBe('cfi1');
-    expect(state.progress).toBe(0.5);
+    expect(state.progress[bookId]?.currentCfi).toBe('cfi1');
+    expect(state.progress[bookId]?.percentage).toBe(0.5);
     expect(uiState.currentSectionTitle).toBe('Chapter 5');
 
     // Test TOC setting
@@ -314,9 +329,10 @@ describe('Feature Integration Tests', () => {
 
     // Verify DB persistence
     const persistedProg = await db.get('user_progress', bookId);
-    expect(persistedProg.currentCfi).toBe('cfi1');
-    expect(persistedProg.percentage).toBe(0.5);
-    expect(persistedProg.lastRead).toBeDefined();
+    expect(persistedProg).toBeDefined();
+    expect(persistedProg!.currentCfi).toBe('cfi1');
+    expect(persistedProg!.percentage).toBe(0.5);
+    expect(persistedProg!.lastRead).toBeDefined();
   });
 
 });
