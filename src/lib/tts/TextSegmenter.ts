@@ -181,6 +181,7 @@ export class TextSegmenter {
     ): SentenceNode[] {
         if (!sentences || sentences.length === 0) return [];
 
+        // Pre-allocate to avoid resizing if possible (though exact size unknown)
         const merged: SentenceNode[] = [];
 
         // Check cache for abbreviations
@@ -204,11 +205,15 @@ export class TextSegmenter {
         }
         const starterSet = TextSegmenter.cache.starterSet;
 
+        // Performance: Track the start CFI of the current merge block separately.
+        // This avoids parsing 'last.cfi' repeatedly.
+        let pendingStartCfi: string | null = null;
+        let pendingStartCfiRaw: string | null = null;
+
         for (let i = 0; i < sentences.length; i++) {
-            // Optimization: Assume sentences are already normalized by TextSegmenter.segment() during ingestion.
-            // Avoiding re-normalization improves performance significantly.
-            // We MUST clone the object to avoid mutating the original input array during merging.
-            const current = { ...sentences[i] };
+            // Optimization: Avoid cloning { ...sentences[i] } immediately.
+            // We only clone if we PUSH it as a new node. If merging, we just read from it.
+            const current = sentences[i];
 
             if (merged.length > 0) {
                 const last = merged[merged.length - 1];
@@ -221,21 +226,25 @@ export class TextSegmenter {
                 // Try checking the last word
                 const oneWordMatch = RE_LAST_WORD.exec(lastTextTrimmed);
                 const rawLastWord = oneWordMatch ? oneWordMatch[0] : lastTextTrimmed;
-                // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
-                const cleanLastWord = rawLastWord.replace(RE_LEADING_PUNCTUATION, '');
+
+                // OPTIMIZATION: Check regex test before replace to avoid alloc
+                let cleanLastWord = rawLastWord;
+                if (RE_LEADING_PUNCTUATION.test(rawLastWord)) {
+                     cleanLastWord = rawLastWord.replace(RE_LEADING_PUNCTUATION, '');
+                }
 
                 if (abbrSet.has(cleanLastWord.toLowerCase())) {
                     isAbbreviation = true;
                     lastWord = cleanLastWord;
                 } else {
                     // Try checking the last two words
-                    // Capture last two whitespace-separated tokens
-                    // (?: ... ) is non-capturing group
                     const twoWordsMatch = RE_LAST_TWO_WORDS.exec(lastTextTrimmed);
                     if (twoWordsMatch) {
                         const rawLastTwo = twoWordsMatch[0];
-                        // Remove leading punctuation from the phrase (e.g. "(et al." -> "et al.")
-                        const cleanLastTwo = rawLastTwo.replace(RE_LEADING_PUNCTUATION, '');
+                        let cleanLastTwo = rawLastTwo;
+                        if (RE_LEADING_PUNCTUATION.test(rawLastTwo)) {
+                             cleanLastTwo = rawLastTwo.replace(RE_LEADING_PUNCTUATION, '');
+                        }
 
                         if (abbrSet.has(cleanLastTwo.toLowerCase())) {
                             isAbbreviation = true;
@@ -255,7 +264,11 @@ export class TextSegmenter {
                         const nextTextTrimmed = current.text.trim();
                         const match = RE_FIRST_WORD.exec(nextTextTrimmed);
                         const nextFirstWord = match ? match[0] : nextTextTrimmed;
-                        const cleanNextWord = nextFirstWord.replace(RE_TRAILING_PUNCTUATION, '');
+
+                        let cleanNextWord = nextFirstWord;
+                        if (RE_TRAILING_PUNCTUATION.test(nextFirstWord)) {
+                             cleanNextWord = nextFirstWord.replace(RE_TRAILING_PUNCTUATION, '');
+                        }
 
                         if (!starterSet.has(cleanNextWord)) {
                             shouldMerge = true;
@@ -267,18 +280,21 @@ export class TextSegmenter {
                         last.text += (last.text.endsWith(' ') ? '' : ' ') + current.text;
 
                         // Merge CFIs
-                        const startCfi = parseCfiRange(last.cfi);
-                        const endCfi = parseCfiRange(current.cfi);
+                        // Optimization: Use cached pendingStartCfi if available, else parse last.cfi
+                        if (!pendingStartCfi) {
+                             const startCfiParsed = parseCfiRange(last.cfi);
+                             pendingStartCfiRaw = startCfiParsed ? startCfiParsed.fullStart : last.cfi;
+                             // Store for next iteration (if we merge again)
+                             pendingStartCfi = pendingStartCfiRaw;
+                        }
 
-                        // If startCfi/endCfi are null, it means they are point CFIs (or invalid).
-                        // We use the raw CFI string in that case.
-                        const startPoint = startCfi ? startCfi.fullStart : last.cfi;
-                        const endPoint = endCfi ? endCfi.fullEnd : current.cfi;
+                        const endCfiParsed = parseCfiRange(current.cfi);
+                        const endPoint = endCfiParsed ? endCfiParsed.fullEnd : current.cfi;
 
-                        if (startPoint && endPoint) {
+                        if (pendingStartCfiRaw && endPoint) {
                              // We want the range from the START of the first segment to the END of the second segment.
                              // generateCfiRange takes two points (start and end) and finds the common parent.
-                             last.cfi = generateCfiRange(startPoint, endPoint);
+                             last.cfi = generateCfiRange(pendingStartCfiRaw, endPoint);
                         }
 
                         // Merge Source Indices
@@ -291,7 +307,12 @@ export class TextSegmenter {
                 }
             }
 
-            merged.push(current);
+            // Not merging, push new segment
+            // Clone now to avoid mutation issues
+            merged.push({ ...current });
+            // Reset pending start CFI because we started a new block
+            pendingStartCfi = null;
+            pendingStartCfiRaw = null;
         }
 
         if (minSentenceLength <= 0) {
@@ -313,12 +334,17 @@ export class TextSegmenter {
 
         const lengthMerged: SentenceNode[] = [];
         let buffer: SentenceNode | null = null;
+        // Optimization: track start point for buffer to avoid re-parsing
+        let bufferStartPoint: string | null = null;
 
         for (let i = 0; i < sentences.length; i++) {
             const current = sentences[i];
 
             if (!buffer) {
                 buffer = { ...current };
+                // Cache start point
+                const p = parseCfiRange(buffer.cfi);
+                bufferStartPoint = p ? p.fullStart : buffer.cfi;
                 continue;
             }
 
@@ -328,14 +354,11 @@ export class TextSegmenter {
                 buffer.text += (buffer.text.endsWith(' ') ? '' : ' ') + current.text;
 
                 // Merge CFIs
-                const startCfi = parseCfiRange(buffer.cfi);
                 const endCfi = parseCfiRange(current.cfi);
-
-                const startPoint = startCfi ? startCfi.fullStart : buffer.cfi;
                 const endPoint = endCfi ? endCfi.fullEnd : current.cfi;
 
-                if (startPoint && endPoint) {
-                    buffer.cfi = generateCfiRange(startPoint, endPoint);
+                if (bufferStartPoint && endPoint) {
+                    buffer.cfi = generateCfiRange(bufferStartPoint, endPoint);
                 }
 
                 // Merge Source Indices
@@ -345,6 +368,9 @@ export class TextSegmenter {
             } else {
                 lengthMerged.push(buffer);
                 buffer = { ...current };
+                 // Cache start point for new buffer
+                 const p = parseCfiRange(buffer.cfi);
+                 bufferStartPoint = p ? p.fullStart : buffer.cfi;
             }
         }
 
