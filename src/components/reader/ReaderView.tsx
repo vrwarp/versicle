@@ -171,7 +171,8 @@ export const ReaderView: React.FC = () => {
             hasPromptedForImport.current = true; // Ensure we only check once per session
 
             // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
-            if (location.start.cfi === useReadingStateStore.getState().currentCfi) return;
+            const progress = useReadingStateStore.getState().progress[id || ''];
+            if (location.start.cfi === (progress?.currentCfi || '')) return;
 
             // Reading History
             if (id && previousLocation.current) {
@@ -209,7 +210,7 @@ export const ReaderView: React.FC = () => {
                 timestamp: Date.now()
             };
 
-            updateLocation(location.start.cfi, percentage);
+            if (id) updateLocation(id, location.start.cfi, percentage);
             setCurrentSection(title, sectionId);
             if (id) {
                 dbService.saveProgress(id, location.start.cfi, percentage);
@@ -401,10 +402,11 @@ export const ReaderView: React.FC = () => {
         setShowImportJumpDialog(false);
         setIsWaitingForJump(false);
         // Explicitly save current position (0) to mark as "started"
-        if (id && useReadingStateStore.getState().currentCfi) {
-            const state = useReadingStateStore.getState();
-            if (state.currentCfi) {
-                dbService.saveProgress(id, state.currentCfi, state.progress);
+        if (id) {
+            const progress = useReadingStateStore.getState().progress[id];
+            const currentCfi = progress?.currentCfi;
+            if (currentCfi) {
+                dbService.saveProgress(id, currentCfi, progress?.percentage || 0);
             }
         }
     };
@@ -458,7 +460,8 @@ export const ReaderView: React.FC = () => {
     useEffect(() => {
         if (rendition && isRenditionReady) {
             // Add new annotations
-            annotations.forEach(annotation => {
+            const annotationList = Object.values(annotations);
+            annotationList.forEach(annotation => {
                 if (!addedAnnotations.current.has(annotation.id)) {
                     const className = annotation.color === 'yellow' ? 'highlight-yellow' :
                         annotation.color === 'green' ? 'highlight-green' :

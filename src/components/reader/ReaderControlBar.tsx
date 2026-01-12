@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useAllBooks } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
 import type { ActionType } from '../ui/CompassPill';
@@ -20,9 +20,9 @@ export const ReaderControlBar: React.FC = () => {
     const [lexiconText, setLexiconText] = React.useState('');
 
     // Store Subscriptions
-    const { popover, addAnnotation, hidePopover } = useAnnotationStore(useShallow(state => ({
+    const { popover, add, hidePopover } = useAnnotationStore(useShallow(state => ({
         popover: state.popover,
-        addAnnotation: state.addAnnotation,
+        add: state.add,
         hidePopover: state.hidePopover,
     })));
 
@@ -42,17 +42,29 @@ export const ReaderControlBar: React.FC = () => {
     // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.
     // Now, we only re-render if the calculated `lastReadBook` or `currentBook` reference changes.
 
+    // Get all books with merged static metadata
+    const allBooks = useAllBooks();
+    
     // Select the most recently read book
-    const lastReadBook = useLibraryStore(state => {
-        return Object.values(state.books)
-            .filter(b => b.lastRead)
-            .sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
-    });
+    const lastReadBook = useMemo(() => {
+        const progress = useReadingStateStore.getState().progress;
+        return allBooks
+            .filter((b) => {
+                const bookProgress = progress[b.bookId];
+                return bookProgress?.lastRead;
+            })
+            .sort((a, b) => {
+                const aProgress = progress[a.bookId];
+                const bProgress = progress[b.bookId];
+                return (bProgress?.lastRead || 0) - (aProgress?.lastRead || 0);
+            })[0];
+    }, [allBooks]);
 
     // Select the current book if active
-    const currentBook = useLibraryStore(state => {
-        return currentBookId ? state.books[currentBookId] : undefined;
-    });
+    const currentBook = useMemo(() => {
+        if (!currentBookId) return undefined;
+        return allBooks.find((b) => b.bookId === currentBookId);
+    }, [allBooks, currentBookId]);
 
     // Determine State Priority
     // 1. Annotation Mode
@@ -87,7 +99,7 @@ export const ReaderControlBar: React.FC = () => {
         switch (action) {
             case 'color':
                 if (payload && currentBookId) {
-                    addAnnotation({
+                    add({
                         type: 'highlight',
                         color: payload,
                         bookId: currentBookId,
@@ -99,7 +111,7 @@ export const ReaderControlBar: React.FC = () => {
                 break;
             case 'note':
                 if (payload && currentBookId) {
-                    addAnnotation({
+                    add({
                         type: 'note',
                         note: payload,
                         bookId: currentBookId,
@@ -156,8 +168,9 @@ export const ReaderControlBar: React.FC = () => {
     if (variant === 'summary' && lastReadBook) {
         title = lastReadBook.title;
         subtitle = "Continue Reading";
-        // Convert progress (0-1) to percentage (0-100)
-        progress = (lastReadBook.progress || 0) * 100;
+        // Get progress from reading state
+        const bookProgress = useReadingStateStore.getState().progress[lastReadBook.bookId];
+        progress = (bookProgress?.percentage || 0) * 100;
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
         // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
         // If queue has items, CompassPill uses queue item title.
@@ -165,7 +178,9 @@ export const ReaderControlBar: React.FC = () => {
         if (!hasQueueItems) {
             title = currentBook.title;
             subtitle = currentSectionTitle || undefined;
-            progress = (currentBook.progress || 0) * 100;
+            // Get progress from reading state
+            const bookProgress = useReadingStateStore.getState().progress[currentBook.bookId];
+            progress = (bookProgress?.percentage || 0) * 100;
         }
     }
 

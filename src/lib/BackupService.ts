@@ -81,7 +81,7 @@ export class BackupService {
 
     onProgress?.(90, 'Compressing archive...');
     const content = await zip.generateAsync({ type: 'blob' }, (metadata) => {
-        onProgress?.(90 + (metadata.percent * 0.1), 'Compressing...');
+      onProgress?.(90 + (metadata.percent * 0.1), 'Compressing...');
     });
 
     const filename = `versicle_backup_full_${new Date().toISOString().split('T')[0]}.zip`;
@@ -123,52 +123,52 @@ export class BackupService {
     const progMap = new Map(progress.map(p => [p.bookId, p]));
 
     const books: BookMetadata[] = manifests.map(m => {
-        const inv = invMap.get(m.bookId);
-        const prog = progMap.get(m.bookId);
-        return {
-            id: m.bookId,
-            title: inv?.customTitle || m.title,
-            author: inv?.customAuthor || m.author,
-            description: m.description,
-            addedAt: inv?.addedAt || 0,
+      const inv = invMap.get(m.bookId);
+      const prog = progMap.get(m.bookId);
+      return {
+        id: m.bookId,
+        title: inv?.customTitle || m.title,
+        author: inv?.customAuthor || m.author,
+        description: m.description,
+        addedAt: inv?.addedAt || 0,
 
-            bookId: m.bookId,
-            filename: inv?.sourceFilename,
-            fileHash: m.fileHash,
-            fileSize: m.fileSize,
-            totalChars: m.totalChars,
-            version: m.schemaVersion,
+        bookId: m.bookId,
+        filename: inv?.sourceFilename,
+        fileHash: m.fileHash,
+        fileSize: m.fileSize,
+        totalChars: m.totalChars,
+        version: m.schemaVersion,
 
-            lastRead: prog?.lastRead,
-            progress: prog?.percentage,
-            currentCfi: prog?.currentCfi,
-            lastPlayedCfi: prog?.lastPlayedCfi,
-            isOffloaded: false // Not accurate here, but irrelevant for export mostly
-        };
+        lastRead: prog?.lastRead,
+        progress: prog?.percentage,
+        currentCfi: prog?.currentCfi,
+        lastPlayedCfi: prog?.lastPlayedCfi,
+        isOffloaded: false // Not accurate here, but irrelevant for export mostly
+      };
     });
 
     // Flatten Overrides to LexiconRule[]
     const lexicon: LexiconRule[] = [];
     for (const ov of overrides) {
-        for (const r of ov.lexicon) {
-            lexicon.push({
-                id: r.id,
-                original: r.original,
-                replacement: r.replacement,
-                isRegex: r.isRegex,
-                created: r.created,
-                bookId: ov.bookId === 'global' ? undefined : ov.bookId,
-                applyBeforeGlobal: ov.lexiconConfig?.applyBefore
-            });
-        }
+      for (const r of ov.lexicon) {
+        lexicon.push({
+          id: r.id,
+          original: r.original,
+          replacement: r.replacement,
+          isRegex: r.isRegex,
+          created: r.created,
+          bookId: ov.bookId === 'global' ? undefined : ov.bookId,
+          applyBeforeGlobal: ov.lexiconConfig?.applyBefore
+        });
+      }
     }
 
     // Map UserAnnotations to Annotation[] (Identical mostly)
 
     // Map Metrics to BookLocations[]
     const locations: BookLocations[] = metrics.map(met => ({
-        bookId: met.bookId,
-        locations: met.locations
+      bookId: met.bookId,
+      locations: met.locations
     }));
 
     return {
@@ -215,9 +215,9 @@ export class BackupService {
     let processed = 0;
 
     const updateProgress = (msg: string) => {
-        processed++;
-        const percent = Math.floor((processed / totalItems) * 100);
-        onProgress?.(percent, msg);
+      processed++;
+      const percent = Math.floor((processed / totalItems) * 100);
+      onProgress?.(percent, msg);
     };
 
     const booksToSave: BookMetadata[] = [];
@@ -242,9 +242,9 @@ export class BackupService {
     }
 
     const tx = db.transaction([
-        'static_manifests', 'static_resources', 'static_structure',
-        'user_inventory', 'user_progress', 'user_annotations',
-        'user_overrides', 'cache_render_metrics'
+      'static_manifests', 'static_resources', 'static_structure',
+      'user_inventory', 'user_progress', 'user_annotations',
+      'user_overrides', 'cache_render_metrics'
     ], 'readwrite');
 
     // 1.1 Restore Books Metadata
@@ -257,57 +257,59 @@ export class BackupService {
       const existingMan = await manStore.get(book.id);
 
       if (existingMan) {
-          // Merge Progress
-          const prog = await progStore.get(book.id);
-          if (prog && (book.lastRead || 0) > (prog.lastRead || 0)) {
-              prog.lastRead = book.lastRead || 0;
-              prog.percentage = book.progress || 0;
-              prog.currentCfi = book.currentCfi;
-              await progStore.put(prog);
-          }
+        // Merge Progress
+        const prog = await progStore.get(book.id);
+        if (prog && (book.lastRead || 0) > (prog.lastRead || 0)) {
+          prog.lastRead = book.lastRead || 0;
+          prog.percentage = book.progress || 0;
+          prog.currentCfi = book.currentCfi;
+          await progStore.put(prog);
+        }
       } else {
-          // Create New from Backup Metadata
-          // Note: Static metadata like fileHash/size might be missing or mocked if not in backup?
-          // BackupManifest.BookMetadata should have them.
+        // Create New from Backup Metadata
+        // Note: Static metadata like fileHash/size might be missing or mocked if not in backup?
+        // BackupManifest.BookMetadata should have them.
 
-          await manStore.put({
-              bookId: book.id,
-              title: book.title,
-              author: book.author,
-              description: book.description,
-              fileHash: book.fileHash || 'unknown',
-              fileSize: book.fileSize || 0,
-              totalChars: book.totalChars || 0,
-              schemaVersion: book.version || 1,
-              isbn: undefined
+        await manStore.put({
+          bookId: book.id,
+          title: book.title,
+          author: book.author,
+          description: book.description,
+          fileHash: book.fileHash || 'unknown',
+          fileSize: book.fileSize || 0,
+          totalChars: book.totalChars || 0,
+          schemaVersion: book.version || 1,
+          isbn: undefined
+        });
+
+        await invStore.put({
+          bookId: book.id,
+          title: book.title,
+          author: book.author,
+          addedAt: book.addedAt,
+          sourceFilename: book.filename,
+          tags: [],
+          status: 'unread',
+          lastInteraction: book.lastRead || 0,
+          customTitle: book.title,
+          customAuthor: book.author
+        });
+
+        await progStore.put({
+          bookId: book.id,
+          percentage: book.progress || 0,
+          lastRead: book.lastRead || 0,
+          currentCfi: book.currentCfi,
+          completedRanges: []
+        });
+
+        if (book.syntheticToc) {
+          await structStore.put({
+            bookId: book.id,
+            toc: book.syntheticToc,
+            spineItems: [] // Missing from backup usually, or need to parse from file later
           });
-
-          await invStore.put({
-              bookId: book.id,
-              addedAt: book.addedAt,
-              sourceFilename: book.filename,
-              tags: [],
-              status: 'unread',
-              lastInteraction: book.lastRead || 0,
-              customTitle: book.title,
-              customAuthor: book.author
-          });
-
-          await progStore.put({
-              bookId: book.id,
-              percentage: book.progress || 0,
-              lastRead: book.lastRead || 0,
-              currentCfi: book.currentCfi,
-              completedRanges: []
-          });
-
-          if (book.syntheticToc) {
-              await structStore.put({
-                  bookId: book.id,
-                  toc: book.syntheticToc,
-                  spineItems: [] // Missing from backup usually, or need to parse from file later
-              });
-          }
+        }
       }
       updateProgress(`Restoring metadata for ${book.title}...`);
     }
@@ -316,17 +318,17 @@ export class BackupService {
     const annStore = tx.objectStore('user_annotations');
     const annotations = Array.isArray(manifest.annotations) ? manifest.annotations : [];
     for (const ann of annotations) {
-        await annStore.put({
-             id: ann.id,
-             bookId: ann.bookId,
-             cfiRange: ann.cfiRange,
-             text: ann.text,
-             type: ann.type,
-             color: ann.color,
-             note: ann.note,
-             created: ann.created
-        });
-        updateProgress('Restoring annotations...');
+      await annStore.put({
+        id: ann.id,
+        bookId: ann.bookId,
+        cfiRange: ann.cfiRange,
+        text: ann.text,
+        type: ann.type,
+        color: ann.color,
+        note: ann.note,
+        created: ann.created
+      });
+      updateProgress('Restoring annotations...');
     }
 
     // 1.3 Restore Lexicon
@@ -336,61 +338,61 @@ export class BackupService {
     // Group by bookId first
     const ruleMap = new Map<string, LexiconRule[]>();
     for (const r of lexicon) {
-        const bid = r.bookId || 'global';
-        if (!ruleMap.has(bid)) ruleMap.set(bid, []);
-        ruleMap.get(bid)?.push(r);
+      const bid = r.bookId || 'global';
+      if (!ruleMap.has(bid)) ruleMap.set(bid, []);
+      ruleMap.get(bid)?.push(r);
     }
 
     for (const [bid, rules] of ruleMap.entries()) {
-        const ov = await ovStore.get(bid) || { bookId: bid, lexicon: [] };
-        // Simple append/replace logic
-        for (const r of rules) {
-             // Avoid dups by ID?
-             if (!ov.lexicon.some(lx => lx.id === r.id)) {
-                 ov.lexicon.push({
-                     id: r.id,
-                     original: r.original,
-                     replacement: r.replacement,
-                     isRegex: r.isRegex,
-                     created: r.created
-                 });
-             }
-             if (r.applyBeforeGlobal !== undefined) ov.lexiconConfig = { applyBefore: r.applyBeforeGlobal };
+      const ov = await ovStore.get(bid) || { bookId: bid, lexicon: [] };
+      // Simple append/replace logic
+      for (const r of rules) {
+        // Avoid dups by ID?
+        if (!ov.lexicon.some(lx => lx.id === r.id)) {
+          ov.lexicon.push({
+            id: r.id,
+            original: r.original,
+            replacement: r.replacement,
+            isRegex: r.isRegex,
+            created: r.created
+          });
         }
-        await ovStore.put(ov);
-        updateProgress('Restoring dictionary...');
+        if (r.applyBeforeGlobal !== undefined) ov.lexiconConfig = { applyBefore: r.applyBeforeGlobal };
+      }
+      await ovStore.put(ov);
+      updateProgress('Restoring dictionary...');
     }
 
     // 1.4 Restore Locations
     const locStore = tx.objectStore('cache_render_metrics');
     const locations = Array.isArray(manifest.locations) ? manifest.locations : [];
     for (const loc of locations) {
-        await locStore.put({
-            bookId: loc.bookId,
-            locations: loc.locations
-        });
-        updateProgress('Restoring map...');
+      await locStore.put({
+        bookId: loc.bookId,
+        locations: loc.locations
+      });
+      updateProgress('Restoring map...');
     }
 
     await tx.done;
 
     // Step 3: Restore Files (if ZIP)
     if (zip) {
-        for (const book of booksToSave) {
-            const zipFile = zip.file(`files/${book.id}.epub`);
-            if (zipFile) {
-                const arrayBuffer = await zipFile.async('arraybuffer');
+      for (const book of booksToSave) {
+        const zipFile = zip.file(`files/${book.id}.epub`);
+        if (zipFile) {
+          const arrayBuffer = await zipFile.async('arraybuffer');
 
-                const fileTx = db.transaction(['static_resources'], 'readwrite');
-                const store = fileTx.objectStore('static_resources');
+          const fileTx = db.transaction(['static_resources'], 'readwrite');
+          const store = fileTx.objectStore('static_resources');
 
-                const existing = await store.get(book.id) || { bookId: book.id, epubBlob: arrayBuffer };
-                existing.epubBlob = arrayBuffer;
+          const existing = await store.get(book.id) || { bookId: book.id, epubBlob: arrayBuffer };
+          existing.epubBlob = arrayBuffer;
 
-                await store.put(existing);
-                await fileTx.done;
-            }
+          await store.put(existing);
+          await fileTx.done;
         }
+      }
     }
 
     onProgress?.(100, 'Restore complete!');

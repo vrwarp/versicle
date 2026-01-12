@@ -7,8 +7,7 @@ import type { UserProgress } from '../types/db';
 
 export function useBookProgress(bookId: string) {
     const currentBookId = useReadingStateStore(state => state.currentBookId);
-    const currentProgress = useReadingStateStore(state => state.progress);
-    const currentCfi = useReadingStateStore(state => state.currentCfi);
+    const allProgress = useReadingStateStore(state => state.progress);
 
     // If the requested book is the active one, return state from store
     const isCurrent = bookId === currentBookId;
@@ -33,9 +32,10 @@ export function useBookProgress(bookId: string) {
     }, [bookId, isCurrent]);
 
     if (isCurrent) {
+        const bookProgress = allProgress[bookId];
         return {
-            percentage: currentProgress,
-            currentCfi: currentCfi || ''
+            percentage: bookProgress?.percentage || 0,
+            currentCfi: bookProgress?.currentCfi || ''
         };
     }
 

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { reprocessBook } from '../../lib/ingestion';
-import { useLibraryStore } from '../../store/useLibraryStore';
 
 interface ReprocessingInterstitialProps {
     isOpen: boolean;
@@ -17,7 +16,6 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
 }) => {
     const [progress, setProgress] = useState<'idle' | 'processing' | 'error'>('idle');
     const [error, setError] = useState<string | null>(null);
-    const fetchBooks = useLibraryStore(state => state.fetchBooks);
 
     useEffect(() => {
         if (!isOpen || !bookId) return;
@@ -27,7 +25,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
             try {
                 await reprocessBook(bookId);
                 // Refresh store to get updated metadata
-                await fetchBooks();
+                // Phase 2: No need to call fetchBooks - Yjs auto-syncs
                 onComplete();
             } catch (e) {
                 console.error("Reprocessing failed", e);
@@ -37,7 +35,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
         };
 
         runReprocessing();
-    }, [isOpen, bookId, fetchBooks, onComplete]);
+    }, [isOpen, bookId, onComplete]);
 
     if (!isOpen) return null;
 

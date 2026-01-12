@@ -375,9 +375,9 @@ export const useAllBooks = () => {
     id: book.bookId,  // Alias for backwards compatibility
     title: staticMetadata[book.bookId]?.title || book.title,
     author: staticMetadata[book.bookId]?.author || book.author,
-    coverBlob: staticMetadata[book.bookId]?.coverBlob || null,
+    coverBlob: staticMetadata[book.bookId]?.coverBlob || undefined,
     coverUrl: staticMetadata[book.bookId]?.coverBlob
-      ? URL.createObjectURL(staticMetadata[book.bookId].coverBlob)
+      ? URL.createObjectURL(staticMetadata[book.bookId]!.coverBlob!)
       : undefined,
     // Add other static fields for compatibility
     fileHash: staticMetadata[book.bookId]?.fileHash,

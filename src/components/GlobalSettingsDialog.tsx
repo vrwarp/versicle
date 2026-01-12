@@ -60,7 +60,7 @@ export const GlobalSettingsDialog = () => {
 
     const {
         addBooks,
-        fetchBooks,
+        
         isImporting,
         importProgress,
         importStatus,
@@ -156,7 +156,7 @@ export const GlobalSettingsDialog = () => {
         setIsCsvImporting(false);
         setCsvImportComplete(false);
         setCsvImportMessage('');
-        await fetchBooks();
+        // Phase 2: No need to fetchBooks - Yjs auto-syncs
         setGlobalSettingsOpen(false);
     };
 

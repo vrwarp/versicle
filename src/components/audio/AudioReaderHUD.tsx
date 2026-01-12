@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useAllBooks } from '../../store/useLibraryStore';
+import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useShallow } from 'zustand/react/shallow';
 import { CompassPill } from '../ui/CompassPill';
 import { SatelliteFAB } from './SatelliteFAB';
@@ -30,9 +31,17 @@ export const AudioReaderHUD: React.FC = () => {
 
     const lastReadBook = useMemo(() => {
         if (!books || books.length === 0) return null;
-        const startedBooks = books.filter(b => b.lastRead && b.progress && b.progress > 0);
+        const progress = useReadingStateStore.getState().progress;
+        const startedBooks = books.filter(b => {
+            const bookProgress = progress[b.bookId];
+            return bookProgress?.lastRead && bookProgress.percentage > 0;
+        });
         if (startedBooks.length === 0) return null;
-        return startedBooks.sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
+        return startedBooks.sort((a, b) => {
+            const aProgress = progress[a.bookId];
+            const bProgress = progress[b.bookId];
+            return (bProgress?.lastRead || 0) - (aProgress?.lastRead || 0);
+        })[0];
     }, [books]);
 
     // Show last read book if in library and not playing audio
@@ -63,8 +72,8 @@ export const AudioReaderHUD: React.FC = () => {
                             variant="summary"
                             title={lastReadBook!.title}
                             subtitle="Continue Reading"
-                            progress={(lastReadBook!.progress || 0) * 100}
-                            onClick={() => navigate(`/read/${lastReadBook!.id}`)}
+                            progress={(useReadingStateStore.getState().progress[lastReadBook!.bookId]?.percentage || 0) * 100}
+                            onClick={() => navigate(`/read/${lastReadBook!.bookId}`)}
                         />
                     ) : (
                         <CompassPill

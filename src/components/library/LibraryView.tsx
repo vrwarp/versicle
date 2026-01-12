@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
+import { useAllBooks } from '../../store/useLibraryStore';
+import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
@@ -26,9 +28,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
  */
 export const LibraryView: React.FC = () => {
   // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
+  const books = useAllBooks();
   const {
-    books,
-    fetchBooks,
     isLoading,
     error,
     addBook,
@@ -39,8 +40,6 @@ export const LibraryView: React.FC = () => {
     sortOrder,
     setSortOrder
   } = useLibraryStore(useShallow(state => ({
-    books: state.books,
-    fetchBooks: state.fetchBooks,
     isLoading: state.isLoading,
     error: state.error,
     addBook: state.addBook,
@@ -82,9 +81,7 @@ export const LibraryView: React.FC = () => {
     }
   }, [location.state]);
 
-  useEffect(() => {
-    fetchBooks();
-  }, [fetchBooks]);
+  // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
 
   const handleBookOpen = useCallback((book: BookMetadata) => {
     const effectiveVersion = book.version ?? 0;
@@ -191,7 +188,7 @@ export const LibraryView: React.FC = () => {
   // This memoized value updates only when the books array changes, not on every search keystroke.
   // This avoids calling toLowerCase() N times per frame during typing.
   const searchableBooks = useMemo(() => {
-    return Object.values(books).map(book => ({
+    return books.map(book => ({
       book,
       // Pre-compute normalized strings
       searchString: `${(book.title || '').toLowerCase()} ${(book.author || '').toLowerCase()}`
@@ -214,8 +211,9 @@ export const LibraryView: React.FC = () => {
           // Sort by addedAt descending (newest first)
           return (b.addedAt || 0) - (a.addedAt || 0);
         case 'last_read':
-          // Sort by lastRead descending (most recently read first)
-          return (b.lastRead || 0) - (a.lastRead || 0);
+          // Sort by lastRead from reading state descending (most recently read first)
+          const progress = useReadingStateStore.getState().progress;
+          return (progress[b.bookId]?.lastRead || 0) - (progress[a.bookId]?.lastRead || 0);
         case 'author':
           // Sort by author ascending (A-Z)
           return (a.author || '').localeCompare(b.author || '');
@@ -387,7 +385,7 @@ export const LibraryView: React.FC = () => {
         </div>
       ) : (
         <section className="flex-1 w-full">
-          {Object.keys(books).length === 0 ? (
+          {books.length === 0 ? (
             <EmptyLibrary onImport={triggerFileUpload} />
           ) : filteredAndSortedBooks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
