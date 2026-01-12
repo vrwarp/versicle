@@ -47,61 +47,42 @@ To ensure type safety, we will strictly type the Yjs maps using the existing int
 **Validation Strategy:**
 Before writing to the `Y.Doc` (especially during sync/merge or migration), data must be validated against `Zod` schemas (to be created in `src/lib/sync/validators.ts`) or strictly typed interfaces.
 
-### Shared Type Interfaces (Reference)
+## 4. Garbage Collection Strategy
 
-```typescript
-// See src/types/db.ts for full definitions
+Since `static_resources` (IDB) and `inventory` (Yjs) are decoupled, we risk "Orphaned Blobs" (User deletes book on Device A -> `inventory` item removed on Device B via sync -> `static_resource` remains on Device B).
 
-type YjsSchema = {
-  inventory: Y.Map<UserInventoryItem>;
-  reading_list: Y.Map<ReadingListEntry>;
-  progress: Y.Map<UserProgress>;
-  annotations: Y.Map<UserAnnotation>;
-  overrides: Y.Map<UserOverrides>;
-  journey: Y.Array<UserJourneyStep>; // Append-only
-  settings: Y.Map<any>;
-}
-```
+**Solution:**
+A `GarbageCollector` service will run on startup/background:
+1.  Get all IDs from `inventory` (Yjs).
+2.  Get all IDs from `static_resources` (IDB).
+3.  Identify `orphans` (ID in IDB but not in Yjs).
+4.  Delete `orphans` from IDB.
 
-## 4. High-Level Migration Plan
+## 5. Testing Strategy
 
-### Step 1: Initialize the Yjs Runtime
-*   Create `src/store/yjs-provider.ts` singleton.
-*   Initialize `Y.Doc`.
-*   Connect `y-indexeddb` (Database: `versicle-yjs`).
+We adopt a **Behavioral Testing** approach to prevent test breakage during the migration.
+*   **Store Factories:** Stores are created via factories allowing injection of dependencies (e.g., `createLibraryStore(doc)`).
+*   **In-Memory Y.Doc:** Tests run against a fresh `new Y.Doc()` in memory, avoiding the need to mock IndexedDB.
+*   **State Verification:** Tests assert on the Store state (or Y.Doc content) rather than verifying `DBService` calls.
 
-### Step 2: Store Refactoring (Split & Bind)
-*   **`useReaderStore`:** Split into `useReaderUIStore` (Transient) and `useReaderSyncStore` (Synced).
-*   **`useLibraryStore`:** Bind `inventory` map. Remove `fetchBooks`.
-*   **`useAnnotationStore`:** Bind `annotations` map.
+## 6. High-Level Migration Plan
 
-### Step 3: The "Great Migration" Script
-*   **Service:** `src/lib/migration/MigrationService.ts`.
-*   **Logic:**
-    1.  Check `app_metadata` (Legacy IDB) or `settings` (Yjs) for `migration_v2_status`.
-    2.  If pending:
-        *   Read all data from `user_*` stores in `EpubLibraryDB`.
-        *   Batch write to `Y.Doc`.
-        *   Set flag `migration_v2_status = 'complete'`.
-    3.  (Future) Delete `user_*` stores from `EpubLibraryDB`.
+### Phase 0: Structural Refactoring (Pre-Migration)
+*   Split `useReaderStore` into ephemeral/persistent stores.
+*   Refactor `useLibraryStore` to use internal Maps.
+*   Refactor tests to use Store Factories and remove deep DB couplings.
+*   Update `DBService.addBook` to return metadata.
 
-### Step 4: Dismantling DBService Write Logic
-*   **Modify `addBook`:** Returns `BookMetadata` instead of writing `user_inventory`.
-*   **Remove:** `updateBookMetadata`, `saveProgress`, `addAnnotation`, `deleteAnnotation`.
+### Phase 1: Foundation
+*   Initialize `Y.Doc` and `y-indexeddb`.
+*   Set up Type definitions and schemas.
 
-## 5. Key Challenges & Solutions
+### Phase 2: Switch to Yjs Persistence
+*   Bind Refactored Stores to Yjs Middleware.
+*   Update Store Factories to inject `Y.Doc`.
+*   Dismantle `DBService` write logic for user data.
 
-### Large Datasets (`user_journey`)
-*   **Problem:** `Y.Array` history grows indefinitely.
-*   **Solution:** For Phase 1-3, we will migrate it as is. In Phase 4 (Optimization), we can implement a "Rolling Window" where items older than X months are archived to a local-only IDB store and removed from the Yjs array.
-
-### Referencing Static Assets
-*   **Flow:**
-    1.  `useLibraryStore` (Yjs) provides `BookId`.
-    2.  `useReaderUIStore` sets `currentBookId`.
-    3.  Component calls `dbService.getBookFile(id)` (Legacy IDB) to get the Blob.
-    *   *Constraint:* If `static_manifests` is missing the book (deleted from device but present in cloud sync), the UI must show a "Download" state.
-
-### Conflict Resolution
-*   **Inventory/Progress:** `Y.Map` uses Last-Write-Wins (LWW) based on Lamport timestamps.
-*   **Annotations:** Keyed by UUID. No merge conflicts, only add/remove races (handled by CRDT set semantics).
+### Phase 3: The "Great Migration" & Cleanup
+*   Implement `MigrationService` with Zod validation.
+*   Run migration on startup.
+*   Implement `GarbageCollector`.

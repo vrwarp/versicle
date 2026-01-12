@@ -24,7 +24,7 @@
 3.  **Exported Members:**
     *   `yDoc`: The shared `Y.Doc`.
     *   `provider`: The `IndexeddbPersistence` instance.
-    *   `waitForSync()`: A promise-based helper that resolves when `provider.on('synced')` fires.
+    *   `waitForYjsSync()`: A promise-based helper that resolves when `provider.on('synced')` fires.
 4.  **Error Handling:**
     *   Log any persistence errors to the console (or `Logger`).
 
@@ -50,7 +50,26 @@ export const waitForYjsSync = (): Promise<void> => {
 };
 ```
 
-## 3. Validation Script
+## 3. Test Helper for Yjs
+
+**Goal:** Create a helper to easily instantiate stores with fresh Yjs docs for testing.
+
+**File:** `src/test/yjs-test-utils.ts`
+
+```typescript
+import * as Y from 'yjs';
+
+export const createTestDoc = () => {
+    return new Y.Doc();
+};
+
+export const createTestStore = <T>(factory: (doc: Y.Doc) => T) => {
+    const doc = createTestDoc();
+    return factory(doc);
+};
+```
+
+## 4. Validation Script
 
 **Goal:** Verify data persists across reloads without touching existing logic.
 
