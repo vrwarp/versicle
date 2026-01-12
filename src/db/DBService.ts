@@ -1,7 +1,7 @@
 import { getDB } from './db';
 import type {
   BookMetadata,
-  ReadingListEntry, ReadingHistoryEntry, ReadingEventType, TTSContent, SectionMetadata, TableImage,
+  ReadingListEntry, ReadingHistoryEntry, ReadingEventType, SectionMetadata, TableImage,
   // Legacy / Composite Types used in Service Layer
   TTSState, Annotation, CachedSegment, BookLocations, ContentAnalysis,
   CacheSessionState,
@@ -13,7 +13,7 @@ import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
 import { mergeCfiRanges } from '../lib/cfi-utils';
-import { v4 as uuidv4 } from 'uuid';
+
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
@@ -826,11 +826,122 @@ class DBService {
     }
   }
 
+
+
+  // --- Content Analysis & Accessibility Operations (Restored) ---
+
+  async getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined> {
+    try {
+      const db = await this.getDB();
+      const inference = await db.get('user_ai_inference', `${bookId}-${sectionId}`);
+
+      if (!inference) return undefined;
+
+      // Map UserAiInference to Legacy ContentAnalysis for compatibility
+      return {
+        id: inference.id,
+        bookId: inference.bookId,
+        sectionId: inference.sectionId,
+        structure: inference.structure || { footnoteMatches: [] },
+        contentTypes: inference.semanticMap,
+        tableAdaptations: inference.accessibilityLayers
+          .filter(l => l.type === 'table-adaptation')
+          .map(l => ({ rootCfi: l.rootCfi, text: l.content })),
+        summary: inference.summary,
+        lastAnalyzed: inference.generatedAt
+      };
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async saveContentClassifications(bookId: string, sectionId: string, results: { rootCfi: string; type: ContentType }[]): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const id = `${bookId}-${sectionId}`;
+      const tx = db.transaction('user_ai_inference', 'readwrite');
+      const store = tx.objectStore('user_ai_inference');
+
+      const existing = await store.get(id) || {
+        id, bookId, sectionId,
+        semanticMap: [],
+        accessibilityLayers: [],
+        generatedAt: Date.now()
+      };
+
+      existing.semanticMap = results;
+      existing.generatedAt = Date.now();
+
+      await store.put(existing);
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async clearContentAnalysis(): Promise<void> {
+    try {
+      const db = await this.getDB();
+      await db.clear('user_ai_inference');
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async getTableImages(bookId: string): Promise<TableImage[]> {
+    try {
+      const db = await this.getDB();
+      return await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const id = `${bookId}-${sectionId}`;
+      const tx = db.transaction('user_ai_inference', 'readwrite');
+      const store = tx.objectStore('user_ai_inference');
+
+      const existing = await store.get(id) || {
+        id, bookId, sectionId,
+        semanticMap: [],
+        accessibilityLayers: [],
+        generatedAt: Date.now()
+      };
+
+      // Merge or Overwrite adaptations
+      // Remove existing table adaptations for these CFIs (if any strategy needed? for now simple append/replace logic)
+      // Actually we should probably rebuild the table-adaptation layers.
+      const others = existing.accessibilityLayers.filter(l => l.type !== 'table-adaptation');
+      const newLayers = adaptations.map(a => ({
+        type: 'table-adaptation' as const,
+        rootCfi: a.rootCfi,
+        content: a.text
+      }));
+
+      existing.accessibilityLayers = [...others, ...newLayers];
+      existing.generatedAt = Date.now();
+
+      await store.put(existing);
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
   // --- Reading History Operations ---
 
   private lastJourneyEntry: { bookId: string; timestamp: number; type: ReadingEventType } | null = null;
 
-  async updateReadingHistory(bookId: string, range: string, type: ReadingEventType): Promise<void> {
+  async updateReadingHistory(
+    bookId: string,
+    range: string,
+    type: ReadingEventType,
+    _data?: string,
+    _isStart?: boolean
+  ): Promise<void> {
     try {
       const db = await this.getDB();
       const tx = db.transaction(['user_progress', 'user_journey'], 'readwrite');
@@ -861,23 +972,14 @@ class DBService {
       }
 
       if (shouldLog) {
-        // Check if journey store uses autoIncrement or keyPath
-        // Assuming auto-generated keys or UUID usage in higher level. 
-        // For now, adhere to Schema: user_journey { id: string, ... }
-        // If we don't provide ID and it's not auto-increment, it will fail.
-        // Schema definition in db.ts: keyPath: 'id'
-        // We need an ID. 
-        // Since we can't easily import uuid here without checking imports, I'll use a simple generator fallback.
-        const id = uuidv4();
-
         await journeyStore.add({
-          id,
+          // id is auto-incremented
           bookId,
           startTimestamp: now,
           endTimestamp: now,
           duration: 0,
           cfiRange: range,
-          type: type // matches expanded UserJourneyStep type
+          type: type === 'tts' || type === 'scroll' || type === 'page' ? type : 'page'
         });
         this.lastJourneyEntry = { bookId, timestamp: now, type };
       }
@@ -902,17 +1004,15 @@ class DBService {
     try {
       const db = await this.getDB();
       const prog = await db.get('user_progress', bookId);
-      const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
       if (!prog) return undefined;
 
       // Note: Logic to aggregate session times would go here.
       // For now, return stub data or calculate from journey events.
-      // Assuming basic totalTimeRead for now.
 
       return {
         bookId,
-        date: new Date().toISOString().split('T')[0], // Today
-        totalTimeRead: 0, // Placeholder
+        lastUpdated: Date.now(),
+        readRanges: prog.completedRanges || [],
         sessions: []
       };
     } catch (error) {
@@ -920,22 +1020,18 @@ class DBService {
     }
   }
 
-  async logReadingEvent(bookId: string, eventType: ReadingEventType, data?: any): Promise<void> {
+  async logReadingEvent(bookId: string, eventType: ReadingEventType, _data?: any): Promise<void> {
     try {
       const db = await this.getDB();
-      await db.put('user_journey', {
-        id: uuidv4(), // Need uuid import, but not imported. Assuming simple ID or importing uuid.
-        // Wait, I am not importing uuid in DBService.
-        // I should rely on auto-id or import it.
-        // user_journey id is string in schema.
-        // I'll skip uuid for now and use timestamp-random
+      await db.add('user_journey', {
+        // id is auto-incremented
         bookId,
-        timestamp: Date.now(),
-        eventType,
-        data
+        startTimestamp: Date.now(),
+        endTimestamp: Date.now(),
+        duration: 0,
+        cfiRange: '', // Missing usage requires placeholder
+        type: eventType === 'tts' || eventType === 'scroll' || eventType === 'page' ? eventType : 'page'
       });
-      // But wait, schema says user_journey needs 'id'.
-      // I will use crypto.randomUUID if available or fallback.
     } catch (error) {
       this.handleError(error);
     }
@@ -972,8 +1068,7 @@ class DBService {
   async getTTSContent(bookId: string, sectionId: string): Promise<CacheTtsPreparation | undefined> {
     try {
       const db = await this.getDB();
-      // Using composite key logic or index
-      // The store uses 'id' as keyPath, which is `${bookId}-${sectionId}`
+      // Using composite key logic
       const id = `${bookId}-${sectionId}`;
       return await db.get('cache_tts_preparation', id);
     } catch (error) {

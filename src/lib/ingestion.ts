@@ -374,9 +374,9 @@ export async function extractBookData(
 // but implemented via extraction + warning.
 // Note: In strict refactor, we would update all callers. Currently only DBService is caller.
 export async function processEpub(
-    file: File,
-    ttsOptions?: ExtractionOptions,
-    onProgress?: (progress: number, message: string) => void
+    _file: File,
+    _ttsOptions?: ExtractionOptions,
+    _onProgress?: (progress: number, message: string) => void
 ): Promise<string> {
     throw new Error("processEpub is deprecated. Use extractBookData and DBService.ingestBook.");
 }

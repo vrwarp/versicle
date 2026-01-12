@@ -1,6 +1,6 @@
 import { useReadingStateStore } from '../store/useReadingStateStore';
 import { dbService } from '../db/DBService';
-import { useQuery } from '@tanstack/react-query'; // Assuming we have react-query or similar, OR we just use useEffect.
+
 // Actually, looking at the project, I don't see react-query. I'll stick to a simple hook given the constraints.
 import { useState, useEffect } from 'react';
 import type { UserProgress } from '../types/db';
