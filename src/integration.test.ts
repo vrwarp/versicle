@@ -5,6 +5,7 @@ import { useReaderStore } from './store/useReaderStore';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { StaticBookManifest, StaticResource, UserInventoryItem, UserProgress } from './types/db';
+import { seedLibrary } from './test/seed';
 
 // Mock offscreen renderer
 vi.mock('./lib/offscreen-renderer', () => ({
@@ -199,21 +200,14 @@ describe('Feature Integration Tests', () => {
   });
 
   it('should persist data across store reloads', async () => {
-    const db = await getDB();
     const bookId = 'test-id';
 
-    await db.put('static_manifests', {
-        bookId, title: 'Persisted Book', author: 'Me', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0
-    } as StaticBookManifest);
-    await db.put('user_inventory', {
-        bookId, addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: Date.now()
-    } as UserInventoryItem);
-    await db.put('user_progress', {
-        bookId, percentage: 0, lastRead: 0, completedRanges: []
-    } as UserProgress);
-
-    const store = useLibraryStore.getState();
-    await store.fetchBooks();
+    await seedLibrary([{
+        bookId,
+        title: 'Persisted Book',
+        author: 'Me',
+        status: 'unread'
+    }]);
 
     const updatedStore = useLibraryStore.getState();
     expect(updatedStore.books).toHaveLength(1);
@@ -258,16 +252,14 @@ describe('Feature Integration Tests', () => {
       const fixturePath = path.resolve(__dirname, './test/fixtures/alice.epub');
       const buffer = fs.readFileSync(fixturePath);
 
-      await db.put('static_manifests', {
-          bookId, title: 'Reader Test Book', author: 'Tester', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0
-      } as StaticBookManifest);
-      await db.put('user_inventory', {
-          bookId, addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: 0
-      } as UserInventoryItem);
-      await db.put('user_progress', {
-          bookId, percentage: 0, lastRead: 0, completedRanges: []
-      } as UserProgress);
-      await db.put('static_resources', { bookId, epubBlob: buffer.buffer } as StaticResource);
+      await seedLibrary([{
+          bookId,
+          title: 'Reader Test Book',
+          author: 'Tester',
+          status: 'unread',
+          lastInteraction: 0,
+          epubBlob: buffer.buffer
+      }]);
 
       // 2. Initialize Reader Store (simulating component mount)
       const readerStore = useReaderStore.getState();

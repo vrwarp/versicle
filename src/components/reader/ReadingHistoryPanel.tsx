@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { dbService } from '../../db/DBService';
+import { useReadingHistory } from '../../hooks/useReadingHistory';
 import { parseCfiRange } from '../../lib/cfi-utils';
 import type { Rendition } from 'epubjs';
 import { BookOpen, Headphones, ScrollText } from 'lucide-react';
@@ -24,114 +24,107 @@ interface HistoryItem {
 }
 
 export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavigate, trigger = 0 }) => {
+    const { entry, loading } = useReadingHistory(bookId, trigger);
     const [items, setItems] = useState<HistoryItem[]>([]);
-    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        loadHistory();
+        if (!loading && entry !== undefined) {
+             processHistory(entry);
+        } else if (!loading && entry === undefined) {
+             setItems([]);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [bookId, trigger]);
+    }, [entry, loading, rendition]);
 
-    const loadHistory = async () => {
-        setLoading(true);
-        try {
-            const entry = await dbService.getReadingHistoryEntry(bookId);
-            const loadedItems: HistoryItem[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const processHistory = (historyEntry: any) => {
+        const loadedItems: HistoryItem[] = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const book = rendition ? (rendition as any).book : null;
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const book = rendition ? (rendition as any).book : null;
+        const processItem = (range: string, timestamp: number = 0, type: ReadingEventType = 'page', explicitLabel?: string) => {
+            let label = explicitLabel || "Reading Segment";
+            let percentage = 0;
+            let subLabel = range;
+            let targetCfi = range;
 
-            if (entry) {
-                const processItem = (range: string, timestamp: number = 0, type: ReadingEventType = 'page', explicitLabel?: string) => {
-                    let label = explicitLabel || "Reading Segment";
-                    let percentage = 0;
-                    let subLabel = range;
-                    let targetCfi = range;
+            // Parse CFI to get start point for jumping
+            const parsed = parseCfiRange(range);
+            if (parsed) {
+                targetCfi = parsed.fullEnd;
+            }
 
-                    // Parse CFI to get start point for jumping
-                    const parsed = parseCfiRange(range);
-                    if (parsed) {
-                        targetCfi = parsed.fullEnd;
+            if (book) {
+                // Try to get percentage
+                if (parsed) {
+                    if (book.locations && book.locations.length() > 0) {
+                        percentage = book.locations.percentageFromCfi(parsed.fullStart);
+                    }
+                }
+
+                // If no explicit label, try to generate one
+                if (!explicitLabel) {
+                    let section;
+                    try {
+                        section = book.spine.get(range);
+                    } catch (e) {
+                        console.warn("Failed to get section from CFI", e);
                     }
 
-                    if (book) {
-                        // Try to get percentage
-                        if (parsed) {
-                            if (book.locations && book.locations.length() > 0) {
-                                percentage = book.locations.percentageFromCfi(parsed.fullStart);
+                    if (section) {
+                        let title = "";
+                        if (section.href) {
+                            const navItem = book.navigation.get(section.href);
+                            if (navItem && navItem.label) {
+                                title = navItem.label.trim();
                             }
                         }
 
-                        // If no explicit label, try to generate one
-                        if (!explicitLabel) {
-                            let section;
-                            try {
-                                section = book.spine.get(range);
-                            } catch (e) {
-                                console.warn("Failed to get section from CFI", e);
-                            }
-
-                            if (section) {
-                                let title = "";
-                                if (section.href) {
-                                    const navItem = book.navigation.get(section.href);
-                                    if (navItem && navItem.label) {
-                                        title = navItem.label.trim();
-                                    }
-                                }
-
-                                if (title) {
-                                    label = title;
-                                } else {
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    const spinePos = (section as any).index ?? book.spine.items.indexOf(section);
-                                    label = spinePos >= 0 ? `Chapter ${spinePos + 1}` : 'Unknown Chapter';
-                                }
-                            } else {
-                                label = `Segment at ${(percentage * 100).toFixed(1)}%`;
-                            }
+                        if (title) {
+                            label = title;
+                        } else {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const spinePos = (section as any).index ?? book.spine.items.indexOf(section);
+                            label = spinePos >= 0 ? `Chapter ${spinePos + 1}` : 'Unknown Chapter';
                         }
+                    } else {
+                        label = `Segment at ${(percentage * 100).toFixed(1)}%`;
                     }
-
-                    // Format subLabel
-                    const date = timestamp > 0 ? new Date(timestamp) : new Date();
-                    const dateStr = date.toLocaleDateString();
-                    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-                    subLabel = `${dateStr} ${timeStr} • ${(percentage * 100).toFixed(0)}%`;
-
-                    return {
-                        range,
-                        label,
-                        percentage,
-                        subLabel,
-                        timestamp,
-                        targetCfi,
-                        type
-                    };
-                };
-
-                // Prefer sessions if available
-                if (entry.sessions && entry.sessions.length > 0) {
-                    for (const session of entry.sessions) {
-                        loadedItems.push(processItem(session.cfiRange, session.timestamp, session.type, session.label));
-                    }
-                    loadedItems.sort((a, b) => b.timestamp - a.timestamp);
-                } else if (entry.readRanges && entry.readRanges.length > 0) {
-                    // Fallback to legacy ranges
-                    for (const range of entry.readRanges) {
-                        loadedItems.push(processItem(range));
-                    }
-                    loadedItems.sort((a, b) => a.percentage - b.percentage);
                 }
             }
 
-            setItems(loadedItems);
-        } catch (e) {
-            console.error("Failed to load history", e);
-        } finally {
-            setLoading(false);
+            // Format subLabel
+            const date = timestamp > 0 ? new Date(timestamp) : new Date();
+            const dateStr = date.toLocaleDateString();
+            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            subLabel = `${dateStr} ${timeStr} • ${(percentage * 100).toFixed(0)}%`;
+
+            return {
+                range,
+                label,
+                percentage,
+                subLabel,
+                timestamp,
+                targetCfi,
+                type
+            };
+        };
+
+        // Prefer sessions if available
+        if (historyEntry.sessions && historyEntry.sessions.length > 0) {
+            for (const session of historyEntry.sessions) {
+                loadedItems.push(processItem(session.cfiRange, session.timestamp, session.type, session.label));
+            }
+            loadedItems.sort((a, b) => b.timestamp - a.timestamp);
+        } else if (historyEntry.readRanges && historyEntry.readRanges.length > 0) {
+            // Fallback to legacy ranges
+            for (const range of historyEntry.readRanges) {
+                loadedItems.push(processItem(range));
+            }
+            loadedItems.sort((a, b) => a.percentage - b.percentage);
         }
+        setItems(loadedItems);
     };
 
     if (loading) return <div className="p-4 text-sm text-foreground">Loading history...</div>;

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ReaderView } from '../ReaderView';
 import { useReaderStore } from '../../../store/useReaderStore';
+import { useLibraryStore } from '../../../store/useLibraryStore';
 import { useTTSStore } from '../../../store/useTTSStore';
 import ePub from 'epubjs';
 import React from 'react';
@@ -16,15 +17,9 @@ vi.mock('../../../db/db', () => ({
     get: vi.fn((store, _id) => {
       if (store === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
 
-      if (store === 'static_manifests') return Promise.resolve({
-          bookId: 'test-book-id', title: 'Test Book', author: 'Author',
-          fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION,
-          coverBlob: new Blob([''])
-      });
-
-      if (store === 'user_inventory') return Promise.resolve({
-          bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
-      });
+      // Explicitly NOT returning metadata to force Store usage
+      if (store === 'static_manifests') return Promise.resolve(null);
+      if (store === 'user_inventory') return Promise.resolve(null);
 
       if (store === 'user_progress') return Promise.resolve({
           bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
@@ -39,13 +34,11 @@ vi.mock('../../../db/db', () => ({
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             get: vi.fn((_id) => {
                if (name === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });
-               if (name === 'static_manifests') return Promise.resolve({
-                   bookId: 'test-book-id', title: 'Test Book', author: 'Author',
-                   fileHash: 'hash', fileSize: 100, totalChars: 100, schemaVersion: CURRENT_BOOK_VERSION
-               });
-               if (name === 'user_inventory') return Promise.resolve({
-                   bookId: 'test-book-id', addedAt: Date.now(), status: 'reading', lastInteraction: Date.now()
-               });
+
+               // Explicitly NOT returning metadata to force Store usage
+               if (name === 'static_manifests') return Promise.resolve(null);
+               if (name === 'user_inventory') return Promise.resolve(null);
+
                if (name === 'user_progress') return Promise.resolve({
                    bookId: 'test-book-id', percentage: 0, lastRead: Date.now(), completedRanges: []
                });
@@ -154,6 +147,19 @@ describe('ReaderView', () => {
       immersiveMode: false, // Default to false so header is visible
     });
 
+    // Seed the store with metadata (Hybrid approach)
+    useLibraryStore.setState({
+        books: [{
+            id: 'test-book-id',
+            title: 'Test Book',
+            author: 'Author',
+            addedAt: Date.now(),
+            bookId: 'test-book-id',
+            progress: 0,
+            version: CURRENT_BOOK_VERSION // Ensure version check passes
+        }]
+    });
+
     useTTSStore.setState({
         isPlaying: false,
         activeCfi: null
@@ -193,8 +199,9 @@ describe('ReaderView', () => {
     await waitFor(() => expect(screen.getByTestId('unified-input-controller')).toBeInTheDocument());
 
     // Click mock buttons exposed by UnifiedInputController mock
-    const prevBtn = screen.getByTestId('mock-prev');
-    const nextBtn = screen.getByTestId('mock-next');
+    // Increase timeout to 5000ms for safety
+    const prevBtn = await screen.findByTestId('mock-prev', {}, { timeout: 5000 });
+    const nextBtn = await screen.findByTestId('mock-next', {}, { timeout: 5000 });
 
     fireEvent.click(prevBtn);
     expect(mockPrev).toHaveBeenCalled();

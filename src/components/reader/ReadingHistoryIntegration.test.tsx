@@ -3,30 +3,47 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
-import { dbService } from '../../db/DBService';
+import { useReadingHistory } from '../../hooks/useReadingHistory';
 
-// Mock DBService
-vi.mock('../../db/DBService', () => ({
-  dbService: {
-    getReadingHistory: vi.fn(),
-    getReadingHistoryEntry: vi.fn(),
-    updateReadingHistory: vi.fn().mockResolvedValue(undefined),
-    saveProgress: vi.fn(),
-    getBook: vi.fn(),
-  }
+// Mock useReadingHistory hook
+vi.mock('../../hooks/useReadingHistory', () => ({
+    useReadingHistory: vi.fn(),
 }));
 
 describe('ReadingHistory Integration', () => {
+    const mockHook = useReadingHistory as unknown as ReturnType<typeof vi.fn>;
+
     beforeEach(() => {
         vi.resetAllMocks();
     });
 
     it('loads and displays reading history in panel', async () => {
         const ranges = ['epubcfi(/6/14!/4/2/1:0)'];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getReadingHistoryEntry as any).mockResolvedValue({
-            sessions: [],
-            readRanges: ranges
+        mockHook.mockReturnValue({
+            entry: { sessions: [], readRanges: ranges },
+            loading: false,
+            error: null,
+            refresh: vi.fn()
+        });
+
+        render(
+           <ReadingHistoryPanel
+               bookId="book1"
+               rendition={null}
+               onNavigate={vi.fn()}
+           />
+        );
+
+        // Should render immediately if loading is false
+        expect(screen.getByText('Reading Segment')).toBeInTheDocument();
+    });
+
+    it('shows loading state', () => {
+        mockHook.mockReturnValue({
+            entry: undefined,
+            loading: true,
+            error: null,
+            refresh: vi.fn()
         });
 
         render(
@@ -38,23 +55,17 @@ describe('ReadingHistory Integration', () => {
         );
 
         expect(screen.getByText('Loading history...')).toBeInTheDocument();
-
-        await waitFor(() => {
-            expect(screen.queryByText('Loading history...')).not.toBeInTheDocument();
-        });
-
-        expect(screen.getByText('Reading Segment')).toBeInTheDocument();
     });
 
     it('refreshes history when trigger changes', async () => {
-        const initialEntry = { sessions: [], readRanges: ['epubcfi(/6/14!/4/2/1:0)'] };
-        const updatedEntry = { sessions: [], readRanges: ['epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/1:10)'] };
-
-        // First call returns initial
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getReadingHistoryEntry as any)
-            .mockResolvedValueOnce(initialEntry)
-            .mockResolvedValueOnce(updatedEntry);
+        // This test now effectively verifies that the component passes the trigger to the hook,
+        // and that the hook behaves correctly. Since we are mocking the hook, we just check call args.
+        mockHook.mockReturnValue({
+            entry: { sessions: [], readRanges: ['range1'] },
+            loading: false,
+            error: null,
+            refresh: vi.fn()
+        });
 
         const { rerender } = render(
            <ReadingHistoryPanel
@@ -65,9 +76,7 @@ describe('ReadingHistory Integration', () => {
            />
         );
 
-        await waitFor(() => {
-             expect(screen.getAllByText('Reading Segment')).toHaveLength(1);
-        });
+        expect(mockHook).toHaveBeenCalledWith('book1', 0);
 
         // Update trigger
         rerender(
@@ -79,16 +88,16 @@ describe('ReadingHistory Integration', () => {
            />
         );
 
-        await waitFor(() => {
-             expect(screen.getAllByText('Reading Segment')).toHaveLength(2);
-        });
-
-        expect(dbService.getReadingHistoryEntry).toHaveBeenCalledTimes(2);
+        expect(mockHook).toHaveBeenCalledWith('book1', 1);
     });
 
     it('handles empty history gracefully', async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions: [], readRanges: [] });
+        mockHook.mockReturnValue({
+            entry: { sessions: [], readRanges: [] },
+            loading: false,
+            error: null,
+            refresh: vi.fn()
+        });
 
         render(
             <ReadingHistoryPanel
@@ -98,16 +107,16 @@ describe('ReadingHistory Integration', () => {
             />
         );
 
-        await waitFor(() => {
-            expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
-        });
+        expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
     });
 
     it('handles database fetch error gracefully', async () => {
-         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         (dbService.getReadingHistoryEntry as any).mockRejectedValue(new Error('Fetch failed'));
-
-         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+         mockHook.mockReturnValue({
+             entry: undefined,
+             loading: false,
+             error: 'Fetch failed',
+             refresh: vi.fn()
+         });
 
          render(
             <ReadingHistoryPanel
@@ -117,43 +126,6 @@ describe('ReadingHistory Integration', () => {
             />
         );
 
-        await waitFor(() => {
-             // Should verify that it stops loading.
-             // Currently component doesn't show error state UI, just stops loading and shows empty list (if items initialized empty)
-             // or keeps previous items.
-             expect(screen.queryByText('Loading history...')).not.toBeInTheDocument();
-        });
-
-        // It renders "No reading history" because items is empty [] by default and error catch block sets loading false.
         expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
-
-        expect(consoleSpy).toHaveBeenCalledWith('Failed to load history', expect.any(Error));
-        consoleSpy.mockRestore();
-    });
-
-    it('debounces rapid trigger updates (functionally via effect)', async () => {
-         // React useEffect naturally handles rapid updates by re-running.
-         // We can verify that rapid props changes trigger requests.
-         // Note: If we want real debounce, we'd need to add it to component.
-         // Current implementation does NOT debounce the effect, so it should call twice.
-
-         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         (dbService.getReadingHistoryEntry as any).mockResolvedValue({ sessions: [], readRanges: ['range1'] });
-
-         const { rerender } = render(
-            <ReadingHistoryPanel
-                bookId="book1"
-                rendition={null}
-                onNavigate={vi.fn()}
-                trigger={0}
-            />
-         );
-
-         rerender(<ReadingHistoryPanel bookId="book1" rendition={null} onNavigate={vi.fn()} trigger={1} />);
-         rerender(<ReadingHistoryPanel bookId="book1" rendition={null} onNavigate={vi.fn()} trigger={2} />);
-
-         await waitFor(() => {
-             expect(dbService.getReadingHistoryEntry).toHaveBeenCalledTimes(3);
-         });
     });
 });

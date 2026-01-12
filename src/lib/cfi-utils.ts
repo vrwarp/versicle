@@ -27,6 +27,7 @@ export function parseCfiRange(range: string): CfiRangeData | null {
             end,
             rawStart: parent + start,
             rawEnd: parent + end,
+            // Ensure no duplicate closing parenthesis
             fullStart: `epubcfi(${parent}${start})`,
             fullEnd: `epubcfi(${parent}${end})`
         };

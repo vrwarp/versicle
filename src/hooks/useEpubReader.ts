@@ -5,6 +5,8 @@ import type { BookMetadata } from '../types/db';
 import { parseCfiRange } from '../lib/cfi-utils';
 import { sanitizeContent } from '../lib/sanitizer';
 import { runCancellable, CancellationError } from '../lib/cancellable-task-runner';
+import { useLibraryStore } from '../store/useLibraryStore';
+import { ReadingHistoryReconciler } from '../lib/ReadingHistoryReconciler';
 
 /**
  * Recursive helper to resolve a section title from the Table of Contents (ToC).
@@ -135,10 +137,27 @@ export function useEpubReader(
       setAreLocationsReady(false);
 
       try {
-        const { file: fileData, metadata: meta } = yield dbService.getBook(currentBookId);
+        // Try to get book via getBook first (legacy/full)
+        // eslint-disable-next-line prefer-const
+        let { file: fileData, metadata: dbMeta } = yield dbService.getBook(currentBookId);
+
+        // Fallback: If getBook returned undefined (maybe due to partial DB state during migration),
+        // try to get file specifically.
+        if (!fileData) {
+            fileData = yield dbService.getBookFile(currentBookId);
+        }
 
         if (!fileData) {
           throw new Error('Book file not found');
+        }
+
+        // Fallback to store if DB metadata is missing (migration path)
+        let meta = dbMeta;
+        if (!meta) {
+            const storeBook = useLibraryStore.getState().books.find(b => b.id === currentBookId);
+            if (storeBook) {
+                meta = storeBook;
+            }
         }
 
         setMetadata(meta || null);
@@ -230,23 +249,9 @@ export function useEpubReader(
         // Try to infer better start location from reading history (end of last session)
         try {
             const entry = yield dbService.getReadingHistoryEntry(currentBookId);
-            if (entry) {
-                // Prefer chronological sessions
-                if (entry.sessions && entry.sessions.length > 0) {
-                    const lastSession = entry.sessions[entry.sessions.length - 1];
-                    const parsed = parseCfiRange(lastSession.cfiRange);
-                    // Use fullStart to resume AT the location
-                    if (parsed && parsed.fullStart) {
-                        startLocation = parsed.fullStart;
-                    }
-                } else if (entry.readRanges && entry.readRanges.length > 0) {
-                     // Fallback to spatial end (legacy behavior)
-                     const lastRange = entry.readRanges[entry.readRanges.length - 1];
-                     const parsed = parseCfiRange(lastRange);
-                     if (parsed && parsed.fullEnd) {
-                         startLocation = parsed.fullEnd;
-                     }
-                }
+            const reconciled = ReadingHistoryReconciler.resolveStartLocation(entry);
+            if (reconciled) {
+                startLocation = reconciled;
             }
         } catch (e) {
             console.error("Failed to load history for start location", e);
