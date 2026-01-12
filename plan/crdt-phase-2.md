@@ -59,7 +59,8 @@
     *   `books: Record<string, UserInventoryItem>`.
     *   `staticMetadata: Record<string, StaticBookManifest>` (Hydrated from IDB).
 *   **Derived State (Selectors):**
-    *   `bookList`: `Object.values(books).map(b => ({ ...b, ...staticMetadata[b.bookId] })).sort(...)`
+    *   `bookList`: `Object.values(books).map(b => ({ ...b, ...staticMetadata[b.bookId] || { title: b.title, author: b.author, coverBlob: null } })).sort(...)`
+    *   **Ghost Book Handling:** If `staticMetadata[id]` is missing (Ghost), the UI uses `b.title` and `b.author` from the Yjs inventory. `coverBlob` will be null, triggering a generic cover or download icon.
 *   **Critical Requirement: The Hydrator**
     *   Since Yjs only stores the `inventory` (user metadata), the store **must** have a mechanism to fetch and cache `StaticBookManifest` (covers, author, title) from `static_manifests` IDB.
     *   *Action:* Implement a `hydrateStaticMetadata` effect that runs whenever `books` changes or on startup.
@@ -67,7 +68,7 @@
     *   `fetchBooks`: **Remove** (Binding handles this).
     *   `addBook(file)`:
         1.  Call `const metadata = await dbService.addBook(file)` (Pure Ingestion).
-        2.  `set(state => { state.books[metadata.id] = mapMetadataToInventory(metadata) })`.
+        2.  `set(state => { state.books[metadata.id] = { ...mapMetadataToInventory(metadata), title: metadata.title, author: metadata.author } })`.
         3.  *Middleware automatically syncs this change to Yjs 'inventory' map.*
     *   `removeBook(id)`:
         1.  `set(state => { delete state.books[id] })`.

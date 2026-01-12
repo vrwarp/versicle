@@ -79,7 +79,7 @@ export const waitForYjsSync = (timeoutMs = 5000): Promise<void> => {
 **Goal:** Ensure data written to Yjs matches our expected types.
 
 **File:** `src/lib/sync/validators.ts`
-*   Define Zod schemas matching `UserInventoryItem`, `UserProgress`, etc.
+*   Define Zod schemas matching `UserInventoryItem` (Must include `title` and `author` snapshots), `UserProgress`, etc.
 *   Export a `validateYjsUpdate` helper.
 
 ## 5. Monitoring & Debugging

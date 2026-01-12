@@ -37,10 +37,14 @@ export const checkAndMigrate = async () => {
 
     // Check if map already has data (e.g., from another device's sync)
     const invMap = yDoc.getMap('inventory');
-    if (invMap.size > 0 && !settingsMap.get('migration_v19_yjs_started')) {
-        Logger.info('Migration', 'Yjs already has data, skipping legacy migration.');
-        settingsMap.set('migration_v19_yjs_complete', true);
-        return;
+    const isFirstMigration = !settingsMap.get('migration_v19_yjs_started');
+    
+    if (invMap.size > 0 && isFirstMigration) {
+        Logger.info('Migration', 'Yjs has existing data. Proceeding with MERGE strategy.');
+    }
+
+    if (settingsMap.get('migration_v19_yjs_complete')) {
+         return; // Already done
     }
 
     Logger.info('Migration', '🚀 Starting Migration to Yjs...');
@@ -75,6 +79,8 @@ export const checkAndMigrate = async () => {
 
                 const inventoryItem = {
                     bookId: book.id,
+                    title: book.title,   // Snapshot for Ghost Books
+                    author: book.author, // Snapshot for Ghost Books
                     addedAt: book.addedAt,
                     sourceFilename: filename,
                     status: book.progress > 0.98 ? 'completed' : (book.progress > 0 ? 'reading' : 'unread'),
@@ -92,10 +98,32 @@ export const checkAndMigrate = async () => {
                 };
 
                 if (validateInventory(inventoryItem)) {
-                    invMap.set(book.id, inventoryItem);
+                    // MERGE STRATEGY:
+                    // 1. If exists in Yjs, check 'lastInteraction'.
+                    // 2. If Legacy is newer, overwrite.
+                    // 3. If Yjs is newer, skip.
+                    if (invMap.has(book.id)) {
+                        const existing = invMap.get(book.id) as UserInventoryItem;
+                        if (inventoryItem.lastInteraction > existing.lastInteraction) {
+                             invMap.set(book.id, inventoryItem);
+                        }
+                    } else {
+                        invMap.set(book.id, inventoryItem);
+                    }
                 }
+                
                 if (validateProgress(progressItem)) {
-                    progMap.set(book.id, progressItem);
+                     // MERGE STRATEGY: Max Progress / Last Read
+                     if (progMap.has(book.id)) {
+                         const existing = progMap.get(book.id) as UserProgress;
+                         // If legacy has further progress OR is more recently read
+                         if ((progressItem.percentage > existing.percentage) || 
+                             (progressItem.lastRead > existing.lastRead)) {
+                             progMap.set(book.id, progressItem);
+                         }
+                     } else {
+                         progMap.set(book.id, progressItem);
+                     }
                 }
             }
 

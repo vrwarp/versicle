@@ -32,7 +32,7 @@ These will be removed from `DBService` *write logic* and handled strictly by Zus
 
 | Yjs Shared Type (Key) | Type | Corresponds to Legacy Store | Description |
 | :--- | :--- | :--- | :--- |
-| `inventory` | `Y.Map<string, UserInventoryItem>` | `user_inventory` | User metadata (rating, tags, status, addedAt). Key: `bookId`. |
+| `inventory` | `Y.Map<string, UserInventoryItem>` | `user_inventory` | User metadata (rating, tags, status). **Update:** Must also snapshot `title` and `author` for display on devices where `static_manifest` is missing. |
 | `reading_list` | `Y.Map<string, ReadingListEntry>` | `user_reading_list` | Persistent history of all books ever interacted with. Key: `filename`. |
 | `progress` | `Y.Map<string, UserProgress>` | `user_progress` | Reading position (CFI, percentage). Key: `bookId`. |
 | `annotations` | `Y.Map<string, UserAnnotation>` | `user_annotations` | Highlights and notes. Key: `annotationId` (UUID). |
@@ -106,12 +106,13 @@ type YjsSchema = {
 *   **Problem:** `Y.Array` history grows indefinitely.
 *   **Solution:** For Phase 1-3, we will migrate it as is. In Phase 4 (Optimization), we can implement a "Rolling Window" where items older than X months are archived to a local-only IDB store and removed from the Yjs array.
 
-### Referencing Static Assets
-*   **Flow:**
-    1.  `useLibraryStore` (Yjs) provides `BookId`.
-    2.  `useReaderUIStore` sets `currentBookId`.
-    3.  Component calls `dbService.getBookFile(id)` (Legacy IDB) to get the Blob.
-    *   *Constraint:* If `static_manifests` is missing the book (deleted from device but present in cloud sync), the UI must show a "Download" state.
+### Referencing Static Assets (The "Ghost Book" Problem)
+*   **Problem:** Yjs syncs the `inventory` (Book ID), but the `static_manifests` (Title, Cover) and `static_resources` (EPUB Blob) live in IDB and do not sync automatically.
+*   **Result:** A new device sees a Book ID but has no title or cover to display.
+*   **Solution:** 
+    1.  **Mirror Metadata:** `inventory` map in Yjs MUST include `title`, `author`, and potentially a `coverHash` (or tiny thumbnail base64 if essential, but avoid bloat).
+    2.  **UI Handling:** If `static_resource` is missing, the UI renders the book using the Yjs mirrored metadata with a "Cloud / Download" icon.
+    3.  **Blob Re-acquisition:** The user must manually re-import or (in future) peer-to-peer transfer the blob to restore read functionality.
 
 ### Conflict Resolution
 *   **Inventory/Progress:** `Y.Map` uses Last-Write-Wins (LWW) based on Lamport timestamps.
