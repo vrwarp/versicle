@@ -7,7 +7,6 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '../ui/DropdownMenu';
-import { cn } from '../../lib/utils';
 
 interface BookActionMenuProps {
     book: BookMetadata;
@@ -64,28 +63,20 @@ export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuPro
 
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <div
-                    onClick={(e) => {
-                        // Prevent click from bubbling to parent (e.g. opening the book)
-                        e.stopPropagation();
-                    }}
-                    onPointerDown={(e) => {
-                        // Stop propagation to prevent scrolling/swiping interference in list views.
-                        // Default Radix DropdownMenuTrigger pointer-down behavior can capture scroll events.
-                        e.stopPropagation();
-                    }}
-                    onKeyDown={handleKeyDown}
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Book actions"
-                    className={cn(
-                        "inline-block rounded-md",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    )}
-                >
-                    {children}
-                </div>
+            <DropdownMenuTrigger
+                asChild
+                onClick={(e) => {
+                    // Prevent click from bubbling to parent (e.g. opening the book)
+                    e.stopPropagation();
+                }}
+                onPointerDown={(e) => {
+                    // Stop propagation to prevent scrolling/swiping interference in list views.
+                    // Default Radix DropdownMenuTrigger pointer-down behavior can capture scroll events.
+                    e.stopPropagation();
+                }}
+                onKeyDown={handleKeyDown}
+            >
+                {children}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
                 {!book.isOffloaded ? (

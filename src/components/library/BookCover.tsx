@@ -66,24 +66,20 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
                     onOffload={() => onOffload(book)}
                     onRestore={() => onRestore(book)}
                 >
-                    <div className="h-11 w-11">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            asChild
-                            className={cn(
-                                "rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white transition-opacity",
-                                "h-11 w-11", // Minimum 44px touch target
-                                "opacity-100 md:opacity-0 md:group-hover:opacity-100", // Always visible on mobile
-                                "touch-manipulation"
-                            )}
-                            data-testid="book-menu-trigger"
-                        >
-                            <span>
-                                <MoreVertical className="w-4 h-4" />
-                            </span>
-                        </Button>
-                    </div>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Book actions"
+                    className={cn(
+                        "rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white transition-opacity",
+                        "h-11 w-11", // Minimum 44px touch target
+                        "opacity-100 md:opacity-0 md:group-hover:opacity-100", // Always visible on mobile
+                        "touch-manipulation"
+                    )}
+                    data-testid="book-menu-trigger"
+                >
+                    <MoreVertical className="w-4 h-4" />
+                </Button>
                 </BookActionMenu>
             </div>
         </div>
