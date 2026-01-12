@@ -1,7 +1,7 @@
 import { getDB } from './db';
 import type {
   BookMetadata,
-  ReadingListEntry, ReadingHistoryEntry, ReadingEventType, SectionMetadata, TableImage,
+  ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, SectionMetadata, TableImage,
   // Legacy / Composite Types used in Service Layer
   TTSState, Annotation, CachedSegment, BookLocations, ContentAnalysis,
   CacheSessionState,
@@ -1006,14 +1006,23 @@ class DBService {
       const prog = await db.get('user_progress', bookId);
       if (!prog) return undefined;
 
-      // Note: Logic to aggregate session times would go here.
-      // For now, return stub data or calculate from journey events.
+      // Populate sessions from user_journey
+      const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
 
       return {
         bookId,
-        lastUpdated: Date.now(),
+        lastUpdated: prog.lastRead || Date.now(),
         readRanges: prog.completedRanges || [],
-        sessions: []
+        sessions: journey.map((step): ReadingSession => {
+          const mappedType = (step.type === 'visual' ? 'page' : step.type) as ReadingEventType;
+          return {
+            timestamp: step.startTimestamp,
+            // Cast duration to avoid undefined issues if DB schema is loose
+            duration: step.duration || 0,
+            cfiRange: step.cfiRange,
+            type: mappedType
+          };
+        }).sort((a, b) => b.timestamp - a.timestamp)
       };
     } catch (error) {
       this.handleError(error);

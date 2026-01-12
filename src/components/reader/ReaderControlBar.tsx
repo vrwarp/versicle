@@ -169,8 +169,8 @@ export const ReaderControlBar: React.FC = () => {
 
     return (
         <>
-            <div className="fixed bottom-6 left-0 right-0 z-50 px-4 pointer-events-none">
-                <div className="pointer-events-auto">
+            <div className="fixed bottom-8 left-0 right-0 z-[100] px-4 pointer-events-none">
+                <div className="pointer-events-auto shadow-2xl">
                     <CompassPill
                         key={variant}
                         variant={variant}

@@ -552,6 +552,8 @@ export interface ReadingSession {
    * - Page/Scroll: The chapter title or progress (e.g., "Chapter 1 - 15%")
    */
   label?: string;
+  /** Duration of the session in seconds. */
+  duration?: number;
 }
 
 /**
