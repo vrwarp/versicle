@@ -36,51 +36,63 @@ export const checkAndMigrate = async () => {
     const annotations = await db.getAll('user_annotations');
     const readingList = await db.getAll('user_reading_list');
 
-    // 2. Transact with Y.Doc
-    yDoc.transact(() => {
-        const invMap = yDoc.getMap('inventory');
-        const rlMap = yDoc.getMap('reading_list');
-        const progMap = yDoc.getMap('progress');
-        const annMap = yDoc.getMap('annotations');
+    // 2. Validate Data (Dry Run)
+    const validationErrors = validateMigrationData(books, annotations, readingList);
+    if (validationErrors.length > 0) {
+        console.error('❌ Migration Aborted due to validation errors:', validationErrors);
+        // Optionally upload error report
+        return; 
+    }
 
-        // Migrate Reading List
-        for (const entry of readingList) {
-            rlMap.set(entry.filename, entry);
-        }
+    // 3. Transact with Y.Doc (All or Nothing)
+    try {
+        yDoc.transact(() => {
+            const invMap = yDoc.getMap('inventory');
+            const rlMap = yDoc.getMap('reading_list');
+            const progMap = yDoc.getMap('progress');
+            const annMap = yDoc.getMap('annotations');
 
-        // Migrate Books & Progress
-        for (const book of books) {
-            // Inventory
-            invMap.set(book.id, {
-                bookId: book.id,
-                addedAt: book.addedAt,
-                sourceFilename: book.filename,
-                status: book.progress > 0.98 ? 'completed' : 'reading', // simplified
-                title: book.title, // User custom title logic needs checking
-                author: book.author,
-                lastInteraction: book.lastRead || Date.now()
-            });
+            // Migrate Reading List
+            for (const entry of readingList) {
+                rlMap.set(entry.filename, entry);
+            }
 
-            // Progress
-            progMap.set(book.id, {
-                bookId: book.id,
-                percentage: book.progress || 0,
-                currentCfi: book.currentCfi,
-                lastRead: book.lastRead || 0,
-                // ... map other fields
-            });
-        }
+            // Migrate Books & Progress
+            for (const book of books) {
+                // Inventory
+                invMap.set(book.id, {
+                    bookId: book.id,
+                    addedAt: book.addedAt,
+                    sourceFilename: book.filename,
+                    status: book.progress > 0.98 ? 'completed' : 'reading', // simplified
+                    title: book.title, // User custom title logic needs checking
+                    author: book.author,
+                    lastInteraction: book.lastRead || Date.now()
+                });
 
-        // Migrate Annotations
-        for (const ann of annotations) {
-            annMap.set(ann.id, ann);
-        }
+                // Progress
+                progMap.set(book.id, {
+                    bookId: book.id,
+                    percentage: book.progress || 0,
+                    currentCfi: book.currentCfi,
+                    lastRead: book.lastRead || 0,
+                    // ... map other fields
+                });
+            }
 
-        // Mark Complete
-        settingsMap.set('migration_v19_yjs_complete', true);
-    });
+            // Migrate Annotations
+            for (const ann of annotations) {
+                annMap.set(ann.id, ann);
+            }
 
-    console.log('✅ Migration Complete');
+            // Mark Complete
+            settingsMap.set('migration_v19_yjs_complete', true);
+        });
+        console.log('✅ Migration Complete');
+    } catch (e) {
+        console.error('❌ Migration Failed during transaction:', e);
+        // Yjs transaction rollback is implicit if error thrown, but we must ensure we didn't set 'complete'
+    }
 };
 ```
 

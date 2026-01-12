@@ -40,6 +40,17 @@ These will be removed from `DBService` *write logic* and handled strictly by Zus
 | `journey` | `Y.Array<UserJourneyStep>` | `user_journey` | Reading history log. **Risk:** Potential unbound growth. |
 | `settings` | `Y.Map<string, any>` | `app_metadata` | Global app settings (theme, font preference). |
 
+### C. Garbage Collection & Consistency (Static vs Inventory)
+Since `static_resources` (Blobs) and `inventory` (Metadata) live in separate stores (IDB vs Yjs), desynchronization is possible (e.g., Book deleted on Device A -> Syncs deletion to Device B's Inventory -> Device B still has Blob).
+
+**Strategy:**
+*   **Routine:** A "Garbage Collector" runs on app startup or after Yjs sync events.
+*   **Logic:**
+    1.  Get all keys from `static_resources` (IDB).
+    2.  Get all keys from `inventory` (Yjs).
+    3.  **Diff:** If `IDB_Key` exists but `Yjs_Key` is missing (and not in `static_manifests` whitelist if applicable), **DELETE** the blob from IDB.
+*   **Safety:** Ensure the GC only runs when Yjs is fully synced to avoid accidental deletion during initial sync download.
+
 ## 3. Schema Definitions & Integrity
 
 To ensure type safety, we will strictly type the Yjs maps using the existing interfaces from `src/types/db.ts`.

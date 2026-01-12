@@ -57,13 +57,18 @@
 *   **Shared Type:** `yDoc.getMap('inventory')`.
 *   **State Interface:**
     *   `books: Record<string, UserInventoryItem>`.
+    *   `staticMetadata: Record<string, StaticBookManifest>` (Hydrated from IDB).
 *   **Derived State (Selectors):**
-    *   `bookList`: `Object.values(books).sort(...)`
+    *   `bookList`: `Object.values(books).map(b => ({ ...b, ...staticMetadata[b.bookId] })).sort(...)`
+*   **Critical Requirement: The Hydrator**
+    *   Since Yjs only stores the `inventory` (user metadata), the store **must** have a mechanism to fetch and cache `StaticBookManifest` (covers, author, title) from `static_manifests` IDB.
+    *   *Action:* Implement a `hydrateStaticMetadata` effect that runs whenever `books` changes or on startup.
 *   **Modified Actions:**
-    *   `fetchBooks`: **Remove**.
+    *   `fetchBooks`: **Remove** (Binding handles this).
     *   `addBook(file)`:
-        1.  Call `const metadata = await dbService.addBook(file)`.
+        1.  Call `const metadata = await dbService.addBook(file)` (Pure Ingestion).
         2.  `set(state => { state.books[metadata.id] = mapMetadataToInventory(metadata) })`.
+        3.  *Middleware automatically syncs this change to Yjs 'inventory' map.*
     *   `removeBook(id)`:
         1.  `set(state => { delete state.books[id] })`.
         2.  Call `await dbService.deleteBook(id)` (to clear blobs).
@@ -91,7 +96,11 @@
 ### Method Updates:
 1.  **`addBook(file)`:**
     *   **Old:** Returns `void`. Writes to `static_*` AND `user_inventory`.
-    *   **New:** Returns `Promise<BookMetadata>`. Writes **ONLY** to `static_*` stores.
+    *   **New:** Returns `Promise<BookMetadata>`. Becomes a **Pure Ingestion Engine**.
+        *   Parses EPUB and extracts metadata.
+        *   Writes **ONLY** to `static_*` stores (Blobs).
+        *   Does **NOT** write to `user_inventory` or any Yjs maps.
+        *   The calling Store is responsible for taking the returned Metadata and writing it to the Yjs `inventory`.
 2.  **`deleteBook(id)`:**
     *   **Keep:** Needs to delete `static_*` and `cache_*` stores.
     *   **Remove:** Deletion of `user_*` stores (handled by Yjs, though we might keep `user_*` cleanup for legacy hygiene temporarily).
@@ -100,17 +109,33 @@
 5.  **`addAnnotation` / `deleteAnnotation`:** **Delete**. (Handled by Store).
 6.  **`getLibrary`:** **Keep for Phase 3 Migration**, then Deprecate.
 
-**Reference - New `addBook` signature:**
-```typescript
-async addBook(file: File, ...): Promise<BookMetadata> {
+async addBook(file: File, ...): Promise<StaticBookManifest> {
     // ... extract metadata ...
     // ... write to static_manifests ...
     // ... write to static_resources ...
-    return metadata; // Do NOT write to user_inventory
+    return manifest; // Do NOT write to user_inventory
 }
 ```
 
-## 6. Component Updates (Consumers)
+## 6. Sync Orchestration & Deprecation
+
+**Action:** Phase out `src/lib/sync/SyncOrchestrator.ts`.
+
+*   **Legacy Sync:** Relies on manual diffing and IDB writes.
+*   **New Yjs Sync:** Automatic via `y-indexeddb` and providers.
+*   **Action Items:**
+    1.  Remove `SyncOrchestrator.get()?.scheduleSync()` calls from stores.
+    2.  Ensure Yjs providers are initialized *before* store consumers attempt to read data.
+
+## 7. Risks & Mitigations
+
+| Risk | Mitigation |
+| :--- | :--- |
+| **Partial Ingestion** | If `DBService.addBook` fails after writing blobs but before store updates Yjs, we get orphaned blobs. **Mitigation:** Wrap IDB writes in a transaction where possible; rely on Phase 1 Garbage Collector to clean up orphans. |
+| **Silent Failures** | Yjs LWW might overwrite local changes if clocks are skewed. **Mitigation:** Minimal impact for metadata; focus on robust error boundaries for `StaticResource` fetching. |
+| **Hydration Lag** | UI might show missing covers while IDB fetches manifests. **Mitigation:** Use a "Loading/Placeholder" state for covers; ensure `staticMetadata` hydration is prioritized. |
+
+## 8. Component Updates (Consumers)
 
 *   **`ReaderView.tsx`:** Update to read `toc` from `ReaderUIStore` and `theme` from `ReaderSyncStore`.
 *   **`LibraryView.tsx`:** Update to observe `useLibraryStore.books` (Yjs map) instead of array.
