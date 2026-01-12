@@ -46,43 +46,43 @@ vi.mock('./lib/tts/AudioPlayerService', () => ({
   },
 }));
 vi.mock('./store/useToastStore', () => {
-    const showToastMock = vi.fn();
-    const useToastStoreMock = (selector: any) => selector({ showToast: showToastMock });
-    useToastStoreMock.getState = () => ({ showToast: showToastMock });
-    return { useToastStore: useToastStoreMock };
+  const showToastMock = vi.fn();
+  const useToastStoreMock = (selector: any) => selector({ showToast: showToastMock });
+  useToastStoreMock.getState = () => ({ showToast: showToastMock });
+  return { useToastStore: useToastStoreMock };
 });
 
 vi.mock('./store/useReaderStore', () => {
-    return {
-        useReaderStore: (selector: any) => selector({
-            immersiveMode: false,
-            currentBookId: null,
-            currentSectionTitle: null,
-        }),
-    };
+  return {
+    useReaderStore: (selector: any) => selector({
+      immersiveMode: false,
+      currentBookId: null,
+      currentSectionTitle: null,
+    }),
+  };
 });
 
 vi.mock('./store/useLibraryStore', () => ({
-    useLibraryStore: (selector: any) => selector({ books: [] }),
+  useLibraryStore: (selector: any) => selector({ books: {} }),
 }));
 
 vi.mock('./store/useAnnotationStore', () => ({
-    useAnnotationStore: (selector: any) => selector({
-        popover: { visible: false },
-        addAnnotation: vi.fn(),
-        hidePopover: vi.fn(),
-    }),
+  useAnnotationStore: (selector: any) => selector({
+    popover: { visible: false },
+    addAnnotation: vi.fn(),
+    hidePopover: vi.fn(),
+  }),
 }));
 
 vi.mock('./store/useTTSStore', () => ({
-    useTTSStore: (selector: any) => selector({ queue: [], isPlaying: false }),
+  useTTSStore: (selector: any) => selector({ queue: [], isPlaying: false }),
 }));
 
 vi.mock('react-router-dom', () => ({
-    useNavigate: vi.fn(),
-    BrowserRouter: ({ children }: any) => <div>{children}</div>,
-    Routes: ({ children }: any) => <div>{children}</div>,
-    Route: ({ element }: any) => <div>{element}</div>,
+  useNavigate: vi.fn(),
+  BrowserRouter: ({ children }: any) => <div>{children}</div>,
+  Routes: ({ children }: any) => <div>{children}</div>,
+  Route: ({ element }: any) => <div>{element}</div>,
 }));
 
 
@@ -102,7 +102,7 @@ describe('App Capacitor Initialization', () => {
   });
 
   it('should attempt to initialize player service', () => {
-      // Just to use the import
-      expect(AudioPlayerService).toBeDefined();
+    // Just to use the import
+    expect(AudioPlayerService).toBeDefined();
   });
 });

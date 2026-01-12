@@ -14,6 +14,7 @@ import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 import { useSyncOrchestrator } from './lib/sync/hooks/useSyncOrchestrator';
+import { YjsTest } from './components/debug/YjsTest';
 
 /**
  * Main Application component.
@@ -66,7 +67,7 @@ function App() {
       if (event.reason instanceof StorageFullError) {
         useToastStore.getState().showToast(event.reason.message, 'error', 5000);
       } else if (event.reason?.name === 'QuotaExceededError' ||
-                 (typeof event.reason === 'object' && event.reason !== null && 'name' in event.reason && (event.reason as { name: unknown }).name === 'QuotaExceededError')) {
+        (typeof event.reason === 'object' && event.reason !== null && 'name' in event.reason && (event.reason as { name: unknown }).name === 'QuotaExceededError')) {
         // Sometimes it might come as a raw QuotaExceededError if not wrapped
         useToastStore.getState().showToast('Storage limit exceeded. Please free up space.', 'error', 5000);
       }
@@ -131,24 +132,24 @@ function App() {
   // But if we render, components might fail if DB is truly broken.
   // Given we want to catch "DB fails to open", waiting is safer for this feature.
   if (swError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
-          <div className="max-w-md text-center">
-            <h1 className="text-xl font-bold mb-2">Critical Error</h1>
-            <p className="mb-4">{swError}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90"
-            >
-              Reload
-            </button>
-          </div>
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-bold mb-2">Critical Error</h1>
+          <p className="mb-4">{swError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90"
+          >
+            Reload
+          </button>
         </div>
-      );
+      </div>
+    );
   }
 
   if (dbStatus === 'loading' || !swInitialized) {
-      return <div className="min-h-screen flex items-center justify-center bg-background text-foreground">Initializing...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-background text-foreground">Initializing...</div>;
   }
 
   return (
@@ -171,6 +172,7 @@ function App() {
           } />
         </Routes>
       </div>
+      <YjsTest />
     </Router>
   );
 }

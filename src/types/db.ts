@@ -170,8 +170,8 @@ export interface UserOverrides {
  * Store: 'user_journey' (Key: id (Auto))
  */
 export interface UserJourneyStep {
-  /** Auto-incrementing ID. */
-  id?: number;
+  /** Auto-incrementing ID or UUID. */
+  id?: number | string;
   /** The book ID. */
   bookId: string;
   /** Start timestamp. */
@@ -183,7 +183,7 @@ export interface UserJourneyStep {
   /** The CFI range covered. */
   cfiRange: string;
   /** Type of session. */
-  type: 'visual' | 'tts';
+  type: 'visual' | 'tts' | 'scroll' | 'page';
 }
 
 /**
@@ -404,8 +404,8 @@ export interface ContentAnalysis {
   };
   /** Detected content types for sections (CFI -> Type). */
   contentTypes?: {
-      rootCfi: string;
-      type: ContentType;
+    rootCfi: string;
+    type: ContentType;
   }[];
   tableAdaptations?: TableAdaptation[];
   /** Summary of the section. */

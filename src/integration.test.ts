@@ -6,6 +6,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { StaticBookManifest, StaticResource, UserInventoryItem, UserProgress } from './types/db';
 
+// Mock zustand persistence
+vi.mock('zustand/middleware', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('zustand/middleware')>();
+  return {
+    ...actual,
+    persist: (config: any) => (set: any, get: any, api: any) => config(set, get, api),
+  };
+});
+
 // Mock offscreen renderer
 vi.mock('./lib/offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn(async () => {
@@ -20,51 +29,46 @@ vi.mock('./lib/offscreen-renderer', () => ({
   })
 }));
 
-// Mock ingestion processEpub to avoid heavy epub.js parsing in JSDOM
+// Mock ingestion extractBookData (was processEpub)
 vi.mock('./lib/ingestion', () => ({
-    processEpub: vi.fn(async (file: File) => {
-        // Simulate what processEpub does: writes to v18 stores and returns ID
-        const db = await getDB();
-        const bookId = 'mock-book-id';
-
-        await db.put('static_manifests', {
-            bookId,
-            title: "Alice's Adventures in Wonderland",
-            author: "Lewis Carroll",
-            description: "Mock description",
-            schemaVersion: 1,
-            fileHash: 'mock-hash',
-            fileSize: 0,
-            totalChars: 0,
-            coverBlob: new Blob(['mock-cover'], { type: 'image/jpeg' })
-        } as StaticBookManifest);
-
-        await db.put('user_inventory', {
-            bookId,
-            addedAt: Date.now(),
-            status: 'unread',
-            tags: [],
-            lastInteraction: Date.now(),
-            sourceFilename: 'alice.epub'
-        } as UserInventoryItem);
-
-        await db.put('user_progress', {
-            bookId,
-            percentage: 0,
-            lastRead: 0,
-            completedRanges: []
-        } as UserProgress);
-
-        // Store file
-        if (file.arrayBuffer) {
-             const buffer = await file.arrayBuffer();
-             await db.put('static_resources', { bookId, epubBlob: buffer } as StaticResource);
-        } else {
-             await db.put('static_resources', { bookId, epubBlob: new ArrayBuffer(0) } as StaticResource);
-        }
-
-        return bookId;
-    })
+  extractBookData: vi.fn(async (file: File) => {
+    const bookId = 'mock-book-id';
+    // Return dummy data
+    return {
+      bookId,
+      manifest: {
+        bookId,
+        title: "Alice's Adventures in Wonderland",
+        author: "Lewis Carroll",
+        description: "Mock description",
+        schemaVersion: 1,
+        fileHash: 'mock-hash',
+        fileSize: 0,
+        totalChars: 0,
+        coverBlob: new Blob(['mock-cover'], { type: 'image/jpeg' })
+      },
+      inventory: {
+        bookId,
+        addedAt: Date.now(),
+        status: 'unread',
+        tags: [],
+        lastInteraction: Date.now(),
+        sourceFilename: 'alice.epub'
+      },
+      progress: {
+        bookId,
+        percentage: 0,
+        lastRead: 0,
+        completedRanges: []
+      },
+      resource: { bookId, epubBlob: file.arrayBuffer ? await file.arrayBuffer() : new ArrayBuffer(0) },
+      structure: { bookId, toc: [], spineItems: [] },
+      overrides: { bookId, lexicon: [] },
+      readingListEntry: { filename: 'alice.epub', title: "Alice's Adventures in Wonderland", author: "Lewis Carroll", status: 'to-read', lastUpdated: Date.now(), percentage: 0 },
+      ttsContentBatches: [],
+      tableBatches: []
+    };
+  })
 }));
 
 // Mock epub.js for ReaderView simulation
@@ -79,18 +83,18 @@ vi.mock('epubjs', async (importOriginal) => {
       book.renderTo = vi.fn().mockReturnValue({
         display: vi.fn().mockResolvedValue(undefined),
         getContents: vi.fn().mockReturnValue([{
-             document: {
-                 body: {
-                     textContent: 'Mock Content',
-                     querySelectorAll: () => [],
-                     querySelector: () => null,
-                     childNodes: [],
-                     nodeType: 1, // ELEMENT_NODE
-                     tagName: 'BODY',
-                     ownerDocument: { createRange: () => ({ setStart: vi.fn(), setEnd: vi.fn() }) }
-                 }
-             },
-             cfiFromRange: vi.fn().mockReturnValue('epubcfi(/6/2!/4/2/1:0)'),
+          document: {
+            body: {
+              textContent: 'Mock Content',
+              querySelectorAll: () => [],
+              querySelector: () => null,
+              childNodes: [],
+              nodeType: 1, // ELEMENT_NODE
+              tagName: 'BODY',
+              ownerDocument: { createRange: () => ({ setStart: vi.fn(), setEnd: vi.fn() }) }
+            }
+          },
+          cfiFromRange: vi.fn().mockReturnValue('epubcfi(/6/2!/4/2/1:0)'),
         }]),
         themes: {
           register: vi.fn(),
@@ -117,9 +121,9 @@ describe('Feature Integration Tests', () => {
     // Clear DB
     const db = await getDB();
     const tx = db.transaction([
-        'static_manifests', 'static_resources', 'static_structure',
-        'user_inventory', 'user_progress', 'user_annotations', 'user_overrides',
-        'cache_tts_preparation'
+      'static_manifests', 'static_resources', 'static_structure',
+      'user_inventory', 'user_progress', 'user_annotations', 'user_overrides',
+      'cache_tts_preparation'
     ], 'readwrite');
 
     await tx.objectStore('static_manifests').clear();
@@ -133,17 +137,17 @@ describe('Feature Integration Tests', () => {
     await tx.done;
 
     // Reset stores
-    useLibraryStore.setState({ books: [], isLoading: false, isImporting: false, error: null });
+    useLibraryStore.setState({ books: {}, isLoading: false, isImporting: false, error: null });
     useReaderStore.getState().reset();
 
     // Mock global fetch for cover extraction
     global.fetch = vi.fn((url) => {
-        if (typeof url === 'string' && url.startsWith('blob:')) {
-            return Promise.resolve({
-                blob: () => Promise.resolve(new Blob(['mock-cover'], { type: 'image/jpeg' })),
-            } as Response);
-        }
-        return Promise.reject('Not mocked');
+      if (typeof url === 'string' && url.startsWith('blob:')) {
+        return Promise.resolve({
+          blob: () => Promise.resolve(new Blob(['mock-cover'], { type: 'image/jpeg' })),
+        } as Response);
+      }
+      return Promise.reject('Not mocked');
     });
   });
 
@@ -161,20 +165,22 @@ describe('Feature Integration Tests', () => {
 
     // Polyfill arrayBuffer if needed
     if (!file.arrayBuffer) {
-        file.arrayBuffer = () => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as ArrayBuffer);
-            reader.onerror = reject;
-            reader.readAsArrayBuffer(file);
-        });
+      file.arrayBuffer = () => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as ArrayBuffer);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
     }
 
     await store.addBook(file);
 
     // Verify state after adding
     const updatedStore = useLibraryStore.getState();
-    expect(updatedStore.books).toHaveLength(1);
-    expect(updatedStore.books[0].title).toContain("Alice's Adventures in Wonderland");
+    expect(Object.keys(updatedStore.books)).toHaveLength(1);
+    // Get the first book
+    const book = Object.values(updatedStore.books)[0];
+    expect(book.title).toContain("Alice's Adventures in Wonderland");
 
     // Verify DB
     const db = await getDB();
@@ -184,12 +190,12 @@ describe('Feature Integration Tests', () => {
     expect(resources).toHaveLength(1);
 
     // 2. Delete Book
-    const bookId = updatedStore.books[0].id;
+    const bookId = book.id;
     await store.removeBook(bookId);
 
     // Verify state after deleting
     const finalStore = useLibraryStore.getState();
-    expect(finalStore.books).toHaveLength(0);
+    expect(Object.keys(finalStore.books)).toHaveLength(0);
 
     // Verify DB empty
     const manifestsAfter = await db.getAll('static_manifests');
@@ -203,21 +209,21 @@ describe('Feature Integration Tests', () => {
     const bookId = 'test-id';
 
     await db.put('static_manifests', {
-        bookId, title: 'Persisted Book', author: 'Me', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0
+      bookId, title: 'Persisted Book', author: 'Me', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0
     } as StaticBookManifest);
     await db.put('user_inventory', {
-        bookId, addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: Date.now()
+      bookId, addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: Date.now()
     } as UserInventoryItem);
     await db.put('user_progress', {
-        bookId, percentage: 0, lastRead: 0, completedRanges: []
+      bookId, percentage: 0, lastRead: 0, completedRanges: []
     } as UserProgress);
 
     const store = useLibraryStore.getState();
     await store.fetchBooks();
 
     const updatedStore = useLibraryStore.getState();
-    expect(updatedStore.books).toHaveLength(1);
-    expect(updatedStore.books[0].title).toBe('Persisted Book');
+    expect(Object.keys(updatedStore.books)).toHaveLength(1);
+    expect(updatedStore.books['test-id'].title).toBe('Persisted Book');
   });
 
   it('should handle annotations (add, list, delete)', async () => {
@@ -225,13 +231,13 @@ describe('Feature Integration Tests', () => {
     const bookId = 'book-1';
 
     const annotation = {
-        id: 'ann-1',
-        bookId,
-        cfiRange: 'epubcfi(/6/4[chapter1]!/4/2/1:0)',
-        text: 'Selected text',
-        color: 'yellow',
-        created: Date.now(),
-        type: 'highlight' as const
+      id: 'ann-1',
+      bookId,
+      cfiRange: 'epubcfi(/6/4[chapter1]!/4/2/1:0)',
+      text: 'Selected text',
+      color: 'yellow',
+      created: Date.now(),
+      type: 'highlight' as const
     };
 
     const tx = db.transaction('user_annotations', 'readwrite');
@@ -251,61 +257,61 @@ describe('Feature Integration Tests', () => {
   });
 
   it('should track reading progress and persist it', async () => {
-      // 1. Setup book in DB
-      const db = await getDB();
-      const bookId = 'reader-test-id';
+    // 1. Setup book in DB
+    const db = await getDB();
+    const bookId = 'reader-test-id';
 
-      const fixturePath = path.resolve(__dirname, './test/fixtures/alice.epub');
-      const buffer = fs.readFileSync(fixturePath);
+    const fixturePath = path.resolve(__dirname, './test/fixtures/alice.epub');
+    const buffer = fs.readFileSync(fixturePath);
 
-      await db.put('static_manifests', {
-          bookId, title: 'Reader Test Book', author: 'Tester', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0
-      } as StaticBookManifest);
-      await db.put('user_inventory', {
-          bookId, addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: 0
-      } as UserInventoryItem);
-      await db.put('user_progress', {
-          bookId, percentage: 0, lastRead: 0, completedRanges: []
-      } as UserProgress);
-      await db.put('static_resources', { bookId, epubBlob: buffer.buffer } as StaticResource);
+    await db.put('static_manifests', {
+      bookId, title: 'Reader Test Book', author: 'Tester', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0
+    } as StaticBookManifest);
+    await db.put('user_inventory', {
+      bookId, addedAt: Date.now(), status: 'unread', tags: [], lastInteraction: 0
+    } as UserInventoryItem);
+    await db.put('user_progress', {
+      bookId, percentage: 0, lastRead: 0, completedRanges: []
+    } as UserProgress);
+    await db.put('static_resources', { bookId, epubBlob: buffer.buffer } as StaticResource);
 
-      // 2. Initialize Reader Store (simulating component mount)
-      const readerStore = useReaderStore.getState();
-      readerStore.setCurrentBookId(bookId);
+    // 2. Initialize Reader Store (simulating component mount)
+    const readerStore = useReaderStore.getState();
+    readerStore.setCurrentBookId(bookId);
 
-      readerStore.updateLocation('cfi1', 0.5, 'Chapter 5');
+    readerStore.updateLocation('cfi1', 0.5, 'Chapter 5');
 
-      const state = useReaderStore.getState();
-      expect(state.currentCfi).toBe('cfi1');
-      expect(state.progress).toBe(0.5);
-      expect(state.currentSectionTitle).toBe('Chapter 5');
+    const state = useReaderStore.getState();
+    expect(state.currentCfi).toBe('cfi1');
+    expect(state.progress).toBe(0.5);
+    expect(state.currentSectionTitle).toBe('Chapter 5');
 
-      // Test TOC setting
-      const mockToc = [{ id: '1', href: 'chap1.html', label: 'Chapter 1' }];
-      readerStore.setToc(mockToc);
-      expect(useReaderStore.getState().toc).toEqual(mockToc);
+    // Test TOC setting
+    const mockToc = [{ id: '1', href: 'chap1.html', label: 'Chapter 1' }];
+    readerStore.setToc(mockToc);
+    expect(useReaderStore.getState().toc).toEqual(mockToc);
 
-      // Simulate the persistence logic used in ReaderView/DBService
-      const saveProgress = async (id: string, cfi: string, prog: number) => {
-        const tx = db.transaction('user_progress', 'readwrite');
-        const store = tx.objectStore('user_progress');
-        const userProg = await store.get(id);
-        if (userProg) {
-            userProg.currentCfi = cfi;
-            userProg.percentage = prog;
-            userProg.lastRead = Date.now();
-            await store.put(userProg);
-        }
-        await tx.done;
-      };
+    // Simulate the persistence logic used in ReaderView/DBService
+    const saveProgress = async (id: string, cfi: string, prog: number) => {
+      const tx = db.transaction('user_progress', 'readwrite');
+      const store = tx.objectStore('user_progress');
+      const userProg = await store.get(id);
+      if (userProg) {
+        userProg.currentCfi = cfi;
+        userProg.percentage = prog;
+        userProg.lastRead = Date.now();
+        await store.put(userProg);
+      }
+      await tx.done;
+    };
 
-      await saveProgress(bookId, 'cfi1', 0.5);
+    await saveProgress(bookId, 'cfi1', 0.5);
 
-      // Verify DB persistence
-      const persistedProg = await db.get('user_progress', bookId);
-      expect(persistedProg.currentCfi).toBe('cfi1');
-      expect(persistedProg.percentage).toBe(0.5);
-      expect(persistedProg.lastRead).toBeDefined();
+    // Verify DB persistence
+    const persistedProg = await db.get('user_progress', bookId);
+    expect(persistedProg.currentCfi).toBe('cfi1');
+    expect(persistedProg.percentage).toBe(0.5);
+    expect(persistedProg.lastRead).toBeDefined();
   });
 
 });

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderStore } from '../../store/useReaderStore';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useLibraryStore, useAllBooks } from '../../store/useLibraryStore';
 import { useShallow } from 'zustand/react/shallow';
 import { CompassPill } from '../ui/CompassPill';
 import { SatelliteFAB } from './SatelliteFAB';
@@ -14,7 +14,7 @@ export const AudioReaderHUD: React.FC = () => {
         pause: state.pause
     })));
     const immersiveMode = useReaderStore(state => state.immersiveMode);
-    const books = useLibraryStore(state => state.books);
+    const books = useAllBooks();
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -47,17 +47,17 @@ export const AudioReaderHUD: React.FC = () => {
 
     return (
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-[40] flex flex-col items-center justify-end pb-6">
-             <div className="relative w-full max-w-md mx-auto pointer-events-auto">
-                 {/* FAB Container - Absolute positioned relative to the wrapper */}
-                 {!isLibrary && !immersiveMode && (
-                     <div className="absolute bottom-20 right-4 z-50">
-                         <SatelliteFAB />
-                     </div>
-                 )}
+            <div className="relative w-full max-w-md mx-auto pointer-events-auto">
+                {/* FAB Container - Absolute positioned relative to the wrapper */}
+                {!isLibrary && !immersiveMode && (
+                    <div className="absolute bottom-20 right-4 z-50">
+                        <SatelliteFAB />
+                    </div>
+                )}
 
-                 {/* Pill Container */}
-                 <div className="mb-4">
-                     {showLastRead ? (
+                {/* Pill Container */}
+                <div className="mb-4">
+                    {showLastRead ? (
                         <CompassPill
                             key="summary"
                             variant="summary"
@@ -66,14 +66,14 @@ export const AudioReaderHUD: React.FC = () => {
                             progress={(lastReadBook!.progress || 0) * 100}
                             onClick={() => navigate(`/read/${lastReadBook!.id}`)}
                         />
-                     ) : (
+                    ) : (
                         <CompassPill
                             key={immersiveMode ? 'compact' : (isLibrary ? 'summary' : 'active')}
                             variant={immersiveMode ? 'compact' : (isLibrary ? 'summary' : 'active')}
                         />
-                     )}
-                 </div>
-             </div>
+                    )}
+                </div>
+            </div>
         </div>
     );
 };

@@ -56,7 +56,10 @@
     "tailwind-merge": "^3.4.0",
     "uuid": "^13.0.0",
     "vite-plugin-pwa": "^1.2.0",
-    "zustand": "^5.0.9"
+    "zustand": "^5.0.9",
+    "yjs": "^13.6.20",
+    "y-indexeddb": "^9.0.12",
+    "zustand-middleware-yjs": "https://github.com/vrwarp/zustand-middleware-yjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",

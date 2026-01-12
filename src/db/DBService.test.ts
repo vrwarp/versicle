@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
@@ -7,6 +7,7 @@ import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResourc
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
   processEpub: vi.fn(),
+  extractBookData: vi.fn(),
   generateFileFingerprint: vi.fn().mockResolvedValue('hash'),
 }));
 
@@ -26,18 +27,36 @@ describe('DBService', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('addBook', () => {
-    it('should call processEpub', async () => {
+    it('should call extractBookData and ingestBook', async () => {
       const file = new File(['content'], 'test.epub', { type: 'application/epub+zip' });
-      const processSpy = vi.mocked(ingestion.processEpub).mockResolvedValue('new-id');
+      const mockData = {
+        metadata: { id: 'new-id', title: 'Test' },
+        cover: new Blob([]),
+        originalFile: file,
+        assets: { images: {}, css: {} },
+        ttsContent: [],
+        tableImages: []
+      };
+
+      const extractSpy = vi.mocked(ingestion.extractBookData).mockResolvedValue(mockData as any);
+
+      // Spy on ingestBook (real method)
+      const ingestSpy = vi.spyOn(dbService, 'ingestBook').mockResolvedValue('new-id');
 
       await dbService.addBook(file);
-      expect(processSpy).toHaveBeenCalledWith(file, undefined, undefined);
+
+      expect(extractSpy).toHaveBeenCalledWith(file, undefined, undefined);
+      expect(ingestSpy).toHaveBeenCalledWith(mockData);
     });
 
     it('should handle error', async () => {
       const file = new File(['content'], 'test.epub', { type: 'application/epub+zip' });
-      vi.mocked(ingestion.processEpub).mockRejectedValue(new Error('Ingestion failed'));
+      vi.mocked(ingestion.extractBookData).mockRejectedValue(new Error('Ingestion failed'));
 
       // Expect the generic error thrown by handleError
       await expect(dbService.addBook(file)).rejects.toThrow('An unexpected database error occurred');
@@ -167,25 +186,25 @@ describe('DBService', () => {
 
   describe('offloadBook', () => {
     it('should remove file and mark as offloaded', async () => {
-        const db = await getDB();
-        const id = 'off-1';
-        const fileContent = new Uint8Array([1, 2, 3]);
+      const db = await getDB();
+      const id = 'off-1';
+      const fileContent = new Uint8Array([1, 2, 3]);
 
-        await db.put('static_manifests', { bookId: id, title: 'Off', author: 'A', schemaVersion: 1, fileHash: 'existing-hash', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-        await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100, sourceFilename: 'f.epub' } as UserInventoryItem);
-        await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-        await db.put('static_resources', { bookId: id, epubBlob: fileContent.buffer } as StaticResource);
+      await db.put('static_manifests', { bookId: id, title: 'Off', author: 'A', schemaVersion: 1, fileHash: 'existing-hash', fileSize: 0, totalChars: 0 } as StaticBookManifest);
+      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100, sourceFilename: 'f.epub' } as UserInventoryItem);
+      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
+      await db.put('static_resources', { bookId: id, epubBlob: fileContent.buffer } as StaticResource);
 
-        await dbService.offloadBook(id);
+      await dbService.offloadBook(id);
 
-        const resource = await db.get('static_resources', id);
+      const resource = await db.get('static_resources', id);
 
-        // After fix: resource blob is undefined
-        expect(resource?.epubBlob).toBeUndefined();
+      // After fix: resource blob is undefined
+      expect(resource?.epubBlob).toBeUndefined();
 
-        // Metadata helper check
-        const meta = await dbService.getBookMetadata(id);
-        expect(meta?.isOffloaded).toBe(true);
+      // Metadata helper check
+      const meta = await dbService.getBookMetadata(id);
+      expect(meta?.isOffloaded).toBe(true);
     });
   });
 
@@ -257,19 +276,19 @@ describe('DBService', () => {
     });
 
     it('should prevent saveTTSState from writing if cleaned up', async () => {
-       const db = await getDB();
-       const id = 'tts-clean-1';
-       // Ensure no previous state
-       await db.delete('cache_session_state', id);
+      const db = await getDB();
+      const id = 'tts-clean-1';
+      // Ensure no previous state
+      await db.delete('cache_session_state', id);
 
-       dbService.saveTTSState(id, [], 1);
+      dbService.saveTTSState(id, [], 1);
 
-       dbService.cleanup();
+      dbService.cleanup();
 
-       await new Promise(resolve => setTimeout(resolve, 1100));
+      await new Promise(resolve => setTimeout(resolve, 1100));
 
-       const state = await db.get('cache_session_state', id);
-       expect(state).toBeUndefined();
+      const state = await db.get('cache_session_state', id);
+      expect(state).toBeUndefined();
     });
   });
 });

@@ -6,6 +6,15 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { MemoryRouter } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
 
+// Mock zustand persistence
+vi.mock('zustand/middleware', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('zustand/middleware')>();
+    return {
+        ...actual,
+        persist: (config: any) => (set: any, get: any, api: any) => config(set, get, api),
+    };
+});
+
 // Mock child components
 vi.mock('./BookCard', () => ({
     BookCard: ({ book }: { book: BookMetadata }) => <div data-testid={`book-card-${book.id}`}>{book.title}</div>
@@ -29,11 +38,11 @@ describe('LibraryView Search', () => {
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
 
         useLibraryStore.setState({
-            books: [
-                { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', addedAt: 100 },
-                { id: '2', title: '1984', author: 'George Orwell', addedAt: 200 },
-                { id: '3', title: 'Brave New World', author: 'Aldous Huxley', addedAt: 150 }
-            ] as unknown as BookMetadata[],
+            books: {
+                '1': { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', addedAt: 100 },
+                '2': { id: '2', title: '1984', author: 'George Orwell', addedAt: 200 },
+                '3': { id: '3', title: 'Brave New World', author: 'Aldous Huxley', addedAt: 150 }
+            } as unknown as Record<string, BookMetadata>,
             isLoading: false,
             error: null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -114,12 +123,12 @@ describe('LibraryView Search', () => {
 
         // Add a new book that matches
         act(() => {
-            useLibraryStore.setState({
-                books: [
-                    ...useLibraryStore.getState().books,
-                    { id: '4', title: 'New Moon', author: 'Stephenie Meyer', addedAt: 300 } as unknown as BookMetadata
-                ]
-            });
+            useLibraryStore.setState((state) => ({
+                books: {
+                    ...state.books,
+                    '4': { id: '4', title: 'New Moon', author: 'Stephenie Meyer', addedAt: 300 } as unknown as BookMetadata
+                }
+            }));
         });
 
         // Should see both now

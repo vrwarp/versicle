@@ -42,14 +42,14 @@ export const ReaderControlBar: React.FC = () => {
 
     // Select the most recently read book
     const lastReadBook = useLibraryStore(state => {
-        return state.books
+        return Object.values(state.books)
             .filter(b => b.lastRead)
             .sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
     });
 
     // Select the current book if active
     const currentBook = useLibraryStore(state => {
-        return currentBookId ? state.books.find(b => b.id === currentBookId) : undefined;
+        return currentBookId ? state.books[currentBookId] : undefined;
     });
 
     // Determine State Priority
@@ -110,14 +110,14 @@ export const ReaderControlBar: React.FC = () => {
                 }
                 break;
             case 'copy':
-                 if (popover.text) {
-                     navigator.clipboard.writeText(popover.text).then(() => {
-                         showToast("Copied to clipboard", "success");
-                         setTimeout(() => hidePopover(), 1000);
-                     }).catch(() => {
-                         showToast("Failed to copy", "error");
-                     });
-                 }
+                if (popover.text) {
+                    navigator.clipboard.writeText(popover.text).then(() => {
+                        showToast("Copied to clipboard", "success");
+                        setTimeout(() => hidePopover(), 1000);
+                    }).catch(() => {
+                        showToast("Failed to copy", "error");
+                    });
+                }
                 break;
             case 'play':
                 // Play from selection

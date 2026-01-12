@@ -1,97 +1,28 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import '@testing-library/jest-dom';
 import 'fake-indexeddb/auto';
-import { cleanup } from '@testing-library/react';
-import { afterEach, vi } from 'vitest';
+import { vi } from 'vitest';
 
-// Mock window.speechSynthesis
-Object.defineProperty(window, 'speechSynthesis', {
-  value: {
-    getVoices: vi.fn().mockReturnValue([
-      { name: 'Google US English', lang: 'en-US', default: true },
-      { name: 'Google UK English Female', lang: 'en-GB', default: false },
-      { name: 'Google Español', lang: 'es-ES', default: false }
-    ]),
-    speak: vi.fn(),
-    cancel: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-    onvoiceschanged: null,
-    speaking: false,
-    paused: false,
-    pending: false
-  },
-  writable: true
-});
+// Mock Media Element
+window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+window.HTMLMediaElement.prototype.pause = vi.fn();
+window.HTMLMediaElement.prototype.load = vi.fn();
+window.HTMLAudioElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+window.HTMLAudioElement.prototype.pause = vi.fn();
 
-// Mock SpeechSynthesisUtterance
-class MockSpeechSynthesisUtterance {
-  text: string;
-  voice: SpeechSynthesisVoice | null = null;
-  rate: number = 1;
-  onstart: (() => void) | null = null;
-  onend: (() => void) | null = null;
-  onerror: ((event: any) => void) | null = null;
-
-  constructor(text: string) {
-    this.text = text;
-  }
-}
-(global as any).SpeechSynthesisUtterance = MockSpeechSynthesisUtterance;
-
-// Mock URL.createObjectURL/revokeObjectURL
-global.URL.createObjectURL = vi.fn(() => 'blob:url');
-global.URL.revokeObjectURL = vi.fn();
-
-// Mock HTMLMediaElement methods
-Object.defineProperty(global.window.HTMLMediaElement.prototype, 'play', {
-  configurable: true,
-  value: vi.fn().mockResolvedValue(undefined),
-});
-Object.defineProperty(global.window.HTMLMediaElement.prototype, 'pause', {
-  configurable: true,
-  value: vi.fn(),
-});
-Object.defineProperty(global.window.HTMLMediaElement.prototype, 'load', {
-  configurable: true,
-  value: vi.fn(),
-});
-
-// Mock ResizeObserver
-global.ResizeObserver = class {
-  observe = vi.fn();
-  unobserve = vi.fn();
-  disconnect = vi.fn();
-};
-
-// Mock Pointer Capture methods for JSDOM environment
-if (!Element.prototype.setPointerCapture) {
-  (Element.prototype as any).setPointerCapture = vi.fn();
-}
-if (!Element.prototype.releasePointerCapture) {
-  (Element.prototype as any).releasePointerCapture = vi.fn();
-}
-
-// Polyfill Blob.prototype.text for JSDOM 20+ which might still lack it or if env issues
+// Polyfill Blob.text
 if (!Blob.prototype.text) {
-  Object.defineProperty(Blob.prototype, 'text', {
-    value: function() {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsText(this);
-      });
-    },
-    writable: true,
-    configurable: true,
-    enumerable: false // Important for IDB cloning
-  });
+  Blob.prototype.text = function () {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsText(this);
+    });
+  };
 }
 
-// Polyfill Blob.prototype.arrayBuffer
 if (!Blob.prototype.arrayBuffer) {
-  Blob.prototype.arrayBuffer = function() {
+  Blob.prototype.arrayBuffer = function () {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as ArrayBuffer);
@@ -101,52 +32,65 @@ if (!Blob.prototype.arrayBuffer) {
   };
 }
 
-// Polyfill File.prototype.text (File inherits from Blob but sometimes needs explicit help in JSDOM)
-if (typeof File !== 'undefined' && !File.prototype.text) {
-  // Use Blob.prototype.text directly if available, or define similarly
-  Object.defineProperty(File.prototype, 'text', {
-    value: Blob.prototype.text,
-    writable: true,
-    configurable: true,
-    enumerable: false // Important for IDB cloning
-  });
-}
-if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
-  File.prototype.arrayBuffer = Blob.prototype.arrayBuffer;
-}
-
-// Also check for arrayBuffer on File prototype in JSDOM
-if (typeof File !== 'undefined' && !File.prototype.arrayBuffer) {
-    Object.defineProperty(File.prototype, 'arrayBuffer', {
-        value: function() {
-             return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as ArrayBuffer);
-                reader.onerror = reject;
-                reader.readAsArrayBuffer(this);
-             });
-        },
-        writable: true,
-        configurable: true,
-        enumerable: false
-    });
-}
-
-
-// Polyfill innerText for JSDOM
-if (typeof HTMLElement !== 'undefined' && !Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'innerText')) {
-  Object.defineProperty(HTMLElement.prototype, 'innerText', {
-    get() {
-      return this.textContent;
+// Mock localStorage
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => {
+      store[key] = value.toString();
     },
-    set(value) {
-      this.textContent = value;
+    removeItem: (key: string) => {
+      delete store[key];
     },
-    configurable: true
-  });
-}
+    clear: () => {
+      store = {};
+    },
+    length: 0,
+    key: (index: number) => null,
+  };
+})();
 
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+  writable: true
+});
+
+// Mock matchMedia
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(), // deprecated
+    removeListener: vi.fn(), // deprecated
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
+// Mock ResizeObserver
+window.ResizeObserver = class ResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+};
+
+// Mock SpeechSynthesis
+Object.defineProperty(window, 'speechSynthesis', {
+  value: {
+    speak: vi.fn(),
+    cancel: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    getVoices: vi.fn().mockReturnValue([]),
+    onvoiceschanged: null
+  },
+  writable: true
+});
+Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+  value: vi.fn(),
+  writable: true
 });
