@@ -38,7 +38,8 @@ export const LibraryView: React.FC = () => {
     viewMode,
     setViewMode,
     sortOrder,
-    setSortOrder
+    setSortOrder,
+    hydrateStaticMetadata
   } = useLibraryStore(useShallow(state => ({
     isLoading: state.isLoading,
     error: state.error,
@@ -48,7 +49,8 @@ export const LibraryView: React.FC = () => {
     viewMode: state.viewMode,
     setViewMode: state.setViewMode,
     sortOrder: state.sortOrder,
-    setSortOrder: state.setSortOrder
+    setSortOrder: state.setSortOrder,
+    hydrateStaticMetadata: state.hydrateStaticMetadata
   })));
 
   const { setGlobalSettingsOpen } = useUIStore();
@@ -80,6 +82,18 @@ export const LibraryView: React.FC = () => {
       setTimeout(() => setReprocessingBookId(state.reprocessBookId), 0);
     }
   }, [location.state]);
+
+  // Phase 2: Hydrate static metadata after Yjs sync completes
+  // Wait for books to be populated by Yjs before hydrating static metadata
+  const bookCount = books.length; // useAllBooks returns array
+  const { staticMetadata } = useLibraryStore(useShallow(state => ({ staticMetadata: state.staticMetadata })));
+  const hasStaticMetadata = Object.keys(staticMetadata).length > 0;
+
+  useEffect(() => {
+    if (bookCount > 0 && !hasStaticMetadata) {
+      hydrateStaticMetadata();
+    }
+  }, [bookCount, hasStaticMetadata, hydrateStaticMetadata]);
 
   // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
 

@@ -175,6 +175,8 @@ class DBService {
 
   /**
    * Retrieves only the metadata for a specific book.
+   * Post-Yjs migration: user_inventory is in Yjs, not IndexedDB.
+   * We only need static_manifests for static metadata.
    */
   async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
     try {
@@ -182,25 +184,28 @@ class DBService {
       const tx = db.transaction(['static_manifests', 'static_resources', 'user_inventory', 'user_progress'], 'readonly');
 
       const manifest = await tx.objectStore('static_manifests').get(id);
+
       // Check existence of resource for isOffloaded
       const resourceKey = await tx.objectStore('static_resources').getKey(id);
-      const inventory = await tx.objectStore('user_inventory').get(id);
+      const inventory = await tx.objectStore('user_inventory').get(id); // May be null (Yjs migration)
       const progress = await tx.objectStore('user_progress').get(id);
 
       await tx.done;
 
-      if (!manifest || !inventory) return undefined;
+      if (!manifest) {
+        return undefined; // Only manifest is required
+      }
 
       return {
         id: manifest.bookId,
-        title: inventory.customTitle || manifest.title,
-        author: inventory.customAuthor || manifest.author,
+        title: inventory?.customTitle || manifest.title,
+        author: inventory?.customAuthor || manifest.author,
         description: manifest.description,
         coverBlob: manifest.coverBlob, // Use thumbnail
-        addedAt: inventory.addedAt,
+        addedAt: inventory?.addedAt || Date.now(), // Fallback to now if no inventory
 
         bookId: manifest.bookId,
-        filename: inventory.sourceFilename,
+        filename: inventory?.sourceFilename || 'unknown.epub', // Fallback
         fileHash: manifest.fileHash,
         fileSize: manifest.fileSize,
         totalChars: manifest.totalChars,
@@ -212,6 +217,19 @@ class DBService {
         lastPlayedCfi: progress?.lastPlayedCfi,
         isOffloaded: !resourceKey
       };
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Retrieves all inventory items directly from the IDB store.
+   * Used for migration and self-repair if Yjs data is missing.
+   */
+  async getAllInventoryItems(): Promise<UserInventoryItem[]> {
+    try {
+      const db = await this.getDB();
+      return await db.getAll('user_inventory');
     } catch (error) {
       this.handleError(error);
     }

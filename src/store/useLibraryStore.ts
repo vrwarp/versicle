@@ -103,6 +103,7 @@ interface IDBService {
   offloadBook: (id: string) => Promise<void>;
   restoreBook: (id: string, file: File) => Promise<void>;
   getBookMetadata: (id: string) => Promise<StaticBookManifest | undefined>;
+  getAllInventoryItems: () => Promise<UserInventoryItem[]>;
 }
 
 export const createLibraryStore = (injectedDB: IDBService = dbService as any) => create<LibraryState>()(
@@ -132,10 +133,37 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
       hydrateStaticMetadata: async () => {
         const { books } = get();
-        const bookIds = Object.keys(books);
+        let bookIds = Object.keys(books);
 
         if (bookIds.length === 0) {
-          return;
+          // Self-healing: Check if user_inventory has items that Yjs missed (e.g. after restore)
+          try {
+            const legacyBooks = await injectedDB.getAllInventoryItems();
+            if (legacyBooks && legacyBooks.length > 0) {
+              console.log(`[Library] Found ${legacyBooks.length} items in user_inventory but 0 in Yjs. Migrating...`);
+
+              // Update state (middleware will sync to Yjs)
+              const updates: Record<string, UserInventoryItem> = {};
+              legacyBooks.forEach(item => {
+                updates[item.bookId] = item;
+              });
+
+              set((state) => ({
+                books: {
+                  ...state.books,
+                  ...updates
+                }
+              }));
+
+              // Refresh IDs
+              bookIds = Object.keys(updates);
+            } else {
+              return;
+            }
+          } catch (e) {
+            console.error("[Library] Failed to self-heal from user_inventory", e);
+            return;
+          }
         }
 
         set({ isHydrating: true });

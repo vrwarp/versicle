@@ -33,6 +33,8 @@ def reset_app(page: Page):
         page: The Playwright Page object.
     """
     page.goto("http://localhost:5173", timeout=10000)
+    # Reload first to potentially release any DB locks from previous sessions
+    page.reload()
 
     # Explicitly clear IDB, LocalStorage, and Unregister Service Workers
     page.evaluate("""
@@ -52,7 +54,10 @@ def reset_app(page: Page):
                     const req = window.indexedDB.deleteDatabase(db.name);
                     req.onsuccess = resolve;
                     req.onerror = reject;
-                    req.onblocked = resolve;
+                    req.onblocked = () => {
+                        console.warn(`DB ${db.name} deletion blocked`);
+                        resolve();
+                    };
                 });
             }
             localStorage.clear();

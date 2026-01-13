@@ -1,9 +1,10 @@
 import JSZip from 'jszip';
 import { exportFile } from './export';
 import { dbService } from '../db/DBService';
-import type { BookMetadata, Annotation, LexiconRule, BookLocations } from '../types/db';
+import type { BookMetadata, Annotation, LexiconRule, BookLocations, UserInventoryItem, UserProgress, UserAnnotation } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import { getDB } from '../db/db';
+import { yDoc } from '../store/yjs-provider';
 
 /**
  * Represents the structure of a backup manifest file.
@@ -113,13 +114,18 @@ export class BackupService {
     // Map new stores to BackupManifest structure
     // We construct legacy-like objects from v18 schema for portability
     const manifests = await db.getAll('static_manifests');
-    const inventory = await db.getAll('user_inventory');
+
+    // Read inventory from Yjs (Source of Truth for Inventory)
+    // Legacy user_inventory might be empty for new books
+    const yLibrary = yDoc.getMap<UserInventoryItem>('library');
+    const yInventory = Array.from(yLibrary.values()).filter(i => i && i.bookId);
+
     const progress = await db.getAll('user_progress');
     const annotations = await db.getAll('user_annotations');
     const overrides = await db.getAll('user_overrides');
     const metrics = await db.getAll('cache_render_metrics');
 
-    const invMap = new Map(inventory.map(i => [i.bookId, i]));
+    const invMap = new Map(yInventory.map(i => [i.bookId, i]));
     const progMap = new Map(progress.map(p => [p.bookId, p]));
 
     const books: BookMetadata[] = manifests.map(m => {
@@ -130,7 +136,7 @@ export class BackupService {
         title: inv?.customTitle || m.title,
         author: inv?.customAuthor || m.author,
         description: m.description,
-        addedAt: inv?.addedAt || 0,
+        addedAt: inv?.addedAt || Date.now(),
 
         bookId: m.bookId,
         filename: inv?.sourceFilename,
@@ -210,6 +216,8 @@ export class BackupService {
       console.warn(`Backup version ${manifest.version} is newer than supported ${this.BACKUP_VERSION}. Proceeding with caution.`);
     }
 
+    console.log('[BackupService] Starting processManifest');
+
     const db = await getDB();
     const totalItems = manifest.books.length + manifest.annotations.length + manifest.lexicon.length + manifest.locations.length;
     let processed = 0;
@@ -253,23 +261,49 @@ export class BackupService {
     const progStore = tx.objectStore('user_progress');
     const structStore = tx.objectStore('static_structure');
 
+    // Collect updates for Yjs to apply in a single transaction later
+    const updates = {
+      library: [] as UserInventoryItem[],
+      progress: [] as UserProgress[],
+      annotations: [] as UserAnnotation[]
+    };
+
     for (const book of booksToSave) {
       const existingMan = await manStore.get(book.id);
 
       if (existingMan) {
         // Merge Progress
         const prog = await progStore.get(book.id);
-        if (prog && (book.lastRead || 0) > (prog.lastRead || 0)) {
-          prog.lastRead = book.lastRead || 0;
-          prog.percentage = book.progress || 0;
-          prog.currentCfi = book.currentCfi;
-          await progStore.put(prog);
+        const resolvedProg: UserProgress = {
+          bookId: book.id,
+          percentage: book.progress || 0,
+          lastRead: book.lastRead || 0,
+          currentCfi: book.currentCfi,
+          completedRanges: [],
+          ...prog // keep existing if available, but check timestamps?
+        };
+
+        // Simple merge logic: overwrite if backup is newer?
+
+        let shouldUpdate = false;
+        if (prog) {
+          if ((book.lastRead || 0) > (prog.lastRead || 0)) {
+            resolvedProg.lastRead = book.lastRead || 0;
+            resolvedProg.percentage = book.progress || 0;
+            resolvedProg.currentCfi = book.currentCfi;
+            resolvedProg.lastPlayedCfi = book.lastPlayedCfi;
+            shouldUpdate = true;
+          }
+        } else {
+          shouldUpdate = true;
+        }
+
+        if (shouldUpdate) {
+          await progStore.put(resolvedProg);
+          updates.progress.push(resolvedProg);
         }
       } else {
         // Create New from Backup Metadata
-        // Note: Static metadata like fileHash/size might be missing or mocked if not in backup?
-        // BackupManifest.BookMetadata should have them.
-
         await manStore.put({
           bookId: book.id,
           title: book.title,
@@ -282,7 +316,7 @@ export class BackupService {
           isbn: undefined
         });
 
-        await invStore.put({
+        const invItem: UserInventoryItem = {
           bookId: book.id,
           title: book.title,
           author: book.author,
@@ -293,15 +327,19 @@ export class BackupService {
           lastInteraction: book.lastRead || 0,
           customTitle: book.title,
           customAuthor: book.author
-        });
+        };
+        await invStore.put(invItem);
+        updates.library.push(invItem);
 
-        await progStore.put({
+        const progItem: UserProgress = {
           bookId: book.id,
           percentage: book.progress || 0,
           lastRead: book.lastRead || 0,
           currentCfi: book.currentCfi,
           completedRanges: []
-        });
+        };
+        await progStore.put(progItem);
+        updates.progress.push(progItem);
 
         if (book.syntheticToc) {
           await structStore.put({
@@ -318,7 +356,7 @@ export class BackupService {
     const annStore = tx.objectStore('user_annotations');
     const annotations = Array.isArray(manifest.annotations) ? manifest.annotations : [];
     for (const ann of annotations) {
-      await annStore.put({
+      const userAnn: UserAnnotation = {
         id: ann.id,
         bookId: ann.bookId,
         cfiRange: ann.cfiRange,
@@ -327,7 +365,10 @@ export class BackupService {
         color: ann.color,
         note: ann.note,
         created: ann.created
-      });
+      };
+      await annStore.put(userAnn);
+      updates.annotations.push(userAnn);
+
       updateProgress('Restoring annotations...');
     }
 
@@ -376,6 +417,37 @@ export class BackupService {
 
     await tx.done;
 
+    // Apply Yjs updates in transaction
+    yDoc.transact(() => {
+      console.log(`[BackupService] Syncing to Yjs: ${updates.library.length} books, ${updates.progress.length} progress, ${updates.annotations.length} annotations`);
+
+      const yLibrary = yDoc.getMap<UserInventoryItem>('library');
+      const yProgress = yDoc.getMap<UserProgress>('progress');
+      const yAnnotations = yDoc.getMap<UserAnnotation>('annotations');
+
+      updates.library.forEach(item => {
+        yLibrary.set(item.bookId, item);
+      });
+      console.log('[BackupService] Yjs library size after update:', yLibrary.size);
+
+      updates.progress.forEach(item => {
+        yProgress.set(item.bookId, item);
+      });
+
+      updates.annotations.forEach(item => {
+        yAnnotations.set(item.id, item);
+      });
+    });
+    console.log('[BackupService] Yjs transaction complete');
+
+    // Wait for Yjs persistence to flush (debounce is typically 500ms)
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Explicitly disconnect to ensure flush
+    const { disconnectYjs } = await import('../store/yjs-provider');
+    await disconnectYjs();
+    console.log('[BackupService] Yjs persistence disconnected');
+
     // Step 3: Restore Files (if ZIP)
     if (zip) {
       for (const book of booksToSave) {
@@ -396,6 +468,8 @@ export class BackupService {
     }
 
     onProgress?.(100, 'Restore complete!');
+
+    // Hydration now happens on LibraryView mount after page reload
   }
 }
 

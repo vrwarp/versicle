@@ -60,3 +60,12 @@ export const waitForYjsSync = (timeoutMs = 5000): Promise<void> => {
         });
     });
 };
+
+export const disconnectYjs = async () => {
+    if (persistence) {
+        console.log('🔌 [Yjs] Disconnecting persistence...');
+        await persistence.destroy();
+        persistence = null;
+        console.log('🔌 [Yjs] Persistence disconnected.');
+    }
+};

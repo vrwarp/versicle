@@ -3,6 +3,7 @@ import pytest
 from playwright.sync_api import Page, expect
 from verification import utils
 
+
 def test_library_journey(page: Page):
     print("Starting Library Journey...")
     utils.reset_app(page)
