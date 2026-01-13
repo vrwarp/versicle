@@ -63,9 +63,9 @@
     *   **Android Backup**: Native integration with Android's Backup Manager.
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted. Export/Import to CSV (Goodreads compatible).
-*   **Backups**:
-    *   **Light**: JSON export of metadata/settings.
-    *   **Full**: ZIP archive including all book files.
+*   **Data Export**:
+    *   **Unified Export**: Seamlessly share files via Browser Download (Web) or Native Share Sheet (Android).
+    *   **Backups**: Light (JSON) or Full (ZIP with original files).
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
 

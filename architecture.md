@@ -67,9 +67,9 @@ graph TD
         Backup[BackupService]
         Maint[MaintenanceService]
         GenAI[GenAIService]
+        Export[Unified Export]
         CostEst[CostEstimator]
         TaskRunner[cancellable-task-runner.ts]
-        MediaSession[MediaSessionManager]
     end
 
     subgraph SyncSubsystem [Sync & Cloud]
@@ -81,6 +81,8 @@ graph TD
     end
 
     subgraph TTS [TTS Subsystem]
+        Platform[PlatformIntegration]
+        Sequencer[TaskSequencer]
         PSM[PlaybackStateManager]
         Segmenter[TextSegmenter]
         Lexicon[LexiconService]
@@ -124,6 +126,7 @@ graph TD
     LibStore --> BatchIngestion
     LibStore --> Backup
     LibStore --> Maint
+    LibStore --> Export
 
     ReaderStore --> Orchestrator
     SyncStore --> Orchestrator
@@ -150,8 +153,11 @@ graph TD
     APS --> Sync
     APS --> Piper
     APS --> CostEst
-    APS --> BG
-    APS --> MediaSession
+    APS --> Sequencer
+    APS --> Platform
+
+    Platform --> MediaSession
+    Platform --> BG
 
     Piper --> PiperUtils
 
@@ -191,7 +197,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `user_annotations`: Highlights and notes.
     *   `user_overrides`: Custom settings like Lexicon rules (pronunciation overrides).
     *   `user_journey`: Granular reading history sessions.
-    *   `user_ai_inference`: Expensive AI-derived data (Summaries, Accessibility Layers).
+    *   `user_ai_inference`: Expensive AI-derived data (Summaries, Content Classifications, Table Adaptations).
 *   **Domain 3: Cache (Transient/Regenerable)**
     *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
     *   `cache_audio_blobs`: Generated TTS audio segments.
@@ -209,11 +215,15 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations).
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 
-#### Hardening: Validation & Sanitization (`src/db/validators.ts`)
-*   **Goal**: Prevent database corruption and XSS attacks.
-*   **Logic**:
+#### Hardening: Validation & Sanitization
+*   **Validators (`src/db/validators.ts`)**:
     *   **Magic Number Check**: Verifies ZIP signature (`50 4B 03 04`) before parsing.
-    *   **Sanitization**: Delegates to `DOMPurify` to strip HTML tags from metadata.
+*   **Sanitizer (`src/lib/sanitizer.ts`)**:
+    *   **Goal**: Prevent XSS attacks and maintain visual security.
+    *   **Logic**:
+        *   Uses **DOMPurify** with a strict configuration (forbidding `script`, `iframe`, `object`).
+        *   **Hook**: Automatically rewrites `target="_blank"` links to include `rel="noopener noreferrer"` to prevent Reverse Tabnabbing.
+        *   **Hook**: Removes `<link>` tags pointing to external domains to prevent CSS injection attacks.
 
 ### Sync & Cloud (`src/lib/sync/`)
 
@@ -223,7 +233,7 @@ Versicle implements a "Serverless Sync" model using personal cloud storage (Goog
 The controller for synchronization. It manages the sync lifecycle and integrates with the UI.
 
 *   **Logic**:
-    *   **Manifest-Based**: Generates a `SyncManifest` JSON containing all User Domain data.
+    *   **Manifest-Based**: Generates a `SyncManifest` JSON containing all User Domain data, including `user_ai_inference` (semantic maps, adaptations).
     *   **Last-Write-Wins (LWW)**: Merges local and remote manifests based on timestamps.
     *   **Debounced Push**: Reading progress updates are debounced (60s) to avoid API rate limits.
     *   **Force Push**: Critical actions (Pause, Bookmark) trigger immediate sync.
@@ -260,10 +270,16 @@ Enhances the reading experience using LLMs.
 
 *   **Goal**: Enhance the reading and listening experience using LLMs (Gemini).
 *   **Logic**:
-    *   **Free Tier Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite`, `gemini-2.5-flash`) to maximize quota. Automatically retries with a different model upon `429 RESOURCE_EXHAUSTED` errors.
-    *   **Multimodal Input**: Accepts text and images (blobs) for tasks like table interpretation.
+    *   **Free Tier Rotation**: Implements a rotation strategy (switching between `gemini-2.5-flash-lite` and `gemini-2.5-flash`) to maximize free tier quotas. Automatically retries upon `429 RESOURCE_EXHAUSTED` errors.
+    *   **Mock Mode**: Supports E2E testing by checking `localStorage` for simulated responses or errors.
     *   **Structured Output**: Enforces strict JSON schemas for all responses (e.g., Content Type classification, Table Adaptation).
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets/images are sent to Google's servers.
+
+#### Unified Export (`src/lib/export.ts`)
+*   **Goal**: Provide consistent file export capabilities across Web and Mobile.
+*   **Logic**:
+    *   **Web**: Uses `file-saver` to trigger a browser download.
+    *   **Native**: Writes the file to the Capacitor Cache Directory and triggers the native OS `Share` sheet.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
@@ -288,10 +304,7 @@ Manages internal state backup and restoration.
 
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
 *   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks and async flows.
-*   **Logic**:
-    *   Uses a **Generator** pattern (`function*`) instead of standard `async/await`.
-    *   The runner iterates the generator, yielding Promises. If `cancel()` is called, it throws a `CancellationError` into the generator, triggering `finally` blocks for cleanup and preventing subsequent code execution.
-*   **Trade-off**: Requires writing async logic as generators, which is non-standard syntax for many developers.
+*   **Logic**: Uses a Generator pattern to yield Promises, throwing a `CancellationError` into the generator if canceled.
 
 ---
 
@@ -302,7 +315,8 @@ The Orchestrator. Manages playback state, provider selection, and UI updates.
 
 *   **Logic**:
     *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state management to `PlaybackStateManager`.
-    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods.
+    *   **Concurrency**: Uses `TaskSequencer` to serialize public methods (`play`, `pause`, `seek`) to prevent race conditions during rapid UI interaction.
+    *   **Platform Integration**: Delegates OS-level controls (Media Session, Background Audio) to `PlatformIntegration`.
 
 #### `src/lib/tts/AudioContentPipeline.ts`
 The Data Pipeline for TTS.
@@ -312,13 +326,19 @@ The Data Pipeline for TTS.
     1.  **Immediate Return**: Returns a raw, playable queue immediately so playback starts instantly.
     2.  **Background Analysis**: Fires asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze the content in the background.
     3.  **Dynamic Updates**: When analysis completes, it triggers callbacks (`onMaskFound`, `onAdaptationsFound`) to update the *active* queue while it plays.
-*   **Content Filtering (Background Masking)**:
-    *   `detectContentSkipMask` runs asynchronously using GenAI to identify skip targets (e.g., footnotes, tables) based on user preferences.
-    *   Returns a set of *source indices* to skip, which are applied to the active queue without interrupting playback.
 *   **Table Adaptation Mapping**:
-    *   Uses **Precise Grouping** to match table images to their source sentences by CFI structure.
-    *   Sorts table roots by length descending to correctly handle nested tables (longest match wins).
-*   **Trade-off**: The first few seconds of playback might contain un-adapted content (e.g., reading a footnote) before the mask is applied.
+    *   **Precise Grouping**: Matches table images to their source sentences by CFI structure (Parent/Child relationship).
+    *   **Longest Match Wins**: Sorts table roots by length descending to correctly handle nested tables.
+
+#### `src/lib/tts/PlatformIntegration.ts`
+*   **Goal**: Centralize all platform-specific audio behaviors.
+*   **Logic**:
+    *   **Media Session**: Manages lock screen metadata and control events (Play/Pause/Seek).
+    *   **Background Audio**: Manages a silent audio loop (or white noise) to keep the webview active on mobile when the screen is off.
+
+#### `src/lib/tts/TaskSequencer.ts`
+*   **Goal**: Ensure async tasks execute in strict order.
+*   **Logic**: Chains Promises to a single `pendingPromise`. If the sequencer is destroyed, new tasks are ignored.
 
 #### `src/lib/tts/PlaybackStateManager.ts`
 Manages the virtual playback timeline.
