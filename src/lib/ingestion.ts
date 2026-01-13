@@ -1,4 +1,5 @@
-import ePub, { type NavigationItem } from 'epubjs';
+import ePub from 'epubjs';
+import type { NavigationItem } from '../types/db';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';

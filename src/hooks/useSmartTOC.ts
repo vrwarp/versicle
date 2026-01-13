@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
-import type { Book, NavigationItem } from 'epubjs';
+import type { Book } from 'epubjs';
+import type { NavigationItem } from '../types/db';
 import { genAIService } from '../lib/genai/GenAIService';
 import { dbService } from '../db/DBService';
 import { useGenAIStore } from '../store/useGenAIStore';
@@ -41,7 +42,7 @@ export function useSmartTOC(
       const sectionsToProcess: { id: string; text: string }[] = [];
 
       await collectSectionData(originalToc, book, (count) => {
-         setProgress((prev) => prev ? { ...prev, current: prev.current + count } : null);
+        setProgress((prev) => prev ? { ...prev, current: prev.current + count } : null);
       }, sectionsToProcess);
 
       if (sectionsToProcess.length === 0) {
@@ -91,61 +92,61 @@ function countTocItems(items: NavigationItem[]): number {
 }
 
 async function collectSectionData(
-    items: NavigationItem[],
-    book: Book,
-    onProgress: (count: number) => void,
-    results: { id: string; text: string }[]
+  items: NavigationItem[],
+  book: Book,
+  onProgress: (count: number) => void,
+  results: { id: string; text: string }[]
 ): Promise<void> {
-    for (const item of items) {
-        try {
-            // Strip hash to ensure we load the file correctly
-            const href = item.href.split('#')[0];
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const contentOrDoc = await (book as any).load(href);
-            let doc: Document | null = null;
+  for (const item of items) {
+    try {
+      // Strip hash to ensure we load the file correctly
+      const href = item.href.split('#')[0];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contentOrDoc = await (book as any).load(href);
+      let doc: Document | null = null;
 
-            if (typeof contentOrDoc === 'string') {
-                doc = new DOMParser().parseFromString(contentOrDoc, 'text/html');
-            } else if (contentOrDoc && typeof contentOrDoc === 'object') {
-                doc = contentOrDoc as Document;
-            }
+      if (typeof contentOrDoc === 'string') {
+        doc = new DOMParser().parseFromString(contentOrDoc, 'text/html');
+      } else if (contentOrDoc && typeof contentOrDoc === 'object') {
+        doc = contentOrDoc as Document;
+      }
 
-            if (doc) {
-                 // Try innerText first (browser), then textContent (standard)
-                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                 const content = (doc.body as any)?.innerText || (doc.documentElement as any)?.innerText;
+      if (doc) {
+        // Try innerText first (browser), then textContent (standard)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const content = (doc.body as any)?.innerText || (doc.documentElement as any)?.innerText;
 
-                 if (content) {
-                    const text = content.trim().substring(0, 500);
-                    if (text.length > 0) {
-                        results.push({ id: item.id, text });
-                    }
-                 }
-            }
-        } catch (e) {
-            console.warn(`Failed to process TOC item: ${item.label}`, e);
+        if (content) {
+          const text = content.trim().substring(0, 500);
+          if (text.length > 0) {
+            results.push({ id: item.id, text });
+          }
         }
-
-        onProgress(1);
-
-        if (item.subitems && item.subitems.length > 0) {
-            await collectSectionData(item.subitems, book, onProgress, results);
-        }
+      }
+    } catch (e) {
+      console.warn(`Failed to process TOC item: ${item.label}`, e);
     }
+
+    onProgress(1);
+
+    if (item.subitems && item.subitems.length > 0) {
+      await collectSectionData(item.subitems, book, onProgress, results);
+    }
+  }
 }
 
 function reconstructToc(items: NavigationItem[], titleMap: Map<string, string>): NavigationItem[] {
-    return items.map(item => {
-        const newTitle = titleMap.get(item.id);
-        const newItem: NavigationItem = {
-            ...item,
-            label: newTitle || item.label
-        };
+  return items.map(item => {
+    const newTitle = titleMap.get(item.id);
+    const newItem: NavigationItem = {
+      ...item,
+      label: newTitle || item.label
+    };
 
-        if (item.subitems && item.subitems.length > 0) {
-            newItem.subitems = reconstructToc(item.subitems, titleMap);
-        }
+    if (item.subitems && item.subitems.length > 0) {
+      newItem.subitems = reconstructToc(item.subitems, titleMap);
+    }
 
-        return newItem;
-    });
+    return newItem;
+  });
 }

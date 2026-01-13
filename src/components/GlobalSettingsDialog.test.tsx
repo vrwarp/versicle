@@ -97,6 +97,30 @@ vi.mock('../lib/sync/CheckpointService', () => ({
     }
 }));
 
+vi.mock('../store/useReadingListStore', () => ({
+    useReadingListStore: Object.assign(
+        (selector: any) => selector ? selector({ entries: {} }) : { entries: {} },
+        {
+            getState: () => ({
+                entries: {},
+                upsertEntry: vi.fn()
+            })
+        }
+    )
+}));
+
+vi.mock('../store/useReadingStateStore', () => ({
+    useReadingStateStore: Object.assign(
+        (selector: any) => selector ? selector({ progress: {} }) : { progress: {} },
+        {
+            getState: () => ({
+                progress: {},
+                updateLocation: vi.fn()
+            })
+        }
+    )
+}));
+
 vi.mock('../store/useToastStore', () => ({
     useToastStore: (selector: any) => selector ? selector({ showToast: vi.fn() }) : { showToast: vi.fn() }
 }));

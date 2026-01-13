@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
-import { useAllBooks } from '../../store/useLibraryStore';
+import { useAllBooks } from '../../store/selectors';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';

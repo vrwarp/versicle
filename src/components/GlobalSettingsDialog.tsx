@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { useTTSStore } from '../store/useTTSStore';
 import { useLibraryStore } from '../store/useLibraryStore';
+import { useReadingListStore } from '../store/useReadingListStore';
+import { useReadingStateStore } from '../store/useReadingStateStore';
 import { usePreferencesStore } from '../store/usePreferencesStore';
 import { useToastStore } from '../store/useToastStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -52,7 +54,8 @@ export const GlobalSettingsDialog = () => {
     const csvInputRef = useRef<HTMLInputElement>(null);
     const zipImportRef = useRef<HTMLInputElement>(null);
     const folderImportRef = useRef<HTMLInputElement>(null);
-    const [readingListCount, setReadingListCount] = useState<number | null>(null);
+    const readingListEntries = useReadingListStore(state => state.entries);
+    const readingListCount = Object.keys(readingListEntries).length;
     const [isReadingListOpen, setIsReadingListOpen] = useState(false);
     const [isCsvImporting, setIsCsvImporting] = useState(false);
     const [csvImportMessage, setCsvImportMessage] = useState('');
@@ -77,9 +80,6 @@ export const GlobalSettingsDialog = () => {
     const [checkpoints, setCheckpoints] = useState<Awaited<ReturnType<typeof CheckpointService.listCheckpoints>>>([]);
 
     useEffect(() => {
-        if (activeTab === 'data') {
-            dbService.getReadingList().then(list => setReadingListCount(list ? list.length : 0));
-        }
         if (activeTab === 'recovery') {
             CheckpointService.listCheckpoints().then(setCheckpoints);
         }
@@ -87,7 +87,7 @@ export const GlobalSettingsDialog = () => {
 
     const handleExportReadingList = async () => {
         try {
-            const list = await dbService.getReadingList();
+            const list = Object.values(useReadingListStore.getState().entries);
             if (!list || list.length === 0) {
                 alert('Reading list is empty.');
                 return;
@@ -132,11 +132,19 @@ export const GlobalSettingsDialog = () => {
                     // Another small delay to ensure the user sees the message
                     await new Promise(r => setTimeout(r, 500));
 
-                    await dbService.importReadingList(entries);
+                    const store = useReadingListStore.getState();
+                    const rsStore = useReadingStateStore.getState();
+                    for (const entry of entries) {
+                        store.upsertEntry(entry);
+                        if (entry.percentage !== undefined) {
+                            // Find bookId by filename (sourceFilename in inventory)
+                            const book = Object.values(useLibraryStore.getState().books).find(b => b.sourceFilename === entry.filename);
+                            const targetId = book ? book.bookId : entry.filename;
+                            rsStore.updateLocation(targetId, '', entry.percentage);
+                        }
+                    }
 
-                    // Update local count
-                    setReadingListCount(entries.length);
-                    dbService.getReadingList().then(list => setReadingListCount(list ? list.length : 0));
+                    // No need to setReadingListCount, it's reactive.
 
                     setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
                     setCsvImportComplete(true);

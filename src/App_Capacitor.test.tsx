@@ -71,7 +71,11 @@ vi.mock('./store/useReadingStateStore', () => {
 
 vi.mock('./store/useLibraryStore', () => ({
   useLibraryStore: (selector: any) => selector({ books: {} }),
+}));
+
+vi.mock('./store/selectors', () => ({
   useAllBooks: vi.fn().mockReturnValue([]),
+  useBook: vi.fn(), // Add useBook too if needed, based on grep/build errors?
 }));
 
 vi.mock('./store/useAnnotationStore', () => ({

@@ -1,5 +1,13 @@
+// type import removed
 import type { Timepoint } from '../lib/tts/providers/types';
-import type { NavigationItem } from 'epubjs';
+
+export interface NavigationItem {
+  id: string;
+  href: string;
+  label: string;
+  subitems?: NavigationItem[];
+  parent?: string;
+}
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ContentType } from './content-analysis';
 

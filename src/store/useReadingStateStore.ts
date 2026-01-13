@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
 import type { UserProgress } from '../types/db';
+import { useLibraryStore } from './useLibraryStore';
+import { useReadingListStore } from './useReadingListStore';
 
 /**
  * Reading state store.
@@ -79,6 +81,26 @@ export const useReadingStateStore = create<ReadingState>()(
                         }
                     }
                 }));
+
+                // Sync to Reading List
+                // We do this outside the set() to avoid side-effects during state calculation,
+                // and because it affects a different store.
+                const book = useLibraryStore.getState().books[bookId];
+                if (book && book.sourceFilename) {
+                    const { staticMetadata } = useLibraryStore.getState();
+                    const meta = staticMetadata[bookId];
+
+                    useReadingListStore.getState().upsertEntry({
+                        filename: book.sourceFilename,
+                        title: meta?.title || book.title || 'Unknown',
+                        author: meta?.author || book.author || 'Unknown',
+                        percentage,
+                        lastUpdated: Date.now(),
+                        status: percentage > 0.98 ? 'read' : 'currently-reading',
+                        isbn: meta?.isbn,
+                        rating: book.rating
+                    });
+                }
             },
 
             getProgress: (bookId) => {

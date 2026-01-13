@@ -4,7 +4,7 @@ import type { NavigationItem } from 'epubjs';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
-import { useBook } from '../../store/useLibraryStore';
+import { useBook } from '../../store/selectors';
 import { useShallow } from 'zustand/react/shallow';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -224,9 +224,6 @@ export const ReaderView: React.FC = () => {
 
             if (id) updateLocation(id, location.start.cfi, percentage);
             setCurrentSection(title, sectionId);
-            if (id) {
-                dbService.saveProgress(id, location.start.cfi, percentage);
-            }
         },
         onTocLoaded: (newToc) => setToc(newToc),
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -418,8 +415,9 @@ export const ReaderView: React.FC = () => {
         if (id) {
             const progress = useReadingStateStore.getState().progress[id];
             const currentCfi = progress?.currentCfi;
+            // updateLocation handles saving to Yjs
             if (currentCfi) {
-                dbService.saveProgress(id, currentCfi, progress?.percentage || 0);
+                useReadingStateStore.getState().updateLocation(id, currentCfi, progress?.percentage || 0);
             }
         }
     };

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useAllBooks } from '../../store/useLibraryStore';
+import { useAllBooks } from '../../store/selectors';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useShallow } from 'zustand/react/shallow';
 import { CompassPill } from '../ui/CompassPill';

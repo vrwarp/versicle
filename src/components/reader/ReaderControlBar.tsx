@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useAllBooks } from '../../store/useLibraryStore';
+import { useAllBooks } from '../../store/selectors';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
 import type { ActionType } from '../ui/CompassPill';

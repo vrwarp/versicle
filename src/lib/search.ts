@@ -23,7 +23,7 @@ class SearchClient {
      */
     private getEngine() {
         if (!this.engine) {
-             this.worker = new Worker(new URL('../workers/search.worker.ts', import.meta.url), {
+            this.worker = new Worker(new URL('../workers/search.worker.ts', import.meta.url), {
                 type: 'module'
             });
             this.engine = Comlink.wrap<SearchEngine>(this.worker);
@@ -80,7 +80,8 @@ class SearchClient {
         // Check if worker supports XML parsing to offload main thread
         const canOffload = await engine.supportsXmlParsing();
 
-        const spineItems = book.spine.items;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const spineItems = (book.spine as any).items || (book.spine as any).spineItems;
         const total = spineItems.length;
         const BATCH_SIZE = 5;
 
@@ -115,10 +116,12 @@ class SearchClient {
                     if (!text && !xml) {
                         const doc = await book.load(item.href);
                         if (doc) {
-                            if (doc.body && doc.body.innerText) {
-                                text = doc.body.innerText;
-                            } else if (doc.documentElement) {
-                                text = doc.documentElement.innerText || '';
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const d = doc as any;
+                            if (d.body && d.body.innerText) {
+                                text = d.body.innerText;
+                            } else if (d.documentElement) {
+                                text = d.documentElement.innerText || '';
                             }
                         }
                     }

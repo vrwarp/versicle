@@ -7,7 +7,7 @@ import { ReaderControlBar } from '../ReaderControlBar';
 const mockUseAnnotationStore = vi.fn();
 const mockUseTTSStore = vi.fn();
 const mockUseReaderUIStore = vi.fn();
-const mockUseReadingStateStore = vi.fn();
+const mockUseReadingStateStore: any = vi.fn();
 const mockUseLibraryStore = vi.fn();
 const mockUseToastStore = vi.fn();
 const mockUseNavigate = vi.fn();
@@ -41,11 +41,14 @@ vi.mock('../../../store/useReadingStateStore', () => ({
   )
 }));
 
+// Mock selectors
+vi.mock('../../../store/selectors', () => ({
+  useAllBooks: () => mockUseLibraryStore({ name: 'useAllBooks' }),
+}));
+
 vi.mock('../../../store/useLibraryStore', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useLibraryStore: (selector: any) => mockUseLibraryStore(selector),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useAllBooks: () => mockUseLibraryStore({ name: 'useAllBooks' }),
 }));
 
 vi.mock('../../../store/useToastStore', () => ({

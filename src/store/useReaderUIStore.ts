@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { NavigationItem } from 'epubjs';
+import type { NavigationItem } from '../types/db';
 
 interface ReaderUIState {
     isLoading: boolean;
