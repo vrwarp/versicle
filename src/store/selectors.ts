@@ -9,6 +9,7 @@ import { useReadingStateStore } from './useReadingStateStore';
 export const useAllBooks = () => {
     const books = useLibraryStore(state => state.books);
     const staticMetadata = useLibraryStore(state => state.staticMetadata);
+    const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
     // Subscribe to progress changes
     const progressMap = useReadingStateStore(state => state.progress);
 
@@ -27,6 +28,9 @@ export const useAllBooks = () => {
         fileHash: staticMetadata[book.bookId]?.fileHash,
         fileSize: staticMetadata[book.bookId]?.fileSize,
         totalChars: staticMetadata[book.bookId]?.totalChars,
+
+        // Derive offloaded status from local set
+        isOffloaded: offloadedBookIds.has(book.bookId),
         // Merge progress from reading state store
         progress: progressMap[book.bookId]?.percentage || 0,
         currentCfi: progressMap[book.bookId]?.currentCfi || undefined
@@ -39,6 +43,7 @@ export const useAllBooks = () => {
 export const useBook = (id: string | null) => {
     const book = useLibraryStore(state => id ? state.books[id] : null);
     const staticMeta = useLibraryStore(state => id ? state.staticMetadata[id] : null);
+    const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
     const progress = useReadingStateStore(state => id ? state.progress[id] : null);
 
     if (!book) return null;
@@ -54,6 +59,9 @@ export const useBook = (id: string | null) => {
         fileSize: staticMeta?.fileSize,
         totalChars: staticMeta?.totalChars,
         version: staticMeta?.schemaVersion || undefined,
+
+        isOffloaded: offloadedBookIds.has(book.bookId),
+
         // Merge progress
         progress: progress?.percentage || 0,
         currentCfi: progress?.currentCfi || undefined

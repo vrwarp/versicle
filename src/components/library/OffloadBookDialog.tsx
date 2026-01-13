@@ -16,11 +16,13 @@ export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, on
     const offloadBook = useLibraryStore(state => state.offloadBook);
     const showToast = useToastStore(state => state.showToast);
     const [isOffloading, setIsOffloading] = useState(false);
+    console.error(`[OffloadBookDialog] Rendered. isOpen: ${isOpen}, bookId: ${book?.id}, isOffloading: ${isOffloading}`);
 
     if (!book) return null;
 
-    const confirmOffload = async (e: React.MouseEvent) => {
-        e.stopPropagation();
+    const confirmOffload = async () => {
+        // e.stopPropagation(); // REMOVED
+        console.log('[OffloadBookDialog] confirmOffload clicked for', book?.id);
 
         if (isOffloading) return;
         setIsOffloading(true);
@@ -56,7 +58,10 @@ export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, on
                     </Button>
                     <Button
                         variant="default"
-                        onClick={confirmOffload}
+                        onClick={() => {
+                            console.log('BUTTON INLINE CLICK');
+                            confirmOffload();
+                        }}
                         disabled={isOffloading}
                         data-testid="confirm-offload"
                         className="gap-2"

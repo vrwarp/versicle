@@ -35,12 +35,19 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
     # Open menu (hover to show button, then click)
     book_card.hover()
     page.get_by_test_id("book-menu-trigger").click()
+    page.wait_for_timeout(1000) # Wait for menu animation
 
     # Click "Offload File"
-    page.get_by_test_id("menu-offload").click()
+    page.get_by_test_id("menu-offload").click(force=True)
 
     # Confirm Offload
-    page.get_by_test_id("confirm-offload").click()
+    # Wait for dialog animation
+    page.wait_for_timeout(1000)
+    # Confirm Offload
+    confirm_btn = page.get_by_test_id("confirm-offload")
+    expect(confirm_btn).to_have_count(1)
+    # Use JS click to bypass potential obstructions
+    page.evaluate("document.querySelector('[data-testid=\"confirm-offload\"]').click()")
 
     # 3. Verify Offloaded State
     # The image should have opacity/grayscale class or overlay

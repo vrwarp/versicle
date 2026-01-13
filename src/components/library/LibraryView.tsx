@@ -181,10 +181,12 @@ export const LibraryView: React.FC = () => {
 
   // Action Handlers
   const handleDelete = useCallback((book: BookMetadata) => {
+    console.error(`[LibraryView] handleDelete called for ${book.id}`);
     setActiveModal({ type: 'delete', book });
   }, []);
 
   const handleOffload = useCallback((book: BookMetadata) => {
+    console.error(`[LibraryView] handleOffload called for ${book.id}`);
     setActiveModal({ type: 'offload', book });
   }, []);
 

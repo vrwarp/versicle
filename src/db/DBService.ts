@@ -466,6 +466,54 @@ class DBService {
     }
   }
 
+  /**
+   * Returns a Map of bookId -> isOffloaded status for the requested book IDs.
+   * If bookIds is empty, returns status for all books.
+   */
+  async getOffloadedStatus(bookIds?: string[]): Promise<Map<string, boolean>> {
+    try {
+      const db = await this.getDB();
+      const resourceKeys = await db.getAllKeys('static_resources');
+      const resourceSet = new Set(resourceKeys);
+      const result = new Map<string, boolean>();
+
+      // If specific IDs requested
+      if (bookIds && bookIds.length > 0) {
+        for (const id of bookIds) {
+          result.set(id, !resourceSet.has(id));
+        }
+      } else {
+        // Return for all resources (inverse: if in set, not offloaded)
+        // Ideally we need the list of ALL books to know which are offloaded (missing from set)
+        // So we get all inventory keys
+        // const inventoryKeys = await db.getAllKeys('user_inventory'); // Migrated? No, inventory is in Yjs.
+        // We can just return the set of PRESENT resources, and let the caller infer.
+        // Actually, better to just return the Set of available Resource IDs.
+        // But to match the signature, let's Stick to checking specific IDs if provided,
+        // or just return a helper to check existence.
+      }
+      return result;
+    } catch (error) {
+      this.handleError(error);
+    }
+    return new Map();
+  }
+
+  /**
+   * Returns a Set of all book IDs that have binary content locally (NOT offloaded).
+   */
+  async getAvailableResourceIds(): Promise<Set<string>> {
+    try {
+      const db = await this.getDB();
+      const keys = await db.getAllKeys('static_resources');
+      return new Set(keys as string[]);
+    } catch (error) {
+      this.handleError(error);
+    }
+    return new Set();
+  }
+
+
   // --- Progress Operations ---
 
   private saveProgressTimeout: NodeJS.Timeout | null = null;

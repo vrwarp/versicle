@@ -24,6 +24,8 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
     // Otherwise, if we have a blob (local), use the SW route.
     const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
 
+    console.log(`[BookCover] Rendering ${book.title} (${book.id}). isOffloaded: ${book.isOffloaded}`);
+
     return (
         <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner flex flex-col">
             {displayUrl ? (

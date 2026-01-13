@@ -26,6 +26,8 @@ interface LibraryState {
   // === TRANSIENT STATE (local-only, not synced) ===
   /** Static metadata cache (title, author, cover) from static_manifests. */
   staticMetadata: Record<string, StaticBookManifest>;
+  /** Set of book IDs that are offloaded (locally missing binary content). */
+  offloadedBookIds: Set<string>;
   /** Flag indicating if static metadata is currently being hydrated. */
   isHydrating: boolean;
   /** Flag indicating if the library is currently loading. */
@@ -105,6 +107,7 @@ interface IDBService {
   restoreBook: (id: string, file: File) => Promise<void>;
   getBookMetadata: (id: string) => Promise<StaticBookManifest | undefined>;
   getAllInventoryItems: () => Promise<UserInventoryItem[]>;
+  getOffloadedStatus: (bookIds?: string[]) => Promise<Map<string, boolean>>;
 }
 
 export const createLibraryStore = (injectedDB: IDBService = dbService as any) => create<LibraryState>()(
@@ -117,6 +120,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
       // Transient state
       staticMetadata: {},
+      offloadedBookIds: new Set<string>(),
       isHydrating: false,
       isLoading: false,
       isImporting: false,
@@ -182,6 +186,18 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           });
 
           set({ staticMetadata, isHydrating: false });
+
+          // Hydrate Offload Status
+          try {
+            const offloadedMap = await injectedDB.getOffloadedStatus(bookIds);
+            const offloadedSet = new Set<string>();
+            offloadedMap.forEach((isOffloaded, id) => {
+              if (isOffloaded) offloadedSet.add(id);
+            });
+            set({ offloadedBookIds: offloadedSet });
+          } catch (e) {
+            console.error('Failed to hydrate offload status:', e);
+          }
         } catch (err) {
           console.error('Failed to hydrate static metadata:', err);
           set({ isHydrating: false });
@@ -233,6 +249,10 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
               ...state.staticMetadata,
               [manifest.bookId]: manifest
             },
+            // Ensure new book is NOT marked as offloaded
+            offloadedBookIds: new Set(
+              [...state.offloadedBookIds].filter(id => id !== manifest.bookId)
+            ),
             isImporting: false,
             importProgress: 0,
             importStatus: ''
@@ -367,13 +387,26 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       },
 
       offloadBook: async (id: string) => {
+        console.log('[Store] offloadBook called. ID:', id);
+        // Optimistic update
+        set((state) => {
+          const set = state.offloadedBookIds || new Set();
+          console.log('[Store] prev offloaded set size:', set.size);
+          const newSet = new Set([...set, id]);
+          console.log('[Store] new offloaded set size:', newSet.size);
+          return { offloadedBookIds: newSet };
+        });
+
         try {
           await injectedDB.offloadBook(id);
           // Metadata remains in Yjs, just blob is removed from IDB
-          // No state update needed
         } catch (err) {
           console.error('Failed to offload book:', err);
-          set({ error: 'Failed to offload book.' });
+          // Revert optimistic update
+          set((state) => ({
+            error: 'Failed to offload book.',
+            offloadedBookIds: new Set([...state.offloadedBookIds].filter(bid => bid !== id))
+          }));
         }
       },
 
@@ -383,7 +416,12 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           await injectedDB.restoreBook(id, file);
           // Re-hydrate to get the restored cover
           await get().hydrateStaticMetadata();
-          set({ isImporting: false });
+
+          // Update offload state
+          set((state) => ({
+            offloadedBookIds: new Set([...state.offloadedBookIds].filter(bid => bid !== id)),
+            isImporting: false
+          }));
         } catch (err) {
           console.error('Failed to restore book:', err);
           set({ error: err instanceof Error ? err.message : 'Failed to restore book.', isImporting: false });
@@ -400,4 +438,3 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 export const useLibraryStore = createLibraryStore();
 
 // Selectors removed and moved to selectors.ts
-
