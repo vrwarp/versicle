@@ -6,6 +6,7 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
+import { usePreferencesStore } from '../../store/usePreferencesStore';
 
 // Mock dependencies
 vi.mock('../../store/yjs-provider', () => {
@@ -51,6 +52,13 @@ vi.mock('../../store/useReadingStateStore', () => ({
 
 vi.mock('../../store/useReadingListStore', () => ({
     useReadingListStore: {
+        getState: vi.fn(),
+        setState: vi.fn()
+    }
+}));
+
+vi.mock('../../store/usePreferencesStore', () => ({
+    usePreferencesStore: {
         getState: vi.fn(),
         setState: vi.fn()
     }
@@ -176,5 +184,57 @@ describe('YjsMigration', () => {
         expect(rsState.progress['book_legacy']).toBeDefined();
         expect(rsState.progress['book_legacy'].percentage).toBe(0.75);
         expect(rsState.progress['book_legacy'].lastRead).toBe(5000);
+    });
+
+    it('should migrate preferences from reader-storage structure', async () => {
+        const mockState = {
+            state: {
+                viewMode: 'scrolled',
+                currentTheme: 'dark',
+                fontSize: 120,
+                lineHeight: 1.8
+            },
+            version: 0
+        };
+
+        vi.stubGlobal('localStorage', {
+            getItem: vi.fn().mockImplementation((key) => {
+                if (key === 'reader-storage') return JSON.stringify(mockState);
+                return null;
+            }),
+            setItem: vi.fn(),
+            clear: vi.fn(),
+            removeItem: vi.fn(),
+            key: vi.fn(),
+            length: 0
+        });
+
+        await migrateToYjs();
+
+        expect(usePreferencesStore.setState).toHaveBeenCalledWith({
+            readerViewMode: 'scrolled',
+            currentTheme: 'dark',
+            fontSize: 120,
+            lineHeight: 1.8
+        });
+    });
+
+    it('should migrate readerViewMode from individual legacy localStorage key as fallback', async () => {
+        // Setup localStorage
+        vi.stubGlobal('localStorage', {
+            getItem: vi.fn().mockImplementation((key) => {
+                if (key === 'viewMode') return 'scrolled';
+                return null;
+            }),
+            setItem: vi.fn(),
+            clear: vi.fn(),
+            removeItem: vi.fn(),
+            key: vi.fn(),
+            length: 0
+        });
+
+        await migrateToYjs();
+
+        expect(usePreferencesStore.setState).toHaveBeenCalledWith({ readerViewMode: 'scrolled' });
     });
 });

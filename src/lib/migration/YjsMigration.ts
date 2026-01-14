@@ -5,6 +5,7 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
+import { usePreferencesStore } from '../../store/usePreferencesStore';
 import type {
     UserInventoryItem,
     UserAnnotation,
@@ -89,6 +90,9 @@ async function migrateLegacyData(): Promise<void> {
 
         // Migrate Annotations
         migrateAnnotations(legacyAnnotations);
+
+        // Migrate Preferences (from localStorage)
+        migratePreferences();
 
         // Journey migration deferred to Phase 4
     });
@@ -201,4 +205,67 @@ function migrateAnnotations(legacyAnnotations: UserAnnotation[]): void {
     }));
 
     console.log(`[Migration] Migrated ${Object.keys(annotations).length} annotations`);
+}
+
+/**
+ * Migrates user preferences from localStorage to usePreferencesStore
+ */
+function migratePreferences(): void {
+    try {
+        // 1. Check for legacy 'reader-storage' (Zustand persist format)
+        const readerStorage = localStorage.getItem('reader-storage');
+        if (readerStorage) {
+            try {
+                const parsed = JSON.parse(readerStorage);
+                const state = parsed.state;
+                if (state) {
+                    const updates: Partial<any> = {};
+
+                    if (state.viewMode) updates.readerViewMode = state.viewMode;
+                    if (state.currentTheme) updates.currentTheme = state.currentTheme;
+                    if (state.customTheme) updates.customTheme = state.customTheme;
+                    if (state.fontFamily) updates.fontFamily = state.fontFamily;
+                    if (state.fontSize) updates.fontSize = state.fontSize;
+                    if (state.lineHeight) updates.lineHeight = state.lineHeight;
+                    if (state.shouldForceFont !== undefined) updates.shouldForceFont = state.shouldForceFont;
+
+                    if (Object.keys(updates).length > 0) {
+                        usePreferencesStore.setState(updates);
+                        console.log(`[Migration] Migrated ${Object.keys(updates).length} preferences from reader-storage`);
+                    }
+                }
+            } catch (e) {
+                console.warn('[Migration] Failed to parse reader-storage:', e);
+            }
+        }
+
+        // 2. Check individual common legacy keys as fallback
+        const keys = ['viewMode', 'readerViewMode', 'reader-view-mode'];
+        let foundMode: 'paginated' | 'scrolled' | null = null;
+
+        for (const key of keys) {
+            const raw = localStorage.getItem(key);
+            if (!raw) continue;
+
+            // Try parsing as JSON or literal
+            let val = raw;
+            try {
+                val = JSON.parse(raw);
+            } catch {
+                // Not JSON, use as literal
+            }
+
+            if (val === 'scrolled' || val === 'paginated') {
+                foundMode = val as 'paginated' | 'scrolled';
+                break;
+            }
+        }
+
+        if (foundMode) {
+            usePreferencesStore.setState({ readerViewMode: foundMode });
+            console.log(`[Migration] Migrated readerViewMode: ${foundMode}`);
+        }
+    } catch (e) {
+        console.warn('[Migration] Failed to migrate preferences:', e);
+    }
 }
