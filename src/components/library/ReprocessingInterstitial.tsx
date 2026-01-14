@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { reprocessBook } from '../../lib/ingestion';
+import { useLibraryStore } from '../../store/useLibraryStore';
 
 interface ReprocessingInterstitialProps {
     isOpen: boolean;
@@ -24,8 +25,8 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
             setProgress('processing');
             try {
                 await reprocessBook(bookId);
-                // Refresh store to get updated metadata
-                // Phase 2: No need to call fetchBooks - Yjs auto-syncs
+                // Refresh store to get updated metadata (especially schemaVersion)
+                await useLibraryStore.getState().hydrateStaticMetadata();
                 onComplete();
             } catch (e) {
                 console.error("Reprocessing failed", e);
@@ -59,7 +60,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
                             Failed to upgrade book: {error}
                         </p>
                         <div className="flex justify-end gap-2">
-                             <button
+                            <button
                                 onClick={onClose}
                                 className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80"
                             >
