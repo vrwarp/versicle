@@ -417,30 +417,48 @@ export class BackupService {
 
     await tx.done;
 
-    // Apply Yjs updates in transaction
-    yDoc.transact(() => {
-      console.log(`[BackupService] Syncing to Yjs: ${updates.library.length} books, ${updates.progress.length} progress, ${updates.annotations.length} annotations`);
+    // Update Zustand stores directly - middleware will sync to Yjs automatically
+    console.log(`[BackupService] Syncing to stores: ${updates.library.length} books, ${updates.progress.length} progress, ${updates.annotations.length} annotations`);
 
-      const yLibrary = yDoc.getMap<UserInventoryItem>('library');
-      const yProgress = yDoc.getMap<UserProgress>('progress');
-      const yAnnotations = yDoc.getMap<UserAnnotation>('annotations');
+    // Import stores dynamically to avoid circular dependencies
+    const { useLibraryStore } = await import('../store/useLibraryStore');
+    const { useReadingStateStore } = await import('../store/useReadingStateStore');
+    const { useAnnotationStore } = await import('../store/useAnnotationStore');
 
+    // Update library store
+    if (updates.library.length > 0) {
+      const currentBooks = useLibraryStore.getState().books;
+      const mergedBooks: Record<string, UserInventoryItem> = { ...currentBooks };
       updates.library.forEach(item => {
-        yLibrary.set(item.bookId, item);
+        mergedBooks[item.bookId] = item;
       });
-      console.log('[BackupService] Yjs library size after update:', yLibrary.size);
+      useLibraryStore.setState({ books: mergedBooks });
+      console.log('[BackupService] Library books count after update:', Object.keys(mergedBooks).length);
+    }
 
+    // Update reading state store
+    if (updates.progress.length > 0) {
+      const currentProgress = useReadingStateStore.getState().progress;
+      const mergedProgress: Record<string, UserProgress> = { ...currentProgress };
       updates.progress.forEach(item => {
-        yProgress.set(item.bookId, item);
+        mergedProgress[item.bookId] = item;
       });
+      useReadingStateStore.setState({ progress: mergedProgress });
+    }
 
+    // Update annotation store
+    if (updates.annotations.length > 0) {
+      const currentAnnotations = useAnnotationStore.getState().annotations;
+      const mergedAnnotations: Record<string, UserAnnotation> = { ...currentAnnotations };
       updates.annotations.forEach(item => {
-        yAnnotations.set(item.id, item);
+        mergedAnnotations[item.id] = item;
       });
-    });
-    console.log('[BackupService] Yjs transaction complete');
+      useAnnotationStore.setState({ annotations: mergedAnnotations });
+    }
 
-    // Wait for Yjs persistence to flush (debounce is typically 500ms)
+    console.log('[BackupService] Store updates complete');
+
+    // Wait for Yjs persistence to flush (middleware syncs state to Yjs, then y-indexeddb persists)
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Explicitly disconnect to ensure flush
