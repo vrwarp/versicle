@@ -1,35 +1,46 @@
 import JSZip from 'jszip';
+import * as Y from 'yjs';
 import { exportFile } from './export';
 import { dbService } from '../db/DBService';
-import type { BookMetadata, Annotation, LexiconRule, BookLocations, UserInventoryItem, UserProgress, UserAnnotation } from '../types/db';
-import { getSanitizedBookMetadata } from '../db/validators';
+import type { LexiconRule, BookLocations, StaticBookManifest, UserOverrides, UserInventoryItem } from '../types/db';
 import { getDB } from '../db/db';
-import { yDoc } from '../store/yjs-provider';
+import { yDoc, waitForYjsSync } from '../store/yjs-provider';
 
 /**
- * Represents the structure of a backup manifest file.
+ * V2 Backup Manifest using Yjs Snapshots
+ * 
+ * Uses Y.encodeStateAsUpdate() to capture the entire CRDT state,
+ * preserving vector clocks and enabling proper merging on restore.
  */
-export interface BackupManifest {
-  /** The version of the backup schema. */
-  version: number;
+export interface BackupManifestV2 {
+  /** Backup schema version. Must be 2 for this format. */
+  version: 2;
   /** ISO timestamp of when the backup was created. */
   timestamp: string;
-  /** List of book metadata records. */
-  books: BookMetadata[];
-  /** List of user annotations. */
-  annotations: Annotation[];
-  /** List of custom pronunciation rules. */
+
+  // === Yjs Snapshot (Base64 encoded) ===
+  /** The entire Y.Doc state as a base64-encoded binary snapshot */
+  yjsSnapshot: string;
+
+  // === Static/Cache Data (from IDB, not in Yjs) ===
+  /** Static manifests for Ghost Book metadata support */
+  staticManifests: StaticBookManifest[];
+  /** Lexicon rules (flattened from user_overrides) */
   lexicon: LexiconRule[];
-  /** List of reading positions/locations. */
+  /** Location data from cache_render_metrics */
   locations: BookLocations[];
 }
 
 /**
  * Service responsible for creating and restoring backups of the application data.
- * Updated to v18 store names.
+ * 
+ * v2 Architecture (Yjs Snapshots):
+ * - Generate: Captures entire Y.Doc state via encodeStateAsUpdate()
+ * - Restore: Applies update via Y.applyUpdate() for proper CRDT merging
+ * - Static data (manifests, resources) still uses IDB directly
  */
 export class BackupService {
-  private readonly BACKUP_VERSION = 1;
+  private readonly BACKUP_VERSION = 2;
 
   async createLightBackup(): Promise<void> {
     const manifest = await this.generateManifest();
@@ -53,31 +64,40 @@ export class BackupService {
     const filesFolder = zip.folder('files');
     if (!filesFolder) throw new Error('Failed to create zip folder');
 
-    const totalBooks = manifest.books.length;
+    // Get book IDs from Yjs library
+    const libraryMap = yDoc.getMap<UserInventoryItem>('library');
+    const bookIds = Array.from(libraryMap.keys());
+    const totalBooks = bookIds.length;
     let processed = 0;
 
     onProgress?.(10, `Processing ${totalBooks} books...`);
 
-    for (const book of manifest.books) {
-      if (book.isOffloaded) {
-        console.warn(`Skipping offloaded book ${book.id} in full backup`);
+    // Get offloaded status
+    const { useLibraryStore } = await import('../store/useLibraryStore');
+    const offloadedBookIds = useLibraryStore.getState().offloadedBookIds;
+
+    for (const bookId of bookIds) {
+      if (offloadedBookIds.has(bookId)) {
+        console.warn(`Skipping offloaded book ${bookId} in full backup`);
+        processed++;
         continue;
       }
 
       try {
-        const fileData = await dbService.getBookFile(book.id);
+        const fileData = await dbService.getBookFile(bookId);
         if (fileData) {
-          filesFolder.file(`${book.id}.epub`, fileData);
+          filesFolder.file(`${bookId}.epub`, fileData);
         } else {
-          console.error(`Missing file for book ${book.title} (${book.id})`);
+          console.error(`Missing file for book ${bookId}`);
         }
       } catch (e) {
-        console.error(`Failed to export file for book ${book.id}`, e);
+        console.error(`Failed to export file for book ${bookId}`, e);
       }
 
       processed++;
       const percent = 10 + Math.floor((processed / totalBooks) * 80);
-      onProgress?.(percent, `Archiving ${book.title}...`);
+      const book = libraryMap.get(bookId);
+      onProgress?.(percent, `Archiving ${book?.title || bookId}...`);
     }
 
     onProgress?.(90, 'Compressing archive...');
@@ -108,52 +128,26 @@ export class BackupService {
     }
   }
 
-  private async generateManifest(): Promise<BackupManifest> {
+  /**
+   * Generate a v2 backup manifest using Yjs snapshot.
+   */
+  private async generateManifest(): Promise<BackupManifestV2> {
+    // Ensure Yjs is synced before capturing snapshot
+    await waitForYjsSync();
+
+    // Capture the entire Y.Doc state as a binary update
+    const stateUpdate = Y.encodeStateAsUpdate(yDoc);
+    const yjsSnapshot = this.uint8ArrayToBase64(stateUpdate);
+
+    console.log(`[BackupService] Yjs snapshot size: ${stateUpdate.byteLength} bytes`);
+
+    // Read static/cache data from IDB
     const db = await getDB();
-
-    // Map new stores to BackupManifest structure
-    // We construct legacy-like objects from v18 schema for portability
-    const manifests = await db.getAll('static_manifests');
-
-    // Read inventory from Yjs (Source of Truth for Inventory)
-    // Legacy user_inventory might be empty for new books
-    const yLibrary = yDoc.getMap<UserInventoryItem>('library');
-    const yInventory = Array.from(yLibrary.values()).filter(i => i && i.bookId);
-
-    const progress = await db.getAll('user_progress');
-    const annotations = await db.getAll('user_annotations');
-    const overrides = await db.getAll('user_overrides');
+    const staticManifests = await db.getAll('static_manifests');
+    const overrides: UserOverrides[] = await db.getAll('user_overrides');
     const metrics = await db.getAll('cache_render_metrics');
 
-    const invMap = new Map(yInventory.map(i => [i.bookId, i]));
-    const progMap = new Map(progress.map(p => [p.bookId, p]));
-
-    const books: BookMetadata[] = manifests.map(m => {
-      const inv = invMap.get(m.bookId);
-      const prog = progMap.get(m.bookId);
-      return {
-        id: m.bookId,
-        title: inv?.customTitle || m.title,
-        author: inv?.customAuthor || m.author,
-        description: m.description,
-        addedAt: inv?.addedAt || Date.now(),
-
-        bookId: m.bookId,
-        filename: inv?.sourceFilename,
-        fileHash: m.fileHash,
-        fileSize: m.fileSize,
-        totalChars: m.totalChars,
-        version: m.schemaVersion,
-
-        lastRead: prog?.lastRead,
-        progress: prog?.percentage,
-        currentCfi: prog?.currentCfi,
-        lastPlayedCfi: prog?.lastPlayedCfi,
-        isOffloaded: false // Not accurate here, but irrelevant for export mostly
-      };
-    });
-
-    // Flatten Overrides to LexiconRule[]
+    // Flatten overrides to lexicon rules
     const lexicon: LexiconRule[] = [];
     for (const ov of overrides) {
       for (const r of ov.lexicon) {
@@ -169,9 +163,7 @@ export class BackupService {
       }
     }
 
-    // Map UserAnnotations to Annotation[] (Identical mostly)
-
-    // Map Metrics to BookLocations[]
+    // Map metrics to locations
     const locations: BookLocations[] = metrics.map(met => ({
       bookId: met.bookId,
       locations: met.locations
@@ -180,8 +172,8 @@ export class BackupService {
     return {
       version: this.BACKUP_VERSION,
       timestamp: new Date().toISOString(),
-      books,
-      annotations: annotations as Annotation[],
+      yjsSnapshot,
+      staticManifests,
       lexicon,
       locations
     };
@@ -189,7 +181,14 @@ export class BackupService {
 
   private async restoreLightBackup(file: File, onProgress?: (percent: number, message: string) => void): Promise<void> {
     const text = await file.text();
-    const manifest: BackupManifest = JSON.parse(text);
+    const rawManifest = JSON.parse(text);
+
+    // Check version - reject v1 backups
+    if (rawManifest.version === 1 || typeof rawManifest.books !== 'undefined') {
+      throw new Error('Backup format v1 is no longer supported. Please re-export from the original device with the latest app version.');
+    }
+
+    const manifest = rawManifest as BackupManifestV2;
     await this.processManifest(manifest, undefined, onProgress);
   }
 
@@ -202,13 +201,23 @@ export class BackupService {
     }
 
     const manifestText = await manifestFile.async('string');
-    const manifest: BackupManifest = JSON.parse(manifestText);
+    const rawManifest = JSON.parse(manifestText);
 
+    // Check version - reject v1 backups
+    if (rawManifest.version === 1 || typeof rawManifest.books !== 'undefined') {
+      throw new Error('Backup format v1 is no longer supported. Please re-export from the original device with the latest app version.');
+    }
+
+    const manifest = rawManifest as BackupManifestV2;
     await this.processManifest(manifest, zip, onProgress);
   }
 
+  /**
+   * Process a v2 manifest by applying Yjs snapshot.
+   * Uses Y.applyUpdate() for proper CRDT merging.
+   */
   private async processManifest(
-    manifest: BackupManifest,
+    manifest: BackupManifestV2,
     zip?: JSZip,
     onProgress?: (percent: number, message: string) => void
   ): Promise<void> {
@@ -216,278 +225,112 @@ export class BackupService {
       console.warn(`Backup version ${manifest.version} is newer than supported ${this.BACKUP_VERSION}. Proceeding with caution.`);
     }
 
-    console.log('[BackupService] Starting processManifest');
+    console.log('[BackupService] Starting v2 processManifest (Yjs snapshot)');
 
+    onProgress?.(10, 'Applying Yjs snapshot...');
+
+    // === Apply Yjs Snapshot ===
+    // This properly merges with existing state using CRDT semantics
+    const stateUpdate = this.base64ToUint8Array(manifest.yjsSnapshot);
+    console.log(`[BackupService] Applying Yjs snapshot: ${stateUpdate.byteLength} bytes`);
+
+    Y.applyUpdate(yDoc, stateUpdate);
+
+    // Wait for middleware to sync Zustand stores from Yjs
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    onProgress?.(30, 'Syncing stores...');
+
+    // === Write Static Data to IDB ===
     const db = await getDB();
-    const totalItems = manifest.books.length + manifest.annotations.length + manifest.lexicon.length + manifest.locations.length;
-    let processed = 0;
 
-    const updateProgress = (msg: string) => {
-      processed++;
-      const percent = Math.floor((processed / totalItems) * 100);
-      onProgress?.(percent, msg);
-    };
-
-    const booksToSave: BookMetadata[] = [];
-    const rawBooks = Array.isArray(manifest.books) ? manifest.books : [];
-
-    for (const rawBook of rawBooks) {
-      if (!rawBook || typeof rawBook !== 'object') continue;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const candidate: any = rawBook;
-      if (typeof candidate.title !== 'string' || !candidate.title.trim()) candidate.title = 'Untitled';
-      if (typeof candidate.author !== 'string') candidate.author = 'Unknown Author';
-      if (typeof candidate.addedAt !== 'number') candidate.addedAt = Date.now();
-
-      const check = getSanitizedBookMetadata(candidate);
-
-      if (!check) {
-        console.warn('Skipping invalid book record in backup', rawBook);
-        updateProgress('Skipping invalid record...');
-        continue;
+    // Write static manifests (for Ghost Book support)
+    if (manifest.staticManifests?.length > 0) {
+      onProgress?.(40, 'Restoring metadata...');
+      const tx = db.transaction(['static_manifests'], 'readwrite');
+      const store = tx.objectStore('static_manifests');
+      for (const m of manifest.staticManifests) {
+        await store.put(m);
       }
-      booksToSave.push(check.sanitized);
+      await tx.done;
     }
 
-    const tx = db.transaction([
-      'static_manifests', 'static_resources', 'static_structure',
-      'user_inventory', 'user_progress', 'user_annotations',
-      'user_overrides', 'cache_render_metrics'
-    ], 'readwrite');
+    // Write lexicon rules
+    if (manifest.lexicon?.length > 0) {
+      onProgress?.(50, 'Restoring dictionary...');
+      const tx = db.transaction(['user_overrides'], 'readwrite');
+      const ovStore = tx.objectStore('user_overrides');
 
-    // 1.1 Restore Books Metadata
-    const manStore = tx.objectStore('static_manifests');
-    const invStore = tx.objectStore('user_inventory');
-    const progStore = tx.objectStore('user_progress');
-    const structStore = tx.objectStore('static_structure');
+      // Group by bookId
+      const ruleMap = new Map<string, LexiconRule[]>();
+      for (const r of manifest.lexicon) {
+        const bid = r.bookId || 'global';
+        if (!ruleMap.has(bid)) ruleMap.set(bid, []);
+        ruleMap.get(bid)?.push(r);
+      }
 
-    // Collect updates for Yjs to apply in a single transaction later
-    const updates = {
-      library: [] as UserInventoryItem[],
-      progress: [] as UserProgress[],
-      annotations: [] as UserAnnotation[]
-    };
-
-    for (const book of booksToSave) {
-      const existingMan = await manStore.get(book.id);
-
-      if (existingMan) {
-        // Merge Progress
-        const prog = await progStore.get(book.id);
-        const resolvedProg: UserProgress = {
-          bookId: book.id,
-          percentage: book.progress || 0,
-          lastRead: book.lastRead || 0,
-          currentCfi: book.currentCfi,
-          completedRanges: [],
-          ...prog // keep existing if available, but check timestamps?
-        };
-
-        // Simple merge logic: overwrite if backup is newer?
-
-        let shouldUpdate = false;
-        if (prog) {
-          if ((book.lastRead || 0) > (prog.lastRead || 0)) {
-            resolvedProg.lastRead = book.lastRead || 0;
-            resolvedProg.percentage = book.progress || 0;
-            resolvedProg.currentCfi = book.currentCfi;
-            resolvedProg.lastPlayedCfi = book.lastPlayedCfi;
-            shouldUpdate = true;
+      for (const [bid, rules] of ruleMap.entries()) {
+        const ov = await ovStore.get(bid) || { bookId: bid, lexicon: [] };
+        for (const r of rules) {
+          if (!ov.lexicon.some((lx: LexiconRule) => lx.id === r.id)) {
+            ov.lexicon.push({
+              id: r.id,
+              original: r.original,
+              replacement: r.replacement,
+              isRegex: r.isRegex,
+              created: r.created
+            });
           }
-        } else {
-          shouldUpdate = true;
+          if (r.applyBeforeGlobal !== undefined) {
+            ov.lexiconConfig = { applyBefore: r.applyBeforeGlobal };
+          }
         }
+        await ovStore.put(ov);
+      }
+      await tx.done;
+    }
 
-        if (shouldUpdate) {
-          await progStore.put(resolvedProg);
-          updates.progress.push(resolvedProg);
-        }
-      } else {
-        // Create New from Backup Metadata
-        await manStore.put({
-          bookId: book.id,
-          title: book.title,
-          author: book.author,
-          description: book.description,
-          fileHash: book.fileHash || 'unknown',
-          fileSize: book.fileSize || 0,
-          totalChars: book.totalChars || 0,
-          schemaVersion: book.version || 1,
-          isbn: undefined
+    // Write locations
+    if (manifest.locations?.length > 0) {
+      onProgress?.(60, 'Restoring locations...');
+      const tx = db.transaction(['cache_render_metrics'], 'readwrite');
+      const locStore = tx.objectStore('cache_render_metrics');
+      for (const loc of manifest.locations) {
+        await locStore.put({
+          bookId: loc.bookId,
+          locations: loc.locations
         });
-
-        const invItem: UserInventoryItem = {
-          bookId: book.id,
-          title: book.title,
-          author: book.author,
-          addedAt: book.addedAt,
-          sourceFilename: book.filename,
-          tags: [],
-          status: 'unread',
-          lastInteraction: book.lastRead || 0,
-          customTitle: book.title,
-          customAuthor: book.author
-        };
-        await invStore.put(invItem);
-        updates.library.push(invItem);
-
-        const progItem: UserProgress = {
-          bookId: book.id,
-          percentage: book.progress || 0,
-          lastRead: book.lastRead || 0,
-          currentCfi: book.currentCfi,
-          completedRanges: []
-        };
-        await progStore.put(progItem);
-        updates.progress.push(progItem);
-
-        if (book.syntheticToc) {
-          await structStore.put({
-            bookId: book.id,
-            toc: book.syntheticToc,
-            spineItems: [] // Missing from backup usually, or need to parse from file later
-          });
-        }
       }
-      updateProgress(`Restoring metadata for ${book.title}...`);
+      await tx.done;
     }
 
-    // 1.2 Restore Annotations
-    const annStore = tx.objectStore('user_annotations');
-    const annotations = Array.isArray(manifest.annotations) ? manifest.annotations : [];
-    for (const ann of annotations) {
-      const userAnn: UserAnnotation = {
-        id: ann.id,
-        bookId: ann.bookId,
-        cfiRange: ann.cfiRange,
-        text: ann.text,
-        type: ann.type,
-        color: ann.color,
-        note: ann.note,
-        created: ann.created
-      };
-      await annStore.put(userAnn);
-      updates.annotations.push(userAnn);
-
-      updateProgress('Restoring annotations...');
-    }
-
-    // 1.3 Restore Lexicon
-    const ovStore = tx.objectStore('user_overrides');
-    const lexicon = Array.isArray(manifest.lexicon) ? manifest.lexicon : [];
-
-    // Group by bookId first
-    const ruleMap = new Map<string, LexiconRule[]>();
-    for (const r of lexicon) {
-      const bid = r.bookId || 'global';
-      if (!ruleMap.has(bid)) ruleMap.set(bid, []);
-      ruleMap.get(bid)?.push(r);
-    }
-
-    for (const [bid, rules] of ruleMap.entries()) {
-      const ov = await ovStore.get(bid) || { bookId: bid, lexicon: [] };
-      // Simple append/replace logic
-      for (const r of rules) {
-        // Avoid dups by ID?
-        if (!ov.lexicon.some(lx => lx.id === r.id)) {
-          ov.lexicon.push({
-            id: r.id,
-            original: r.original,
-            replacement: r.replacement,
-            isRegex: r.isRegex,
-            created: r.created
-          });
-        }
-        if (r.applyBeforeGlobal !== undefined) ov.lexiconConfig = { applyBefore: r.applyBeforeGlobal };
-      }
-      await ovStore.put(ov);
-      updateProgress('Restoring dictionary...');
-    }
-
-    // 1.4 Restore Locations
-    const locStore = tx.objectStore('cache_render_metrics');
-    const locations = Array.isArray(manifest.locations) ? manifest.locations : [];
-    for (const loc of locations) {
-      await locStore.put({
-        bookId: loc.bookId,
-        locations: loc.locations
-      });
-      updateProgress('Restoring map...');
-    }
-
-    await tx.done;
-
-    // Update Zustand stores directly - middleware will sync to Yjs automatically
-    console.log(`[BackupService] Syncing to stores: ${updates.library.length} books, ${updates.progress.length} progress, ${updates.annotations.length} annotations`);
-
-    // Import stores dynamically to avoid circular dependencies
-    const { useLibraryStore } = await import('../store/useLibraryStore');
-    const { useReadingStateStore } = await import('../store/useReadingStateStore');
-    const { useAnnotationStore } = await import('../store/useAnnotationStore');
-
-    // Update library store
-    if (updates.library.length > 0) {
-      const currentBooks = useLibraryStore.getState().books;
-      const mergedBooks: Record<string, UserInventoryItem> = { ...currentBooks };
-      updates.library.forEach(item => {
-        mergedBooks[item.bookId] = item;
-      });
-      useLibraryStore.setState({ books: mergedBooks });
-      console.log('[BackupService] Library books count after update:', Object.keys(mergedBooks).length);
-    }
-
-    // Update reading state store
-    if (updates.progress.length > 0) {
-      const currentProgress = useReadingStateStore.getState().progress;
-      const mergedProgress: Record<string, UserProgress> = { ...currentProgress };
-      updates.progress.forEach(item => {
-        mergedProgress[item.bookId] = item;
-      });
-      useReadingStateStore.setState({ progress: mergedProgress });
-    }
-
-    // Update annotation store
-    if (updates.annotations.length > 0) {
-      const currentAnnotations = useAnnotationStore.getState().annotations;
-      const mergedAnnotations: Record<string, UserAnnotation> = { ...currentAnnotations };
-      updates.annotations.forEach(item => {
-        mergedAnnotations[item.id] = item;
-      });
-      useAnnotationStore.setState({ annotations: mergedAnnotations });
-    }
-
-    console.log('[BackupService] Store updates complete');
-
-    // Wait for Yjs persistence to flush (middleware syncs state to Yjs, then y-indexeddb persists)
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Explicitly disconnect to ensure flush
-    const { disconnectYjs } = await import('../store/yjs-provider');
-    await disconnectYjs();
-    console.log('[BackupService] Yjs persistence disconnected');
-
-    // Step 3: Restore Files (if ZIP)
+    // === Restore Files (if ZIP) ===
     if (zip) {
+      onProgress?.(70, 'Restoring files...');
+
+      const libraryMap = yDoc.getMap<UserInventoryItem>('library');
+      const bookIds = Array.from(libraryMap.keys());
       const restoredBookIds: string[] = [];
-      for (const book of booksToSave) {
-        const zipFile = zip.file(`files/${book.id}.epub`);
+
+      for (const bookId of bookIds) {
+        const zipFile = zip.file(`files/${bookId}.epub`);
         if (zipFile) {
           const arrayBuffer = await zipFile.async('arraybuffer');
 
           const fileTx = db.transaction(['static_resources'], 'readwrite');
           const store = fileTx.objectStore('static_resources');
 
-          const existing = await store.get(book.id) || { bookId: book.id, epubBlob: arrayBuffer };
+          const existing = await store.get(bookId) || { bookId, epubBlob: arrayBuffer };
           existing.epubBlob = arrayBuffer;
 
           await store.put(existing);
           await fileTx.done;
 
-          restoredBookIds.push(book.id);
+          restoredBookIds.push(bookId);
         }
       }
 
-      // Clear offloaded status for books whose files were restored
+      // Clear offloaded status for restored books
       if (restoredBookIds.length > 0) {
         const { useLibraryStore } = await import('../store/useLibraryStore');
         const currentOffloaded = useLibraryStore.getState().offloadedBookIds;
@@ -497,10 +340,35 @@ export class BackupService {
       }
     }
 
-    onProgress?.(100, 'Restore complete!');
+    // Wait for Yjs persistence to flush
+    onProgress?.(90, 'Persisting data...');
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Hydration now happens on LibraryView mount after page reload
+    onProgress?.(100, 'Restore complete!');
+    console.log('[BackupService] v2 restore complete (Yjs snapshot applied)');
+  }
+
+  // === Utility Methods ===
+
+  private uint8ArrayToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  private base64ToUint8Array(base64: string): Uint8Array {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   }
 }
 
 export const backupService = new BackupService();
+
+// Type alias for backwards compatibility with tests
+export type BackupManifest = BackupManifestV2;

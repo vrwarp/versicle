@@ -1,7 +1,23 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { BackupService, BackupManifest } from './BackupService';
+import * as Y from 'yjs';
+import { BackupService, BackupManifestV2 } from './BackupService';
 import { dbService } from '../db/DBService';
 import { exportFile } from './export';
+
+// Create the mock Y.Doc at module level BEFORE vi.mock calls
+const testYDoc = new Y.Doc();
+
+// Mock yjs-provider - must use inline factory to avoid hoisting issues
+vi.mock('../store/yjs-provider', () => {
+  const Y = require('yjs');
+  const doc = new Y.Doc();
+  return {
+    yDoc: doc,
+    waitForYjsSync: vi.fn(() => Promise.resolve()),
+    // Export for test access
+    __testDoc: doc,
+  };
+});
 
 // Mock DB
 const mockDB = {
@@ -25,24 +41,70 @@ vi.mock('./export', () => ({
   exportFile: vi.fn(),
 }));
 
-describe('BackupService', () => {
-  let service: BackupService;
+// Mock stores
+vi.mock('../store/useLibraryStore', () => ({
+  useLibraryStore: {
+    getState: vi.fn(() => ({
+      books: {},
+      offloadedBookIds: new Set(),
+    })),
+    setState: vi.fn(),
+  },
+}));
 
-  beforeEach(() => {
+vi.mock('../store/useReadingStateStore', () => ({
+  useReadingStateStore: {
+    getState: vi.fn(() => ({
+      progress: {},
+    })),
+    setState: vi.fn(),
+  },
+}));
+
+vi.mock('../store/useAnnotationStore', () => ({
+  useAnnotationStore: {
+    getState: vi.fn(() => ({
+      annotations: {},
+    })),
+    setState: vi.fn(),
+  },
+}));
+
+describe('BackupService (v2 - Yjs Snapshots)', () => {
+  let service: BackupService;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockYDoc: any;
+
+  beforeEach(async () => {
     service = new BackupService();
     vi.clearAllMocks();
-    vi.spyOn(window, 'confirm').mockImplementation(() => true);
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Get the mocked yDoc
+    const yjsProvider = await import('../store/yjs-provider');
+    mockYDoc = yjsProvider.yDoc;
+
+    // Clear Y.Doc maps
+    mockYDoc.getMap('library').clear();
+    mockYDoc.getMap('progress').clear();
+    mockYDoc.getMap('annotations').clear();
+
+    vi.spyOn(console, 'log').mockImplementation(() => { });
+    vi.spyOn(console, 'warn').mockImplementation(() => { });
+    vi.spyOn(console, 'error').mockImplementation(() => { });
   });
 
   describe('createLightBackup', () => {
-    it('should create a JSON backup of metadata', async () => {
-      mockDB.getAll.mockImplementation((store) => {
-        if (store === 'static_manifests') return Promise.resolve([{ bookId: 'b1', title: 'Book 1' }]);
-        if (store === 'user_inventory') return Promise.resolve([{ bookId: 'b1' }]);
-        if (store === 'user_progress') return Promise.resolve([{ bookId: 'b1' }]);
-        if (store === 'user_annotations') return Promise.resolve([]);
+    it('should create a JSON backup with Yjs snapshot', async () => {
+      // Add a book to the mock Y.Doc
+      mockYDoc.getMap('library').set('b1', {
+        bookId: 'b1',
+        title: 'Test Book',
+        author: 'Test Author',
+        addedAt: Date.now(),
+      });
+
+      mockDB.getAll.mockImplementation((store: string) => {
+        if (store === 'static_manifests') return Promise.resolve([{ bookId: 'b1', title: 'Test Book' }]);
         if (store === 'user_overrides') return Promise.resolve([]);
         if (store === 'cache_render_metrics') return Promise.resolve([]);
         return Promise.resolve([]);
@@ -50,8 +112,6 @@ describe('BackupService', () => {
 
       await service.createLightBackup();
 
-      expect(mockDB.getAll).toHaveBeenCalledWith('static_manifests');
-      expect(mockDB.getAll).toHaveBeenCalledWith('user_annotations');
       expect(exportFile).toHaveBeenCalled();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,23 +119,43 @@ describe('BackupService', () => {
       expect(filename).toContain('.json');
       expect(mimeType).toBe('application/json');
 
-      const manifest: BackupManifest = JSON.parse(data as string);
-      expect(manifest.books).toHaveLength(1);
-      expect(manifest.books[0].title).toBe('Book 1');
-      expect(manifest.version).toBe(1);
+      const manifest: BackupManifestV2 = JSON.parse(data as string);
+      expect(manifest.version).toBe(2);
+      expect(manifest.yjsSnapshot).toBeDefined();
+      expect(typeof manifest.yjsSnapshot).toBe('string');
+      expect(manifest.yjsSnapshot.length).toBeGreaterThan(0);
+    });
+
+    it('should include static manifests in backup', async () => {
+      mockDB.getAll.mockImplementation((store: string) => {
+        if (store === 'static_manifests') return Promise.resolve([
+          { bookId: 'b1', title: 'Book 1', fileHash: 'abc123' }
+        ]);
+        return Promise.resolve([]);
+      });
+
+      await service.createLightBackup();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = (exportFile as any).mock.calls[0][0];
+      const manifest: BackupManifestV2 = JSON.parse(data as string);
+
+      expect(manifest.staticManifests).toHaveLength(1);
+      expect(manifest.staticManifests[0].bookId).toBe('b1');
     });
   });
 
   describe('createFullBackup', () => {
     it('should create a ZIP backup with files', async () => {
-      mockDB.getAll.mockImplementation((store) => {
-        // v18 uses static_manifests for the list
+      // Add a book to Y.Doc
+      mockYDoc.getMap('library').set('b1', {
+        bookId: 'b1',
+        title: 'Book 1',
+        author: 'Author 1',
+      });
+
+      mockDB.getAll.mockImplementation((store: string) => {
         if (store === 'static_manifests') return Promise.resolve([{ bookId: 'b1', title: 'Book 1' }]);
-        // isOffloaded is derived, but BackupService usually filters it.
-        // Actually BackupService implementation checks `book.isOffloaded` which comes from DBService or manual map?
-        // In BackupService.generateManifest:
-        // `isOffloaded: false // Not accurate here, but irrelevant for export mostly`
-        // Wait, if it says `isOffloaded: false`, it tries to fetch file.
         return Promise.resolve([]);
       });
 
@@ -95,34 +175,32 @@ describe('BackupService', () => {
       expect(filename).toContain('.zip');
       expect(mimeType).toBe('application/zip');
     });
-
-    // v18 implementation hardcodes isOffloaded: false in generateManifest.
-    // So this test is irrelevant or needs to be adapted if we supported offloading logic in backup.
-    // If we skip the test, we lose coverage.
-    // But since the implementation hardcodes false, it will always try to export.
-    // Which is fine for full backup (it logs error if missing).
-    // I'll skip this test or update it to expect file fetch failure handling.
-    /*
-    it('should skip offloaded books', async () => {
-      // ...
-    });
-    */
   });
 
   describe('restoreBackup', () => {
-    it('should restore from light backup (JSON)', async () => {
-      const manifest = {
-        version: 1,
+    it('should restore from v2 light backup with Yjs snapshot', async () => {
+      // Create a snapshot from test data using a separate doc
+      // The service will apply this to its internal yDoc
+      const testDoc = new Y.Doc();
+      testDoc.getMap('library').set('b1', {
+        bookId: 'b1',
+        title: 'Restored Book',
+        author: 'Author',
+      });
+      const snapshot = Y.encodeStateAsUpdate(testDoc);
+      const snapshotBase64 = btoa(String.fromCharCode(...snapshot));
+
+      const manifest: BackupManifestV2 = {
+        version: 2,
         timestamp: '2023-01-01',
-        books: [{ id: 'b1', title: 'Restored Book', author: 'Author', addedAt: 1234567890, lastRead: 100 }],
-        annotations: [],
+        yjsSnapshot: snapshotBase64,
+        staticManifests: [{ bookId: 'b1', title: 'Restored Book', author: 'Author', fileHash: 'abc', fileSize: 100, totalChars: 1000, schemaVersion: 1 }],
         lexicon: [],
         locations: []
       };
 
       const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
 
-      // Stable mocks
       const putMock = vi.fn().mockResolvedValue(undefined);
       const getMock = vi.fn().mockResolvedValue(undefined);
 
@@ -137,155 +215,111 @@ describe('BackupService', () => {
 
       await service.restoreBackup(file);
 
-      // Verify new stores used
-      expect(mockTx.objectStore).toHaveBeenCalledWith('static_manifests');
-      expect(putMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Restored Book' }));
-
-      // user_inventory, user_progress
-      expect(mockTx.objectStore).toHaveBeenCalledWith('user_inventory');
-      expect(mockTx.objectStore).toHaveBeenCalledWith('user_progress');
+      // After restore, the mock Y.Doc should have the book merged in
+      // Y.applyUpdate merges the snapshot into the existing doc
+      // Note: The book may have its properties as a Map-like object
+      const restored = mockYDoc.getMap('library').get('b1');
+      expect(restored).toBeDefined();
+      // The restored object should have the expected properties
+      if (restored) {
+        expect(restored.bookId || restored.get?.('bookId')).toBe('b1');
+      }
     });
 
-    it('should smart merge existing books', async () => {
-        const manifest = {
-          version: 1,
-          timestamp: '2023-01-01',
-          books: [{ id: 'b1', title: 'New Title', author: 'Author', addedAt: 1234567890, lastRead: 200, progress: 0.5 }],
-          annotations: [],
-          lexicon: [],
-          locations: []
-        };
+    it('should reject v1 backup format', async () => {
+      const v1Manifest = {
+        version: 1,
+        timestamp: '2023-01-01',
+        books: [{ id: 'b1', title: 'Old Book' }],
+        annotations: [],
+        lexicon: [],
+        locations: []
+      };
 
-        const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
+      const file = new File([JSON.stringify(v1Manifest)], 'backup.json', { type: 'application/json' });
 
-        const existingMan = { bookId: 'b1', title: 'Old Title' };
-        const existingProg = { bookId: 'b1', lastRead: 100, percentage: 0.1 };
+      await expect(service.restoreBackup(file)).rejects.toThrow('v1 is no longer supported');
+    });
 
-        const manStoreMock = {
-            get: vi.fn().mockResolvedValue(existingMan),
-            put: vi.fn().mockResolvedValue(undefined)
-        };
-        const progStoreMock = {
-            get: vi.fn().mockResolvedValue(existingProg),
-            put: vi.fn().mockResolvedValue(undefined)
-        };
-        const genericStoreMock = {
-            get: vi.fn().mockResolvedValue(undefined),
-            put: vi.fn().mockResolvedValue(undefined)
-        };
+    it('should restore lexicon rules to IDB', async () => {
+      const testDoc = new Y.Doc();
+      const snapshot = Y.encodeStateAsUpdate(testDoc);
+      const snapshotBase64 = btoa(String.fromCharCode(...snapshot));
 
-        const mockTx = {
-          objectStore: vi.fn((store) => {
-              if (store === 'static_manifests') return manStoreMock;
-              if (store === 'user_progress') return progStoreMock;
-              return genericStoreMock;
-          }),
-          done: Promise.resolve(),
-        };
-        mockDB.transaction.mockReturnValue(mockTx);
+      const manifest: BackupManifestV2 = {
+        version: 2,
+        timestamp: '2023-01-01',
+        yjsSnapshot: snapshotBase64,
+        staticManifests: [],
+        lexicon: [
+          { id: 'r1', original: 'foo', replacement: 'bar', isRegex: false, created: 123 }
+        ],
+        locations: []
+      };
 
-        await service.restoreBackup(file);
+      const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
 
-        // Should update user_progress with newer progress
-        expect(mockTx.objectStore).toHaveBeenCalledWith('user_progress');
-        expect(progStoreMock.put).toHaveBeenCalledWith(expect.objectContaining({
-            bookId: 'b1',
-            lastRead: 200,
-            percentage: 0.5
-        }));
+      const putMock = vi.fn().mockResolvedValue(undefined);
+      const getMock = vi.fn().mockResolvedValue(undefined);
+
+      const mockTx = {
+        objectStore: vi.fn().mockReturnValue({
+          get: getMock,
+          put: putMock,
+        }),
+        done: Promise.resolve(),
+      };
+      mockDB.transaction.mockReturnValue(mockTx);
+
+      await service.restoreBackup(file);
+
+      // Should have written lexicon to user_overrides
+      expect(mockTx.objectStore).toHaveBeenCalledWith('user_overrides');
+      expect(putMock).toHaveBeenCalled();
+    });
+  });
+
+  describe('Yjs snapshot encoding/decoding', () => {
+    it('should round-trip Yjs state correctly', async () => {
+      // Add data to Y.Doc
+      mockYDoc.getMap('library').set('book1', {
+        bookId: 'book1',
+        title: 'Round Trip Test',
+        author: 'Test Author',
+      });
+      mockYDoc.getMap('progress').set('book1', {
+        bookId: 'book1',
+        percentage: 0.5,
       });
 
-    it('should reject backup with invalid book metadata (missing id)', async () => {
-      const manifest = {
-        version: 1,
-        timestamp: '2023-01-01',
-        books: [{ title: 'No ID', author: 'Author' }], // Missing id
-        annotations: [],
-        lexicon: [],
-        locations: []
-      };
+      mockDB.getAll.mockResolvedValue([]);
 
-      const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
+      await service.createLightBackup();
 
-      const putMock = vi.fn();
-      const mockTx = {
-        objectStore: vi.fn().mockReturnValue({
-          get: vi.fn().mockResolvedValue(undefined),
-          put: putMock,
-        }),
-        done: Promise.resolve(),
-      };
-      mockDB.transaction.mockReturnValue(mockTx);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = (exportFile as any).mock.calls[0][0];
+      const manifest: BackupManifestV2 = JSON.parse(data as string);
 
-      await service.restoreBackup(file);
+      // Decode the snapshot and apply to a fresh doc
+      const binary = atob(manifest.yjsSnapshot);
+      const snapshot = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        snapshot[i] = binary.charCodeAt(i);
+      }
 
-      expect(putMock).not.toHaveBeenCalled();
-    });
+      const freshDoc = new Y.Doc();
+      Y.applyUpdate(freshDoc, snapshot);
 
-    it('should sanitize and restore book with missing title', async () => {
-      const manifest = {
-        version: 1,
-        timestamp: '2023-01-01',
-        // Missing title, addedAt. Should be defaulted.
-        books: [{ id: 'b1', author: 'Author' }],
-        annotations: [],
-        lexicon: [],
-        locations: []
-      };
+      // Verify the data was preserved
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const restoredBook = freshDoc.getMap('library').get('book1') as any;
+      expect(restoredBook).toBeDefined();
+      expect(restoredBook.title).toBe('Round Trip Test');
 
-      const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
-
-      const putMock = vi.fn();
-      const mockTx = {
-        objectStore: vi.fn().mockReturnValue({
-          get: vi.fn().mockResolvedValue(undefined),
-          put: putMock,
-        }),
-        done: Promise.resolve(),
-      };
-      mockDB.transaction.mockReturnValue(mockTx);
-
-      await service.restoreBackup(file);
-
-      // We expect separate calls for manifest, inventory, progress.
-      // Check for manifest update
-      expect(putMock).toHaveBeenCalledWith(expect.objectContaining({
-        bookId: 'b1', // v18 uses bookId
-        title: 'Untitled',
-        author: 'Author'
-      }));
-    });
-
-    it('should always sanitize metadata', async () => {
-        const confirmSpy = vi.spyOn(window, 'confirm');
-        const longTitle = 'a'.repeat(3000);
-        const manifest = {
-          version: 1,
-          timestamp: '2023-01-01',
-          books: [{ id: 'b1', title: longTitle, author: 'Author', addedAt: 1234567890 }],
-          annotations: [],
-          lexicon: [],
-          locations: []
-        };
-
-        const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
-
-        const putMock = vi.fn();
-        const mockTx = {
-          objectStore: vi.fn().mockReturnValue({
-            get: vi.fn().mockResolvedValue(undefined),
-            put: putMock,
-          }),
-          done: Promise.resolve(),
-        };
-        mockDB.transaction.mockReturnValue(mockTx);
-
-        await service.restoreBackup(file);
-
-        expect(confirmSpy).not.toHaveBeenCalled();
-        expect(putMock).toHaveBeenCalledWith(expect.objectContaining({
-          title: 'a'.repeat(500)
-        }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const restoredProgress = freshDoc.getMap('progress').get('book1') as any;
+      expect(restoredProgress).toBeDefined();
+      expect(restoredProgress.percentage).toBe(0.5);
     });
   });
 });
