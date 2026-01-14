@@ -6,7 +6,7 @@ import { usePreferencesStore } from '../store/usePreferencesStore';
  * This ensures that Tailwind's dark mode and custom CSS variables work correctly.
  */
 export const ThemeSynchronizer = () => {
-  const currentTheme = usePreferencesStore(state => state.currentTheme);
+  const currentTheme = usePreferencesStore(state => state.currentTheme) || 'light';
 
   useEffect(() => {
     const root = window.document.documentElement;
