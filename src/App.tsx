@@ -17,6 +17,7 @@ import { useSyncOrchestrator } from './lib/sync/hooks/useSyncOrchestrator';
 import { YjsTest } from './components/debug/YjsTest';
 import { useLibraryStore } from './store/useLibraryStore';
 import { migrateToYjs } from './lib/migration/YjsMigration';
+import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
 
 import './App.css';
 
@@ -41,27 +42,11 @@ function App() {
   // Service Worker Initialization
   useEffect(() => {
     const initSW = async () => {
-      // If service worker is supported, wait for it to be ready
-      if ('serviceWorker' in navigator) {
-        try {
-          await navigator.serviceWorker.ready;
-
-          // Poll for controller with exponential backoff
-          let attempt = 0;
-          let delay = 5;
-          while (!navigator.serviceWorker.controller) {
-            if (attempt >= 8) {
-              throw new Error(`Controller still not ready after ${attempt} attempts`);
-            }
-            await new Promise(resolve => setTimeout(resolve, delay));
-            delay *= 2;
-            attempt++;
-          }
-
-        } catch (e) {
-          console.error('Service Worker wait failed:', e);
-          setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
-        }
+      try {
+        await waitForServiceWorkerController();
+      } catch (e) {
+        console.error('Service Worker wait failed:', e);
+        setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
       }
       setSwInitialized(true);
     };

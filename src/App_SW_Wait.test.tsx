@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from './App';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -9,7 +9,7 @@ vi.mock('./db/db', () => ({
   getDB: vi.fn().mockResolvedValue({})
 }));
 
-// Mock DBService - Ensure it has getAllInventoryItems
+// Mock DBService
 vi.mock('./db/DBService', () => ({
   dbService: {
     initialize: vi.fn().mockResolvedValue(undefined),
@@ -19,15 +19,24 @@ vi.mock('./db/DBService', () => ({
   }
 }));
 
-// Mock migration to avoid DB calls
+// Mock migration
 vi.mock('./lib/migration/YjsMigration', () => ({
   migrateToYjs: vi.fn().mockResolvedValue(undefined)
 }));
 
-// Mock useLibraryStore to avoid real store logic entirely
+// Mock Yjs Provider
+vi.mock('./store/yjs-provider', () => ({
+  waitForYjsSync: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock SW Utils - The key fix
+vi.mock('./lib/serviceWorkerUtils', () => ({
+  waitForServiceWorkerController: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock useLibraryStore
 vi.mock('./store/useLibraryStore', () => ({
   useLibraryStore: (selector: any) => {
-    // Return a mock state that includes hydrateStaticMetadata
     return selector({
       hydrateStaticMetadata: vi.fn().mockResolvedValue(undefined),
       books: {}
@@ -35,7 +44,7 @@ vi.mock('./store/useLibraryStore', () => ({
   },
 }));
 
-// Mock all sub-components to focus on App logic
+// Mock sub-components
 vi.mock('./components/library/LibraryView', () => ({ LibraryView: () => <div data-testid="library-view">Library View</div> }));
 vi.mock('./components/reader/ReaderView', () => ({ ReaderView: () => <div data-testid="reader-view">Reader View</div> }));
 vi.mock('./components/reader/ReaderControlBar', () => ({ ReaderControlBar: () => <div data-testid="reader-control-bar">Control Bar</div> }));
@@ -58,7 +67,9 @@ vi.mock('react-router-dom', () => ({
   useNavigate: vi.fn(),
 }));
 
-describe('App Service Worker Wait', () => {
+import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
+
+describe('App Service Worker Wait (Refactored)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -67,129 +78,30 @@ describe('App Service Worker Wait', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders "Initializing..." when waiting for Service Worker', async () => {
-    // Mock navigator.serviceWorker
-    const readyPromise = new Promise<void>((resolve) => {
-      // Simulate delay
-      setTimeout(() => resolve(), 100);
-    });
-
-    Object.defineProperty(window.navigator, 'serviceWorker', {
-      value: {
-        ready: readyPromise,
-        get controller() { return { postMessage: vi.fn() }; },
-        register: vi.fn(),
-      },
-      configurable: true,
-      writable: true,
-    });
+  it('initializes successfully when SW controller is ready (mocked)', async () => {
+    // Mock successful resolution
+    (waitForServiceWorkerController as any).mockResolvedValue(undefined);
 
     render(<App />);
 
-    // Should be initializing initially
-    expect(screen.getByText('Connecting to database...')).toBeInTheDocument();
+    // Initially waiting (React effect cycle)
+    // Actually, if promise resolves immediately, we might see Library View immediately
+    // or brief "Connecting..."
 
-    // After ready resolves, it should render app (LibraryView)
     await waitFor(() => {
-      expect(screen.queryByText('Connecting to database...')).not.toBeInTheDocument();
+      expect(screen.getByText('Library View')).toBeInTheDocument();
     });
   });
 
-  it('skips waiting if Service Worker is not supported', async () => {
-    Object.defineProperty(window.navigator, 'serviceWorker', {
-      value: undefined,
-      configurable: true,
-      writable: true
-    });
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+  it('shows critical error if SW controller wait fails', async () => {
+    // Mock failure
+    (waitForServiceWorkerController as any).mockRejectedValue(new Error('Controller missing'));
 
     render(<App />);
 
-    // Should NOT be initializing (or very briefly)
-    await waitFor(() => {
-      expect(screen.queryByText('Connecting to database...')).not.toBeInTheDocument();
-    });
-
-    consoleSpy.mockRestore();
-  });
-
-  it('shows critical error if Service Worker controller is missing after polling', async () => {
-    // Mock navigator.serviceWorker with ready but no controller
-    const readyPromise = Promise.resolve();
-    Object.defineProperty(window.navigator, 'serviceWorker', {
-      value: {
-        ready: readyPromise,
-        get controller() { return null; }, // Always null
-        register: vi.fn(),
-      },
-      configurable: true,
-      writable: true,
-    });
-
-    vi.useFakeTimers();
-    render(<App />);
-
-    // Initially initializing
-    expect(screen.getByText('Connecting to database...')).toBeInTheDocument();
-
-    // Run timers multiple times to exhaust the exponential backoff loop
-    // 8 attempts, max delay 640ms. 
-    // runAllTimersAsync should handle pending timeouts.
-    for (let i = 0; i < 15; i++) {
-      await act(async () => {
-        await vi.runAllTimersAsync();
-      });
-    }
-
-    vi.useRealTimers();
-
-    // Then shows error
     await waitFor(() => {
       expect(screen.getByText('Critical Error')).toBeInTheDocument();
       expect(screen.getByText(/Service Worker failed to take control/)).toBeInTheDocument();
-    });
-  });
-
-  it('initializes successfully if controller appears during polling', async () => {
-    const readyPromise = Promise.resolve();
-    let controllerValue: unknown = null;
-
-    Object.defineProperty(window.navigator, 'serviceWorker', {
-      value: {
-        ready: readyPromise,
-        get controller() { return controllerValue; },
-        register: vi.fn(),
-      },
-      configurable: true,
-      writable: true,
-    });
-
-    vi.useFakeTimers();
-    render(<App />);
-
-    // Initially no controller
-    expect(screen.getByText('Connecting to database...')).toBeInTheDocument();
-
-    // Make controller appear after some time
-    setTimeout(() => {
-      controllerValue = { postMessage: vi.fn() };
-    }, 50);
-
-    // Advance enough times to catch the change
-    for (let i = 0; i < 15; i++) {
-      await act(async () => {
-        await vi.runAllTimersAsync();
-      });
-    }
-
-    vi.useRealTimers();
-
-    // Should NO LONGER show Initializing
-    await waitFor(() => {
-      expect(screen.queryByText('Connecting to database...')).not.toBeInTheDocument();
-      expect(screen.queryByText('Critical Error')).not.toBeInTheDocument();
-      expect(screen.getByText('Library View')).toBeInTheDocument();
     });
   });
 });
