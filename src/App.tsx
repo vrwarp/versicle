@@ -31,7 +31,6 @@ function App() {
   const [dbError, setDbError] = useState<unknown>(null);
   const [swInitialized, setSwInitialized] = useState(false);
   const [swError, setSwError] = useState<string | null>(null);
-  const [migrationStatus, setMigrationStatus] = useState<'pending' | 'migrating' | 'done' | 'error'>('pending');
   const [statusMessage, setStatusMessage] = useState('Initializing...');
 
   const hydrateStaticMetadata = useLibraryStore(state => state.hydrateStaticMetadata);
@@ -84,14 +83,12 @@ function App() {
         await getDB();
 
         setStatusMessage('Checking for upgrades...');
-        setMigrationStatus('migrating');
+        setStatusMessage('Checking for upgrades...');
         try {
           await migrateToYjs();
-          setMigrationStatus('done');
         } catch (e) {
           console.error('[App] Migration failed:', e);
           // We proceed anyway, but log it
-          setMigrationStatus('error');
         }
 
         setStatusMessage('Loading library...');
