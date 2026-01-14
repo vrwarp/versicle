@@ -484,9 +484,9 @@ export function useEpubReader(
     const themes = r.themes as any;
 
     themes.register('custom', {
-      'body': { 'background': `${options.customTheme.bg} !important`, 'color': `${options.customTheme.fg} !important` },
+      'body': { 'background': `${options.customTheme?.bg || '#ffffff'} !important`, 'color': `${options.customTheme?.fg || '#000000'} !important` },
       'p, div, span, h1, h2, h3, h4, h5, h6': { 'color': 'inherit !important', 'background': 'transparent !important' },
-      'a': { 'color': `${options.customTheme.fg} !important` }
+      'a': { 'color': `${options.customTheme?.fg || '#0000e'} !important` }
     });
 
     // TTS Highlight Theme
@@ -538,7 +538,7 @@ export function useEpubReader(
           bg = '#f4ecd8'; fg = '#5b4636'; linkColor = '#0000ee';
           break;
         case 'custom':
-          bg = options.customTheme.bg; fg = options.customTheme.fg; linkColor = options.customTheme.fg;
+          bg = options.customTheme?.bg || '#ffffff'; fg = options.customTheme?.fg || '#000000'; linkColor = options.customTheme?.fg || '#000000';
           break;
         default: // light
           bg = '#ffffff'; fg = '#000000'; linkColor = '#0000ee';

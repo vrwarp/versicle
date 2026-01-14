@@ -119,7 +119,7 @@ export const VisualSettings = () => {
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLineHeight(Math.max(1, parseFloat((lineHeight - 0.1).toFixed(1))))} aria-label="Decrease line height">
               <Minus className="h-3 w-3" />
             </Button>
-            <span className="w-8 text-center text-sm font-medium tabular-nums">{lineHeight.toFixed(1)}</span>
+            <span className="w-8 text-center text-sm font-medium tabular-nums">{(lineHeight || 1.5).toFixed(1)}</span>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLineHeight(Math.min(3, parseFloat((lineHeight + 0.1).toFixed(1))))} aria-label="Increase line height">
               <Plus className="h-3 w-3" />
             </Button>

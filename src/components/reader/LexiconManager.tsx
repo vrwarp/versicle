@@ -471,7 +471,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                 />
                             </div>
                         </div>
-                        <div className="flex items-center justify-between gap-2 mt-2">
+                        <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
                             <div className="flex gap-4">
                                 <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                                     <input

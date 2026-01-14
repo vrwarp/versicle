@@ -47,6 +47,8 @@ import { CURRENT_BOOK_VERSION } from '../../lib/constants';
  *
  * @returns A React component for reading books.
  */
+const DEFAULT_CUSTOM_THEME = { bg: '#ffffff', fg: '#000000' };
+
 export const ReaderView: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -63,9 +65,9 @@ export const ReaderView: React.FC = () => {
         shouldForceFont
     } = usePreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
-        customTheme: state.customTheme,
+        customTheme: state.customTheme || DEFAULT_CUSTOM_THEME,
         fontFamily: state.fontFamily,
-        lineHeight: state.lineHeight,
+        lineHeight: state.lineHeight || 1.5,
         fontSize: state.fontSize,
         shouldForceFont: state.shouldForceFont,
     })));
