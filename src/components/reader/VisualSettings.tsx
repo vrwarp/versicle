@@ -1,5 +1,4 @@
 import { usePreferencesStore } from "../../store/usePreferencesStore"
-import { useReaderUIStore } from "../../store/useReaderUIStore"
 import { useShallow } from 'zustand/react/shallow';
 import { PopoverContent, PopoverClose } from "../ui/Popover"
 import { Button } from "../ui/Button"
@@ -23,7 +22,8 @@ export const VisualSettings = () => {
     fontSize, setFontSize,
     fontFamily, setFontFamily,
     lineHeight, setLineHeight,
-    shouldForceFont, setShouldForceFont
+    shouldForceFont, setShouldForceFont,
+    readerViewMode, setReaderViewMode
   } = usePreferencesStore(useShallow(state => ({
     currentTheme: state.currentTheme,
     setTheme: state.setTheme,
@@ -34,12 +34,9 @@ export const VisualSettings = () => {
     lineHeight: state.lineHeight,
     setLineHeight: state.setLineHeight,
     shouldForceFont: state.shouldForceFont,
-    setShouldForceFont: state.setShouldForceFont
-  })));
-
-  const { viewMode, setViewMode } = useReaderUIStore(useShallow(state => ({
-    viewMode: state.viewMode,
-    setViewMode: state.setViewMode
+    setShouldForceFont: state.setShouldForceFont,
+    readerViewMode: state.readerViewMode,
+    setReaderViewMode: state.setReaderViewMode
   })));
 
   return (
@@ -106,7 +103,7 @@ export const VisualSettings = () => {
       {/* 3. The "Format" Row (Layout) */}
       <div className="space-y-4">
         <Label className="block text-sm font-medium">Layout</Label>
-        <Tabs value={viewMode} onValueChange={(val) => setViewMode(val as 'paginated' | 'scrolled')} className="w-full">
+        <Tabs value={readerViewMode} onValueChange={(val) => setReaderViewMode(val as 'paginated' | 'scrolled')} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="paginated">Paginated</TabsTrigger>
             <TabsTrigger value="scrolled">Scrolled</TabsTrigger>

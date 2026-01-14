@@ -62,7 +62,8 @@ export const ReaderView: React.FC = () => {
         fontFamily,
         lineHeight,
         fontSize,
-        shouldForceFont
+        shouldForceFont,
+        readerViewMode
     } = usePreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
         customTheme: state.customTheme || DEFAULT_CUSTOM_THEME,
@@ -70,6 +71,7 @@ export const ReaderView: React.FC = () => {
         lineHeight: state.lineHeight || 1.5,
         fontSize: state.fontSize,
         shouldForceFont: state.shouldForceFont,
+        readerViewMode: state.readerViewMode
     })));
 
     const {
@@ -78,7 +80,6 @@ export const ReaderView: React.FC = () => {
         setIsLoading,
         currentSectionTitle,
         currentSectionId,
-        viewMode,
         immersiveMode,
         setImmersiveMode,
         setPlayFromSelection,
@@ -90,7 +91,6 @@ export const ReaderView: React.FC = () => {
         setIsLoading: state.setIsLoading,
         currentSectionTitle: state.currentSectionTitle,
         currentSectionId: state.currentSectionId,
-        viewMode: state.viewMode,
         immersiveMode: state.immersiveMode,
         setImmersiveMode: state.setImmersiveMode,
         setPlayFromSelection: state.setPlayFromSelection,
@@ -148,7 +148,7 @@ export const ReaderView: React.FC = () => {
     // --- Setup useEpubReader Hook ---
 
     const readerOptions = useMemo<EpubReaderOptions>(() => ({
-        viewMode,
+        viewMode: readerViewMode,
         currentTheme,
         customTheme,
         fontFamily,
@@ -193,8 +193,7 @@ export const ReaderView: React.FC = () => {
                 const prevStart = previousLocation.current.start;
                 const prevEnd = previousLocation.current.end;
                 const duration = Date.now() - previousLocation.current.timestamp;
-                const mode = useReaderUIStore.getState().viewMode;
-                const isScroll = mode === 'scrolled';
+                const isScroll = readerViewMode === 'scrolled';
                 const shouldSave = isScroll ? duration > 2000 : true;
 
                 if (prevStart && prevEnd && prevStart !== location.start.cfi && shouldSave) {
@@ -206,7 +205,7 @@ export const ReaderView: React.FC = () => {
                         ]).then(([snappedStart, snappedEnd]) => {
                             const range = generateCfiRange(snappedStart, snappedEnd);
                             const type = isScroll ? 'scroll' : 'page';
-                            const label = useReaderUIStore.getState().currentSectionTitle || undefined;
+                            const label = currentSectionTitle || undefined;
 
                             dbService.updateReadingHistory(id, range, type, label)
                                 .then(() => setHistoryTick(t => t + 1))
@@ -256,7 +255,7 @@ export const ReaderView: React.FC = () => {
             console.error("Reader Error:", msg);
         }
     }), [
-        viewMode,
+        readerViewMode,
         currentTheme,
         customTheme,
         fontFamily,
@@ -340,9 +339,8 @@ export const ReaderView: React.FC = () => {
                     // which might be destroyed during unmount, causing crashes.
                     // This ensures reading history is saved even if the reader is tearing down.
                     const range = generateCfiRange(prevStart, prevEnd);
-                    const mode = useReaderUIStore.getState().viewMode;
-                    const type = mode === 'scrolled' ? 'scroll' : 'page';
-                    const label = useReaderUIStore.getState().currentSectionTitle || undefined;
+                    const type = readerViewMode === 'scrolled' ? 'scroll' : 'page';
+                    const label = currentSectionTitle || undefined;
                     dbService.updateReadingHistory(id, range, type, label).catch(console.error);
                 }
             }
@@ -766,7 +764,7 @@ export const ReaderView: React.FC = () => {
             }
 
             if (element) {
-                if (viewMode === 'scrolled') {
+                if (readerViewMode === 'scrolled') {
                     const wrapper = viewerRef.current?.firstElementChild as HTMLElement;
                     if (wrapper && wrapper.scrollHeight > wrapper.clientHeight) {
                         const rect = element.getBoundingClientRect();
@@ -897,7 +895,7 @@ export const ReaderView: React.FC = () => {
 
             <ReaderTTSController
                 rendition={rendition}
-                viewMode={viewMode}
+                viewMode={readerViewMode}
                 onPrev={handlePrev}
                 onNext={handleNext}
             />
@@ -1212,7 +1210,7 @@ export const ReaderView: React.FC = () => {
                         data-testid="reader-iframe-container"
                         ref={viewerRef}
                         className={`w-full max-w-2xl overflow-hidden px-6 md:px-8 transition-opacity duration-300 ${isPlaying && immersiveMode ? 'opacity-40' : 'opacity-100'}`}
-                        style={{ height: viewMode === 'paginated' ? 'calc(100% - 100px)' : '100%' }}
+                        style={{ height: readerViewMode === 'paginated' ? 'calc(100% - 100px)' : '100%' }}
                     />
 
                     <LexiconManager open={lexiconOpen} onOpenChange={setLexiconOpen} initialTerm={lexiconText} />

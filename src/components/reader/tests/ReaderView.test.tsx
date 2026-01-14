@@ -143,19 +143,20 @@ describe('ReaderView', () => {
 
     useReadingStateStore.setState({
       currentBookId: null,
-      currentCfi: null,
-      progress: 0,
-      saveProgress: vi.fn(), // Mock saveProgress if needed or let it use default
+      progress: {},
+      setCurrentBookId: vi.fn(),
+      updateLocation: vi.fn(),
+      getProgress: vi.fn(),
+      reset: vi.fn(),
     });
 
     useReaderUIStore.setState({
       isLoading: false,
       toc: [],
-      viewMode: 'paginated',
       immersiveMode: false,
       currentSectionTitle: null,
       currentSectionId: null,
-      resetUI: vi.fn(),
+      reset: vi.fn(),
       setToc: (toc) => useReaderUIStore.setState({ toc }),
       setIsLoading: (isLoading) => useReaderUIStore.setState({ isLoading }),
       setCurrentSection: (title, id) => useReaderUIStore.setState({ currentSectionTitle: title, currentSectionId: id }),
@@ -165,6 +166,7 @@ describe('ReaderView', () => {
       currentTheme: 'light',
       fontSize: 100,
       shouldForceFont: false,
+      readerViewMode: 'paginated',
     });
 
     useTTSStore.setState({
@@ -179,7 +181,7 @@ describe('ReaderView', () => {
 
   const renderComponent = (id = 'test-book-id') => {
     return render(
-      <MemoryRouter initialEntries={[`/read/${id}`]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <MemoryRouter initialEntries={[`/read/${id}`]}>
         <Routes>
           <Route path="/read/:id" element={<ReaderView />} />
         </Routes>

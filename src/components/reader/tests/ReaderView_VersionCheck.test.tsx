@@ -20,7 +20,6 @@ vi.mock('../../../hooks/useEpubReader');
 vi.mock('../../../store/useReaderUIStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useReaderUIStore: (selector: any) => selector({
-        viewMode: 'paginated',
         setToc: vi.fn(),
         setIsLoading: vi.fn(),
         reset: vi.fn(),
@@ -40,7 +39,8 @@ vi.mock('../../../store/usePreferencesStore', () => ({
         fontFamily: 'serif',
         lineHeight: 1.5,
         fontSize: 100,
-        shouldForceFont: false
+        shouldForceFont: false,
+        readerViewMode: 'paginated'
     })
 }));
 vi.mock('../../../store/useReadingStateStore', () => ({

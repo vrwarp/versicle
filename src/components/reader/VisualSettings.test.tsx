@@ -10,7 +10,7 @@ vi.mock('../../store/usePreferencesStore', () => ({
   usePreferencesStore: vi.fn(),
 }));
 vi.mock('../../store/useReaderUIStore', () => ({
-  useReaderUIStore: vi.fn(),
+  useReaderUIStore: vi.fn(() => ({})),
 }));
 
 // Mock zustand shallow
@@ -54,7 +54,7 @@ describe('VisualSettings', () => {
   const mockSetTheme = vi.fn();
   const mockSetFontSize = vi.fn();
   const mockSetFontFamily = vi.fn();
-  const mockSetViewMode = vi.fn();
+  const mockSetReaderViewMode = vi.fn();
   const mockSetLineHeight = vi.fn();
   const mockSetShouldForceFont = vi.fn();
 
@@ -73,12 +73,12 @@ describe('VisualSettings', () => {
       setLineHeight: mockSetLineHeight,
       shouldForceFont: false,
       setShouldForceFont: mockSetShouldForceFont,
+      readerViewMode: 'paginated',
+      setReaderViewMode: mockSetReaderViewMode,
     }));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (useReaderUIStore as any).mockImplementation((selector: any) => selector({
-      viewMode: 'paginated',
-      setViewMode: mockSetViewMode,
     }));
   });
 
@@ -117,6 +117,6 @@ describe('VisualSettings', () => {
   it('changes layout mode', () => {
     render(<VisualSettings />);
     fireEvent.click(screen.getByText('Scrolled'));
-    expect(mockSetViewMode).toHaveBeenCalledWith('scrolled');
+    expect(mockSetReaderViewMode).toHaveBeenCalledWith('scrolled');
   });
 });

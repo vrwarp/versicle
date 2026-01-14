@@ -16,6 +16,7 @@ interface PreferencesState {
     lineHeight: number;
     fontSize: number;
     shouldForceFont: boolean;
+    readerViewMode: 'paginated' | 'scrolled';
 
     // === ACTIONS (not synced to Yjs) ===
     setTheme: (theme: 'light' | 'dark' | 'sepia') => void;
@@ -24,6 +25,7 @@ interface PreferencesState {
     setLineHeight: (height: number) => void;
     setFontSize: (size: number) => void;
     setShouldForceFont: (force: boolean) => void;
+    setReaderViewMode: (mode: 'paginated' | 'scrolled') => void;
 }
 
 const defaultPreferences = {
@@ -32,7 +34,8 @@ const defaultPreferences = {
     fontFamily: 'serif',
     lineHeight: 1.5,
     fontSize: 100,
-    shouldForceFont: false
+    shouldForceFont: false,
+    readerViewMode: 'paginated' as const
 };
 
 /**
@@ -52,6 +55,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             setLineHeight: (lineHeight) => set({ lineHeight }),
             setFontSize: (size) => set({ fontSize: size }),
             setShouldForceFont: (force) => set({ shouldForceFont: force }),
+            setReaderViewMode: (mode) => set({ readerViewMode: mode }),
         })
     )
 );
