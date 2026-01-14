@@ -52,7 +52,7 @@ export const LibraryView: React.FC = () => {
     setSortOrder: state.setSortOrder
   })));
 
-  const { setGlobalSettingsOpen } = useUIStore();
+  const setGlobalSettingsOpen = useUIStore(state => state.setGlobalSettingsOpen);
   const showToast = useToastStore(state => state.showToast);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const restoreFileInputRef = useRef<HTMLInputElement>(null);

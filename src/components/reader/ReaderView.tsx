@@ -102,7 +102,12 @@ export const ReaderView: React.FC = () => {
     loadAnnotations,
     showPopover,
     hidePopover
-  } = useAnnotationStore();
+  } = useAnnotationStore(useShallow(state => ({
+    annotations: state.annotations,
+    loadAnnotations: state.loadAnnotations,
+    showPopover: state.showPopover,
+    hidePopover: state.hidePopover
+  })));
 
   const [historyTick, setHistoryTick] = useState(0);
 
@@ -622,7 +627,7 @@ export const ReaderView: React.FC = () => {
   const [lexiconOpen, setLexiconOpen] = useState(false);
   const [lexiconText] = useState('');
 
-  const { setGlobalSettingsOpen } = useUIStore();
+  const setGlobalSettingsOpen = useUIStore(state => state.setGlobalSettingsOpen);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
