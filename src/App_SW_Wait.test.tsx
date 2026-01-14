@@ -45,6 +45,11 @@ vi.mock('./components/ui/ToastContainer', () => ({ ToastContainer: () => null })
 vi.mock('./components/SafeModeView', () => ({ SafeModeView: () => <div>SafeMode</div> }));
 vi.mock('./components/debug/YjsTest', () => ({ YjsTest: () => null }));
 
+// Mock Sync Orchestrator
+vi.mock('./lib/sync/hooks/useSyncOrchestrator', () => ({
+  useSyncOrchestrator: vi.fn(),
+}));
+
 // Mock Router
 vi.mock('react-router-dom', () => ({
   BrowserRouter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -109,7 +114,7 @@ describe('App Service Worker Wait', () => {
     consoleSpy.mockRestore();
   });
 
-  it.skip('shows critical error if Service Worker controller is missing after polling', async () => {
+  it('shows critical error if Service Worker controller is missing after polling', async () => {
     // Mock navigator.serviceWorker with ready but no controller
     const readyPromise = Promise.resolve();
     Object.defineProperty(window.navigator, 'serviceWorker', {
@@ -128,18 +133,14 @@ describe('App Service Worker Wait', () => {
     // Initially initializing
     expect(screen.getByText('Connecting to database...')).toBeInTheDocument();
 
-    // Fast-forward timers to exhaust retries
-    let delay = 5;
-    for (let i = 0; i < 8; i++) {
+    // Run timers multiple times to exhaust the exponential backoff loop
+    // 8 attempts, max delay 640ms. 
+    // runAllTimersAsync should handle pending timeouts.
+    for (let i = 0; i < 15; i++) {
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(delay);
+        await vi.runAllTimersAsync();
       });
-      delay *= 2;
     }
-    // Advance a bit more to ensure rejection
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
-    });
 
     vi.useRealTimers();
 
@@ -150,7 +151,7 @@ describe('App Service Worker Wait', () => {
     });
   });
 
-  it.skip('initializes successfully if controller appears during polling', async () => {
+  it('initializes successfully if controller appears during polling', async () => {
     const readyPromise = Promise.resolve();
     let controllerValue: unknown = null;
 
@@ -173,20 +174,14 @@ describe('App Service Worker Wait', () => {
     // Make controller appear after some time
     setTimeout(() => {
       controllerValue = { postMessage: vi.fn() };
-    }, 35);
+    }, 50);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(20);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(40);
-    });
+    // Advance enough times to catch the change
+    for (let i = 0; i < 15; i++) {
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+    }
 
     vi.useRealTimers();
 
