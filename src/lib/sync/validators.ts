@@ -5,29 +5,37 @@ import { z } from 'zod';
 export const UserInventoryItemSchema = z.object({
     bookId: z.string(),
     title: z.string(),
-    author: z.string().optional(),
-    coverUrl: z.string().optional(), // For ghost books
+    author: z.string(),
     addedAt: z.number(),
-    lastOpenedAt: z.number().optional(),
-    isFavorite: z.boolean().optional(),
-    isArchived: z.boolean().optional(),
-    tags: z.array(z.string()).optional(),
+    lastInteraction: z.number(),
+    sourceFilename: z.string().optional(),
+    tags: z.array(z.string()),
     rating: z.number().min(0).max(5).optional(),
+    status: z.enum(['unread', 'reading', 'completed', 'abandoned']),
+    customTitle: z.string().optional(),
+    customAuthor: z.string().optional(),
 });
 
 export const ReadingListEntrySchema = z.object({
     filename: z.string(),
-    bookId: z.string().optional(),
-    addedAt: z.number(),
+    title: z.string(),
+    author: z.string(),
+    isbn: z.string().optional(),
+    percentage: z.number(),
+    lastUpdated: z.number(),
+    status: z.enum(['read', 'currently-reading', 'to-read']).optional(),
+    rating: z.number().optional(),
 });
 
 export const UserProgressSchema = z.object({
     bookId: z.string(),
-    cfi: z.string(),
-    percentage: z.number().min(0).max(100),
-    chapterTitle: z.string().optional(),
-    lastUpdated: z.number(),
-    device: z.string().optional(), // Setup for multi-device sync
+    percentage: z.number().min(0).max(1),
+    currentCfi: z.string().optional(),
+    lastPlayedCfi: z.string().optional(),
+    currentQueueIndex: z.number().optional(),
+    currentSectionIndex: z.number().optional(),
+    lastRead: z.number(),
+    completedRanges: z.array(z.string()),
 });
 
 export const UserAnnotationSchema = z.object({
@@ -35,16 +43,26 @@ export const UserAnnotationSchema = z.object({
     bookId: z.string(),
     cfiRange: z.string(),
     text: z.string(),
-    color: z.string().optional(),
+    type: z.enum(['highlight', 'note']),
+    color: z.string(),
     note: z.string().optional(),
-    createdAt: z.number(),
-    updatedAt: z.number().optional(),
+    created: z.number(),
 });
 
 export const UserOverridesSchema = z.object({
     bookId: z.string(),
-    // Allow flexible key-value pairs for overrides
-    settings: z.record(z.string(), z.any()),
+    lexicon: z.array(z.object({
+        id: z.string(),
+        original: z.string(),
+        replacement: z.string(),
+        isRegex: z.boolean().optional(),
+        applyBeforeGlobal: z.boolean().optional(),
+        created: z.number(),
+    })),
+    lexiconConfig: z.object({
+        applyBefore: z.boolean(),
+    }).optional(),
+    settings: z.record(z.string(), z.unknown()).optional(),
 });
 
 // --- Validation Helper ---

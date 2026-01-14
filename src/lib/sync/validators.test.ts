@@ -8,6 +8,9 @@ describe('Yjs Validators', () => {
             title: 'Moby Dick',
             author: 'Herman Melville',
             addedAt: Date.now(),
+            lastInteraction: Date.now(),
+            status: 'unread',
+            sourceFilename: 'test.epub',
             tags: ['classic', 'sea'],
             rating: 5
         };
