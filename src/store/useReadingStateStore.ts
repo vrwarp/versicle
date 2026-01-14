@@ -97,7 +97,6 @@ export const useReadingStateStore = create<ReadingState>()(
                         percentage,
                         lastUpdated: Date.now(),
                         status: percentage > 0.98 ? 'read' : 'currently-reading',
-                        isbn: meta?.isbn,
                         rating: book.rating
                     });
                 }

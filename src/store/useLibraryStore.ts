@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
 import { dbService } from '../db/DBService';
-import type { UserInventoryItem, StaticBookManifest } from '../types/db';
+import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '../types/db';
 import { StorageFullError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
 import { useReadingListStore } from './useReadingListStore';
@@ -25,7 +25,7 @@ interface LibraryState {
 
   // === TRANSIENT STATE (local-only, not synced) ===
   /** Static metadata cache (title, author, cover) from static_manifests. */
-  staticMetadata: Record<string, StaticBookManifest>;
+  staticMetadata: Record<string, BookMetadata>;
   /** Set of book IDs that are offloaded (locally missing binary content). */
   offloadedBookIds: Set<string>;
   /** Flag indicating if static metadata is currently being hydrated. */
@@ -105,7 +105,7 @@ interface IDBService {
   deleteBook: (id: string) => Promise<void>;
   offloadBook: (id: string) => Promise<void>;
   restoreBook: (id: string, file: File) => Promise<void>;
-  getBookMetadata: (id: string) => Promise<StaticBookManifest | undefined>;
+  getBookMetadata: (id: string) => Promise<BookMetadata | undefined>;
   getAllInventoryItems: () => Promise<UserInventoryItem[]>;
   getOffloadedStatus: (bookIds?: string[]) => Promise<Map<string, boolean>>;
 }
@@ -178,10 +178,10 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             bookIds.map(id => injectedDB.getBookMetadata(id))
           );
 
-          const staticMetadata: Record<string, StaticBookManifest> = {};
+          const staticMetadata: Record<string, BookMetadata> = {};
           manifests.forEach(manifest => {
-            if (manifest) {
-              staticMetadata[manifest.bookId] = manifest;
+            if (manifest && manifest.id) {
+              staticMetadata[manifest.id] = manifest;
             }
           });
 
@@ -247,7 +247,13 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             },
             staticMetadata: {
               ...state.staticMetadata,
-              [manifest.bookId]: manifest
+              // Map StaticBookManifest to BookMetadata-compatible object
+              [manifest.bookId]: {
+                ...manifest,
+                id: manifest.bookId,  // Alias bookId to id for BookMetadata compatibility
+                version: manifest.schemaVersion,  // Alias schemaVersion to version
+                addedAt: Date.now()  // Required for Book type
+              } as BookMetadata
             },
             // Ensure new book is NOT marked as offloaded
             offloadedBookIds: new Set(
@@ -266,7 +272,6 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             percentage: 0,
             lastUpdated: Date.now(),
             status: 'to-read',
-            isbn: manifest.isbn,
             rating: 0
           });
         } catch (err) {

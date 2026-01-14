@@ -20,7 +20,7 @@ export const useAllBooks = () => {
         title: staticMetadata[book.bookId]?.title || book.title,
         author: staticMetadata[book.bookId]?.author || book.author,
         coverBlob: staticMetadata[book.bookId]?.coverBlob || undefined,
-        version: staticMetadata[book.bookId]?.schemaVersion || undefined,
+        version: staticMetadata[book.bookId]?.version || undefined,
         coverUrl: (staticMetadata[book.bookId]?.coverBlob instanceof Blob)
             ? URL.createObjectURL(staticMetadata[book.bookId]!.coverBlob!)
             : undefined,
@@ -58,7 +58,7 @@ export const useBook = (id: string | null) => {
         fileHash: staticMeta?.fileHash,
         fileSize: staticMeta?.fileSize,
         totalChars: staticMeta?.totalChars,
-        version: staticMeta?.schemaVersion || undefined,
+        version: staticMeta?.version || undefined,
 
         isOffloaded: offloadedBookIds.has(book.bookId),
 
