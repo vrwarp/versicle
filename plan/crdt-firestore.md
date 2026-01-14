@@ -1,135 +1,135 @@
 # Design Document: Cloud Sync via Firestore (y-fire)
 
 **Status:** Draft
-**Objective:** Enable cross-device synchronization of user data (progress, annotations, library metadata) using Firestore as a relay and persistence layer, while maintaining `IndexedDB` as the primary local-first storage.
+**Objective:** Enable cross-device synchronization of user data (progress, annotations, library metadata) using Firestore as a relay and persistence layer, while strictly maintaining `IndexedDB` (`y-indexeddb`) as the primary local-first storage.
 
-## 1. Architecture: Dual Provider Strategy
+## 1. Architecture: Dual Provider Overlay
 
-Versicles is a **Local-First** application. The primary source of truth for the application session is the `Y.Doc` in memory, persisted locally by `y-indexeddb`.
+Versicles is a **Local-First** application. The existing `yjs-provider.ts` initializes the `Y.Doc` and connects it to `y-indexeddb` immediately on startup. This ensures offline capability and fast load times.
 
-We will introduce `y-fire` as a **Secondary Provider** that acts as a "Cloud Overlay".
+We will introduce `y-fire` as a **Secondary, Conditional Provider** that acts as a "Cloud Overlay".
 
 ```mermaid
 graph TD
-    A[Zustand Store] <-->|Middleware| B(Y.Doc Memory)
+    A[Zustand Stores] <-->|Middleware| B(Y.Doc Memory)
     B <-->|y-indexeddb| C[(IndexedDB 'versicle-yjs')]
     B <-->|y-fire| D[Firestore & WebRTC Peers]
 
-    subgraph Local Device
+    subgraph Local Device (Always Active)
     A
     B
     C
     end
 
-    subgraph Cloud
+    subgraph Cloud Overlay (Auth Only)
     D
     end
 ```
 
 ### Roles
-*   **y-indexeddb:** Always active. Loads data on startup. Saves data offline. Ensures the app works without internet.
-*   **y-fire:** Active **only** when authenticated and online. Syncs local `Y.Doc` changes to Firestore and other connected peers.
+*   **y-indexeddb:** Primary. Always active. Source of truth for offline state.
+*   **y-fire:** Secondary. Active **only** when authenticated and online. Syncs local `Y.Doc` changes to Firestore.
 
-## 2. Authentication & Security
+## 2. Current Implementation Analysis
 
-Since `y-fire` writes to a shared database, we must authenticate users to partition data securely.
+We have analyzed the existing stores in `src/store/` to identify what will be synced and the associated risks.
+
+### Synced Stores (via `zustand-middleware-yjs`)
+These stores are already wrapped with `yjs()` middleware and writing to the shared `Y.Doc`.
+
+| Namespace | Store | Content | Risk Analysis |
+| :--- | :--- | :--- | :--- |
+| `library` | `useLibraryStore` | `books: Record<string, UserInventoryItem>` | **Medium Risk.** `UserInventoryItem` is synced as a whole object. If Device A updates `rating` and Device B updates `tags` simultaneously, **Last-Write-Wins (LWW) will overwrite one change**. Acceptable for single-user scenarios. |
+| `progress` | `useReadingStateStore` | `progress: Record<string, UserProgress>` | **High Risk (Cost).** Updates occur frequently (e.g., every page turn via `updateLocation`). `UserProgress` contains `completedRanges` which can grow large. **Mitigation:** Aggressive debouncing in `y-fire` config. |
+| `annotations` | `useAnnotationStore` | `annotations: Record<string, UserAnnotation>` | **Low Risk.** Keyed by UUID. Set semantics work well here. |
+| `reading-list` | `useReadingListStore` | `entries: Record<string, ReadingListEntry>` | **Low Risk.** Similar LWW constraints as Library. |
+| `preferences` | `usePreferencesStore` | Theme, Font, etc. | **Low Risk.** Infrequent updates. |
+
+### Ghost Book Support
+The codebase is **already prepared** for the Ghost Book scenario (Metadata present, Blob missing).
+*   `useLibraryStore.hydrateStaticMetadata` only populates `staticMetadata` if the blob exists in IDB.
+*   `src/store/selectors.ts` (`useAllBooks`) gracefully handles missing static metadata, returning `undefined` for `coverBlob` while falling back to the synced `UserInventoryItem` for `title` and `author`.
+
+## 3. Authentication & Security
 
 ### Strategy
-*   **Provider:** Firebase Auth.
-*   **Method:** Google Sign-In (Primary).
-*   **Anonymous Auth:** Not recommended for sync (user identity is needed across devices), but useful for "Guest" modes if we ever support temporary sharing.
+*   **Provider:** Firebase Auth (Google Sign-In).
+*   **Data Partitioning:** `users/${uid}/versicle/sync_root`.
 
-### Data Partitioning
-We will store user data in a private path keyed by their User ID (UID).
-
-*   **Path Pattern:** `users/${uid}/versicle/sync_root`
-*   **Firestore Rules:**
-    ```javascript
-    rules_version = '2';
-    service cloud.firestore {
-      match /databases/{database}/documents {
-        match /users/{userId}/{document=**} {
-          allow read, write: if request.auth != null && request.auth.uid == userId;
-        }
-      }
+### Firestore Rules
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
-    ```
-
-## 3. The "Ghost Book" Reality
-
-**Crucial Constraint:** Yjs is optimized for JSON-like metadata (CRDTs). It is **not** suitable for syncing large binaries like EPUB files (1MB - 100MB+).
-
-### Sync Scope
-| Synced via Yjs (y-fire) | NOT Synced (Local IDB Only) |
-| :--- | :--- |
-| **User Inventory:** Title, Author, Tags, Rating | **Static Resources:** The `.epub` binary blob |
-| **Progress:** CFI, Percentage | **Generated Assets:** Covers, Table Images |
-| **Annotations:** Highlights, Notes | |
-| **Preferences:** Theme, Fonts | |
-
-### User Experience
-When a user adds a book on Device A:
-1.  Device A writes Metadata + Blob to IDB.
-2.  Device A syncs Metadata to Firestore.
-3.  Device B receives Metadata.
-4.  Device B shows a **"Ghost Book"** (Metadata visible, but "Download" or "Missing" icon).
-5.  **Resolution:** User must manually add the same `.epub` file to Device B. The system detects the matching Hash/ID and "hydrates" the ghost book, unlocking the synced progress and annotations.
+  }
+}
+```
 
 ## 4. Implementation Plan
 
-### Step 1: Dependencies
-Add required packages:
-```bash
-npm install firebase y-fire
-```
+**Constraint:** Do not modify existing store logic. Implement `SyncManager` as an additive service.
 
-### Step 2: Firebase Initialization
-Create `src/lib/sync/firebase-config.ts`.
-*   Initialize `FirebaseApp`.
-*   Export `auth` and `firestore` instances.
+### Step 1: Dependencies
+*   Add `firebase` and `y-fire` to `package.json`.
+*   Note: `y-fire` typically requires `yjs` and `firebase` as peers.
+
+### Step 2: Firebase Configuration
+Create `src/lib/sync/firebase-config.ts` to export initialized `auth` and `firestore`.
 
 ### Step 3: Sync Manager Service
-Create `src/lib/sync/SyncManager.ts`. This service orchestrates the `y-fire` connection.
+Create `src/lib/sync/SyncManager.ts`.
 
 **Responsibilities:**
-1.  Listen to Firebase Auth state changes.
-2.  **On Login:**
-    *   Initialize `FireProvider` with `yDoc` (from `yjs-provider.ts`).
-    *   Path: `users/${user.uid}/versicle/main`.
-    *   Wait for `onReady`.
-3.  **On Logout:**
-    *   Call `provider.destroy()`.
-    *   Clear local Yjs state? **Decision:** No. Keep local data. Merging handles conflicts if a different user logs in (though single-user device is assumed).
+1.  **Monitor Auth:** Listen to `onAuthStateChanged`.
+2.  **Manage Connection:**
+    *   **On Login:** Import `yDoc` from `src/store/yjs-provider.ts` and initialize `FireProvider`.
+    *   **On Logout:** Call `provider.destroy()`.
+3.  **Cost Control:**
+    *   Configure `maxWaitFirestoreTime` to **2000ms** (or higher) to debounce high-frequency progress updates.
+    *   This ensures that scrubbing a slider doesn't result in 50 Firestore writes.
 
 **Code Sketch:**
 ```typescript
 import { FireProvider } from 'y-fire';
 import { yDoc } from '../../store/yjs-provider';
 import { auth, app } from './firebase-config';
+import { Logger } from '../logger';
 
 let fireProvider: FireProvider | null = null;
 
-export const initSync = () => {
+export const initSyncService = () => {
     auth.onAuthStateChanged((user) => {
         if (user) {
-            connectFireProvider(user);
+            Logger.info('Sync', `User logged in: ${user.uid}`);
+            connectFireProvider(user.uid);
         } else {
+            Logger.info('Sync', 'User logged out');
             disconnectFireProvider();
         }
     });
 };
 
-const connectFireProvider = (user: User) => {
+const connectFireProvider = (uid: string) => {
     if (fireProvider) return;
 
-    fireProvider = new FireProvider({
-        firebaseApp: app,
-        ydoc: yDoc,
-        path: `users/${user.uid}/versicle/main`,
-        maxWaitFirestoreTime: 2000 // Debounce writes
-    });
+    try {
+        fireProvider = new FireProvider({
+            firebaseApp: app,
+            ydoc: yDoc,
+            path: `users/${uid}/versicle/main`,
+            // CRITICAL: Debounce writes to save costs/bandwidth
+            maxWaitFirestoreTime: 2000,
+            maxUpdatesThreshold: 50
+        });
 
-    fireProvider.on('synced', () => console.log('☁️ Cloud Synced'));
+        fireProvider.on('synced', () => Logger.info('Sync', 'Cloud synced'));
+        // y-fire might throw connection errors, need robust listeners
+    } catch (e) {
+        Logger.error('Sync', 'Failed to connect FireProvider', e);
+    }
 };
 
 const disconnectFireProvider = () => {
@@ -140,39 +140,26 @@ const disconnectFireProvider = () => {
 };
 ```
 
-### Step 4: UI Components
-*   **`SyncSettings.tsx`**: A panel in the Settings menu.
-    *   Status: "Synced" / "Offline" / "Not Signed In".
-    *   Action: "Sign in with Google".
-    *   Debug: "Force Sync".
+### Step 4: UI Integration
+*   Add a "Sync" section to the Settings page.
+*   Show current Auth state and a "Sign In with Google" button.
+*   (Future) Show sync status icon in the header.
 
-## 5. Cost & Performance Optimization
-
-`y-fire` uses Firestore writes. To avoid high costs:
-1.  **Debounce:** Configure `maxWaitFirestoreTime` to batch updates (e.g., 2000ms).
-2.  **Peer-to-Peer:** `y-fire` attempts WebRTC peer connections first. Firestore is used for signaling and persistence. This offloads bandwidth from the database.
-3.  **Connection Lifecycle:** Only connect `FireProvider` when the app is foregrounded?
-    *   *Decision:* Keep connected while app is open to ensure realtime collaboration/sync. Disconnect on `unload`.
-
-## 6. Migration & Compatibility
-
-*   **Existing Local Data:** When `y-fire` connects, it merges local data with cloud data.
-    *   If Cloud is empty: Local data uploads.
-    *   If Cloud has data: Merges (Union).
-*   **Version Control:** Ensure schema compatibility. If schema changes (e.g., `UserProgress` shape), we might need version names in the path: `users/${uid}/versicle_v1/main`.
-
-## 7. Risks & Mitigations
+## 5. Risks & Mitigations
 
 | Risk | Mitigation |
 | :--- | :--- |
-| **Data overwrite (LWW)** | Yjs handles merging, but clock skew can cause LWW anomalies. Acceptable for Phase 4. |
-| **High Firestore Bill** | Monitor usage. Use `y-fire` clustering settings. |
-| **Auth Complexity** | Abstract Auth logic into `useAuthStore`. |
-| **Ghost Book Confusion** | Clear UI messaging: "File missing. Please add [Filename.epub] to read." |
+| **High Firestore Costs** | `maxWaitFirestoreTime: 2000` is mandatory. Monitor usage during beta. |
+| **Object LWW Data Loss** | Document limitation: "If two devices edit the same book's metadata simultaneously, one edit may be lost." Acceptable for current scope. |
+| **Large `completedRanges`** | If `UserProgress` grows > 1MB (Firestore document limit), sync will fail. **Future Action:** Implement compaction logic in `useReadingStateStore` to merge overlapping ranges. |
+| **WebRTC Connection Limits** | `y-fire` uses WebRTC. On restricted networks (corporate/school), direct peering fails. It falls back to Firestore (slower, costlier). |
 
-## 8. Development Roadmap
+## 6. Verification Plan
 
-1.  **Setup:** Create Firebase Project, get config.
-2.  **Integration:** Implement `SyncManager`.
-3.  **UI:** Add Sign-In button.
-4.  **Verification:** Test sync between two simulator windows (or devices).
+1.  **Unit Tests:** Verify `SyncManager` correctly initializes/destroys provider on auth state mock changes.
+2.  **Integration (Manual):**
+    *   Open App in Simulator A (Logged In).
+    *   Open App in Simulator B (Logged In, same account).
+    *   Change Theme on A -> Verify B updates.
+    *   Add Bookmark on A -> Verify B updates.
+    *   Turn off Network on A -> Make changes -> Turn on -> Verify sync.
