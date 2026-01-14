@@ -468,6 +468,7 @@ export class BackupService {
 
     // Step 3: Restore Files (if ZIP)
     if (zip) {
+      const restoredBookIds: string[] = [];
       for (const book of booksToSave) {
         const zipFile = zip.file(`files/${book.id}.epub`);
         if (zipFile) {
@@ -481,7 +482,18 @@ export class BackupService {
 
           await store.put(existing);
           await fileTx.done;
+
+          restoredBookIds.push(book.id);
         }
+      }
+
+      // Clear offloaded status for books whose files were restored
+      if (restoredBookIds.length > 0) {
+        const { useLibraryStore } = await import('../store/useLibraryStore');
+        const currentOffloaded = useLibraryStore.getState().offloadedBookIds;
+        const newOffloaded = new Set([...currentOffloaded].filter(id => !restoredBookIds.includes(id)));
+        useLibraryStore.setState({ offloadedBookIds: newOffloaded });
+        console.log(`[BackupService] Cleared offload status for ${restoredBookIds.length} restored books`);
       }
     }
 

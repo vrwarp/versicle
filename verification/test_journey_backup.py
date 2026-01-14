@@ -1,4 +1,5 @@
 import os
+import uuid
 import pytest
 from playwright.sync_api import Page, expect
 from verification.utils import reset_app, capture_screenshot
@@ -73,7 +74,9 @@ def test_journey_backup_restore(page: Page):
     if not suggested_filename.endswith('.json'):
         suggested_filename += '.json'
 
-    backup_path = f"/tmp/{suggested_filename}"
+    # Use unique path to prevent parallel test conflicts
+    unique_id = str(uuid.uuid4())[:8]
+    backup_path = f"/tmp/backup_{unique_id}_{suggested_filename}"
     download.save_as(backup_path)
     print(f"Backup saved to: {backup_path}")
 
@@ -162,7 +165,9 @@ def test_journey_full_backup_restore(page: Page):
     if not suggested_filename.endswith('.zip'):
         suggested_filename += '.zip'
 
-    backup_path = f"/tmp/{suggested_filename}"
+    # Use unique path to prevent parallel test conflicts
+    unique_id = str(uuid.uuid4())[:8]
+    backup_path = f"/tmp/backup_{unique_id}_{suggested_filename}"
     download.save_as(backup_path)
     print(f"Full Backup saved to: {backup_path}")
 
