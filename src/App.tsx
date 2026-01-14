@@ -14,7 +14,6 @@ import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 import { useSyncOrchestrator } from './lib/sync/hooks/useSyncOrchestrator';
-import { YjsTest } from './components/debug/YjsTest';
 import { useLibraryStore } from './store/useLibraryStore';
 import { migrateToYjs } from './lib/migration/YjsMigration';
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
@@ -181,7 +180,6 @@ function App() {
           } />
         </Routes>
       </div>
-      <YjsTest />
     </Router>
   );
 }

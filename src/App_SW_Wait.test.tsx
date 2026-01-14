@@ -52,7 +52,6 @@ vi.mock('./components/ThemeSynchronizer', () => ({ ThemeSynchronizer: () => null
 vi.mock('./components/GlobalSettingsDialog', () => ({ GlobalSettingsDialog: () => null }));
 vi.mock('./components/ui/ToastContainer', () => ({ ToastContainer: () => null }));
 vi.mock('./components/SafeModeView', () => ({ SafeModeView: () => <div>SafeMode</div> }));
-vi.mock('./components/debug/YjsTest', () => ({ YjsTest: () => null }));
 
 // Mock Sync Orchestrator
 vi.mock('./lib/sync/hooks/useSyncOrchestrator', () => ({
