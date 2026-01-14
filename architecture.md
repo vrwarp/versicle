@@ -56,6 +56,7 @@ graph TD
         GenAIStore[useGenAIStore]
         UIStore[useUIStore]
         SyncStore[useSyncStore]
+        ToastStore[useToastStore]
     end
 
     subgraph Core [Core Services]
@@ -196,6 +197,8 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
     *   `cache_audio_blobs`: Generated TTS audio segments.
     *   `cache_render_metrics`: Layout calculation results.
+    *   `cache_session_state`: Transient playback state (queue, position) for resumption.
+    *   `cache_tts_preparation`: Cached text segmentation results to speed up section loading.
 *   **App Level (System)**:
     *   `checkpoints`: Snapshots of the SyncManifest for "Safety Net" rollbacks.
     *   `sync_log`: Audit logs for sync operations.
@@ -261,6 +264,7 @@ Enhances the reading experience using LLMs.
 *   **Goal**: Enhance the reading and listening experience using LLMs (Gemini).
 *   **Logic**:
     *   **Free Tier Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite`, `gemini-2.5-flash`) to maximize quota. Automatically retries with a different model upon `429 RESOURCE_EXHAUSTED` errors.
+    *   **Mock Mode**: Supports an offline "Mock Mode" for testing, which intercepts requests and uses `localStorage` to return simulated responses.
     *   **Multimodal Input**: Accepts text and images (blobs) for tasks like table interpretation.
     *   **Structured Output**: Enforces strict JSON schemas for all responses (e.g., Content Type classification, Table Adaptation).
 *   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets/images are sent to Google's servers.
@@ -293,6 +297,13 @@ Manages internal state backup and restoration.
     *   The runner iterates the generator, yielding Promises. If `cancel()` is called, it throws a `CancellationError` into the generator, triggering `finally` blocks for cleanup and preventing subsequent code execution.
 *   **Trade-off**: Requires writing async logic as generators, which is non-standard syntax for many developers.
 
+#### Unified Export (`src/lib/export.ts`)
+*   **Goal**: Provide a consistent file export experience across Web and Native platforms.
+*   **Logic**:
+    *   **Web**: Uses `file-saver` to trigger a browser download.
+    *   **Native**: Writes the file to the app's cache directory using `@capacitor/filesystem` and then triggers the native `@capacitor/share` sheet.
+    *   **Binary Handling**: Automatically converts `Blob` data to Base64 for Capacitor's filesystem API.
+
 ---
 
 ### TTS Subsystem (`src/lib/tts/`)
@@ -303,6 +314,11 @@ The Orchestrator. Manages playback state, provider selection, and UI updates.
 *   **Logic**:
     *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state management to `PlaybackStateManager`.
     *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods.
+
+#### `src/lib/tts/TaskSequencer.ts`
+*   **Goal**: Prevent race conditions in async UI interactions (e.g., user clicking "Next" rapidly while "Play" is initializing).
+*   **Logic**: Maintains a promise chain (`currentTask`). New tasks are appended to the chain and executed sequentially. Errors in one task do not block subsequent tasks.
+*   **Trade-off**: Increases latency for user actions if the queue is long. Requires strict discipline to wrap all public state-mutating methods in `enqueue`.
 
 #### `src/lib/tts/AudioContentPipeline.ts`
 The Data Pipeline for TTS.
@@ -364,6 +380,7 @@ State is managed using **Zustand**.
 *   **`useGenAIStore`**: Persists AI settings and usage stats to **localStorage**.
 *   **`useLibraryStore`**: Transient UI state. Hydrates book lists from `DBService` (IndexedDB) on mount.
 *   **`useSyncStore`**: Persists Sync credentials and settings to **localStorage**.
+*   **`useToastStore`**: Manages ephemeral UI notifications (Toasts).
 
 ### UI Layer
 

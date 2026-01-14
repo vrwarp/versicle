@@ -27,7 +27,7 @@
 *   **Mobile**: Capacitor 7 (Android)
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
-*   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`
+*   **Tools**: `@zumer/snapdom` (Snapshots), `@jofr/capacitor-media-session`, `browser-image-compression`, `JSZip`
 
 ## Features
 
@@ -50,6 +50,7 @@
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
 *   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
 *   **Free Tier Rotation**: Automatically rotates between Gemini models (Flash Lite/Flash) to maximize free tier usage quotas.
+*   **Mock Mode**: Includes a simulated AI backend for offline testing and development.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
