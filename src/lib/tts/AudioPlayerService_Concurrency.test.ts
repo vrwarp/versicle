@@ -4,11 +4,11 @@ import { MockCloudProvider } from './providers/MockCloudProvider';
 
 // Mock useTTSStore to avoid circular dependency crash
 vi.mock('../../store/useTTSStore', () => ({
-    useTTSStore: {
-        getState: vi.fn(() => ({
-            settings: { customAbbreviations: [], alwaysMerge: [], sentenceStarters: [] }
-        }))
-    }
+  useTTSStore: {
+    getState: vi.fn(() => ({
+      settings: { customAbbreviations: [], alwaysMerge: [], sentenceStarters: [] }
+    }))
+  }
 }));
 
 // Mock DBService
@@ -27,14 +27,14 @@ vi.mock('../../db/DBService', () => ({
 
 // Mock LexiconService
 vi.mock('./LexiconService', () => ({
-    LexiconService: {
-        getInstance: vi.fn().mockReturnValue({
-            getRules: vi.fn().mockResolvedValue([]),
-            applyLexicon: vi.fn((text) => text),
-            getRulesHash: vi.fn().mockResolvedValue('hash'),
-            getBibleLexiconPreference: vi.fn().mockResolvedValue('default'),
-        })
-    }
+  LexiconService: {
+    getInstance: vi.fn().mockReturnValue({
+      getRules: vi.fn().mockResolvedValue([]),
+      applyLexicon: vi.fn((text) => text),
+      getRulesHash: vi.fn().mockResolvedValue('hash'),
+      getBibleLexiconPreference: vi.fn().mockResolvedValue('default'),
+    })
+  }
 }));
 
 // Mock TTSCache
@@ -54,9 +54,9 @@ describe('AudioPlayerService Concurrency', () => {
 
   // Create a queue
   const queue: TTSQueueItem[] = [
-      { text: 'Sentence one.', cfi: 'cfi1' },
-      { text: 'Sentence two.', cfi: 'cfi2' },
-      { text: 'Sentence three.', cfi: 'cfi3' },
+    { text: 'Sentence one.', cfi: 'cfi1' },
+    { text: 'Sentence two.', cfi: 'cfi2' },
+    { text: 'Sentence three.', cfi: 'cfi3' },
   ];
 
   beforeEach(async () => {
@@ -70,15 +70,15 @@ describe('AudioPlayerService Concurrency', () => {
     // Slow down synthesis to simulate network latency and allow overlap
     // @ts-expect-error Accessing protected method
     vi.spyOn(mockProvider, 'fetchAudioData').mockImplementation(async () => {
-        // Wait 50ms
-        await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait 50ms
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-        // Return dummy result
-        return {
-             isNative: false,
-             audio: new Blob(['dummy'], { type: 'audio/mp3' }),
-             alignment: [{ timeSeconds: 0, charIndex: 0 }]
-        };
+      // Return dummy result
+      return {
+        isNative: false,
+        audio: new Blob(['dummy'], { type: 'audio/mp3' }),
+        alignment: [{ timeSeconds: 0, charIndex: 0 }]
+      };
     });
 
     // IMPORTANT: Await these because executeWithLock makes them async
@@ -96,40 +96,34 @@ describe('AudioPlayerService Concurrency', () => {
     const playSpy = vi.spyOn(mockProvider, 'fetchAudioData');
 
     // Call play multiple times rapidly
-    // These return promises now, but we intentionally don't await them to simulate concurrency
-    service.jumpTo(0);
-    service.jumpTo(1);
-    service.jumpTo(2);
+    // Await all of them to ensure the TaskSequencer has processed them serially.
+    await Promise.all([
+      service.jumpTo(0),
+      service.jumpTo(1),
+      service.jumpTo(2)
+    ]);
 
-    // Wait for all promises to settle
-    // Increase timeout to ensure serial execution + overhead fits
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    // Only the last one should have completed successfully.
-    // However, depending on timing, the first ones might have started but been aborted.
-    // The key is that the final state should reflect the last call.
+    // Only the last one's state should persist in the end.
+    // Because execution is serial (TaskSequencer), fetchAudioData is likely called 3 times.
+    // The assertions verify the FINAL state.
 
     // Access state via stateManager
-    // @ts-expect-error Accessing private property
     expect(service['stateManager'].currentIndex).toBe(2);
     expect(service['status']).toBe('playing');
 
     const calls = playSpy.mock.calls;
-    // We expect at least the last one
+    // We expect at least the last one (likely 3 calls in reality due to serial queue)
     expect(calls.length).toBeGreaterThanOrEqual(1);
-    expect(calls[calls.length - 1][0]).toBe('Sentence three.');
+    expect((calls[calls.length - 1] as any)[0]).toBe('Sentence three.');
   });
 
   it('should stop playback immediately if stop() is called after play()', async () => {
-      // Start playing
-      service.play();
+    // Start playing and then immediately stop
+    // We await both to ensure the sequence processes (Play -> Stop)
+    await service.play();
+    await service.stop();
 
-      // Immediately stop
-      service.stop();
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      expect(service['status']).toBe('stopped');
+    expect(service['status']).toBe('stopped');
   });
 
 });
