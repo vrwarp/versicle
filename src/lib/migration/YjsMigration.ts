@@ -4,10 +4,12 @@ import { getDB } from '../../db/db';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReadingListStore } from '../../store/useReadingListStore';
 import type {
     UserInventoryItem,
     UserAnnotation,
-    UserProgress
+    UserProgress,
+    ReadingListEntry
 } from '../../types/db';
 
 /**
@@ -70,18 +72,20 @@ async function migrateLegacyData(): Promise<void> {
         legacyInventory,
         legacyAnnotations,
         legacyProgress,
+        legacyReadingList,
     ] = await Promise.all([
         dbService.getAllInventoryItems(),
         db.getAll('user_annotations'),
         db.getAll('user_progress'),
+        db.getAll('user_reading_list'),
     ]);
 
-    console.log(`[Migration] Found ${legacyInventory.length} books, ${legacyAnnotations.length} annotations, ${legacyProgress.length} progress entries`);
+    console.log(`[Migration] Found ${legacyInventory.length} books, ${legacyAnnotations.length} annotations, ${legacyProgress.length} progress entries, ${legacyReadingList.length} reading list entries`);
 
     // Use a single Yjs transaction for atomic migration
     yDoc.transact(() => {
-        // Migrate Library (Inventory + Progress)
-        migrateBooksAndProgress(legacyInventory, legacyProgress);
+        // Migrate Library (Inventory + Progress + Reading List)
+        migrateBooksAndProgress(legacyInventory, legacyProgress, legacyReadingList);
 
         // Migrate Annotations
         migrateAnnotations(legacyAnnotations);
@@ -93,13 +97,18 @@ async function migrateLegacyData(): Promise<void> {
 }
 
 /**
- * Migrates books from legacy IDB to useLibraryStore and useReadingStateStore
+ * Migrates books from legacy IDB to useLibraryStore, useReadingStateStore, and useReadingListStore
  */
-function migrateBooksAndProgress(legacyInventory: UserInventoryItem[], legacyProgress: UserProgress[]): void {
+function migrateBooksAndProgress(
+    legacyInventory: UserInventoryItem[],
+    legacyProgress: UserProgress[],
+    legacyReadingList: ReadingListEntry[]
+): void {
     const books: Record<string, UserInventoryItem> = {};
     const progress: Record<string, UserProgress> = {};
+    const readingList: Record<string, ReadingListEntry> = {};
 
-    // Populate books from legacyInventory
+    // 1. Populate books from legacyInventory
     for (const item of legacyInventory) {
         books[item.bookId] = {
             bookId: item.bookId,
@@ -114,7 +123,13 @@ function migrateBooksAndProgress(legacyInventory: UserInventoryItem[], legacyPro
         };
     }
 
-    // Populate progress from legacyProgress
+    // 2. Populate reading list
+    for (const entry of legacyReadingList) {
+        readingList[entry.filename] = entry;
+    }
+
+    // 3. Populate progress from legacyProgress
+    const progressBookIds = new Set<string>();
     for (const prog of legacyProgress) {
         progress[prog.bookId] = {
             bookId: prog.bookId,
@@ -124,6 +139,28 @@ function migrateBooksAndProgress(legacyInventory: UserInventoryItem[], legacyPro
             lastPlayedCfi: prog.lastPlayedCfi,
             completedRanges: prog.completedRanges || []
         };
+        progressBookIds.add(prog.bookId);
+    }
+
+    // 4. Progress Fallback: Check reading list for books missing from user_progress
+    let fallbackCount = 0;
+    for (const item of legacyInventory) {
+        if (!progressBookIds.has(item.bookId) && item.sourceFilename) {
+            const rlEntry = readingList[item.sourceFilename];
+            if (rlEntry && rlEntry.percentage > 0) {
+                progress[item.bookId] = {
+                    bookId: item.bookId,
+                    percentage: rlEntry.percentage,
+                    lastRead: rlEntry.lastUpdated || Date.now(),
+                    completedRanges: []
+                };
+                fallbackCount++;
+            }
+        }
+    }
+
+    if (fallbackCount > 0) {
+        console.log(`[Migration] Applied progress fallbacks for ${fallbackCount} books from reading list`);
     }
 
     // Batch update stores (middleware syncs to Yjs)
@@ -135,7 +172,11 @@ function migrateBooksAndProgress(legacyInventory: UserInventoryItem[], legacyPro
         progress: { ...state.progress, ...progress }
     }));
 
-    console.log(`[Migration] Migrated ${Object.keys(books).length} books and ${Object.keys(progress).length} progress entries`);
+    useReadingListStore.setState((state) => ({
+        entries: { ...state.entries, ...readingList }
+    }));
+
+    console.log(`[Migration] Migrated ${Object.keys(books).length} books, ${Object.keys(progress).length} progress entries, and ${Object.keys(readingList).length} reading list entries`);
 }
 
 /**

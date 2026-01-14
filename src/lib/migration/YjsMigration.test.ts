@@ -5,6 +5,7 @@ import { dbService } from '../../db/DBService';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReadingListStore } from '../../store/useReadingListStore';
 
 // Mock dependencies
 vi.mock('../../store/yjs-provider', () => {
@@ -48,6 +49,13 @@ vi.mock('../../store/useReadingStateStore', () => ({
     }
 }));
 
+vi.mock('../../store/useReadingListStore', () => ({
+    useReadingListStore: {
+        getState: vi.fn(),
+        setState: vi.fn()
+    }
+}));
+
 describe('YjsMigration', () => {
     let yDoc: Y.Doc;
 
@@ -65,6 +73,7 @@ describe('YjsMigration', () => {
             getAll: vi.fn().mockImplementation((storeName) => {
                 if (storeName === 'user_annotations') return Promise.resolve([]);
                 if (storeName === 'user_progress') return Promise.resolve([]);
+                if (storeName === 'user_reading_list') return Promise.resolve([]);
                 return Promise.resolve([]);
             })
         };
@@ -126,5 +135,46 @@ describe('YjsMigration', () => {
 
         // Flag should NOT be set
         expect(yDoc.getMap('preferences').get('migration_complete')).toBeUndefined();
+    });
+
+    it('should migrate reading list and apply progress fallback', async () => {
+        // Setup legacy data
+        const mockInventory = [
+            { bookId: 'book_legacy', title: 'Legacy Book', addedAt: 1000, sourceFilename: 'legacy.epub' }
+        ];
+        const mockReadingList = [
+            { filename: 'legacy.epub', title: 'Legacy Book', author: 'Author', percentage: 0.75, lastUpdated: 5000 }
+        ];
+
+        (dbService.getAllInventoryItems as any).mockResolvedValue(mockInventory);
+
+        const dbMock = {
+            getAll: vi.fn().mockImplementation((storeName) => {
+                if (storeName === 'user_reading_list') return Promise.resolve(mockReadingList);
+                if (storeName === 'user_progress') return Promise.resolve([]); // NO progress in user_progress
+                if (storeName === 'user_annotations') return Promise.resolve([]);
+                return Promise.resolve([]);
+            })
+        };
+        const { getDB } = await import('../../db/db');
+        (getDB as any).mockResolvedValue(dbMock);
+
+        // Run migration
+        await migrateToYjs();
+
+        // Check Reading List Store
+        expect(useReadingListStore.setState).toHaveBeenCalled();
+        const rlUpdateFn = (useReadingListStore.setState as any).mock.calls[0][0];
+        const rlState = rlUpdateFn({ entries: {} });
+        expect(rlState.entries['legacy.epub']).toBeDefined();
+        expect(rlState.entries['legacy.epub'].percentage).toBe(0.75);
+
+        // Check Progress Fallback in Reading State Store
+        expect(useReadingStateStore.setState).toHaveBeenCalled();
+        const rsUpdateFn = (useReadingStateStore.setState as any).mock.calls[0][0];
+        const rsState = rsUpdateFn({ progress: {} });
+        expect(rsState.progress['book_legacy']).toBeDefined();
+        expect(rsState.progress['book_legacy'].percentage).toBe(0.75);
+        expect(rsState.progress['book_legacy'].lastRead).toBe(5000);
     });
 });
