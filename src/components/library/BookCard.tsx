@@ -1,6 +1,7 @@
 import React from 'react';
 import type { BookMetadata } from '../../types/db';
 import { BookCover } from './BookCover';
+import { Progress } from '../ui/Progress';
 
 /**
  * Props for the BookCard component.
@@ -51,6 +52,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book, onOpen, onD
   };
 
   const durationString = book.totalChars ? formatDuration(book.totalChars) : null;
+  const progressPercent = book.progress ? Math.round(book.progress * 100) : 0;
 
   return (
     <div
@@ -83,21 +85,12 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book, onOpen, onD
         )}
 
         {book.progress !== undefined && book.progress > 0 && (
-          <div
-            className="w-full h-1.5 bg-secondary rounded-full mt-3 overflow-hidden"
+          <Progress
+            value={progressPercent}
+            className="mt-3 h-1.5"
             data-testid="progress-container"
-            role="progressbar"
-            aria-valuenow={Math.round(book.progress * 100)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={`Reading progress: ${Math.round(book.progress * 100)}%`}
-          >
-            <div
-              className="h-full bg-primary transition-all duration-300 ease-out"
-              style={{ width: `${Math.min(100, Math.max(0, book.progress * 100))}%` }}
-              data-testid="progress-bar"
-            />
-          </div>
+            aria-label={`Reading progress: ${progressPercent}%`}
+          />
         )}
       </div>
     </div>
