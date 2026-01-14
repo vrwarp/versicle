@@ -259,4 +259,24 @@ describe('ReaderView', () => {
 
     expect(usePreferencesStore.getState().shouldForceFont).toBe(true);
   });
+  it('resumes reading from stored position', async () => {
+    // Set up initial reading state
+    useReadingStateStore.setState({
+      progress: {
+        'test-book-id': {
+          bookId: 'test-book-id',
+          currentCfi: 'epubcfi(/6/4!/4/2/2)',
+          percentage: 0.5,
+          lastRead: Date.now(),
+          completedRanges: []
+        }
+      }
+    });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(mockDisplay).toHaveBeenCalledWith('epubcfi(/6/4!/4/2/2)');
+    });
+  });
 });

@@ -25,6 +25,10 @@ vi.mock('../../../lib/tts/AudioPlayerService', () => ({
   AudioPlayerService: {
     getInstance: () => ({
       preview: vi.fn(),
+      subscribe: vi.fn(),
+      setRate: vi.fn(),
+      setVoice: vi.fn(),
+      setVolume: vi.fn(),
     }),
   },
 }));

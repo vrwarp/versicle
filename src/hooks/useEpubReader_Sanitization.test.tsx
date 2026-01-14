@@ -11,6 +11,7 @@ const sanitizeSpy = vi.spyOn(sanitizer, 'sanitizeContent');
 vi.mock('../db/DBService', () => ({
   dbService: {
     getBook: vi.fn().mockResolvedValue({ file: new ArrayBuffer(0), metadata: {} }),
+    getBookFile: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
     getLocations: vi.fn().mockResolvedValue(null),
     saveLocations: vi.fn().mockResolvedValue(undefined),
     getReadingHistory: vi.fn().mockResolvedValue([]),
@@ -24,30 +25,30 @@ vi.mock('epubjs', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
       renderTo: vi.fn().mockImplementation((element) => {
-          // Create iframe to satisfy the hook logic finding an iframe
-          const iframe = document.createElement('iframe');
-          element.appendChild(iframe);
-          return {
-            themes: { register: vi.fn(), select: vi.fn(), fontSize: vi.fn(), font: vi.fn(), default: vi.fn() },
-            display: vi.fn(),
-            on: vi.fn(),
-            hooks: { content: { register: vi.fn() } },
-            spread: vi.fn(),
-            flow: vi.fn(),
-            getContents: vi.fn().mockReturnValue([]),
-          };
+        // Create iframe to satisfy the hook logic finding an iframe
+        const iframe = document.createElement('iframe');
+        element.appendChild(iframe);
+        return {
+          themes: { register: vi.fn(), select: vi.fn(), fontSize: vi.fn(), font: vi.fn(), default: vi.fn() },
+          display: vi.fn(),
+          on: vi.fn(),
+          hooks: { content: { register: vi.fn() } },
+          spread: vi.fn(),
+          flow: vi.fn(),
+          getContents: vi.fn().mockReturnValue([]),
+        };
       }),
       loaded: { navigation: Promise.resolve({ toc: [] }) },
       ready: Promise.resolve(),
       destroy: vi.fn(),
-      locations: { generate: vi.fn().mockResolvedValue(), save: vi.fn(), load: vi.fn(), percentageFromCfi: vi.fn() },
+      locations: { generate: vi.fn().mockResolvedValue(undefined), save: vi.fn(), load: vi.fn(), percentageFromCfi: vi.fn() },
       spine: {
-          get: vi.fn(),
-          hooks: {
-              serialize: {
-                  register: registerSerializeSpy
-              }
+        get: vi.fn(),
+        hooks: {
+          serialize: {
+            register: registerSerializeSpy
           }
+        }
       }
     }))
   };
@@ -65,7 +66,7 @@ const TestComponent = () => {
     shouldForceFont: false,
   };
 
-  useEpubReader('test-book-id', viewerRef, options);
+  useEpubReader('test-book-id', viewerRef as React.RefObject<HTMLElement>, options);
 
   return <div ref={viewerRef} data-testid="viewer" />;
 };
@@ -79,28 +80,28 @@ describe('useEpubReader Sanitization', () => {
     render(<TestComponent />);
 
     await waitFor(() => {
-        expect(registerSerializeSpy).toHaveBeenCalled();
+      expect(registerSerializeSpy).toHaveBeenCalled();
     });
   });
 
   it('should call sanitizeContent when the hook is executed', async () => {
-      // Need to run render to register the spy
-      render(<TestComponent />);
-      await waitFor(() => {
-        expect(registerSerializeSpy).toHaveBeenCalled();
-      });
+    // Need to run render to register the spy
+    render(<TestComponent />);
+    await waitFor(() => {
+      expect(registerSerializeSpy).toHaveBeenCalled();
+    });
 
-      // Execute the registered hook manually
-      const hookFn = registerSerializeSpy.mock.calls[0][0];
-      const dirtyHtml = '<script>alert(1)</script><b>Safe</b>';
+    // Execute the registered hook manually
+    const hookFn = registerSerializeSpy.mock.calls[0][0];
+    const dirtyHtml = '<script>alert(1)</script><b>Safe</b>';
 
-      // We expect sanitizeContent to be called
-      const result = hookFn(dirtyHtml);
+    // We expect sanitizeContent to be called
+    const result = hookFn(dirtyHtml);
 
-      expect(sanitizeSpy).toHaveBeenCalledWith(dirtyHtml);
+    expect(sanitizeSpy).toHaveBeenCalledWith(dirtyHtml);
 
-      // And the return value should be sanitized
-      expect(result).toContain('<b>Safe</b>');
-      expect(result).not.toContain('<script>');
+    // And the return value should be sanitized
+    expect(result).toContain('<b>Safe</b>');
+    expect(result).not.toContain('<script>');
   });
 });

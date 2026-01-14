@@ -60,13 +60,15 @@ vi.mock('../ui/Select', () => ({
     ),
 }));
 
-vi.mock('../../store/useReadingStateStore', () => ({
-    useReadingStateStore: {
-        getState: vi.fn().mockReturnValue({ progress: {} }),
-        setState: vi.fn(),
-        subscribe: vi.fn(),
-    }
-}));
+vi.mock('../../store/useReadingStateStore', () => {
+    const mockStore = vi.fn((selector) => selector ? selector({ progress: {} }) : { progress: {} });
+    mockStore.getState = vi.fn().mockReturnValue({ progress: {} });
+    mockStore.setState = vi.fn();
+    mockStore.subscribe = vi.fn();
+    return {
+        useReadingStateStore: mockStore
+    };
+});
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 
 describe('LibraryView', () => {
