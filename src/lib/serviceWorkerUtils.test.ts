@@ -26,6 +26,7 @@ describe('waitForServiceWorkerController', () => {
     });
 
     it('waits for ready then polls for controller', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let controllerValue: any = null;
         const readyPromise = Promise.resolve();
 

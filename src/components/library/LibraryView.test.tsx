@@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 // Mock zustand/middleware to disable persistence
 vi.mock('zustand/middleware', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     persist: (config: any) => (set: any, get: any, api: any) => config(set, get, api),
     createJSONStorage: () => ({
         getItem: vi.fn(),
@@ -61,14 +62,16 @@ vi.mock('../ui/Select', () => ({
 }));
 
 vi.mock('../../store/useReadingStateStore', () => {
-    const getProgress = (bookId: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const getProgress = (_bookId: string) => {
         // This will be overridden in tests that need custom progress
         return null;
     };
     const mockStore = vi.fn((selector) => selector ? selector({ progress: {}, getProgress }) : { progress: {}, getProgress });
     mockStore.getState = vi.fn().mockReturnValue({
         progress: {},
-        getProgress: (bookId: string) => null
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        getProgress: (_bookId: string) => null
     });
     mockStore.setState = vi.fn();
     mockStore.subscribe = vi.fn();
@@ -111,8 +114,11 @@ describe('LibraryView', () => {
     it('sorts books correctly', async () => {
         useLibraryStore.setState({
             books: {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 '1': { id: '1', bookId: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200 } as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 '2': { id: '2', bookId: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100 } as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 '3': { id: '3', bookId: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300 } as any
             },
             viewMode: 'grid',
@@ -120,6 +126,7 @@ describe('LibraryView', () => {
         });
 
         // Mock reading progress for sorting - using per-device structure
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useReadingStateStore.getState as any).mockReturnValue({
             progress: {},
             getProgress: (bookId: string) => {
@@ -170,6 +177,7 @@ describe('LibraryView', () => {
     it('shows no results message when search returns nothing', async () => {
         useLibraryStore.setState({
             books: {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 '1': { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald' } as any
             },
             viewMode: 'grid'

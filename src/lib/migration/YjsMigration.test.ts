@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as Y from 'yjs';
 import { migrateToYjs } from './YjsMigration';
 import { dbService } from '../../db/DBService';
 import { useLibraryStore } from '../../store/useLibraryStore';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
@@ -87,6 +86,7 @@ describe('YjsMigration', () => {
         };
 
         const { getDB } = await import('../../db/db');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (getDB as any).mockResolvedValue(dbMock);
     });
 
@@ -95,6 +95,7 @@ describe('YjsMigration', () => {
         const mockInventory = [
             { bookId: 'book1', title: 'Book 1', addedAt: 1000, tags: ['tag1'] }
         ];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getAllInventoryItems as any).mockResolvedValue(mockInventory);
 
         // Run migration
@@ -104,6 +105,7 @@ describe('YjsMigration', () => {
         expect(useLibraryStore.setState).toHaveBeenCalledWith(expect.any(Function));
 
         // Extract the state update function passed to setState and verify logic
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const updateFn = (useLibraryStore.setState as any).mock.calls[0][0];
         const newState = updateFn({ books: {} }); // Mock existing state
 
@@ -137,6 +139,7 @@ describe('YjsMigration', () => {
     });
 
     it('should handle errors gracefully', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getAllInventoryItems as any).mockRejectedValue(new Error('DB Error'));
 
         await expect(migrateToYjs()).rejects.toThrow('DB Error');
@@ -154,6 +157,7 @@ describe('YjsMigration', () => {
             { filename: 'legacy.epub', title: 'Legacy Book', author: 'Author', percentage: 0.75, lastUpdated: 5000 }
         ];
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getAllInventoryItems as any).mockResolvedValue(mockInventory);
 
         const dbMock = {
@@ -165,6 +169,7 @@ describe('YjsMigration', () => {
             })
         };
         const { getDB } = await import('../../db/db');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (getDB as any).mockResolvedValue(dbMock);
 
         // Run migration
@@ -172,6 +177,7 @@ describe('YjsMigration', () => {
 
         // Check Reading List Store
         expect(useReadingListStore.setState).toHaveBeenCalled();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rlUpdateFn = (useReadingListStore.setState as any).mock.calls[0][0];
         const rlState = rlUpdateFn({ entries: {} });
         expect(rlState.entries['legacy.epub']).toBeDefined();
@@ -180,6 +186,7 @@ describe('YjsMigration', () => {
         // Check Progress Fallback in Reading State Store
         // Note: Progress is now stored per-device: progress[bookId][deviceId]
         expect(useReadingStateStore.setState).toHaveBeenCalled();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rsUpdateFn = (useReadingStateStore.setState as any).mock.calls[0][0];
         const rsState = rsUpdateFn({ progress: {} });
         expect(rsState.progress['book_legacy']).toBeDefined();

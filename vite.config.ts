@@ -53,4 +53,5 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any)

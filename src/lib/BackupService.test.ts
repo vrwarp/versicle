@@ -4,14 +4,28 @@ import { BackupService, BackupManifestV2 } from './BackupService';
 import { dbService } from '../db/DBService';
 import { exportFile } from './export';
 
+// Hoist variables to capture mock interactions
+const mocks = vi.hoisted(() => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  capturedDocs: [] as any[],
+  persistenceMock: {
+    clearData: vi.fn(() => Promise.resolve()),
+  }
+}));
+
 // Mock y-indexeddb to avoid side effects in yjs-provider
 vi.mock('y-indexeddb', () => ({
   IndexeddbPersistence: class {
-    constructor() {}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    constructor(_name: string, doc: any) {
+      mocks.capturedDocs.push(doc);
+    }
     on() {}
     destroy() {}
+    clearData() { return mocks.persistenceMock.clearData(); }
     get synced() { return true; }
-    once() {}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    once(_event: string, cb: any) { cb(); }
   }
 }));
 
@@ -21,6 +35,10 @@ vi.mock('../store/yjs-provider', async (importOriginal) => {
   return {
     ...actual,
     waitForYjsSync: vi.fn(() => Promise.resolve()),
+    // Ensure we expose a mock persistence if the real one isn't initialized
+    yjsPersistence: {
+        clearData: mocks.persistenceMock.clearData
+    }
   };
 });
 
@@ -83,6 +101,7 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
   beforeEach(async () => {
     service = new BackupService();
     vi.clearAllMocks();
+    mocks.capturedDocs.length = 0; // Clear captured docs
 
     // Get the mocked yDoc
     const yjsProvider = await import('../store/yjs-provider');
@@ -90,6 +109,8 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
 
     // Clear Y.Doc maps
     mockYDoc.getMap('library').clear();
+    // Initialize books submap
+    mockYDoc.getMap('library').set('books', new Y.Map());
     mockYDoc.getMap('progress').clear();
     mockYDoc.getMap('annotations').clear();
 
@@ -153,7 +174,8 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
   describe('createFullBackup', () => {
     it('should create a ZIP backup with files', async () => {
       // Add a book to Y.Doc
-      mockYDoc.getMap('library').set('b1', {
+      const booksMap = mockYDoc.getMap('library').get('books');
+      booksMap.set('b1', {
         bookId: 'b1',
         title: 'Book 1',
         author: 'Author 1',
@@ -187,7 +209,9 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       // Create a snapshot from test data using a separate doc
       // The service will apply this to its internal yDoc
       const testDoc = new Y.Doc();
-      testDoc.getMap('library').set('b1', {
+      testDoc.getMap('library').set('books', new Y.Map());
+      const booksMap = testDoc.getMap('library').get('books') as Y.Map<unknown>;
+      booksMap.set('b1', {
         bookId: 'b1',
         title: 'Restored Book',
         author: 'Author',
@@ -220,15 +244,18 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
 
       await service.restoreBackup(file);
 
-      // After restore, the mock Y.Doc should have the book merged in
-      // Y.applyUpdate merges the snapshot into the existing doc
-      // Note: The book may have its properties as a Map-like object
-      const restored = mockYDoc.getMap('library').get('b1');
-      expect(restored).toBeDefined();
-      // The restored object should have the expected properties
-      if (restored) {
-        expect(restored.bookId || restored.get?.('bookId')).toBe('b1');
-      }
+      // Verify that clearData was called on the existing persistence
+      expect(mocks.persistenceMock.clearData).toHaveBeenCalled();
+
+      // Verify that a new Y.Doc was created and populated
+      expect(mocks.capturedDocs.length).toBeGreaterThan(0);
+      const restoredDoc = mocks.capturedDocs[mocks.capturedDocs.length - 1] as Y.Doc;
+
+      const restoredBooks = restoredDoc.getMap('library').get('books');
+      expect(restoredBooks).toBeDefined();
+      const b1 = restoredBooks.get('b1');
+      expect(b1).toBeDefined();
+      expect(b1.title).toBe('Restored Book');
     });
 
     it('should reject v1 backup format', async () => {

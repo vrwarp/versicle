@@ -99,6 +99,7 @@ vi.mock('../lib/sync/CheckpointService', () => ({
 
 vi.mock('../store/useReadingListStore', () => ({
     useReadingListStore: Object.assign(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (selector: any) => selector ? selector({ entries: {} }) : { entries: {} },
         {
             getState: () => ({
@@ -111,6 +112,7 @@ vi.mock('../store/useReadingListStore', () => ({
 
 vi.mock('../store/useReadingStateStore', () => ({
     useReadingStateStore: Object.assign(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (selector: any) => selector ? selector({ progress: {} }) : { progress: {} },
         {
             getState: () => ({
@@ -122,6 +124,7 @@ vi.mock('../store/useReadingStateStore', () => ({
 }));
 
 vi.mock('../store/useToastStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useToastStore: (selector: any) => selector ? selector({ showToast: vi.fn() }) : { showToast: vi.fn() }
 }));
 

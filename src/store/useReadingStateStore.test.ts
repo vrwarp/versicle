@@ -5,7 +5,7 @@ vi.mock('../lib/device-id', () => ({
     getDeviceId: vi.fn(() => 'test-device-id')
 }));
 
-import { useReadingStateStore, useBookProgress, useCurrentDeviceProgress } from './useReadingStateStore';
+import { useReadingStateStore } from './useReadingStateStore';
 import { getDeviceId } from '../lib/device-id';
 
 describe('useReadingStateStore - Per-Device Progress', () => {

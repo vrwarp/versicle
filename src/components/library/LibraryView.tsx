@@ -226,12 +226,13 @@ export const LibraryView: React.FC = () => {
         case 'recent':
           // Sort by addedAt descending (newest first)
           return (b.addedAt || 0) - (a.addedAt || 0);
-        case 'last_read':
+        case 'last_read': {
           // Sort by lastRead from reading state descending (most recently read first)
           const getProgress = useReadingStateStore.getState().getProgress;
           const bProgress = getProgress(b.bookId);
           const aProgress = getProgress(a.bookId);
           return (bProgress?.lastRead || 0) - (aProgress?.lastRead || 0);
+        }
         case 'author':
           // Sort by author ascending (A-Z)
           return (a.author || '').localeCompare(b.author || '');

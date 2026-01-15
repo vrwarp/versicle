@@ -284,6 +284,7 @@ function migratePreferences(): void {
                 const parsed = JSON.parse(readerStorage);
                 const state = parsed.state;
                 if (state) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const updates: Partial<any> = {};
 
                     if (state.viewMode) updates.readerViewMode = state.viewMode;

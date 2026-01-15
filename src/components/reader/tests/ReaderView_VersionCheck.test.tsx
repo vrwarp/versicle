@@ -33,6 +33,7 @@ vi.mock('../../../store/useReaderUIStore', () => ({
     })
 }));
 vi.mock('../../../store/usePreferencesStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     usePreferencesStore: (selector: any) => selector({
         currentTheme: 'light',
         customTheme: null,
@@ -44,6 +45,7 @@ vi.mock('../../../store/usePreferencesStore', () => ({
     })
 }));
 vi.mock('../../../store/useReadingStateStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useReadingStateStore: (selector: any) => selector({
         updateLocation: vi.fn(),
         currentBookId: null,

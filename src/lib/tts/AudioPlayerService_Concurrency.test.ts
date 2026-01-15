@@ -114,6 +114,7 @@ describe('AudioPlayerService Concurrency', () => {
     const calls = playSpy.mock.calls;
     // We expect at least the last one (likely 3 calls in reality due to serial queue)
     expect(calls.length).toBeGreaterThanOrEqual(1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect((calls[calls.length - 1] as any)[0]).toBe('Sentence three.');
   });
 
