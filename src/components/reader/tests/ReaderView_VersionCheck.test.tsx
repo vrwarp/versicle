@@ -49,8 +49,8 @@ vi.mock('../../../store/useReadingStateStore', () => ({
         currentBookId: null,
         setCurrentBookId: vi.fn(),
         reset: vi.fn(),
-        currentCfi: null,
-        progress: 0
+        progress: {},
+        getProgress: () => null
     })
 }));
 vi.mock('../../../store/useTTSStore', () => ({

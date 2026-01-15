@@ -61,8 +61,15 @@ vi.mock('../ui/Select', () => ({
 }));
 
 vi.mock('../../store/useReadingStateStore', () => {
-    const mockStore = vi.fn((selector) => selector ? selector({ progress: {} }) : { progress: {} });
-    mockStore.getState = vi.fn().mockReturnValue({ progress: {} });
+    const getProgress = (bookId: string) => {
+        // This will be overridden in tests that need custom progress
+        return null;
+    };
+    const mockStore = vi.fn((selector) => selector ? selector({ progress: {}, getProgress }) : { progress: {}, getProgress });
+    mockStore.getState = vi.fn().mockReturnValue({
+        progress: {},
+        getProgress: (bookId: string) => null
+    });
     mockStore.setState = vi.fn();
     mockStore.subscribe = vi.fn();
     return {
@@ -112,12 +119,16 @@ describe('LibraryView', () => {
             sortOrder: 'recent'
         });
 
-        // Mock reading progress for sorting
+        // Mock reading progress for sorting - using per-device structure
         (useReadingStateStore.getState as any).mockReturnValue({
-            progress: {
-                '1': { lastRead: 200 },
-                '2': { lastRead: 100 },
-                '3': { lastRead: 300 }
+            progress: {},
+            getProgress: (bookId: string) => {
+                const progressData: Record<string, { lastRead: number }> = {
+                    '1': { lastRead: 200 },
+                    '2': { lastRead: 100 },
+                    '3': { lastRead: 300 }
+                };
+                return progressData[bookId] || null;
             }
         });
 

@@ -302,8 +302,10 @@ describe('Feature Integration Tests', () => {
 
     const state = useReadingStateStore.getState();
     const uiState = useReaderUIStore.getState();
-    expect(state.progress[bookId]?.currentCfi).toBe('cfi1');
-    expect(state.progress[bookId]?.percentage).toBe(0.5);
+    // Use getProgress for per-device progress structure
+    const bookProgress = state.getProgress(bookId);
+    expect(bookProgress?.currentCfi).toBe('cfi1');
+    expect(bookProgress?.percentage).toBe(0.5);
     expect(uiState.currentSectionTitle).toBe('Chapter 5');
 
     // Test TOC setting

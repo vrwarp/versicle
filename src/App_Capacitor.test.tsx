@@ -67,8 +67,13 @@ vi.mock('./store/useReaderUIStore', () => ({
 vi.mock('./store/useReadingStateStore', () => {
   const useReadingStateStore = (selector: any) => selector({
     currentBookId: null,
+    progress: {},
+    getProgress: () => null,
   });
-  useReadingStateStore.getState = vi.fn().mockReturnValue({ progress: {} });
+  useReadingStateStore.getState = vi.fn().mockReturnValue({
+    progress: {},
+    getProgress: () => null
+  });
   useReadingStateStore.setState = vi.fn();
   useReadingStateStore.subscribe = vi.fn();
   return { useReadingStateStore };

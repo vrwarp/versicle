@@ -121,7 +121,11 @@ describe('ReaderControlBar', () => {
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
       currentBookId: null,
     }));
-    mockUseReadingStateStore.getState = vi.fn().mockReturnValue({ progress: {} });
+    // Fix: getProgress returns per-device progress as a function
+    mockUseReadingStateStore.getState = vi.fn().mockReturnValue({
+      progress: {},
+      getProgress: () => null
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseLibraryStore.mockImplementation((selector: any) => {
@@ -186,7 +190,8 @@ describe('ReaderControlBar', () => {
       return selector(state);
     });
     mockUseReadingStateStore.getState.mockReturnValue({
-      progress: { '123': { percentage: 0.5, lastRead: 1000 } }
+      progress: {},
+      getProgress: (bookId: string) => bookId === '123' ? { percentage: 0.5, lastRead: 1000 } : null
     });
 
     // Explicitly debug the hook return in the test
@@ -221,7 +226,8 @@ describe('ReaderControlBar', () => {
       currentBookId: '123',
     }));
     mockUseReadingStateStore.getState.mockReturnValue({
-      progress: { '123': { percentage: 0.75 } }
+      progress: {},
+      getProgress: (bookId: string) => bookId === '123' ? { percentage: 0.75 } : null
     });
     render(<ReaderControlBar />);
     const pill = screen.getByTestId('compass-pill-compact');
@@ -243,7 +249,8 @@ describe('ReaderControlBar', () => {
       progress: { '123': { percentage: 0.25, lastRead: 1000 } }
     }));
     mockUseReadingStateStore.getState.mockReturnValue({
-      progress: { '123': { percentage: 0.25, lastRead: 1000 } }
+      progress: {},
+      getProgress: (bookId: string) => bookId === '123' ? { percentage: 0.25, lastRead: 1000 } : null
     });
 
     render(<ReaderControlBar />);
@@ -271,7 +278,8 @@ describe('ReaderControlBar', () => {
       progress: { '123': { percentage: 0.25, lastRead: 1000 } }
     }));
     mockUseReadingStateStore.getState.mockReturnValue({
-      progress: { '123': { percentage: 0.25, lastRead: 1000 } }
+      progress: {},
+      getProgress: (bookId: string) => bookId === '123' ? { percentage: 0.25, lastRead: 1000 } : null
     });
 
     render(<ReaderControlBar />);

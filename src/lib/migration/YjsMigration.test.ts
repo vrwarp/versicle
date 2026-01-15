@@ -45,7 +45,7 @@ vi.mock('../../store/useAnnotationStore', () => ({
 
 vi.mock('../../store/useReadingStateStore', () => ({
     useReadingStateStore: {
-        getState: vi.fn(),
+        getState: vi.fn().mockReturnValue({ progress: {} }),
         setState: vi.fn()
     }
 }));
@@ -178,12 +178,14 @@ describe('YjsMigration', () => {
         expect(rlState.entries['legacy.epub'].percentage).toBe(0.75);
 
         // Check Progress Fallback in Reading State Store
+        // Note: Progress is now stored per-device: progress[bookId][deviceId]
         expect(useReadingStateStore.setState).toHaveBeenCalled();
         const rsUpdateFn = (useReadingStateStore.setState as any).mock.calls[0][0];
         const rsState = rsUpdateFn({ progress: {} });
         expect(rsState.progress['book_legacy']).toBeDefined();
-        expect(rsState.progress['book_legacy'].percentage).toBe(0.75);
-        expect(rsState.progress['book_legacy'].lastRead).toBe(5000);
+        expect(rsState.progress['book_legacy']['legacy-device']).toBeDefined();
+        expect(rsState.progress['book_legacy']['legacy-device'].percentage).toBe(0.75);
+        expect(rsState.progress['book_legacy']['legacy-device'].lastRead).toBe(5000);
     });
 
     it('should migrate preferences from reader-storage structure', async () => {

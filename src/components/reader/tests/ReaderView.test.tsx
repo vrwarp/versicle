@@ -262,17 +262,24 @@ describe('ReaderView', () => {
     expect(usePreferencesStore.getState().shouldForceFont).toBe(true);
   });
   it('resumes reading from stored position', async () => {
-    // Set up initial reading state
+    // Set up initial reading state with per-device progress structure
+    const deviceId = 'test-device';
+    const storedProgress = {
+      bookId: 'test-book-id',
+      currentCfi: 'epubcfi(/6/4!/4/2/2)',
+      percentage: 0.5,
+      lastRead: Date.now(),
+      completedRanges: []
+    };
+
     useReadingStateStore.setState({
       progress: {
         'test-book-id': {
-          bookId: 'test-book-id',
-          currentCfi: 'epubcfi(/6/4!/4/2/2)',
-          percentage: 0.5,
-          lastRead: Date.now(),
-          completedRanges: []
+          [deviceId]: storedProgress
         }
-      }
+      },
+      // getProgress should return the max progress entry
+      getProgress: (bookId: string) => bookId === 'test-book-id' ? storedProgress : null
     });
 
     renderComponent();
