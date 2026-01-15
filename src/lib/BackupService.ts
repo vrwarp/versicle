@@ -378,7 +378,7 @@ export class BackupService {
           const currentOffloaded = useLibraryStore.getState().offloadedBookIds || new Set();
           const newOffloaded = new Set([...currentOffloaded].filter(id => !restoredBookIds.includes(id)));
           useLibraryStore.setState({ offloadedBookIds: newOffloaded });
-        } catch (e) {
+        } catch {
           // Ignore store update errors during restore
         }
         console.log(`[BackupService] Cleared offload status for ${restoredBookIds.length} restored books`);

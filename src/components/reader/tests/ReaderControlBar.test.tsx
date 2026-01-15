@@ -106,7 +106,6 @@ describe('ReaderControlBar', () => {
       play: vi.fn(),
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: false,
       currentSectionTitle: null,

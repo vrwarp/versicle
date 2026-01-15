@@ -61,7 +61,6 @@ describe('VisualSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (usePreferencesStore as any).mockImplementation((selector: any) => selector({
       currentTheme: 'light',
       setTheme: mockSetTheme,

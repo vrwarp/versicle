@@ -95,6 +95,7 @@ describe('GoogleDriveProvider', () => {
         mockGapi.client.drive.files.list.mockResolvedValue({ result: { files: [] } });
 
         // Mock successful upload
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (global.fetch as any).mockResolvedValue({
             ok: true,
             json: () => Promise.resolve({ id: 'new_file_id' })
@@ -125,6 +126,7 @@ describe('GoogleDriveProvider', () => {
         testDoc.getMap('library').set('book1', { title: 'Downloaded' });
         const snapshot = Y.encodeStateAsUpdate(testDoc);
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (global.fetch as any).mockResolvedValue({
             ok: true,
             arrayBuffer: () => Promise.resolve(snapshot.buffer)

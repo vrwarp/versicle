@@ -231,7 +231,7 @@ export function useEpubReader(
         });
 
         // Display at saved location or start
-        let startLocation = optionsRef.current.initialLocation || meta?.currentCfi || undefined;
+        const startLocation = optionsRef.current.initialLocation || meta?.currentCfi || undefined;
 
         // Legacy reading history fallback removed as Phase 2 relies on Stores (passed via options)
 

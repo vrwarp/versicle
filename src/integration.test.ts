@@ -12,6 +12,7 @@ vi.mock('zustand/middleware', async (importOriginal) => {
   const actual = await importOriginal<typeof import('zustand/middleware')>();
   return {
     ...actual,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     persist: (config: any) => (set: any, get: any, api: any) => config(set, get, api),
   };
 });
@@ -231,6 +232,7 @@ describe('Feature Integration Tests', () => {
           status: 'unread',
           tags: [],
           lastInteraction: Date.now()
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any
       }
     });

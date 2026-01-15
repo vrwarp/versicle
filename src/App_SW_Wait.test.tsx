@@ -97,6 +97,7 @@ describe('App Service Worker Wait (Refactored)', () => {
 
   it('initializes successfully when SW controller is ready (mocked)', async () => {
     // Mock successful resolution
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (waitForServiceWorkerController as any).mockResolvedValue(undefined);
 
     render(<App />);
@@ -112,6 +113,7 @@ describe('App Service Worker Wait (Refactored)', () => {
 
   it('shows critical error if SW controller wait fails', async () => {
     // Mock failure
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (waitForServiceWorkerController as any).mockRejectedValue(new Error('Controller missing'));
 
     render(<App />);

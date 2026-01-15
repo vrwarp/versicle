@@ -376,6 +376,7 @@ export async function extractBookData(
 // Backward compatibility: keep for external callers not yet updated (if any),
 // but implemented via extraction + warning.
 // Note: In strict refactor, we would update all callers. Currently only DBService is caller.
+/* eslint-disable @typescript-eslint/no-unused-vars */
 export async function processEpub(
     _file: File,
     _ttsOptions?: ExtractionOptions,
@@ -383,3 +384,4 @@ export async function processEpub(
 ): Promise<string> {
     throw new Error("processEpub is deprecated. Use extractBookData and DBService.ingestBook.");
 }
+/* eslint-enable @typescript-eslint/no-unused-vars */

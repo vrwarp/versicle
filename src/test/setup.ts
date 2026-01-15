@@ -47,7 +47,8 @@ const localStorageMock = (() => {
       store = {};
     },
     length: 0,
-    key: (index: number) => null,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    key: (_index: number) => null,
   };
 })();
 

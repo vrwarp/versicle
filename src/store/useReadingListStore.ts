@@ -24,7 +24,8 @@ export const useReadingListStore = create<ReadingListState>()(
             })),
 
             removeEntry: (filename) => set((state) => {
-                const { [filename]: removed, ...remain } = state.entries;
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { [filename]: _removed, ...remain } = state.entries;
                 return { entries: remain };
             }),
 

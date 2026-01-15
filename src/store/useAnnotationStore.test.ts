@@ -1,7 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { createAnnotationStore } from './useAnnotationStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getDB } from '../db/db';
 
 vi.mock('../db/db', () => ({
   getDB: vi.fn(),
@@ -71,6 +70,7 @@ describe('useAnnotationStore', () => {
     // However, the STORE defines 'annotations' as Record<string, UserAnnotation>.
     // So we should expect it to equal the map.
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     act(() => useAnnotationStore.setState({ annotations: annotationsMap as any }));
 
     await act(async () => {
@@ -104,6 +104,7 @@ describe('useAnnotationStore', () => {
     const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
 
     // Manually set state directly as if loaded from Yjs
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     act(() => useAnnotationStore.setState({ annotations: { 'test-uuid': annotation as any } }));
 
     await act(async () => {
@@ -118,6 +119,7 @@ describe('useAnnotationStore', () => {
     const { result } = renderHook(() => useAnnotationStore());
     const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     act(() => useAnnotationStore.setState({ annotations: { 'test-uuid': annotation as any } }));
 
     await act(async () => {

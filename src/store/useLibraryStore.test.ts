@@ -11,6 +11,7 @@ const mockDBService = {
   offloadBook: vi.fn(),
   restoreBook: vi.fn(),
   getBookMetadata: vi.fn(),
+  getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
 };
 
 // Mock DBService methods
@@ -23,6 +24,7 @@ vi.mock('zustand/middleware', async (importOriginal) => {
   const actual = await importOriginal<typeof import('zustand/middleware')>();
   return {
     ...actual,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     persist: (config: any) => (set: any, get: any, api: any) => config(set, get, api),
   };
 });
@@ -78,6 +80,7 @@ describe('useLibraryStore', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useLibraryStore = createLibraryStore(mockDBService as any);
     useLibraryStore.setState({
       books: {},
@@ -108,6 +111,7 @@ describe('useLibraryStore', () => {
       totalChars: 1000,
       schemaVersion: 1
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(mockDBService.addBook).mockResolvedValue(mockManifest as any);
 
     await useLibraryStore.getState().addBook(mockFile);
@@ -134,6 +138,7 @@ describe('useLibraryStore', () => {
 
   it('should remove a book calling dbService', async () => {
     // Setup initial state
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useLibraryStore.setState({ books: { 'test-id': { ...mockBook, lastInteraction: 1000, tags: [], status: 'unread' } as any } });
 
     vi.mocked(mockDBService.deleteBook).mockResolvedValue(undefined);
@@ -157,6 +162,7 @@ describe('useLibraryStore', () => {
           status: 'unread',
           tags: [],
           lastInteraction: 1000
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any
       }
     });
@@ -167,6 +173,7 @@ describe('useLibraryStore', () => {
 
     // Setup initial state with a book so hydration has something to do
     useLibraryStore.setState({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       books: { 'test-id': mockBook as any }
     });
 

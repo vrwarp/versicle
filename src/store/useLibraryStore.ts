@@ -101,6 +101,7 @@ interface LibraryState {
 
 // DB Service Interface for injection (updated for Phase 2)
 interface IDBService {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   addBook: (file: File, options: any, onProgress: (progress: number, message: string) => void) => Promise<StaticBookManifest>;
   deleteBook: (id: string) => Promise<void>;
   offloadBook: (id: string) => Promise<void>;
@@ -110,6 +111,7 @@ interface IDBService {
   getOffloadedStatus: (bookIds?: string[]) => Promise<Map<string, boolean>>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const createLibraryStore = (injectedDB: IDBService = dbService as any) => create<LibraryState>()(
   yjs(
     yDoc,
@@ -375,8 +377,10 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         try {
           // Delete from Zustand (middleware syncs deletion to Yjs)
           set((state) => {
-            const { [id]: removed, ...remainingBooks } = state.books;
-            const { [id]: removedMeta, ...remainingMeta } = state.staticMetadata;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { [id]: _removed, ...remainingBooks } = state.books;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { [id]: _removedMeta, ...remainingMeta } = state.staticMetadata;
             return {
               books: remainingBooks,
               staticMetadata: remainingMeta

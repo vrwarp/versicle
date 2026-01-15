@@ -43,6 +43,7 @@ describe('DBService', () => {
         tableImages: []
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const extractSpy = vi.mocked(ingestion.extractBookData).mockResolvedValue(mockData as any);
 
       // Spy on ingestBook (real method)
