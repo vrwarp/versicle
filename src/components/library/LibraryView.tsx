@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo, useDeferredValue } from 'react';
 import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
@@ -58,6 +58,8 @@ export const LibraryView: React.FC = () => {
   const restoreFileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // OPTIMIZATION: Defer the search query to keep the input responsive during expensive filtering
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -200,7 +202,7 @@ export const LibraryView: React.FC = () => {
 
   // OPTIMIZATION: Memoize filtered and sorted books
   const filteredAndSortedBooks = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    const query = deferredSearchQuery.toLowerCase();
 
     // 1. Filter using the pre-computed index (fast string check)
     const filtered = searchableBooks
@@ -226,7 +228,7 @@ export const LibraryView: React.FC = () => {
             return 0;
         }
       });
-  }, [searchableBooks, searchQuery, sortOrder]);
+  }, [searchableBooks, deferredSearchQuery, sortOrder]);
 
   return (
     <div

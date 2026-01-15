@@ -17,3 +17,8 @@
 - **Bottleneck:** `LibraryView` was calling `searchQuery.toLowerCase()` inside the filter loop for every book. For a library of 1000 books, this redundant operation ran 1000 times per render/keystroke.
 - **Solution:** Lifted the query normalization out of the `.filter()` callback.
 - **Learning:** React `useMemo` optimizes *when* a calculation runs, but not *how* inefficient the calculation itself is. Always check loop internals inside `useMemo` or `useCallback`.
+
+## 2025-05-27 - Synchronous Search Filtering
+- **Bottleneck:** `LibraryView` filters the book list synchronously on the main thread, directly coupled to the search input state. Large libraries cause input lag.
+- **Solution:** Implemented `useDeferredValue` for the search query to decouple input updates from expensive filtering logic.
+- **Learning:** `useDeferredValue` (React 18+) is essential for "type-ahead" search inputs where the filtering operation is expensive and runs on the main thread. It prioritizes input responsiveness over list updates.
