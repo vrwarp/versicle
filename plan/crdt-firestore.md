@@ -30,66 +30,59 @@ graph TD
 *   **y-indexeddb:** Primary. Always active. Source of truth for offline state.
 *   **y-fire:** Secondary. Active **only** when authenticated and online. Syncs local `Y.Doc` changes to Firestore.
 
-## 2. Current Implementation Analysis
+## 2. Current Implementation Analysis & Investigation Findings
 
-We have analyzed the existing stores in `src/store/` to identify what will be synced and the associated risks.
+We have analyzed the existing stores in `src/store/` and investigated the `zustand-middleware-yjs` implementation.
 
-### Synced Stores (via `zustand-middleware-yjs`)
-These stores are already wrapped with `yjs()` middleware and writing to the shared `Y.Doc`.
+### Investigation Result: Deep Diffing Supported
+Our analysis of `node_modules/zustand-middleware-yjs/dist/yjs.mjs` confirms that the middleware performs **deep diffing and recursive patching**.
+*   It does **not** blindly replace top-level objects with JSON blobs.
+*   It converts nested objects into nested `Y.Map` instances.
+*   **Conclusion:** If Device A updates `book.rating` and Device B updates `book.tags`, the middleware will merge these changes correctly. The previously feared "Object-level LWW" risk is **resolved**.
 
-| Namespace | Store | Content | Risk Analysis |
-| :--- | :--- | :--- | :--- |
-| `library` | `useLibraryStore` | `books: Record<string, UserInventoryItem>` | **Medium Risk.** `UserInventoryItem` is synced as a whole object. If Device A updates `rating` and Device B updates `tags` simultaneously, **Last-Write-Wins (LWW) will overwrite one change**. Acceptable for single-user scenarios. |
-| `progress` | `useReadingStateStore` | `progress: Record<string, UserProgress>` | **High Risk (Cost).** Updates occur frequently (e.g., every page turn via `updateLocation`). `UserProgress` contains `completedRanges` which can grow large. **Mitigation:** Aggressive debouncing in `y-fire` config. |
-| `annotations` | `useAnnotationStore` | `annotations: Record<string, UserAnnotation>` | **Low Risk.** Keyed by UUID. Set semantics work well here. |
-| `reading-list` | `useReadingListStore` | `entries: Record<string, ReadingListEntry>` | **Low Risk.** Similar LWW constraints as Library. |
-| `preferences` | `usePreferencesStore` | Theme, Font, etc. | **Low Risk.** Infrequent updates. |
+### Remaining Risk: Scalar LWW (Progress Regression)
+While object merging works, **Scalar** values (like `percentage` or `currentCfi`) still suffer from Last-Write-Wins (LWW).
+*   **Scenario:**
+    1.  User reads to **50%** on Device A. Goes offline.
+    2.  User reads to **10%** on Device B (re-reading).
+    3.  Device A comes online.
+    4.  If Device B's update (10%) has a later timestamp (or arbitrarily wins), Device A's progress (50%) is overwritten.
+*   **Impact:** User loses their "furthest read" location.
 
-### Ghost Book Support
-The codebase is **already prepared** for the Ghost Book scenario (Metadata present, Blob missing).
-*   `useLibraryStore.hydrateStaticMetadata` only populates `staticMetadata` if the blob exists in IDB.
-*   `src/store/selectors.ts` (`useAllBooks`) gracefully handles missing static metadata, returning `undefined` for `coverBlob` while falling back to the synced `UserInventoryItem` for `title` and `author`.
+## 3. Mitigation Strategy: Per-Device Progress Tracking
 
-## 3. LWW Mitigation Strategy
+To solve the Scalar LWW issue for reading progress, we will switch from a "Shared Register" model to a "Multi-Value Register" (per-device) model.
 
-The primary disadvantage of the current `Record<string, Object>` structure in Zustand is that Yjs treats the `Object` as an atomic unit when syncing via the middleware's Map implementation (unless deeply nested proxies are used, which `zustand-middleware-yjs` has specific behavior for).
+### 1. Schema Refactoring
+Instead of storing a single `UserProgress` object per book, we will store a map of progress objects keyed by `deviceId`.
 
-**Problem:** If Device A updates `book.rating` and Device B updates `book.tags` for the same book ID at the same time, the Last-Write-Wins (LWW) strategy will pick one object and discard the other's changes.
-
-**Solution: Granular Y.Map Binding**
-
-To mitigate this, we must ensure that `UserInventoryItem` properties are treated as individual keys in a Y.Map (or Subdoc), rather than a single JSON blob.
-
-### 1. Refactoring Data Structures
-Instead of:
+**Current Schema:**
 ```typescript
-// Current: One big object per book
-libraryMap.set('book-123', { rating: 5, tags: ['a'], status: 'read' })
+progress: Record<bookId, UserProgress>
 ```
 
-We should structure the Yjs data as nested Maps:
+**Proposed Schema:**
 ```typescript
-// Proposed: Nested Map for granular conflict resolution
-const bookMap = new Y.Map();
-bookMap.set('rating', 5);
-bookMap.set('tags', ['a']);
-libraryMap.set('book-123', bookMap);
+progress: Record<bookId, Record<deviceId, UserProgress>>
 ```
 
-### 2. Middleware Configuration
-We need to verify if `zustand-middleware-yjs` automatically proxies nested objects to `Y.Map`.
-*   **If Yes:** We are safe. The middleware handles deep merging.
-*   **If No:** We must flatten the store or explicitly configure the middleware to handle deep observation.
+### 2. Device ID Management
+*   Generate a stable `deviceId` (UUID) on first app launch.
+*   Store it in `localStorage` (not synced).
 
-**Investigation Plan:**
-Check `zustand-middleware-yjs` documentation or source. Most modern wrappers support deep proxing. If not, we will refactor `useLibraryStore` actions to update specific fields rather than replacing whole objects:
+### 3. Read-Side Aggregation (Selector Logic)
+The `useBookProgress` selector will become smart. Instead of returning a raw object, it will aggregate all device entries for a book and return the "best" one.
 
-*   **Bad:** `set({ books: { ...books, [id]: { ...book, rating: 5 } } })` (Replaces object)
-*   **Good:** `set((state) => { state.books[id].rating = 5 })` (Requires Immer + Yjs Proxy support)
+**Logic:**
+1.  Fetch all entries: `state.progress[bookId]`.
+2.  Values: `[Progress(DevA, 50%, TS=100), Progress(DevB, 10%, TS=120)]`.
+3.  **Strategy:** Return the entry with the **highest percentage** (or latest timestamp, user preference).
+    *   *Default:* Max Percentage Wins (prevents regression).
+4.  UI sees a single, coherent progress state.
 
-**Proposed Plan for Phase 4 (Refinement):**
-1.  **Audit Middleware:** Confirm if it uses `y-utility/y-map` or deep proxies.
-2.  **Explicit Merging:** If deep proxying is unreliable, we will implement a custom `merge` function in the store that manually reconciles fields (e.g., merging `tags` arrays) before committing to state.
+### 4. Write-Side Isolation
+*   `updateLocation(bookId, ...)` only writes to `state.progress[bookId][currentDeviceId]`.
+*   **Result:** No write conflicts. Device A never overwrites Device B's entry.
 
 ## 4. Authentication & Security
 
@@ -115,7 +108,6 @@ service cloud.firestore {
 
 ### Step 1: Dependencies
 *   Add `firebase` and `y-fire` to `package.json`.
-*   Note: `y-fire` typically requires `yjs` and `firebase` as peers.
 
 ### Step 2: Firebase Configuration
 Create `src/lib/sync/firebase-config.ts` to export initialized `auth` and `firestore`.
@@ -129,8 +121,7 @@ Create `src/lib/sync/SyncManager.ts`.
     *   **On Login:** Import `yDoc` from `src/store/yjs-provider.ts` and initialize `FireProvider`.
     *   **On Logout:** Call `provider.destroy()`.
 3.  **Cost Control:**
-    *   Configure `maxWaitFirestoreTime` to **2000ms** (or higher) to debounce high-frequency progress updates.
-    *   This ensures that scrubbing a slider doesn't result in 50 Firestore writes.
+    *   Configure `maxWaitFirestoreTime` to **2000ms** to debounce high-frequency progress updates.
 
 **Code Sketch:**
 ```typescript
@@ -144,10 +135,8 @@ let fireProvider: FireProvider | null = null;
 export const initSyncService = () => {
     auth.onAuthStateChanged((user) => {
         if (user) {
-            Logger.info('Sync', `User logged in: ${user.uid}`);
             connectFireProvider(user.uid);
         } else {
-            Logger.info('Sync', 'User logged out');
             disconnectFireProvider();
         }
     });
@@ -155,21 +144,16 @@ export const initSyncService = () => {
 
 const connectFireProvider = (uid: string) => {
     if (fireProvider) return;
-
     try {
         fireProvider = new FireProvider({
             firebaseApp: app,
             ydoc: yDoc,
             path: `users/${uid}/versicle/main`,
-            // CRITICAL: Debounce writes to save costs/bandwidth
             maxWaitFirestoreTime: 2000,
             maxUpdatesThreshold: 50
         });
-
-        fireProvider.on('synced', () => Logger.info('Sync', 'Cloud synced'));
-        // y-fire might throw connection errors, need robust listeners
     } catch (e) {
-        Logger.error('Sync', 'Failed to connect FireProvider', e);
+        Logger.error('Sync', 'Failed to connect', e);
     }
 };
 
@@ -181,26 +165,20 @@ const disconnectFireProvider = () => {
 };
 ```
 
-### Step 4: UI Integration
-*   Add a "Sync" section to the Settings page.
-*   Show current Auth state and a "Sign In with Google" button.
-*   (Future) Show sync status icon in the header.
-
 ## 6. Risks & Mitigations
 
 | Risk | Mitigation |
 | :--- | :--- |
-| **High Firestore Costs** | `maxWaitFirestoreTime: 2000` is mandatory. Monitor usage during beta. |
-| **Object LWW Data Loss** | **Action:** Implement "LWW Mitigation Strategy" (Section 3). Verify middleware deep proxy support. |
-| **Large `completedRanges`** | If `UserProgress` grows > 1MB (Firestore document limit), sync will fail. **Future Action:** Implement compaction logic in `useReadingStateStore` to merge overlapping ranges. |
-| **WebRTC Connection Limits** | `y-fire` uses WebRTC. On restricted networks (corporate/school), direct peering fails. It falls back to Firestore (slower, costlier). |
+| **High Firestore Costs** | `maxWaitFirestoreTime: 2000` is mandatory. |
+| **Data Growth** | Per-device entries grow over time. **Action:** Implement "Pruning" logic in `SyncManager` to delete entries older than 6 months. |
+| **Object LWW** | **Resolved:** Middleware supports deep merging. |
+| **WebRTC Blocking** | `y-fire` falls back to Firestore automatically. |
 
 ## 7. Verification Plan
 
-1.  **Unit Tests:** Verify `SyncManager` correctly initializes/destroys provider on auth state mock changes.
-2.  **Integration (Manual):**
-    *   Open App in Simulator A (Logged In).
-    *   Open App in Simulator B (Logged In, same account).
-    *   Change Theme on A -> Verify B updates.
-    *   Add Bookmark on A -> Verify B updates.
-    *   Turn off Network on A -> Make changes -> Turn on -> Verify sync.
+1.  **Unit Tests:** Verify `SyncManager` auth handling.
+2.  **Granularity Test:** Write a test confirming that modifying `fieldA` on one client and `fieldB` on another (for the same ID) results in a merged object, verifying the middleware's behavior.
+3.  **Progress Conflict Test:**
+    *   Simulate Device A writing `progress[id][A] = 50%`.
+    *   Simulate Device B writing `progress[id][B] = 10%`.
+    *   Verify selector `useBookProgress` returns 50%.
