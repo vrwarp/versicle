@@ -390,6 +390,10 @@ class DBService {
         tx.objectStore('cache_session_state').delete(id),
       ]);
 
+      console.log(`[DBService] deleteBook: keys deleted for ${id}. Verifying static_resources deletion...`);
+      const res = await tx.objectStore('static_resources').get(id);
+      console.log(`[DBService] deleteBook: static_resources.get(${id}) after delete = ${res}`);
+
       // Delete from index-based stores
       const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
         const store = tx.objectStore(storeName);
@@ -480,7 +484,9 @@ class DBService {
       // If specific IDs requested
       if (bookIds && bookIds.length > 0) {
         for (const id of bookIds) {
-          result.set(id, !resourceSet.has(id));
+          const exists = resourceSet.has(id);
+          console.log(`[DBService] getOffloadedStatus: ${id} exists in static_resources? ${exists} (Keys: ${resourceKeys.length})`);
+          result.set(id, !exists);
         }
       } else {
         // Return for all resources (inverse: if in set, not offloaded)

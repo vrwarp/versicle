@@ -71,7 +71,7 @@ export const ReaderView: React.FC = () => {
         lineHeight: state.lineHeight || 1.5,
         fontSize: state.fontSize,
         shouldForceFont: state.shouldForceFont,
-        readerViewMode: state.readerViewMode
+        readerViewMode: state.readerViewMode || 'paginated'
     })));
 
     const {
@@ -97,6 +97,8 @@ export const ReaderView: React.FC = () => {
         setCurrentSection: state.setCurrentSection,
         resetUI: state.reset
     })));
+
+    console.log(`[ReaderView] viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
 
     const {
         updateLocation,

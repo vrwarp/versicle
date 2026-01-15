@@ -139,6 +139,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       hydrateStaticMetadata: async () => {
         const { books } = get();
         let bookIds = Object.keys(books);
+        console.error(`[Hydrate] Called. Books in store: ${bookIds.length}`);
 
         if (bookIds.length === 0) {
           // Self-healing: Check if user_inventory has items that Yjs missed (e.g. after restore)
@@ -190,6 +191,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           // Hydrate Offload Status
           try {
             const offloadedMap = await injectedDB.getOffloadedStatus(bookIds);
+            console.error(`[Hydrate] Offloaded Map for ${bookIds.length} books: ${JSON.stringify(Array.from(offloadedMap.entries()))}`);
             const offloadedSet = new Set<string>();
             offloadedMap.forEach((isOffloaded, id) => {
               if (isOffloaded) offloadedSet.add(id);

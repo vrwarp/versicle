@@ -65,8 +65,10 @@ export class BackupService {
     if (!filesFolder) throw new Error('Failed to create zip folder');
 
     // Get book IDs from Yjs library
-    const libraryMap = yDoc.getMap<UserInventoryItem>('library');
-    const bookIds = Array.from(libraryMap.keys());
+    const libraryMap = yDoc.getMap('library');
+    // Phase 2: Books are stored in 'books' submap
+    const booksMap = libraryMap.get('books') as Y.Map<UserInventoryItem>;
+    const bookIds = booksMap ? Array.from(booksMap.keys()) : [];
     const totalBooks = bookIds.length;
     let processed = 0;
 
@@ -96,7 +98,7 @@ export class BackupService {
 
       processed++;
       const percent = 10 + Math.floor((processed / totalBooks) * 80);
-      const book = libraryMap.get(bookId);
+      const book = booksMap.get(bookId);
       onProgress?.(percent, `Archiving ${book?.title || bookId}...`);
     }
 
@@ -138,8 +140,6 @@ export class BackupService {
     // Capture the entire Y.Doc state as a binary update
     const stateUpdate = Y.encodeStateAsUpdate(yDoc);
     const yjsSnapshot = this.uint8ArrayToBase64(stateUpdate);
-
-    console.log(`[BackupService] Yjs snapshot size: ${stateUpdate.byteLength} bytes`);
 
     // Read static/cache data from IDB
     const db = await getDB();
@@ -230,14 +230,40 @@ export class BackupService {
     onProgress?.(10, 'Applying Yjs snapshot...');
 
     // === Apply Yjs Snapshot ===
-    // This properly merges with existing state using CRDT semantics
     const stateUpdate = this.base64ToUint8Array(manifest.yjsSnapshot);
     console.log(`[BackupService] Applying Yjs snapshot: ${stateUpdate.byteLength} bytes`);
 
-    Y.applyUpdate(yDoc, stateUpdate);
+    // CRDT Issue: If we apply snapshot to current doc, deleted items remain deleted (Delete wins).
+    // Solution: Wipe IDB data, then write snapshot using a fresh/isolated YDoc.
+    // The App must be reloaded after this to pick up the new state.
 
-    // Wait for middleware to sync Zustand stores from Yjs
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // 1. Clear existing persistence
+    const { yjsPersistence } = await import('../store/yjs-provider');
+    if (yjsPersistence) {
+      console.log('[BackupService] Clearing existing database...');
+      await yjsPersistence.clearData();
+    }
+
+    // 2. Create isolated YDoc and Persistence to write the snapshot as fresh state
+    const tempDoc = new Y.Doc();
+    Y.applyUpdate(tempDoc, stateUpdate);
+
+    // Import IndexeddbPersistence dynamically to avoid circular deps if any
+    const { IndexeddbPersistence } = await import('y-indexeddb');
+    const tempPersistence = new IndexeddbPersistence('versicle-yjs', tempDoc);
+
+    // 3. Wait for temp persistence to save
+    console.log('[BackupService] Writing snapshot to clean database...');
+    await new Promise<void>((resolve) => {
+      // IndexeddbPersistence saves updates immediately, but we wait for 'synced' to ensure connection
+      // and then a small buffer for write completion.
+      tempPersistence.once('synced', () => {
+        setTimeout(resolve, 500);
+      });
+    });
+
+    tempPersistence.destroy();
+    tempDoc.destroy();
 
     onProgress?.(30, 'Syncing stores...');
 
@@ -308,34 +334,53 @@ export class BackupService {
     if (zip) {
       onProgress?.(70, 'Restoring files...');
 
-      const libraryMap = yDoc.getMap<UserInventoryItem>('library');
-      const bookIds = Array.from(libraryMap.keys());
+      const filesFolder = zip.folder('files');
       const restoredBookIds: string[] = [];
 
-      for (const bookId of bookIds) {
-        const zipFile = zip.file(`files/${bookId}.epub`);
-        if (zipFile) {
-          const arrayBuffer = await zipFile.async('arraybuffer');
+      if (filesFolder) {
+        // Iterate over files in the zip folder directly
+        // This is safer than relying on YDoc state which might be pending reload
+        const filePromises: Promise<void>[] = [];
 
-          const fileTx = db.transaction(['static_resources'], 'readwrite');
-          const store = fileTx.objectStore('static_resources');
+        filesFolder.forEach((relativePath, zipFile) => {
+          if (relativePath.endsWith('.epub')) {
+            const bookId = relativePath.replace('.epub', '');
 
-          const existing = await store.get(bookId) || { bookId, epubBlob: arrayBuffer };
-          existing.epubBlob = arrayBuffer;
+            const p = (async () => {
+              const arrayBuffer = await zipFile.async('arraybuffer');
 
-          await store.put(existing);
-          await fileTx.done;
+              // Direct IDB write to bypass any store logic
+              const db = await getDB();
+              const tx = db.transaction(['static_resources'], 'readwrite');
+              const store = tx.objectStore('static_resources');
 
-          restoredBookIds.push(bookId);
-        }
+              const existing = await store.get(bookId) || { bookId, epubBlob: arrayBuffer };
+              existing.epubBlob = arrayBuffer;
+
+              await store.put(existing);
+              await tx.done;
+
+              restoredBookIds.push(bookId);
+            })();
+            filePromises.push(p);
+          }
+        });
+
+        await Promise.all(filePromises);
       }
 
       // Clear offloaded status for restored books
       if (restoredBookIds.length > 0) {
-        const { useLibraryStore } = await import('../store/useLibraryStore');
-        const currentOffloaded = useLibraryStore.getState().offloadedBookIds;
-        const newOffloaded = new Set([...currentOffloaded].filter(id => !restoredBookIds.includes(id)));
-        useLibraryStore.setState({ offloadedBookIds: newOffloaded });
+        // We can try to update store, but since we require reload, this is mostly for UI feedback if any
+        try {
+          const { useLibraryStore } = await import('../store/useLibraryStore');
+          // Check if store is actually populated (might be empty due to delete wins)
+          const currentOffloaded = useLibraryStore.getState().offloadedBookIds || new Set();
+          const newOffloaded = new Set([...currentOffloaded].filter(id => !restoredBookIds.includes(id)));
+          useLibraryStore.setState({ offloadedBookIds: newOffloaded });
+        } catch (e) {
+          // Ignore store update errors during restore
+        }
         console.log(`[BackupService] Cleared offload status for ${restoredBookIds.length} restored books`);
       }
     }

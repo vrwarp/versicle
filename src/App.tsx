@@ -15,6 +15,7 @@ import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 import { useYjsSync } from './lib/sync/hooks/useYjsSync';
 import { useLibraryStore } from './store/useLibraryStore';
+import { waitForYjsSync } from './store/yjs-provider';
 import { migrateToYjs } from './lib/migration/YjsMigration';
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
 
@@ -91,6 +92,15 @@ function App() {
         }
 
         setStatusMessage('Loading library...');
+        await waitForYjsSync();
+
+        // Wait for middleware to sync books (short poll)
+        let attempts = 0;
+        while (Object.keys(useLibraryStore.getState().books).length === 0 && attempts < 10) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+
         await hydrateStaticMetadata();
 
         setDbStatus('ready');
