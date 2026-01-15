@@ -268,7 +268,11 @@ export const ReaderView: React.FC = () => {
         updateLocation,
         setToc,
         showPopover,
-        hidePopover
+        hidePopover,
+        bookMetadata,
+        currentSectionTitle,
+        progress?.currentCfi,
+        setCurrentSection
     ]);
 
     const {
@@ -341,8 +345,9 @@ export const ReaderView: React.FC = () => {
                     // which might be destroyed during unmount, causing crashes.
                     // This ensures reading history is saved even if the reader is tearing down.
                     const range = generateCfiRange(prevStart, prevEnd);
-                    const type = readerViewMode === 'scrolled' ? 'scroll' : 'page';
-                    const label = currentSectionTitle || undefined;
+                    const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
+                    const type = mode === 'scrolled' ? 'scroll' : 'page';
+                    const label = title || undefined;
                     dbService.updateReadingHistory(id, range, type, label).catch(console.error);
                 }
             }
@@ -358,7 +363,7 @@ export const ReaderView: React.FC = () => {
             // Ensure popover is hidden when leaving the reader
             hidePopover();
         };
-    }, [reset, hidePopover]);
+    }, [reset, hidePopover, setCurrentBookId]);
 
     const handleClearSelection = useCallback(() => {
         const iframe = viewerRef.current?.querySelector('iframe');

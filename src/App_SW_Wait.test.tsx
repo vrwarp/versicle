@@ -35,13 +35,31 @@ vi.mock('./lib/serviceWorkerUtils', () => ({
 }));
 
 // Mock useLibraryStore
-vi.mock('./store/useLibraryStore', () => ({
-  useLibraryStore: (selector: any) => {
+vi.mock('./store/useLibraryStore', () => {
+  const hydrate = vi.fn().mockResolvedValue(undefined);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const useLibraryStore = (selector: any) => {
     return selector({
-      hydrateStaticMetadata: vi.fn().mockResolvedValue(undefined),
-      books: {}
+      hydrateStaticMetadata: hydrate,
+      books: {},
+      isHydrating: false,
+      isLoading: false,
+      error: null
     });
-  },
+  };
+  useLibraryStore.getState = () => ({
+    hydrateStaticMetadata: hydrate,
+    books: { 'b1': { id: 'b1' } },
+    isHydrating: false,
+    isLoading: false,
+    error: null
+  });
+  return { useLibraryStore };
+});
+
+vi.mock('zustand/react/shallow', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  useShallow: (selector: any) => selector
 }));
 
 // Mock sub-components

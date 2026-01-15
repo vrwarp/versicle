@@ -1020,6 +1020,8 @@ class DBService {
     _data?: string,
     _isStart?: boolean
   ): Promise<void> {
+    void _data;
+    void _isStart;
     try {
       const db = await this.getDB();
       const tx = db.transaction(['user_progress', 'user_journey'], 'readwrite');
@@ -1107,7 +1109,9 @@ class DBService {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async logReadingEvent(bookId: string, eventType: ReadingEventType, _data?: any): Promise<void> {
+    void _data;
     try {
       const db = await this.getDB();
       await db.add('user_journey', {

@@ -7,7 +7,7 @@ import { ReaderControlBar } from '../ReaderControlBar';
 const mockUseAnnotationStore = vi.fn();
 const mockUseTTSStore = vi.fn();
 const mockUseReaderUIStore = vi.fn();
-const mockUseReadingStateStore: any = vi.fn();
+const mockUseReadingStateStore = vi.fn();
 const mockUseLibraryStore = vi.fn();
 const mockUseToastStore = vi.fn();
 const mockUseNavigate = vi.fn();
@@ -15,28 +15,24 @@ const mockUseNavigate = vi.fn();
 // Fix paths to be relative to THIS test file (src/components/reader/tests/)
 // Target: src/store/... -> ../../../store/...
 vi.mock('../../../store/useAnnotationStore', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useAnnotationStore: (selector: any) => mockUseAnnotationStore(selector),
+  useAnnotationStore: (selector: unknown) => mockUseAnnotationStore(selector),
 }));
 
 vi.mock('../../../store/useTTSStore', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useTTSStore: (selector: any) => mockUseTTSStore(selector),
+  useTTSStore: (selector: unknown) => mockUseTTSStore(selector),
 }));
 
 vi.mock('../../../store/useReaderUIStore', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useReaderUIStore: (selector: any) => mockUseReaderUIStore(selector),
+  useReaderUIStore: (selector: unknown) => mockUseReaderUIStore(selector),
 }));
 
 vi.mock('../../../store/useReadingStateStore', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useReadingStateStore: Object.assign(
-    (selector: any) => mockUseReadingStateStore(selector),
+    (selector: unknown) => mockUseReadingStateStore(selector),
     {
       getState: () => mockUseReadingStateStore.getState?.() || {},
-      setState: (state: any) => mockUseReadingStateStore.setState?.(state),
-      subscribe: (listener: any) => mockUseReadingStateStore.subscribe?.(listener),
+      setState: (state: unknown) => mockUseReadingStateStore.setState?.(state),
+      subscribe: (listener: unknown) => mockUseReadingStateStore.subscribe?.(listener),
     }
   )
 }));
@@ -47,13 +43,11 @@ vi.mock('../../../store/selectors', () => ({
 }));
 
 vi.mock('../../../store/useLibraryStore', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useLibraryStore: (selector: any) => mockUseLibraryStore(selector),
+  useLibraryStore: (selector: unknown) => mockUseLibraryStore(selector),
 }));
 
 vi.mock('../../../store/useToastStore', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useToastStore: (selector: any) => mockUseToastStore(selector),
+  useToastStore: (selector: unknown) => mockUseToastStore(selector),
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -162,7 +156,6 @@ describe('ReaderControlBar', () => {
 
   it('renders active variant when currentBookId is present (Reader Active)', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: false,
       currentSectionTitle: 'Chapter 1',
@@ -180,6 +173,7 @@ describe('ReaderControlBar', () => {
       // If it's the useLibraryStore selector
       return selector ? selector({ books: {} }) : { books: {} };
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => {
       const state = {
         currentBookId: '123',
@@ -206,7 +200,6 @@ describe('ReaderControlBar', () => {
 
   it('renders compact variant when immersive mode is on', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: true,
       currentSectionTitle: 'Chapter 1',
@@ -222,6 +215,7 @@ describe('ReaderControlBar', () => {
       }
       return selector({ books: {} });
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
       currentBookId: '123',
     }));
@@ -244,6 +238,7 @@ describe('ReaderControlBar', () => {
       }
       return selector({ books: {} });
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
       currentBookId: null,
       progress: { '123': { percentage: 0.25, lastRead: 1000 } }
@@ -273,6 +268,7 @@ describe('ReaderControlBar', () => {
       }
       return selector({ books: {} });
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
       currentBookId: null,
       progress: { '123': { percentage: 0.25, lastRead: 1000 } }
@@ -292,12 +288,12 @@ describe('ReaderControlBar', () => {
     const hidePopover = vi.fn();
     const showToast = vi.fn();
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
       popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
       add,
       hidePopover,
     }));
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: false,
@@ -313,6 +309,7 @@ describe('ReaderControlBar', () => {
       }
       return selector({ books: {} });
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
       currentBookId: '123',
     }));

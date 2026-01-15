@@ -1,0 +1,161 @@
+
+> versicle@0.0.0 lint
+> eslint .
+
+
+/app/src/App_Capacitor.test.tsx
+  3:23  error  'waitFor' is defined but never used  @typescript-eslint/no-unused-vars
+  4:8   error  'App' is defined but never used      @typescript-eslint/no-unused-vars
+
+/app/src/App_SW_Wait.test.tsx
+  39:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  82:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  97:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/components/GlobalSettingsDialog.test.tsx
+  102:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  114:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  125:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/components/library/LibraryView.test.tsx
+   11:23   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   11:37   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   11:47   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   11:57   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   64:26   error  'bookId' is defined but never used        @typescript-eslint/no-unused-vars
+   71:23   error  'bookId' is defined but never used        @typescript-eslint/no-unused-vars
+  114:104  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  115:104  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  116:104  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  123:43   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  173:95   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/components/library/LibraryView.tsx
+  231:11  error  Unexpected lexical declaration in case block  no-case-declarations
+  232:11  error  Unexpected lexical declaration in case block  no-case-declarations
+  233:11  error  Unexpected lexical declaration in case block  no-case-declarations
+
+/app/src/components/library/LibraryView_Search.test.tsx
+   14:27   error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+   14:41   error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+   14:51   error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+   14:61   error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+   45:29   error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+   48:13   warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+  129:114  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+
+/app/src/components/reader/VisualSettings.test.tsx
+  63:5  warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+
+/app/src/components/reader/tests/ReaderControlBar.test.tsx
+   10:33  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+   30:3   warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+   32:16  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+   35:25  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+   36:29  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  111:5   warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-explicit-any')
+  150:58  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  178:60  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  203:56  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  218:60  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  240:60  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  269:60  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  288:58  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+  308:60  error    Unexpected any. Specify a different type                                                               @typescript-eslint/no-explicit-any
+
+/app/src/components/reader/tests/ReaderView_VersionCheck.test.tsx
+  36:37  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  47:38  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/db/DBService.test.ts
+  46:93  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/db/DBService.ts
+  1016:3  warning  Unused eslint-disable directive (no problems were reported from '@typescript-eslint/no-unused-vars')
+  1021:5  error    '_data' is defined but never used                                                                     @typescript-eslint/no-unused-vars
+  1022:5  error    '_isStart' is defined but never used                                                                  @typescript-eslint/no-unused-vars
+
+/app/src/hooks/useEpubReader.ts
+  234:13  error  'startLocation' is never reassigned. Use 'const' instead  prefer-const
+
+/app/src/integration.test.ts
+   15:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   15:37  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   15:47  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   15:57  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  234:14  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/lib/BackupService.ts
+  381:18  error  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+/app/src/lib/ingestion.ts
+  380:5  error  '_file' is defined but never used        @typescript-eslint/no-unused-vars
+  381:5  error  '_ttsOptions' is defined but never used  @typescript-eslint/no-unused-vars
+  382:5  error  '_onProgress' is defined but never used  @typescript-eslint/no-unused-vars
+
+/app/src/lib/migration/YjsMigration.test.ts
+    1:48  error  'afterEach' is defined but never used           @typescript-eslint/no-unused-vars
+    6:10  error  'useAnnotationStore' is defined but never used  @typescript-eslint/no-unused-vars
+   90:19  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+   98:44  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  107:55  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  140:44  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  157:44  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  168:19  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  175:61  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+  183:62  error  Unexpected any. Specify a different type        @typescript-eslint/no-explicit-any
+
+/app/src/lib/migration/YjsMigration.ts
+  287:44  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/lib/serviceWorkerUtils.test.ts
+  29:30  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/lib/sync/drivers/GoogleDriveProvider.test.ts
+   98:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  128:26  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/lib/tts/AudioPlayerService_Concurrency.test.ts
+  117:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/store/useAnnotationStore.test.ts
+    4:10  error  'getDB' is defined but never used         @typescript-eslint/no-unused-vars
+   74:76  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  107:87  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  121:87  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/store/useAnnotationStore.ts
+  136:25  error  'removed' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/src/store/useLibraryStore.test.ts
+   26:23   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   26:37   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   26:47   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   26:57   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   81:59   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  111:72   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  137:122  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  160:14   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  170:39   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/src/store/useLibraryStore.ts
+  104:34  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+  113:74  error  Unexpected any. Specify a different type          @typescript-eslint/no-explicit-any
+  378:27  error  'removed' is assigned a value but never used      @typescript-eslint/no-unused-vars
+  379:27  error  'removedMeta' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/src/store/useReadingListStore.ts
+  27:37  error  'removed' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/src/store/useReadingStateStore.test.ts
+  8:32  error  'useBookProgress' is defined but never used           @typescript-eslint/no-unused-vars
+  8:49  error  'useCurrentDeviceProgress' is defined but never used  @typescript-eslint/no-unused-vars
+
+/app/src/test/setup.ts
+  50:11  error  'index' is defined but never used  @typescript-eslint/no-unused-vars
+
+/app/vite.config.ts
+  56:6  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 98 problems (93 errors, 5 warnings)
+  1 error and 5 warnings potentially fixable with the `--fix` option.
