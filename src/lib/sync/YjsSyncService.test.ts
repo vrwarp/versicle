@@ -2,12 +2,22 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as Y from 'yjs';
 import { MockDriveProvider } from './drivers/MockDriveProvider';
 
-// Create mock Y.Doc
-vi.mock('../../store/yjs-provider', () => {
-    const Y = require('yjs');
-    const doc = new Y.Doc();
+// Mock y-indexeddb to avoid side effects in yjs-provider
+vi.mock('y-indexeddb', () => ({
+  IndexeddbPersistence: class {
+    constructor() {}
+    on() {}
+    destroy() {}
+    get synced() { return true; }
+    once() {}
+  }
+}));
+
+// Mock Y.Doc using importOriginal
+vi.mock('../../store/yjs-provider', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../store/yjs-provider')>();
     return {
-        yDoc: doc,
+        ...actual,
         waitForYjsSync: vi.fn(() => Promise.resolve()),
     };
 });

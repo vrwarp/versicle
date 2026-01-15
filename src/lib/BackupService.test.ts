@@ -4,18 +4,23 @@ import { BackupService, BackupManifestV2 } from './BackupService';
 import { dbService } from '../db/DBService';
 import { exportFile } from './export';
 
-// Create the mock Y.Doc at module level BEFORE vi.mock calls
-const testYDoc = new Y.Doc();
+// Mock y-indexeddb to avoid side effects in yjs-provider
+vi.mock('y-indexeddb', () => ({
+  IndexeddbPersistence: class {
+    constructor() {}
+    on() {}
+    destroy() {}
+    get synced() { return true; }
+    once() {}
+  }
+}));
 
-// Mock yjs-provider - must use inline factory to avoid hoisting issues
-vi.mock('../store/yjs-provider', () => {
-  const Y = require('yjs');
-  const doc = new Y.Doc();
+// Mock yjs-provider using importOriginal to preserve yDoc identity
+vi.mock('../store/yjs-provider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../store/yjs-provider')>();
   return {
-    yDoc: doc,
+    ...actual,
     waitForYjsSync: vi.fn(() => Promise.resolve()),
-    // Export for test access
-    __testDoc: doc,
   };
 });
 
