@@ -19,6 +19,8 @@ import {
     isFirebaseConfigured,
     initializeFirebase
 } from './firebase-config';
+import { MockFireProvider } from './drivers/MockFireProvider';
+
 
 // Status types for the sync manager
 export type FirestoreSyncStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -159,14 +161,22 @@ class FirestoreSyncManager {
 
         this.setStatus('connecting');
 
+        const providerConfig = {
+            firebaseApp: app,
+            ydoc: yDoc,
+            path: `users/${uid}/versicle/main`,
+            maxWaitFirestoreTime: this.config.maxWaitFirestoreTime,
+            maxUpdatesThreshold: this.config.maxUpdatesThreshold
+        };
+
         try {
-            this.fireProvider = new FireProvider({
-                firebaseApp: app,
-                ydoc: yDoc,
-                path: `users/${uid}/versicle/main`,
-                maxWaitFirestoreTime: this.config.maxWaitFirestoreTime,
-                maxUpdatesThreshold: this.config.maxUpdatesThreshold
-            });
+            // Use MockFireProvider for testing when flag is set
+            if (typeof window !== 'undefined' && window.__VERSICLE_MOCK_FIRESTORE__) {
+                console.log('[FirestoreSync] Using MockFireProvider (test mode)');
+                this.fireProvider = new MockFireProvider(providerConfig) as unknown as FireProvider;
+            } else {
+                this.fireProvider = new FireProvider(providerConfig);
+            }
 
             // y-fire connects automatically
             console.log(`[FirestoreSync] Connected to path: users/${uid}/versicle/main`);

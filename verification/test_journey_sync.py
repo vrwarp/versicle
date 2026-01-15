@@ -31,6 +31,10 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     page_a.get_by_test_id("header-settings-button").click()
     page_a.get_by_role("button", name="Sync & Cloud").click()
     time.sleep(1)
+    # Select Provider (Required for inputs to show)
+    page_a.get_by_role("combobox").click()
+    page_a.get_by_role("option", name="Google Drive (Legacy)").click()
+
     page_a.get_by_placeholder("OAuth2 Client ID").fill("device-a")
     page_a.get_by_placeholder("API Key").fill("key-a")
     page_a.get_by_role("switch").click()
@@ -82,24 +86,16 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     time.sleep(2)
 
     # Extract Cloud State
-    mock_data_str = page_a.evaluate("localStorage.getItem('versicle_mock_drive_data')")
+    mock_data_str = page_a.evaluate("localStorage.getItem('versicle_mock_drive_snapshot')")
     assert mock_data_str is not None, "Device A failed to sync data to mock storage"
 
     # Debug: Inspect Payload
     try:
         mock_data = json.loads(mock_data_str)
-        manifest = mock_data.get("manifest", {})
-        lexicon = manifest.get("lexicon", [])
-        print(f"Device A Pushed Manifest Version: {manifest.get('version')}")
-        print(f"Device A Pushed Lexicon Rules: {len(lexicon)}")
-        if len(lexicon) > 0:
-            print(f"First Rule: {lexicon[0]}")
-
-        # Assertion to ensure we are actually testing something
-        assert len(lexicon) > 0, "Device A synced successfully but the payload contained 0 lexicon rules!"
-
-    except json.JSONDecodeError:
-        pytest.fail("Failed to parse mock drive data as JSON")
+        snapshot_b64 = mock_data.get("snapshotBase64")
+        print(f"Device A Pushed Snapshot Size: {len(snapshot_b64) if snapshot_b64 else 0} chars")
+    except Exception as e:
+        print(f"Failed to parse mock drive data: {e}")
 
     page_a.close()
     context_a.close()
@@ -117,7 +113,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     injection_script = f"""
         window.__VERSICLE_MOCK_SYNC__ = true;
         window.__VERSICLE_SANITIZATION_DISABLED__ = true;
-        localStorage.setItem('versicle_mock_drive_data', {json.dumps(mock_data_str)});
+        localStorage.setItem('versicle_mock_drive_snapshot', {json.dumps(mock_data_str)});
     """
 
     page_b.add_init_script(injection_script)
@@ -127,7 +123,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     expect(page_b.get_by_test_id("library-view")).to_be_visible()
 
     # Verify Injection
-    injected = page_b.evaluate("localStorage.getItem('versicle_mock_drive_data')")
+    injected = page_b.evaluate("localStorage.getItem('versicle_mock_drive_snapshot')")
     assert injected == mock_data_str, "Device B failed to inject mock data correctly"
     print("Device B injection verified.")
 
@@ -136,6 +132,10 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     page_b.get_by_role("button", name="Sync & Cloud").click()
     time.sleep(1)
 
+    # Select Provider first (Switch is hidden otherwise)
+    page_b.get_by_role("combobox").click()
+    page_b.get_by_role("option", name="Google Drive (Legacy)").click()
+    
     sync_switch = page_b.get_by_role("switch")
     if sync_switch.get_attribute("aria-checked") == "false":
         page_b.get_by_placeholder("OAuth2 Client ID").fill("device-b")

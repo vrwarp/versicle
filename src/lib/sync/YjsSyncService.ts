@@ -127,6 +127,9 @@ export class YjsSyncService {
                 // This automatically handles conflicts via vector clocks
                 Y.applyUpdate(yDoc, remoteSnapshot);
 
+                // Restore Lexicon (Yjs -> IDB)
+                await this.restoreLexiconFromYjs();
+
                 // Middleware automatically syncs Yjs → Zustand stores
                 await new Promise(resolve => setTimeout(resolve, 100));
             } else {
@@ -143,6 +146,9 @@ export class YjsSyncService {
     private async push(trigger: string): Promise<void> {
         // Ensure Yjs is synced from IndexedDB
         await waitForYjsSync();
+
+        // Sync Lexicon (IDB -> Yjs)
+        await this.syncLexicon();
 
         // Capture entire Y.Doc state
         const snapshot = Y.encodeStateAsUpdate(yDoc);
@@ -179,5 +185,52 @@ export class YjsSyncService {
         for (const rule of lexicon) {
             lexiconMap.set(rule.id, rule);
         }
+    }
+
+
+    /**
+     * Restore lexicon rules from Yjs back to IDB
+     */
+    async restoreLexiconFromYjs(): Promise<void> {
+        const lexiconMap = yDoc.getMap<LexiconRule>('lexicon');
+        const rules = Array.from(lexiconMap.values());
+
+        if (rules.length === 0) return;
+
+        console.log(`[YjsSync] Restoring ${rules.length} lexicon rules from sync`);
+
+        const db = await getDB();
+        const tx = db.transaction('user_overrides', 'readwrite');
+
+        // Group by bookId
+        const byBookId: Record<string, LexiconRule[]> = {};
+
+        for (const rule of rules) {
+            const bookId = rule.bookId || 'global';
+            if (!byBookId[bookId]) byBookId[bookId] = [];
+            byBookId[bookId].push(rule);
+        }
+
+        for (const [bookId, bookRules] of Object.entries(byBookId)) {
+            const existing = await tx.store.get(bookId) || {
+                bookId,
+                lexicon: [],
+                // created/modified not part of UserOverrides type
+            };
+
+            // Merge rules
+            const existingMap = new Map(existing.lexicon.map(r => [r.id, r]));
+
+            for (const r of bookRules) {
+                existingMap.set(r.id, r);
+            }
+
+            existing.lexicon = Array.from(existingMap.values());
+            // existing.modified = Date.now();
+
+            await tx.store.put(existing);
+        }
+
+        await tx.done;
     }
 }
