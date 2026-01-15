@@ -25,6 +25,7 @@ import { backupService } from '../lib/BackupService';
 import { dbService } from '../db/DBService';
 import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
+import { useFirestoreSync } from '../lib/sync/hooks/useFirestoreSync';
 import { YjsSyncService } from '../lib/sync/YjsSyncService';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { exportFile } from '../lib/export';
@@ -76,7 +77,13 @@ export const GlobalSettingsDialog = () => {
         setTheme: state.setTheme
     })));
 
-    const { googleClientId, googleApiKey, setGoogleCredentials, isSyncEnabled, setSyncEnabled } = useSyncStore();
+    const {
+        googleClientId, googleApiKey, setGoogleCredentials, isSyncEnabled, setSyncEnabled,
+        setFirebaseEnabled, firestoreStatus, firebaseAuthStatus, firebaseUserEmail,
+        syncProvider, setSyncProvider, firebaseConfig, setFirebaseConfig
+    } = useSyncStore();
+    const { signIn: firebaseSignIn, signOut: firebaseSignOut, isConfigured: isFirebaseAvailable } = useFirestoreSync();
+    const [isFirebaseSigningIn, setIsFirebaseSigningIn] = useState(false);
     const [checkpoints, setCheckpoints] = useState<Awaited<ReturnType<typeof CheckpointService.listCheckpoints>>>([]);
 
     useEffect(() => {
@@ -924,44 +931,181 @@ export const GlobalSettingsDialog = () => {
                                 <div>
                                     <h3 className="text-lg font-medium mb-4">Cross-Device Sync</h3>
                                     <p className="text-sm text-muted-foreground mb-4">
-                                        Sync your reading progress, annotations, and reading list across devices using Google Drive.
+                                        Sync your reading progress, annotations, and reading list across devices.
                                     </p>
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="space-y-0.5">
-                                                <label className="text-sm font-medium">Enable Sync</label>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Requires Google Drive API credentials.
-                                                </p>
-                                            </div>
-                                            <Switch
-                                                checked={isSyncEnabled}
-                                                onCheckedChange={setSyncEnabled}
-                                            />
-                                        </div>
 
+                                    {/* Provider Selection */}
+                                    <div className="space-y-4 mb-6">
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium">Google Client ID</label>
-                                            <Input
-                                                type="text"
-                                                value={googleClientId}
-                                                onChange={(e) => setGoogleCredentials(e.target.value, googleApiKey)}
-                                                placeholder="OAuth2 Client ID"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-sm font-medium">Google API Key</label>
-                                            <Input
-                                                type="password"
-                                                value={googleApiKey}
-                                                onChange={(e) => setGoogleCredentials(googleClientId, e.target.value)}
-                                                placeholder="API Key"
-                                            />
-                                        </div>
-                                        <div className="pt-2 text-xs text-muted-foreground">
-                                            <p>Data is stored in your personal Google Drive (App Data folder).</p>
+                                            <label className="text-sm font-medium">Sync Provider</label>
+                                            <Select value={syncProvider} onValueChange={(val) => setSyncProvider(val as 'none' | 'google-drive' | 'firebase')}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select sync provider" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">Disabled</SelectItem>
+                                                    <SelectItem value="firebase">Firebase (Recommended)</SelectItem>
+                                                    <SelectItem value="google-drive">Google Drive (Legacy)</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-xs text-muted-foreground">
+                                                {syncProvider === 'firebase' && 'Real-time sync with automatic conflict resolution.'}
+                                                {syncProvider === 'google-drive' && 'Manual sync using Google Drive App Data folder.'}
+                                                {syncProvider === 'none' && 'Sync is disabled. Data is stored locally only.'}
+                                            </p>
                                         </div>
                                     </div>
+
+                                    {/* Firebase Sync Section */}
+                                    {syncProvider === 'firebase' && (
+                                        <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                                            <h4 className="text-sm font-medium">Firebase Configuration</h4>
+
+                                            {!isFirebaseAvailable ? (
+                                                /* Configuration Form */
+                                                <div className="space-y-3">
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Enter your Firebase project credentials. You can find these in the Firebase Console under Project Settings → General → Your apps.
+                                                    </p>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">API Key</label>
+                                                        <Input
+                                                            type="password"
+                                                            value={firebaseConfig.apiKey}
+                                                            onChange={(e) => setFirebaseConfig({ apiKey: e.target.value })}
+                                                            placeholder="AIza..."
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Auth Domain</label>
+                                                        <Input
+                                                            type="text"
+                                                            value={firebaseConfig.authDomain}
+                                                            onChange={(e) => setFirebaseConfig({ authDomain: e.target.value })}
+                                                            placeholder="your-project.firebaseapp.com"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Project ID</label>
+                                                        <Input
+                                                            type="text"
+                                                            value={firebaseConfig.projectId}
+                                                            onChange={(e) => setFirebaseConfig({ projectId: e.target.value })}
+                                                            placeholder="your-project-id"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">App ID</label>
+                                                        <Input
+                                                            type="text"
+                                                            value={firebaseConfig.appId}
+                                                            onChange={(e) => setFirebaseConfig({ appId: e.target.value })}
+                                                            placeholder="1:123456789:web:abc123"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : firebaseAuthStatus === 'signed-in' ? (
+                                                /* Connected State */
+                                                <div className="space-y-3">
+                                                    <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-md">
+                                                        <div className="space-y-0.5">
+                                                            <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                                                                {firestoreStatus === 'connected' ? '✓ Connected' : 'Connecting...'}
+                                                            </p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                Signed in as {firebaseUserEmail}
+                                                            </p>
+                                                        </div>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={async () => {
+                                                                await firebaseSignOut();
+                                                            }}
+                                                        >
+                                                            Sign Out
+                                                        </Button>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Your data is syncing automatically in real-time.
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                /* Sign In State */
+                                                <div className="space-y-3">
+                                                    <p className="text-sm text-muted-foreground">
+                                                        Sign in with your Google account to enable real-time sync.
+                                                    </p>
+                                                    <Button
+                                                        onClick={async () => {
+                                                            setIsFirebaseSigningIn(true);
+                                                            try {
+                                                                await firebaseSignIn();
+                                                                setFirebaseEnabled(true);
+                                                            } catch (e) {
+                                                                console.error('Firebase sign in failed:', e);
+                                                                showToast('Sign in failed. Please try again.', 'error');
+                                                            } finally {
+                                                                setIsFirebaseSigningIn(false);
+                                                            }
+                                                        }}
+                                                        disabled={isFirebaseSigningIn}
+                                                        className="w-full"
+                                                    >
+                                                        {isFirebaseSigningIn ? (
+                                                            <>
+                                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                                Signing in...
+                                                            </>
+                                                        ) : (
+                                                            'Sign in with Google'
+                                                        )}
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Google Drive (Legacy) Section */}
+                                    {syncProvider === 'google-drive' && (
+                                        <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                                            <h4 className="text-sm font-medium">Google Drive Sync (Legacy)</h4>
+                                            <div className="flex items-center justify-between">
+                                                <div className="space-y-0.5">
+                                                    <label className="text-sm font-medium">Enable Sync</label>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Requires Google Drive API credentials.
+                                                    </p>
+                                                </div>
+                                                <Switch
+                                                    checked={isSyncEnabled}
+                                                    onCheckedChange={setSyncEnabled}
+                                                />
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium">Google Client ID</label>
+                                                <Input
+                                                    type="text"
+                                                    value={googleClientId}
+                                                    onChange={(e) => setGoogleCredentials(e.target.value, googleApiKey)}
+                                                    placeholder="OAuth2 Client ID"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-medium">Google API Key</label>
+                                                <Input
+                                                    type="password"
+                                                    value={googleApiKey}
+                                                    onChange={(e) => setGoogleCredentials(googleClientId, e.target.value)}
+                                                    placeholder="API Key"
+                                                />
+                                            </div>
+                                            <div className="pt-2 text-xs text-muted-foreground">
+                                                <p>Data is stored in your personal Google Drive (App Data folder).</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
