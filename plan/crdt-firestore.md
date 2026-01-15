@@ -50,7 +50,48 @@ The codebase is **already prepared** for the Ghost Book scenario (Metadata prese
 *   `useLibraryStore.hydrateStaticMetadata` only populates `staticMetadata` if the blob exists in IDB.
 *   `src/store/selectors.ts` (`useAllBooks`) gracefully handles missing static metadata, returning `undefined` for `coverBlob` while falling back to the synced `UserInventoryItem` for `title` and `author`.
 
-## 3. Authentication & Security
+## 3. LWW Mitigation Strategy
+
+The primary disadvantage of the current `Record<string, Object>` structure in Zustand is that Yjs treats the `Object` as an atomic unit when syncing via the middleware's Map implementation (unless deeply nested proxies are used, which `zustand-middleware-yjs` has specific behavior for).
+
+**Problem:** If Device A updates `book.rating` and Device B updates `book.tags` for the same book ID at the same time, the Last-Write-Wins (LWW) strategy will pick one object and discard the other's changes.
+
+**Solution: Granular Y.Map Binding**
+
+To mitigate this, we must ensure that `UserInventoryItem` properties are treated as individual keys in a Y.Map (or Subdoc), rather than a single JSON blob.
+
+### 1. Refactoring Data Structures
+Instead of:
+```typescript
+// Current: One big object per book
+libraryMap.set('book-123', { rating: 5, tags: ['a'], status: 'read' })
+```
+
+We should structure the Yjs data as nested Maps:
+```typescript
+// Proposed: Nested Map for granular conflict resolution
+const bookMap = new Y.Map();
+bookMap.set('rating', 5);
+bookMap.set('tags', ['a']);
+libraryMap.set('book-123', bookMap);
+```
+
+### 2. Middleware Configuration
+We need to verify if `zustand-middleware-yjs` automatically proxies nested objects to `Y.Map`.
+*   **If Yes:** We are safe. The middleware handles deep merging.
+*   **If No:** We must flatten the store or explicitly configure the middleware to handle deep observation.
+
+**Investigation Plan:**
+Check `zustand-middleware-yjs` documentation or source. Most modern wrappers support deep proxing. If not, we will refactor `useLibraryStore` actions to update specific fields rather than replacing whole objects:
+
+*   **Bad:** `set({ books: { ...books, [id]: { ...book, rating: 5 } } })` (Replaces object)
+*   **Good:** `set((state) => { state.books[id].rating = 5 })` (Requires Immer + Yjs Proxy support)
+
+**Proposed Plan for Phase 4 (Refinement):**
+1.  **Audit Middleware:** Confirm if it uses `y-utility/y-map` or deep proxies.
+2.  **Explicit Merging:** If deep proxying is unreliable, we will implement a custom `merge` function in the store that manually reconciles fields (e.g., merging `tags` arrays) before committing to state.
+
+## 4. Authentication & Security
 
 ### Strategy
 *   **Provider:** Firebase Auth (Google Sign-In).
@@ -68,7 +109,7 @@ service cloud.firestore {
 }
 ```
 
-## 4. Implementation Plan
+## 5. Implementation Plan
 
 **Constraint:** Do not modify existing store logic. Implement `SyncManager` as an additive service.
 
@@ -145,16 +186,16 @@ const disconnectFireProvider = () => {
 *   Show current Auth state and a "Sign In with Google" button.
 *   (Future) Show sync status icon in the header.
 
-## 5. Risks & Mitigations
+## 6. Risks & Mitigations
 
 | Risk | Mitigation |
 | :--- | :--- |
 | **High Firestore Costs** | `maxWaitFirestoreTime: 2000` is mandatory. Monitor usage during beta. |
-| **Object LWW Data Loss** | Document limitation: "If two devices edit the same book's metadata simultaneously, one edit may be lost." Acceptable for current scope. |
+| **Object LWW Data Loss** | **Action:** Implement "LWW Mitigation Strategy" (Section 3). Verify middleware deep proxy support. |
 | **Large `completedRanges`** | If `UserProgress` grows > 1MB (Firestore document limit), sync will fail. **Future Action:** Implement compaction logic in `useReadingStateStore` to merge overlapping ranges. |
 | **WebRTC Connection Limits** | `y-fire` uses WebRTC. On restricted networks (corporate/school), direct peering fails. It falls back to Firestore (slower, costlier). |
 
-## 6. Verification Plan
+## 7. Verification Plan
 
 1.  **Unit Tests:** Verify `SyncManager` correctly initializes/destroys provider on auth state mock changes.
 2.  **Integration (Manual):**
