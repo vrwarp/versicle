@@ -40,49 +40,41 @@ Our analysis of `node_modules/zustand-middleware-yjs/dist/yjs.mjs` confirms that
 *   It converts nested objects into nested `Y.Map` instances.
 *   **Conclusion:** If Device A updates `book.rating` and Device B updates `book.tags`, the middleware will merge these changes correctly. The previously feared "Object-level LWW" risk is **resolved**.
 
-### Remaining Risk: Scalar LWW (Progress Regression)
-While object merging works, **Scalar** values (like `percentage` or `currentCfi`) still suffer from Last-Write-Wins (LWW).
-*   **Scenario:**
-    1.  User reads to **50%** on Device A. Goes offline.
-    2.  User reads to **10%** on Device B (re-reading).
-    3.  Device A comes online.
-    4.  If Device B's update (10%) has a later timestamp (or arbitrarily wins), Device A's progress (50%) is overwritten.
-*   **Impact:** User loses their "furthest read" location.
+### Remaining Risk: Scalar LWW
+While object merging works for distinct fields, conflicting updates to the *same* scalar field (e.g., `percentage`) still suffer from Last-Write-Wins (LWW).
 
-## 3. Mitigation Strategy: Per-Device Progress Tracking
+#### Scenario 1: Reading Progress (High Frequency)
+*   **Issue:** Device A (50%) vs Device B (10%). LWW might overwrite the "furthest read" point with the "latest timestamp" point (which could be the 10% on Device B).
+*   **Mitigation:** Per-Device tracking (Multi-Value Register).
 
-To solve the Scalar LWW issue for reading progress, we will switch from a "Shared Register" model to a "Multi-Value Register" (per-device) model.
+#### Scenario 2: Reading List (Composite Data)
+*   **Issue:** `ReadingListEntry` contains `percentage`, `status`, `rating`.
+    *   *Conflict:* Device A updates `percentage` (reading). Device B updates `rating` (reviewing).
+    *   *Resolution:* Middleware handles this (Field-level LWW). We get `percentage` from A and `rating` from B. Correct.
+    *   *Conflict:* Device A reads to 50%. Device B reads to 52%.
+    *   *Resolution:* Standard LWW. The latest write wins. This is generally acceptable for history/list views, unlike the granular position saving needed for resuming a book.
 
-### 1. Schema Refactoring
-Instead of storing a single `UserProgress` object per book, we will store a map of progress objects keyed by `deviceId`.
+## 3. Mitigation Strategy: Hybrid Approach
 
-**Current Schema:**
-```typescript
-progress: Record<bookId, UserProgress>
-```
+We will apply different strategies based on the data type and conflict risk.
 
-**Proposed Schema:**
-```typescript
-progress: Record<bookId, Record<deviceId, UserProgress>>
-```
+### Strategy A: Per-Device Tracking (Reading Progress)
+*   **Target:** `useReadingStateStore`.
+*   **Problem:** Scalar LWW on `percentage`/`cfi` causes regression.
+*   **Solution:** Store progress per-device.
+    ```typescript
+    progress: Record<bookId, Record<deviceId, UserProgress>>
+    ```
+*   **Read Logic:** `useBookProgress` selector aggregates all device entries and returns the one with the **highest percentage**.
+*   **Write Logic:** Only write to `progress[bookId][currentDeviceId]`.
 
-### 2. Device ID Management
-*   Generate a stable `deviceId` (UUID) on first app launch.
-*   Store it in `localStorage` (not synced).
-
-### 3. Read-Side Aggregation (Selector Logic)
-The `useBookProgress` selector will become smart. Instead of returning a raw object, it will aggregate all device entries for a book and return the "best" one.
-
-**Logic:**
-1.  Fetch all entries: `state.progress[bookId]`.
-2.  Values: `[Progress(DevA, 50%, TS=100), Progress(DevB, 10%, TS=120)]`.
-3.  **Strategy:** Return the entry with the **highest percentage** (or latest timestamp, user preference).
-    *   *Default:* Max Percentage Wins (prevents regression).
-4.  UI sees a single, coherent progress state.
-
-### 4. Write-Side Isolation
-*   `updateLocation(bookId, ...)` only writes to `state.progress[bookId][currentDeviceId]`.
-*   **Result:** No write conflicts. Device A never overwrites Device B's entry.
+### Strategy B: Granular Field Merging (Reading List & Library)
+*   **Target:** `useReadingListStore` and `useLibraryStore`.
+*   **Problem:** Concurrent edits to *different* fields (e.g., `status` vs `rating`).
+*   **Solution:** Rely on `zustand-middleware-yjs`'s deep diffing.
+    *   `entries` will be a Y.Map.
+    *   Each `ReadingListEntry` will be a nested Y.Map.
+*   **Result:** Field-level LWW. This is sufficient. We **do not** need per-device tracking here because `ReadingListEntry` is a summary, not a precision state.
 
 ## 4. Authentication & Security
 
@@ -170,15 +162,18 @@ const disconnectFireProvider = () => {
 | Risk | Mitigation |
 | :--- | :--- |
 | **High Firestore Costs** | `maxWaitFirestoreTime: 2000` is mandatory. |
-| **Data Growth** | Per-device entries grow over time. **Action:** Implement "Pruning" logic in `SyncManager` to delete entries older than 6 months. |
-| **Object LWW** | **Resolved:** Middleware supports deep merging. |
-| **WebRTC Blocking** | `y-fire` falls back to Firestore automatically. |
+| **Data Growth (Progress)** | Per-device entries grow over time. **Action:** Implement "Pruning" logic in `SyncManager` to delete entries older than 6 months. |
+| **Object LWW (Library/List)** | **Resolved:** Middleware supports deep merging. Distinct field updates merge cleanly. |
+| **Scalar LWW (Library/List)** | Conflict on same field (e.g. rating) uses LWW. Accepted behavior. |
 
 ## 7. Verification Plan
 
 1.  **Unit Tests:** Verify `SyncManager` auth handling.
-2.  **Granularity Test:** Write a test confirming that modifying `fieldA` on one client and `fieldB` on another (for the same ID) results in a merged object, verifying the middleware's behavior.
+2.  **Field Merge Test:**
+    *   Device A: `updateEntry('file.epub', { rating: 5 })`
+    *   Device B: `updateEntry('file.epub', { status: 'read' })`
+    *   Verify result: `{ rating: 5, status: 'read' }`.
 3.  **Progress Conflict Test:**
     *   Simulate Device A writing `progress[id][A] = 50%`.
     *   Simulate Device B writing `progress[id][B] = 10%`.
-    *   Verify selector `useBookProgress` returns 50%.
+    *   Verify selector `useBookProgress` returns 50% (Max Strategy).
