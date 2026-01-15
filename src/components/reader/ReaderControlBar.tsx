@@ -47,15 +47,15 @@ export const ReaderControlBar: React.FC = () => {
 
     // Select the most recently read book
     const lastReadBook = useMemo(() => {
-        const progress = useReadingStateStore.getState().progress;
+        const getProgress = useReadingStateStore.getState().getProgress;
         return allBooks
             .filter((b) => {
-                const bookProgress = progress[b.bookId];
+                const bookProgress = getProgress(b.bookId);
                 return bookProgress?.lastRead;
             })
             .sort((a, b) => {
-                const aProgress = progress[a.bookId];
-                const bProgress = progress[b.bookId];
+                const aProgress = getProgress(a.bookId);
+                const bProgress = getProgress(b.bookId);
                 return (bProgress?.lastRead || 0) - (aProgress?.lastRead || 0);
             })[0];
     }, [allBooks]);
@@ -168,9 +168,9 @@ export const ReaderControlBar: React.FC = () => {
     if (variant === 'summary' && lastReadBook) {
         title = lastReadBook.title;
         subtitle = "Continue Reading";
-        // Get progress from reading state
-        const bookProgress = useReadingStateStore.getState().progress[lastReadBook.bookId];
-        progress = (bookProgress?.percentage || 0) * 100;
+        // Get progress from reading state (max across all devices)
+        const lastReadProgress = useReadingStateStore.getState().getProgress(lastReadBook.bookId);
+        progress = (lastReadProgress?.percentage || 0) * 100;
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
         // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
         // If queue has items, CompassPill uses queue item title.
@@ -178,9 +178,9 @@ export const ReaderControlBar: React.FC = () => {
         if (!hasQueueItems) {
             title = currentBook.title;
             subtitle = currentSectionTitle || undefined;
-            // Get progress from reading state
-            const bookProgress = useReadingStateStore.getState().progress[currentBook.bookId];
-            progress = (bookProgress?.percentage || 0) * 100;
+            // Get progress from reading state (max across all devices)
+            const currentProgress = useReadingStateStore.getState().getProgress(currentBook.bookId);
+            progress = (currentProgress?.percentage || 0) * 100;
         }
     }
 

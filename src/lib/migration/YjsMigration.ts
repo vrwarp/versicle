@@ -29,6 +29,8 @@ export async function migrateToYjs(): Promise<void> {
 
     if (migrationComplete === true) {
         console.log('[Migration] ✅ Migration already complete. Skipping.');
+        // Still run per-device migration in case it's pending
+        await migrateProgressToPerDevice();
         return;
     }
 
@@ -39,6 +41,8 @@ export async function migrateToYjs(): Promise<void> {
     if (hasExistingData) {
         console.log('[Migration] 📦 Yjs has existing data from sync. Skipping legacy migration.');
         preferencesMap.set('migration_complete', true);
+        // Migrate existing progress to per-device format
+        await migrateProgressToPerDevice();
         return;
     }
 
@@ -58,6 +62,56 @@ export async function migrateToYjs(): Promise<void> {
         // Don't mark complete - will retry on next startup
         throw error;
     }
+}
+
+/**
+ * Migrates existing Yjs progress data from the old single-entry format
+ * to the new per-device format.
+ * 
+ * Old format: progress[bookId] = UserProgress
+ * New format: progress[bookId][deviceId] = UserProgress
+ */
+async function migrateProgressToPerDevice(): Promise<void> {
+    const preferencesMap = yDoc.getMap('preferences');
+    const perDeviceMigrationDone = preferencesMap.get('progress_per_device_migration');
+
+    if (perDeviceMigrationDone === true) {
+        return;
+    }
+
+    console.log('[Migration] Checking for progress format migration...');
+
+    const { progress } = useReadingStateStore.getState();
+    const needsMigration: Record<string, Record<string, UserProgress>> = {};
+    let migratedCount = 0;
+
+    for (const [bookId, value] of Object.entries(progress)) {
+        // Check if this is old format (has 'bookId' directly as a property of value)
+        // vs new format (value is a nested object with deviceId keys)
+        const valueAsAny = value as unknown as Record<string, unknown>;
+
+        // Old format detection: the value itself has 'bookId' and 'percentage' at top level
+        if (valueAsAny && typeof valueAsAny === 'object' &&
+            'bookId' in valueAsAny &&
+            'percentage' in valueAsAny &&
+            typeof valueAsAny.percentage === 'number') {
+            // Old format - convert to per-device
+            needsMigration[bookId] = {
+                'legacy-device': valueAsAny as unknown as UserProgress
+            };
+            migratedCount++;
+        }
+    }
+
+    if (migratedCount > 0) {
+        console.log(`[Migration] Converting ${migratedCount} progress entries to per-device format`);
+        useReadingStateStore.setState((state) => ({
+            progress: { ...state.progress, ...needsMigration }
+        }));
+    }
+
+    preferencesMap.set('progress_per_device_migration', true);
+    console.log('[Migration] Progress per-device migration complete');
 }
 
 /**
@@ -109,8 +163,13 @@ function migrateBooksAndProgress(
     legacyReadingList: ReadingListEntry[]
 ): void {
     const books: Record<string, UserInventoryItem> = {};
-    const progress: Record<string, UserProgress> = {};
+    // Per-device progress structure: Record<bookId, Record<deviceId, UserProgress>>
+    const progress: Record<string, Record<string, UserProgress>> = {};
     const readingList: Record<string, ReadingListEntry> = {};
+
+    // Use a consistent device ID for all legacy entries 
+    // This device inherits the legacy data
+    const legacyDeviceId = 'legacy-device';
 
     // 1. Populate books from legacyInventory
     for (const item of legacyInventory) {
@@ -132,16 +191,20 @@ function migrateBooksAndProgress(
         readingList[entry.filename] = entry;
     }
 
-    // 3. Populate progress from legacyProgress
+    // 3. Populate progress from legacyProgress (using per-device structure)
     const progressBookIds = new Set<string>();
     for (const prog of legacyProgress) {
-        progress[prog.bookId] = {
+        const progressEntry: UserProgress = {
             bookId: prog.bookId,
             currentCfi: prog.currentCfi,
             percentage: prog.percentage || 0,
             lastRead: prog.lastRead || Date.now(),
             lastPlayedCfi: prog.lastPlayedCfi,
             completedRanges: prog.completedRanges || []
+        };
+        // Wrap in per-device structure
+        progress[prog.bookId] = {
+            [legacyDeviceId]: progressEntry
         };
         progressBookIds.add(prog.bookId);
     }
@@ -153,10 +216,12 @@ function migrateBooksAndProgress(
             const rlEntry = readingList[item.sourceFilename];
             if (rlEntry && rlEntry.percentage > 0) {
                 progress[item.bookId] = {
-                    bookId: item.bookId,
-                    percentage: rlEntry.percentage,
-                    lastRead: rlEntry.lastUpdated || Date.now(),
-                    completedRanges: []
+                    [legacyDeviceId]: {
+                        bookId: item.bookId,
+                        percentage: rlEntry.percentage,
+                        lastRead: rlEntry.lastUpdated || Date.now(),
+                        completedRanges: []
+                    }
                 };
                 fallbackCount++;
             }

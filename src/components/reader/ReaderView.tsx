@@ -115,7 +115,7 @@ export const ReaderView: React.FC = () => {
             coverBlob: rawBookMetadata.coverBlob || undefined // Convert null to undefined for compatibility
         };
     }, [rawBookMetadata]);
-    const progress = useReadingStateStore(useShallow(state => id ? state.progress[id] : undefined));
+    const progress = useReadingStateStore(state => id ? state.getProgress(id) : null);
 
     const reset = useCallback(() => {
         resetUI();
@@ -185,8 +185,8 @@ export const ReaderView: React.FC = () => {
             hasPromptedForImport.current = true; // Ensure we only check once per session
 
             // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
-            const progress = useReadingStateStore.getState().progress[id || ''];
-            if (location.start.cfi === (progress?.currentCfi || '')) return;
+            const currentProgress = useReadingStateStore.getState().getProgress(id || '');
+            if (location.start.cfi === (currentProgress?.currentCfi || '')) return;
 
             // Reading History
             if (id && previousLocation.current) {
@@ -413,11 +413,11 @@ export const ReaderView: React.FC = () => {
         setIsWaitingForJump(false);
         // Explicitly save current position (0) to mark as "started"
         if (id) {
-            const progress = useReadingStateStore.getState().progress[id];
-            const currentCfi = progress?.currentCfi;
+            const currentProgress = useReadingStateStore.getState().getProgress(id);
+            const currentCfi = currentProgress?.currentCfi;
             // updateLocation handles saving to Yjs
             if (currentCfi) {
-                useReadingStateStore.getState().updateLocation(id, currentCfi, progress?.percentage || 0);
+                useReadingStateStore.getState().updateLocation(id, currentCfi, currentProgress?.percentage || 0);
             }
         }
     };

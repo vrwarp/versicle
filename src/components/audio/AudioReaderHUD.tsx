@@ -31,15 +31,15 @@ export const AudioReaderHUD: React.FC = () => {
 
     const lastReadBook = useMemo(() => {
         if (!books || books.length === 0) return null;
-        const progress = useReadingStateStore.getState().progress;
+        const getProgress = useReadingStateStore.getState().getProgress;
         const startedBooks = books.filter(b => {
-            const bookProgress = progress[b.bookId];
+            const bookProgress = getProgress(b.bookId);
             return bookProgress?.lastRead && bookProgress.percentage > 0;
         });
         if (startedBooks.length === 0) return null;
         return startedBooks.sort((a, b) => {
-            const aProgress = progress[a.bookId];
-            const bProgress = progress[b.bookId];
+            const aProgress = getProgress(a.bookId);
+            const bProgress = getProgress(b.bookId);
             return (bProgress?.lastRead || 0) - (aProgress?.lastRead || 0);
         })[0];
     }, [books]);
@@ -53,6 +53,10 @@ export const AudioReaderHUD: React.FC = () => {
     if ((!queue || queue.length === 0) && !showLastRead) {
         return null;
     }
+
+    // Get progress for the last read book
+    const lastReadProgress = lastReadBook ?
+        useReadingStateStore.getState().getProgress(lastReadBook.bookId)?.percentage || 0 : 0;
 
     return (
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-[40] flex flex-col items-center justify-end pb-6">
@@ -72,7 +76,7 @@ export const AudioReaderHUD: React.FC = () => {
                             variant="summary"
                             title={lastReadBook!.title}
                             subtitle="Continue Reading"
-                            progress={(useReadingStateStore.getState().progress[lastReadBook!.bookId]?.percentage || 0) * 100}
+                            progress={lastReadProgress * 100}
                             onClick={() => navigate(`/read/${lastReadBook!.bookId}`)}
                         />
                     ) : (
