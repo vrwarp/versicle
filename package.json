@@ -8,8 +8,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest",
-    "tests": "vitest",
+    "test": "vitest run",
+    "tests": "vitest run",
     "preview": "vite preview",
     "prepare-piper": "mkdir -p public/piper && cp node_modules/piper-wasm/build/piper_phonemize.js public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.wasm public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.data public/piper/ && cp node_modules/piper-wasm/build/worker/piper_worker.js public/piper/ && node scripts/patch_piper_worker.js",
     "postinstall": "npm run prepare-piper"
