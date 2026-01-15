@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as Y from 'yjs';
 import { GoogleDriveProvider } from './GoogleDriveProvider';
 
 
@@ -20,8 +21,6 @@ describe('GoogleDriveProvider', () => {
                     files: {
                         list: vi.fn(),
                         get: vi.fn(),
-                        create: vi.fn(), // If used via gapi, but we used fetch for upload usually?
-                        // Provider uses fetch for upload/patch
                     }
                 }
             }
@@ -56,14 +55,11 @@ describe('GoogleDriveProvider', () => {
     });
 
     it('should authenticate on demand', async () => {
-        // Prepare mock that triggers callback automatically
-        // We need a mutable object because Provider overwrites .callback
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         mockGoogle.accounts.oauth2.initTokenClient.mockImplementation((config: any) => {
             const clientMock = {
                 callback: config.callback,
                 requestAccessToken: vi.fn(() => {
-                    // Call the current callback property
                     setTimeout(() => clientMock.callback({ access_token: 'new_token' }), 0);
                 })
             };
@@ -71,56 +67,78 @@ describe('GoogleDriveProvider', () => {
         });
 
         await provider.initialize({ clientId: 'cid', apiKey: 'key' });
-
         await provider.signIn();
 
         expect(await provider.isAuthenticated()).toBe(true);
     });
 
-    it('should search for manifest file', async () => {
+    it('should search for snapshot file', async () => {
         await provider.initialize({ clientId: 'cid', apiKey: 'key' });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (provider as any).accessToken = 'token'; // Bypass auth check
+        (provider as any).accessToken = 'token';
 
         mockGapi.client.drive.files.list.mockResolvedValue({
             result: { files: [{ id: 'file_123' }] }
         });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const id = await (provider as any).findManifestFileId();
+        const id = await (provider as any).findSnapshotFileId();
         expect(id).toBe('file_123');
     });
 
-    it('should get manifest', async () => {
-        await provider.initialize({ clientId: 'cid', apiKey: 'key' });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (provider as any).accessToken = 'token';
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (provider as any).manifestFileId = 'file_123';
-
-        const mockManifest = { version: 1 };
-        mockGapi.client.drive.files.get.mockResolvedValue({
-            result: mockManifest
-        });
-
-        const result = await provider.getManifest();
-        expect(result).toEqual(mockManifest);
-    });
-
-    it('should upload manifest (create new)', async () => {
+    it('should upload Yjs snapshot', async () => {
         await provider.initialize({ clientId: 'cid', apiKey: 'key' });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (provider as any).accessToken = 'token';
 
-        // Mock find returning null
+        // Mock find returning null (new file)
         mockGapi.client.drive.files.list.mockResolvedValue({ result: { files: [] } });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await provider.uploadManifest({ version: 1 } as any);
+        // Mock successful upload
+        (global.fetch as any).mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ id: 'new_file_id' })
+        });
+
+        // Create test snapshot
+        const testDoc = new Y.Doc();
+        testDoc.getMap('library').set('book1', { title: 'Test' });
+        const snapshot = Y.encodeStateAsUpdate(testDoc);
+
+        await provider.uploadSnapshot(snapshot);
 
         expect(fetch).toHaveBeenCalledWith(
             expect.stringContaining('upload/drive/v3/files?uploadType=multipart'),
             expect.objectContaining({ method: 'POST' })
         );
+    });
+
+    it('should download Yjs snapshot', async () => {
+        await provider.initialize({ clientId: 'cid', apiKey: 'key' });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (provider as any).accessToken = 'token';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (provider as any).snapshotFileId = 'file_123';
+
+        // Create test data
+        const testDoc = new Y.Doc();
+        testDoc.getMap('library').set('book1', { title: 'Downloaded' });
+        const snapshot = Y.encodeStateAsUpdate(testDoc);
+
+        (global.fetch as any).mockResolvedValue({
+            ok: true,
+            arrayBuffer: () => Promise.resolve(snapshot.buffer)
+        });
+
+        const result = await provider.downloadSnapshot();
+
+        expect(result).not.toBeNull();
+        expect(result!.byteLength).toBeGreaterThan(0);
+
+        // Verify we can apply the snapshot
+        const freshDoc = new Y.Doc();
+        Y.applyUpdate(freshDoc, result!);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((freshDoc.getMap('library').get('book1') as any).title).toBe('Downloaded');
     });
 });

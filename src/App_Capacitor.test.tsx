@@ -98,9 +98,9 @@ vi.mock('./store/useTTSStore', () => ({
   useTTSStore: (selector: any) => selector({ queue: [], isPlaying: false }),
 }));
 
-// Mock Sync Orchestrator
-vi.mock('./lib/sync/hooks/useSyncOrchestrator', () => ({
-  useSyncOrchestrator: vi.fn(),
+// Mock Yjs Sync
+vi.mock('./lib/sync/hooks/useYjsSync', () => ({
+  useYjsSync: vi.fn(),
 }));
 
 // Mock ReaderControlBar to avoid internal logic issues

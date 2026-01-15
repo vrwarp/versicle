@@ -53,9 +53,9 @@ vi.mock('./components/GlobalSettingsDialog', () => ({ GlobalSettingsDialog: () =
 vi.mock('./components/ui/ToastContainer', () => ({ ToastContainer: () => null }));
 vi.mock('./components/SafeModeView', () => ({ SafeModeView: () => <div>SafeMode</div> }));
 
-// Mock Sync Orchestrator
-vi.mock('./lib/sync/hooks/useSyncOrchestrator', () => ({
-  useSyncOrchestrator: vi.fn(),
+// Mock Yjs Sync
+vi.mock('./lib/sync/hooks/useYjsSync', () => ({
+  useYjsSync: vi.fn(),
 }));
 
 // Mock Router

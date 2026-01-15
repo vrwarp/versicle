@@ -13,7 +13,7 @@ import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
-import { useSyncOrchestrator } from './lib/sync/hooks/useSyncOrchestrator';
+import { useYjsSync } from './lib/sync/hooks/useYjsSync';
 import { useLibraryStore } from './store/useLibraryStore';
 import { migrateToYjs } from './lib/migration/YjsMigration';
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
@@ -35,7 +35,7 @@ function App() {
   const hydrateStaticMetadata = useLibraryStore(state => state.hydrateStaticMetadata);
 
   // Initialize Sync
-  useSyncOrchestrator();
+  useYjsSync();
 
   // Service Worker Initialization
   useEffect(() => {

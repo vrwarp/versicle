@@ -25,7 +25,7 @@ import { backupService } from '../lib/BackupService';
 import { dbService } from '../db/DBService';
 import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
-import { SyncOrchestrator } from '../lib/sync/SyncOrchestrator';
+import { YjsSyncService } from '../lib/sync/YjsSyncService';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { exportFile } from '../lib/export';
 import { ReadingListDialog } from './ReadingListDialog';
@@ -379,11 +379,11 @@ export const GlobalSettingsDialog = () => {
                 setRecoveryStatus("Restoring...");
                 const manifest = await CheckpointService.restoreCheckpoint(id);
                 if (manifest) {
-                    const orchestrator = SyncOrchestrator.get();
-                    if (orchestrator) {
-                        await orchestrator.restoreFromManifest(manifest);
-                        setRecoveryStatus("Restoration complete. Reloading...");
-                        setTimeout(() => window.location.reload(), 1500);
+                    const syncService = YjsSyncService.get();
+                    if (syncService) {
+                        // Note: Checkpoint restoration with legacy manifests is deprecated
+                        // TODO: Update checkpoint system to use Yjs snapshots
+                        setRecoveryStatus("Checkpoint system needs migration to Yjs. Please restore from backup instead.");
                     } else {
                         setRecoveryStatus("Sync service unavailable.");
                     }

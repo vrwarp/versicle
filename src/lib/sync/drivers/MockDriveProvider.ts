@@ -1,41 +1,50 @@
-import type { SyncManifest } from '../../../types/db';
 import type { RemoteStorageProvider } from '../types';
 
 /**
  * A mock implementation of RemoteStorageProvider for testing and offline development.
+ * V2: Uses Yjs binary snapshots for CRDT sync.
  */
 export class MockDriveProvider implements RemoteStorageProvider {
-  private remoteManifest: SyncManifest | null = null;
+  private remoteSnapshot: Uint8Array | null = null;
   private lastModified: number | null = null;
   private initialized = false;
   private shouldFailAuth = false;
   private shouldFailNetwork = false;
   private latency = 0;
 
-  constructor(initialManifest?: SyncManifest) {
-    // Try to load from local storage first (persistence)
-    const stored = localStorage.getItem('versicle_mock_drive_data');
+  constructor() {
+    // Try to load snapshot from local storage (persistence for testing)
+    const stored = localStorage.getItem('versicle_mock_drive_snapshot');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        this.remoteManifest = parsed.manifest;
         this.lastModified = parsed.lastModified;
+        if (parsed.snapshotBase64) {
+          const binary = atob(parsed.snapshotBase64);
+          this.remoteSnapshot = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            this.remoteSnapshot[i] = binary.charCodeAt(i);
+          }
+        }
       } catch (e) {
         console.error('Failed to load mock drive data', e);
       }
     }
-
-    if (initialManifest) {
-      this.remoteManifest = initialManifest;
-      this.lastModified = Date.now();
-      this.persist();
-    }
   }
 
   private persist() {
-    localStorage.setItem('versicle_mock_drive_data', JSON.stringify({
-      manifest: this.remoteManifest,
-      lastModified: this.lastModified
+    let snapshotBase64: string | undefined;
+    if (this.remoteSnapshot) {
+      let binary = '';
+      for (let i = 0; i < this.remoteSnapshot.byteLength; i++) {
+        binary += String.fromCharCode(this.remoteSnapshot[i]);
+      }
+      snapshotBase64 = btoa(binary);
+    }
+
+    localStorage.setItem('versicle_mock_drive_snapshot', JSON.stringify({
+      lastModified: this.lastModified,
+      snapshotBase64
     }));
   }
 
@@ -55,7 +64,7 @@ export class MockDriveProvider implements RemoteStorageProvider {
     }
   }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async initialize(_config: { clientId?: string; apiKey?: string }): Promise<void> {
     await this.simulateLatency();
     if (this.shouldFailAuth) {
@@ -68,28 +77,25 @@ export class MockDriveProvider implements RemoteStorageProvider {
     return this.initialized && !this.shouldFailAuth;
   }
 
-  async getManifest(): Promise<SyncManifest | null> {
-    await this.simulateLatency();
-    if (this.shouldFailNetwork) throw new Error('Mock Network Error');
-    return this.remoteManifest ? JSON.parse(JSON.stringify(this.remoteManifest)) : null;
-  }
-
-  async uploadManifest(manifest: SyncManifest, previousVersion?: number): Promise<void> {
+  async uploadSnapshot(snapshot: Uint8Array): Promise<void> {
     await this.simulateLatency();
     if (this.shouldFailNetwork) throw new Error('Mock Network Error');
 
-    // Simple optimistic concurrency check simulation
-    if (this.remoteManifest && previousVersion !== undefined) {
-      if (this.remoteManifest.version > previousVersion) {
-         // In a real drive, this might be a 412.
-         // For mock, we can just throw.
-         throw new Error('Conflict: Remote version is newer');
-      }
-    }
-
-    this.remoteManifest = JSON.parse(JSON.stringify(manifest));
+    this.remoteSnapshot = new Uint8Array(snapshot);
     this.lastModified = Date.now();
     this.persist();
+    console.log(`[MockDrive] Uploaded snapshot (${snapshot.byteLength} bytes)`);
+  }
+
+  async downloadSnapshot(): Promise<Uint8Array | null> {
+    await this.simulateLatency();
+    if (this.shouldFailNetwork) throw new Error('Mock Network Error');
+
+    if (this.remoteSnapshot) {
+      console.log(`[MockDrive] Downloaded snapshot (${this.remoteSnapshot.byteLength} bytes)`);
+      return new Uint8Array(this.remoteSnapshot);
+    }
+    return null;
   }
 
   async getLastModified(): Promise<number | null> {
