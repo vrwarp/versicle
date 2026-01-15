@@ -56,6 +56,7 @@ graph TD
         GenAIStore[useGenAIStore]
         UIStore[useUIStore]
         SyncStore[useSyncStore]
+        ToastStore[useToastStore]
     end
 
     subgraph Core [Core Services]
@@ -65,11 +66,11 @@ graph TD
         BatchIngestion[batch-ingestion.ts]
         SearchClient[SearchClient]
         Backup[BackupService]
+        Export[export.ts]
         Maint[MaintenanceService]
         GenAI[GenAIService]
         CostEst[CostEstimator]
         TaskRunner[cancellable-task-runner.ts]
-        MediaSession[MediaSessionManager]
     end
 
     subgraph SyncSubsystem [Sync & Cloud]
@@ -90,6 +91,8 @@ graph TD
         Piper[PiperProvider]
         PiperUtils[piper-utils.ts]
         BG[BackgroundAudio]
+        Platform[PlatformIntegration]
+        MediaSession[MediaSessionManager]
     end
 
     subgraph Workers [Web Workers]
@@ -123,6 +126,7 @@ graph TD
     LibStore --> Ingestion
     LibStore --> BatchIngestion
     LibStore --> Backup
+    LibStore --> Export
     LibStore --> Maint
 
     ReaderStore --> Orchestrator
@@ -150,8 +154,9 @@ graph TD
     APS --> Sync
     APS --> Piper
     APS --> CostEst
-    APS --> BG
-    APS --> MediaSession
+    APS --> Platform
+    Platform --> BG
+    Platform --> MediaSession
 
     Piper --> PiperUtils
 
@@ -286,10 +291,16 @@ Manages internal state backup and restoration.
 *   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files (reconstructed from `static_resources`).
 *   **`restoreBackup()`**: Implements a smart merge strategy (keeps newer progress).
 
+#### Unified Export (`src/lib/export.ts`)
+*   **Goal**: Provide a single interface for exporting files on both Web and Native platforms.
+*   **Logic**:
+    *   **Web**: Uses `file-saver` to trigger a browser download.
+    *   **Native**: Writes the file to the app's cache directory via `@capacitor/filesystem` and then triggers the native OS Share dialog via `@capacitor/share`.
+
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
 *   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks and async flows.
 *   **Logic**:
-    *   Uses a **Generator** pattern (`function*`) instead of standard `async/await`.
+    *   **Generator** pattern (`function*`) instead of standard `async/await`.
     *   The runner iterates the generator, yielding Promises. If `cancel()` is called, it throws a `CancellationError` into the generator, triggering `finally` blocks for cleanup and preventing subsequent code execution.
 *   **Trade-off**: Requires writing async logic as generators, which is non-standard syntax for many developers.
 
@@ -303,6 +314,14 @@ The Orchestrator. Manages playback state, provider selection, and UI updates.
 *   **Logic**:
     *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state management to `PlaybackStateManager`.
     *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods.
+
+#### `src/lib/tts/PlatformIntegration.ts`
+Handles platform-specific audio behaviors for mobile devices.
+
+*   **Goal**: Ensure correct audio behavior in the background and on the lock screen.
+*   **Logic**:
+    *   **MediaSession**: Maps player state and metadata to the OS Media Session API (Lock Screen controls).
+    *   **BackgroundAudio**: Manages a silent audio loop (or white noise) to keep the Android process alive and prevent the OS from killing the TTS service when the screen is off.
 
 #### `src/lib/tts/AudioContentPipeline.ts`
 The Data Pipeline for TTS.
@@ -364,9 +383,4 @@ State is managed using **Zustand**.
 *   **`useGenAIStore`**: Persists AI settings and usage stats to **localStorage**.
 *   **`useLibraryStore`**: Transient UI state. Hydrates book lists from `DBService` (IndexedDB) on mount.
 *   **`useSyncStore`**: Persists Sync credentials and settings to **localStorage**.
-
-### UI Layer
-
-#### Mobile Integration
-*   **Safe Area**: Uses `@capacitor-community/safe-area`.
-*   **Media Session**: Managed via `MediaSessionManager` with support for artwork cropping.
+*   **`useToastStore`**: Transient global notification state.

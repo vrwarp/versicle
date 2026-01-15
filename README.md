@@ -25,6 +25,7 @@
 *   **Audio**: Piper (WASM) / Web Speech API
 *   **AI**: Google Gemini (Flash Lite / Flash / Pro) via `@google/generative-ai`
 *   **Mobile**: Capacitor 7 (Android)
+    *   Plugins: Media Session, Filesystem, Share, Background Audio
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
 *   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`
@@ -54,6 +55,7 @@
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
+*   **Lock Screen Controls**: Full Media Session integration (Play/Pause/Seek/Next/Prev) with album art support.
 
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
@@ -63,9 +65,10 @@
     *   **Android Backup**: Native integration with Android's Backup Manager.
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted. Export/Import to CSV (Goodreads compatible).
-*   **Backups**:
+*   **Backups & Export**:
     *   **Light**: JSON export of metadata/settings.
     *   **Full**: ZIP archive including all book files.
+    *   **Unified Export**: Uses browser downloads on Web and native Share Sheet on Android.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
 
