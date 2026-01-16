@@ -204,23 +204,30 @@ export class TextSegmenter {
         }
         const starterSet = TextSegmenter.cache.starterSet;
 
+        // Optimization: Pre-compile regex with trailing whitespace support to avoid string trimming
+        const RE_LAST_WORD_RAW = /\S+(?=\s*$)/;
+        const RE_LAST_TWO_WORDS_RAW = /(?:\S+\s+)\S+(?=\s*$)/;
+
         for (let i = 0; i < sentences.length; i++) {
             // Optimization: Assume sentences are already normalized by TextSegmenter.segment() during ingestion.
             // Avoiding re-normalization improves performance significantly.
-            // We MUST clone the object to avoid mutating the original input array during merging.
-            const current = { ...sentences[i] };
+            // Defer cloning: We only clone if we actually push to 'merged'.
+            // If we merge into 'last', we just read from 'sentences[i]' (which is safe).
+            const rawCurrent = sentences[i];
 
             if (merged.length > 0) {
                 const last = merged[merged.length - 1];
-                const lastTextTrimmed = last.text.trim();
+                // OPTIMIZATION: Avoid last.text.trim() allocation.
+                // We use a regex that matches the last word even if there are trailing spaces.
+                const lastText = last.text;
 
                 // Check if last segment ends with an abbreviation
                 let isAbbreviation = false;
                 let lastWord = '';
 
                 // Try checking the last word
-                const oneWordMatch = RE_LAST_WORD.exec(lastTextTrimmed);
-                const rawLastWord = oneWordMatch ? oneWordMatch[0] : lastTextTrimmed;
+                const oneWordMatch = RE_LAST_WORD_RAW.exec(lastText);
+                const rawLastWord = oneWordMatch ? oneWordMatch[0] : lastText.trim();
                 // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
                 const cleanLastWord = rawLastWord.replace(RE_LEADING_PUNCTUATION, '');
 
@@ -231,7 +238,7 @@ export class TextSegmenter {
                     // Try checking the last two words
                     // Capture last two whitespace-separated tokens
                     // (?: ... ) is non-capturing group
-                    const twoWordsMatch = RE_LAST_TWO_WORDS.exec(lastTextTrimmed);
+                    const twoWordsMatch = RE_LAST_TWO_WORDS_RAW.exec(lastText);
                     if (twoWordsMatch) {
                         const rawLastTwo = twoWordsMatch[0];
                         // Remove leading punctuation from the phrase (e.g. "(et al." -> "et al.")
@@ -251,8 +258,10 @@ export class TextSegmenter {
                     if (mergeSet.has(lastWord.toLowerCase())) {
                         shouldMerge = true;
                     } else {
-                        // Check the next segment (current)
-                        const nextTextTrimmed = current.text.trim();
+                        // Check the next segment (rawCurrent)
+                        // current.text.trim() is small (usually a sentence), so allocation is less critical,
+                        // but we can optimize it slightly if needed. For now, keep it simple as it's the "next" check.
+                        const nextTextTrimmed = rawCurrent.text.trim();
                         const match = RE_FIRST_WORD.exec(nextTextTrimmed);
                         const nextFirstWord = match ? match[0] : nextTextTrimmed;
                         const cleanNextWord = nextFirstWord.replace(RE_TRAILING_PUNCTUATION, '');
@@ -264,16 +273,16 @@ export class TextSegmenter {
 
                     if (shouldMerge) {
                         // Merge current into last
-                        last.text += (last.text.endsWith(' ') ? '' : ' ') + current.text;
+                        last.text += (last.text.endsWith(' ') ? '' : ' ') + rawCurrent.text;
 
                         // Merge CFIs
                         const startCfi = parseCfiRange(last.cfi);
-                        const endCfi = parseCfiRange(current.cfi);
+                        const endCfi = parseCfiRange(rawCurrent.cfi);
 
                         // If startCfi/endCfi are null, it means they are point CFIs (or invalid).
                         // We use the raw CFI string in that case.
                         const startPoint = startCfi ? startCfi.fullStart : last.cfi;
-                        const endPoint = endCfi ? endCfi.fullEnd : current.cfi;
+                        const endPoint = endCfi ? endCfi.fullEnd : rawCurrent.cfi;
 
                         if (startPoint && endPoint) {
                              // We want the range from the START of the first segment to the END of the second segment.
@@ -282,8 +291,8 @@ export class TextSegmenter {
                         }
 
                         // Merge Source Indices
-                        if (current.sourceIndices) {
-                            last.sourceIndices = (last.sourceIndices || []).concat(current.sourceIndices);
+                        if (rawCurrent.sourceIndices) {
+                            last.sourceIndices = (last.sourceIndices || []).concat(rawCurrent.sourceIndices);
                         }
 
                         continue;
@@ -291,7 +300,8 @@ export class TextSegmenter {
                 }
             }
 
-            merged.push(current);
+            // Clone only when pushing to the new array
+            merged.push({ ...rawCurrent });
         }
 
         if (minSentenceLength <= 0) {
