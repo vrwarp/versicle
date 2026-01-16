@@ -58,6 +58,11 @@ vi.mock('uuid', () => ({
   v4: () => 'mock-uuid',
 }));
 
+// Mock extractCoverPalette
+vi.mock('./cover-palette', () => ({
+    extractCoverPalette: vi.fn().mockResolvedValue([1, 2, 3, 4, 5])
+}));
+
 describe('ingestion', () => {
   beforeEach(async () => {
     vi.spyOn(window, 'confirm').mockImplementation(() => true);

@@ -8,6 +8,9 @@ import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from './constants';
+import { extractCoverPalette } from './cover-palette';
+
+export { extractCoverPalette } from './cover-palette';
 
 function cheapHash(buffer: ArrayBuffer): string {
     const view = new Uint8Array(buffer);
@@ -199,6 +202,7 @@ export async function extractBookData(
 
     let coverBlob: Blob | undefined;
     let thumbnailBlob: Blob | undefined;
+    let coverPalette: number[] | undefined;
 
     if (coverUrl) {
         try {
@@ -219,6 +223,13 @@ export async function extractBookData(
         } catch (error) {
             console.warn('Failed to retrieve cover blob:', error);
         }
+    }
+
+    // Generate palette if we have any cover image
+    if (thumbnailBlob || coverBlob) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        coverPalette = await extractCoverPalette((thumbnailBlob || coverBlob)!);
+        if (coverPalette.length === 0) coverPalette = undefined;
     }
 
     book.destroy();
@@ -333,7 +344,8 @@ export async function extractBookData(
         sourceFilename: file.name,
         tags: [],
         status: 'unread',
-        lastInteraction: Date.now()
+        lastInteraction: Date.now(),
+        coverPalette
     };
 
     const progress: UserProgress = {

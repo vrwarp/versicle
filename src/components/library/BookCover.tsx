@@ -6,6 +6,14 @@ import { Cloud, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu } from './BookActionMenu';
 import type { BookMetadata } from '../../types/db';
+
+function unpackColor(packed: number): string {
+    const r = ((packed >> 12) & 0xF) * 17; // 0-15 -> 0-255
+    const g = (packed >> 4) & 0xFF;
+    const b = (packed & 0xF) * 17;
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
 interface BookCoverProps {
     book: BookMetadata;
     onDelete: (book: BookMetadata) => void;
@@ -24,13 +32,46 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
     // Otherwise, if we have a blob (local), use the SW route.
     const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
 
+    const [imageError, setImageError] = React.useState(false);
+
+    React.useEffect(() => {
+        setImageError(false);
+    }, [displayUrl]);
+
+    const gradientStyle = React.useMemo(() => {
+        if (!book.coverPalette || book.coverPalette.length !== 5) return undefined;
+
+        const colors = book.coverPalette.map(unpackColor);
+
+        // We use oklab interpolation for perceptually smooth transitions and to avoid muddy colors in the middle
+        // 5th color is the Center color, used as a central radial boost.
+        // Base layer is linear gradient between TL and BR.
+        return {
+            backgroundImage: `
+                radial-gradient(at top left in oklab, ${colors[0]}, transparent),
+                radial-gradient(at top right in oklab, ${colors[1]}, transparent),
+                radial-gradient(at bottom left in oklab, ${colors[2]}, transparent),
+                radial-gradient(at bottom right in oklab, ${colors[3]}, transparent),
+                radial-gradient(circle at center in oklab, ${colors[4]} 0%, transparent 125%),
+                /* Base layer is white to ensure contrast and prevent transparency */
+                linear-gradient(white, white)
+            `
+        };
+    }, [book.coverPalette]);
+
+    const showImage = displayUrl && !imageError;
+
     console.log(`[BookCover] Rendering ${book.title} (${book.id}). isOffloaded: ${book.isOffloaded}`);
 
     return (
-        <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner flex flex-col">
-            {displayUrl ? (
+        <div
+            className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner flex flex-col"
+            style={!showImage && gradientStyle ? gradientStyle : undefined}
+        >
+            {showImage ? (
                 <LazyLoadImage
                     src={displayUrl}
+                    onError={() => setImageError(true)}
                     alt={`Cover of ${book.title}`}
                     effect="blur"
                     wrapperClassName="w-full h-full !block"
@@ -40,6 +81,8 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
                     )}
                     threshold={200}
                 />
+            ) : gradientStyle ? (
+                 <div className="w-full h-full" />
             ) : (
                 <div className="w-full h-full flex items-center justify-center text-muted-foreground/50">
                     <span className="text-4xl font-light">Aa</span>

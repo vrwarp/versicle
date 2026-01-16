@@ -119,6 +119,13 @@ export interface UserInventoryItem {
   status: 'unread' | 'reading' | 'completed' | 'abandoned';
   /** User rating (1-5). */
   rating?: number;
+  /**
+   * Ghost Book metadata: Palette snapshot generated during ingestion.
+   * Synced to Yjs to enable gradient cover display without the EPUB file.
+   * Format: 5x 16-bit integers (R4-G8-B4).
+   * Layout: [TL, TR, BL, BR, Center]
+   */
+  coverPalette?: number[];
 }
 
 /**
@@ -351,6 +358,10 @@ export interface Book {
   coverBlob?: Blob;
   /** Timestamp when the book was added to the library. */
   addedAt: number;
+  /**
+   * 5 integers representing the cover regions (TL, TR, BL, BR, Center).
+   */
+  coverPalette?: number[];
 }
 
 /**

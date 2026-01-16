@@ -27,6 +27,15 @@ vi.mock('./lib/migration/YjsMigration', () => ({
 // Mock Yjs Provider
 vi.mock('./store/yjs-provider', () => ({
   waitForYjsSync: vi.fn().mockResolvedValue(undefined),
+  yDoc: {
+      getMap: vi.fn().mockReturnValue({ get: vi.fn(), set: vi.fn() }),
+      transact: vi.fn()
+  }
+}));
+
+// Mock GhostBookBackfill
+vi.mock('./lib/migration/GhostBookBackfill', () => ({
+  backfillCoverPalettes: vi.fn().mockResolvedValue(undefined)
 }));
 
 // Mock SW Utils - The key fix
