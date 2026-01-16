@@ -154,9 +154,30 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
               // Update state (middleware will sync to Yjs)
               const updates: Record<string, UserInventoryItem> = {};
-              legacyBooks.forEach(item => {
-                updates[item.bookId] = item;
-              });
+
+              // Enrich legacy items with metadata from IDB if missing (Ghost Book requirements)
+              await Promise.all(legacyBooks.map(async (item) => {
+                let { title, author } = item;
+
+                // If title/author missing (legacy), try to fetch from static manifest
+                if (!title || !author || author === 'Unknown Author') {
+                  try {
+                    const meta = await injectedDB.getBookMetadata(item.bookId);
+                    if (meta) {
+                      if (!title) title = meta.title;
+                      if (!author || author === 'Unknown Author') author = meta.author;
+                    }
+                  } catch (e) {
+                    console.warn(`[Library] Failed to fetch metadata for legacy book ${item.bookId}`, e);
+                  }
+                }
+
+                updates[item.bookId] = {
+                  ...item,
+                  title: title || 'Untitled',
+                  author: author || 'Unknown Author'
+                };
+              }));
 
               set((state) => ({
                 books: {
@@ -303,8 +324,8 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         try {
           const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
 
-          // Use batch import utility (will need to be updated to return manifests)
-          await processBatchImport(
+          // Process files and get returns manifests
+          const { successful } = await processBatchImport(
             files,
             {
               abbreviations: [],
@@ -326,6 +347,25 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
               });
             }
           );
+
+          // Phase 2: Explicitly add new books to Yjs inventory to ensure metadata (esp. Author) syncs correctly
+          set((state) => {
+            const newBooks = { ...state.books };
+            successful.forEach(manifest => {
+              const inventoryItem: UserInventoryItem = {
+                bookId: manifest.bookId,
+                title: manifest.title,
+                author: manifest.author || 'Unknown Author', // Ensure author is captured
+                addedAt: Date.now(),
+                sourceFilename: files.find(f => f.name.includes(manifest.title) || f.size === manifest.fileSize)?.name, // Best effort match
+                tags: [],
+                status: 'unread',
+                lastInteraction: Date.now()
+              };
+              newBooks[manifest.bookId] = inventoryItem;
+            });
+            return { books: newBooks };
+          });
 
           // Hydrate newly imported books
           await get().hydrateStaticMetadata();
