@@ -29,6 +29,7 @@ vi.mock('../../../store/useReaderUIStore', () => ({
         currentSectionTitle: null,
         currentSectionId: null,
         setCurrentSection: vi.fn(),
+        setCurrentBookId: vi.fn(),
         playFromSelection: null
     })
 }));
@@ -48,8 +49,6 @@ vi.mock('../../../store/useReadingStateStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useReadingStateStore: (selector: any) => selector({
         updateLocation: vi.fn(),
-        currentBookId: null,
-        setCurrentBookId: vi.fn(),
         reset: vi.fn(),
         progress: {},
         getProgress: () => null
