@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { useTTSStore } from '../store/useTTSStore';
-import { useLibraryStore } from '../store/useLibraryStore';
+import { useLibraryStore, useBookStore } from '../store/useLibraryStore';
 import { useReadingListStore } from '../store/useReadingListStore';
 import { useReadingStateStore } from '../store/useReadingStateStore';
 import { usePreferencesStore } from '../store/usePreferencesStore';
@@ -145,7 +145,7 @@ export const GlobalSettingsDialog = () => {
                         store.upsertEntry(entry);
                         if (entry.percentage !== undefined) {
                             // Find bookId by filename (sourceFilename in inventory)
-                            const book = Object.values(useLibraryStore.getState().books).find(b => b.sourceFilename === entry.filename);
+                            const book = Object.values(useBookStore.getState().books).find(b => b.sourceFilename === entry.filename);
                             const targetId = book ? book.bookId : entry.filename;
                             rsStore.updateLocation(targetId, '', entry.percentage);
                         }

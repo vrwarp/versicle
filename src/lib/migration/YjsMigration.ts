@@ -1,7 +1,7 @@
 import { yDoc, waitForYjsSync } from '../../store/yjs-provider';
 import { dbService } from '../../db/DBService';
 import { getDB } from '../../db/db';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useBookStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
@@ -250,7 +250,7 @@ function migrateBooksAndProgress(
     }
 
     // Batch update stores (middleware syncs to Yjs)
-    useLibraryStore.setState((state) => ({
+    useBookStore.setState((state) => ({
         books: { ...state.books, ...books }
     }));
 
