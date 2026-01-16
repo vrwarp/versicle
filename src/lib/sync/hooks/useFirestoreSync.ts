@@ -34,7 +34,10 @@ export const useFirestoreSync = () => {
 
     // Initialize sync manager when Firebase is enabled AND configured
     useEffect(() => {
-        if (!firebaseEnabled || !isConfigured) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+
+        if ((!firebaseEnabled || !isConfigured) && !isMock) {
             return;
         }
 
