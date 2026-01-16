@@ -12,6 +12,7 @@ const mockDBService = {
   restoreBook: vi.fn(),
   getBookMetadata: vi.fn(),
   getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
+  getBookIdByFilename: vi.fn(),
 };
 
 // Mock DBService methods
@@ -134,6 +135,41 @@ describe('useLibraryStore', () => {
     // Store sets a generic error message for UI
     expect(state.error).toBe('Failed to import book.');
     expect(state.isLoading).toBe(false);
+  });
+
+  it('should detect duplicate book and throw error if not overwriting', async () => {
+    vi.mocked(mockDBService.getBookIdByFilename).mockResolvedValue('existing-id');
+
+    await expect(useLibraryStore.getState().addBook(mockFile)).rejects.toThrow('A book with the filename "test.epub" already exists.');
+
+    expect(mockDBService.getBookIdByFilename).toHaveBeenCalledWith('test.epub');
+    expect(mockDBService.addBook).not.toHaveBeenCalled();
+  });
+
+  it('should overwrite duplicate book if requested', async () => {
+    vi.mocked(mockDBService.getBookIdByFilename).mockResolvedValue('existing-id');
+    vi.mocked(mockDBService.deleteBook).mockResolvedValue(undefined);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(mockDBService.addBook).mockResolvedValue({ bookId: 'new-id', title: 'New', author: 'A', schemaVersion: 1 } as any);
+
+    // Initial state with existing book
+    useLibraryStore.setState({
+      books: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'existing-id': { bookId: 'existing-id' } as any
+      }
+    });
+
+    await useLibraryStore.getState().addBook(mockFile, { overwrite: true });
+
+    expect(mockDBService.getBookIdByFilename).toHaveBeenCalledWith('test.epub');
+    expect(mockDBService.deleteBook).toHaveBeenCalledWith('existing-id');
+    expect(mockDBService.addBook).toHaveBeenCalled();
+
+    // Verify state
+    const state = useLibraryStore.getState();
+    expect(state.books['existing-id']).toBeUndefined();
+    expect(state.books['new-id']).toBeDefined();
   });
 
   it('should remove a book calling dbService', async () => {

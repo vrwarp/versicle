@@ -1,6 +1,8 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as Y from 'yjs';
 import { MockDriveProvider } from './drivers/MockDriveProvider';
+import { YjsSyncService } from './YjsSyncService';
+import { useSyncStore } from './hooks/useSyncStore';
 
 // Mock y-indexeddb to avoid side effects in yjs-provider
 vi.mock('y-indexeddb', () => ({
@@ -141,6 +143,31 @@ describe('YjsSyncService', () => {
             // Both should be in A too
             expect(docA.getMap('library').get('bookA')).toBeDefined();
             expect(docA.getMap('library').get('bookB')).toBeDefined();
+        });
+    });
+
+    describe('Service Logic', () => {
+        it('should NOT push when sync is disabled', async () => {
+            // Setup store to return enabled=false
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (useSyncStore.getState as any).mockReturnValue({
+                isSyncEnabled: false, // Sync disabled
+                googleClientId: 'test',
+                googleApiKey: 'test',
+                setLastSyncTime: vi.fn(),
+            });
+
+            const service = new YjsSyncService(mockProvider);
+            vi.spyOn(mockProvider, 'uploadSnapshot');
+
+            // initialize will check isSyncEnabled and SKIP provider init
+            await service.initialize();
+
+            // Trigger forcePush
+            await service.forcePush('test');
+
+            // Should NOT call uploadSnapshot because sync is disabled
+            expect(mockProvider.uploadSnapshot).not.toHaveBeenCalled();
         });
     });
 });

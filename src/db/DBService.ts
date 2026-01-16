@@ -365,8 +365,15 @@ class DBService {
         'static_manifests', 'static_resources', 'static_structure',
         'user_inventory', 'user_progress', 'user_annotations',
         'user_overrides', 'user_journey', 'user_ai_inference',
-        'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation'
+        'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation',
+        'user_reading_list'
       ], 'readwrite');
+
+      // Cleanup Reading List (Requires filename lookup)
+      const inv = await tx.objectStore('user_inventory').get(id);
+      if (inv && inv.sourceFilename) {
+        await tx.objectStore('user_reading_list').delete(inv.sourceFilename);
+      }
 
       await Promise.all([
         tx.objectStore('static_manifests').delete(id),

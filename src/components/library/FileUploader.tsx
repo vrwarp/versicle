@@ -5,6 +5,7 @@ import { UploadCloud, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { validateZipSignature } from '../../lib/ingestion';
 import { Progress } from '../ui/Progress';
+import { DuplicateBookError } from '../../types/errors';
 
 /**
  * A component for uploading EPUB files, ZIP archives, or directories via drag-and-drop or file selection.
@@ -34,7 +35,15 @@ export const FileUploader: React.FC = () => {
       if (lowerName.endsWith('.epub')) {
            const isValid = await validateZipSignature(file);
            if (isValid) {
-               await addBook(file);
+               try {
+                   await addBook(file);
+               } catch (error) {
+                   if (error instanceof DuplicateBookError) {
+                       if (window.confirm(`"${file.name}" already exists. Do you want to replace it?`)) {
+                           await addBook(file, { overwrite: true });
+                       }
+                   }
+               }
            } else {
                showToast(`Invalid EPUB file (header mismatch): ${file.name}`, 'error');
            }

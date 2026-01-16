@@ -18,6 +18,7 @@ import type { BookMetadata } from '../../types/db';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
 import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { DuplicateBookError } from '../../types/errors';
 
 /**
  * The main library view component.
@@ -108,10 +109,21 @@ export const LibraryView: React.FC = () => {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      addBook(e.target.files[0]).then(() => {
+      const file = e.target.files[0];
+      addBook(file).then(() => {
         showToast("Book imported successfully", "success");
       }).catch((err) => {
-        showToast(`Import failed: ${err.message}`, "error");
+        if (err instanceof DuplicateBookError) {
+          if (window.confirm(`"${file.name}" already exists. Do you want to replace it?`)) {
+            addBook(file, { overwrite: true }).then(() => {
+              showToast("Book replaced successfully", "success");
+            }).catch(e2 => {
+              showToast(`Replace failed: ${e2.message}`, "error");
+            });
+          }
+        } else {
+          showToast(`Import failed: ${err.message}`, "error");
+        }
       });
     }
     // Reset input so same file can be selected again if needed
@@ -170,7 +182,17 @@ export const LibraryView: React.FC = () => {
       addBook(file).then(() => {
         showToast("Book imported successfully", "success", 5000);
       }).catch((err) => {
-        showToast(`Import failed: ${err.message}`, "error");
+        if (err instanceof DuplicateBookError) {
+          if (window.confirm(`"${file.name}" already exists. Do you want to replace it?`)) {
+            addBook(file, { overwrite: true }).then(() => {
+              showToast("Book replaced successfully", "success");
+            }).catch(e2 => {
+              showToast(`Replace failed: ${e2.message}`, "error");
+            });
+          }
+        } else {
+          showToast(`Import failed: ${err.message}`, "error");
+        }
       });
     }
   }, [addBook, showToast]);
