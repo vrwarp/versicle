@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as Y from 'yjs';
 import { migrateToYjs } from './YjsMigration';
 import { dbService } from '../../db/DBService';
-import { useLibraryStore } from '../../store/useLibraryStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
