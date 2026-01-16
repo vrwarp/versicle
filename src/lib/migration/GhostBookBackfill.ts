@@ -28,18 +28,7 @@ export async function backfillCoverPalettes(): Promise<void> {
             try {
                 // Try to get cover from static_manifests (fastest)
                 const manifest = await db.get('static_manifests', book.bookId);
-                let blob = manifest?.coverBlob;
-
-                // Fallback to static_resources if not in manifest (legacy data)
-                // Note: We avoid this if possible because it loads the full epub
-                // Actually, static_resources has the EPUB blob, not the cover.
-                // If it's not in manifest.coverBlob, we might have to extract it again, which is expensive.
-                // However, previous versions of ingestion MIGHT have put it in 'books' store in IDB?
-                // But we are in Yjs world now. 'books' store in IDB is legacy.
-                // The 'hydrateStaticMetadata' pulls from static_manifests.
-
-                // If we don't have a blob, check if we have a URL? No, URL is ephemeral.
-                // If we don't have a blob, we can't generate a palette.
+                const blob = manifest?.coverBlob;
 
                 if (blob) {
                     const palette = await extractCoverPalette(blob);
