@@ -58,21 +58,13 @@ export async function backfillCoverPalettes(): Promise<void> {
     if (updatedCount > 0) {
         console.log(`[Backfill] Generating palettes for ${updatedCount} books...`);
 
-        // Batch update via store action (which syncs to Yjs)
-        // We need to update each book individually or add a bulk update action?
-        // useBookStore has addBook/updateBook. We can just setState directly for deep merge
-        // assuming the middleware handles it?
-        // zustand-middleware-yjs usually handles top-level merge.
-        // But 'books' is a record.
-
-        useBookStore.setState((state) => {
-            const newBooks = { ...state.books };
+        // Update Yjs (via store actions) to ensure persistence and sync.
+        // We use yDoc.transact to bundle the updates into a single transaction.
+        yDoc.transact(() => {
+            const store = useBookStore.getState();
             for (const [id, palette] of Object.entries(updates)) {
-                if (newBooks[id]) {
-                    newBooks[id] = { ...newBooks[id], coverPalette: palette };
-                }
+                 store.updateBook(id, { coverPalette: palette });
             }
-            return { books: newBooks };
         });
 
         console.log(`[Backfill] Successfully updated ${updatedCount} books.`);

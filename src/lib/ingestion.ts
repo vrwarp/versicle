@@ -21,8 +21,18 @@ function cheapHash(buffer: ArrayBuffer): string {
 export async function extractCoverPalette(blob: Blob): Promise<number[]> {
     try {
         const bitmap = await createImageBitmap(blob);
-        const canvas = new OffscreenCanvas(2, 2);
-        const ctx = canvas.getContext('2d');
+        let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
+
+        if (typeof OffscreenCanvas !== 'undefined') {
+            const canvas = new OffscreenCanvas(2, 2);
+            ctx = canvas.getContext('2d');
+        } else {
+            const canvas = document.createElement('canvas');
+            canvas.width = 2;
+            canvas.height = 2;
+            ctx = canvas.getContext('2d');
+        }
+
         if (!ctx) return [];
 
         ctx.drawImage(bitmap, 0, 0, 2, 2);
