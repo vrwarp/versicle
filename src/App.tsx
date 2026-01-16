@@ -17,6 +17,7 @@ import { useYjsSync } from './lib/sync/hooks/useYjsSync';
 import { useLibraryStore, useBookStore } from './store/useLibraryStore';
 import { waitForYjsSync } from './store/yjs-provider';
 import { migrateToYjs } from './lib/migration/YjsMigration';
+import { backfillCoverPalettes } from './lib/migration/GhostBookBackfill';
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
 
 import './App.css';
@@ -102,6 +103,9 @@ function App() {
         }
 
         await hydrateStaticMetadata();
+
+        // Run non-blocking backfill
+        backfillCoverPalettes().catch(e => console.error('[App] Backfill failed:', e));
 
         setDbStatus('ready');
       } catch (err) {
