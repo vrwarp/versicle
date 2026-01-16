@@ -43,9 +43,9 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
 
         const colors = book.coverPalette.map(unpackColor);
 
+        // We use oklab interpolation for perceptually smooth transitions and to avoid muddy colors in the middle
         return {
             backgroundImage: `
-                /* We use oklab interpolation for perceptually smooth transitions and to avoid muddy colors in the middle */
                 radial-gradient(at top left in oklab, ${colors[0]}, transparent),
                 radial-gradient(at top right in oklab, ${colors[1]}, transparent),
                 radial-gradient(at bottom left in oklab, ${colors[2]}, transparent),
