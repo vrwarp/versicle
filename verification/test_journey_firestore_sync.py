@@ -68,17 +68,30 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     expect(page_a.get_by_test_id("library-view")).to_be_visible(timeout=15000)
     print("[A] Library view loaded")
 
-    # Import a book
-    page_a.set_input_files("data-testid=hidden-file-input", "verification/alice.epub")
+    # Import multiple books
+    books_to_upload = [
+        "verification/alice.epub",
+        "verification/jane-eyre.epub",
+        "verification/room-with-a-view.epub",
+        "verification/frankenstein.epub",
+        "verification/pride-and-prejudice.epub"
+    ]
     
-    # Wait for book card to appear
-    book_card_a = page_a.locator("[data-testid^='book-card-']").first
-    expect(book_card_a).to_be_visible(timeout=15000)
-    print("[A] Book imported successfully")
+    for book_path in books_to_upload:
+        print(f"[A] Importing {book_path}...")
+        page_a.set_input_files("data-testid=hidden-file-input", book_path)
+        # Short wait to prevent overwhelming the file importer/UI
+        time.sleep(1)
 
-    # Capture the book title for verification
-    book_title = page_a.locator("[data-testid='book-title']").first.text_content()
-    print(f"[A] Book title: {book_title}")
+    # Wait for all book cards to appear
+    expect(page_a.locator("[data-testid^='book-card-']")).to_have_count(len(books_to_upload), timeout=30000)
+    print(f"[A] All {len(books_to_upload)} books imported successfully")
+
+    # Capture book titles for verification
+    # We wait for the titles to be visible and stable
+    page_a.wait_for_timeout(1000)
+    book_titles_a = page_a.locator("[data-testid='book-title']").all_text_contents()
+    print(f"[A] Book titles: {book_titles_a}")
 
     # Wait for sync to complete (MockFireProvider debounces saves)
     time.sleep(2)
@@ -188,21 +201,41 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
             break
         time.sleep(0.5)
     
-    # Verify the book appears
-    book_card_b = page_b.locator("[data-testid^='book-card-']").first
-    expect(book_card_b).to_be_visible(timeout=10000)
-    print("[B] Synced book card visible!")
+    # Verify the books appear
+    expected_count = 5
+    expect(page_b.locator("[data-testid^='book-card-']")).to_have_count(expected_count, timeout=20000)
+    print(f"[B] All {expected_count} synced books visible!")
 
-    # Verify the book title matches
-    synced_title = page_b.locator("[data-testid='book-title']").first.text_content()
-    print(f"[B] Synced book title: {synced_title}")
-    assert book_title == synced_title, f"Title mismatch: expected '{book_title}', got '{synced_title}'"
+    # Verify titles
+    # Wait for titles to populate and stabilize
+    page_b.wait_for_timeout(1000)
+    synced_titles = page_b.locator("[data-testid='book-title']").all_text_contents()
+    print(f"[B] Synced titles: {synced_titles}")
+    assert sorted(synced_titles) == sorted(book_titles_a), f"Title mismatch!\nA: {sorted(book_titles_a)}\nB: {sorted(synced_titles)}"
 
-    # The book should be marked as offloaded (no local file)
-    # Check for the offload indicator (cloud icon overlay)
-    offload_indicator = page_b.locator(".bg-black\\/20")
+    # EXTENDED: Verify persistence on refresh
+    print(f"[B] Refreshing page to verify persistence...")
+    page_b.reload()
+    expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=15000)
+    
+    # Check count again
+    expect(page_b.locator("[data-testid^='book-card-']")).to_have_count(expected_count, timeout=10000)
+    
+    refreshed_titles = page_b.locator("[data-testid='book-title']").all_text_contents()
+    print(f"[B] Refreshed titles: {refreshed_titles}")
+    assert sorted(refreshed_titles) == sorted(book_titles_a), "Persistence failure on titles"
+
+    # The books should be marked as offloaded (no local file)
+    # Check for the offload indicator on ONE card (e.g. Alice)
+    book_card_alice = page_b.locator("[data-testid^='book-card-']").filter(has_text="Alice's Adventures in Wonderland").first
+    expect(book_card_alice).to_be_visible()
+    
+    offload_indicator = book_card_alice.locator(".bg-black\\/20")
     expect(offload_indicator).to_be_visible(timeout=5000)
-    print("[B] Book correctly shows as offloaded (cloud icon visible)")
+    print("[B] Alice correctly shows as offloaded (cloud icon visible)")
+    
+    # Store reference for restoration step
+    book_card_b = book_card_alice
 
     # ============================================
     # DEVICE B: Restore Book File
