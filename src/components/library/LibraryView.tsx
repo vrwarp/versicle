@@ -210,10 +210,7 @@ export const LibraryView: React.FC = () => {
     setBookToRestore(book);
     // Use setTimeout to ensure state is updated before click if needed, though usually not strictly necessary for simple refs
     // But direct click is fine.
-    // However, we need to ensure restoreFileInputRef is available.
-    requestAnimationFrame(() => {
-      restoreFileInputRef.current?.click();
-    });
+    restoreFileInputRef.current?.click();
   }, []);
 
   // OPTIMIZATION: Create a search index to avoid expensive re-calculation on every render
