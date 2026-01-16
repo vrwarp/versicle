@@ -227,7 +227,7 @@ describe('ingestion', () => {
 
         expect(global.OffscreenCanvas).toHaveBeenCalled();
         expect(mockContext.drawImage).toHaveBeenCalled();
-        expect(palette).toHaveLength(4);
+        expect(palette).toHaveLength(5);
 
         // Verify packing (approximate due to weighted averaging)
         // With weighted K-Means, we expect 5 colors.
@@ -263,7 +263,7 @@ describe('ingestion', () => {
 
         expect(document.createElement).toHaveBeenCalledWith('canvas');
         expect(mockCanvas.width).toBe(16);
-        expect(mockCanvas.height).toBe(2);
+        expect(mockCanvas.height).toBe(16);
         expect(mockContext.drawImage).toHaveBeenCalled();
         expect(palette).toEqual([0, 0, 0, 0, 0]);
     });
