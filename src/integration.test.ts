@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { getDB } from './db/db';
 import { useLibraryStore } from './store/useLibraryStore';
+import { useBookStore } from './store/useBookStore';
 import { useReaderUIStore } from './store/useReaderUIStore';
 import { useReadingStateStore } from './store/useReadingStateStore';
 import * as fs from 'fs';
@@ -139,7 +140,8 @@ describe('Feature Integration Tests', () => {
     await tx.done;
 
     // Reset stores
-    useLibraryStore.setState({ books: {}, staticMetadata: {}, isLoading: false, isImporting: false, error: null });
+    useLibraryStore.setState({ staticMetadata: {}, isLoading: false, isImporting: false, error: null });
+    useBookStore.setState({ books: {} });
     useReaderUIStore.getState().reset();
     useReadingStateStore.setState({ currentBookId: null, progress: {} });
 
@@ -179,7 +181,7 @@ describe('Feature Integration Tests', () => {
     await store.addBook(file);
 
     // Verify state after adding
-    const updatedStore = useLibraryStore.getState();
+    const updatedStore = useBookStore.getState();
     expect(Object.keys(updatedStore.books)).toHaveLength(1);
     // Get the first book
     const book = Object.values(updatedStore.books)[0];
@@ -197,7 +199,7 @@ describe('Feature Integration Tests', () => {
     await store.removeBook(bookId);
 
     // Verify state after deleting
-    const finalStore = useLibraryStore.getState();
+    const finalStore = useBookStore.getState();
     expect(Object.keys(finalStore.books)).toHaveLength(0);
 
     // Verify DB empty
@@ -222,7 +224,7 @@ describe('Feature Integration Tests', () => {
     } as UserProgress);
 
     // Manually add to Yjs state (simulating sync)
-    useLibraryStore.setState({
+    useBookStore.setState({
       books: {
         'test-id': {
           bookId: 'test-id',
@@ -240,7 +242,7 @@ describe('Feature Integration Tests', () => {
     const store = useLibraryStore.getState();
     await store.hydrateStaticMetadata();
 
-    const updatedStore = useLibraryStore.getState();
+    const updatedStore = useBookStore.getState();
     expect(Object.keys(updatedStore.books)).toHaveLength(1);
     expect(updatedStore.books['test-id'].title).toBe('Persisted Book');
   });

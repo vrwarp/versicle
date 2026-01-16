@@ -54,7 +54,15 @@ vi.mock('./store/useLibraryStore', () => {
     isLoading: false,
     error: null
   });
-  return { useLibraryStore };
+
+  const useBookStore = {
+    getState: vi.fn().mockReturnValue({
+      books: { 'b1': { id: 'b1', title: 'Test Book' } }
+    }),
+    setState: vi.fn()
+  };
+
+  return { useLibraryStore, useBookStore };
 });
 
 vi.mock('zustand/react/shallow', () => ({

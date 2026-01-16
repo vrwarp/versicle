@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useLibraryStore, useBookStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -94,8 +94,11 @@ describe('LibraryView', () => {
             return { showToast: mockShowToast };
         });
 
+        useBookStore.setState({
+            books: {}
+        });
+
         useLibraryStore.setState({
-            books: {},
             isLoading: false,
             error: null,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -112,16 +115,18 @@ describe('LibraryView', () => {
     });
 
     it('sorts books correctly', async () => {
-        useLibraryStore.setState({
+        useBookStore.setState({
             books: {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                '1': { id: '1', bookId: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200 } as any,
+                '1': { id: '1', bookId: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200, lastInteraction: 100 } as any,
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                '2': { id: '2', bookId: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100 } as any,
+                '2': { id: '2', bookId: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100, lastInteraction: 300 } as any,
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                '3': { id: '3', bookId: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300 } as any
-            },
-            viewMode: 'grid',
+                '3': { id: '3', bookId: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300, lastInteraction: 200 } as any
+            }
+        });
+
+        useLibraryStore.setState({
             sortOrder: 'recent'
         });
 
@@ -175,12 +180,11 @@ describe('LibraryView', () => {
     });
 
     it('shows no results message when search returns nothing', async () => {
-        useLibraryStore.setState({
+        useBookStore.setState({
             books: {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                '1': { id: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald' } as any
-            },
-            viewMode: 'grid'
+                '1': { id: '1', bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', lastInteraction: 100 } as any
+            }
         });
 
         render(

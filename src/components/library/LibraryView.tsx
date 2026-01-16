@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
+import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useAllBooks } from '../../store/selectors';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useToastStore } from '../../store/useToastStore';
@@ -36,8 +37,6 @@ export const LibraryView: React.FC = () => {
     addBook,
     restoreBook,
     isImporting,
-    viewMode,
-    setViewMode,
     sortOrder,
     setSortOrder,
     hydrateStaticMetadata
@@ -47,12 +46,19 @@ export const LibraryView: React.FC = () => {
     addBook: state.addBook,
     restoreBook: state.restoreBook,
     isImporting: state.isImporting,
-    viewMode: state.viewMode,
-    setViewMode: state.setViewMode,
     sortOrder: state.sortOrder,
     setSortOrder: state.setSortOrder,
     hydrateStaticMetadata: state.hydrateStaticMetadata
   })));
+
+  const { libraryLayout, setLibraryLayout } = usePreferencesStore(useShallow(state => ({
+    libraryLayout: state.libraryLayout,
+    setLibraryLayout: state.setLibraryLayout
+  })));
+
+  // Alias for backward compatibility in component
+  const viewMode = libraryLayout || 'grid';
+  const setViewMode = setLibraryLayout;
 
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
@@ -87,14 +93,30 @@ export const LibraryView: React.FC = () => {
   // Phase 2: Hydrate static metadata after Yjs sync completes
   // Wait for books to be populated by Yjs before hydrating static metadata
   const bookCount = books.length; // useAllBooks returns array
-  const { staticMetadata } = useLibraryStore(useShallow(state => ({ staticMetadata: state.staticMetadata })));
-  const hasStaticMetadata = Object.keys(staticMetadata).length > 0;
+  const { staticMetadata, offloadedBookIds } = useLibraryStore(useShallow(state => ({
+    staticMetadata: state.staticMetadata,
+    offloadedBookIds: state.offloadedBookIds
+  })));
+  const hydratedCount = Object.keys(staticMetadata).length;
+  const offloadedCount = offloadedBookIds.size;
+
+  // Track previous book count to detect when new books sync
+  const prevBookCountRef = useRef(0);
 
   useEffect(() => {
-    if (bookCount > 0 && !hasStaticMetadata) {
+    // Only hydrate when:
+    // 1. Books exist AND book count increased (new books added)
+    // 2. OR books exist but nothing has been hydrated yet (initial load on fresh device)
+    const bookCountIncreased = bookCount > prevBookCountRef.current;
+    const needsInitialHydration = bookCount > 0 && hydratedCount === 0 && offloadedCount === 0;
+
+    if (bookCountIncreased || needsInitialHydration) {
+      console.log(`[LibraryView] Hydration triggered: ${bookCount} books, ${hydratedCount} hydrated, ${offloadedCount} offloaded`);
       hydrateStaticMetadata();
     }
-  }, [bookCount, hasStaticMetadata, hydrateStaticMetadata]);
+
+    prevBookCountRef.current = bookCount;
+  }, [bookCount, hydratedCount, offloadedCount, hydrateStaticMetadata]);
 
   // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
 
@@ -216,10 +238,7 @@ export const LibraryView: React.FC = () => {
     setBookToRestore(book);
     // Use setTimeout to ensure state is updated before click if needed, though usually not strictly necessary for simple refs
     // But direct click is fine.
-    // However, we need to ensure restoreFileInputRef is available.
-    requestAnimationFrame(() => {
-      restoreFileInputRef.current?.click();
-    });
+    restoreFileInputRef.current?.click();
   }, []);
 
   // OPTIMIZATION: Create a search index to avoid expensive re-calculation on every render

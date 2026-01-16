@@ -1,4 +1,5 @@
 import { useLibraryStore } from './useLibraryStore';
+import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import type { UserProgress } from '../types/db';
 
@@ -24,7 +25,9 @@ function getMaxProgress(bookProgress: Record<string, UserProgress> | undefined):
  * otherwise falls back to Ghost Book metadata from Yjs inventory.
  */
 export const useAllBooks = () => {
-    const books = useLibraryStore(state => state.books);
+    // Access books from the SYNCED store
+    const books = useBookStore(state => state.books);
+    // Access static metadata from the LOCAL store
     const staticMetadata = useLibraryStore(state => state.staticMetadata);
     const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
     // Subscribe to progress changes (per-device structure)
@@ -61,7 +64,9 @@ export const useAllBooks = () => {
  * Returns a single book by ID with static metadata merged.
  */
 export const useBook = (id: string | null) => {
-    const book = useLibraryStore(state => id ? state.books[id] : null);
+    // Access books from the SYNCED store
+    const book = useBookStore(state => id ? state.books[id] : null);
+    // Access static metadata from the LOCAL store
     const staticMeta = useLibraryStore(state => id ? state.staticMetadata[id] : null);
     const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
     // Subscribe to progress changes (per-device structure)
@@ -91,4 +96,3 @@ export const useBook = (id: string | null) => {
         currentCfi: progress?.currentCfi || undefined
     };
 };
-

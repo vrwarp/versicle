@@ -1,7 +1,8 @@
 
 import JSZip from 'jszip';
-import { processEpub } from './ingestion';
+import { dbService } from '../db/DBService';
 import type { ExtractionOptions } from './tts';
+import type { StaticBookManifest } from '../types/db';
 
 /**
  * Unzips a file and extracts all EPUBs contained within.
@@ -22,27 +23,27 @@ export async function extractEpubsFromZip(
         let zipContent: JSZip;
 
         if (onProgress) {
-             // Read the file with FileReader to report progress
-             const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-                 const reader = new FileReader();
-                 reader.onload = (e) => {
-                     if (e.target?.result) {
-                         resolve(e.target.result as ArrayBuffer);
-                     } else {
-                         reject(new Error("Failed to read file"));
-                     }
-                 };
-                 reader.onerror = () => reject(reader.error);
-                 reader.onprogress = (e) => {
-                     if (e.lengthComputable) {
-                         onProgress((e.loaded / e.total) * 100);
-                     }
-                 };
-                 reader.readAsArrayBuffer(file);
-             });
-             zipContent = await zip.loadAsync(buffer);
+            // Read the file with FileReader to report progress
+            const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    if (e.target?.result) {
+                        resolve(e.target.result as ArrayBuffer);
+                    } else {
+                        reject(new Error("Failed to read file"));
+                    }
+                };
+                reader.onerror = () => reject(reader.error);
+                reader.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        onProgress((e.loaded / e.total) * 100);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+            zipContent = await zip.loadAsync(buffer);
         } else {
-             zipContent = await zip.loadAsync(file);
+            zipContent = await zip.loadAsync(file);
         }
 
         const processingPromises: Promise<void>[] = [];
@@ -88,7 +89,7 @@ export async function processBatchImport(
     ttsOptions?: ExtractionOptions,
     onProgress?: (processed: number, total: number, filename: string) => void,
     onUploadProgress?: (percent: number, status: string) => void
-): Promise<number> {
+): Promise<{ successful: StaticBookManifest[]; failed: string[] }> {
     let allEpubs: File[] = [];
 
     // Calculate total size for upload/extraction progress
@@ -97,8 +98,8 @@ export async function processBatchImport(
 
     const updateUploadProgress = (bytes: number, filename: string) => {
         if (onUploadProgress) {
-             const percentage = totalSize > 0 ? Math.min(100, Math.round((bytes / totalSize) * 100)) : 100;
-             onUploadProgress(percentage, `Processing ${filename}...`);
+            const percentage = totalSize > 0 ? Math.min(100, Math.round((bytes / totalSize) * 100)) : 100;
+            onUploadProgress(percentage, `Processing ${filename}...`);
         }
     };
 
@@ -130,7 +131,8 @@ export async function processBatchImport(
         onUploadProgress(100, 'All files processed. Starting import...');
     }
 
-    let successCount = 0;
+    const successful: StaticBookManifest[] = [];
+    const failed: string[] = [];
     const total = allEpubs.length;
 
     // Process each EPUB
@@ -141,12 +143,17 @@ export async function processBatchImport(
         }
 
         try {
-            await processEpub(epub, ttsOptions);
-            successCount++;
+            const manifest = await dbService.addBook(epub, ttsOptions);
+            if (manifest) {
+                successful.push(manifest);
+            } else {
+                failed.push(epub.name);
+            }
         } catch (e) {
             console.error(`Failed to import ${epub.name}:`, e);
+            failed.push(epub.name);
         }
     }
 
-    return successCount;
+    return { successful, failed };
 }

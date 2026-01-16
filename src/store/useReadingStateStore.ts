@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
 import type { UserProgress } from '../types/db';
-import { useLibraryStore } from './useLibraryStore';
+import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { getDeviceId } from '../lib/device-id';
 
@@ -123,7 +123,7 @@ export const useReadingStateStore = create<ReadingState>()(
                 // Sync to Reading List
                 // We do this outside the set() to avoid side-effects during state calculation,
                 // and because it affects a different store.
-                const book = useLibraryStore.getState().books[bookId];
+                const book = useBookStore.getState().books[bookId];
                 if (book && book.sourceFilename) {
                     const { staticMetadata } = useLibraryStore.getState();
                     const meta = staticMetadata[bookId];

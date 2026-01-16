@@ -48,6 +48,7 @@ export class MockFireProvider extends ObservableV2<{
     private _ready = false;
     private destroyed = false;
     private syncTimeout: ReturnType<typeof setTimeout> | null = null;
+    readonly maxWaitFirestoreTime: number;
 
     // Test control flags
     private static shouldFailSync = false;
@@ -58,6 +59,7 @@ export class MockFireProvider extends ObservableV2<{
         this.doc = config.ydoc;
         this.documentPath = config.path;
         this.firebaseApp = config.firebaseApp;
+        this.maxWaitFirestoreTime = config.maxWaitFirestoreTime || 2000;
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         console.log(`[MockFireProvider] Initialized for path: ${config.path}`);
@@ -67,6 +69,13 @@ export class MockFireProvider extends ObservableV2<{
     }
 
     private async initializeAsync(): Promise<void> {
+        // Check for globally configured delay (testing hook)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_SYNC_DELAY__) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            MockFireProvider.syncDelay = (window as any).__VERSICLE_MOCK_SYNC_DELAY__;
+        }
+
         // Simulate network delay
         await this.delay(MockFireProvider.syncDelay);
 
@@ -86,6 +95,7 @@ export class MockFireProvider extends ObservableV2<{
                 for (let i = 0; i < binary.length; i++) {
                     snapshot[i] = binary.charCodeAt(i);
                 }
+
                 Y.applyUpdate(this.doc, snapshot);
                 console.log('[MockFireProvider] Applied stored snapshot');
             } catch (e) {
@@ -113,7 +123,7 @@ export class MockFireProvider extends ObservableV2<{
 
         this.syncTimeout = setTimeout(() => {
             this.saveToStorage();
-        }, 100);
+        }, this.maxWaitFirestoreTime);
     };
 
     private loadFromStorage(): MockStorageData | null {

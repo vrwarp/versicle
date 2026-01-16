@@ -1,7 +1,7 @@
 import { yDoc, waitForYjsSync } from '../../store/yjs-provider';
 import { dbService } from '../../db/DBService';
 import { getDB } from '../../db/db';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useBookStore } from '../../store/useLibraryStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
@@ -137,6 +137,23 @@ async function migrateLegacyData(): Promise<void> {
 
     console.log(`[Migration] Found ${legacyInventory.length} books, ${legacyAnnotations.length} annotations, ${legacyProgress.length} progress entries, ${legacyReadingList.length} reading list entries`);
 
+    // Check if there is anything to migrate to avoid overwriting Yjs with empty state
+    // (which causes race conditions with incoming cloud sync)
+    const areAllLegacyStoresEmpty =
+        legacyInventory.length === 0 &&
+        legacyAnnotations.length === 0 &&
+        legacyProgress.length === 0 &&
+        legacyReadingList.length === 0;
+
+    if (areAllLegacyStoresEmpty) {
+        console.log('[Migration] Legacy stores empty. Checking preferences only...');
+        yDoc.transact(() => {
+            migratePreferences();
+        });
+        console.log('[Migration] ✅ Migration complete (Preferences only)!');
+        return;
+    }
+
     // Use a single Yjs transaction for atomic migration
     yDoc.transact(() => {
         // Migrate Library (Inventory + Progress + Reading List)
@@ -233,7 +250,7 @@ function migrateBooksAndProgress(
     }
 
     // Batch update stores (middleware syncs to Yjs)
-    useLibraryStore.setState((state) => ({
+    useBookStore.setState((state) => ({
         books: { ...state.books, ...books }
     }));
 

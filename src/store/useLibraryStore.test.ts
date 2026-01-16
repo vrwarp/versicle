@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { createLibraryStore } from './useLibraryStore';
+import { useBookStore } from './useBookStore';
 import type { BookMetadata } from '../types/db';
 
 // Mock DBService
@@ -84,11 +85,12 @@ describe('useLibraryStore', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useLibraryStore = createLibraryStore(mockDBService as any);
     useLibraryStore.setState({
-      books: {},
+      staticMetadata: {},
       isLoading: false,
       error: null,
       sortOrder: 'last_read',
     });
+    useBookStore.setState({ books: {} });
   });
 
   afterEach(() => {
@@ -97,7 +99,8 @@ describe('useLibraryStore', () => {
 
   it('should have initial state', () => {
     const state = useLibraryStore.getState();
-    expect(state.books).toEqual({});
+    const bookState = useBookStore.getState();
+    expect(bookState.books).toEqual({});
     expect(state.isLoading).toBe(false);
   });
 
@@ -121,7 +124,8 @@ describe('useLibraryStore', () => {
 
     // State should be updated via Yjs sync (book added to store)
     const state = useLibraryStore.getState();
-    expect(state.books['test-id']).toBeDefined();
+    const bookState = useBookStore.getState();
+    expect(bookState.books['test-id']).toBeDefined();
     expect(state.isLoading).toBe(false);
   });
 
@@ -153,7 +157,7 @@ describe('useLibraryStore', () => {
     vi.mocked(mockDBService.addBook).mockResolvedValue({ bookId: 'new-id', title: 'New', author: 'A', schemaVersion: 1 } as any);
 
     // Initial state with existing book
-    useLibraryStore.setState({
+    useBookStore.setState({
       books: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'existing-id': { bookId: 'existing-id' } as any
@@ -167,28 +171,27 @@ describe('useLibraryStore', () => {
     expect(mockDBService.addBook).toHaveBeenCalled();
 
     // Verify state
-    const state = useLibraryStore.getState();
-    expect(state.books['existing-id']).toBeUndefined();
-    expect(state.books['new-id']).toBeDefined();
+    const bookState = useBookStore.getState();
+    expect(bookState.books['existing-id']).toBeUndefined();
+    expect(bookState.books['new-id']).toBeDefined();
   });
 
   it('should remove a book calling dbService', async () => {
     // Setup initial state
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useLibraryStore.setState({ books: { 'test-id': { ...mockBook, lastInteraction: 1000, tags: [], status: 'unread' } as any } });
+    useBookStore.setState({ books: { 'test-id': { ...mockBook, lastInteraction: 1000, tags: [], status: 'unread' } as any } });
 
     vi.mocked(mockDBService.deleteBook).mockResolvedValue(undefined);
 
     await useLibraryStore.getState().removeBook('test-id');
 
     expect(mockDBService.deleteBook).toHaveBeenCalledWith('test-id');
-    const state = useLibraryStore.getState();
-    expect(state.books['test-id']).toBeUndefined();
+    const bookState = useBookStore.getState();
+    expect(bookState.books['test-id']).toBeUndefined();
   });
 
   it('should hydrate static metadata from DB', async () => {
     // Setup book in Yjs state first
-    useLibraryStore.setState({
+    useBookStore.setState({
       books: {
         'test-id': {
           bookId: 'test-id',
@@ -206,12 +209,6 @@ describe('useLibraryStore', () => {
     // Mock DBService to return static metadata
     vi.mocked(mockDBService.getLibrary).mockResolvedValue([mockBook]);
     vi.mocked(mockDBService.getBookMetadata).mockResolvedValue(mockBook);
-
-    // Setup initial state with a book so hydration has something to do
-    useLibraryStore.setState({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      books: { 'test-id': mockBook as any }
-    });
 
     await useLibraryStore.getState().hydrateStaticMetadata();
 

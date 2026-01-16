@@ -115,7 +115,8 @@ describe('MockFireProvider', () => {
             const provider = new MockFireProvider({
                 firebaseApp: mockApp,
                 ydoc,
-                path: 'users/test-uid/versicle/main'
+                path: 'users/test-uid/versicle/main',
+                maxWaitFirestoreTime: 50
             });
 
             // Wait for init
@@ -144,7 +145,8 @@ describe('MockFireProvider', () => {
             const provider1 = new MockFireProvider({
                 firebaseApp: mockApp,
                 ydoc: firstDoc,
-                path
+                path,
+                maxWaitFirestoreTime: 50
             });
 
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -174,7 +176,8 @@ describe('MockFireProvider', () => {
             const provider = new MockFireProvider({
                 firebaseApp: mockApp,
                 ydoc,
-                path: 'test/path'
+                path: 'test/path',
+                maxWaitFirestoreTime: 50
             });
 
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -204,7 +207,8 @@ describe('MockFireProvider', () => {
             const provider = new MockFireProvider({
                 firebaseApp: mockApp,
                 ydoc,
-                path: 'test/path'
+                path: 'test/path',
+                maxWaitFirestoreTime: 50
             });
 
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -220,7 +224,8 @@ describe('MockFireProvider', () => {
             const provider = new MockFireProvider({
                 firebaseApp: mockApp,
                 ydoc,
-                path: 'test/path'
+                path: 'test/path',
+                maxWaitFirestoreTime: 50
             });
 
             await new Promise(resolve => setTimeout(resolve, 50));
