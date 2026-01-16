@@ -36,8 +36,9 @@ export const useAllBooks = () => {
             ...book,
             // Merge static metadata if available, otherwise use Ghost Book snapshots
             id: book.bookId,  // Alias for backwards compatibility
-            title: staticMetadata[book.bookId]?.title || book.title,
-            author: staticMetadata[book.bookId]?.author || book.author,
+            // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+            title: book.customTitle || staticMetadata[book.bookId]?.title || book.title,
+            author: book.customAuthor || staticMetadata[book.bookId]?.author || book.author,
             coverBlob: staticMetadata[book.bookId]?.coverBlob || undefined,
             version: staticMetadata[book.bookId]?.version || undefined,
             coverUrl: (staticMetadata[book.bookId]?.coverBlob instanceof Blob)
@@ -75,8 +76,9 @@ export const useBook = (id: string | null) => {
     return {
         ...book,
         id: book.bookId,  // Alias
-        title: staticMeta?.title || book.title,
-        author: staticMeta?.author || book.author,
+        // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+        title: book.customTitle || staticMeta?.title || book.title,
+        author: book.customAuthor || staticMeta?.author || book.author,
         coverBlob: staticMeta?.coverBlob || null,
         coverUrl: (staticMeta?.coverBlob instanceof Blob) ? URL.createObjectURL(staticMeta.coverBlob!) : undefined,
         fileHash: staticMeta?.fileHash,
