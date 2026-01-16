@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { dbService } from '../db/DBService';
 import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '../types/db';
-import { StorageFullError } from '../types/errors';
+import { StorageFullError, DuplicateBookError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
 import { useReadingListStore } from './useReadingListStore';
 import { processBatchImport } from '../lib/batch-ingestion';
@@ -57,8 +57,9 @@ interface LibraryState {
   /**
    * Imports a new EPUB file into the library.
    * @param file - The EPUB file to import.
+   * @param options - Import options.
    */
-  addBook: (file: File) => Promise<void>;
+  addBook: (file: File, options?: { overwrite?: boolean }) => Promise<void>;
   /**
    * Imports multiple files (EPUBs or ZIPs) into the library.
    * @param files - The array of files to import.
@@ -100,6 +101,7 @@ interface IDBService {
   getBookMetadata: (id: string) => Promise<BookMetadata | undefined>;
   getAllInventoryItems: () => Promise<UserInventoryItem[]>;
   getOffloadedStatus: (bookIds?: string[]) => Promise<Map<string, boolean>>;
+  getBookIdByFilename: (filename: string) => Promise<string | undefined>;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -207,7 +209,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       }
     },
 
-    addBook: async (file: File) => {
+    addBook: async (file: File, options?: { overwrite?: boolean }) => {
       set({
         isImporting: true,
         importProgress: 0,
@@ -216,7 +218,28 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         uploadStatus: '',
         error: null
       });
+
       try {
+        // Check for duplicates
+        // Use Store state first (synchronous check to avoid race conditions with recent adds)
+        const books = useBookStore.getState().books;
+        let existingId = Object.values(books).find(b => b.sourceFilename === file.name)?.bookId;
+
+        // If not found in store (e.g. not fully synced?), try DB as backup
+        if (!existingId) {
+          existingId = await injectedDB.getBookIdByFilename(file.name);
+        }
+
+        if (existingId) {
+          if (options?.overwrite) {
+            set({ importStatus: 'Removing existing copy...' });
+            await get().removeBook(existingId);
+          } else {
+            set({ isImporting: false, importProgress: 0, importStatus: '' });
+            throw new DuplicateBookError(file.name);
+          }
+        }
+
         const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
 
         // 1. Pure ingestion: Write to static_* stores only
@@ -431,6 +454,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         } else {
           // Synced book download: no local manifest, need to fully import with existing ID
           console.log(`[Library] Book ${id} has no local manifest. Importing with existing ID for synced book.`);
+
           const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
 
           // Preserve existing inventory data before import

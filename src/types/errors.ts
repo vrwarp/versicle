@@ -39,3 +39,13 @@ export class StorageFullError extends DatabaseError {
     this.name = 'StorageFullError';
   }
 }
+
+/**
+ * Error thrown when attempting to add a book that already exists.
+ */
+export class DuplicateBookError extends AppError {
+  constructor(public filename: string) {
+    super(`A book with the filename "${filename}" already exists.`, 'DUPLICATE_BOOK');
+    this.name = 'DuplicateBookError';
+  }
+}
