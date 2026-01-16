@@ -38,17 +38,12 @@ interface LibraryState {
   uploadStatus: string;
   /** Error message if an operation failed, or null. */
   error: string | null;
-  /** The current view mode of the library. */
-  viewMode: 'grid' | 'list';
+
   /** The current sort order of the library. */
   sortOrder: SortOption;
 
   // === ACTIONS (not synced to Yjs) ===
-  /**
-   * Sets the view mode of the library.
-   * @param mode - The new view mode.
-   */
-  setViewMode: (mode: 'grid' | 'list') => void;
+
   /**
    * Sets the sort order of the library.
    * @param sort - The new sort order.
@@ -121,11 +116,11 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
     uploadProgress: 0,
     uploadStatus: '',
     error: null,
-    viewMode: 'grid',
+
     sortOrder: 'last_read',
 
     // Actions
-    setViewMode: (mode) => set({ viewMode: mode }),
+
     setSortOrder: (sort) => set({ sortOrder: sort }),
 
     hydrateStaticMetadata: async () => {

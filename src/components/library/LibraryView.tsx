@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
+import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useAllBooks } from '../../store/selectors';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useToastStore } from '../../store/useToastStore';
@@ -35,8 +36,6 @@ export const LibraryView: React.FC = () => {
     addBook,
     restoreBook,
     isImporting,
-    viewMode,
-    setViewMode,
     sortOrder,
     setSortOrder,
     hydrateStaticMetadata
@@ -46,12 +45,19 @@ export const LibraryView: React.FC = () => {
     addBook: state.addBook,
     restoreBook: state.restoreBook,
     isImporting: state.isImporting,
-    viewMode: state.viewMode,
-    setViewMode: state.setViewMode,
     sortOrder: state.sortOrder,
     setSortOrder: state.setSortOrder,
     hydrateStaticMetadata: state.hydrateStaticMetadata
   })));
+
+  const { libraryLayout, setLibraryLayout } = usePreferencesStore(useShallow(state => ({
+    libraryLayout: state.libraryLayout,
+    setLibraryLayout: state.setLibraryLayout
+  })));
+
+  // Alias for backward compatibility in component
+  const viewMode = libraryLayout || 'grid';
+  const setViewMode = setLibraryLayout;
 
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
