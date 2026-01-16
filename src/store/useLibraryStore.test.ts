@@ -178,6 +178,7 @@ describe('useLibraryStore', () => {
 
   it('should remove a book calling dbService', async () => {
     // Setup initial state
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useBookStore.setState({ books: { 'test-id': { ...mockBook, lastInteraction: 1000, tags: [], status: 'unread' } as any } });
 
     vi.mocked(mockDBService.deleteBook).mockResolvedValue(undefined);
