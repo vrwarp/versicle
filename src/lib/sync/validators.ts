@@ -14,6 +14,7 @@ export const UserInventoryItemSchema = z.object({
     status: z.enum(['unread', 'reading', 'completed', 'abandoned']),
     customTitle: z.string().optional(),
     customAuthor: z.string().optional(),
+    coverPalette: z.array(z.number().int().min(0).max(65535)).length(4).optional(),
 });
 
 export const ReadingListEntrySchema = z.object({

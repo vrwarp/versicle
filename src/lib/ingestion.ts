@@ -18,6 +18,42 @@ function cheapHash(buffer: ArrayBuffer): string {
     return (hash >>> 0).toString(16);
 }
 
+export async function extractCoverPalette(blob: Blob): Promise<number[]> {
+    try {
+        const bitmap = await createImageBitmap(blob);
+        const canvas = new OffscreenCanvas(2, 2);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return [];
+
+        ctx.drawImage(bitmap, 0, 0, 2, 2);
+        const data = ctx.getImageData(0, 0, 2, 2).data; // RGBA sequence
+
+        // 4 pixels * 4 channels = 16 bytes
+        const palette: number[] = [];
+
+        for (let i = 0; i < 4; i++) {
+            const idx = i * 4;
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            // Alpha is ignored
+
+            // Packing: R4-G8-B4
+            const r4 = (r >> 4) & 0xF; // 0-255 -> 0-15
+            const g8 = g & 0xFF;       // 0-255 -> 0-255
+            const b4 = (b >> 4) & 0xF; // 0-255 -> 0-15
+
+            const packed = (r4 << 12) | (g8 << 4) | b4;
+            palette.push(packed);
+        }
+
+        return palette;
+    } catch (e) {
+        console.warn('Failed to extract cover palette:', e);
+        return [];
+    }
+}
+
 export async function generateFileFingerprint(
     file: Blob,
     metadata: { title: string; author: string; filename: string }
@@ -199,6 +235,7 @@ export async function extractBookData(
 
     let coverBlob: Blob | undefined;
     let thumbnailBlob: Blob | undefined;
+    let coverPalette: number[] | undefined;
 
     if (coverUrl) {
         try {
@@ -214,6 +251,11 @@ export async function extractBookData(
                 } catch (error) {
                     console.warn('Failed to compress cover image, using original:', error);
                     thumbnailBlob = coverBlob;
+                }
+
+                if (thumbnailBlob || coverBlob) {
+                     coverPalette = await extractCoverPalette(thumbnailBlob || coverBlob);
+                     if (coverPalette.length === 0) coverPalette = undefined;
                 }
             }
         } catch (error) {
@@ -333,7 +375,8 @@ export async function extractBookData(
         sourceFilename: file.name,
         tags: [],
         status: 'unread',
-        lastInteraction: Date.now()
+        lastInteraction: Date.now(),
+        coverPalette
     };
 
     const progress: UserProgress = {
