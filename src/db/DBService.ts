@@ -7,7 +7,8 @@ import type {
   CacheSessionState,
   CacheTtsPreparation,
   UserInventoryItem,
-  StaticBookManifest
+  StaticBookManifest,
+  NavigationItem
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
@@ -236,13 +237,6 @@ class DBService {
   }
 
   /**
-   * Updates only the metadata for a specific book.
-   */
-  async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
-    Logger.warn('DBService', 'updateBookMetadata is deprecated. Use useLibraryStore/useReadingStateStore instead.');
-  }
-
-  /**
    * Retrieves the file content for a specific book.
    */
   async getBookFile(id: string): Promise<Blob | ArrayBuffer | undefined> {
@@ -271,6 +265,27 @@ class DBService {
         characterCount: item.characterCount,
         playOrder: item.index
       })).sort((a, b) => a.playOrder - b.playOrder);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Updates the Table of Contents in the static structure.
+   * Used for persisting AI-enhanced TOCs.
+   */
+  async updateBookStructure(bookId: string, toc: NavigationItem[]): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const tx = db.transaction('static_structure', 'readwrite');
+      const store = tx.objectStore('static_structure');
+
+      const structure = await store.get(bookId);
+      if (structure) {
+        structure.toc = toc;
+        await store.put(structure);
+      }
+      await tx.done;
     } catch (error) {
       this.handleError(error);
     }
@@ -494,12 +509,6 @@ class DBService {
   }
 
 
-  // --- Progress Operations ---
-
-  saveProgress(bookId: string, cfi: string, progress: number): void {
-    Logger.warn('DBService', 'saveProgress is deprecated. Use useReadingStateStore instead.');
-  }
-
   // --- Reading List Operations (Legacy/Mapped) ---
   // Mapping UserInventory to ReadingListEntry for backward compatibility
 
@@ -722,10 +731,6 @@ class DBService {
 
   // --- Annotation Operations ---
 
-  async addAnnotation(annotation: Annotation): Promise<void> {
-    Logger.warn('DBService', 'addAnnotation is deprecated. Use useAnnotationStore instead.');
-  }
-
   async getAnnotations(bookId: string): Promise<Annotation[]> {
     // This might still be used by legacy sync/migration?
     try {
@@ -736,10 +741,6 @@ class DBService {
       this.handleError(error);
     }
     return [];
-  }
-
-  async deleteAnnotation(id: string): Promise<void> {
-    Logger.warn('DBService', 'deleteAnnotation is deprecated. Use useAnnotationStore instead.');
   }
 
   // --- TTS Cache Operations ---
