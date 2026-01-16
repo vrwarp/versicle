@@ -1,4 +1,5 @@
 import { useReadingStateStore } from '../store/useReadingStateStore';
+import { useReaderUIStore } from '../store/useReaderUIStore';
 import { dbService } from '../db/DBService';
 
 // Actually, looking at the project, I don't see react-query. I'll stick to a simple hook given the constraints.
@@ -6,7 +7,7 @@ import { useState, useEffect } from 'react';
 import type { UserProgress } from '../types/db';
 
 export function useBookProgress(bookId: string) {
-    const currentBookId = useReadingStateStore(state => state.currentBookId);
+    const currentBookId = useReaderUIStore(state => state.currentBookId);
     const allProgress = useReadingStateStore(state => state.progress);
 
     // If the requested book is the active one, return state from store

@@ -31,12 +31,11 @@ export const ReaderControlBar: React.FC = () => {
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentSectionTitle } = useReaderUIStore(useShallow(state => ({
+    const { immersiveMode, currentSectionTitle, currentBookId } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
-        currentSectionTitle: state.currentSectionTitle
+        currentSectionTitle: state.currentSectionTitle,
+        currentBookId: state.currentBookId
     })));
-
-    const currentBookId = useReadingStateStore(state => state.currentBookId);
 
     // OPTIMIZATION: Use granular selectors to avoid re-rendering on every library change.
     // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.

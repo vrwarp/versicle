@@ -41,7 +41,12 @@ vi.mock('../../ui/Dialog', () => ({
 
 vi.mock('../../store/useReadingStateStore', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useReadingStateStore: (selector: any) => selector({ currentBookId: 'book1' }),
+  useReadingStateStore: (selector: any) => selector({ }),
+}));
+
+vi.mock('../../store/useReaderUIStore', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  useReaderUIStore: (selector: any) => selector({ currentBookId: 'book1' }),
 }));
 
 // Mock export
