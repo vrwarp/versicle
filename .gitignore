@@ -36,3 +36,4 @@ venv/
 
 # Test output
 test_output*.txt
+verification_output*.txt
