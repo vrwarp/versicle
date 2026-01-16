@@ -965,8 +965,63 @@ export const GlobalSettingsDialog = () => {
                                                 /* Configuration Form */
                                                 <div className="space-y-3">
                                                     <p className="text-sm text-muted-foreground">
-                                                        Enter your Firebase project credentials. You can find these in the Firebase Console under Project Settings → General → Your apps.
+                                                        Paste your Firebase configuration snippet from the Firebase Console (Project Settings → General → Your apps), or enter credentials manually.
                                                     </p>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Paste Firebase Config</label>
+                                                        <textarea
+                                                            className="w-full h-32 p-2 text-xs font-mono border rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                                                            placeholder={`// Paste your Firebase config here, e.g.:
+const firebaseConfig = {
+  apiKey: "AIza...",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project",
+  storageBucket: "your-project.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abc123",
+  measurementId: "G-XXXXXXX"
+};`}
+                                                            onChange={(e) => {
+                                                                const text = e.target.value;
+                                                                // Parse the pasted Firebase config
+                                                                const extractValue = (key: string): string => {
+                                                                    const patterns = [
+                                                                        new RegExp(`${key}\\s*:\\s*["']([^"']+)["']`),
+                                                                        new RegExp(`"${key}"\\s*:\\s*["']([^"']+)["']`),
+                                                                    ];
+                                                                    for (const pattern of patterns) {
+                                                                        const match = text.match(pattern);
+                                                                        if (match) return match[1];
+                                                                    }
+                                                                    return '';
+                                                                };
+
+                                                                const apiKey = extractValue('apiKey');
+                                                                const authDomain = extractValue('authDomain');
+                                                                const projectId = extractValue('projectId');
+                                                                const storageBucket = extractValue('storageBucket');
+                                                                const messagingSenderId = extractValue('messagingSenderId');
+                                                                const appId = extractValue('appId');
+                                                                const measurementId = extractValue('measurementId');
+
+                                                                // Only update if we found at least some values
+                                                                if (apiKey || authDomain || projectId || appId) {
+                                                                    setFirebaseConfig({
+                                                                        ...(apiKey && { apiKey }),
+                                                                        ...(authDomain && { authDomain }),
+                                                                        ...(projectId && { projectId }),
+                                                                        ...(storageBucket && { storageBucket }),
+                                                                        ...(messagingSenderId && { messagingSenderId }),
+                                                                        ...(appId && { appId }),
+                                                                        ...(measurementId && { measurementId }),
+                                                                    });
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div className="border-t pt-3 mt-2">
+                                                        <p className="text-xs text-muted-foreground mb-3">Or edit fields individually:</p>
+                                                    </div>
                                                     <div className="space-y-2">
                                                         <label className="text-sm font-medium">API Key</label>
                                                         <Input
@@ -992,6 +1047,24 @@ export const GlobalSettingsDialog = () => {
                                                             value={firebaseConfig.projectId}
                                                             onChange={(e) => setFirebaseConfig({ projectId: e.target.value })}
                                                             placeholder="your-project-id"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Storage Bucket</label>
+                                                        <Input
+                                                            type="text"
+                                                            value={firebaseConfig.storageBucket}
+                                                            onChange={(e) => setFirebaseConfig({ storageBucket: e.target.value })}
+                                                            placeholder="your-project.appspot.com"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Messaging Sender ID</label>
+                                                        <Input
+                                                            type="text"
+                                                            value={firebaseConfig.messagingSenderId}
+                                                            onChange={(e) => setFirebaseConfig({ messagingSenderId: e.target.value })}
+                                                            placeholder="123456789"
                                                         />
                                                     </div>
                                                     <div className="space-y-2">

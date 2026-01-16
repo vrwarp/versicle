@@ -14,7 +14,10 @@ export interface FirebaseConfigSettings {
     apiKey: string;
     authDomain: string;
     projectId: string;
+    storageBucket: string;
+    messagingSenderId: string;
     appId: string;
+    measurementId?: string;
 }
 
 interface SyncStore {
@@ -64,6 +67,8 @@ const defaultFirebaseConfig: FirebaseConfigSettings = {
     apiKey: '',
     authDomain: '',
     projectId: '',
+    storageBucket: '',
+    messagingSenderId: '',
     appId: ''
 };
 
