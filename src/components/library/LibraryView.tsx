@@ -86,14 +86,30 @@ export const LibraryView: React.FC = () => {
   // Phase 2: Hydrate static metadata after Yjs sync completes
   // Wait for books to be populated by Yjs before hydrating static metadata
   const bookCount = books.length; // useAllBooks returns array
-  const { staticMetadata } = useLibraryStore(useShallow(state => ({ staticMetadata: state.staticMetadata })));
-  const hasStaticMetadata = Object.keys(staticMetadata).length > 0;
+  const { staticMetadata, offloadedBookIds } = useLibraryStore(useShallow(state => ({
+    staticMetadata: state.staticMetadata,
+    offloadedBookIds: state.offloadedBookIds
+  })));
+  const hydratedCount = Object.keys(staticMetadata).length;
+  const offloadedCount = offloadedBookIds.size;
+
+  // Track previous book count to detect when new books sync
+  const prevBookCountRef = useRef(0);
 
   useEffect(() => {
-    if (bookCount > 0 && !hasStaticMetadata) {
+    // Only hydrate when:
+    // 1. Books exist AND book count increased (new books added)
+    // 2. OR books exist but nothing has been hydrated yet (initial load on fresh device)
+    const bookCountIncreased = bookCount > prevBookCountRef.current;
+    const needsInitialHydration = bookCount > 0 && hydratedCount === 0 && offloadedCount === 0;
+
+    if (bookCountIncreased || needsInitialHydration) {
+      console.log(`[LibraryView] Hydration triggered: ${bookCount} books, ${hydratedCount} hydrated, ${offloadedCount} offloaded`);
       hydrateStaticMetadata();
     }
-  }, [bookCount, hasStaticMetadata, hydrateStaticMetadata]);
+
+    prevBookCountRef.current = bookCount;
+  }, [bookCount, hydratedCount, offloadedCount, hydrateStaticMetadata]);
 
   // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
 

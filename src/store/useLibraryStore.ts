@@ -103,6 +103,8 @@ interface LibraryState {
 interface IDBService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   addBook: (file: File, options: any, onProgress: (progress: number, message: string) => void) => Promise<StaticBookManifest>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  importBookWithId: (bookId: string, file: File, options: any, onProgress: (progress: number, message: string) => void) => Promise<StaticBookManifest>;
   deleteBook: (id: string) => Promise<void>;
   offloadBook: (id: string) => Promise<void>;
   restoreBook: (id: string, file: File) => Promise<void>;
@@ -424,14 +426,53 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       restoreBook: async (id: string, file: File) => {
         set({ isImporting: true, error: null });
         try {
-          await injectedDB.restoreBook(id, file);
+          // Check if we have a local manifest (determines if this is a true restore or a sync download)
+          const existingMetadata = await injectedDB.getBookMetadata(id);
+
+          if (existingMetadata) {
+            // True restore: manifest exists, just restore the binary
+            await injectedDB.restoreBook(id, file);
+          } else {
+            // Synced book download: no local manifest, need to fully import with existing ID
+            console.log(`[Library] Book ${id} has no local manifest. Importing with existing ID for synced book.`);
+            const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+
+            // Preserve existing inventory data before import
+            const existingBook = get().books[id];
+
+            // Import with specific book ID (preserves the synced book's ID)
+            const manifest = await injectedDB.importBookWithId(id, file, {
+              abbreviations: [],
+              alwaysMerge: [],
+              sentenceStarters,
+              sanitizationEnabled
+            }, (progress, message) => {
+              set({ importProgress: progress, importStatus: message });
+            });
+
+            // Update static metadata with the new manifest
+            set((state) => ({
+              staticMetadata: {
+                ...state.staticMetadata,
+                [id]: {
+                  ...manifest,
+                  id: id,
+                  version: manifest.schemaVersion,
+                  addedAt: existingBook?.addedAt || Date.now()
+                } as BookMetadata
+              }
+            }));
+          }
+
           // Re-hydrate to get the restored cover
           await get().hydrateStaticMetadata();
 
           // Update offload state
           set((state) => ({
             offloadedBookIds: new Set([...state.offloadedBookIds].filter(bid => bid !== id)),
-            isImporting: false
+            isImporting: false,
+            importProgress: 0,
+            importStatus: ''
           }));
         } catch (err) {
           console.error('Failed to restore book:', err);

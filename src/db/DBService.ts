@@ -322,6 +322,61 @@ class DBService {
   }
 
   /**
+   * Imports a book with a specific book ID.
+   * Used for restoring synced books where the inventory already exists via Yjs
+   * but the local static data (manifest, resources, structure) doesn't exist.
+   * 
+   * This extracts the book, overrides all bookId references with the specified ID,
+   * then ingests the data.
+   */
+  async importBookWithId(
+    bookId: string,
+    file: File,
+    ttsOptions?: ExtractionOptions,
+    onProgress?: (progress: number, message: string) => void
+  ): Promise<StaticBookManifest> {
+    try {
+      const data = await extractBookData(file, ttsOptions, onProgress);
+
+      // Override all bookId references with the specified ID
+      const originalBookId = data.bookId;
+
+      data.bookId = bookId;
+      data.manifest.bookId = bookId;
+      data.resource.bookId = bookId;
+      data.structure.bookId = bookId;
+      data.inventory.bookId = bookId;
+      data.progress.bookId = bookId;
+      data.overrides.bookId = bookId;
+
+      // Update section IDs that include the bookId
+      data.structure.spineItems = data.structure.spineItems.map(item => ({
+        ...item,
+        id: item.id.replace(originalBookId, bookId)
+      }));
+
+      // Update TTS batch IDs
+      data.ttsContentBatches = data.ttsContentBatches.map(batch => ({
+        ...batch,
+        id: batch.id.replace(originalBookId, bookId),
+        bookId
+      }));
+
+      // Update table batch IDs
+      data.tableBatches = data.tableBatches.map(table => ({
+        ...table,
+        id: table.id.replace(originalBookId, bookId),
+        bookId
+      }));
+
+      await this.ingestBook(data);
+      return data.manifest;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
    * Ingests extracted book data into the database (Phase 2: Static Only).
    * Only writes to static_*, cache_*, and minimal legacy stores.
    * Does NOT write user_inventory - caller (Yjs store action) handles that.
