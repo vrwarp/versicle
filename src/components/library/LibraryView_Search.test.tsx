@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useLibraryStore, useBookStore } from '../../store/useLibraryStore';
 import { MemoryRouter } from 'react-router-dom';
 import type { BookMetadata } from '../../types/db';
 
@@ -38,18 +38,19 @@ describe('LibraryView Search', () => {
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
 
-        useLibraryStore.setState({
+        useBookStore.setState({
             books: {
-                '1': { id: '1', bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', addedAt: 100 },
-                '2': { id: '2', bookId: '2', title: '1984', author: 'George Orwell', addedAt: 200 },
-                '3': { id: '3', bookId: '3', title: 'Brave New World', author: 'Aldous Huxley', addedAt: 150 }
+                '1': { id: '1', bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', addedAt: 100, lastInteraction: 100 },
+                '2': { id: '2', bookId: '2', title: '1984', author: 'George Orwell', addedAt: 200, lastInteraction: 200 },
+                '3': { id: '3', bookId: '3', title: 'Brave New World', author: 'Aldous Huxley', addedAt: 150, lastInteraction: 150 }
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            } as unknown as any,
+            } as unknown as any
+        });
+
+        useLibraryStore.setState({
             isLoading: false,
             error: null,
-            // fetchBooks removed
             isImporting: false,
-            viewMode: 'grid',
             sortOrder: 'recent'
         });
     });
@@ -124,11 +125,11 @@ describe('LibraryView Search', () => {
 
         // Add a new book that matches
         act(() => {
-            useLibraryStore.setState((state) => ({
+            useBookStore.setState((state) => ({
                 books: {
                     ...state.books,
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    '4': { id: '4', bookId: '4', title: 'New Moon', author: 'Stephenie Meyer', addedAt: 300 } as any
+                    '4': { id: '4', bookId: '4', title: 'New Moon', author: 'Stephenie Meyer', addedAt: 300, lastInteraction: 300 } as any
                 }
             }));
         });

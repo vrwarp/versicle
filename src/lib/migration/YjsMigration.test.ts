@@ -28,12 +28,16 @@ vi.mock('../../db/db', () => ({
 }));
 
 // Mock stores
-vi.mock('../../store/useLibraryStore', () => ({
-    useLibraryStore: {
+vi.mock('../../store/useLibraryStore', () => {
+    const mockStore = {
         getState: vi.fn(),
         setState: vi.fn()
-    }
-}));
+    };
+    return {
+        useLibraryStore: mockStore,
+        useBookStore: mockStore // Both use the same mock for now or separate ones if needed
+    };
+});
 
 vi.mock('../../store/useAnnotationStore', () => ({
     useAnnotationStore: {
@@ -102,11 +106,12 @@ describe('YjsMigration', () => {
         await migrateToYjs();
 
         // Assert stores called
-        expect(useLibraryStore.setState).toHaveBeenCalledWith(expect.any(Function));
+        const { useBookStore } = await import('../../store/useLibraryStore');
+        expect(useBookStore.setState).toHaveBeenCalledWith(expect.any(Function));
 
         // Extract the state update function passed to setState and verify logic
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updateFn = (useLibraryStore.setState as any).mock.calls[0][0];
+        const updateFn = (useBookStore.setState as any).mock.calls[0][0];
         const newState = updateFn({ books: {} }); // Mock existing state
 
         expect(newState.books['book1']).toBeDefined();
@@ -122,8 +127,9 @@ describe('YjsMigration', () => {
 
         await migrateToYjs();
 
+        const { useBookStore } = await import('../../store/useLibraryStore');
         expect(dbService.getAllInventoryItems).not.toHaveBeenCalled();
-        expect(useLibraryStore.setState).not.toHaveBeenCalled();
+        expect(useBookStore.setState).not.toHaveBeenCalled();
     });
 
     it('should skip migration if Yjs has existing data (sync case)', async () => {
