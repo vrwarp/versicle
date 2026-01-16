@@ -405,15 +405,17 @@ export async function extractBookData(
                     console.warn('Failed to compress cover image, using original:', error);
                     thumbnailBlob = coverBlob;
                 }
-
-                if (thumbnailBlob || coverBlob) {
-                     coverPalette = await extractCoverPalette(thumbnailBlob || coverBlob);
-                     if (coverPalette.length === 0) coverPalette = undefined;
-                }
             }
         } catch (error) {
             console.warn('Failed to retrieve cover blob:', error);
         }
+    }
+
+    // Generate palette if we have any cover image
+    if (thumbnailBlob || coverBlob) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        coverPalette = await extractCoverPalette((thumbnailBlob || coverBlob)!);
+        if (coverPalette.length === 0) coverPalette = undefined;
     }
 
     book.destroy();
