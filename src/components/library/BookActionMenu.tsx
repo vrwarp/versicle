@@ -40,18 +40,19 @@ export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuPro
         }
     }));
 
-    const handleDeleteClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleDeleteClick = () => {
+        // e.stopPropagation();
         onDelete();
     };
 
-    const handleOffloadClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleOffloadClick = () => {
+        // e.stopPropagation();
+        console.error('[BookActionMenu] handleOffloadClick');
         onOffload();
     };
 
-    const handleRestoreClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleRestoreClick = () => {
+        // e.stopPropagation();
         onRestore();
     };
 
@@ -89,17 +90,17 @@ export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuPro
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
                 {!book.isOffloaded ? (
-                    <DropdownMenuItem onClick={handleOffloadClick} data-testid="menu-offload" className="cursor-pointer gap-2 text-amber-600 focus:text-amber-700">
+                    <DropdownMenuItem onSelect={handleOffloadClick} data-testid="menu-offload" className="cursor-pointer gap-2 text-amber-600 focus:text-amber-700">
                         <CloudOff className="w-4 h-4" />
                         <span>Offload File</span>
                     </DropdownMenuItem>
                 ) : (
-                    <DropdownMenuItem onClick={handleRestoreClick} data-testid="menu-restore" className="cursor-pointer gap-2">
+                    <DropdownMenuItem onSelect={handleRestoreClick} data-testid="menu-restore" className="cursor-pointer gap-2">
                         <RefreshCw className="w-4 h-4" />
                         <span>Restore File</span>
                     </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={handleDeleteClick} className="text-destructive focus:text-destructive cursor-pointer gap-2" data-testid="menu-delete">
+                <DropdownMenuItem onSelect={handleDeleteClick} className="text-destructive focus:text-destructive cursor-pointer gap-2" data-testid="menu-delete">
                     <Trash2 className="w-4 h-4" />
                     <span>Delete</span>
                 </DropdownMenuItem>

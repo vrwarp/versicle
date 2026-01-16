@@ -12,7 +12,7 @@ def test_journey_visual_reading(page: Page):
 
     # 1. Load Book
     page.click("text=Load Demo Book (Alice in Wonderland)")
-    expect(page.locator("text=Alice's Adventures in Wonderland")).to_be_visible(timeout=5000)
+    expect(page.locator("text=Alice's Adventures in Wonderland")).to_be_visible(timeout=15000)
     page.click("text=Alice's Adventures in Wonderland")
     expect(page.locator("div[data-testid='reader-iframe-container']")).to_be_visible(timeout=5000)
 

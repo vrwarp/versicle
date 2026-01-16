@@ -15,15 +15,15 @@ interface BookCardProps {
 }
 
 const formatDuration = (chars?: number): string => {
-    if (!chars) return '';
-    const minutes = Math.ceil(chars / (180 * 5));
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
+  if (!chars) return '';
+  const minutes = Math.ceil(chars / (180 * 5));
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
 
-    if (hours > 0) {
-        return `${hours}h ${remainingMinutes}m`;
-    }
-    return `${minutes}m`;
+  if (hours > 0) {
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  return `${minutes}m`;
 }
 
 /**
@@ -77,9 +77,9 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({ book, onOpen, onD
         </p>
 
         {durationString && (
-            <p className="text-xs text-muted-foreground mt-1">
-                {durationString}
-            </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {durationString}
+          </p>
         )}
 
         {book.progress !== undefined && book.progress > 0 && (

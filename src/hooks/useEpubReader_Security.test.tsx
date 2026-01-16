@@ -7,6 +7,7 @@ import { useEpubReader, EpubReaderOptions } from './useEpubReader';
 vi.mock('../db/DBService', () => ({
   dbService: {
     getBook: vi.fn().mockResolvedValue({ file: new ArrayBuffer(0), metadata: {} }),
+    getBookFile: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
     getLocations: vi.fn().mockResolvedValue(null),
     saveLocations: vi.fn().mockResolvedValue(undefined),
     getReadingHistory: vi.fn().mockResolvedValue([]),
@@ -23,19 +24,19 @@ vi.mock('epubjs', () => {
         iframe.setAttribute('sandbox', 'allow-same-origin');
         element.appendChild(iframe);
         return {
-            themes: { register: vi.fn(), select: vi.fn(), fontSize: vi.fn(), font: vi.fn(), default: vi.fn() },
-            display: vi.fn(),
-            on: vi.fn(),
-            hooks: { content: { register: vi.fn() } },
-            spread: vi.fn(),
-            flow: vi.fn(),
-            getContents: vi.fn().mockReturnValue([]),
+          themes: { register: vi.fn(), select: vi.fn(), fontSize: vi.fn(), font: vi.fn(), default: vi.fn() },
+          display: vi.fn(),
+          on: vi.fn(),
+          hooks: { content: { register: vi.fn() } },
+          spread: vi.fn(),
+          flow: vi.fn(),
+          getContents: vi.fn().mockReturnValue([]),
         };
       }),
       loaded: { navigation: Promise.resolve({ toc: [] }) },
       ready: Promise.resolve(),
       destroy: vi.fn(),
-      locations: { generate: vi.fn().mockResolvedValue(), save: vi.fn(), load: vi.fn(), percentageFromCfi: vi.fn() },
+      locations: { generate: vi.fn().mockResolvedValue(undefined), save: vi.fn(), load: vi.fn(), percentageFromCfi: vi.fn() },
       spine: { get: vi.fn() }
     }))
   };
@@ -53,7 +54,7 @@ const TestComponent = () => {
     shouldForceFont: false,
   };
 
-  useEpubReader('test-book-id', viewerRef, options);
+  useEpubReader('test-book-id', viewerRef as React.RefObject<HTMLElement>, options);
 
   return <div ref={viewerRef} data-testid="viewer" />;
 };
@@ -63,9 +64,9 @@ describe('useEpubReader Security', () => {
     const { getByTestId } = render(<TestComponent />);
 
     await waitFor(() => {
-        const viewer = getByTestId('viewer');
-        const iframe = viewer.querySelector('iframe');
-        expect(iframe).not.toBeNull();
+      const viewer = getByTestId('viewer');
+      const iframe = viewer.querySelector('iframe');
+      expect(iframe).not.toBeNull();
     });
 
     const viewer = getByTestId('viewer');

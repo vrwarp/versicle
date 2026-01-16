@@ -24,11 +24,12 @@ vi.mock('../../store/useTTSStore', () => ({
     useTTSStore: vi.fn()
 }));
 
-// Mock useReaderStore with selector support
-vi.mock('../../store/useReaderStore', () => ({
-    useReaderStore: (selector: any) => {
+// Mock useReaderUIStore with selector support
+vi.mock('../../store/useReaderUIStore', () => ({
+    useReaderUIStore: (selector: any) => {
         const state = {
-            currentSectionTitle: 'Test Chapter'
+            currentSectionTitle: 'Test Chapter',
+            toc: []
         };
         return selector ? selector(state) : state;
     }
@@ -54,12 +55,12 @@ describe('CompassPill', () => {
     it('dispatches reader:chapter-nav event when "prev" button is clicked and not playing', () => {
         // Setup not playing
         vi.mocked(useTTSStore).mockReturnValue({
-             isPlaying: false,
-             queue: [{ title: 'Item 1' }],
-             currentIndex: 0,
-             jumpTo: mockJumpTo,
-             play: mockPlay,
-             pause: mockPause
+            isPlaying: false,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
         } as any);
 
         render(<CompassPill variant="active" />);
@@ -76,15 +77,15 @@ describe('CompassPill', () => {
     });
 
     it('dispatches reader:chapter-nav event when "next" button is clicked and not playing', () => {
-         // Setup not playing
-         vi.mocked(useTTSStore).mockReturnValue({
-             isPlaying: false,
-             queue: [{ title: 'Item 1' }],
-             currentIndex: 0,
-             jumpTo: mockJumpTo,
-             play: mockPlay,
-             pause: mockPause
-         } as any);
+        // Setup not playing
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: false,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
 
         render(<CompassPill variant="active" />);
 
@@ -100,15 +101,15 @@ describe('CompassPill', () => {
     });
 
     it('dispatches reader:chapter-nav event when "next" button is clicked and playing', () => {
-         // Setup playing
-         vi.mocked(useTTSStore).mockReturnValue({
-             isPlaying: true,
-             queue: [{ title: 'Item 1' }],
-             currentIndex: 5,
-             jumpTo: mockJumpTo,
-             play: mockPlay,
-             pause: mockPause
-         } as any);
+        // Setup playing
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: true,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 5,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
 
         render(<CompassPill variant="active" />);
 
@@ -146,7 +147,7 @@ describe('CompassPill', () => {
     });
 
     it('toggles play/pause in compact mode', () => {
-         vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSStore).mockReturnValue({
             isPlaying: false,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -163,89 +164,89 @@ describe('CompassPill', () => {
 
     it('pauses when playing in compact mode', () => {
         vi.mocked(useTTSStore).mockReturnValue({
-           isPlaying: true,
-           queue: [{ title: 'Item 1' }],
-           currentIndex: 0,
-           jumpTo: mockJumpTo,
-           play: mockPlay,
-           pause: mockPause
-       } as any);
+            isPlaying: true,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
 
-       render(<CompassPill variant="compact" />);
-       const pauseButton = screen.getByTestId('icon-pause').closest('button');
-       fireEvent.click(pauseButton!);
-       expect(mockPause).toHaveBeenCalled();
-   });
+        render(<CompassPill variant="compact" />);
+        const pauseButton = screen.getByTestId('icon-pause').closest('button');
+        fireEvent.click(pauseButton!);
+        expect(mockPause).toHaveBeenCalled();
+    });
 
-   it('has consistent aria-labels in active mode', () => {
-       // Setup not playing
-       vi.mocked(useTTSStore).mockReturnValue({
-           isPlaying: false,
-           queue: [{ title: 'Item 1' }],
-           currentIndex: 0,
-           jumpTo: mockJumpTo,
-           play: mockPlay,
-           pause: mockPause
-       } as any);
+    it('has consistent aria-labels in active mode', () => {
+        // Setup not playing
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: false,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
 
-       const { rerender } = render(<CompassPill variant="active" />);
+        const { rerender } = render(<CompassPill variant="active" />);
 
-       let prevButton = screen.getByTestId('icon-chevrons-left').closest('button');
-       let nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
+        let prevButton = screen.getByTestId('icon-chevrons-left').closest('button');
+        let nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
 
-       expect(prevButton).toHaveAttribute('aria-label', 'Previous chapter');
-       expect(nextButton).toHaveAttribute('aria-label', 'Next chapter');
+        expect(prevButton).toHaveAttribute('aria-label', 'Previous chapter');
+        expect(nextButton).toHaveAttribute('aria-label', 'Next chapter');
 
-       // Setup playing
-       vi.mocked(useTTSStore).mockReturnValue({
-           isPlaying: true,
-           queue: [{ title: 'Item 1' }],
-           currentIndex: 0,
-           jumpTo: mockJumpTo,
-           play: mockPlay,
-           pause: mockPause
-       } as any);
+        // Setup playing
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: true,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
 
-       rerender(<CompassPill variant="active" />);
+        rerender(<CompassPill variant="active" />);
 
-       prevButton = screen.getByTestId('icon-chevrons-left').closest('button');
-       nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
+        prevButton = screen.getByTestId('icon-chevrons-left').closest('button');
+        nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
 
-       expect(prevButton).toHaveAttribute('aria-label', 'Previous chapter');
-       expect(nextButton).toHaveAttribute('aria-label', 'Next chapter');
-   });
+        expect(prevButton).toHaveAttribute('aria-label', 'Previous chapter');
+        expect(nextButton).toHaveAttribute('aria-label', 'Next chapter');
+    });
 
     it('shows playback indicator in active mode', () => {
-       // Paused state
-       vi.mocked(useTTSStore).mockReturnValue({
-           isPlaying: false,
-           queue: [{ title: 'Item 1' }],
-           currentIndex: 0,
-           jumpTo: mockJumpTo,
-           play: mockPlay,
-           pause: mockPause
-       } as any);
+        // Paused state
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: false,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
 
-       const { rerender } = render(<CompassPill variant="active" />);
+        const { rerender } = render(<CompassPill variant="active" />);
 
-       // Should show Play icon
-       expect(screen.getByTestId('active-play-icon')).toBeInTheDocument();
-       expect(screen.queryByTestId('active-pause-icon')).not.toBeInTheDocument();
+        // Should show Play icon
+        expect(screen.getByTestId('active-play-icon')).toBeInTheDocument();
+        expect(screen.queryByTestId('active-pause-icon')).not.toBeInTheDocument();
 
-       // Playing state
-       vi.mocked(useTTSStore).mockReturnValue({
-           isPlaying: true,
-           queue: [{ title: 'Item 1' }],
-           currentIndex: 0,
-           jumpTo: mockJumpTo,
-           play: mockPlay,
-           pause: mockPause
-       } as any);
+        // Playing state
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: true,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
 
-       rerender(<CompassPill variant="active" />);
+        rerender(<CompassPill variant="active" />);
 
-       // Should show Pause icon
-       expect(screen.getByTestId('active-pause-icon')).toBeInTheDocument();
-       expect(screen.queryByTestId('active-play-icon')).not.toBeInTheDocument();
+        // Should show Pause icon
+        expect(screen.getByTestId('active-pause-icon')).toBeInTheDocument();
+        expect(screen.queryByTestId('active-play-icon')).not.toBeInTheDocument();
     });
 });

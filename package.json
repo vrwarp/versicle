@@ -8,8 +8,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest",
-    "tests": "vitest",
+    "test": "vitest run",
+    "tests": "vitest run",
     "preview": "vite preview",
     "prepare-piper": "mkdir -p public/piper && cp node_modules/piper-wasm/build/piper_phonemize.js public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.wasm public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.data public/piper/ && cp node_modules/piper-wasm/build/worker/piper_worker.js public/piper/ && node scripts/patch_piper_worker.js",
     "postinstall": "npm run prepare-piper"
@@ -43,6 +43,7 @@
     "dompurify": "^3.3.1",
     "epubjs": "^0.3.93",
     "file-saver": "^2.0.5",
+    "firebase": "^10.14.1",
     "idb": "^8.0.3",
     "jszip": "^3.10.1",
     "lucide-react": "^0.562.0",
@@ -56,7 +57,13 @@
     "tailwind-merge": "^3.4.0",
     "uuid": "^13.0.0",
     "vite-plugin-pwa": "^1.2.0",
-    "zustand": "^5.0.9"
+    "y-fire": "^2.1.1",
+    "y-indexeddb": "^9.0.12",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.20",
+    "zod": "^4.3.5",
+    "zustand": "^5.0.9",
+    "zustand-middleware-yjs": "github:vrwarp/zustand-middleware-yjs#master"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.0.0",

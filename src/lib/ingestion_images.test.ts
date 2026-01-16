@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { processEpub } from './ingestion';
-import { dbService } from '../db/DBService';
+import { extractBookData } from './ingestion';
 import imageCompression from 'browser-image-compression';
-import { getDB } from '../db/db';
 
 // Mock dependencies
 vi.mock('browser-image-compression', () => ({
@@ -47,6 +45,10 @@ vi.mock('./offscreen-renderer', () => ({
     }
   ]),
 }));
+// Mock uuid
+vi.mock('uuid', () => ({
+  v4: () => 'mock-uuid',
+}));
 
 describe('Ingestion Image Optimization', () => {
   const mockFile = new File(['PK\x03\x04'], 'test.epub', { type: 'application/epub+zip' });
@@ -64,23 +66,10 @@ describe('Ingestion Image Optimization', () => {
 
     // Setup compression mock
     (imageCompression as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockThumbnailBlob);
-
-    // Clean DB
-    const db = await getDB();
-    await db.clear('static_manifests'); // Updated to use v18 store
-    await db.clear('user_inventory');
-    await db.clear('user_progress');
-    await db.clear('static_resources');
-    await db.clear('user_reading_list');
-    // We can't clear cache_table_images if it doesn't exist yet in the test DB context if not fully migrated in test env
-    // But getDB() calls initDB() which should handle upgrade.
-    if (db.objectStoreNames.contains('cache_table_images')) {
-        await db.clear('cache_table_images');
-    }
   });
 
-  it('should store thumbnail in books store (manifest)', async () => {
-    const bookId = await processEpub(mockFile);
+  it('should generate thumbnail for cover', async () => {
+    const data = await extractBookData(mockFile);
 
     // Verify compression was called
     expect(imageCompression).toHaveBeenCalledWith(mockCoverBlob, expect.objectContaining({
@@ -88,45 +77,33 @@ describe('Ingestion Image Optimization', () => {
       maxSizeMB: 0.05,
     }));
 
-    // Verify metadata has thumbnail
-    // DBService.getBookMetadata now returns composite from static_manifests
-    const metadata = await dbService.getBookMetadata(bookId);
-    expect(metadata).toBeDefined();
-
-    // Verify coverBlob is returned and defined
-    expect(metadata?.coverBlob).toBeDefined();
-    // Ideally verify it is the thumbnail blob but blob equality might be tricky in mocks if not referentially stable
-    // But since we mock return value, we expect it to be passed through.
+    expect(data.manifest.coverBlob).toBeDefined();
+    // In extractBookData, the returned cover is the optimized one (or original if optimization fails/not needed)
+    // We mocked optimization to return mockThumbnailBlob
+    // Check if the logic in extractBookData uses the optimized blob.
   });
 
-  it('should store table images in cache_table_images', async () => {
-    const bookId = await processEpub(mockFile);
+  it('should extract table images', async () => {
+    const data = await extractBookData(mockFile);
 
-    const db = await getDB();
-    const tableImages = await db.getAll('cache_table_images');
-
-    expect(tableImages).toHaveLength(1);
-    expect(tableImages[0]).toEqual(expect.objectContaining({
-      bookId,
+    expect(data.tableBatches).toHaveLength(1);
+    expect(data.tableBatches[0]).toEqual(expect.objectContaining({
       sectionId: 'chapter1.xhtml',
       cfi: 'epubcfi(/6/2[chapter1]!/4/2/1:0)',
     }));
-    expect(tableImages[0].imageBlob).toBeDefined();
-    // Check ID construction
-    expect(tableImages[0].id).toBe(`${bookId}-epubcfi(/6/2[chapter1]!/4/2/1:0)`);
+    expect(data.tableBatches[0].imageBlob).toBeDefined();
   });
 
   it('should fallback to original if compression fails', async () => {
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
     // Setup compression failure
     (imageCompression as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Compression failed'));
 
-    const bookId = await processEpub(mockFile);
+    const data = await extractBookData(mockFile);
     consoleSpy.mockRestore();
 
-    const metadata = await dbService.getBookMetadata(bookId);
-
-    expect(metadata?.coverBlob).toBeDefined();
-    // Metadata coverBlob should be the original since compression failed.
+    expect(data.manifest.coverBlob).toBeDefined();
+    // Should be original blob since compression failed
+    // We check existence here.
   });
 });

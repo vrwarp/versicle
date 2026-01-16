@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
 import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
-import { parseCfiRange } from '../lib/cfi-utils';
 import { sanitizeContent } from '../lib/sanitizer';
 import { runCancellable, CancellationError } from '../lib/cancellable-task-runner';
 
@@ -18,20 +17,20 @@ import { runCancellable, CancellationError } from '../lib/cancellable-task-runne
  * Matching by file path allows us to associate a generic file with its parent ToC entry (e.g., the Chapter title).
  */
 const findTitleInToc = (toc: NavigationItem[], href: string): string | null => {
-    for (const item of toc) {
-        if (item.href === href) return item.label;
+  for (const item of toc) {
+    if (item.href === href) return item.label;
 
-        // Check if item.href matches the file path of the spine item
-        const itemPath = item.href.split('#')[0];
-        const spinePath = href.split('#')[0];
-        if (itemPath === spinePath) return item.label;
+    // Check if item.href matches the file path of the spine item
+    const itemPath = item.href.split('#')[0];
+    const spinePath = href.split('#')[0];
+    if (itemPath === spinePath) return item.label;
 
-        if (item.subitems && item.subitems.length > 0) {
-            const found = findTitleInToc(item.subitems, href);
-            if (found) return found;
-        }
+    if (item.subitems && item.subitems.length > 0) {
+      const found = findTitleInToc(item.subitems, href);
+      if (found) return found;
     }
-    return null;
+  }
+  return null;
 };
 
 /**
@@ -64,6 +63,10 @@ export interface EpubReaderOptions {
   onClick?: (event: MouseEvent) => void;
   /** Callback when an error occurs. */
   onError?: (error: string) => void;
+  /** Optional: Initial CFI location to start reading at. Overrides metadata.currentCfi. */
+  initialLocation?: string;
+  /** Optional: Book metadata. If not provided, some features like initial location inference may be limited. */
+  metadata?: BookMetadata | null;
 }
 
 /**
@@ -115,7 +118,7 @@ export function useEpubReader(
   const renditionRef = useRef<Rendition | null>(null);
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeRaf = useRef<number | null>(null);
-  const applyStylesRef = useRef<() => void>(() => {});
+  const applyStylesRef = useRef<() => void>(() => { });
 
   // Use a ref for options to access latest values in event listeners without re-binding
   const optionsRef = useRef(options);
@@ -135,13 +138,16 @@ export function useEpubReader(
       setAreLocationsReady(false);
 
       try {
-        const { file: fileData, metadata: meta } = yield dbService.getBook(currentBookId);
+        // Phase 2: Get file blob from static resources only. Metadata comes from props (Store).
+        const fileData = yield dbService.getBookFile(currentBookId);
 
         if (!fileData) {
           throw new Error('Book file not found');
         }
 
-        setMetadata(meta || null);
+        // Use metadata passed in options if available
+        const meta = optionsRef.current.metadata || null;
+        setMetadata(meta);
 
         // Cleanup previous instance
         if (bookRef.current) {
@@ -154,15 +160,15 @@ export function useEpubReader(
         // This prevents XSS attacks from malicious scripts in EPUB files.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if ((newBook.spine as any).hooks?.serialize) {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (newBook.spine as any).hooks.serialize.register((html: string) => {
-                 // Optimization: Allow disabling sanitization in E2E tests for performance
-                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                 if ((window as any).__VERSICLE_SANITIZATION_DISABLED__) {
-                     return html;
-                 }
-                 return sanitizeContent(html);
-             });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (newBook.spine as any).hooks.serialize.register((html: string) => {
+            // Optimization: Allow disabling sanitization in E2E tests for performance
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if ((window as any).__VERSICLE_SANITIZATION_DISABLED__) {
+              return html;
+            }
+            return sanitizeContent(html);
+          });
         }
 
         bookRef.current = newBook;
@@ -186,10 +192,10 @@ export function useEpubReader(
         // This is a backup to the MutationObserver strategy mentioned above (which might be missing or slow)
         const iframe = viewerRef.current?.querySelector('iframe');
         if (iframe) {
-            const sandbox = iframe.getAttribute('sandbox') || '';
-            if (!sandbox.includes('allow-scripts')) {
-                iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
-            }
+          const sandbox = iframe.getAttribute('sandbox') || '';
+          if (!sandbox.includes('allow-scripts')) {
+            iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
+          }
         }
         setRendition(newRendition);
 
@@ -202,7 +208,7 @@ export function useEpubReader(
         const tocItems = nav.toc;
         setToc(tocItems);
         if (optionsRef.current.onTocLoaded) {
-            optionsRef.current.onTocLoaded(tocItems);
+          optionsRef.current.onTocLoaded(tocItems);
         }
 
         // Register themes
@@ -225,32 +231,9 @@ export function useEpubReader(
         });
 
         // Display at saved location or start
-        let startLocation = meta?.currentCfi || undefined;
+        const startLocation = optionsRef.current.initialLocation || meta?.currentCfi || undefined;
 
-        // Try to infer better start location from reading history (end of last session)
-        try {
-            const entry = yield dbService.getReadingHistoryEntry(currentBookId);
-            if (entry) {
-                // Prefer chronological sessions
-                if (entry.sessions && entry.sessions.length > 0) {
-                    const lastSession = entry.sessions[entry.sessions.length - 1];
-                    const parsed = parseCfiRange(lastSession.cfiRange);
-                    // Use fullStart to resume AT the location
-                    if (parsed && parsed.fullStart) {
-                        startLocation = parsed.fullStart;
-                    }
-                } else if (entry.readRanges && entry.readRanges.length > 0) {
-                     // Fallback to spatial end (legacy behavior)
-                     const lastRange = entry.readRanges[entry.readRanges.length - 1];
-                     const parsed = parseCfiRange(lastRange);
-                     if (parsed && parsed.fullEnd) {
-                         startLocation = parsed.fullEnd;
-                     }
-                }
-            }
-        } catch (e) {
-            console.error("Failed to load history for start location", e);
-        }
+        // Legacy reading history fallback removed as Phase 2 relies on Stores (passed via options)
 
         yield newRendition.display(startLocation);
 
@@ -258,162 +241,162 @@ export function useEpubReader(
 
         // Location Generation
         const updateProgress = () => {
-             // Force a location check to sync progress
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             const currentLocation = (newRendition as any).location;
-             if (currentLocation && currentLocation.start) {
-                 const cfi = currentLocation.start.cfi;
-                 let percentage = 0;
-                 try {
-                     percentage = newBook.locations.percentageFromCfi(cfi);
-                 } catch {
-                     // ignore
-                 }
+          // Force a location check to sync progress
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const currentLocation = (newRendition as any).location;
+          if (currentLocation && currentLocation.start) {
+            const cfi = currentLocation.start.cfi;
+            let percentage = 0;
+            try {
+              percentage = newBook.locations.percentageFromCfi(cfi);
+            } catch {
+              // ignore
+            }
 
-                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                 const item = newBook.spine.get(currentLocation.start.href) as any;
-                 let title = item ? (item.label || 'Chapter') : 'Unknown';
-                 const sectionId = item ? item.href : '';
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const item = newBook.spine.get(currentLocation.start.href) as any;
+            let title = item ? (item.label || 'Chapter') : 'Unknown';
+            const sectionId = item ? item.href : '';
 
-                 // Improve title resolution
-                 if (item && (title === 'Chapter' || !item.label)) {
-                     const betterTitle = findTitleInToc(tocItems, item.href);
-                     if (betterTitle) {
-                         title = betterTitle;
-                     }
-                 }
+            // Improve title resolution
+            if (item && (title === 'Chapter' || !item.label)) {
+              const betterTitle = findTitleInToc(tocItems, item.href);
+              if (betterTitle) {
+                title = betterTitle;
+              }
+            }
 
-                 if (optionsRef.current.onLocationChange) {
-                     optionsRef.current.onLocationChange(currentLocation, percentage, title, sectionId);
-                 }
-             }
+            if (optionsRef.current.onLocationChange) {
+              optionsRef.current.onLocationChange(currentLocation, percentage, title, sectionId);
+            }
+          }
         };
 
         const savedLocations = yield dbService.getLocations(currentBookId);
         if (savedLocations) {
-            newBook.locations.load(savedLocations.locations);
+          newBook.locations.load(savedLocations.locations);
+          setAreLocationsReady(true);
+          updateProgress();
+        } else {
+          // Generate in background
+          newBook.locations.generate(1000).then(async () => {
+            const locationStr = newBook.locations.save();
+            await dbService.saveLocations(currentBookId, locationStr);
             setAreLocationsReady(true);
             updateProgress();
-        } else {
-            // Generate in background
-            newBook.locations.generate(1000).then(async () => {
-                 const locationStr = newBook.locations.save();
-                 await dbService.saveLocations(currentBookId, locationStr);
-                 setAreLocationsReady(true);
-                 updateProgress();
-            });
+          });
         }
         yield newBook.ready;
 
         // Event Listeners
         newRendition.on('relocated', (location: Location) => {
-             const cfi = location.start.cfi;
-             let percentage = 0;
-             try {
-                 percentage = newBook.locations.percentageFromCfi(cfi);
-             } catch {
-                 // ignore
-             }
+          const cfi = location.start.cfi;
+          let percentage = 0;
+          try {
+            percentage = newBook.locations.percentageFromCfi(cfi);
+          } catch {
+            // ignore
+          }
 
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             const item = newBook.spine.get(location.start.href) as any;
-             let title = item ? (item.label || 'Chapter') : 'Unknown';
-             const sectionId = item ? item.href : '';
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const item = newBook.spine.get(location.start.href) as any;
+          let title = item ? (item.label || 'Chapter') : 'Unknown';
+          const sectionId = item ? item.href : '';
 
-             // Improve title resolution
-             if (item && (title === 'Chapter' || !item.label)) {
-                 const betterTitle = findTitleInToc(tocItems, item.href);
-                 if (betterTitle) {
-                     title = betterTitle;
-                 }
-             }
+          // Improve title resolution
+          if (item && (title === 'Chapter' || !item.label)) {
+            const betterTitle = findTitleInToc(tocItems, item.href);
+            if (betterTitle) {
+              title = betterTitle;
+            }
+          }
 
-             if (optionsRef.current.onLocationChange) {
-                 optionsRef.current.onLocationChange(location, percentage, title, sectionId);
-             }
+          if (optionsRef.current.onLocationChange) {
+            optionsRef.current.onLocationChange(location, percentage, title, sectionId);
+          }
         });
 
         newRendition.on('selected', (cfiRange: string, contents: unknown) => {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             const range = (newRendition as any).getRange(cfiRange);
-             if (optionsRef.current.onSelection && range) {
-                 optionsRef.current.onSelection(cfiRange, range, contents);
-             }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const range = (newRendition as any).getRange(cfiRange);
+          if (optionsRef.current.onSelection && range) {
+            optionsRef.current.onSelection(cfiRange, range, contents);
+          }
         });
 
         newRendition.on('click', (event: MouseEvent) => {
-            if (optionsRef.current.onClick) optionsRef.current.onClick(event);
+          if (optionsRef.current.onClick) optionsRef.current.onClick(event);
         });
 
         // Inject styles and spacer
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const injectExtras = (contents: any) => {
-            const doc = contents.document;
-            if (!doc) return;
+          const doc = contents.document;
+          if (!doc) return;
 
-            // Re-apply forced styles on content load
-            const styleId = 'force-theme-style';
-            if (!doc.getElementById(styleId)) {
-                const style = doc.createElement('style');
-                style.id = styleId;
-                doc.head.appendChild(style);
-                applyStylesRef.current();
-            }
+          // Re-apply forced styles on content load
+          const styleId = 'force-theme-style';
+          if (!doc.getElementById(styleId)) {
+            const style = doc.createElement('style');
+            style.id = styleId;
+            doc.head.appendChild(style);
+            applyStylesRef.current();
+          }
 
-            // Inject empty div for scrolling space
-            const spacerId = 'reader-bottom-spacer';
-            if (optionsRef.current.viewMode === 'scrolled' && !doc.getElementById(spacerId)) {
-                const spacer = doc.createElement('div');
-                spacer.id = spacerId;
-                spacer.style.height = '150px';
-                spacer.style.width = '100%';
-                spacer.style.clear = 'both'; // Ensure it sits below floated content
-                doc.body.appendChild(spacer);
-            }
+          // Inject empty div for scrolling space
+          const spacerId = 'reader-bottom-spacer';
+          if (optionsRef.current.viewMode === 'scrolled' && !doc.getElementById(spacerId)) {
+            const spacer = doc.createElement('div');
+            spacer.id = spacerId;
+            spacer.style.height = '150px';
+            spacer.style.width = '100%';
+            spacer.style.clear = 'both'; // Ensure it sits below floated content
+            doc.body.appendChild(spacer);
+          }
         };
 
         // Manual selection listener fallback
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const attachListeners = (contents: any) => {
-            const doc = contents.document;
-            if (!doc) return;
+          const doc = contents.document;
+          if (!doc) return;
 
-            // Prevent duplicate listeners
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if ((contents as any)._listenersAttached) return;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (contents as any)._listenersAttached = true;
+          // Prevent duplicate listeners
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if ((contents as any)._listenersAttached) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (contents as any)._listenersAttached = true;
 
-            // Prevent default context menu (especially for Android)
-            doc.addEventListener('contextmenu', (e: Event) => {
-                e.preventDefault();
-                e.stopPropagation();
-            });
+          // Prevent default context menu (especially for Android)
+          doc.addEventListener('contextmenu', (e: Event) => {
+            e.preventDefault();
+            e.stopPropagation();
+          });
 
-            doc.addEventListener('mouseup', () => {
-                const selection = contents.window.getSelection();
-                if (!selection || selection.isCollapsed) return;
+          doc.addEventListener('mouseup', () => {
+            const selection = contents.window.getSelection();
+            if (!selection || selection.isCollapsed) return;
 
-                setTimeout(() => {
-                    // Re-check selection existence after delay to handle race conditions
-                    // where a click event might have cleared it.
-                    if (selection.rangeCount === 0 || selection.isCollapsed) return;
+            setTimeout(() => {
+              // Re-check selection existence after delay to handle race conditions
+              // where a click event might have cleared it.
+              if (selection.rangeCount === 0 || selection.isCollapsed) return;
 
-                    let range;
-                    try {
-                        range = selection.getRangeAt(0);
-                    } catch {
-                        // Handle IndexSizeError if selection was cleared
-                        return;
-                    }
+              let range;
+              try {
+                range = selection.getRangeAt(0);
+              } catch {
+                // Handle IndexSizeError if selection was cleared
+                return;
+              }
 
-                    if (!range) return;
-                    const cfi = contents.cfiFromRange(range);
-                    if (cfi && optionsRef.current.onSelection) {
-                        optionsRef.current.onSelection(cfi, range, contents);
-                    }
-                }, 10);
-            });
+              if (!range) return;
+              const cfi = contents.cfiFromRange(range);
+              if (cfi && optionsRef.current.onSelection) {
+                optionsRef.current.onSelection(cfi, range, contents);
+              }
+            }, 10);
+          });
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -452,7 +435,7 @@ export function useEpubReader(
     return () => {
       cancel();
       if (resizeRaf.current) {
-          cancelAnimationFrame(resizeRaf.current);
+        cancelAnimationFrame(resizeRaf.current);
       }
     };
   }, [bookId, viewerRef]);
@@ -462,112 +445,112 @@ export function useEpubReader(
     if (!viewerRef.current) return;
 
     const observer = new ResizeObserver((entries) => {
-        if (!renditionRef.current || !entries.length) return;
+      if (!renditionRef.current || !entries.length) return;
 
-        const { width, height } = entries[0].contentRect;
+      const { width, height } = entries[0].contentRect;
 
-        // Use > 10px threshold as per hardening plan to prevent thrashing on mobile
-        if (Math.abs(prevSize.current.width - width) > 10 || Math.abs(prevSize.current.height - height) > 10) {
-            prevSize.current = { width, height };
+      // Use > 10px threshold as per hardening plan to prevent thrashing on mobile
+      if (Math.abs(prevSize.current.width - width) > 10 || Math.abs(prevSize.current.height - height) > 10) {
+        prevSize.current = { width, height };
 
-            if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
+        if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
 
-            resizeRaf.current = requestAnimationFrame(() => {
-                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                 const r = renditionRef.current as any;
-                 if (r && r.manager) {
-                     r.resize(width, height);
-                 }
-            });
-        }
+        resizeRaf.current = requestAnimationFrame(() => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const r = renditionRef.current as any;
+          if (r && r.manager) {
+            r.resize(width, height);
+          }
+        });
+      }
     });
 
     observer.observe(viewerRef.current);
 
     return () => {
-        observer.disconnect();
-        if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
+      observer.disconnect();
+      if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
     };
   }, [viewerRef]);
 
   // Update Settings/Themes
   useEffect(() => {
-      if (!renditionRef.current || !isReady) return;
+    if (!renditionRef.current || !isReady) return;
 
-      const r = renditionRef.current;
+    const r = renditionRef.current;
 
-      // Update Themes
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const themes = r.themes as any;
+    // Update Themes
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const themes = r.themes as any;
 
-      themes.register('custom', {
-        'body': { 'background': `${options.customTheme.bg} !important`, 'color': `${options.customTheme.fg} !important` },
-        'p, div, span, h1, h2, h3, h4, h5, h6': { 'color': 'inherit !important', 'background': 'transparent !important' },
-        'a': { 'color': `${options.customTheme.fg} !important` }
-      });
+    themes.register('custom', {
+      'body': { 'background': `${options.customTheme?.bg || '#ffffff'} !important`, 'color': `${options.customTheme?.fg || '#000000'} !important` },
+      'p, div, span, h1, h2, h3, h4, h5, h6': { 'color': 'inherit !important', 'background': 'transparent !important' },
+      'a': { 'color': `${options.customTheme?.fg || '#0000e'} !important` }
+    });
 
-      // TTS Highlight Theme
-      themes.default({
-          '.tts-highlight': {
-              'fill': 'yellow',
-              'background-color': 'rgba(255, 255, 0, 0.3)',
-              'fill-opacity': '0.3',
-              'mix-blend-mode': 'multiply'
-          },
-          '.highlight-yellow': { 'fill': 'yellow', 'background-color': 'rgba(255, 255, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
-          '.highlight-green': { 'fill': 'green', 'background-color': 'rgba(0, 255, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
-          '.highlight-blue': { 'fill': 'blue', 'background-color': 'rgba(0, 0, 255, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
-          '.highlight-red': { 'fill': 'red', 'background-color': 'rgba(255, 0, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' }
-      });
+    // TTS Highlight Theme
+    themes.default({
+      '.tts-highlight': {
+        'fill': 'yellow',
+        'background-color': 'rgba(255, 255, 0, 0.3)',
+        'fill-opacity': '0.3',
+        'mix-blend-mode': 'multiply'
+      },
+      '.highlight-yellow': { 'fill': 'yellow', 'background-color': 'rgba(255, 255, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
+      '.highlight-green': { 'fill': 'green', 'background-color': 'rgba(0, 255, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
+      '.highlight-blue': { 'fill': 'blue', 'background-color': 'rgba(0, 0, 255, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
+      '.highlight-red': { 'fill': 'red', 'background-color': 'rgba(255, 0, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' }
+    });
 
-      themes.select(options.currentTheme);
-      themes.fontSize(`${options.fontSize}%`);
-      themes.font(options.fontFamily);
-      themes.default({
-        p: { 'line-height': `${options.lineHeight} !important` },
-        body: { 'line-height': `${options.lineHeight} !important` }
-      });
+    themes.select(options.currentTheme);
+    themes.fontSize(`${options.fontSize}%`);
+    themes.font(options.fontFamily);
+    themes.default({
+      p: { 'line-height': `${options.lineHeight} !important` },
+      body: { 'line-height': `${options.lineHeight} !important` }
+    });
 
-      // Flow
-      // Capture current location before changing flow to prevent reset
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const currentLoc = (r as any).location?.start?.cfi;
+    // Flow
+    // Capture current location before changing flow to prevent reset
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const currentLoc = (r as any).location?.start?.cfi;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (r as any).flow(options.viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (r as any).flow(options.viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated');
 
-      // Restore location if available
-      if (currentLoc) {
-          r.display(currentLoc);
+    // Restore location if available
+    if (currentLoc) {
+      r.display(currentLoc);
+    }
+
+    // Forced Styles
+    const applyStyles = () => {
+      const isDarkOrSepia = options.currentTheme === 'dark' || options.currentTheme === 'sepia' || options.currentTheme === 'custom';
+      if (!options.shouldForceFont && !isDarkOrSepia) return;
+
+      let bg, fg, linkColor;
+      switch (options.currentTheme) {
+        case 'dark':
+          bg = '#1a1a1a'; fg = '#f5f5f5'; linkColor = '#6ab0f3';
+          break;
+        case 'sepia':
+          bg = '#f4ecd8'; fg = '#5b4636'; linkColor = '#0000ee';
+          break;
+        case 'custom':
+          bg = options.customTheme?.bg || '#ffffff'; fg = options.customTheme?.fg || '#000000'; linkColor = options.customTheme?.fg || '#000000';
+          break;
+        default: // light
+          bg = '#ffffff'; fg = '#000000'; linkColor = '#0000ee';
       }
 
-      // Forced Styles
-      const applyStyles = () => {
-          const isDarkOrSepia = options.currentTheme === 'dark' || options.currentTheme === 'sepia' || options.currentTheme === 'custom';
-          if (!options.shouldForceFont && !isDarkOrSepia) return;
-
-          let bg, fg, linkColor;
-          switch (options.currentTheme) {
-            case 'dark':
-              bg = '#1a1a1a'; fg = '#f5f5f5'; linkColor = '#6ab0f3';
-              break;
-            case 'sepia':
-              bg = '#f4ecd8'; fg = '#5b4636'; linkColor = '#0000ee';
-              break;
-            case 'custom':
-              bg = options.customTheme.bg; fg = options.customTheme.fg; linkColor = options.customTheme.fg;
-              break;
-            default: // light
-              bg = '#ffffff'; fg = '#000000'; linkColor = '#0000ee';
-          }
-
-          const fontCss = options.shouldForceFont ? `
+      const fontCss = options.shouldForceFont ? `
               font-family: ${options.fontFamily} !important;
               line-height: ${options.lineHeight} !important;
               text-align: left !important;
           ` : '';
 
-          const css = `
+      const css = `
             html body *, html body p, html body div, html body span, html body h1, html body h2, html body h3, html body h4, html body h5, html body h6 {
               ${fontCss}
               color: ${fg} !important;
@@ -586,32 +569,32 @@ export function useEpubReader(
             }
           `;
 
-          // Apply to all active contents
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (r as any).getContents().forEach((content: any) => {
-            const doc = content.document;
-            let style = doc.getElementById('force-theme-style');
-            if (!style) {
-              style = doc.createElement('style');
-              style.id = 'force-theme-style';
-              doc.head.appendChild(style);
-            }
-            style.textContent = css;
-          });
-      };
+      // Apply to all active contents
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (r as any).getContents().forEach((content: any) => {
+        const doc = content.document;
+        let style = doc.getElementById('force-theme-style');
+        if (!style) {
+          style = doc.createElement('style');
+          style.id = 'force-theme-style';
+          doc.head.appendChild(style);
+        }
+        style.textContent = css;
+      });
+    };
 
-      applyStylesRef.current = applyStyles;
-      applyStyles();
+    applyStylesRef.current = applyStyles;
+    applyStyles();
 
   }, [
-      isReady,
-      options.currentTheme,
-      options.customTheme,
-      options.fontSize,
-      options.fontFamily,
-      options.lineHeight,
-      options.viewMode,
-      options.shouldForceFont
+    isReady,
+    options.currentTheme,
+    options.customTheme,
+    options.fontSize,
+    options.fontFamily,
+    options.lineHeight,
+    options.viewMode,
+    options.shouldForceFont
   ]);
 
   return { book, rendition, isReady, areLocationsReady, isLoading, metadata, toc, error };

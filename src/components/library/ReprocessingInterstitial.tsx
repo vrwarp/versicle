@@ -17,7 +17,6 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
 }) => {
     const [progress, setProgress] = useState<'idle' | 'processing' | 'error'>('idle');
     const [error, setError] = useState<string | null>(null);
-    const fetchBooks = useLibraryStore(state => state.fetchBooks);
 
     useEffect(() => {
         if (!isOpen || !bookId) return;
@@ -26,8 +25,8 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
             setProgress('processing');
             try {
                 await reprocessBook(bookId);
-                // Refresh store to get updated metadata
-                await fetchBooks();
+                // Refresh store to get updated metadata (especially schemaVersion)
+                await useLibraryStore.getState().hydrateStaticMetadata();
                 onComplete();
             } catch (e) {
                 console.error("Reprocessing failed", e);
@@ -37,7 +36,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
         };
 
         runReprocessing();
-    }, [isOpen, bookId, fetchBooks, onComplete]);
+    }, [isOpen, bookId, onComplete]);
 
     if (!isOpen) return null;
 
@@ -61,7 +60,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
                             Failed to upgrade book: {error}
                         </p>
                         <div className="flex justify-end gap-2">
-                             <button
+                            <button
                                 onClick={onClose}
                                 className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80"
                             >

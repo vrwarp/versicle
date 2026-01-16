@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderStore } from '../../store/useReaderStore';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useAllBooks } from '../../store/selectors';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
 import type { ActionType } from '../ui/CompassPill';
@@ -19,9 +20,9 @@ export const ReaderControlBar: React.FC = () => {
     const [lexiconText, setLexiconText] = React.useState('');
 
     // Store Subscriptions
-    const { popover, addAnnotation, hidePopover } = useAnnotationStore(useShallow(state => ({
+    const { popover, add, hidePopover } = useAnnotationStore(useShallow(state => ({
         popover: state.popover,
-        addAnnotation: state.addAnnotation,
+        add: state.add,
         hidePopover: state.hidePopover,
     })));
 
@@ -30,27 +31,40 @@ export const ReaderControlBar: React.FC = () => {
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentBookId, currentSectionTitle } = useReaderStore(useShallow(state => ({
+    const { immersiveMode, currentSectionTitle } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
-        currentBookId: state.currentBookId,
         currentSectionTitle: state.currentSectionTitle
     })));
+
+    const currentBookId = useReadingStateStore(state => state.currentBookId);
 
     // OPTIMIZATION: Use granular selectors to avoid re-rendering on every library change.
     // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.
     // Now, we only re-render if the calculated `lastReadBook` or `currentBook` reference changes.
 
+    // Get all books with merged static metadata
+    const allBooks = useAllBooks();
+
     // Select the most recently read book
-    const lastReadBook = useLibraryStore(state => {
-        return state.books
-            .filter(b => b.lastRead)
-            .sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0))[0];
-    });
+    const lastReadBook = useMemo(() => {
+        const getProgress = useReadingStateStore.getState().getProgress;
+        return allBooks
+            .filter((b) => {
+                const bookProgress = getProgress(b.bookId);
+                return bookProgress?.lastRead;
+            })
+            .sort((a, b) => {
+                const aProgress = getProgress(a.bookId);
+                const bProgress = getProgress(b.bookId);
+                return (bProgress?.lastRead || 0) - (aProgress?.lastRead || 0);
+            })[0];
+    }, [allBooks]);
 
     // Select the current book if active
-    const currentBook = useLibraryStore(state => {
-        return currentBookId ? state.books.find(b => b.id === currentBookId) : undefined;
-    });
+    const currentBook = useMemo(() => {
+        if (!currentBookId) return undefined;
+        return allBooks.find((b) => b.bookId === currentBookId);
+    }, [allBooks, currentBookId]);
 
     // Determine State Priority
     // 1. Annotation Mode
@@ -85,7 +99,7 @@ export const ReaderControlBar: React.FC = () => {
         switch (action) {
             case 'color':
                 if (payload && currentBookId) {
-                    addAnnotation({
+                    add({
                         type: 'highlight',
                         color: payload,
                         bookId: currentBookId,
@@ -97,7 +111,7 @@ export const ReaderControlBar: React.FC = () => {
                 break;
             case 'note':
                 if (payload && currentBookId) {
-                    addAnnotation({
+                    add({
                         type: 'note',
                         note: payload,
                         bookId: currentBookId,
@@ -110,19 +124,19 @@ export const ReaderControlBar: React.FC = () => {
                 }
                 break;
             case 'copy':
-                 if (popover.text) {
-                     navigator.clipboard.writeText(popover.text).then(() => {
-                         showToast("Copied to clipboard", "success");
-                         setTimeout(() => hidePopover(), 1000);
-                     }).catch(() => {
-                         showToast("Failed to copy", "error");
-                     });
-                 }
+                if (popover.text) {
+                    navigator.clipboard.writeText(popover.text).then(() => {
+                        showToast("Copied to clipboard", "success");
+                        setTimeout(() => hidePopover(), 1000);
+                    }).catch(() => {
+                        showToast("Failed to copy", "error");
+                    });
+                }
                 break;
             case 'play':
                 // Play from selection
                 if (popover.cfiRange) {
-                    const playFromSelection = useReaderStore.getState().playFromSelection;
+                    const playFromSelection = useReaderUIStore.getState().playFromSelection;
                     if (playFromSelection) {
                         playFromSelection(popover.cfiRange);
                     } else {
@@ -154,8 +168,9 @@ export const ReaderControlBar: React.FC = () => {
     if (variant === 'summary' && lastReadBook) {
         title = lastReadBook.title;
         subtitle = "Continue Reading";
-        // Convert progress (0-1) to percentage (0-100)
-        progress = (lastReadBook.progress || 0) * 100;
+        // Get progress from reading state (max across all devices)
+        const lastReadProgress = useReadingStateStore.getState().getProgress(lastReadBook.bookId);
+        progress = (lastReadProgress?.percentage || 0) * 100;
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
         // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
         // If queue has items, CompassPill uses queue item title.
@@ -163,14 +178,16 @@ export const ReaderControlBar: React.FC = () => {
         if (!hasQueueItems) {
             title = currentBook.title;
             subtitle = currentSectionTitle || undefined;
-            progress = (currentBook.progress || 0) * 100;
+            // Get progress from reading state (max across all devices)
+            const currentProgress = useReadingStateStore.getState().getProgress(currentBook.bookId);
+            progress = (currentProgress?.percentage || 0) * 100;
         }
     }
 
     return (
         <>
-            <div className="fixed bottom-6 left-0 right-0 z-50 px-4 pointer-events-none">
-                <div className="pointer-events-auto">
+            <div className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none">
+                <div className="pointer-events-auto shadow-2xl">
                     <CompassPill
                         key={variant}
                         variant={variant}

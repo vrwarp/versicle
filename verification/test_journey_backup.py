@@ -1,9 +1,13 @@
 import os
+import uuid
 import pytest
 from playwright.sync_api import Page, expect
 from verification.utils import reset_app, capture_screenshot
 
 def test_journey_backup_restore(page: Page):
+    # Enable console logging capture
+    page.on("console", lambda msg: print(f"Browser Console: {msg.text}"))
+    
     """
     Test the full Backup & Restore journey:
     1. Import a book (Alice).
@@ -19,7 +23,7 @@ def test_journey_backup_restore(page: Page):
     # Use hidden input locator consistent with other tests
     # Wait for the view to be stable
     page.wait_for_timeout(1000)
-    page.set_input_files("data-testid=hidden-file-input", "public/books/alice.epub")
+    page.set_input_files("data-testid=hidden-file-input", "verification/alice.epub")
 
     # Wait for processing - wait for the card to be visible
     # Using selector similar to test_journey_smart_delete.py
@@ -70,7 +74,9 @@ def test_journey_backup_restore(page: Page):
     if not suggested_filename.endswith('.json'):
         suggested_filename += '.json'
 
-    backup_path = f"/tmp/{suggested_filename}"
+    # Use unique path to prevent parallel test conflicts
+    unique_id = str(uuid.uuid4())[:8]
+    backup_path = f"/tmp/backup_{unique_id}_{suggested_filename}"
     download.save_as(backup_path)
     print(f"Backup saved to: {backup_path}")
 
@@ -142,7 +148,7 @@ def test_journey_full_backup_restore(page: Page):
 
     # 1. Import Book
     page.wait_for_timeout(1000)
-    page.set_input_files("data-testid=hidden-file-input", "public/books/alice.epub")
+    page.set_input_files("data-testid=hidden-file-input", "verification/alice.epub")
 
     book_card = page.locator("[data-testid^='book-card-']").first
     expect(book_card).to_be_visible(timeout=5000)
@@ -159,7 +165,9 @@ def test_journey_full_backup_restore(page: Page):
     if not suggested_filename.endswith('.zip'):
         suggested_filename += '.zip'
 
-    backup_path = f"/tmp/{suggested_filename}"
+    # Use unique path to prevent parallel test conflicts
+    unique_id = str(uuid.uuid4())[:8]
+    backup_path = f"/tmp/backup_{unique_id}_{suggested_filename}"
     download.save_as(backup_path)
     print(f"Full Backup saved to: {backup_path}")
 

@@ -21,48 +21,30 @@ def test_theme(page: Page):
     # Take screenshot
     utils.capture_screenshot(page, "theme_1_library_light")
 
-    # 3. Verify Dark Theme
-    print("Switching to Dark Theme via localStorage...")
+    # 3. Open Settings
+    print("Opening Settings...")
+    page.get_by_test_id("header-settings-button").click()
+    expect(page.get_by_text("Global Settings")).to_be_visible()
 
-    # Need to structure it exactly as zustand persist expects
-    dark_state = {
-        "state": {
-            "currentTheme": "dark",
-            "customTheme": {"bg": "#ffffff", "fg": "#000000"},
-            "fontFamily": "serif",
-            "lineHeight": 1.5,
-            "fontSize": 100,
-            "toc": [],
-            "isLoading": False,
-            "currentBookId": None,
-            "currentCfi": None,
-            "currentChapterTitle": None,
-            "progress": 0
-        },
-        "version": 0
-    }
-
-    json_state = json.dumps(dark_state)
-
-    page.evaluate(f"localStorage.setItem('reader-storage', '{json_state}')")
-    page.reload()
-
+    # 4. Switch to Dark Theme
+    print("Switching to Dark Theme...")
+    page.get_by_label("Select Dark theme").click()
+    
     # Verify Dark Class
     expect(html).to_have_class(re.compile(r"\bdark\b"))
-
-    # Verify visual change
     utils.capture_screenshot(page, "theme_2_library_dark")
 
-    # 4. Verify Sepia Theme
-    print("Switching to Sepia Theme via localStorage...")
-    sepia_state = json_state.replace("dark", "sepia")
-    page.evaluate(f"localStorage.setItem('reader-storage', '{sepia_state}')")
-    page.reload()
+    # 5. Switch to Sepia Theme
+    print("Switching to Sepia Theme...")
+    page.get_by_label("Select Sepia theme").click()
 
     # Verify Sepia Class
     expect(html).to_have_class(re.compile(r"\bsepia\b"))
-
-    # Verify visual change
     utils.capture_screenshot(page, "theme_3_library_sepia")
+
+    # 6. Switch back to Light
+    print("Switching to Light Theme...")
+    page.get_by_label("Select Light theme").click()
+    expect(html).to_have_class(re.compile(r"\blight\b"))
 
     print("Theme Verification Passed!")

@@ -1,3 +1,4 @@
+from typing import Optional
 import os
 from playwright.sync_api import Page, Frame, expect
 
@@ -32,6 +33,8 @@ def reset_app(page: Page):
         page: The Playwright Page object.
     """
     page.goto("http://localhost:5173", timeout=10000)
+    # Reload first to potentially release any DB locks from previous sessions
+    page.reload()
 
     # Explicitly clear IDB, LocalStorage, and Unregister Service Workers
     page.evaluate("""
@@ -51,7 +54,10 @@ def reset_app(page: Page):
                     const req = window.indexedDB.deleteDatabase(db.name);
                     req.onsuccess = resolve;
                     req.onerror = reject;
-                    req.onblocked = resolve;
+                    req.onblocked = () => {
+                        console.warn(`DB ${db.name} deletion blocked`);
+                        resolve();
+                    };
                 });
             }
             localStorage.clear();
@@ -158,7 +164,7 @@ def capture_screenshot(page: Page, name: str, hide_tts_status: bool = False):
     if hide_tts_status:
         page.evaluate("const el = document.getElementById('tts-debug'); if (el) el.style.visibility = 'visible';")
 
-def get_reader_frame(page: Page) -> Frame | None:
+def get_reader_frame(page: Page) -> Optional[Frame]:
     """
     Retrieves the iframe containing the epub.js reader.
 

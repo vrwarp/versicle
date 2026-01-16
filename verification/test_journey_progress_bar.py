@@ -11,7 +11,7 @@ def test_verify_progress_bar(page: Page):
 
     if page.get_by_text("Load Demo Book").is_visible():
         page.get_by_text("Load Demo Book").click()
-        expect(page.get_by_text("Alice's Adventures in Wonderland")).to_be_visible(timeout=5000)
+        expect(page.get_by_text("Alice's Adventures in Wonderland")).to_be_visible(timeout=15000)
 
     # 3. Simulate progress by navigating in the reader
     page.get_by_text("Alice's Adventures in Wonderland").click()

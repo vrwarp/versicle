@@ -1,5 +1,8 @@
-import type { SyncManifest } from '../../types/db';
-
+/**
+ * Remote storage provider interface for cloud sync.
+ * 
+ * V2: Uses Yjs binary snapshots for CRDT-based sync.
+ */
 export interface RemoteStorageProvider {
   /**
    * Initializes the provider with credentials.
@@ -13,19 +16,16 @@ export interface RemoteStorageProvider {
   isAuthenticated(): Promise<boolean>;
 
   /**
-   * Retrieves the latest SyncManifest from the remote storage.
-   * Returns null if no manifest exists.
+   * Uploads a Yjs state snapshot to remote storage.
+   * @param snapshot Binary Yjs state from Y.encodeStateAsUpdate()
    */
-  getManifest(): Promise<SyncManifest | null>;
+  uploadSnapshot(snapshot: Uint8Array): Promise<void>;
 
   /**
-   * Uploads a new SyncManifest to the remote storage.
-   *
-   * @param manifest The manifest to upload.
-   * @param previousVersion The version of the manifest that we believe we are overwriting.
-   *                        Used for optimistic concurrency control (if supported).
+   * Downloads the Yjs state snapshot from remote storage.
+   * @returns Binary Yjs state to be applied via Y.applyUpdate(), or null if not found
    */
-  uploadManifest(manifest: SyncManifest, previousVersion?: number): Promise<void>;
+  downloadSnapshot(): Promise<Uint8Array | null>;
 
   /**
    * Returns the timestamp of the last modification on the remote file.

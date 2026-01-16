@@ -1,4 +1,4 @@
-import { useReaderStore } from "../../store/useReaderStore"
+import { usePreferencesStore } from "../../store/usePreferencesStore"
 import { useShallow } from 'zustand/react/shallow';
 import { PopoverContent, PopoverClose } from "../ui/Popover"
 import { Button } from "../ui/Button"
@@ -21,22 +21,22 @@ export const VisualSettings = () => {
     currentTheme, setTheme,
     fontSize, setFontSize,
     fontFamily, setFontFamily,
-    viewMode, setViewMode,
     lineHeight, setLineHeight,
-    shouldForceFont, setShouldForceFont
-  } = useReaderStore(useShallow(state => ({
+    shouldForceFont, setShouldForceFont,
+    readerViewMode, setReaderViewMode
+  } = usePreferencesStore(useShallow(state => ({
     currentTheme: state.currentTheme,
     setTheme: state.setTheme,
     fontSize: state.fontSize,
     setFontSize: state.setFontSize,
     fontFamily: state.fontFamily,
     setFontFamily: state.setFontFamily,
-    viewMode: state.viewMode,
-    setViewMode: state.setViewMode,
     lineHeight: state.lineHeight,
     setLineHeight: state.setLineHeight,
     shouldForceFont: state.shouldForceFont,
-    setShouldForceFont: state.setShouldForceFont
+    setShouldForceFont: state.setShouldForceFont,
+    readerViewMode: state.readerViewMode,
+    setReaderViewMode: state.setReaderViewMode
   })));
 
   return (
@@ -60,33 +60,33 @@ export const VisualSettings = () => {
 
         {/* Font Size Slider Row */}
         <div className="flex items-center gap-3">
-           <Button variant="ghost" size="sm" onClick={() => setFontSize(Math.max(50, fontSize - 10))} className="h-8 w-8 p-0" aria-label="Decrease font size">
-             <span className="text-xs font-medium">A</span>
-           </Button>
-           <Slider
-              value={[fontSize]}
-              min={50}
-              max={200}
-              step={10}
-              onValueChange={(val) => setFontSize(val[0])}
-              className="flex-1"
-              aria-label="Font size percentage"
-           />
-           <Button variant="ghost" size="sm" onClick={() => setFontSize(Math.min(200, fontSize + 10))} className="h-8 w-8 p-0" aria-label="Increase font size">
-             <span className="text-xl font-medium">A</span>
-           </Button>
+          <Button variant="ghost" size="sm" onClick={() => setFontSize(Math.max(50, fontSize - 10))} className="h-8 w-8 p-0" aria-label="Decrease font size">
+            <span className="text-xs font-medium">A</span>
+          </Button>
+          <Slider
+            value={[fontSize]}
+            min={50}
+            max={200}
+            step={10}
+            onValueChange={(val) => setFontSize(val[0])}
+            className="flex-1"
+            aria-label="Font size percentage"
+          />
+          <Button variant="ghost" size="sm" onClick={() => setFontSize(Math.min(200, fontSize + 10))} className="h-8 w-8 p-0" aria-label="Increase font size">
+            <span className="text-xl font-medium">A</span>
+          </Button>
         </div>
 
         {/* Font Family Select */}
         <Select value={fontFamily} onValueChange={setFontFamily}>
-           <SelectTrigger className="w-full">
-             <SelectValue placeholder="Font Family" />
-           </SelectTrigger>
-           <SelectContent>
-             <SelectItem value="serif">Serif</SelectItem>
-             <SelectItem value="sans-serif">Sans-Serif</SelectItem>
-             <SelectItem value="monospace">Monospace</SelectItem>
-           </SelectContent>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Font Family" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="serif">Serif</SelectItem>
+            <SelectItem value="sans-serif">Sans-Serif</SelectItem>
+            <SelectItem value="monospace">Monospace</SelectItem>
+          </SelectContent>
         </Select>
 
         {/* Force Theme Switch */}
@@ -102,26 +102,26 @@ export const VisualSettings = () => {
 
       {/* 3. The "Format" Row (Layout) */}
       <div className="space-y-4">
-         <Label className="block text-sm font-medium">Layout</Label>
-         <Tabs value={viewMode} onValueChange={(val) => setViewMode(val as 'paginated' | 'scrolled')} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="paginated">Paginated</TabsTrigger>
-              <TabsTrigger value="scrolled">Scrolled</TabsTrigger>
-            </TabsList>
-         </Tabs>
+        <Label className="block text-sm font-medium">Layout</Label>
+        <Tabs value={readerViewMode} onValueChange={(val) => setReaderViewMode(val as 'paginated' | 'scrolled')} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="paginated">Paginated</TabsTrigger>
+            <TabsTrigger value="scrolled">Scrolled</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-         <div className="flex items-center justify-between pt-1">
-            <span className="text-sm text-muted-foreground">Line Height</span>
-            <div className="flex items-center gap-3 bg-secondary/50 rounded-md p-1">
-               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLineHeight(Math.max(1, parseFloat((lineHeight - 0.1).toFixed(1))))} aria-label="Decrease line height">
-                  <Minus className="h-3 w-3" />
-               </Button>
-               <span className="w-8 text-center text-sm font-medium tabular-nums">{lineHeight.toFixed(1)}</span>
-               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLineHeight(Math.min(3, parseFloat((lineHeight + 0.1).toFixed(1))))} aria-label="Increase line height">
-                  <Plus className="h-3 w-3" />
-               </Button>
-            </div>
-         </div>
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-sm text-muted-foreground">Line Height</span>
+          <div className="flex items-center gap-3 bg-secondary/50 rounded-md p-1">
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLineHeight(Math.max(1, parseFloat((lineHeight - 0.1).toFixed(1))))} aria-label="Decrease line height">
+              <Minus className="h-3 w-3" />
+            </Button>
+            <span className="w-8 text-center text-sm font-medium tabular-nums">{(lineHeight || 1.5).toFixed(1)}</span>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLineHeight(Math.min(3, parseFloat((lineHeight + 0.1).toFixed(1))))} aria-label="Increase line height">
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
       </div>
     </PopoverContent>
   );

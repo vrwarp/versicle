@@ -13,7 +13,13 @@ import { SafeModeView } from './components/SafeModeView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
-import { useSyncOrchestrator } from './lib/sync/hooks/useSyncOrchestrator';
+import { useYjsSync } from './lib/sync/hooks/useYjsSync';
+import { useLibraryStore } from './store/useLibraryStore';
+import { waitForYjsSync } from './store/yjs-provider';
+import { migrateToYjs } from './lib/migration/YjsMigration';
+import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
+
+import './App.css';
 
 /**
  * Main Application component.
@@ -25,39 +31,28 @@ function App() {
   const [dbError, setDbError] = useState<unknown>(null);
   const [swInitialized, setSwInitialized] = useState(false);
   const [swError, setSwError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState('Initializing...');
+
+  const hydrateStaticMetadata = useLibraryStore(state => state.hydrateStaticMetadata);
 
   // Initialize Sync
-  useSyncOrchestrator();
+  useYjsSync();
 
+  // Service Worker Initialization
   useEffect(() => {
     const initSW = async () => {
-      // If service worker is supported, wait for it to be ready
-      if ('serviceWorker' in navigator) {
-        try {
-          await navigator.serviceWorker.ready;
-
-          // Poll for controller with exponential backoff
-          let attempt = 0;
-          let delay = 5;
-          while (!navigator.serviceWorker.controller) {
-            if (attempt >= 8) {
-              throw new Error(`Controller still not ready after ${attempt} attempts`);
-            }
-            await new Promise(resolve => setTimeout(resolve, delay));
-            delay *= 2;
-            attempt++;
-          }
-
-        } catch (e) {
-          console.error('Service Worker wait failed:', e);
-          setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
-        }
+      try {
+        await waitForServiceWorkerController();
+      } catch (e) {
+        console.error('Service Worker wait failed:', e);
+        setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
       }
       setSwInitialized(true);
     };
     initSW();
   }, []);
 
+  // Global Error Handler
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       console.error('Unhandled Promise Rejection:', event.reason);
@@ -66,7 +61,7 @@ function App() {
       if (event.reason instanceof StorageFullError) {
         useToastStore.getState().showToast(event.reason.message, 'error', 5000);
       } else if (event.reason?.name === 'QuotaExceededError' ||
-                 (typeof event.reason === 'object' && event.reason !== null && 'name' in event.reason && (event.reason as { name: unknown }).name === 'QuotaExceededError')) {
+        (typeof event.reason === 'object' && event.reason !== null && 'name' in event.reason && (event.reason as { name: unknown }).name === 'QuotaExceededError')) {
         // Sometimes it might come as a raw QuotaExceededError if not wrapped
         useToastStore.getState().showToast('Storage limit exceeded. Please free up space.', 'error', 5000);
       }
@@ -79,21 +74,44 @@ function App() {
     };
   }, []);
 
+  // Main Initialization (DB + Migration)
   useEffect(() => {
     const init = async () => {
       try {
+        setStatusMessage('Connecting to database...');
         // Initialize DB
         await getDB();
 
+        setStatusMessage('Checking for upgrades...');
+        setStatusMessage('Checking for upgrades...');
+        try {
+          await migrateToYjs();
+        } catch (e) {
+          console.error('[App] Migration failed:', e);
+          // We proceed anyway, but log it
+        }
+
+        setStatusMessage('Loading library...');
+        await waitForYjsSync();
+
+        // Wait for middleware to sync books (short poll)
+        let attempts = 0;
+        while (Object.keys(useLibraryStore.getState().books).length === 0 && attempts < 10) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+
+        await hydrateStaticMetadata();
+
         setDbStatus('ready');
       } catch (err) {
-        console.error('Failed to initialize DB:', err);
+        console.error('Failed to initialize App:', err);
         setDbError(err);
         setDbStatus('error');
       }
     };
     init();
-  }, []);
+  }, [hydrateStaticMetadata]);
 
   const handleReset = async () => {
     if (!window.confirm('Are you sure you want to delete all data? This cannot be undone.')) {
@@ -102,6 +120,8 @@ function App() {
     try {
       dbService.cleanup();
       await deleteDB('EpubLibraryDB');
+      // Also clear Yjs DB if we really want a full reset?
+      // deleteDB('versicle-yjs'); 
       window.location.reload();
     } catch (err) {
       console.error('Failed to delete DB:', err);
@@ -119,36 +139,35 @@ function App() {
     return <SafeModeView error={dbError} onReset={handleReset} onRetry={handleRetry} />;
   }
 
-  // Optional: Show a loading screen, or just render the app (LibraryView handles its own loading state)
-  // Rendering the app immediately allows the UI to show up faster,
-  // but if getDB failed we would have hit the error block.
-  // If getDB hangs, we are in 'loading'.
-  // We can just proceed if 'loading' assuming idb promise handles concurrency if components call getDB.
-  // However, for Safe Mode to work, we want to know if it fails.
-  // So we wait for 'ready' or just rely on the error catch.
-
-  // If we return null while loading, the app feels slow.
-  // But if we render, components might fail if DB is truly broken.
-  // Given we want to catch "DB fails to open", waiting is safer for this feature.
   if (swError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
-          <div className="max-w-md text-center">
-            <h1 className="text-xl font-bold mb-2">Critical Error</h1>
-            <p className="mb-4">{swError}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90"
-            >
-              Reload
-            </button>
-          </div>
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-bold mb-2">Critical Error</h1>
+          <p className="mb-4">{swError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90"
+          >
+            Reload
+          </button>
         </div>
-      );
+      </div>
+    );
   }
 
+  // Combined Loading Screen
   if (dbStatus === 'loading' || !swInitialized) {
-      return <div className="min-h-screen flex items-center justify-center bg-background text-foreground">Initializing...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm font-medium text-muted-foreground animate-pulse">
+            {statusMessage}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

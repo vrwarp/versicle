@@ -25,6 +25,10 @@ vi.mock('../../../lib/tts/AudioPlayerService', () => ({
   AudioPlayerService: {
     getInstance: () => ({
       preview: vi.fn(),
+      subscribe: vi.fn(),
+      setRate: vi.fn(),
+      setVoice: vi.fn(),
+      setVolume: vi.fn(),
     }),
   },
 }));
@@ -35,9 +39,9 @@ vi.mock('../../ui/Dialog', () => ({
   Dialog: ({ isOpen, children }: any) => (isOpen ? <div data-testid="lexicon-dialog">{children}</div> : null),
 }));
 
-vi.mock('../../store/useReaderStore', () => ({
+vi.mock('../../store/useReadingStateStore', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useReaderStore: (selector: any) => selector({ currentBookId: 'book1' }),
+  useReadingStateStore: (selector: any) => selector({ currentBookId: 'book1' }),
 }));
 
 // Mock export
@@ -61,7 +65,7 @@ describe('LexiconManager', () => {
 
     // Check if original input is populated
     await waitFor(() => {
-        expect(screen.getByTestId('lexicon-input-original')).toHaveValue('Hello');
+      expect(screen.getByTestId('lexicon-input-original')).toHaveValue('Hello');
     });
 
     // Check if test input is populated
@@ -78,7 +82,7 @@ describe('LexiconManager', () => {
 
     // Wait for rules to load (empty)
     await waitFor(() => {
-         expect(screen.getByTestId('lexicon-add-rule-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('lexicon-add-rule-btn')).toBeInTheDocument();
     });
 
     // Inputs should not be visible unless adding, or if we force adding state
@@ -96,9 +100,9 @@ describe('LexiconManager', () => {
     );
 
     await waitFor(() => {
-        expect(screen.getByTestId('lexicon-test-current-btn')).toBeInTheDocument();
-        expect(screen.getByTestId('lexicon-test-all-btn')).toBeInTheDocument();
-        expect(screen.getByTestId('lexicon-play-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('lexicon-test-current-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('lexicon-test-all-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('lexicon-play-btn')).toBeInTheDocument();
     });
   });
 
@@ -111,7 +115,7 @@ describe('LexiconManager', () => {
     );
 
     await waitFor(() => {
-        expect(screen.getByTestId('lexicon-test-current-btn')).toBeDisabled();
+      expect(screen.getByTestId('lexicon-test-current-btn')).toBeDisabled();
     });
   });
 
@@ -131,7 +135,7 @@ describe('LexiconManager', () => {
     exportBtn.click();
 
     await waitFor(() => {
-        expect(exportFile).toHaveBeenCalled();
+      expect(exportFile).toHaveBeenCalled();
     });
   });
 
@@ -151,7 +155,7 @@ describe('LexiconManager', () => {
     sampleBtn.click();
 
     await waitFor(() => {
-        expect(exportFile).toHaveBeenCalled();
+      expect(exportFile).toHaveBeenCalled();
     });
   });
 });

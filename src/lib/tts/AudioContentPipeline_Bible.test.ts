@@ -7,9 +7,26 @@ import { LexiconService } from './LexiconService';
 import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';
 import type { BookMetadata, TTSContentAnalysis } from '../../types/db';
 
-vi.mock('../../db/DBService');
-vi.mock('./TextSegmenter');
-vi.mock('./LexiconService');
+// Explicit mocks to prevent auto-mocking issues
+vi.mock('../../db/DBService', () => ({
+    dbService: {
+        getTTSContent: vi.fn(),
+        getBookMetadata: vi.fn(),
+        getContentAnalysis: vi.fn(),
+    }
+}));
+
+vi.mock('./TextSegmenter', () => ({
+    TextSegmenter: {
+        refineSegments: vi.fn()
+    }
+}));
+
+vi.mock('./LexiconService', () => ({
+    LexiconService: {
+        getInstance: vi.fn()
+    }
+}));
 
 // Break circular dependency
 vi.mock('./AudioPlayerService', () => ({
@@ -29,7 +46,7 @@ vi.mock('./AudioPlayerService', () => ({
     }
 }));
 
-// Partially mock useTTSStore to avoid running its initialization logic which might trigger AudioPlayerService
+// Partially mock useTTSStore
 vi.mock('../../store/useTTSStore', () => ({
     useTTSStore: {
         getState: vi.fn(() => ({
@@ -63,7 +80,6 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
             sentenceStarters: ['The'],
             minSentenceLength: 50,
             isBibleLexiconEnabled: true,
-            // Add other required properties to satisfy the type if needed, or cast as any only if necessary
         } as unknown as ReturnType<typeof useTTSStore.getState>);
 
         vi.mocked(LexiconService.getInstance).mockReturnValue({
@@ -112,6 +128,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
             minSentenceLength: 50,
             isBibleLexiconEnabled: false
         } as unknown as ReturnType<typeof useTTSStore.getState>);
+
         vi.mocked(LexiconService.getInstance).mockReturnValue({
             getBibleLexiconPreference: vi.fn().mockResolvedValue('on')
         } as unknown as LexiconService);

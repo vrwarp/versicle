@@ -17,19 +17,42 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('../../../hooks/useEpubReader');
-vi.mock('../../../store/useReaderStore', () => ({
+vi.mock('../../../store/useReaderUIStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useReaderStore: (selector: any) => selector({
-        currentTheme: 'light',
-        viewMode: 'paginated',
-        updateLocation: vi.fn(),
+    useReaderUIStore: (selector: any) => selector({
         setToc: vi.fn(),
         setIsLoading: vi.fn(),
+        reset: vi.fn(),
+        setImmersiveMode: vi.fn(),
+        immersiveMode: false,
+        setPlayFromSelection: vi.fn(),
+        currentSectionTitle: null,
+        currentSectionId: null,
+        setCurrentSection: vi.fn(),
+        playFromSelection: null
+    })
+}));
+vi.mock('../../../store/usePreferencesStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    usePreferencesStore: (selector: any) => selector({
+        currentTheme: 'light',
+        customTheme: null,
+        fontFamily: 'serif',
+        lineHeight: 1.5,
+        fontSize: 100,
+        shouldForceFont: false,
+        readerViewMode: 'paginated'
+    })
+}));
+vi.mock('../../../store/useReadingStateStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useReadingStateStore: (selector: any) => selector({
+        updateLocation: vi.fn(),
+        currentBookId: null,
         setCurrentBookId: vi.fn(),
         reset: vi.fn(),
-        setPlayFromSelection: vi.fn(),
-        setImmersiveMode: vi.fn(),
-        immersiveMode: false
+        progress: {},
+        getProgress: () => null
     })
 }));
 vi.mock('../../../store/useTTSStore', () => ({
@@ -181,8 +204,8 @@ describe('ReaderView Version Check', () => {
     });
 
     it('defaults to version 0 and redirects if version is missing', async () => {
-         // Mock missing version
-         (useEpubReader as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        // Mock missing version
+        (useEpubReader as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
             book: {},
             rendition: {
                 hooks: { content: { register: vi.fn() } },
