@@ -99,6 +99,17 @@ class FirestoreSyncManager {
      * Sets up auth state listener and auto-connects when authenticated.
      */
     async initialize(): Promise<void> {
+        // Support for Mock Firestore (Testing)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__) {
+            console.log('[FirestoreSync] Mock mode detected. Simulating auth and connection.');
+            this.setAuthStatus('signed-in');
+            // Simulate a mock user
+            this.currentUser = { uid: 'mock-user', email: 'mock@example.com' } as User;
+            this.connectFireProvider('mock-user');
+            return;
+        }
+
         if (!isFirebaseConfigured()) {
             console.warn('[FirestoreSync] Firebase not configured. Sync disabled.');
             this.setAuthStatus('signed-out');
@@ -152,17 +163,26 @@ class FirestoreSyncManager {
             return;
         }
 
-        const app = getFirebaseApp();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+
+        let app = getFirebaseApp();
         if (!app) {
-            console.error('[FirestoreSync] Firebase app not available');
-            this.setStatus('error');
-            return;
+            if (isMock) {
+                // Use dummy app for mock provider
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                app = {} as any;
+            } else {
+                console.error('[FirestoreSync] Firebase app not available');
+                this.setStatus('error');
+                return;
+            }
         }
 
         this.setStatus('connecting');
 
         const providerConfig = {
-            firebaseApp: app,
+            firebaseApp: app!,
             ydoc: yDoc,
             path: `users/${uid}/versicle/main`,
             maxWaitFirestoreTime: this.config.maxWaitFirestoreTime,

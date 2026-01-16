@@ -355,7 +355,7 @@ export const GlobalSettingsDialog = () => {
                 setBackupStatus(`Restore: ${percent}% - ${msg}`);
             });
             setBackupStatus('Restore complete! Reloading...');
-            setTimeout(() => window.location.reload(), 3000);
+            setTimeout(() => window.location.reload(), 500);
         } catch (error) {
             console.error(error);
             setBackupStatus(`Restore failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

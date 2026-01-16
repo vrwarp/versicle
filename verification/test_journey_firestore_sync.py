@@ -84,17 +84,14 @@ def test_firestore_cross_device_sync(browser: Browser, browser_context_args):
     page_a.goto("/")
     expect(page_a.get_by_test_id("library-view")).to_be_visible()
 
-    # Add a lexicon rule (easy to verify synced data)
+    # Change theme (easy to verify synced data via usePreferencesStore)
     page_a.get_by_test_id("header-settings-button").click()
-    page_a.get_by_role("button", name="Dictionary").click()
-    page_a.get_by_role("button", name="Manage Rules").click()
-    page_a.get_by_test_id("lexicon-add-rule-btn").click()
-    page_a.get_by_test_id("lexicon-input-original").fill("FirestoreTest")
-    page_a.get_by_test_id("lexicon-input-replacement").fill("FirestoreReplacement")
-    page_a.get_by_test_id("lexicon-save-rule-btn").click()
 
-    # Verify it appears
-    expect(page_a.get_by_text("FirestoreTest")).to_be_visible()
+    # Change to Dark mode
+    page_a.get_by_label("Select Dark theme").click()
+
+    # Verify change applied
+    expect(page_a.locator("html")).to_have_class("dark")
 
     # Wait for sync to complete
     time.sleep(2)
@@ -106,8 +103,7 @@ def test_firestore_cross_device_sync(browser: Browser, browser_context_args):
 
     print(f"Device A snapshot data present: {snapshot_data is not None}")
 
-    # Close lexicon and settings
-    page_a.get_by_test_id("lexicon-close-btn").click()
+    # Close settings
     page_a.keyboard.press("Escape")
 
     page_a.close()
@@ -138,15 +134,10 @@ def test_firestore_cross_device_sync(browser: Browser, browser_context_args):
     # Wait for data to sync
     time.sleep(2)
 
-    # Verify the lexicon rule synced
-    page_b.get_by_test_id("header-settings-button").click()
-    page_b.get_by_role("button", name="Dictionary").click()
-    page_b.get_by_role("button", name="Manage Rules").click()
-
-    # The synced rule should be visible
-    print("Checking for synced lexicon rule on Device B...")
-    expect(page_b.get_by_text("FirestoreTest")).to_be_visible(timeout=10000)
-    expect(page_b.get_by_text("FirestoreReplacement")).to_be_visible()
+    # Verify the theme synced
+    print("Checking for synced theme on Device B...")
+    # It might take a moment for Yjs to apply the update
+    expect(page_b.locator("html")).to_have_class("dark", timeout=10000)
 
     print("Cross-device Firestore sync verified!")
 

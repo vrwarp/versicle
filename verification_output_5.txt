@@ -1,0 +1,74 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.verification
+#1 transferring dockerfile: 1.11kB 0.0s done
+#1 DONE 0.1s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.8s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:b6afd42430b15f2d2a4c5a02b919e98a525b785b1aaff16747d2f623364e39b6
+#3 CACHED
+
+#4 [internal] load metadata for mcr.microsoft.com/playwright/python:v1.48.0-jammy
+#4 DONE 0.2s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 98B done
+#5 DONE 0.0s
+
+#6 [ 1/12] FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy@sha256:6bbd515848db4042068571135979b6ee6d330a794b28e037e3a6ccd7f2abfa26
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 66.39kB 0.2s done
+#7 DONE 0.2s
+
+#8 [ 3/12] RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&     apt-get install -y nodejs &&     node --version &&     npm --version
+#8 CACHED
+
+#9 [ 4/12] COPY package.json package-lock.json ./
+#9 CACHED
+
+#10 [ 6/12] RUN npm ci
+#10 CACHED
+
+#11 [ 7/12] RUN pip install pytest pytest-playwright pytest-xdist playwright==1.48.0
+#11 CACHED
+
+#12 [ 2/12] WORKDIR /app
+#12 CACHED
+
+#13 [ 5/12] COPY scripts ./scripts
+#13 CACHED
+
+#14 [ 8/12] RUN playwright install
+#14 CACHED
+
+#15 [ 9/12] COPY . .
+#15 DONE 160.8s
+
+#16 [10/12] RUN npm run build
+#16 48.37
+#16 48.37 > versicle@0.0.0 build
+#16 48.37 > tsc -b && vite build
+#16 48.37
+#16 58.04 src/components/reader/ReaderView.tsx(348,82): error TS2304: Cannot find name 'panicSaveState'.
+#16 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2
+------
+ > [10/12] RUN npm run build:
+48.37
+48.37 > versicle@0.0.0 build
+48.37 > tsc -b && vite build
+48.37
+58.04 src/components/reader/ReaderView.tsx(348,82): error TS2304: Cannot find name 'panicSaveState'.
+------
+Dockerfile.verification:30
+--------------------
+  28 |
+  29 |     # 4. Build the App
+  30 | >>> RUN npm run build
+  31 |
+  32 |     # 5. Set Entrypoint
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 2

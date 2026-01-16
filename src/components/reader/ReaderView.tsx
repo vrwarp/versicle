@@ -108,6 +108,12 @@ export const ReaderView: React.FC = () => {
         setCurrentBookId: state.setCurrentBookId,
     })));
 
+    const panicSaveState = useRef({ readerViewMode, currentSectionTitle });
+
+    useEffect(() => {
+        panicSaveState.current = { readerViewMode, currentSectionTitle };
+    }, [readerViewMode, currentSectionTitle]);
+
     // Select current book metadata and progress from stores (Phase 2)
     const rawBookMetadata = useBook(id || null);
     const bookMetadata = useMemo(() => {

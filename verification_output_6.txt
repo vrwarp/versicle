@@ -1,0 +1,473 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.verification
+#1 transferring dockerfile: 1.11kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.5s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:b6afd42430b15f2d2a4c5a02b919e98a525b785b1aaff16747d2f623364e39b6
+#3 CACHED
+
+#4 [internal] load metadata for mcr.microsoft.com/playwright/python:v1.48.0-jammy
+#4 DONE 0.1s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 98B done
+#5 DONE 0.0s
+
+#6 [ 1/12] FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy@sha256:6bbd515848db4042068571135979b6ee6d330a794b28e037e3a6ccd7f2abfa26
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 187.29kB 0.1s done
+#7 DONE 0.1s
+
+#8 [ 3/12] RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&     apt-get install -y nodejs &&     node --version &&     npm --version
+#8 CACHED
+
+#9 [ 4/12] COPY package.json package-lock.json ./
+#9 CACHED
+
+#10 [ 5/12] COPY scripts ./scripts
+#10 CACHED
+
+#11 [ 6/12] RUN npm ci
+#11 CACHED
+
+#12 [ 7/12] RUN pip install pytest pytest-playwright pytest-xdist playwright==1.48.0
+#12 CACHED
+
+#13 [ 2/12] WORKDIR /app
+#13 CACHED
+
+#14 [ 8/12] RUN playwright install
+#14 CACHED
+
+#15 [ 9/12] COPY . .
+#15 DONE 32.5s
+
+#16 [10/12] RUN npm run build
+#16 32.83
+#16 32.83 > versicle@0.0.0 build
+#16 32.83 > tsc -b && vite build
+#16 32.83
+#16 43.45 vite v7.3.0 building client environment for production...
+#16 43.92 transforming...
+#16 58.06 ✓ 2178 modules transformed.
+#16 61.37 rendering chunks...
+#16 62.46 [plugin vite:reporter]
+#16 62.46 (!) /app/node_modules/y-indexeddb/src/y-indexeddb.js is dynamically imported by /app/src/lib/BackupService.ts but also statically imported by /app/src/store/yjs-provider.ts, dynamic import will not move module into another chunk.
+#16 62.46
+#16 62.46 [plugin vite:reporter]
+#16 62.46 (!) /app/src/store/yjs-provider.ts is dynamically imported by /app/src/lib/BackupService.ts but also statically imported by /app/src/App.tsx, /app/src/lib/BackupService.ts, /app/src/lib/migration/YjsMigration.ts, /app/src/lib/sync/FirestoreSyncManager.ts, /app/src/lib/sync/YjsSyncService.ts, /app/src/store/useAnnotationStore.ts, /app/src/store/useLibraryStore.ts, /app/src/store/usePreferencesStore.ts, /app/src/store/useReadingListStore.ts, /app/src/store/useReadingStateStore.ts, dynamic import will not move module into another chunk.
+#16 62.46
+#16 62.46 [plugin vite:reporter]
+#16 62.46 (!) /app/src/store/useTTSStore.ts is dynamically imported by /app/src/lib/tts/LexiconService.ts but also statically imported by /app/src/components/GlobalSettingsDialog.tsx, /app/src/components/reader/ReaderControlBar.tsx, /app/src/components/reader/ReaderTTSController.tsx, /app/src/components/reader/ReaderView.tsx, /app/src/components/reader/TTSAbbreviationSettings.tsx, /app/src/components/reader/TTSQueue.tsx, /app/src/components/reader/UnifiedAudioPanel.tsx, /app/src/components/reader/UnifiedInputController.tsx, /app/src/components/ui/CompassPill.tsx, /app/src/hooks/useSectionDuration.ts, /app/src/hooks/useTTS.ts, /app/src/lib/tts/AudioContentPipeline.ts, /app/src/store/useLibraryStore.ts, dynamic import will not move module into another chunk.
+#16 62.46
+#16 62.46 [plugin vite:reporter]
+#16 62.46 (!) /app/src/store/useLibraryStore.ts is dynamically imported by /app/src/lib/BackupService.ts, /app/src/lib/BackupService.ts but also statically imported by /app/src/App.tsx, /app/src/components/GlobalSettingsDialog.tsx, /app/src/components/library/DeleteBookDialog.tsx, /app/src/components/library/EmptyLibrary.tsx, /app/src/components/library/FileUploader.tsx, /app/src/components/library/LibraryView.tsx, /app/src/components/library/OffloadBookDialog.tsx, /app/src/components/library/ReprocessingInterstitial.tsx, /app/src/lib/migration/YjsMigration.ts, /app/src/store/selectors.ts, /app/src/store/useReadingStateStore.ts, dynamic import will not move module into another chunk.
+#16 62.46
+#16 68.62 computing gzip size...
+#16 68.86 dist/registerSW.js                              0.13 kB
+#16 68.86 dist/manifest.webmanifest                       0.36 kB
+#16 68.86 dist/index.html                                 0.76 kB │ gzip:   0.38 kB
+#16 68.86 dist/assets/silence-B6oov6b9.ogg                4.12 kB
+#16 68.86 dist/assets/search.worker-DyNrTPTN.js           5.22 kB
+#16 68.86 dist/assets/white-noise-U8_pGdEo.ogg          201.37 kB
+#16 68.86 dist/assets/index-DROifTTH.css                 63.77 kB │ gzip:  11.53 kB
+#16 68.86 dist/assets/rasterize-JS5G2XHH-B_d6BCN-.js      0.36 kB │ gzip:   0.28 kB │ map:     0.83 kB
+#16 68.86 dist/assets/toBlob-byzRNT5x.js                  0.36 kB │ gzip:   0.29 kB │ map:     0.89 kB
+#16 68.86 dist/assets/web-C4G6R-B9.js                     0.40 kB │ gzip:   0.28 kB │ map:     1.21 kB
+#16 68.86 dist/assets/download-C2cmjSzx.js                0.64 kB │ gzip:   0.42 kB │ map:     1.53 kB
+#16 68.86 dist/assets/web-B_OLZUiq.js                     0.87 kB │ gzip:   0.30 kB │ map:     2.02 kB
+#16 68.86 dist/assets/toImg-DukqhQzw.js                   1.30 kB │ gzip:   0.65 kB │ map:     2.90 kB
+#16 68.86 dist/assets/web-CzxOWp1O.js                     1.69 kB │ gzip:   0.72 kB │ map:     5.07 kB
+#16 68.86 dist/assets/toCanvas-Bsmm5eIB.js                2.55 kB │ gzip:   1.32 kB │ map:     6.62 kB
+#16 68.86 dist/assets/web-BqgDDHtb.js                     8.71 kB │ gzip:   2.99 kB │ map:    35.69 kB
+#16 68.86 dist/assets/index-xrP4oqh4.js               1,908.42 kB │ gzip: 589.80 kB │ map: 8,980.08 kB
+#16 68.86
+#16 68.86 (!) Some chunks are larger than 500 kB after minification. Consider:
+#16 68.86 - Using dynamic import() to code-split the application
+#16 68.86 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+#16 68.86 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+#16 68.86 ✓ built in 25.37s
+#16 68.87
+#16 68.87 PWA v1.2.0
+#16 68.87 Building src/sw.ts service worker ("es" format)...
+#16 69.95 vite v7.3.0 building client environment for production...
+#16 70.00 transforming...
+#16 70.22 ✓ 67 modules transformed.
+#16 70.25 rendering chunks...
+#16 70.27 computing gzip size...
+#16 70.27 dist/sw.mjs  20.71 kB │ gzip: 7.11 kB │ map: 161.90 kB
+#16 70.27 ✓ built in 298ms
+#16 70.41
+#16 70.41 PWA v1.2.0
+#16 70.41 mode      injectManifest
+#16 70.41 format:   es
+#16 70.41 precache  21 entries (2697.91 KiB)
+#16 70.41 files generated
+#16 70.41   dist/sw.js
+#16 70.41   dist/sw.js.map
+#16 DONE 70.7s
+
+#17 [11/12] COPY verification/docker_entrypoint.sh /app/verification/docker_entrypoint.sh
+#17 DONE 31.5s
+
+#18 [12/12] RUN chmod +x /app/verification/docker_entrypoint.sh
+#18 DONE 47.8s
+
+#19 exporting to image
+#19 exporting layers
+#19 exporting layers 71.7s done
+#19 writing image sha256:689eb8a1a1c809545036a686604bbcbe8d6643be9d77323fd39a1406c86d96b7 done
+#19 naming to docker.io/library/versicle-verify done
+#19 DONE 71.7s
+🏃 Running verification tests...
+🚀 Starting Vite Preview Server...
+⏳ Waiting for application to be ready at http://localhost:5173...
+
+> versicle@0.0.0 preview
+> vite preview --port 5173 --host
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://172.17.0.2:5173/
+✅ Application is ready!
+🧪 Running verification suite...
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: xdist-3.8.0, playwright-0.7.2, base-url-2.1.0
+created: 4/4 workers
+4 workers [154 items]
+
+............................F........................................... [ 46%]
+...........F............................................................ [ 93%]
+..........                                                               [100%]
+=================================== FAILURES ===================================
+______________ test_firestore_cross_device_sync[desktop-chromium] ______________
+[gw0] linux -- Python 3.10.12 /usr/bin/python
+
+browser = <Browser type=<BrowserType name=chromium executable_path=/ms-playwright/chromium-1140/chrome-linux/chrome> version=130.0.6723.31>
+browser_context_args = {'base_url': 'http://localhost:5173', 'viewport': {'height': 720, 'width': 1280}}
+
+    def test_firestore_cross_device_sync(browser: Browser, browser_context_args):
+        """
+        Verifies cross-device syncing using MockFireProvider.
+        Device A creates data, Device B should see it after sync.
+        """
+        base_url = browser_context_args.get("base_url", "http://localhost:5173")
+
+        # --- Device A: Create Data & Sync ---
+        print("Starting Device A...")
+        context_a = browser.new_context(**browser_context_args)
+        page_a = context_a.new_page()
+
+        page_a.on("console", lambda msg: print(f"DEVICE A: {msg.text}"))
+
+        # Enable mock Firestore mode
+        page_a.add_init_script("""
+            window.__VERSICLE_MOCK_FIRESTORE__ = true;
+            window.__VERSICLE_SANITIZATION_DISABLED__ = true;
+        """)
+        page_a.add_init_script(path="verification/tts-polyfill.js")
+
+        page_a.goto("/")
+        expect(page_a.get_by_test_id("library-view")).to_be_visible()
+
+        # Add a lexicon rule (easy to verify synced data)
+        page_a.get_by_test_id("header-settings-button").click()
+        page_a.get_by_role("button", name="Dictionary").click()
+        page_a.get_by_role("button", name="Manage Rules").click()
+        page_a.get_by_test_id("lexicon-add-rule-btn").click()
+        page_a.get_by_test_id("lexicon-input-original").fill("FirestoreTest")
+        page_a.get_by_test_id("lexicon-input-replacement").fill("FirestoreReplacement")
+        page_a.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Verify it appears
+        expect(page_a.get_by_text("FirestoreTest")).to_be_visible()
+
+        # Wait for sync to complete
+        time.sleep(2)
+
+        # Extract snapshot from localStorage for Device B
+        snapshot_data = page_a.evaluate(
+            "localStorage.getItem('versicle_mock_firestore_snapshot')"
+        )
+
+        print(f"Device A snapshot data present: {snapshot_data is not None}")
+
+        # Close lexicon and settings
+        page_a.get_by_test_id("lexicon-close-btn").click()
+        page_a.keyboard.press("Escape")
+
+        page_a.close()
+        context_a.close()
+
+        # --- Device B: Sync & Verify ---
+        print("Starting Device B...")
+        context_b = browser.new_context(**browser_context_args)
+        page_b = context_b.new_page()
+
+        page_b.on("console", lambda msg: print(f"DEVICE B: {msg.text}"))
+
+        # Inject the snapshot from Device A
+        injection_script = f"""
+            window.__VERSICLE_MOCK_FIRESTORE__ = true;
+            window.__VERSICLE_SANITIZATION_DISABLED__ = true;
+            if ({json.dumps(snapshot_data)}) {{
+                localStorage.setItem('versicle_mock_firestore_snapshot', {json.dumps(snapshot_data)});
+            }}
+        """
+
+        page_b.add_init_script(injection_script)
+        page_b.add_init_script(path="verification/tts-polyfill.js")
+
+        page_b.goto("/")
+        expect(page_b.get_by_test_id("library-view")).to_be_visible()
+
+        # Wait for data to sync
+        time.sleep(2)
+
+        # Verify the lexicon rule synced
+        page_b.get_by_test_id("header-settings-button").click()
+        page_b.get_by_role("button", name="Dictionary").click()
+        page_b.get_by_role("button", name="Manage Rules").click()
+
+        # The synced rule should be visible
+        print("Checking for synced lexicon rule on Device B...")
+>       expect(page_b.get_by_text("FirestoreTest")).to_be_visible(timeout=10000)
+E       AssertionError: Locator expected to be visible
+E       Actual value: <element(s) not found>
+E       Call log:
+E       LocatorAssertions.to_be_visible with timeout 10000ms
+E         - waiting for get_by_text("FirestoreTest")
+
+verification/test_journey_firestore_sync.py:148: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Starting Device A...
+DEVICE A: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+DEVICE A: 🗣️ [MockTTS] Worker Initialized
+DEVICE A: 🗣️ [MockTTS] window.speechSynthesis overwritten
+DEVICE A: Migrating to v18 Data Architecture...
+DEVICE A: Migrating to v20: Fixing Reading List Progress...
+DEVICE A: Migrating to v21: Seeding User Reading List...
+DEVICE A: ✅ [Yjs] Content loaded from IndexedDB (versicle-yjs)
+DEVICE A: Migrating to v22: Repairing corrupted filenames...
+DEVICE A: v22 Migration Complete. Repaired 0 books.
+DEVICE A: [Migration] Starting Yjs migration check...
+DEVICE A: [Migration] 🔄 Migrating from legacy IndexedDB...
+DEVICE A: [Migration] Found 0 books, 0 annotations, 0 progress entries, 0 reading list entries
+DEVICE A: [Migration] Migrated 0 books, 0 progress entries, and 0 reading list entries
+DEVICE A: [Migration] Migrated 0 annotations
+DEVICE A: [Migration] All data migrated to Yjs
+DEVICE A: [Migration] ✅ Migration complete!
+DEVICE A: 🗣️ [MockTTS] Dispatching voiceschanged
+DEVICE A: [Hydrate] Called. Books in store: 0
+DEVICE A: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+DEVICE A: [FirestoreSync] Mock mode detected. Simulating auth and connection.
+DEVICE A: [FirestoreSync] Using MockFireProvider (test mode)
+DEVICE A: [MockFireProvider] Initialized for path: users/mock-user/versicle/main
+DEVICE A: [FirestoreSync] Connected to path: users/mock-user/versicle/main
+DEVICE A: [MockFireProvider] Ready
+DEVICE A: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+DEVICE A: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+DEVICE A: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Device A snapshot data present: False
+DEVICE A: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+Starting Device B...
+DEVICE B: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+DEVICE B: 🗣️ [MockTTS] Worker Initialized
+DEVICE B: 🗣️ [MockTTS] window.speechSynthesis overwritten
+DEVICE B: Migrating to v18 Data Architecture...
+DEVICE B: Migrating to v20: Fixing Reading List Progress...
+DEVICE B: Migrating to v21: Seeding User Reading List...
+DEVICE B: ✅ [Yjs] Content loaded from IndexedDB (versicle-yjs)
+DEVICE B: Migrating to v22: Repairing corrupted filenames...
+DEVICE B: v22 Migration Complete. Repaired 0 books.
+DEVICE B: [Migration] Starting Yjs migration check...
+DEVICE B: [Migration] 🔄 Migrating from legacy IndexedDB...
+DEVICE B: [Migration] Found 0 books, 0 annotations, 0 progress entries, 0 reading list entries
+DEVICE B: [Migration] Migrated 0 books, 0 progress entries, and 0 reading list entries
+DEVICE B: [Migration] Migrated 0 annotations
+DEVICE B: [Migration] All data migrated to Yjs
+DEVICE B: [Migration] ✅ Migration complete!
+DEVICE B: 🗣️ [MockTTS] Dispatching voiceschanged
+DEVICE B: [Hydrate] Called. Books in store: 0
+DEVICE B: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+DEVICE B: [FirestoreSync] Mock mode detected. Simulating auth and connection.
+DEVICE B: [FirestoreSync] Using MockFireProvider (test mode)
+DEVICE B: [MockFireProvider] Initialized for path: users/mock-user/versicle/main
+DEVICE B: [FirestoreSync] Connected to path: users/mock-user/versicle/main
+DEVICE B: [MockFireProvider] Ready
+DEVICE B: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+DEVICE B: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+DEVICE B: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Checking for synced lexicon rule on Device B...
+______________ test_firestore_cross_device_sync[mobile-chromium] _______________
+[gw2] linux -- Python 3.10.12 /usr/bin/python
+
+browser = <Browser type=<BrowserType name=chromium executable_path=/ms-playwright/chromium-1140/chrome-linux/chrome> version=130.0.6723.31>
+browser_context_args = {'base_url': 'http://localhost:5173', 'has_touch': True, 'is_mobile': True, 'viewport': {'height': 667, 'width': 375}}
+
+    def test_firestore_cross_device_sync(browser: Browser, browser_context_args):
+        """
+        Verifies cross-device syncing using MockFireProvider.
+        Device A creates data, Device B should see it after sync.
+        """
+        base_url = browser_context_args.get("base_url", "http://localhost:5173")
+
+        # --- Device A: Create Data & Sync ---
+        print("Starting Device A...")
+        context_a = browser.new_context(**browser_context_args)
+        page_a = context_a.new_page()
+
+        page_a.on("console", lambda msg: print(f"DEVICE A: {msg.text}"))
+
+        # Enable mock Firestore mode
+        page_a.add_init_script("""
+            window.__VERSICLE_MOCK_FIRESTORE__ = true;
+            window.__VERSICLE_SANITIZATION_DISABLED__ = true;
+        """)
+        page_a.add_init_script(path="verification/tts-polyfill.js")
+
+        page_a.goto("/")
+        expect(page_a.get_by_test_id("library-view")).to_be_visible()
+
+        # Add a lexicon rule (easy to verify synced data)
+        page_a.get_by_test_id("header-settings-button").click()
+        page_a.get_by_role("button", name="Dictionary").click()
+        page_a.get_by_role("button", name="Manage Rules").click()
+        page_a.get_by_test_id("lexicon-add-rule-btn").click()
+        page_a.get_by_test_id("lexicon-input-original").fill("FirestoreTest")
+        page_a.get_by_test_id("lexicon-input-replacement").fill("FirestoreReplacement")
+        page_a.get_by_test_id("lexicon-save-rule-btn").click()
+
+        # Verify it appears
+        expect(page_a.get_by_text("FirestoreTest")).to_be_visible()
+
+        # Wait for sync to complete
+        time.sleep(2)
+
+        # Extract snapshot from localStorage for Device B
+        snapshot_data = page_a.evaluate(
+            "localStorage.getItem('versicle_mock_firestore_snapshot')"
+        )
+
+        print(f"Device A snapshot data present: {snapshot_data is not None}")
+
+        # Close lexicon and settings
+        page_a.get_by_test_id("lexicon-close-btn").click()
+        page_a.keyboard.press("Escape")
+
+        page_a.close()
+        context_a.close()
+
+        # --- Device B: Sync & Verify ---
+        print("Starting Device B...")
+        context_b = browser.new_context(**browser_context_args)
+        page_b = context_b.new_page()
+
+        page_b.on("console", lambda msg: print(f"DEVICE B: {msg.text}"))
+
+        # Inject the snapshot from Device A
+        injection_script = f"""
+            window.__VERSICLE_MOCK_FIRESTORE__ = true;
+            window.__VERSICLE_SANITIZATION_DISABLED__ = true;
+            if ({json.dumps(snapshot_data)}) {{
+                localStorage.setItem('versicle_mock_firestore_snapshot', {json.dumps(snapshot_data)});
+            }}
+        """
+
+        page_b.add_init_script(injection_script)
+        page_b.add_init_script(path="verification/tts-polyfill.js")
+
+        page_b.goto("/")
+        expect(page_b.get_by_test_id("library-view")).to_be_visible()
+
+        # Wait for data to sync
+        time.sleep(2)
+
+        # Verify the lexicon rule synced
+        page_b.get_by_test_id("header-settings-button").click()
+        page_b.get_by_role("button", name="Dictionary").click()
+        page_b.get_by_role("button", name="Manage Rules").click()
+
+        # The synced rule should be visible
+        print("Checking for synced lexicon rule on Device B...")
+>       expect(page_b.get_by_text("FirestoreTest")).to_be_visible(timeout=10000)
+E       AssertionError: Locator expected to be visible
+E       Actual value: <element(s) not found>
+E       Call log:
+E       LocatorAssertions.to_be_visible with timeout 10000ms
+E         - waiting for get_by_text("FirestoreTest")
+
+verification/test_journey_firestore_sync.py:148: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Starting Device A...
+DEVICE A: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+DEVICE A: 🗣️ [MockTTS] Worker Initialized
+DEVICE A: 🗣️ [MockTTS] window.speechSynthesis overwritten
+DEVICE A: Migrating to v18 Data Architecture...
+DEVICE A: Migrating to v20: Fixing Reading List Progress...
+DEVICE A: Migrating to v21: Seeding User Reading List...
+DEVICE A: ✅ [Yjs] Content loaded from IndexedDB (versicle-yjs)
+DEVICE A: Migrating to v22: Repairing corrupted filenames...
+DEVICE A: v22 Migration Complete. Repaired 0 books.
+DEVICE A: [Migration] Starting Yjs migration check...
+DEVICE A: [Migration] 🔄 Migrating from legacy IndexedDB...
+DEVICE A: [Migration] Found 0 books, 0 annotations, 0 progress entries, 0 reading list entries
+DEVICE A: [Migration] Migrated 0 books, 0 progress entries, and 0 reading list entries
+DEVICE A: [Migration] Migrated 0 annotations
+DEVICE A: [Migration] All data migrated to Yjs
+DEVICE A: [Migration] ✅ Migration complete!
+DEVICE A: 🗣️ [MockTTS] Dispatching voiceschanged
+DEVICE A: [Hydrate] Called. Books in store: 0
+DEVICE A: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+DEVICE A: [FirestoreSync] Mock mode detected. Simulating auth and connection.
+DEVICE A: [FirestoreSync] Using MockFireProvider (test mode)
+DEVICE A: [MockFireProvider] Initialized for path: users/mock-user/versicle/main
+DEVICE A: [FirestoreSync] Connected to path: users/mock-user/versicle/main
+DEVICE A: [MockFireProvider] Ready
+DEVICE A: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+DEVICE A: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+DEVICE A: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Device A snapshot data present: False
+DEVICE A: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+Starting Device B...
+DEVICE B: %c 🗣️ [MockTTS] Injecting Polyfill (Web Worker) background: #222; color: #bada55
+DEVICE B: 🗣️ [MockTTS] Worker Initialized
+DEVICE B: 🗣️ [MockTTS] window.speechSynthesis overwritten
+DEVICE B: Migrating to v18 Data Architecture...
+DEVICE B: Migrating to v20: Fixing Reading List Progress...
+DEVICE B: Migrating to v21: Seeding User Reading List...
+DEVICE B: 🗣️ [MockTTS] Dispatching voiceschanged
+DEVICE B: ✅ [Yjs] Content loaded from IndexedDB (versicle-yjs)
+DEVICE B: Migrating to v22: Repairing corrupted filenames...
+DEVICE B: v22 Migration Complete. Repaired 0 books.
+DEVICE B: [Migration] Starting Yjs migration check...
+DEVICE B: [Migration] 🔄 Migrating from legacy IndexedDB...
+DEVICE B: [Migration] Found 0 books, 0 annotations, 0 progress entries, 0 reading list entries
+DEVICE B: [Migration] Migrated 0 books, 0 progress entries, and 0 reading list entries
+DEVICE B: [Migration] Migrated 0 annotations
+DEVICE B: [Migration] All data migrated to Yjs
+DEVICE B: [Migration] ✅ Migration complete!
+DEVICE B: [Hydrate] Called. Books in store: 0
+DEVICE B: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+DEVICE B: [FirestoreSync] Mock mode detected. Simulating auth and connection.
+DEVICE B: [FirestoreSync] Using MockFireProvider (test mode)
+DEVICE B: [MockFireProvider] Initialized for path: users/mock-user/versicle/main
+DEVICE B: [FirestoreSync] Connected to path: users/mock-user/versicle/main
+DEVICE B: [MockFireProvider] Ready
+DEVICE B: [OffloadBookDialog] Rendered. isOpen: false, bookId: undefined, isOffloading: false
+DEVICE B: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+DEVICE B: Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.
+Checking for synced lexicon rule on Device B...
+=========================== short test summary info ============================
+FAILED verification/test_journey_firestore_sync.py::test_firestore_cross_device_sync[desktop-chromium]
+FAILED verification/test_journey_firestore_sync.py::test_firestore_cross_device_sync[mobile-chromium]
+================== 2 failed, 152 passed in 348.03s (0:05:48) ===================
+🚀 Running verification tests with pytest...
+Executing: /usr/bin/python -m pytest -n auto verification/
