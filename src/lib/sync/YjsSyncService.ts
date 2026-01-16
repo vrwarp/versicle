@@ -144,6 +144,9 @@ export class YjsSyncService {
      * Push local Yjs state as snapshot to remote
      */
     private async push(trigger: string): Promise<void> {
+        const { isSyncEnabled } = useSyncStore.getState();
+        if (!isSyncEnabled) return;
+
         // Ensure Yjs is synced from IndexedDB
         await waitForYjsSync();
 
