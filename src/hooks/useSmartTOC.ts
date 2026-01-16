@@ -56,14 +56,8 @@ export function useSmartTOC(
 
       const newToc = reconstructToc(originalToc, titleMap);
 
-      const metadata = await dbService.getBookMetadata(bookId);
-      if (metadata) {
-        await dbService.updateBookMetadata(bookId, {
-          ...metadata,
-          syntheticToc: newToc,
-          aiAnalysisStatus: 'complete'
-        });
-      }
+      // Persist enhanced TOC to static_structure in IDB
+      await dbService.updateBookStructure(bookId, newToc);
 
       setSyntheticToc(newToc);
       showToast('Table of Contents enhanced successfully!', 'success');
