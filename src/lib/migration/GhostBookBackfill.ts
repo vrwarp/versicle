@@ -1,6 +1,5 @@
 import { getDB } from '../../db/db';
 import { useBookStore } from '../../store/useLibraryStore';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { extractCoverPalette } from '../ingestion';
 import { yDoc } from '../../store/yjs-provider';
 
