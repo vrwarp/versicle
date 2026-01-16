@@ -21,3 +21,8 @@
 
 **Learning:** Book cards use visual overlays (e.g., Cloud icon for offloaded) that lack accessible text, leaving screen reader users unaware of the status.
 **Action:** Always pair status icons/overlays with `title` attributes for tooltips and `sr-only` text or `aria-label` for screen readers to ensure the status is communicable to all users.
+
+## 2025-05-22 - Search Input Semantics
+
+**Learning:** Standard `<input>` elements default to text type, missing browser-native search affordances like the "clear" (x) button and mobile keyboard optimizations.
+**Action:** Always use `type="search"` for search inputs and pair it with an explicit `aria-label` (e.g., "Search library") to provide context for screen reader users who may navigate directly to the form field.

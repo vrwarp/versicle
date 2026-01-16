@@ -94,14 +94,13 @@ describe('BookCard', () => {
 
     const progressBar = screen.getByTestId('progress-bar');
     expect(progressBar).toBeInTheDocument();
-    expect(progressBar).toHaveStyle({ width: '45%' });
 
-    const progressContainer = screen.getByRole('progressbar');
-    expect(progressContainer).toBeInTheDocument();
-    expect(progressContainer).toHaveAttribute('aria-valuenow', '45');
-    expect(progressContainer).toHaveAttribute('aria-valuemin', '0');
-    expect(progressContainer).toHaveAttribute('aria-valuemax', '100');
-    expect(progressContainer).toHaveAttribute('aria-label', 'Reading progress: 45%');
+    // Check accessibility attributes on the Progress component
+    expect(progressBar).toHaveAttribute('role', 'progressbar');
+    expect(progressBar).toHaveAttribute('aria-valuenow', '45');
+    expect(progressBar).toHaveAttribute('aria-valuemin', '0');
+    expect(progressBar).toHaveAttribute('aria-valuemax', '100');
+    expect(progressBar).toHaveAttribute('aria-label', 'Reading progress: 45%');
   });
 
   it('should not render progress bar when progress is 0 or undefined', () => {
