@@ -7,7 +7,8 @@ import type {
   CacheSessionState,
   CacheTtsPreparation,
   UserInventoryItem,
-  StaticBookManifest
+  StaticBookManifest,
+  NavigationItem
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
@@ -26,6 +27,10 @@ class DBService {
 
   private handleError(error: unknown): never {
     Logger.error('DBService', 'Database operation failed', error);
+
+    if (error instanceof DatabaseError) {
+      throw error;
+    }
 
     if (error instanceof Error) {
       if (error.name === 'QuotaExceededError') {
@@ -261,35 +266,7 @@ class DBService {
   /**
    * Updates only the metadata for a specific book.
    */
-  async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
-    try {
-      const db = await this.getDB();
-      const tx = db.transaction(['user_inventory', 'user_progress'], 'readwrite');
-
-      const invStore = tx.objectStore('user_inventory');
-      const progStore = tx.objectStore('user_progress');
-
-      const inventory = await invStore.get(id);
-      const progress = await progStore.get(id);
-
-      if (inventory) {
-        if (metadata.title) inventory.customTitle = metadata.title;
-        if (metadata.author) inventory.customAuthor = metadata.author;
-        await invStore.put(inventory);
-      }
-
-      if (progress) {
-        if (metadata.progress !== undefined) progress.percentage = metadata.progress;
-        if (metadata.lastRead !== undefined) progress.lastRead = metadata.lastRead;
-        if (metadata.currentCfi !== undefined) progress.currentCfi = metadata.currentCfi;
-        await progStore.put(progress);
-      }
-
-      await tx.done;
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
+  // Deprecated: updateBookMetadata removed. Use useBookStore/useReadingStateStore.
 
   /**
    * Retrieves the file content for a specific book.
@@ -417,10 +394,9 @@ class DBService {
       await tx.objectStore('static_manifests').add(data.manifest);
       await tx.objectStore('static_resources').add(data.resource);
       await tx.objectStore('static_structure').add(data.structure);
-      // Phase 2: user_inventory NO LONGER written here - Yjs store handles it
-      await tx.objectStore('user_progress').add(data.progress);
+      // Phase 2: user_inventory, user_progress, user_reading_list NO LONGER written here
+      // Yjs store handles inventory. Reading State store handles progress/reading list.
       await tx.objectStore('user_overrides').add(data.overrides);
-      await tx.objectStore('user_reading_list').add(data.readingListEntry);
 
       const ttsStore = tx.objectStore('cache_tts_preparation');
       for (const batch of data.ttsContentBatches) {
@@ -436,6 +412,30 @@ class DBService {
       for (const table of data.tableBatches) {
         await tableStore.add(table);
       }
+
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Updates the static structure (TOC) for a book.
+   * Used by Smart TOC enhancement.
+   */
+  async updateBookStructure(bookId: string, toc: NavigationItem[]): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const tx = db.transaction('static_structure', 'readwrite');
+      const store = tx.objectStore('static_structure');
+
+      const structure = await store.get(bookId);
+      if (!structure) {
+        throw new DatabaseError(`Book structure not found for ${bookId}`);
+      }
+
+      structure.toc = toc;
+      await store.put(structure);
 
       await tx.done;
     } catch (error) {
@@ -606,73 +606,7 @@ class DBService {
 
 
   // --- Progress Operations ---
-
-  private saveProgressTimeout: NodeJS.Timeout | null = null;
-  private pendingProgress: { [key: string]: { cfi: string; progress: number } } = {};
-
-  saveProgress(bookId: string, cfi: string, progress: number): void {
-    this.pendingProgress[bookId] = { cfi, progress };
-
-    if (this.saveProgressTimeout) return;
-
-    this.saveProgressTimeout = setTimeout(async () => {
-      this.saveProgressTimeout = null;
-      const pending = { ...this.pendingProgress };
-      this.pendingProgress = {};
-
-      try {
-        const db = await this.getDB();
-        const tx = db.transaction(['user_progress', 'user_inventory', 'user_reading_list', 'static_manifests'], 'readwrite');
-        const progStore = tx.objectStore('user_progress');
-        const invStore = tx.objectStore('user_inventory');
-        const rlStore = tx.objectStore('user_reading_list');
-        const manStore = tx.objectStore('static_manifests');
-
-        for (const [id, data] of Object.entries(pending)) {
-          let userProg = await progStore.get(id);
-          if (!userProg) {
-            // Should exist, but handle edge case
-            userProg = {
-              bookId: id, percentage: 0, lastRead: Date.now(), completedRanges: []
-            };
-          }
-          userProg.currentCfi = data.cfi;
-          userProg.percentage = data.progress;
-          userProg.lastRead = Date.now();
-          await progStore.put(userProg);
-
-          // Update Inventory Status
-          const inv = await invStore.get(id);
-          if (inv) {
-            inv.lastInteraction = Date.now();
-            if (data.progress > 0.98) inv.status = 'completed';
-            else if (inv.status !== 'completed') inv.status = 'reading';
-            await invStore.put(inv);
-
-            // --- Sync to Reading List ---
-            if (inv.sourceFilename) {
-              // Fetch Manifest for Metadata if needed (or use Inv)
-              // We prefer manifest for ISBN
-              const man = await manStore.get(id);
-              await rlStore.put({
-                filename: inv.sourceFilename,
-                title: inv.customTitle || man?.title || 'Unknown',
-                author: inv.customAuthor || man?.author || 'Unknown',
-                isbn: man?.isbn,
-                percentage: data.progress,
-                lastUpdated: Date.now(),
-                status: inv.status === 'completed' ? 'read' : (inv.status === 'reading' ? 'currently-reading' : 'to-read'),
-                rating: inv.rating
-              });
-            }
-          }
-        }
-        await tx.done;
-      } catch (error) {
-        Logger.error('DBService', 'Failed to save progress', error);
-      }
-    }, 1000);
-  }
+  // Deprecated: saveProgress removed. Use useReadingStateStore.
 
   // --- Reading List Operations (Legacy/Mapped) ---
   // Mapping UserInventory to ReadingListEntry for backward compatibility
@@ -895,39 +829,13 @@ class DBService {
   }
 
   // --- Annotation Operations ---
-
-  async addAnnotation(annotation: Annotation): Promise<void> {
-    try {
-      const db = await this.getDB();
-      await db.put('user_annotations', {
-        id: annotation.id,
-        bookId: annotation.bookId,
-        cfiRange: annotation.cfiRange,
-        text: annotation.text,
-        type: annotation.type,
-        color: annotation.color,
-        note: annotation.note,
-        created: annotation.created
-      });
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
+  // Deprecated: addAnnotation/deleteAnnotation removed. Use useAnnotationStore.
 
   async getAnnotations(bookId: string): Promise<Annotation[]> {
     try {
       const db = await this.getDB();
       const anns = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
       return anns as Annotation[];
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async deleteAnnotation(id: string): Promise<void> {
-    try {
-      const db = await this.getDB();
-      await db.delete('user_annotations', id);
     } catch (error) {
       this.handleError(error);
     }
@@ -1216,10 +1124,6 @@ class DBService {
   // --- Cleanup ---
 
   cleanup(): void {
-    if (this.saveProgressTimeout) {
-      clearTimeout(this.saveProgressTimeout);
-      this.saveProgressTimeout = null;
-    }
     if (this.saveTTSStateTimeout) {
       clearTimeout(this.saveTTSStateTimeout);
       this.saveTTSStateTimeout = null;

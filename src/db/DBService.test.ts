@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
-import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, ReadingListEntry } from '../types/db';
+import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, ReadingListEntry, NavigationItem } from '../types/db';
 
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
@@ -209,73 +209,7 @@ describe('DBService', () => {
     });
   });
 
-  describe('Annotation Operations', () => {
-    it('should add and get annotations', async () => {
-      const ann = { id: 'a1', bookId: 'b1', cfiRange: 'cfi1', text: 't1', color: 'red', created: 100, type: 'highlight' as const };
-      await dbService.addAnnotation(ann);
-
-      const res = await dbService.getAnnotations('b1');
-      expect(res).toHaveLength(1);
-      expect(res[0]).toEqual(ann);
-    });
-
-    it('should delete annotation', async () => {
-      const ann = { id: 'a1', bookId: 'b1', cfiRange: 'cfi1', text: 't1', color: 'red', created: 100, type: 'highlight' as const };
-      await dbService.addAnnotation(ann);
-      await dbService.deleteAnnotation('a1');
-      const res = await dbService.getAnnotations('b1');
-      expect(res).toHaveLength(0);
-    });
-  });
-
-  describe('saveProgress', () => {
-    it('should save progress debounced', async () => {
-      // Use real timers for simplicity/reliability with async DB ops
-      const db = await getDB();
-      const id = 'prog-1';
-
-      await db.put('static_manifests', { bookId: id, title: 'P', author: 'A', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
-      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-
-      dbService.saveProgress(id, 'cfi1', 0.1);
-      dbService.saveProgress(id, 'cfi2', 0.2);
-
-      // Wait > 1000ms
-      await new Promise(resolve => setTimeout(resolve, 1100));
-
-      const updated = await db.get('user_progress', id);
-      expect(updated?.currentCfi).toBe('cfi2');
-      expect(updated?.percentage).toBe(0.2);
-    });
-  });
-
   describe('cleanup', () => {
-    it('should prevent saveProgress from writing if cleaned up', async () => {
-      const db = await getDB();
-      const id = 'clean-1';
-
-      await db.put('static_manifests', { bookId: id, title: 'Clean', author: 'A', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
-      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-
-      dbService.saveProgress(id, 'cfi-updated', 0.5);
-
-      // Verify not yet written
-      let updated = await db.get('user_progress', id);
-      expect(updated?.percentage).toBe(0);
-
-      // Cleanup
-      dbService.cleanup();
-
-      // Wait > 1000ms (real time)
-      await new Promise(resolve => setTimeout(resolve, 1100));
-
-      // Verify STILL not written
-      updated = await db.get('user_progress', id);
-      expect(updated?.percentage).toBe(0);
-    });
-
     it('should prevent saveTTSState from writing if cleaned up', async () => {
       const db = await getDB();
       const id = 'tts-clean-1';
@@ -290,6 +224,27 @@ describe('DBService', () => {
 
       const state = await db.get('cache_session_state', id);
       expect(state).toBeUndefined();
+    });
+  });
+
+  describe('updateBookStructure', () => {
+    it('should throw error if book structure not found', async () => {
+      const id = 'non-existent-book';
+      await expect(dbService.updateBookStructure(id, [])).rejects.toThrow(`Book structure not found for ${id}`);
+    });
+
+    it('should update toc if book structure exists', async () => {
+      const db = await getDB();
+      const id = 'struct-1';
+      // Seed structure
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await db.put('static_structure', { bookId: id, toc: [], spineItems: [] } as any);
+
+      const newToc: NavigationItem[] = [{ id: '1', href: 'h', label: 'L' }];
+      await dbService.updateBookStructure(id, newToc);
+
+      const updated = await db.get('static_structure', id);
+      expect(updated?.toc).toEqual(newToc);
     });
   });
 });
