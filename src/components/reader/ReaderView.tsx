@@ -55,6 +55,7 @@ export const ReaderView: React.FC = () => {
     const { activeSidebar, setSidebar } = useSidebarState();
     const viewerRef = useRef<HTMLDivElement>(null);
     const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
+    const panicSaveState = useRef({ readerViewMode: 'paginated', currentSectionTitle: null as string | null });
 
     const {
         currentTheme,
@@ -324,6 +325,11 @@ export const ReaderView: React.FC = () => {
             }
         }
     }, [hookError, navigate]);
+
+    // Keep panic save state updated
+    useEffect(() => {
+        panicSaveState.current = { readerViewMode, currentSectionTitle };
+    }, [readerViewMode, currentSectionTitle]);
 
     // Set Book ID and Audio Service context
     useEffect(() => {
