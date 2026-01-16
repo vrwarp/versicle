@@ -19,7 +19,7 @@
 
 *   **Framework**: React 19 + Vite 7
 *   **Language**: TypeScript
-*   **State**: Zustand + React Query (implied via hooks/idb)
+*   **State**: Zustand + Yjs (CRDT)
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
@@ -58,7 +58,7 @@
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
     *   **Google Drive Sync**: Keep your progress and annotations in sync across devices using your personal Google Drive.
-    *   **Last-Write-Wins**: Simple, conflict-free synchronization logic.
+    *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization of reading progress and inventory.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots protect against data loss during sync.
     *   **Android Backup**: Native integration with Android's Backup Manager.
 *   **Reading History**: Detailed session tracking with timeline visualization.

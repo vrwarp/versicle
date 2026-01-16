@@ -6,10 +6,12 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
 
 ### Core Design Principles
 
-1.  **Local-First & Offline-Capable**:
-    *   **Why**: To provide zero-latency access, total privacy (no reading analytics sent to a server), and true ownership of data. Users should be able to read their books without an internet connection or fear of service shutdown.
-    *   **How**: All data—books, annotations, progress, and settings—is stored in **IndexedDB** via the `idb` wrapper. The app is a PWA that functions completely offline.
-    *   **Trade-off**: Data is bound to the device. Syncing across devices requires manual backup/restore (JSON/ZIP export) or explicit sync configuration (Google Drive), as there is no central sync server. Storage is limited by the browser's quota.
+1.  **Store-First (Local-First) Architecture**:
+    *   **Why**: To enable seamless offline functionality, instant UI updates, and conflict-free data synchronization without a central server.
+    *   **How**: The application uses **Yjs** (CRDTs) as the single source of truth for all user data (reading progress, library inventory, annotations).
+        *   **Zustand Middleware**: State changes in the UI (`useLibraryStore`, `useReadingStateStore`) are automatically mapped to Yjs documents via `zustand-middleware-yjs`.
+        *   **Persistence**: The Yjs document is persisted to **IndexedDB** (`y-indexeddb`) for offline access.
+    *   **Trade-off**: The initial load (hydration) involves reading the Yjs binary from IndexedDB, which scales with dataset size.
 
 2.  **Heavy Client-Side Logic**:
     *   **Why**: To avoid server costs and maintain privacy. Features typically done on a backend (Text-to-Speech segmentation, Full-Text Indexing, File Parsing) are moved to the client.
@@ -19,12 +21,12 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
         *   **Ingestion**: Parses EPUB files directly in the browser using `epub.js` and a custom **Offscreen Renderer** for accurate text extraction.
     *   **Trade-off**: Higher memory and CPU usage on the client device. Large books may take seconds to index for search or parse for ingestion.
 
-3.  **Hybrid Text-to-Speech (TTS)**:
+3.  **Hybrid Text-to-Speech (TTS) & GenAI**:
     *   **Why**: To balance quality, cost, and offline availability.
     *   **How**:
         *   **Local**: Uses the Web Speech API (OS native) or local WASM models (Piper) for free, offline reading.
-        *   **Cloud**: Integrates with Google/OpenAI/LemonFox for high-quality neural voices, but caches generated audio to minimize API costs and latency on replay.
-        *   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural speech (narrative flow) instead of robotic cell reading.
+        *   **Cloud**: Integrates with Google/OpenAI for high-quality neural voices.
+        *   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural speech (narrative flow).
     *   **Stability**: The system implements a "Let It Crash" philosophy for worker management to ensure resilience.
 
 ### User Interface: The "Three Rooms"
@@ -58,6 +60,14 @@ graph TD
         SyncStore[useSyncStore]
     end
 
+    subgraph DataLayer [Data & Sync]
+        YjsProvider[YjsProvider]
+        Middleware[zustand-middleware-yjs]
+        YDoc[Y.Doc CRDT]
+        YSync[YjsSyncService]
+        GDrive[GoogleDriveProvider]
+    end
+
     subgraph Core [Core Services]
         APS[AudioPlayerService]
         Pipeline[AudioContentPipeline]
@@ -70,14 +80,6 @@ graph TD
         CostEst[CostEstimator]
         TaskRunner[cancellable-task-runner.ts]
         MediaSession[MediaSessionManager]
-    end
-
-    subgraph SyncSubsystem [Sync & Cloud]
-        Orchestrator[SyncOrchestrator]
-        Manager[SyncManager]
-        Checkpoint[CheckpointService]
-        Provider[GoogleDriveProvider]
-        AndroidBackup[AndroidBackupService]
     end
 
     subgraph TTS [TTS Subsystem]
@@ -103,6 +105,7 @@ graph TD
         UserStores[User Data & Progress]
         CacheStores[Cache & Tables]
         AppStores[Checkpoints & Logs]
+        YDB[versicle-yjs]
     end
 
     App --> Library
@@ -119,29 +122,27 @@ graph TD
 
     TTSStore --> APS
     Library --> LibStore
+
+    LibStore <--> Middleware
+    ReaderStore <--> Middleware
+
+    Middleware <--> YDoc
+    YDoc <--> YjsProvider
+    YjsProvider <--> YDB
+    YjsProvider --> YSync
+    YSync --> GDrive
+
     LibStore --> DBService
     LibStore --> Ingestion
     LibStore --> BatchIngestion
     LibStore --> Backup
     LibStore --> Maint
 
-    ReaderStore --> Orchestrator
-    SyncStore --> Orchestrator
-
-    Orchestrator --> Manager
-    Orchestrator --> Checkpoint
-    Orchestrator --> Provider
-    Orchestrator --> AndroidBackup
-    Checkpoint --> DBService
-    Manager --> DBService
-
     APS --> Pipeline
     APS --> PSM
     Pipeline --> GenAI
     Pipeline --> GenAIStore
     Pipeline --> DBService
-
-    APS --> Orchestrator
 
     APS --> Providers
     APS --> Segmenter
@@ -180,32 +181,24 @@ The data layer is built on **IndexedDB** using the `idb` library. It is accessed
 The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
 
 **Key Stores (Schema v22):**
-*   **Domain 1: Static (Immutable/Heavy)**
+*   **Domain 1: Static (Immutable/Heavy)** - *Managed by DBService*
     *   `static_manifests`: Lightweight metadata (Title, Author, Cover Thumbnail) for listing books.
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
     *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
-*   **Domain 2: User (Mutable/Syncable)**
+*   **Domain 2: User (Mutable/Syncable)** - *Managed by Yjs (via Middleware)*
     *   `user_inventory`: User-specific metadata (Added Date, Custom Title, Tags, Status, Rating).
-    *   `user_reading_list`: Persistent reading history and status (Read/Reading/Want to Read), separate from inventory to allow "Shadow Inventory" (tracking books not currently on device).
+    *   `user_reading_list`: Persistent reading history and status (Read/Reading/Want to Read).
     *   `user_progress`: Reading state (CFI, Percentage, Last Read Timestamp, Queue Position).
-    *   `user_annotations`: Highlights and notes.
     *   `user_overrides`: Custom settings like Lexicon rules (pronunciation overrides).
+    *   `user_annotations`: Highlights and notes.
     *   `user_journey`: Granular reading history sessions.
     *   `user_ai_inference`: Expensive AI-derived data (Summaries, Accessibility Layers).
 *   **Domain 3: Cache (Transient/Regenerable)**
     *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
     *   `cache_audio_blobs`: Generated TTS audio segments.
     *   `cache_render_metrics`: Layout calculation results.
-*   **App Level (System)**:
-    *   `checkpoints`: Snapshots of the SyncManifest for "Safety Net" rollbacks.
-    *   `sync_log`: Audit logs for sync operations.
-    *   `app_metadata`: Global application configuration.
-*   **Legacy/Migration**:
-    *   Includes logic to migrate from Schema v17 (monolithic `books`/`files` stores) to the v19 Domain Model.
-    *   **v22 Repair & Resync**: Includes self-healing logic to recover missing filenames in `user_inventory` by cross-referencing `static_resources` and backfilling `user_reading_list`.
 
 **Key Functions:**
-*   **`saveProgress(bookId, cfi, progress)`**: Debounced (1s) persistence of reading position. Updates `user_progress`.
 *   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations).
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 
@@ -219,26 +212,20 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 
 Versicle implements a "Serverless Sync" model using personal cloud storage (Google Drive) as a dumb file store.
 
-#### `SyncOrchestrator.ts`
-The controller for synchronization. It manages the sync lifecycle and integrates with the UI.
+#### `YjsSyncService.ts` (Replaces SyncOrchestrator)
+The modern controller for synchronization. It leverages Yjs snapshots to sync state.
 
 *   **Logic**:
-    *   **Manifest-Based**: Generates a `SyncManifest` JSON containing all User Domain data.
-    *   **Last-Write-Wins (LWW)**: Merges local and remote manifests based on timestamps.
-    *   **Debounced Push**: Reading progress updates are debounced (60s) to avoid API rate limits.
-    *   **Force Push**: Critical actions (Pause, Bookmark) trigger immediate sync.
-    *   **Background Sync**: Listens for `visibilitychange` to sync when the app is backgrounded.
+    *   **Snapshot-Based**: Periodically (or on demand) captures the entire Yjs state using `Y.encodeStateAsUpdate`.
+    *   **Binary Storage**: Uploads the binary blob (`versicle_yjs_state.bin`) to the user's Google Drive App Data folder.
+    *   **Conflict-Free**: Merges remote updates using Yjs `applyUpdate`, which handles CRDT conflicts automatically without manual "Last-Write-Wins" logic.
+    *   **Lexicon Sync**: Separately syncs `user_overrides` (Lexicon) by serializing them into a Yjs Map, as they are stored in a separate IDB store.
 *   **Trade-offs**:
-    *   **Conflict Resolution**: LWW is simple but can lose data if two devices edit the same field offline simultaneously.
-    *   **Traffic**: Uploads the entire metadata manifest on every sync (no delta sync yet).
+    *   **Bandwidth**: Uploads the full state snapshot on every sync (currently no delta sync optimization).
 
-#### `CheckpointService.ts` ("The Moral Layer")
-*   **Goal**: Safety net for sync operations.
-*   **Logic**: Creates a local snapshot of the `SyncManifest` (stored in `checkpoints` store) before every sync operation. Allows the user to roll back to a previous state if a bad sync occurs.
-
-#### `AndroidBackupService.ts`
-*   **Goal**: Native Android backup integration.
-*   **Logic**: Writes the `SyncManifest` to a specific file (`backup_payload.json`) in the app's data directory, which Android's `BackupManager` can include in OS-level backups.
+#### `GoogleDriveProvider.ts`
+*   **Goal**: Interface with Google Drive API.
+*   **Logic**: Uses the GAPI client to access the hidden `appDataFolder` to store the sync snapshot.
 
 ### Core Logic & Services (`src/lib/`)
 
@@ -250,10 +237,6 @@ Handles the complex task of importing an EPUB file.
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`) to render chapters.
         *   *Logic*: Scrapes text nodes for TTS and uses `@zumer/snapdom` to capture tables as structural `webp` images (enforcing white background).
     3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head + Metadata + Tail) using a `cheapHash` function for O(1) duplicate detection.
-
-*   **`reprocessBook(bookId)`**:
-    *   **Goal**: Update book content (e.g., better text extraction, new table snapshots) without losing reading progress or annotations.
-    *   **Logic**: Re-reads the source file from `static_resources`, re-runs the extraction pipeline, and performs a transactional update of structure and caches.
 
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs.
@@ -315,9 +298,9 @@ The Data Pipeline for TTS.
 *   **Content Filtering (Background Masking)**:
     *   `detectContentSkipMask` runs asynchronously using GenAI to identify skip targets (e.g., footnotes, tables) based on user preferences.
     *   Returns a set of *source indices* to skip, which are applied to the active queue without interrupting playback.
-*   **Table Adaptation Mapping**:
+*   **Table Adaptation (Teleprompter)**:
+    *   Uses **Multimodal GenAI** to "see" table images and convert them into narrative text.
     *   Uses **Precise Grouping** to match table images to their source sentences by CFI structure.
-    *   Sorts table roots by length descending to correctly handle nested tables (longest match wins).
 *   **Trade-off**: The first few seconds of playback might contain un-adapted content (e.g., reading a footnote) before the mask is applied.
 
 #### `src/lib/tts/PlaybackStateManager.ts`
