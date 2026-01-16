@@ -142,9 +142,7 @@ describe('ReaderView', () => {
     });
 
     useReadingStateStore.setState({
-      currentBookId: null,
       progress: {},
-      setCurrentBookId: vi.fn(),
       updateLocation: vi.fn(),
       getProgress: vi.fn(),
       reset: vi.fn(),
@@ -156,10 +154,12 @@ describe('ReaderView', () => {
       immersiveMode: false,
       currentSectionTitle: null,
       currentSectionId: null,
+      currentBookId: null,
       reset: vi.fn(),
       setToc: (toc) => useReaderUIStore.setState({ toc }),
       setIsLoading: (isLoading) => useReaderUIStore.setState({ isLoading }),
       setCurrentSection: (title, id) => useReaderUIStore.setState({ currentSectionTitle: title, currentSectionId: id }),
+      setCurrentBookId: (id) => useReaderUIStore.setState({ currentBookId: id }),
     });
 
     usePreferencesStore.setState({

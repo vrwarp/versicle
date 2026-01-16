@@ -50,7 +50,8 @@ vi.mock('../store/useTTSStore', () => {
 vi.mock('../store/useReaderUIStore', () => {
     const mockGetState = vi.fn(() => ({
         currentSectionId: 'section1',
-        currentSectionTitle: 'Chapter 1'
+        currentSectionTitle: 'Chapter 1',
+        currentBookId: 'book1'
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const useReaderUIStore = vi.fn((selector?: any) => {
@@ -64,7 +65,6 @@ vi.mock('../store/useReaderUIStore', () => {
 
 vi.mock('../store/useReadingStateStore', () => {
     const mockGetState = vi.fn(() => ({
-        currentBookId: 'book1',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const useReadingStateStore = vi.fn((selector?: any) => {
@@ -93,11 +93,11 @@ describe('useTTS', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useReaderUIStore.getState as any).mockReturnValue({
             currentSectionId: 'section1',
-            currentSectionTitle: 'Chapter 1'
+            currentSectionTitle: 'Chapter 1',
+            currentBookId: 'book1'
         });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useReadingStateStore.getState as any).mockReturnValue({
-            currentBookId: 'book1',
         });
     });
 

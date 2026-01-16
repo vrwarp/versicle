@@ -84,6 +84,7 @@ export const ReaderView: React.FC = () => {
         setImmersiveMode,
         setPlayFromSelection,
         setCurrentSection,
+        setCurrentBookId,
         resetUI
     } = useReaderUIStore(useShallow(state => ({
         toc: state.toc,
@@ -95,17 +96,16 @@ export const ReaderView: React.FC = () => {
         setImmersiveMode: state.setImmersiveMode,
         setPlayFromSelection: state.setPlayFromSelection,
         setCurrentSection: state.setCurrentSection,
+        setCurrentBookId: state.setCurrentBookId,
         resetUI: state.reset
     })));
 
     console.log(`[ReaderView] viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
 
     const {
-        updateLocation,
-        setCurrentBookId
+        updateLocation
     } = useReadingStateStore(useShallow(state => ({
-        updateLocation: state.updateLocation,
-        setCurrentBookId: state.setCurrentBookId,
+        updateLocation: state.updateLocation
     })));
 
     const panicSaveState = useRef({ readerViewMode, currentSectionTitle });
