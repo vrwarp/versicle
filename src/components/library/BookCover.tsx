@@ -53,7 +53,8 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
                 radial-gradient(at bottom left in oklab, ${colors[2]}, transparent),
                 radial-gradient(at bottom right in oklab, ${colors[3]}, transparent),
                 radial-gradient(circle at center in oklab, ${colors[4]} 0%, transparent 125%),
-                linear-gradient(135deg in oklab, ${colors[0]}, ${colors[3]})
+                /* Base layer is white to ensure contrast and prevent transparency */
+                linear-gradient(white, white)
             `
         };
     }, [book.coverPalette]);
