@@ -236,6 +236,29 @@ class DBService {
   }
 
   /**
+   * Retrieves the book ID associated with a given filename.
+   * Scans user_inventory as there is no index on sourceFilename.
+   */
+  async getBookIdByFilename(filename: string): Promise<string | undefined> {
+    try {
+      const db = await this.getDB();
+      // Optimization: Try reading list first to fail fast?
+      // But reading list doesn't have ID.
+      // Just scan inventory.
+      let cursor = await db.transaction('user_inventory').store.openCursor();
+      while (cursor) {
+        if (cursor.value.sourceFilename === filename) {
+          return cursor.value.bookId;
+        }
+        cursor = await cursor.continue();
+      }
+      return undefined;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
    * Updates only the metadata for a specific book.
    */
   async updateBookMetadata(id: string, metadata: Partial<BookMetadata>): Promise<void> {
@@ -376,8 +399,15 @@ class DBService {
         'static_manifests', 'static_resources', 'static_structure',
         'user_inventory', 'user_progress', 'user_annotations',
         'user_overrides', 'user_journey', 'user_ai_inference',
-        'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation'
+        'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation',
+        'user_reading_list'
       ], 'readwrite');
+
+      // Cleanup Reading List (Requires filename lookup)
+      const inv = await tx.objectStore('user_inventory').get(id);
+      if (inv && inv.sourceFilename) {
+        await tx.objectStore('user_reading_list').delete(inv.sourceFilename);
+      }
 
       await Promise.all([
         tx.objectStore('static_manifests').delete(id),
