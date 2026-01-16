@@ -39,17 +39,20 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
     }, [displayUrl]);
 
     const gradientStyle = React.useMemo(() => {
-        if (!book.coverPalette || book.coverPalette.length !== 4) return undefined;
+        if (!book.coverPalette || book.coverPalette.length !== 5) return undefined;
 
         const colors = book.coverPalette.map(unpackColor);
 
         // We use oklab interpolation for perceptually smooth transitions and to avoid muddy colors in the middle
+        // 5th color is the Center color, used as a central radial boost.
+        // Base layer is linear gradient between TL and BR.
         return {
             backgroundImage: `
                 radial-gradient(at top left in oklab, ${colors[0]}, transparent),
                 radial-gradient(at top right in oklab, ${colors[1]}, transparent),
                 radial-gradient(at bottom left in oklab, ${colors[2]}, transparent),
                 radial-gradient(at bottom right in oklab, ${colors[3]}, transparent),
+                radial-gradient(circle at center in oklab, ${colors[4]} 0%, transparent 125%),
                 linear-gradient(135deg in oklab, ${colors[0]}, ${colors[3]})
             `
         };

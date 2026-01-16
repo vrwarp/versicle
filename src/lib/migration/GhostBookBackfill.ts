@@ -9,13 +9,13 @@ import { yDoc } from '../../store/yjs-provider';
  */
 export async function backfillCoverPalettes(): Promise<void> {
     const preferencesMap = yDoc.getMap('preferences');
-    const backfillComplete = preferencesMap.get('ghost_book_palette_backfill_complete');
+    const backfillComplete = preferencesMap.get('ghost_book_palette_v2_backfill_complete');
 
     if (backfillComplete === true) {
         return;
     }
 
-    console.log('[Backfill] Checking for missing cover palettes...');
+    console.log('[Backfill] Checking for missing or outdated cover palettes...');
 
     const books = useBookStore.getState().books;
     const db = await getDB();
@@ -24,7 +24,8 @@ export async function backfillCoverPalettes(): Promise<void> {
     const updates: Record<string, number[]> = {};
 
     for (const book of Object.values(books)) {
-        if (!book.coverPalette) {
+        // Regenerate if missing OR if old 4-color format
+        if (!book.coverPalette || book.coverPalette.length !== 5) {
             try {
                 // Try to get cover from static_manifests (fastest)
                 const manifest = await db.get('static_manifests', book.bookId);
@@ -32,7 +33,7 @@ export async function backfillCoverPalettes(): Promise<void> {
 
                 if (blob) {
                     const palette = await extractCoverPalette(blob);
-                    if (palette.length === 4) {
+                    if (palette.length === 5) {
                         updates[book.bookId] = palette;
                         updatedCount++;
                     }
@@ -61,5 +62,5 @@ export async function backfillCoverPalettes(): Promise<void> {
     }
 
     // Mark complete
-    preferencesMap.set('ghost_book_palette_backfill_complete', true);
+    preferencesMap.set('ghost_book_palette_v2_backfill_complete', true);
 }
