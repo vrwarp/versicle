@@ -28,11 +28,11 @@ function packColor(c: Color): number {
     return (r4 << 12) | (g8 << 4) | b4;
 }
 
-function distRGB(c1: Color, c2: Color): number {
+function distRGBSq(c1: Color, c2: Color): number {
     const dr = c1.r - c2.r;
     const dg = c1.g - c2.g;
     const db = c1.b - c2.b;
-    return Math.sqrt(dr * dr + dg * dg + db * db);
+    return dr * dr + dg * dg + db * db;
 }
 
 function extractRegionColor(pixels: Pixel[], anchor: Point): Color {
@@ -70,7 +70,7 @@ function extractRegionColor(pixels: Pixel[], anchor: Point): Color {
 
         for (const p of pixels) {
             // Assign to nearest centroid
-            if (distRGB(p, c1) < distRGB(p, c2)) {
+            if (distRGBSq(p, c1) < distRGBSq(p, c2)) {
                 sum1.r += p.r * p.weight;
                 sum1.g += p.g * p.weight;
                 sum1.b += p.b * p.weight;
