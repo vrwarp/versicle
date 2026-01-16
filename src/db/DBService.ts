@@ -7,7 +7,8 @@ import type {
   CacheSessionState,
   CacheTtsPreparation,
   UserInventoryItem,
-  StaticBookManifest
+  StaticBookManifest,
+  NavigationItem
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
@@ -26,6 +27,10 @@ class DBService {
 
   private handleError(error: unknown): never {
     Logger.error('DBService', 'Database operation failed', error);
+
+    if (error instanceof DatabaseError) {
+      throw error;
+    }
 
     if (error instanceof Error) {
       if (error.name === 'QuotaExceededError') {
@@ -436,6 +441,30 @@ class DBService {
       for (const table of data.tableBatches) {
         await tableStore.add(table);
       }
+
+      await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Updates the static structure (TOC) for a book.
+   * Used by Smart TOC enhancement.
+   */
+  async updateBookStructure(bookId: string, toc: NavigationItem[]): Promise<void> {
+    try {
+      const db = await this.getDB();
+      const tx = db.transaction('static_structure', 'readwrite');
+      const store = tx.objectStore('static_structure');
+
+      const structure = await store.get(bookId);
+      if (!structure) {
+        throw new DatabaseError(`Book structure not found for ${bookId}`);
+      }
+
+      structure.toc = toc;
+      await store.put(structure);
 
       await tx.done;
     } catch (error) {

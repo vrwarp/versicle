@@ -25,9 +25,7 @@ function getMaxProgress(bookProgress: Record<string, UserProgress> | undefined):
  * otherwise falls back to Ghost Book metadata from Yjs inventory.
  */
 export const useAllBooks = () => {
-    // Access books from the SYNCED store
     const books = useBookStore(state => state.books);
-    // Access static metadata from the LOCAL store
     const staticMetadata = useLibraryStore(state => state.staticMetadata);
     const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
     // Subscribe to progress changes (per-device structure)
@@ -39,8 +37,9 @@ export const useAllBooks = () => {
             ...book,
             // Merge static metadata if available, otherwise use Ghost Book snapshots
             id: book.bookId,  // Alias for backwards compatibility
-            title: staticMetadata[book.bookId]?.title || book.title,
-            author: staticMetadata[book.bookId]?.author || book.author,
+            // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+            title: book.customTitle || staticMetadata[book.bookId]?.title || book.title,
+            author: book.customAuthor || staticMetadata[book.bookId]?.author || book.author,
             coverBlob: staticMetadata[book.bookId]?.coverBlob || undefined,
             version: staticMetadata[book.bookId]?.version || undefined,
             coverUrl: (staticMetadata[book.bookId]?.coverBlob instanceof Blob)
@@ -64,9 +63,7 @@ export const useAllBooks = () => {
  * Returns a single book by ID with static metadata merged.
  */
 export const useBook = (id: string | null) => {
-    // Access books from the SYNCED store
     const book = useBookStore(state => id ? state.books[id] : null);
-    // Access static metadata from the LOCAL store
     const staticMeta = useLibraryStore(state => id ? state.staticMetadata[id] : null);
     const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
     // Subscribe to progress changes (per-device structure)
@@ -80,8 +77,9 @@ export const useBook = (id: string | null) => {
     return {
         ...book,
         id: book.bookId,  // Alias
-        title: staticMeta?.title || book.title,
-        author: staticMeta?.author || book.author,
+        // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+        title: book.customTitle || staticMeta?.title || book.title,
+        author: book.customAuthor || staticMeta?.author || book.author,
         coverBlob: staticMeta?.coverBlob || null,
         coverUrl: (staticMeta?.coverBlob instanceof Blob) ? URL.createObjectURL(staticMeta.coverBlob!) : undefined,
         fileHash: staticMeta?.fileHash,
