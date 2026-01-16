@@ -1,6 +1,6 @@
 import { getDB } from '../../db/db';
 import { useBookStore } from '../../store/useLibraryStore';
-import { extractCoverPalette } from '../ingestion';
+import { extractCoverPalette } from '../cover-palette';
 import { yDoc } from '../../store/yjs-provider';
 
 /**
