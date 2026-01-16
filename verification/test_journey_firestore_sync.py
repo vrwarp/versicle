@@ -43,6 +43,7 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     # Init scripts for Device A
     page_a.add_init_script("window.__VERSICLE_MOCK_FIRESTORE__ = true;")
     page_a.add_init_script("window.__VERSICLE_SANITIZATION_DISABLED__ = true;")
+    page_a.add_init_script("window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 20;")
     page_a.add_init_script(path="verification/tts-polyfill.js")
 
     # Clear any existing data first
@@ -139,6 +140,7 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     injection_script = f"""
         window.__VERSICLE_MOCK_FIRESTORE__ = true;
         window.__VERSICLE_SANITIZATION_DISABLED__ = true;
+        window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 20;
         localStorage.setItem('versicle_mock_firestore_snapshot', {json.dumps(mock_data_str)});
     """
     page_b.add_init_script(injection_script)

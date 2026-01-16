@@ -185,7 +185,8 @@ class FirestoreSyncManager {
             firebaseApp: app!,
             ydoc: yDoc,
             path: `users/${uid}/versicle/main`,
-            maxWaitFirestoreTime: this.config.maxWaitFirestoreTime,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            maxWaitFirestoreTime: (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime,
             maxUpdatesThreshold: this.config.maxUpdatesThreshold
         };
 
