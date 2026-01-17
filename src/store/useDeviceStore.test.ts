@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useDeviceStore } from './useDeviceStore';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Mock yjs-provider
 vi.mock('./yjs-provider', () => ({
     yDoc: {
@@ -16,7 +17,7 @@ vi.mock('./yjs-provider', () => ({
 
 // Mock zustand-middleware-yjs
 vi.mock('zustand-middleware-yjs', () => ({
-    default: (doc: any, name: any, config: any) => config
+    default: (_doc: any, _name: any, config: any) => config
 }));
 
 describe('useDeviceStore', () => {

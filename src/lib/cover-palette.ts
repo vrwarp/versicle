@@ -63,8 +63,8 @@ function extractRegionColor(pixels: Pixel[], anchor: Point): Color {
 
     // 3. Run K-Means (5 iterations)
     for (let i = 0; i < 5; i++) {
-        let sum1 = { r: 0, g: 0, b: 0 };
-        let sum2 = { r: 0, g: 0, b: 0 };
+        const sum1 = { r: 0, g: 0, b: 0 };
+        const sum2 = { r: 0, g: 0, b: 0 };
         let wSum1 = 0;
         let wSum2 = 0;
 
