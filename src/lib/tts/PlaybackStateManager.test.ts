@@ -198,7 +198,7 @@ describe('PlaybackStateManager', () => {
             manager.setQueue(items, 0, 1);
 
             // setQueue automatically persists
-            expect(dbService.saveTTSState).toHaveBeenCalledWith('book1', items, 0, 1);
+            expect(dbService.saveTTSState).toHaveBeenCalledWith('book1', items);
         });
 
         it('should save playback state', async () => {
