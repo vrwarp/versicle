@@ -34,35 +34,20 @@ export class YjsSyncService {
      * Initialize the sync service and perform initial sync
      */
     async initialize(): Promise<void> {
-        const { googleClientId, googleApiKey, isSyncEnabled } = useSyncStore.getState();
+        try {
+            await this.provider.initialize({});
+            console.log('[YjsSync] Provider initialized');
 
-        if (isSyncEnabled && googleClientId && googleApiKey) {
-            try {
-                await this.provider.initialize({ clientId: googleClientId, apiKey: googleApiKey });
-                console.log('[YjsSync] Provider initialized');
-
-                // Perform initial pull to get remote state
-                await this.sync('startup');
-            } catch (e) {
-                console.error('[YjsSync] Initialization failed', e);
-            }
+            // Perform initial pull to get remote state
+            await this.sync('startup');
+        } catch (e) {
+            console.error('[YjsSync] Initialization failed', e);
         }
 
         // Handle visibility change - push when going to background
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 this.forcePush('background');
-            }
-        });
-
-        // React to sync settings changes
-        useSyncStore.subscribe((state, prevState) => {
-            if (state.googleClientId !== prevState.googleClientId ||
-                state.googleApiKey !== prevState.googleApiKey ||
-                state.isSyncEnabled !== prevState.isSyncEnabled) {
-                if (state.isSyncEnabled) {
-                    this.initialize();
-                }
             }
         });
     }
@@ -90,9 +75,6 @@ export class YjsSyncService {
      */
     async sync(trigger: string): Promise<void> {
         if (this.isSyncing) return;
-
-        const { isSyncEnabled } = useSyncStore.getState();
-        if (!isSyncEnabled) return;
 
         this.isSyncing = true;
         try {
@@ -144,9 +126,6 @@ export class YjsSyncService {
      * Push local Yjs state as snapshot to remote
      */
     private async push(trigger: string): Promise<void> {
-        const { isSyncEnabled } = useSyncStore.getState();
-        if (!isSyncEnabled) return;
-
         // Ensure Yjs is synced from IndexedDB
         await waitForYjsSync();
 
