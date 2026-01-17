@@ -177,7 +177,9 @@ function App() {
   return (
     <Router>
       <ThemeSynchronizer />
-      <GlobalSettingsDialog />
+      <ErrorBoundary>
+        <GlobalSettingsDialog />
+      </ErrorBoundary>
       <ToastContainer />
       <ReaderControlBar />
       <div className="min-h-screen bg-background text-foreground main_layout">

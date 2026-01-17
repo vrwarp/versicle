@@ -11,7 +11,9 @@
 import { FireProvider } from 'y-fire';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import type { FirebaseApp } from 'firebase/app';
 import { yDoc } from '../../store/yjs-provider';
+
 import {
     getFirebaseApp,
     getFirebaseAuth,
@@ -65,6 +67,7 @@ class FirestoreSyncManager {
     private status: FirestoreSyncStatus = 'disconnected';
     private authStatus: FirebaseAuthStatus = 'loading';
     private unsubscribeAuth: (() => void) | null = null;
+    private currentApp: FirebaseApp | null = null;
 
     // Callbacks for status changes
     private statusCallbacks: Set<StatusChangeCallback> = new Set();
@@ -130,6 +133,7 @@ class FirestoreSyncManager {
         }
 
         // Set up auth state listener
+        if (this.unsubscribeAuth) this.unsubscribeAuth();
         this.unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             this.handleAuthStateChange(user);
         });
@@ -159,8 +163,14 @@ class FirestoreSyncManager {
      */
     private connectFireProvider(uid: string): void {
         if (this.fireProvider) {
-            console.log('[FirestoreSync] Already connected, skipping');
-            return;
+            const currentApp = getFirebaseApp();
+            if (currentApp !== this.currentApp) {
+                console.log('[FirestoreSync] Firebase app changed, reconnecting...');
+                this.disconnectFireProvider();
+            } else {
+                console.log('[FirestoreSync] Already connected, skipping');
+                return;
+            }
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -198,6 +208,7 @@ class FirestoreSyncManager {
             } else {
                 this.fireProvider = new FireProvider(providerConfig);
             }
+            this.currentApp = app;
 
             // y-fire connects automatically
             console.log(`[FirestoreSync] Connected to path: users/${uid}/versicle/main`);
