@@ -398,7 +398,9 @@ export const LibraryView: React.FC = () => {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search"
+                type="search"
+                placeholder="Search library..."
+                aria-label="Search library"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -409,7 +411,7 @@ export const LibraryView: React.FC = () => {
 
           {/* Sort By */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="whitespace-nowrap">Sort by:</span>
+            <span className="whitespace-nowrap" id="sort-by-label">Sort by:</span>
             <Select
               value={sortOrder}
               onValueChange={(val) => setSortOrder(val as SortOption)}
@@ -417,6 +419,7 @@ export const LibraryView: React.FC = () => {
               <SelectTrigger
                 className="w-[180px] text-foreground"
                 data-testid="sort-select"
+                aria-labelledby="sort-by-label"
               >
                 <SelectValue />
               </SelectTrigger>
