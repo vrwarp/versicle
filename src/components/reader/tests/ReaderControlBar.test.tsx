@@ -109,10 +109,10 @@ describe('ReaderControlBar', () => {
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: false,
       currentSectionTitle: null,
+      currentBookId: null,
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
-      currentBookId: null,
     }));
     // Fix: getProgress returns per-device progress as a function
     mockUseReadingStateStore.getState = vi.fn().mockReturnValue({
@@ -158,10 +158,10 @@ describe('ReaderControlBar', () => {
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: false,
       currentSectionTitle: 'Chapter 1',
+      currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
-      currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseLibraryStore.mockImplementation((selector: any) => {
@@ -175,7 +175,6 @@ describe('ReaderControlBar', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => {
       const state = {
-        currentBookId: '123',
         progress: { '123': { percentage: 0.5, lastRead: 1000 } }
       };
       // If the component selects progress (e.g. s => s.progress), return it
@@ -202,10 +201,10 @@ describe('ReaderControlBar', () => {
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: true,
       currentSectionTitle: 'Chapter 1',
+      currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
-      currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseLibraryStore.mockImplementation((selector: any) => {
@@ -216,7 +215,6 @@ describe('ReaderControlBar', () => {
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
-      currentBookId: '123',
     }));
     mockUseReadingStateStore.getState.mockReturnValue({
       progress: {},
@@ -238,8 +236,13 @@ describe('ReaderControlBar', () => {
       return selector({ books: {} });
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockUseReadingStateStore.mockImplementation((selector: any) => selector({
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
+      immersiveMode: false,
+      currentSectionTitle: null,
       currentBookId: null,
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockUseReadingStateStore.mockImplementation((selector: any) => selector({
       progress: { '123': { percentage: 0.25, lastRead: 1000 } }
     }));
     mockUseReadingStateStore.getState.mockReturnValue({
@@ -268,8 +271,13 @@ describe('ReaderControlBar', () => {
       return selector({ books: {} });
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockUseReadingStateStore.mockImplementation((selector: any) => selector({
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
+      immersiveMode: false,
+      currentSectionTitle: null,
       currentBookId: null,
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockUseReadingStateStore.mockImplementation((selector: any) => selector({
       progress: { '123': { percentage: 0.25, lastRead: 1000 } }
     }));
     mockUseReadingStateStore.getState.mockReturnValue({
@@ -296,10 +304,10 @@ describe('ReaderControlBar', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: false,
+      currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
-      currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseLibraryStore.mockImplementation((selector: any) => {
@@ -310,7 +318,6 @@ describe('ReaderControlBar', () => {
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({
-      currentBookId: '123',
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockUseToastStore.mockImplementation((selector: any) => selector({

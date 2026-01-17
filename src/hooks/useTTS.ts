@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
-import { useReadingStateStore } from '../store/useReadingStateStore';
 import { useReaderUIStore } from '../store/useReaderUIStore';
 import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 
@@ -13,7 +12,7 @@ export const useTTS = () => {
     loadVoices
   } = useTTSStore();
 
-  const currentBookId = useReadingStateStore(state => state.currentBookId);
+  const currentBookId = useReaderUIStore(state => state.currentBookId);
   const currentSectionId = useReaderUIStore(state => state.currentSectionId);
 
   const player = AudioPlayerService.getInstance();

@@ -7,6 +7,7 @@ interface ReaderUIState {
     immersiveMode: boolean;
     currentSectionTitle: string | null;
     currentSectionId: string | null;
+    currentBookId: string | null;
 
     /** Callback to initiate playback from a specific CFI (registered by ReaderView). */
     playFromSelection?: (cfi: string) => void;
@@ -15,6 +16,7 @@ interface ReaderUIState {
     setToc: (toc: NavigationItem[]) => void;
     setImmersiveMode: (enabled: boolean) => void;
     setCurrentSection: (title: string | null, id: string | null) => void;
+    setCurrentBookId: (id: string | null) => void;
     setPlayFromSelection: (callback?: (cfi: string) => void) => void;
 
     reset: () => void;
@@ -26,12 +28,14 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     immersiveMode: false,
     currentSectionTitle: null,
     currentSectionId: null,
+    currentBookId: null,
     playFromSelection: undefined,
 
     setIsLoading: (isLoading) => set({ isLoading }),
     setToc: (toc) => set({ toc }),
     setImmersiveMode: (enabled) => set({ immersiveMode: enabled }),
     setCurrentSection: (title, id) => set({ currentSectionTitle: title, currentSectionId: id }),
+    setCurrentBookId: (id) => set({ currentBookId: id }),
     setPlayFromSelection: (callback) => set({ playFromSelection: callback }),
 
     reset: () => set({
@@ -40,6 +44,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
         immersiveMode: false,
         currentSectionTitle: null,
         currentSectionId: null,
+        currentBookId: null,
         playFromSelection: undefined
     })
 }));

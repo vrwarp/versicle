@@ -3,7 +3,7 @@ import type { BookMetadata } from '../../types/db';
 import { BookOpen, HardDriveDownload, MoreVertical } from 'lucide-react';
 import { useToastStore } from '../../store/useToastStore';
 import { cn } from '../../lib/utils';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { Progress } from '../ui/Progress';
 import { BookActionMenu } from './BookActionMenu';
 
@@ -49,7 +49,7 @@ const formatDuration = (chars?: number): string => {
  */
 export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onRestore }: BookListItemProps) => {
     const showToast = useToastStore(state => state.showToast);
-    const setBookId = useReadingStateStore(state => state.setCurrentBookId);
+    const setBookId = useReaderUIStore(state => state.setCurrentBookId);
 
     const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
 

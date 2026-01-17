@@ -21,7 +21,6 @@ type PerDeviceProgress = Record<string, Record<string, UserProgress>>;
  * 
  * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
  * - `progress` (Record): Synced to yDoc.getMap('progress'), keyed by bookId then deviceId
- * - `currentBookId`: Transient (device-specific, not synced)
  * - Actions (functions): Not synced, local-only
  */
 interface ReadingState {
@@ -29,17 +28,7 @@ interface ReadingState {
     /** Map of reading progress keyed by bookId, then deviceId. */
     progress: PerDeviceProgress;
 
-    // === TRANSIENT STATE (local-only, not synced) ===
-    /** The currently active book on this device. */
-    currentBookId: string | null;
-
     // === ACTIONS (not synced to Yjs) ===
-    /**
-     * Sets the currently active book.
-     * @param id - The book ID, or null to clear.
-     */
-    setCurrentBookId: (id: string | null) => void;
-
     /**
      * Updates the reading location for a book on this device.
      * @param bookId - The book ID.
@@ -106,12 +95,7 @@ export const useReadingStateStore = create<ReadingState>()(
             // Synced state (per-device structure)
             progress: {},
 
-            // Transient state
-            currentBookId: null,
-
             // Actions
-            setCurrentBookId: (id) => set({ currentBookId: id }),
-
             updateLocation: (bookId, cfi, percentage) => {
                 const deviceId = getDeviceId();
 
@@ -249,7 +233,6 @@ export const useReadingStateStore = create<ReadingState>()(
 
             reset: () => set({
                 progress: {},
-                currentBookId: null
             })
         })
     )
@@ -280,4 +263,3 @@ export const useCurrentDeviceProgress = (bookId: string | null) => {
         return state.progress[bookId]?.[deviceId] || null;
     });
 };
-

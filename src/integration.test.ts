@@ -143,7 +143,7 @@ describe('Feature Integration Tests', () => {
     useLibraryStore.setState({ staticMetadata: {}, isLoading: false, isImporting: false, error: null });
     useBookStore.setState({ books: {} });
     useReaderUIStore.getState().reset();
-    useReadingStateStore.setState({ currentBookId: null, progress: {} });
+    useReadingStateStore.setState({ progress: {} });
 
     // Mock global fetch for cover extraction
     global.fetch = vi.fn((url) => {
@@ -299,7 +299,7 @@ describe('Feature Integration Tests', () => {
     // 2. Initialize Reader Store (simulating component mount)
     const readingState = useReadingStateStore.getState();
     const uiStore = useReaderUIStore.getState();
-    readingState.setCurrentBookId(bookId);
+    uiStore.setCurrentBookId(bookId);
 
     readingState.updateLocation(bookId, 'cfi1', 0.5);
     uiStore.setCurrentSection('Chapter 5', 'section1');
