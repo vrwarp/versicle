@@ -45,7 +45,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     const settings = useLexiconStore(state => state.settings);
 
     const rules = useMemo(() => {
-        let list = Object.values(rulesMap).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        let list = Object.values(rulesMap || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         if (scope === 'global') {
             return list.filter(r => !r.bookId || r.bookId === 'global');
         } else if (currentBookId) {
