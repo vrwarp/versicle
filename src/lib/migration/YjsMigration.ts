@@ -6,12 +6,14 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { getDeviceId } from '../device-id';
 import type {
     UserInventoryItem,
     UserAnnotation,
     UserProgress,
     ReadingListEntry
 } from '../../types/db';
+import { migrateLexicon } from '../sync/migration';
 
 /**
  * Checks if migration from legacy IDB to Yjs is needed and executes it.
@@ -31,6 +33,7 @@ export async function migrateToYjs(): Promise<void> {
         console.log('[Migration] ✅ Migration already complete. Skipping.');
         // Still run per-device migration in case it's pending
         await migrateProgressToPerDevice();
+        await migratePreferencesToPerDevice();
         return;
     }
 
@@ -43,6 +46,7 @@ export async function migrateToYjs(): Promise<void> {
         preferencesMap.set('migration_complete', true);
         // Migrate existing progress to per-device format
         await migrateProgressToPerDevice();
+        await migratePreferencesToPerDevice();
         return;
     }
 
@@ -62,6 +66,49 @@ export async function migrateToYjs(): Promise<void> {
         // Don't mark complete - will retry on next startup
         throw error;
     }
+}
+
+/**
+ * Migrates existing Yjs preferences data from the old single shared map
+ * to the new per-device map.
+ */
+async function migratePreferencesToPerDevice(): Promise<void> {
+    const oldPreferencesMap = yDoc.getMap('preferences');
+    const deviceId = getDeviceId();
+    const newPreferencesMap = yDoc.getMap(`preferences/${deviceId}`);
+
+    // If new map is populated, nothing to do (already migrated or initialized)
+    if (newPreferencesMap.size > 0) {
+        return;
+    }
+
+    // If old map is empty, nothing to copy
+    if (oldPreferencesMap.size === 0) {
+        return;
+    }
+
+    // Keys to migrate (matching PreferencesState)
+    const keysToMigrate = [
+        'currentTheme', 'customTheme', 'fontFamily',
+        'lineHeight', 'fontSize', 'shouldForceFont',
+        'readerViewMode', 'libraryLayout'
+    ];
+
+    console.log(`[Migration] Migrating preferences to per-device map for ${deviceId}...`);
+
+    yDoc.transact(() => {
+        let migratedCount = 0;
+        for (const key of keysToMigrate) {
+            if (oldPreferencesMap.has(key)) {
+                const val = oldPreferencesMap.get(key);
+                newPreferencesMap.set(key, val);
+                migratedCount++;
+            }
+        }
+        if (migratedCount > 0) {
+            console.log(`[Migration] Copied ${migratedCount} preferences to per-device map`);
+        }
+    });
 }
 
 /**
@@ -165,8 +212,17 @@ async function migrateLegacyData(): Promise<void> {
         // Migrate Preferences (from localStorage)
         migratePreferences();
 
-        // Journey migration deferred to Phase 4
+        // Migrate Lexicon (User Overrides)
+        // Must run outside yDoc.transact because it performs async operations (DB reads)
+        // and modifying the store via actions is safer outside the raw update transaction.
     });
+
+    try {
+        await migrateLexicon();
+        console.log('[Migration] Lexicon migration step completed.');
+    } catch (e) {
+        console.error('[Migration] Lexicon migration failed:', e);
+    }
 
     console.log('[Migration] All data migrated to Yjs');
 }

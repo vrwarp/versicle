@@ -66,6 +66,10 @@ vi.mock('../../store/usePreferencesStore', () => ({
     }
 }));
 
+vi.mock('../device-id', () => ({
+    getDeviceId: vi.fn().mockReturnValue('test-device')
+}));
+
 describe('YjsMigration', () => {
     let yDoc: Y.Doc;
 
@@ -250,5 +254,25 @@ describe('YjsMigration', () => {
         await migrateToYjs();
 
         expect(usePreferencesStore.setState).toHaveBeenCalledWith({ readerViewMode: 'scrolled' });
+    });
+
+    it('should migrate global preferences to per-device preferences for existing users', async () => {
+        // Setup global preferences
+        const prefs = yDoc.getMap('preferences');
+        prefs.set('currentTheme', 'dark');
+        prefs.set('fontSize', 150);
+
+        // Ensure per-device map is empty
+        yDoc.getMap('preferences/test-device').clear();
+
+        // Set migration complete to simulate existing user
+        prefs.set('migration_complete', true);
+
+        await migrateToYjs();
+
+        // Check per-device map
+        const devicePrefs = yDoc.getMap('preferences/test-device');
+        expect(devicePrefs.get('currentTheme')).toBe('dark');
+        expect(devicePrefs.get('fontSize')).toBe(150);
     });
 });

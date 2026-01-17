@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
+import { getDeviceId } from '../lib/device-id';
 
 /**
  * Preferences store state.
@@ -44,11 +45,13 @@ const defaultPreferences = {
 /**
  * Zustand store for user preferences (theme, font, etc.).
  * Wrapped with yjs() middleware for automatic CRDT synchronization.
+ *
+ * Keyed by device ID so each device maintains its own persistent preferences.
  */
 export const usePreferencesStore = create<PreferencesState>()(
     yjs(
         yDoc,
-        'preferences',
+        `preferences/${getDeviceId()}`,
         (set) => ({
             ...defaultPreferences,
 
