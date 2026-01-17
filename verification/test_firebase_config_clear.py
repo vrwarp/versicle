@@ -56,9 +56,6 @@ const firebaseConfig = {
     clear_btn = page.get_by_role("button", name="Clear Configuration")
     expect(clear_btn).to_be_visible()
 
-    # Take screenshot of the Sign In state with Clear button
-    page.screenshot(path="verification/firebase_signin_state_with_clear_btn.png")
-
     # Handle confirmation dialog
     page.on("dialog", lambda dialog: dialog.accept())
 
