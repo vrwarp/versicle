@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
@@ -31,32 +32,40 @@ export const useAllBooks = () => {
     // Subscribe to progress changes (per-device structure)
     const progressMap = useReadingStateStore(state => state.progress);
 
-    return Object.values(books).map(book => {
-        const bookProgress = getMaxProgress(progressMap[book.bookId]);
-        return {
-            ...book,
-            // Merge static metadata if available, otherwise use Ghost Book snapshots
-            id: book.bookId,  // Alias for backwards compatibility
-            // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
-            title: book.customTitle || staticMetadata[book.bookId]?.title || book.title,
-            author: book.customAuthor || staticMetadata[book.bookId]?.author || book.author,
-            coverBlob: staticMetadata[book.bookId]?.coverBlob || undefined,
-            version: staticMetadata[book.bookId]?.version || undefined,
-            coverUrl: (staticMetadata[book.bookId]?.coverBlob instanceof Blob)
-                ? URL.createObjectURL(staticMetadata[book.bookId]!.coverBlob!)
-                : undefined,
-            // Add other static fields for compatibility
-            fileHash: staticMetadata[book.bookId]?.fileHash,
-            fileSize: staticMetadata[book.bookId]?.fileSize,
-            totalChars: staticMetadata[book.bookId]?.totalChars,
+    // OPTIMIZATION: Memoize the derived book list to prevent creating new object references
+    // on every render if the underlying stores haven't changed.
+    return useMemo(() => {
+        return Object.values(books).map(book => {
+            const bookProgress = getMaxProgress(progressMap[book.bookId]);
+            const hasCoverBlob = staticMetadata[book.bookId]?.coverBlob instanceof Blob;
 
-            // Derive offloaded status from local set
-            isOffloaded: offloadedBookIds.has(book.bookId),
-            // Merge progress from reading state store (max across all devices)
-            progress: bookProgress?.percentage || 0,
-            currentCfi: bookProgress?.currentCfi || undefined
-        };
-    }).sort((a, b) => b.lastInteraction - a.lastInteraction);
+            return {
+                ...book,
+                // Merge static metadata if available, otherwise use Ghost Book snapshots
+                id: book.bookId,  // Alias for backwards compatibility
+                // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+                title: book.customTitle || staticMetadata[book.bookId]?.title || book.title,
+                author: book.customAuthor || staticMetadata[book.bookId]?.author || book.author,
+                coverBlob: staticMetadata[book.bookId]?.coverBlob || undefined,
+                version: staticMetadata[book.bookId]?.version || undefined,
+                // OPTIMIZATION: Use Service Worker route for covers instead of creating blob URLs.
+                // This prevents memory leaks from unrevoked createObjectURL calls and avoids sync overhead.
+                coverUrl: hasCoverBlob
+                    ? `/__versicle__/covers/${book.bookId}`
+                    : undefined,
+                // Add other static fields for compatibility
+                fileHash: staticMetadata[book.bookId]?.fileHash,
+                fileSize: staticMetadata[book.bookId]?.fileSize,
+                totalChars: staticMetadata[book.bookId]?.totalChars,
+
+                // Derive offloaded status from local set
+                isOffloaded: offloadedBookIds.has(book.bookId),
+                // Merge progress from reading state store (max across all devices)
+                progress: bookProgress?.percentage || 0,
+                currentCfi: bookProgress?.currentCfi || undefined
+            };
+        }).sort((a, b) => b.lastInteraction - a.lastInteraction);
+    }, [books, staticMetadata, offloadedBookIds, progressMap]);
 };
 
 /**
@@ -72,25 +81,31 @@ export const useBook = (id: string | null) => {
     // Get max progress across all devices for this book
     const progress = id ? getMaxProgress(progressMap[id]) : null;
 
-    if (!book) return null;
+    // OPTIMIZATION: Memoize the single book result
+    return useMemo(() => {
+        if (!book) return null;
 
-    return {
-        ...book,
-        id: book.bookId,  // Alias
-        // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
-        title: book.customTitle || staticMeta?.title || book.title,
-        author: book.customAuthor || staticMeta?.author || book.author,
-        coverBlob: staticMeta?.coverBlob || null,
-        coverUrl: (staticMeta?.coverBlob instanceof Blob) ? URL.createObjectURL(staticMeta.coverBlob!) : undefined,
-        fileHash: staticMeta?.fileHash,
-        fileSize: staticMeta?.fileSize,
-        totalChars: staticMeta?.totalChars,
-        version: staticMeta?.version || undefined,
+        const hasCoverBlob = staticMeta?.coverBlob instanceof Blob;
 
-        isOffloaded: offloadedBookIds.has(book.bookId),
+        return {
+            ...book,
+            id: book.bookId,  // Alias
+            // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+            title: book.customTitle || staticMeta?.title || book.title,
+            author: book.customAuthor || staticMeta?.author || book.author,
+            coverBlob: staticMeta?.coverBlob || null,
+            // OPTIMIZATION: Use Service Worker route
+            coverUrl: hasCoverBlob ? `/__versicle__/covers/${book.bookId}` : undefined,
+            fileHash: staticMeta?.fileHash,
+            fileSize: staticMeta?.fileSize,
+            totalChars: staticMeta?.totalChars,
+            version: staticMeta?.version || undefined,
 
-        // Merge progress (max across all devices)
-        progress: progress?.percentage || 0,
-        currentCfi: progress?.currentCfi || undefined
-    };
+            isOffloaded: offloadedBookIds.has(book.bookId),
+
+            // Merge progress (max across all devices)
+            progress: progress?.percentage || 0,
+            currentCfi: progress?.currentCfi || undefined
+        };
+    }, [book, staticMeta, offloadedBookIds, progress]);
 };
