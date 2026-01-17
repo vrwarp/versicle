@@ -34,6 +34,7 @@ import { Trash2, Download, Loader2, RotateCcw } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { useDeviceStore } from '../store/useDeviceStore';
 import { getDeviceId } from '../lib/device-id';
+import { DeviceManager } from './devices/DeviceManager';
 
 /**
  * Global application settings dialog.
@@ -53,6 +54,7 @@ export const GlobalSettingsDialog = () => {
     const [isScanning, setIsScanning] = useState(false);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
     const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const csvInputRef = useRef<HTMLInputElement>(null);
     const zipImportRef = useRef<HTMLInputElement>(null);
@@ -88,7 +90,7 @@ export const GlobalSettingsDialog = () => {
     const [isFirebaseSigningIn, setIsFirebaseSigningIn] = useState(false);
     const [checkpoints, setCheckpoints] = useState<Awaited<ReturnType<typeof CheckpointService.listCheckpoints>>>([]);
 
-    const { devices, registerDevice } = useDeviceStore();
+    const { devices, renameDevice } = useDeviceStore();
     const currentDeviceId = getDeviceId();
 
     useEffect(() => {
@@ -300,7 +302,7 @@ export const GlobalSettingsDialog = () => {
             const report = await maintenanceService.scanForOrphans();
             const total = report.files + report.annotations + report.locations + report.lexicon + report.tts_position;
             if (total > 0) {
-                if (confirm(`Found orphans:\n- Files: ${report.files}\n- Annotations: ${report.annotations}\n- Locations: ${report.locations}\n- Lexicon: ${report.lexicon}\n- TTS Pos: ${report.tts_position}\n\nDelete them?`)) {
+                if (confirm(`Found orphans: \n - Files: ${report.files} \n - Annotations: ${report.annotations} \n - Locations: ${report.locations} \n - Lexicon: ${report.lexicon} \n - TTS Pos: ${report.tts_position} \n\nDelete them ? `)) {
                     await maintenanceService.pruneOrphans();
                     setOrphanScanResult('Repair complete. Orphans removed.');
                 } else {
@@ -332,7 +334,7 @@ export const GlobalSettingsDialog = () => {
         try {
             setBackupStatus('Starting full backup...');
             await backupService.createFullBackup((percent, msg) => {
-                setBackupStatus(`Backup: ${percent}% - ${msg}`);
+                setBackupStatus(`Backup: ${percent}% - ${msg} `);
             });
             setTimeout(() => setBackupStatus('Full backup complete.'), 2000);
         } catch (error) {
@@ -357,13 +359,13 @@ export const GlobalSettingsDialog = () => {
         try {
             setBackupStatus('Starting restore...');
             await backupService.restoreBackup(file, (percent, msg) => {
-                setBackupStatus(`Restore: ${percent}% - ${msg}`);
+                setBackupStatus(`Restore: ${percent}% - ${msg} `);
             });
             setBackupStatus('Restore complete! Reloading...');
             setTimeout(() => window.location.reload(), 500);
         } catch (error) {
             console.error(error);
-            setBackupStatus(`Restore failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            setBackupStatus(`Restore failed: ${error instanceof Error ? error.message : 'Unknown error'} `);
         } finally {
             e.target.value = '';
         }
@@ -371,9 +373,9 @@ export const GlobalSettingsDialog = () => {
 
     const handleDownloadGenAILogs = async () => {
         const content = genAILogs.map(log =>
-            `[${new Date(log.timestamp).toISOString()}] ${log.type.toUpperCase()} (${log.method})\n` +
+            `[${new Date(log.timestamp).toISOString()}] ${log.type.toUpperCase()} (${log.method}) \n` +
             JSON.stringify(log.payload, null, 2) +
-            `\n${'-'.repeat(40)}\n`
+            `\n${'-'.repeat(40)} \n`
         ).join('\n');
 
         const filename = `genai_logs_${new Date().toISOString()}.txt`;
@@ -436,7 +438,7 @@ export const GlobalSettingsDialog = () => {
                     <span id="global-settings-desc" className="sr-only">Global application settings including appearance, TTS configuration, and data management.</span>
                     {isCsvImporting && (
                         <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 text-center">
-                            <Loader2 className={`h-12 w-12 text-primary mb-4 ${!csvImportComplete ? 'animate-spin' : ''}`} />
+                            <Loader2 className={`h - 12 w - 12 text - primary mb - 4 ${!csvImportComplete ? 'animate-spin' : ''} `} />
                             <h3 className="text-xl font-semibold mb-2">{csvImportComplete ? 'Import Complete' : 'Importing Reading List'}</h3>
                             <p className="text-muted-foreground mb-6">{csvImportMessage}</p>
 
@@ -460,8 +462,14 @@ export const GlobalSettingsDialog = () => {
                         <Button variant={activeTab === 'genai' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('genai')}>
                             Generative AI
                         </Button>
+
+                        {/* ... (existing imports) */}
+
                         <Button variant={activeTab === 'sync' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('sync')}>
                             Sync & Cloud
+                        </Button>
+                        <Button variant={activeTab === 'devices' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('devices')}>
+                            Devices
                         </Button>
                         <Button variant={activeTab === 'dictionary' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('dictionary')}>
                             Dictionary
@@ -544,7 +552,7 @@ export const GlobalSettingsDialog = () => {
                                                 <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                                                     <div
                                                         className="h-full bg-primary/70 transition-all duration-300 ease-out"
-                                                        style={{ width: `${uploadProgress}%` }}
+                                                        style={{ width: `${uploadProgress}% ` }}
                                                     />
                                                 </div>
                                             </div>
@@ -556,7 +564,7 @@ export const GlobalSettingsDialog = () => {
                                                     <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
                                                         <div
                                                             className="h-full bg-primary transition-all duration-300 ease-out"
-                                                            style={{ width: `${importProgress}%` }}
+                                                            style={{ width: `${importProgress}% ` }}
                                                         />
                                                     </div>
                                                 </div>
@@ -660,7 +668,7 @@ export const GlobalSettingsDialog = () => {
                                                                         <span>{Math.round(downloadProgress)}%</span>
                                                                     </div>
                                                                     <div className="h-2 bg-secondary rounded overflow-hidden">
-                                                                        <div className="h-full bg-primary transition-all duration-300" style={{ width: `${downloadProgress}%` }} />
+                                                                        <div className="h-full bg-primary transition-all duration-300" style={{ width: `${downloadProgress}% ` }} />
                                                                     </div>
                                                                 </div>
                                                             ) : (
@@ -854,7 +862,7 @@ export const GlobalSettingsDialog = () => {
                                                                     {(['footnote', 'table', 'other', 'title', 'main'] as ContentType[]).map((type) => (
                                                                         <div key={type} className="flex items-center space-x-2">
                                                                             <Checkbox
-                                                                                id={`skip-${type}`}
+                                                                                id={`skip - ${type} `}
                                                                                 checked={contentFilterSkipTypes.includes(type)}
                                                                                 onCheckedChange={(checked) => {
                                                                                     if (checked) {
@@ -865,7 +873,7 @@ export const GlobalSettingsDialog = () => {
                                                                                 }}
                                                                             />
                                                                             <label
-                                                                                htmlFor={`skip-${type}`}
+                                                                                htmlFor={`skip - ${type} `}
                                                                                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize"
                                                                             >
                                                                                 {type}
@@ -961,7 +969,7 @@ export const GlobalSettingsDialog = () => {
                                             <label className="text-sm font-medium">Device Name</label>
                                             <Input
                                                 value={devices[currentDeviceId]?.name || ''}
-                                                onChange={(e) => registerDevice(currentDeviceId, e.target.value)}
+                                                onChange={(e) => renameDevice(currentDeviceId, e.target.value)}
                                                 placeholder="My Device"
                                             />
                                             <p className="text-xs text-muted-foreground">
@@ -1009,14 +1017,14 @@ export const GlobalSettingsDialog = () => {
                                                             className="w-full h-32 p-2 text-xs font-mono border rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                                                             placeholder={`// Paste your Firebase config here, e.g.:
 const firebaseConfig = {
-  apiKey: "AIza...",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abc123",
-  measurementId: "G-XXXXXXX"
-};`}
+    apiKey: "AIza...",
+    authDomain: "your-project.firebaseapp.com",
+    projectId: "your-project",
+    storageBucket: "your-project.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abc123",
+    measurementId: "G-XXXXXXX"
+}; `}
                                                             onChange={(e) => {
                                                                 const text = e.target.value;
                                                                 // Parse the pasted Firebase config
@@ -1221,6 +1229,12 @@ const firebaseConfig = {
                                         </div>
                                     )}
                                 </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'devices' && (
+                            <div className="space-y-6">
+                                <DeviceManager />
                             </div>
                         )}
 
