@@ -2,15 +2,14 @@ import React from 'react';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import 'react-lazy-load-image-component/src/effects/blur.css';
 import { cn } from '../../lib/utils';
+import { getOptimizedTextColor, unpackColorToRGB } from '../../lib/cover-palette';
 import { Cloud, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu } from './BookActionMenu';
 import type { BookMetadata } from '../../types/db';
 
 function unpackColor(packed: number): string {
-    const r = ((packed >> 12) & 0xF) * 17; // 0-15 -> 0-255
-    const g = (packed >> 4) & 0xFF;
-    const b = (packed & 0xF) * 17;
+    const { r, g, b } = unpackColorToRGB(packed);
     return `rgb(${r}, ${g}, ${b})`;
 }
 
@@ -59,6 +58,10 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
         };
     }, [book.coverPalette]);
 
+    const textColorClass = React.useMemo(() => {
+        return getOptimizedTextColor(book.coverPalette);
+    }, [book.coverPalette]);
+
     const showImage = displayUrl && !imageError;
 
     console.log(`[BookCover] Rendering ${book.title} (${book.id}). isOffloaded: ${book.isOffloaded}`);
@@ -83,10 +86,20 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
                 />
             ) : gradientStyle ? (
                 <div className="w-full h-full flex flex-col justify-between p-2">
-                    <span className="text-white font-bold text-lg leading-tight text-center drop-shadow-md line-clamp-3 break-words">
+                    <span
+                        className={cn(
+                            "font-bold text-lg leading-tight text-center drop-shadow-md line-clamp-3 break-words",
+                            textColorClass
+                        )}
+                    >
                         {book.title}
                     </span>
-                    <span className="text-white/90 text-xs font-medium text-center drop-shadow-md line-clamp-1">
+                    <span
+                        className={cn(
+                            "text-xs font-medium text-center drop-shadow-md line-clamp-1 opacity-90",
+                            textColorClass
+                        )}
+                    >
                         {book.author}
                     </span>
                 </div>

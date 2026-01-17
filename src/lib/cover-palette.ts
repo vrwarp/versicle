@@ -187,3 +187,64 @@ export async function extractCoverPalette(blob: Blob): Promise<number[]> {
         return [];
     }
 }
+
+/**
+ * Unpacks a 16-bit integer color (R4-G8-B4) into 8-bit components.
+ */
+export function unpackColorToRGB(packed: number): { r: number, g: number, b: number } {
+    const r = ((packed >> 12) & 0xF) * 17;
+    const g = (packed >> 4) & 0xFF;
+    const b = (packed & 0xF) * 17;
+    return { r, g, b };
+}
+
+// Constants for sRGB to Lab conversion
+const D65_EPSILON = 0.008856;
+const D65_KAPPA = 903.3;
+
+/**
+ * Calculates ONLY the perceptual lightness (L*) from an RGB triplet.
+ * Optimization: Skips calculation of a* and b* components.
+ */
+export function rgbToL(r: number, g: number, b: number): number {
+    // 1. Normalize (0-255 -> 0-1) and Linearize (Gamma Expansion)
+    const v = [r, g, b].map(val => {
+        val /= 255;
+        return val <= 0.04045
+            ? val / 12.92
+            : Math.pow((val + 0.055) / 1.055, 2.4);
+    });
+
+    // 2. Calculate Luminance (Y)
+    // Using sRGB / Rec. 709 coefficients
+    const Y = (0.2126 * v[0]) + (0.7152 * v[1]) + (0.0722 * v[2]);
+
+    // 3. Calculate L* (CIE 1976 Lightness)
+    // Formula: L* = 116 * f(Y) - 16
+    return Y <= D65_EPSILON
+        ? Y * D65_KAPPA
+        : (Math.pow(Y, 1/3) * 116) - 16;
+}
+
+/**
+ * Determines the optimal text color for a given color palette.
+ * Returns a Tailwind class string.
+ */
+export function getOptimizedTextColor(palette: number[] | undefined): string {
+    // Default fallback
+    if (!palette || palette.length === 0) return 'text-white';
+
+    // Calculate Average Lightness
+    let totalL = 0;
+    for (const packed of palette) {
+        const { r, g, b } = unpackColorToRGB(packed);
+        totalL += rgbToL(r, g, b);
+    }
+    const avgL = totalL / palette.length;
+
+    // Apply "Soft/Hard" Curve Logic
+    if (avgL > 85) return 'text-slate-700'; // Soft Dark
+    if (avgL > 55) return 'text-black';     // Hard Black
+    if (avgL > 30) return 'text-white';     // Hard White
+    return 'text-slate-200';                // Soft Light
+}
