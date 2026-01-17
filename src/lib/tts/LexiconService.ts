@@ -59,34 +59,73 @@ export class LexiconService {
                 .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
             // Assemble: High Priority -> Global -> Low Priority
-            rules = [...highPriority, ...globalRules, ...lowPriority];
+            // Note: We will inject Bible rules before Low Priority if enabled
+            rules = [...highPriority, ...globalRules];
+
+            // Determine if we should apply Bible Lexicon rules
+            // Circular Dependency Fix: Dynamic import
+            let globalEnabled = true;
+            try {
+                const { useTTSStore } = await import('../../store/useTTSStore');
+                globalEnabled = useTTSStore.getState().isBibleLexiconEnabled;
+            } catch (e) {
+                console.warn('LexiconService: Failed to access useTTSStore, defaulting bible lexicon to enabled.', e);
+            }
+
+            const shouldApplyBible = bibleLexiconEnabled === 'on' || (bibleLexiconEnabled === 'default' && globalEnabled);
+
+            if (shouldApplyBible) {
+                const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES.map((r, i) => ({
+                    id: `bible-${i}`,
+                    original: r.original,
+                    replacement: r.replacement,
+                    isRegex: r.isRegex,
+                    applyBeforeGlobal: false,
+                    created: 0,
+                    // Bible rules act as lowest priority system defaults
+                    order: Number.MAX_SAFE_INTEGER - BIBLE_LEXICON_RULES.length + i
+                }));
+
+                rules = [...rules, ...bibleRules];
+            }
+
+            // Append Low Priority (Standard) Book Rules last
+            rules = [...rules, ...lowPriority];
+
+            return rules;
         }
 
-        // Determine if we should apply Bible Lexicon rules
-        // Circular Dependency Fix: Dynamic import
-        let globalEnabled = true;
-        try {
-            const { useTTSStore } = await import('../../store/useTTSStore');
-            globalEnabled = useTTSStore.getState().isBibleLexiconEnabled;
-        } catch (e) {
-            console.warn('LexiconService: Failed to access useTTSStore, defaulting bible lexicon to enabled.', e);
-        }
+        // If no bookId or falling through
+        if (rules === globalRules) {
+            // 3. Fallback for non-book context (just Global + potentially Bible)
+            // Re-evaluate bible toggle for global context if we haven't already
+            // Logic above for 'shouldApplyBible' was nested in 'if (bookId)'.
+            // We need valid logic here too.
 
-        const shouldApplyBible = bibleLexiconEnabled === 'on' || (bibleLexiconEnabled === 'default' && globalEnabled);
+            let globalEnabled = true;
+            try {
+                const { useTTSStore } = await import('../../store/useTTSStore');
+                globalEnabled = useTTSStore.getState().isBibleLexiconEnabled;
+            } catch (e) {
+                console.warn('LexiconService: Failed to access useTTSStore, defaulting bible lexicon to enabled.', e);
+            }
 
-        if (shouldApplyBible) {
-            const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES.map((r, i) => ({
-                id: `bible-${i}`,
-                original: r.original,
-                replacement: r.replacement,
-                isRegex: r.isRegex,
-                applyBeforeGlobal: false,
-                created: 0,
-                // Bible rules act as lowest priority system defaults
-                order: Number.MAX_SAFE_INTEGER - BIBLE_LEXICON_RULES.length + i
-            }));
+            // For global context (no book), we just use global toggle?
+            // "bibleLexiconEnabled" var was defaulted to 'default'.
+            const shouldApplyBible = globalEnabled; // Default/Global setting
 
-            rules = [...rules, ...bibleRules];
+            if (shouldApplyBible) {
+                const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES.map((r, i) => ({
+                    id: `bible-${i}`,
+                    original: r.original,
+                    replacement: r.replacement,
+                    isRegex: r.isRegex,
+                    applyBeforeGlobal: false,
+                    created: 0,
+                    order: Number.MAX_SAFE_INTEGER - BIBLE_LEXICON_RULES.length + i
+                }));
+                rules = [...rules, ...bibleRules];
+            }
         }
 
         return rules;
