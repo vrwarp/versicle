@@ -28,6 +28,21 @@ vi.mock('epubjs', () => {
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+// Mock createImageBitmap and OffscreenCanvas
+global.createImageBitmap = vi.fn().mockResolvedValue({} as ImageBitmap);
+
+class MockOffscreenCanvas {
+  getContext() {
+    return {
+      drawImage: vi.fn(),
+      getImageData: vi.fn().mockReturnValue({
+        data: new Uint8ClampedArray(1024).fill(255) // White
+      })
+    };
+  }
+}
+global.OffscreenCanvas = MockOffscreenCanvas as unknown as typeof OffscreenCanvas;
+
 // Mock extractContentOffscreen
 vi.mock('./offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn().mockResolvedValue([
