@@ -150,6 +150,7 @@ export class YjsSyncService {
         // Flatten to LexiconRule array
         const lexicon: LexiconRule[] = [];
         for (const ov of overrides) {
+            if (!ov.lexicon) continue;
             for (const r of ov.lexicon) {
                 lexicon.push({
                     id: r.id,
@@ -164,7 +165,8 @@ export class YjsSyncService {
 
         // Store lexicon in a Yjs map for sync
         const lexiconMap = yDoc.getMap<LexiconRule>('lexicon');
-        for (const rule of lexicon) {
+        const cleanLexicon = JSON.parse(JSON.stringify(lexicon));
+        for (const rule of cleanLexicon) {
             lexiconMap.set(rule.id, rule);
         }
     }
@@ -175,7 +177,8 @@ export class YjsSyncService {
      */
     async restoreLexiconFromYjs(): Promise<void> {
         const lexiconMap = yDoc.getMap<LexiconRule>('lexicon');
-        const rules = Array.from(lexiconMap.values());
+        // Ensure we have plain objects to avoid DataCloneError with Proxies/functions
+        const rules = JSON.parse(JSON.stringify(Array.from(lexiconMap.values()))) as LexiconRule[];
 
         if (rules.length === 0) return;
 
@@ -194,21 +197,21 @@ export class YjsSyncService {
         }
 
         for (const [bookId, bookRules] of Object.entries(byBookId)) {
-            const existing = await tx.store.get(bookId) || {
+            const existingRaw = await tx.store.get(bookId);
+            // Ensure existing record is also clean
+            const existing = existingRaw ? JSON.parse(JSON.stringify(existingRaw)) : {
                 bookId,
                 lexicon: [],
-                // created/modified not part of UserOverrides type
             };
 
             // Merge rules
-            const existingMap = new Map(existing.lexicon.map(r => [r.id, r]));
+            const existingMap = new Map(existing.lexicon.map((r: LexiconRule) => [r.id, r]));
 
             for (const r of bookRules) {
                 existingMap.set(r.id, r);
             }
 
             existing.lexicon = Array.from(existingMap.values());
-            // existing.modified = Date.now();
 
             await tx.store.put(existing);
         }
