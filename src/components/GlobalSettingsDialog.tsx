@@ -88,7 +88,7 @@ export const GlobalSettingsDialog = () => {
     const [isFirebaseSigningIn, setIsFirebaseSigningIn] = useState(false);
     const [checkpoints, setCheckpoints] = useState<Awaited<ReturnType<typeof CheckpointService.listCheckpoints>>>([]);
 
-    const { devices, setDeviceName } = useDeviceStore();
+    const { devices, registerDevice } = useDeviceStore();
     const currentDeviceId = getDeviceId();
 
     useEffect(() => {
@@ -960,8 +960,8 @@ export const GlobalSettingsDialog = () => {
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium">Device Name</label>
                                             <Input
-                                                value={devices[currentDeviceId] || ''}
-                                                onChange={(e) => setDeviceName(currentDeviceId, e.target.value)}
+                                                value={devices[currentDeviceId]?.name || ''}
+                                                onChange={(e) => registerDevice(currentDeviceId, e.target.value)}
                                                 placeholder="My Device"
                                             />
                                             <p className="text-xs text-muted-foreground">

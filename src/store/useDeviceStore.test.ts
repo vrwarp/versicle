@@ -23,20 +23,54 @@ vi.mock('zustand-middleware-yjs', () => ({
 describe('useDeviceStore', () => {
     beforeEach(() => {
         useDeviceStore.setState({ devices: {} });
+        vi.useFakeTimers();
     });
 
-    it('should register a device name', () => {
-        const { setDeviceName } = useDeviceStore.getState();
-        setDeviceName('device-123', 'My iPad');
+    it('should register a device', () => {
+        const now = Date.now();
+        vi.setSystemTime(now);
 
-        expect(useDeviceStore.getState().devices['device-123']).toBe('My iPad');
+        const { registerDevice } = useDeviceStore.getState();
+        registerDevice('device-123', 'My iPad');
+
+        const device = useDeviceStore.getState().devices['device-123'];
+        expect(device).toEqual({
+            name: 'My iPad',
+            created: now,
+            lastActive: now
+        });
     });
 
-    it('should update an existing device name', () => {
-        const { setDeviceName } = useDeviceStore.getState();
-        setDeviceName('device-123', 'My iPad');
-        setDeviceName('device-123', 'My iPhone');
+    it('should update a device name without changing created date', () => {
+        const t1 = 1000;
+        vi.setSystemTime(t1);
+        const { registerDevice } = useDeviceStore.getState();
+        registerDevice('device-123', 'My iPad');
 
-        expect(useDeviceStore.getState().devices['device-123']).toBe('My iPhone');
+        const t2 = 2000;
+        vi.setSystemTime(t2);
+        registerDevice('device-123', 'My iPhone');
+
+        const device = useDeviceStore.getState().devices['device-123'];
+        expect(device).toEqual({
+            name: 'My iPhone',
+            created: t1,
+            lastActive: t2
+        });
+    });
+
+    it('should touch a device to update last active', () => {
+        const t1 = 1000;
+        vi.setSystemTime(t1);
+        const { registerDevice, touchDevice } = useDeviceStore.getState();
+        registerDevice('device-123', 'My iPad');
+
+        const t2 = 2000;
+        vi.setSystemTime(t2);
+        touchDevice('device-123');
+
+        const device = useDeviceStore.getState().devices['device-123'];
+        expect(device.lastActive).toBe(t2);
+        expect(device.created).toBe(t1);
     });
 });

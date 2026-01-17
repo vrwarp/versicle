@@ -102,7 +102,10 @@ function App() {
         const deviceStore = useDeviceStore.getState();
         if (!deviceStore.devices[deviceId]) {
           console.log('[App] Registering new device:', deviceId);
-          deviceStore.setDeviceName(deviceId, `Device ${deviceId.slice(-6)}`);
+          deviceStore.registerDevice(deviceId, `Device ${deviceId.slice(-6)}`);
+        } else {
+          // Touch device to update last active
+          deviceStore.touchDevice(deviceId);
         }
 
         // Wait for middleware to sync books (short poll)
