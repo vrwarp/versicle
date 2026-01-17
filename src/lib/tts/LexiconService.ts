@@ -30,7 +30,7 @@ export class LexiconService {
 
     // Fetch Global Rules
     const globalOverrides = await db.get('user_overrides', 'global');
-    let rules: LexiconRule[] = globalOverrides?.lexicon.map(r => ({
+    const globalRules: LexiconRule[] = globalOverrides?.lexicon.map(r => ({
         id: r.id,
         original: r.original,
         replacement: r.replacement,
@@ -43,6 +43,8 @@ export class LexiconService {
 
     // Fetch Book Specific Rules
     let bibleLexiconEnabled: 'on' | 'off' | 'default' = 'default';
+    let beforeRules: LexiconRule[] = [];
+    let afterRules: LexiconRule[] = [];
 
     if (bookId) {
         const bookOverrides = await db.get('user_overrides', bookId);
@@ -69,10 +71,8 @@ export class LexiconService {
             }));
 
             // Merge logic: Per-rule priority
-            const beforeRules = bookRules.filter(r => r.applyBeforeGlobal);
-            const afterRules = bookRules.filter(r => !r.applyBeforeGlobal);
-
-            rules = [...beforeRules, ...rules, ...afterRules];
+            beforeRules = bookRules.filter(r => r.applyBeforeGlobal);
+            afterRules = bookRules.filter(r => !r.applyBeforeGlobal);
         }
     }
 
@@ -92,40 +92,25 @@ export class LexiconService {
     }
 
     const shouldApplyBible = bibleLexiconEnabled === 'on' || (bibleLexiconEnabled === 'default' && globalEnabled);
+    let bibleRules: LexiconRule[] = [];
 
     if (shouldApplyBible) {
-        const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES.map((r, i) => ({
+        bibleRules = BIBLE_LEXICON_RULES.map((r, i) => ({
             id: `bible-${i}`,
             original: r.original,
             replacement: r.replacement,
             isRegex: r.isRegex,
-            applyBeforeGlobal: false, // Generally Bible rules should apply after user custom rules? Or maybe before?
-            // Usually system rules are lower priority than user overrides.
-            // But if user wants to override "Gen." they should be able to.
-            // So we put Bible rules *after* book rules (which might contain overrides).
-            // Wait, rules are applied in order. First match? No, replaceAll.
-            // LexiconService.applyLexicon iterates and does replace.
-            // So later rules replace what earlier rules might have produced?
-            // Or earlier rules replace original text.
-            // If I have "Gen." -> "Genesis".
-            // If I run that first, "Gen. 1" -> "Genesis 1".
-            // If user has "Genesis" -> "Start", then "Start 1".
-            // So order matters.
-            // If we want user rules to take precedence (i.e. override system behavior),
-            // user rules should probably run *before* system rules if they are fixing system output?
-            // Or *instead* of system rules?
-            // If I want "Gen." to be "General", and system says "Genesis".
-            // If system runs first: "Genesis" -> user rule for "Gen." won't match.
-            // So user rules for "Gen." must run first.
+            applyBeforeGlobal: false,
             created: 0
         }));
-
-        // Append Bible rules at the end (lowest priority / applied last)
-        // This means user rules (both global and book specific) run first.
-        rules = [...rules, ...bibleRules];
     }
 
-    return rules;
+    // Order:
+    // 1. Book Rules (applyBeforeGlobal=true) - User explicitly wants these before global
+    // 2. Global Rules
+    // 3. Bible Rules - Applied after global, but before standard book rules
+    // 4. Book Rules (applyBeforeGlobal=false) - Standard user overrides, applied last to override everything else
+    return [...beforeRules, ...globalRules, ...bibleRules, ...afterRules];
   }
 
   async saveRule(rule: Omit<LexiconRule, 'id' | 'created'> & { id?: string }): Promise<void> {
