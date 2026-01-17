@@ -128,7 +128,7 @@ describe('ReadingHistory Integration', () => {
         // It renders "No reading history" because items is empty [] by default and error catch block sets loading false.
         expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
 
-        expect(consoleSpy).toHaveBeenCalledWith('Failed to load history', expect.any(Error));
+        expect(consoleSpy).toHaveBeenCalledWith('Failed to load journey events', expect.any(Error));
         consoleSpy.mockRestore();
     });
 
