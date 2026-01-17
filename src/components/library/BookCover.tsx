@@ -82,7 +82,14 @@ export const BookCover: React.FC<BookCoverProps> = React.memo(({ book, onDelete,
                     threshold={200}
                 />
             ) : gradientStyle ? (
-                 <div className="w-full h-full" />
+                <div className="w-full h-full flex flex-col justify-between p-2">
+                    <span className="text-white font-bold text-lg leading-tight text-center drop-shadow-md line-clamp-3 break-words">
+                        {book.title}
+                    </span>
+                    <span className="text-white/90 text-xs font-medium text-center drop-shadow-md line-clamp-1">
+                        {book.author}
+                    </span>
+                </div>
             ) : (
                 <div className="w-full h-full flex items-center justify-center text-muted-foreground/50">
                     <span className="text-4xl font-light">Aa</span>
