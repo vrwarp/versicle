@@ -404,6 +404,21 @@ export const GlobalSettingsDialog = () => {
         }
     };
 
+    const handleClearConfig = () => {
+        if (confirm("Are you sure you want to clear the Firebase configuration?")) {
+            setFirebaseConfig({
+                apiKey: '',
+                authDomain: '',
+                projectId: '',
+                storageBucket: '',
+                messagingSenderId: '',
+                appId: '',
+                measurementId: ''
+            });
+            setFirebaseEnabled(false);
+        }
+    };
+
     return (
         <>
             <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
@@ -1134,6 +1149,11 @@ const firebaseConfig = {
                                                             'Sign in with Google'
                                                         )}
                                                     </Button>
+                                                    <div className="flex justify-center pt-2">
+                                                        <Button variant="ghost" size="sm" onClick={handleClearConfig}>
+                                                            Clear Configuration
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook } from '@testing-library/react';
 import { useAllBooks } from './selectors';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
@@ -67,10 +68,10 @@ describe('selectors', () => {
         return selector({ progress: {} });
       });
 
-      const result = useAllBooks();
+      const { result } = renderHook(() => useAllBooks());
 
-      expect(result).toHaveLength(1);
-      expect(result[0].title).toBe('Renamed Title');
+      expect(result.current).toHaveLength(1);
+      expect(result.current[0].title).toBe('Renamed Title');
     });
 
     it('should fallback to static metadata title if customTitle is missing', () => {
@@ -114,10 +115,10 @@ describe('selectors', () => {
         return selector({ progress: {} });
       });
 
-      const result = useAllBooks();
+      const { result } = renderHook(() => useAllBooks());
 
-      expect(result).toHaveLength(1);
-      expect(result[0].title).toBe('Static Title');
+      expect(result.current).toHaveLength(1);
+      expect(result.current[0].title).toBe('Static Title');
     });
   });
 });
