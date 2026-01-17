@@ -1,8 +1,8 @@
 import { cn } from "../lib/utils";
 
 interface ThemeSelectorProps {
-  currentTheme: 'light' | 'dark' | 'sepia';
-  onThemeChange: (theme: 'light' | 'dark' | 'sepia') => void;
+  currentTheme: 'light' | 'dark' | 'sepia' | 'custom';
+  onThemeChange: (theme: 'light' | 'dark' | 'sepia' | 'custom') => void;
   className?: string;
 }
 
