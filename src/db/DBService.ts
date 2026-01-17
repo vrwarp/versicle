@@ -1,20 +1,25 @@
 import { getDB } from './db';
 import type {
   BookMetadata,
-  ReadingListEntry, ReadingHistoryEntry, ReadingSession, ReadingEventType, SectionMetadata, TableImage,
-  // Legacy / Composite Types used in Service Layer
-  TTSState, Annotation, CachedSegment, BookLocations, ContentAnalysis,
-  CacheSessionState,
+  ReadingEventType,
+  SectionMetadata,
+  TableImage,
+  BookLocations,
+  Annotation,
   CacheTtsPreparation,
+  CacheSessionState,
+  TTSState,
+  ContentAnalysis,
   UserInventoryItem,
   StaticBookManifest,
-  NavigationItem
+  NavigationItem,
+  CachedSegment,
+  ReadingSession
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
-import { mergeCfiRanges } from '../lib/cfi-utils';
 
 import { Logger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
@@ -51,132 +56,12 @@ class DBService {
    * Retrieves all books in the library.
    * JOINS: static_manifests, user_inventory, user_progress
    */
-  async getLibrary(): Promise<BookMetadata[]> {
-    try {
-      const db = await this.getDB();
 
-      const [manifests, inventory, progress, readingList] = await Promise.all([
-        db.getAll('static_manifests'),
-        db.getAll('user_inventory'),
-        db.getAll('user_progress'),
-        db.getAll('user_reading_list')
-      ]);
-
-      const invMap = new Map(inventory.map(i => [i.bookId, i]));
-      const progMap = new Map(progress.map(p => [p.bookId, p]));
-      const rlMap = new Map(readingList.map(r => [r.filename, r]));
-
-      const library: BookMetadata[] = [];
-
-      for (const man of manifests) {
-        const inv = invMap.get(man.bookId);
-        const prog = progMap.get(man.bookId);
-
-        if (!inv) continue;
-
-        // Resolve Reading List entry via filename
-        const rlEntry = inv.sourceFilename ? rlMap.get(inv.sourceFilename) : undefined;
-
-        // Calculate Display Progress (Highest Wins)
-        const localPct = prog?.percentage || 0;
-        const rlPct = rlEntry?.percentage || 0;
-        const displayPct = Math.max(localPct, rlPct);
-
-        const composite: BookMetadata = {
-          // Book Interface
-          id: man.bookId,
-          title: inv.customTitle || man.title,
-          author: inv.customAuthor || man.author,
-          description: man.description,
-          coverUrl: undefined, // Needs blob, managed by UI/SW
-          coverBlob: man.coverBlob, // Thumbnail is now in manifest
-          addedAt: inv.addedAt,
-          // BookSource Interface
-          bookId: man.bookId,
-          filename: inv.sourceFilename,
-          fileHash: man.fileHash,
-          fileSize: man.fileSize,
-          totalChars: man.totalChars,
-          version: man.schemaVersion,
-          // BookState Interface
-          lastRead: prog?.lastRead,
-          progress: displayPct,
-          currentCfi: prog?.currentCfi,
-          lastPlayedCfi: prog?.lastPlayedCfi,
-          isOffloaded: false // Placeholder, see logic below
-        };
-        library.push(composite);
-      }
-
-      // Optimization for isOffloaded: Get all keys from static_resources
-      const resourceKeys = await db.getAllKeys('static_resources');
-      const resourceSet = new Set(resourceKeys);
-
-      for (const book of library) {
-        book.isOffloaded = !resourceSet.has(book.id);
-      }
-
-      return library.sort((a, b) => b.addedAt - a.addedAt);
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
 
   /**
    * Retrieves a specific book and its file content.
    */
-  async getBook(id: string): Promise<{ metadata: BookMetadata | undefined; file: Blob | ArrayBuffer | undefined }> {
-    try {
-      const db = await this.getDB();
-      const tx = db.transaction(['static_manifests', 'static_resources', 'user_inventory', 'user_progress', 'user_reading_list'], 'readonly');
 
-      const manifest = await tx.objectStore('static_manifests').get(id);
-      const resource = await tx.objectStore('static_resources').get(id);
-      const inventory = await tx.objectStore('user_inventory').get(id);
-      const progress = await tx.objectStore('user_progress').get(id);
-
-      // Fetch Reading List Entry if possible
-      let readingListEntry;
-      if (inventory?.sourceFilename) {
-        readingListEntry = await tx.objectStore('user_reading_list').get(inventory.sourceFilename);
-      }
-
-      await tx.done;
-
-      if (!manifest || !inventory) return { metadata: undefined, file: undefined };
-
-      // Determine progress: prefer local if > 0, else fallback to reading list
-      const localPct = progress?.percentage || 0;
-      const rlPct = readingListEntry?.percentage || 0;
-      const displayPct = (localPct > 0) ? localPct : rlPct;
-
-      const metadata: BookMetadata = {
-        id: manifest.bookId,
-        title: inventory.customTitle || manifest.title,
-        author: inventory.customAuthor || manifest.author,
-        description: manifest.description,
-        coverBlob: manifest.coverBlob, // Use thumbnail
-        addedAt: inventory.addedAt,
-
-        bookId: manifest.bookId,
-        filename: inventory.sourceFilename,
-        fileHash: manifest.fileHash,
-        fileSize: manifest.fileSize,
-        totalChars: manifest.totalChars,
-        version: manifest.schemaVersion,
-
-        lastRead: progress?.lastRead,
-        progress: displayPct,
-        currentCfi: progress?.currentCfi,
-        lastPlayedCfi: progress?.lastPlayedCfi,
-        isOffloaded: !resource?.epubBlob
-      };
-
-      return { metadata, file: resource?.epubBlob };
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
 
   /**
    * Retrieves only the metadata for a specific book.
@@ -611,118 +496,15 @@ class DBService {
   // --- Reading List Operations (Legacy/Mapped) ---
   // Mapping UserInventory to ReadingListEntry for backward compatibility
 
-  async getReadingList(): Promise<ReadingListEntry[]> {
-    try {
-      const db = await this.getDB();
-      return await db.getAll('user_reading_list');
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
 
-  async upsertReadingListEntry(entry: ReadingListEntry): Promise<void> {
-    try {
-      const db = await this.getDB();
-
-      const tx = db.transaction(['user_reading_list', 'user_inventory', 'user_progress'], 'readwrite');
-      const rlStore = tx.objectStore('user_reading_list');
-      const invStore = tx.objectStore('user_inventory');
-      const progStore = tx.objectStore('user_progress');
-
-      // 1. Always upsert to Reading List
-      await rlStore.put(entry);
-
-      // 2. Try to sync with Library
-      let bookId: string | undefined;
-      let inventoryItem: UserInventoryItem | undefined;
-
-      let cursor = await invStore.openCursor();
-      while (cursor) {
-        if (cursor.value.sourceFilename === entry.filename) {
-          bookId = cursor.value.bookId;
-          inventoryItem = cursor.value;
-          break;
-        }
-        cursor = await cursor.continue();
-      }
-
-      if (bookId && inventoryItem) {
-        // Update Inventory (Sync Back)
-        // We only update if the reading list entry has meaningful data?
-        // Yes, Title/Author/Rating/Status
-        inventoryItem.customTitle = entry.title;
-        inventoryItem.customAuthor = entry.author;
-        inventoryItem.rating = entry.rating;
-        // inv.lastInteraction? Maybe.
-        inventoryItem.lastInteraction = entry.lastUpdated;
-
-        if (entry.status === 'read') inventoryItem.status = 'completed';
-        else if (entry.status === 'currently-reading') inventoryItem.status = 'reading';
-        else if (entry.status === 'to-read') inventoryItem.status = 'unread';
-
-        await invStore.put(inventoryItem);
-
-        // Update Progress (Highest Wins)
-        const prog = await progStore.get(bookId);
-        if (prog) {
-          if (entry.percentage > prog.percentage) {
-            prog.percentage = entry.percentage;
-            prog.lastRead = entry.lastUpdated;
-            await progStore.put(prog);
-          }
-        }
-      }
-
-      await tx.done;
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async deleteReadingListEntry(filename: string): Promise<void> {
-    try {
-      const db = await this.getDB();
-      await db.delete('user_reading_list', filename);
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async deleteReadingListEntries(filenames: string[]): Promise<void> {
-    try {
-      const db = await this.getDB();
-      const tx = db.transaction('user_reading_list', 'readwrite');
-      const store = tx.objectStore('user_reading_list');
-      for (const f of filenames) {
-        await store.delete(f);
-      }
-      await tx.done;
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  async importReadingList(entries: ReadingListEntry[]): Promise<void> {
-    for (const entry of entries) {
-      await this.upsertReadingListEntry(entry);
-    }
-  }
 
   // --- Playback State ---
 
-  async updatePlaybackState(bookId: string, lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
+  async updatePlaybackState(bookId: string, _lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['user_progress', 'cache_session_state'], 'readwrite');
-
-      if (lastPlayedCfi !== undefined) {
-        const progStore = tx.objectStore('user_progress');
-        const prog = await progStore.get(bookId);
-        if (prog) {
-          prog.lastPlayedCfi = lastPlayedCfi;
-          await progStore.put(prog);
-        }
-      }
+      // Only cache_session_state is updated now
+      const tx = db.transaction(['cache_session_state'], 'readwrite');
 
       if (lastPauseTime !== undefined) {
         const sessionStore = tx.objectStore('cache_session_state');
@@ -742,15 +524,12 @@ class DBService {
   private saveTTSStateTimeout: NodeJS.Timeout | null = null;
   private pendingTTSState: { [bookId: string]: CacheSessionState } = {};
 
-  saveTTSState(bookId: string, queue: TTSQueueItem[], currentIndex: number, sectionIndex?: number): void {
+  saveTTSState(bookId: string, queue: TTSQueueItem[], _currentIndex: number, _sectionIndex?: number): void {
     this.pendingTTSState[bookId] = {
       bookId,
       playbackQueue: queue,
       updatedAt: Date.now()
     };
-
-    // Also update progress index
-    this.saveTTSPosition(bookId, currentIndex, sectionIndex);
 
     if (this.saveTTSStateTimeout) return;
 
@@ -772,39 +551,6 @@ class DBService {
         Logger.error('DBService', 'Failed to save TTS state', error);
       }
     }, 1000);
-  }
-
-  private saveTTSPositionTimeout: NodeJS.Timeout | null = null;
-  private pendingTTSPosition: { [bookId: string]: { idx: number, secIdx?: number } } = {};
-
-  saveTTSPosition(bookId: string, currentIndex: number, sectionIndex?: number): void {
-    this.pendingTTSPosition[bookId] = { idx: currentIndex, secIdx: sectionIndex };
-
-    if (this.saveTTSPositionTimeout) return;
-
-    this.saveTTSPositionTimeout = setTimeout(async () => {
-      this.saveTTSPositionTimeout = null;
-      const pending = { ...this.pendingTTSPosition };
-      this.pendingTTSPosition = {};
-
-      try {
-        const db = await this.getDB();
-        const tx = db.transaction('user_progress', 'readwrite');
-        const store = tx.objectStore('user_progress');
-
-        for (const [id, val] of Object.entries(pending)) {
-          const prog = await store.get(id);
-          if (prog) {
-            prog.currentQueueIndex = val.idx;
-            prog.currentSectionIndex = val.secIdx;
-            await store.put(prog);
-          }
-        }
-        await tx.done;
-      } catch (error) {
-        Logger.error('DBService', 'Failed to save TTS position', error);
-      }
-    }, 500);
   }
 
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
@@ -1017,19 +763,8 @@ class DBService {
     void _isStart;
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['user_progress', 'user_journey'], 'readwrite');
-      const progStore = tx.objectStore('user_progress');
+      const tx = db.transaction(['user_journey'], 'readwrite');
       const journeyStore = tx.objectStore('user_journey');
-
-      // 1. Update Progress (Completed Ranges)
-      const prog = await progStore.get(bookId) || {
-        bookId, percentage: 0, lastRead: Date.now(), completedRanges: []
-      };
-
-      const newRanges = mergeCfiRanges(prog.completedRanges || [], range);
-      prog.completedRanges = newRanges;
-      prog.lastRead = Date.now();
-      await progStore.put(prog);
 
       // 2. Log Journey Event (with Coalescing)
       const now = Date.now();
@@ -1063,44 +798,7 @@ class DBService {
     }
   }
 
-  async getReadingHistory(bookId: string): Promise<string[]> {
-    try {
-      const db = await this.getDB();
-      const prog = await db.get('user_progress', bookId);
-      return prog ? prog.completedRanges : [];
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
 
-  async getReadingHistoryEntry(bookId: string): Promise<ReadingHistoryEntry | undefined> {
-    try {
-      const db = await this.getDB();
-      const prog = await db.get('user_progress', bookId);
-      if (!prog) return undefined;
-
-      // Populate sessions from user_journey
-      const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
-
-      return {
-        bookId,
-        lastUpdated: prog.lastRead || Date.now(),
-        readRanges: prog.completedRanges || [],
-        sessions: journey.map((step): ReadingSession => {
-          const mappedType = (step.type === 'visual' ? 'page' : step.type) as ReadingEventType;
-          return {
-            timestamp: step.startTimestamp,
-            // Cast duration to avoid undefined issues if DB schema is loose
-            duration: step.duration || 0,
-            cfiRange: step.cfiRange,
-            type: mappedType
-          };
-        }).sort((a, b) => b.timestamp - a.timestamp)
-      };
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async logReadingEvent(bookId: string, eventType: ReadingEventType, _data?: any): Promise<void> {
@@ -1121,16 +819,32 @@ class DBService {
     }
   }
 
+  async getJourneyEvents(bookId: string): Promise<ReadingSession[]> {
+    try {
+      const db = await this.getDB();
+      const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
+
+      return journey.map((step): ReadingSession => {
+        const mappedType = (step.type === 'visual' ? 'page' : step.type) as ReadingEventType;
+        return {
+          timestamp: step.startTimestamp,
+          duration: step.duration || 0,
+          cfiRange: step.cfiRange,
+          type: mappedType
+        };
+      }).sort((a, b) => b.timestamp - a.timestamp);
+    } catch (error) {
+      this.handleError(error);
+      return [];
+    }
+  }
+
   // --- Cleanup ---
 
   cleanup(): void {
     if (this.saveTTSStateTimeout) {
       clearTimeout(this.saveTTSStateTimeout);
       this.saveTTSStateTimeout = null;
-    }
-    if (this.saveTTSPositionTimeout) {
-      clearTimeout(this.saveTTSPositionTimeout);
-      this.saveTTSPositionTimeout = null;
     }
   }
 

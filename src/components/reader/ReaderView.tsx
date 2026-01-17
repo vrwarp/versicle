@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { NavigationItem } from 'epubjs';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReadingStateStore, useBookProgress } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useBook } from '../../store/selectors';
@@ -590,19 +590,19 @@ export const ReaderView: React.FC = () => {
     }, [rendition, isRenditionReady, isDebugModeEnabled, id, currentSectionId, book]);
 
     // Reading History Highlights
+    const bookProgress = useBookProgress(id || null);
+
     useEffect(() => {
         const addedRanges: string[] = [];
-        if (rendition && isRenditionReady && id) {
-            dbService.getReadingHistory(id).then(ranges => {
-                ranges.forEach(range => {
-                    try {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (rendition as any).annotations.add('highlight', range, {}, null, 'reading-history-highlight', { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' });
-                        addedRanges.push(range);
-                    } catch (e) {
-                        console.warn("Failed to add history highlight", e);
-                    }
-                });
+        if (rendition && isRenditionReady && id && bookProgress?.completedRanges) {
+            bookProgress.completedRanges.forEach(range => {
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (rendition as any).annotations.add('highlight', range, {}, null, 'reading-history-highlight', { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' });
+                    addedRanges.push(range);
+                } catch (e) {
+                    console.warn("Failed to add history highlight", e);
+                }
             });
         }
 
@@ -618,7 +618,7 @@ export const ReaderView: React.FC = () => {
                 });
             }
         };
-    }, [rendition, isRenditionReady, id]);
+    }, [rendition, isRenditionReady, id, bookProgress?.completedRanges]);
 
     const [useSyntheticToc, setUseSyntheticToc] = useState(false);
     const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);

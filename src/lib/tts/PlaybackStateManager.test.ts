@@ -185,9 +185,9 @@ describe('PlaybackStateManager', () => {
         });
 
         it('should handle zero duration gracefully', () => {
-             manager.setQueue([], 0, 0);
-             expect(manager.getTotalDuration()).toBe(0);
-             expect(manager.getCurrentPosition(1)).toBe(0);
+            manager.setQueue([], 0, 0);
+            expect(manager.getTotalDuration()).toBe(0);
+            expect(manager.getCurrentPosition(1)).toBe(0);
         });
     });
 
@@ -202,20 +202,20 @@ describe('PlaybackStateManager', () => {
         });
 
         it('should save playback state', async () => {
-             const items = [{ text: 'Hello', cfi: 'cfi1' }];
+            const items = [{ text: 'Hello', cfi: 'cfi1' }];
             manager.setBookId('book1');
             manager.setQueue(items, 0, 0);
 
-             await manager.savePlaybackState('paused');
+            await manager.savePlaybackState('paused');
 
-             expect(dbService.updatePlaybackState).toHaveBeenCalledWith('book1', 'cfi1', expect.any(Number));
+            expect(dbService.updatePlaybackState).toHaveBeenCalledWith('book1', undefined, expect.any(Number));
         });
 
         it('should not persist if bookId is not set', () => {
-             const items = [{ text: 'Hello', cfi: '1' }];
+            const items = [{ text: 'Hello', cfi: '1' }];
             manager.setQueue(items, 0, 1); // No book ID set
 
-             expect(dbService.saveTTSState).not.toHaveBeenCalled();
+            expect(dbService.saveTTSState).not.toHaveBeenCalled();
         });
     });
 
@@ -237,7 +237,7 @@ describe('PlaybackStateManager', () => {
             const listener = vi.fn();
             manager.subscribe(listener);
 
-             const items = [{ text: 'Hello', cfi: '1' }];
+            const items = [{ text: 'Hello', cfi: '1' }];
             manager.setQueue(items, 0, 0); // 1 call
 
             manager.next(); // fails
@@ -250,10 +250,10 @@ describe('PlaybackStateManager', () => {
             const listener = vi.fn();
             const unsubscribe = manager.subscribe(listener);
 
-             unsubscribe();
+            unsubscribe();
             manager.setQueue([], 0, 0);
 
-             expect(listener).not.toHaveBeenCalled();
+            expect(listener).not.toHaveBeenCalled();
         });
     });
 });

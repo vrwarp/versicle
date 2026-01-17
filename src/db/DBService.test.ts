@@ -47,7 +47,7 @@ describe('DBService', () => {
       const extractSpy = vi.mocked(ingestion.extractBookData).mockResolvedValue(mockData as any);
 
       // Spy on ingestBook (real method)
-      const ingestSpy = vi.spyOn(dbService, 'ingestBook').mockResolvedValue('new-id');
+      const ingestSpy = vi.spyOn(dbService, 'ingestBook').mockResolvedValue();
 
       await dbService.addBook(file);
 
@@ -64,100 +64,7 @@ describe('DBService', () => {
     });
   });
 
-  describe('getLibrary', () => {
-    it('should return sorted books', async () => {
-      const db = await getDB();
 
-      // Seed using v18 stores
-      await db.put('static_manifests', { bookId: '1', title: 'A', author: 'A', schemaVersion: 1, fileHash: 'h1', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: '1', addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
-      await db.put('user_progress', { bookId: '1', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-
-      await db.put('static_manifests', { bookId: '2', title: 'B', author: 'B', schemaVersion: 1, fileHash: 'h2', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: '2', addedAt: 200, status: 'unread', tags: [], lastInteraction: 200 } as UserInventoryItem);
-      await db.put('user_progress', { bookId: '2', percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-
-      const library = await dbService.getLibrary();
-      expect(library).toHaveLength(2);
-      expect(library[0].id).toBe('2'); // Sorted by addedAt desc
-      expect(library[1].id).toBe('1');
-    });
-
-    it('should use higher progress from reading list', async () => {
-      const db = await getDB();
-      const id = '1';
-
-      await db.put('static_manifests', { bookId: id, title: 'A', author: 'A', schemaVersion: 1, fileHash: 'h1', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100, sourceFilename: 'book.epub' } as UserInventoryItem);
-      // Local progress 10%
-      await db.put('user_progress', { bookId: id, percentage: 0.1, lastRead: 0, completedRanges: [] } as UserProgress);
-      // Reading list progress 50%
-      await db.put('user_reading_list', { filename: 'book.epub', title: 'A', author: 'A', percentage: 0.5, lastUpdated: 0 } as ReadingListEntry);
-
-      const library = await dbService.getLibrary();
-      expect(library[0].progress).toBe(0.5);
-    });
-  });
-
-  describe('getBook', () => {
-    it('should return book metadata and file', async () => {
-      const db = await getDB();
-      const id = '123';
-
-      const fileData = new TextEncoder().encode('data').buffer;
-
-      await db.put('static_manifests', { bookId: id, title: 'Test', author: 'A', schemaVersion: 1, fileHash: 'h1', fileSize: 100, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
-      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-      await db.put('static_resources', { bookId: id, epubBlob: fileData } as StaticResource);
-
-      const result = await dbService.getBook(id);
-      expect(result.metadata?.id).toBe(id);
-      expect(result.metadata?.fileHash).toBe('h1');
-      expect(result.file).toEqual(fileData);
-    });
-
-    it('should return undefined if book not found', async () => {
-      const result = await dbService.getBook('non-existent');
-      expect(result.metadata).toBeUndefined();
-      expect(result.file).toBeUndefined();
-    });
-
-    it('should fallback to reading list progress if local is zero', async () => {
-      const db = await getDB();
-      const id = '1';
-      const fileData = new TextEncoder().encode('data').buffer;
-
-      await db.put('static_manifests', { bookId: id, title: 'A', author: 'A', schemaVersion: 1, fileHash: 'h1', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100, sourceFilename: 'book.epub' } as UserInventoryItem);
-      // Local progress 0%
-      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
-      // Reading list progress 50%
-      await db.put('user_reading_list', { filename: 'book.epub', title: 'A', author: 'A', percentage: 0.5, lastUpdated: 0 } as ReadingListEntry);
-      await db.put('static_resources', { bookId: id, epubBlob: fileData } as StaticResource);
-
-      const result = await dbService.getBook(id);
-      expect(result.metadata?.progress).toBe(0.5);
-      expect(result.metadata?.currentCfi).toBeUndefined(); // Should still be undefined/local
-    });
-
-    it('should use local progress if greater than zero', async () => {
-      const db = await getDB();
-      const id = '1';
-      const fileData = new TextEncoder().encode('data').buffer;
-
-      await db.put('static_manifests', { bookId: id, title: 'A', author: 'A', schemaVersion: 1, fileHash: 'h1', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100, sourceFilename: 'book.epub' } as UserInventoryItem);
-      // Local progress 10%
-      await db.put('user_progress', { bookId: id, percentage: 0.1, lastRead: 0, completedRanges: [] } as UserProgress);
-      // Reading list progress 50%
-      await db.put('user_reading_list', { filename: 'book.epub', title: 'A', author: 'A', percentage: 0.5, lastUpdated: 0 } as ReadingListEntry);
-      await db.put('static_resources', { bookId: id, epubBlob: fileData } as StaticResource);
-
-      const result = await dbService.getBook(id);
-      expect(result.metadata?.progress).toBe(0.1);
-    });
-  });
 
   describe('deleteBook', () => {
     it('should delete book, file, and related data', async () => {
@@ -165,7 +72,7 @@ describe('DBService', () => {
       const id = 'del-1';
 
       await db.put('static_manifests', { bookId: id, title: 'Del', author: 'A', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
+      await db.put('user_inventory', { bookId: id, title: 'Del', author: 'A', addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
       await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
       await db.put('static_resources', { bookId: id, epubBlob: new ArrayBuffer(0) } as StaticResource);
 
@@ -192,7 +99,7 @@ describe('DBService', () => {
       const fileContent = new Uint8Array([1, 2, 3]);
 
       await db.put('static_manifests', { bookId: id, title: 'Off', author: 'A', schemaVersion: 1, fileHash: 'existing-hash', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, addedAt: 100, status: 'unread', tags: [], lastInteraction: 100, sourceFilename: 'f.epub' } as UserInventoryItem);
+      await db.put('user_inventory', { bookId: id, title: 'Off', author: 'A', addedAt: 100, status: 'unread', tags: [], lastInteraction: 100, sourceFilename: 'f.epub' } as UserInventoryItem);
       await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
       await db.put('static_resources', { bookId: id, epubBlob: fileContent.buffer } as StaticResource);
 

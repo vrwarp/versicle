@@ -53,7 +53,8 @@ vi.mock('../../../store/useReadingStateStore', () => ({
         reset: vi.fn(),
         progress: {},
         getProgress: () => null
-    })
+    }),
+    useBookProgress: vi.fn(() => ({ completedRanges: [] }))
 }));
 vi.mock('../../../store/useTTSStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

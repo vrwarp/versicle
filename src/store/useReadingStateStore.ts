@@ -5,6 +5,7 @@ import type { UserProgress } from '../types/db';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { getDeviceId } from '../lib/device-id';
+import { mergeCfiRanges } from '../lib/cfi-utils';
 
 /**
  * Per-device progress structure.
@@ -46,6 +47,21 @@ interface ReadingState {
      * @param percentage - The new progress percentage (0-1).
      */
     updateLocation: (bookId: string, cfi: string, percentage: number) => void;
+
+    /**
+     * Adds a completed range to the progress, merging overlapping ranges.
+     */
+    addCompletedRange: (bookId: string, range: string) => void;
+
+    /**
+     * Updates the last played CFI position (TTS).
+     */
+    updatePlaybackPosition: (bookId: string, lastPlayedCfi: string) => void;
+
+    /**
+     * Updates the TTS queue position.
+     */
+    updateTTSProgress: (bookId: string, index: number, sectionIndex: number) => void;
 
     /**
      * Gets the progress for a specific book (aggregated across all devices).
@@ -138,6 +154,92 @@ export const useReadingStateStore = create<ReadingState>()(
                         rating: book.rating
                     });
                 }
+            },
+
+            addCompletedRange: (bookId, range) => {
+                const deviceId = getDeviceId();
+                set((state) => {
+                    const bookProgress = state.progress[bookId] || {};
+                    const existing = bookProgress[deviceId] || {
+                        bookId,
+                        percentage: 0,
+                        currentCfi: '',
+                        lastRead: Date.now(),
+                        completedRanges: []
+                    };
+
+                    const newRanges = mergeCfiRanges(existing.completedRanges || [], range);
+
+                    return {
+                        progress: {
+                            ...state.progress,
+                            [bookId]: {
+                                ...bookProgress,
+                                [deviceId]: {
+                                    ...existing,
+                                    completedRanges: newRanges,
+                                    lastRead: Date.now()
+                                }
+                            }
+                        }
+                    };
+                });
+            },
+
+            updatePlaybackPosition: (bookId, lastPlayedCfi) => {
+                const deviceId = getDeviceId();
+                set((state) => {
+                    const bookProgress = state.progress[bookId] || {};
+                    const existing = bookProgress[deviceId] || {
+                        bookId,
+                        percentage: 0,
+                        currentCfi: '',
+                        lastRead: Date.now(),
+                        completedRanges: []
+                    };
+
+                    return {
+                        progress: {
+                            ...state.progress,
+                            [bookId]: {
+                                ...bookProgress,
+                                [deviceId]: {
+                                    ...existing,
+                                    lastPlayedCfi
+                                }
+                            }
+                        }
+                    };
+                });
+            },
+
+            updateTTSProgress: (bookId, index, sectionIndex) => {
+                const deviceId = getDeviceId();
+                set((state) => {
+                    const bookProgress = state.progress[bookId] || {};
+                    const existing = bookProgress[deviceId] || {
+                        bookId,
+                        percentage: 0,
+                        currentCfi: '',
+                        lastRead: Date.now(),
+                        completedRanges: []
+                    };
+
+                    return {
+                        progress: {
+                            ...state.progress,
+                            [bookId]: {
+                                ...bookProgress,
+                                [deviceId]: {
+                                    ...existing,
+                                    currentQueueIndex: index,
+                                    currentSectionIndex: sectionIndex,
+                                    lastRead: Date.now()
+                                }
+                            }
+                        }
+                    };
+                });
             },
 
             getProgress: (bookId) => {

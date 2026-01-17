@@ -1,6 +1,7 @@
 import type { TTSQueueItem, TTSStatus } from './AudioPlayerService';
 import { dbService } from '../../db/DBService';
 
+
 export type PlaybackStateSnapshot = {
     queue: ReadonlyArray<TTSQueueItem>;
     currentIndex: number;
@@ -82,7 +83,7 @@ export class PlaybackStateManager {
     applySkippedMask(rawSkippedIndices: Set<number>, sectionId?: string) {
         // Validation of sectionId can be added here if needed, currently implicitly handled by caller
         if (sectionId && this.currentSectionIndex === -1) {
-             // Optional: validate section ID
+            // Optional: validate section ID
         }
         let changed = false;
 
@@ -93,7 +94,7 @@ export class PlaybackStateManager {
             // Only skip if ALL source indices are in the skipped set
             let shouldSkip = false;
             if (item.sourceIndices && item.sourceIndices.length > 0) {
-                 shouldSkip = item.sourceIndices.every(idx => rawSkippedIndices.has(idx));
+                shouldSkip = item.sourceIndices.every(idx => rawSkippedIndices.has(idx));
             }
 
             if (item.isSkipped !== shouldSkip) {
@@ -136,11 +137,11 @@ export class PlaybackStateManager {
 
                 const item = newQueue[i];
                 if (item.sourceIndices && item.sourceIndices.length > 0) {
-                     // Check if all source indices of this item are in the adaptation's set
-                     const isMatch = item.sourceIndices.every(idx => adaptIndicesSet.has(idx));
-                     if (isMatch) {
-                         matchingQueueIndices.push(i);
-                     }
+                    // Check if all source indices of this item are in the adaptation's set
+                    const isMatch = item.sourceIndices.every(idx => adaptIndicesSet.has(idx));
+                    if (isMatch) {
+                        matchingQueueIndices.push(i);
+                    }
                 }
             }
 
@@ -151,12 +152,12 @@ export class PlaybackStateManager {
                 // 1. Update the first item (Anchor)
                 const firstIdx = matchingQueueIndices[0];
                 if (newQueue[firstIdx].text !== adaptation.text || newQueue[firstIdx].isSkipped) {
-                     newQueue[firstIdx] = {
-                         ...newQueue[firstIdx],
-                         text: adaptation.text,
-                         isSkipped: false
-                     };
-                     changed = true;
+                    newQueue[firstIdx] = {
+                        ...newQueue[firstIdx],
+                        text: adaptation.text,
+                        isSkipped: false
+                    };
+                    changed = true;
                 }
 
                 // 2. Mark others as skipped
@@ -368,23 +369,25 @@ export class PlaybackStateManager {
      * @returns {number} Total duration in seconds.
      */
     getTotalDuration(): number {
-         if (!this._queue.length || !this.prefixSums.length) return 0;
-         const charsPerSecond = this.calculateCharsPerSecond();
-         if (charsPerSecond === 0) return 0;
-         return this.prefixSums[this._queue.length] / charsPerSecond;
+        if (!this._queue.length || !this.prefixSums.length) return 0;
+        const charsPerSecond = this.calculateCharsPerSecond();
+        if (charsPerSecond === 0) return 0;
+        return this.prefixSums[this._queue.length] / charsPerSecond;
     }
 
     /**
      * Persists the current queue and playback position to the database.
      * Optimizes writes by checking if the queue structure has changed.
      */
+    /**
+     * Persists the current queue and playback position.
+     * Optimizes writes by checking if the queue structure has changed.
+     */
     persistQueue() {
         if (this.currentBookId) {
             // Optimization: If queue has not changed since last persist,
-            // only update the position (currentIndex/sectionIndex).
-            if (this.lastPersistedQueue === this._queue) {
-                dbService.saveTTSPosition(this.currentBookId, this._currentIndex, this._currentSectionIndex);
-            } else {
+            // we don't need to save the full queue to cache_session_state.
+            if (this.lastPersistedQueue !== this._queue) {
                 dbService.saveTTSState(this.currentBookId, this._queue, this._currentIndex, this._currentSectionIndex);
                 this.lastPersistedQueue = this._queue;
             }
@@ -398,12 +401,15 @@ export class PlaybackStateManager {
      */
     async savePlaybackState(status: TTSStatus) {
         if (!this.currentBookId) return;
-        const currentItem = this._queue[this._currentIndex];
-        const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
+
         const isPaused = status === 'paused';
         const lastPauseTime = isPaused ? Date.now() : null;
+
+
+
         try {
-            await dbService.updatePlaybackState(this.currentBookId, lastPlayedCfi, lastPauseTime);
+            // Only update pause time in local cache session state
+            await dbService.updatePlaybackState(this.currentBookId, undefined, lastPauseTime);
         } catch (e) {
             console.warn('Failed to save playback state', e);
         }

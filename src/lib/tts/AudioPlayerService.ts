@@ -11,6 +11,7 @@ import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
 import { YjsSyncService } from '../sync/YjsSyncService';
+import { useReadingStateStore } from '../../store/useReadingStateStore';
 
 /**
  * Defines the possible states of the TTS playback.
@@ -142,6 +143,14 @@ export class AudioPlayerService {
 
         // Subscribe to state manager changes
         this.stateManager.subscribe((snapshot) => {
+            // Update Yjs Progress
+            if (this.currentBookId) {
+                useReadingStateStore.getState().updateTTSProgress(
+                    this.currentBookId,
+                    snapshot.currentIndex,
+                    snapshot.currentSectionIndex
+                );
+            }
             this.updateMediaSessionMetadata();
             this.notifyListeners(snapshot.currentItem?.cfi || null);
         });
@@ -463,7 +472,7 @@ export class AudioPlayerService {
         return this.enqueue(async () => {
             this.providerManager.pause();
             this.setStatus('paused');
-            await this.stateManager.savePlaybackState('paused');
+            await this.persistPlaybackState('paused');
         });
     }
 
@@ -474,7 +483,7 @@ export class AudioPlayerService {
     }
 
     private async stopInternal() {
-        await this.stateManager.savePlaybackState('stopped');
+        await this.persistPlaybackState('stopped');
         await this.platformIntegration.stop();
         this.setStatus('stopped');
         this.providerManager.stop();
@@ -575,7 +584,12 @@ export class AudioPlayerService {
                 if (this.currentBookId) {
                     const item = this.stateManager.getCurrentItem();
                     if (item && item.cfi && !item.isPreroll) {
-                        dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, true).catch(console.error);
+                        try {
+                            useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi);
+                            dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, true).catch(console.error);
+                        } catch (e) {
+                            console.error("Failed to update history", e);
+                        }
                     }
                 }
 
@@ -600,7 +614,12 @@ export class AudioPlayerService {
             if (this.currentBookId) {
                 const item = this.stateManager.getCurrentItem();
                 if (item && item.cfi && !item.isPreroll) {
-                    dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, false).catch(console.error);
+                    try {
+                        useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi);
+                        dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, false).catch(console.error);
+                    } catch (e) {
+                        console.error("Failed to update history", e);
+                    }
                 }
             }
         }
@@ -701,7 +720,7 @@ export class AudioPlayerService {
         if (newQueue && newQueue.length > 0) {
             if (autoPlay) {
                 this.providerManager.stop();
-                await this.stateManager.savePlaybackState('stopped');
+                await this.persistPlaybackState('stopped');
                 this.setStatus('loading');
             } else {
                 await this.stopInternal();
@@ -752,5 +771,19 @@ export class AudioPlayerService {
             prevSectionIndex--;
         }
         return false;
+    }
+    private async persistPlaybackState(status: TTSStatus) {
+        if (!this.currentBookId) return;
+
+        // updatePlaybackPosition in Yjs
+        const currentItem = this.stateManager.getCurrentItem();
+        const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
+
+        if (lastPlayedCfi) {
+            useReadingStateStore.getState().updatePlaybackPosition(this.currentBookId, lastPlayedCfi);
+        }
+
+        // Call stateManager to save legacy cache/db
+        await this.stateManager.savePlaybackState(status);
     }
 }
