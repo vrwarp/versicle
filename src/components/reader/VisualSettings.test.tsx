@@ -3,11 +3,15 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VisualSettings } from './VisualSettings';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { useLocalPreferencesStore } from '../../store/useLocalPreferencesStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 
 // Mock zustand store
 vi.mock('../../store/usePreferencesStore', () => ({
   usePreferencesStore: vi.fn(),
+}));
+vi.mock('../../store/useLocalPreferencesStore', () => ({
+  useLocalPreferencesStore: vi.fn(),
 }));
 vi.mock('../../store/useReaderUIStore', () => ({
   useReaderUIStore: vi.fn(() => ({})),
@@ -62,8 +66,6 @@ describe('VisualSettings', () => {
     vi.clearAllMocks();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (usePreferencesStore as any).mockImplementation((selector: any) => selector({
-      currentTheme: 'light',
-      setTheme: mockSetTheme,
       fontSize: 100,
       setFontSize: mockSetFontSize,
       fontFamily: 'serif',
@@ -74,6 +76,12 @@ describe('VisualSettings', () => {
       setShouldForceFont: mockSetShouldForceFont,
       readerViewMode: 'paginated',
       setReaderViewMode: mockSetReaderViewMode,
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useLocalPreferencesStore as any).mockImplementation((selector: any) => selector({
+      currentTheme: 'light',
+      setTheme: mockSetTheme,
     }));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

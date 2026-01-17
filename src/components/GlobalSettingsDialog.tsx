@@ -4,7 +4,7 @@ import { useTTSStore } from '../store/useTTSStore';
 import { useLibraryStore, useBookStore } from '../store/useLibraryStore';
 import { useReadingListStore } from '../store/useReadingListStore';
 import { useReadingStateStore } from '../store/useReadingStateStore';
-import { usePreferencesStore } from '../store/usePreferencesStore';
+import { useLocalPreferencesStore } from '../store/useLocalPreferencesStore';
 import { useToastStore } from '../store/useToastStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Modal, ModalContent, ModalHeader, ModalTitle } from './ui/Modal';
@@ -72,7 +72,7 @@ export const GlobalSettingsDialog = () => {
         uploadStatus
     } = useLibraryStore();
     const showToast = useToastStore(state => state.showToast);
-    const { currentTheme, setTheme } = usePreferencesStore(useShallow(state => ({
+    const { currentTheme, setTheme } = useLocalPreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
         setTheme: state.setTheme
     })));

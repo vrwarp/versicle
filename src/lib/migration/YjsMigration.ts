@@ -6,6 +6,7 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { useLocalPreferencesStore } from '../../store/useLocalPreferencesStore';
 import type {
     UserInventoryItem,
     UserAnnotation,
@@ -305,8 +306,10 @@ function migratePreferences(): void {
                     const updates: Partial<any> = {};
 
                     if (state.viewMode) updates.readerViewMode = state.viewMode;
-                    if (state.currentTheme) updates.currentTheme = state.currentTheme;
-                    if (state.customTheme) updates.customTheme = state.customTheme;
+                    // Theme is now local-only
+                    if (state.currentTheme) useLocalPreferencesStore.getState().setTheme(state.currentTheme);
+                    if (state.customTheme) useLocalPreferencesStore.getState().setCustomTheme(state.customTheme);
+
                     if (state.fontFamily) updates.fontFamily = state.fontFamily;
                     if (state.fontSize) updates.fontSize = state.fontSize;
                     if (state.lineHeight) updates.lineHeight = state.lineHeight;

@@ -4,6 +4,7 @@ import { ReaderView } from '../ReaderView';
 import { useReaderUIStore } from '../../../store/useReaderUIStore';
 import { useReadingStateStore } from '../../../store/useReadingStateStore';
 import { usePreferencesStore } from '../../../store/usePreferencesStore';
+import { useLocalPreferencesStore } from '../../../store/useLocalPreferencesStore';
 import { useTTSStore } from '../../../store/useTTSStore';
 import ePub from 'epubjs';
 import React from 'react';
@@ -163,10 +164,13 @@ describe('ReaderView', () => {
     });
 
     usePreferencesStore.setState({
-      currentTheme: 'light',
       fontSize: 100,
       shouldForceFont: false,
       readerViewMode: 'paginated',
+    });
+
+    useLocalPreferencesStore.setState({
+        currentTheme: 'light',
     });
 
     useTTSStore.setState({
@@ -252,7 +256,7 @@ describe('ReaderView', () => {
     const darkThemeBtn = await screen.findByLabelText('Select Dark theme');
     fireEvent.click(darkThemeBtn);
 
-    expect(usePreferencesStore.getState().currentTheme).toBe('dark');
+    expect(useLocalPreferencesStore.getState().currentTheme).toBe('dark');
 
     // Toggle Force Theme
     // We use getByRole for switch as it might not be labeled by text directly in a way JSDOM likes with Radix

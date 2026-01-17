@@ -5,6 +5,7 @@ import { dbService } from '../../db/DBService';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { useLocalPreferencesStore } from '../../store/useLocalPreferencesStore';
 
 // Mock dependencies
 vi.mock('../../store/yjs-provider', () => {
@@ -62,6 +63,16 @@ vi.mock('../../store/useReadingListStore', () => ({
 vi.mock('../../store/usePreferencesStore', () => ({
     usePreferencesStore: {
         getState: vi.fn(),
+        setState: vi.fn()
+    }
+}));
+
+vi.mock('../../store/useLocalPreferencesStore', () => ({
+    useLocalPreferencesStore: {
+        getState: vi.fn().mockReturnValue({
+            setTheme: vi.fn(),
+            setCustomTheme: vi.fn()
+        }),
         setState: vi.fn()
     }
 }));
@@ -227,10 +238,11 @@ describe('YjsMigration', () => {
 
         expect(usePreferencesStore.setState).toHaveBeenCalledWith({
             readerViewMode: 'scrolled',
-            currentTheme: 'dark',
             fontSize: 120,
             lineHeight: 1.8
         });
+
+        expect(useLocalPreferencesStore.getState().setTheme).toHaveBeenCalledWith('dark');
     });
 
     it('should migrate readerViewMode from individual legacy localStorage key as fallback', async () => {

@@ -36,13 +36,18 @@ vi.mock('../../../store/useReaderUIStore', () => ({
 vi.mock('../../../store/usePreferencesStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     usePreferencesStore: (selector: any) => selector({
-        currentTheme: 'light',
-        customTheme: null,
         fontFamily: 'serif',
         lineHeight: 1.5,
         fontSize: 100,
         shouldForceFont: false,
         readerViewMode: 'paginated'
+    })
+}));
+vi.mock('../../../store/useLocalPreferencesStore', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useLocalPreferencesStore: (selector: any) => selector({
+        currentTheme: 'light',
+        customTheme: null,
     })
 }));
 vi.mock('../../../store/useReadingStateStore', () => ({

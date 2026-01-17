@@ -49,12 +49,17 @@ const mockSetProviderId = vi.fn();
 
 vi.mock('../store/usePreferencesStore', () => ({
     usePreferencesStore: vi.fn(() => ({
-        currentTheme: 'light',
-        setTheme: vi.fn(),
         fontFamily: 'serif',
         lineHeight: 1.5,
         fontSize: 100,
         shouldForceFont: false
+    }))
+}));
+
+vi.mock('../store/useLocalPreferencesStore', () => ({
+    useLocalPreferencesStore: vi.fn(() => ({
+        currentTheme: 'light',
+        setTheme: vi.fn(),
     }))
 }));
 

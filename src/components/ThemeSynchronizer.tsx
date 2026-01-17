@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
-import { usePreferencesStore } from '../store/usePreferencesStore';
+import { useLocalPreferencesStore } from '../store/useLocalPreferencesStore';
 
 /**
  * Synchronizes the reader theme with the document root class.
  * This ensures that Tailwind's dark mode and custom CSS variables work correctly.
  */
 export const ThemeSynchronizer = () => {
-  const currentTheme = usePreferencesStore(state => state.currentTheme) || 'light';
+  const currentTheme = useLocalPreferencesStore(state => state.currentTheme) || 'light';
 
   useEffect(() => {
     const root = window.document.documentElement;

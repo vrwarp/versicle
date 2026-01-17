@@ -1,4 +1,5 @@
 import { usePreferencesStore } from "../../store/usePreferencesStore"
+import { useLocalPreferencesStore } from "../../store/useLocalPreferencesStore"
 import { useShallow } from 'zustand/react/shallow';
 import { PopoverContent, PopoverClose } from "../ui/Popover"
 import { Button } from "../ui/Button"
@@ -17,16 +18,18 @@ import { ThemeSelector } from "../ThemeSelector";
  * @returns The VisualSettings component.
  */
 export const VisualSettings = () => {
+  const { currentTheme, setTheme } = useLocalPreferencesStore(useShallow(state => ({
+    currentTheme: state.currentTheme,
+    setTheme: state.setTheme,
+  })));
+
   const {
-    currentTheme, setTheme,
     fontSize, setFontSize,
     fontFamily, setFontFamily,
     lineHeight, setLineHeight,
     shouldForceFont, setShouldForceFont,
     readerViewMode, setReaderViewMode
   } = usePreferencesStore(useShallow(state => ({
-    currentTheme: state.currentTheme,
-    setTheme: state.setTheme,
     fontSize: state.fontSize,
     setFontSize: state.setFontSize,
     fontFamily: state.fontFamily,

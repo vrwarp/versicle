@@ -4,6 +4,7 @@ import type { NavigationItem } from 'epubjs';
 import { useReadingStateStore, useBookProgress } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { useLocalPreferencesStore } from '../../store/useLocalPreferencesStore';
 import { useBook } from '../../store/selectors';
 import { useShallow } from 'zustand/react/shallow';
 import { useTTSStore } from '../../store/useTTSStore';
@@ -59,14 +60,18 @@ export const ReaderView: React.FC = () => {
     const {
         currentTheme,
         customTheme,
+    } = useLocalPreferencesStore(useShallow(state => ({
+        currentTheme: state.currentTheme,
+        customTheme: state.customTheme || DEFAULT_CUSTOM_THEME,
+    })));
+
+    const {
         fontFamily,
         lineHeight,
         fontSize,
         shouldForceFont,
         readerViewMode
     } = usePreferencesStore(useShallow(state => ({
-        currentTheme: state.currentTheme,
-        customTheme: state.customTheme || DEFAULT_CUSTOM_THEME,
         fontFamily: state.fontFamily,
         lineHeight: state.lineHeight || 1.5,
         fontSize: state.fontSize,
