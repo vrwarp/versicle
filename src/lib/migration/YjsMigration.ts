@@ -12,6 +12,7 @@ import type {
     UserProgress,
     ReadingListEntry
 } from '../../types/db';
+import { migrateLexicon } from '../sync/migration';
 
 /**
  * Checks if migration from legacy IDB to Yjs is needed and executes it.
@@ -165,8 +166,17 @@ async function migrateLegacyData(): Promise<void> {
         // Migrate Preferences (from localStorage)
         migratePreferences();
 
-        // Journey migration deferred to Phase 4
+        // Migrate Lexicon (User Overrides)
+        // Must run outside yDoc.transact because it performs async operations (DB reads)
+        // and modifying the store via actions is safer outside the raw update transaction.
     });
+
+    try {
+        await migrateLexicon();
+        console.log('[Migration] Lexicon migration step completed.');
+    } catch (e) {
+        console.error('[Migration] Lexicon migration failed:', e);
+    }
 
     console.log('[Migration] All data migrated to Yjs');
 }

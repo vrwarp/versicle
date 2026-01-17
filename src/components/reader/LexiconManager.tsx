@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { LexiconService } from '../../lib/tts/LexiconService';
+import { useLexiconStore } from '../../store/useLexiconStore';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import type { LexiconRule } from '../../types/db';
 import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw, CornerDownRight } from 'lucide-react';
@@ -27,39 +28,33 @@ interface LexiconManagerProps {
  * @returns The LexiconManager dialog component.
  */
 export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManagerProps) {
-    const [rules, setRules] = useState<LexiconRule[]>([]);
+    // const [rules, setRules] = useState<LexiconRule[]>([]); // Removed: using store derived state
     const [editingRule, setEditingRule] = useState<Partial<LexiconRule> | null>(null);
     const [isAdding, setIsAdding] = useState(false);
     const lexiconService = LexiconService.getInstance();
 
     const currentBookId = useReaderUIStore(state => state.currentBookId);
     const [scope, setScope] = useState<'global' | 'book'>('global');
-    const [biblePreference, setBiblePreference] = useState<'on' | 'off' | 'default'>('default');
 
     const [testInput, setTestInput] = useState('');
     const [testOutput, setTestOutput] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const loadRules = useCallback(async () => {
-        if (scope === 'global') {
-            const globals = await lexiconService.getRules();
-            setRules(globals.filter(r => !r.id.startsWith('bible-')));
-        } else if (currentBookId) {
-            const all = await lexiconService.getRules(currentBookId);
-            setRules(all.filter(r => r.bookId === currentBookId));
-            const pref = await lexiconService.getBibleLexiconPreference(currentBookId);
-            setBiblePreference(pref);
-        } else {
-            setRules([]);
-        }
-    }, [scope, currentBookId, lexiconService]);
+    // Subscribe to store
+    const rulesMap = useLexiconStore(state => state.rules);
+    const settings = useLexiconStore(state => state.settings);
 
-    useEffect(() => {
-        if (open) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            void loadRules();
+    const rules = useMemo(() => {
+        let list = Object.values(rulesMap).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        if (scope === 'global') {
+            return list.filter(r => !r.bookId || r.bookId === 'global');
+        } else if (currentBookId) {
+            return list.filter(r => r.bookId === currentBookId);
         }
-    }, [open, loadRules]);
+        return [];
+    }, [rulesMap, scope, currentBookId]);
+
+    const biblePreference = currentBookId ? (settings[currentBookId]?.bibleLexiconEnabled || 'default') : 'default';
 
     const [initializedTerm, setInitializedTerm] = useState<string | null>(null);
 
@@ -79,7 +74,6 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     const handleBiblePreferenceChange = async (pref: 'on' | 'off' | 'default') => {
         if (currentBookId) {
             await lexiconService.setBibleLexiconPreference(currentBookId, pref);
-            setBiblePreference(pref);
         }
     };
 
@@ -87,8 +81,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         if (!editingRule?.original || !editingRule?.replacement) return;
 
         // Preserve existing order if editing, or append to end if new
-        const existingRule = rules.find(r => r.id === editingRule.id);
-        const order = existingRule?.order ?? rules.length;
+        // const existingRule = rules.find(r => r.id === editingRule.id);
+        // const order = existingRule?.order ?? rules.length; // Handled by store addition/update implicitly
 
         await lexiconService.saveRule({
             id: editingRule.id,
@@ -96,13 +90,11 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             replacement: editingRule.replacement,
             isRegex: editingRule.isRegex,
             bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
-            applyBeforeGlobal: editingRule.applyBeforeGlobal,
-            order
+            applyBeforeGlobal: editingRule.applyBeforeGlobal
         });
 
         setIsAdding(false);
         setEditingRule(null);
-        loadRules();
     };
 
     const moveRule = async (index: number, direction: 'up' | 'down') => {
@@ -115,8 +107,6 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         newRules[index] = newRules[targetIndex];
         newRules[targetIndex] = temp;
 
-        setRules(newRules);
-
         // Persist order
         const updates = newRules.map((rule, idx) => ({ id: rule.id, order: idx }));
         await lexiconService.reorderRules(updates);
@@ -124,7 +114,6 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
     const handleDelete = async (id: string) => {
         await lexiconService.deleteRule(id);
-        loadRules();
     };
 
     const performReplacement = async (useAllRules: boolean) => {
@@ -256,7 +245,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                         applyBeforeGlobal: r.applyBeforeGlobal
                     });
                 }
-                loadRules();
+                // loadRules(); // Reactive update
             }
             // Reset input
             if (fileInputRef.current) fileInputRef.current.value = '';
