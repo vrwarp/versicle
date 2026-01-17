@@ -32,6 +32,8 @@ import { exportFile } from '../lib/export';
 import { ReadingListDialog } from './ReadingListDialog';
 import { Trash2, Download, Loader2, RotateCcw } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { useDeviceStore } from '../store/useDeviceStore';
+import { getDeviceId } from '../lib/device-id';
 
 /**
  * Global application settings dialog.
@@ -85,6 +87,9 @@ export const GlobalSettingsDialog = () => {
     const { signIn: firebaseSignIn, signOut: firebaseSignOut, isConfigured: isFirebaseAvailable } = useFirestoreSync();
     const [isFirebaseSigningIn, setIsFirebaseSigningIn] = useState(false);
     const [checkpoints, setCheckpoints] = useState<Awaited<ReturnType<typeof CheckpointService.listCheckpoints>>>([]);
+
+    const { devices, registerDevice } = useDeviceStore();
+    const currentDeviceId = getDeviceId();
 
     useEffect(() => {
         if (activeTab === 'recovery') {
@@ -948,6 +953,22 @@ export const GlobalSettingsDialog = () => {
                                     <p className="text-sm text-muted-foreground mb-4">
                                         Sync your reading progress, annotations, and reading list across devices.
                                     </p>
+
+                                    {/* Device Identity */}
+                                    <div className="space-y-4 mb-6 pb-6 border-b">
+                                        <h4 className="text-sm font-medium">Device Identity</h4>
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-medium">Device Name</label>
+                                            <Input
+                                                value={devices[currentDeviceId]?.name || ''}
+                                                onChange={(e) => registerDevice(currentDeviceId, e.target.value)}
+                                                placeholder="My Device"
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                                ID: {currentDeviceId}
+                                            </p>
+                                        </div>
+                                    </div>
 
                                     {/* Provider Selection */}
                                     <div className="space-y-4 mb-6">

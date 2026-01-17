@@ -93,6 +93,18 @@ vi.mock('./lib/sync/hooks/useYjsSync', () => ({
   useYjsSync: vi.fn(),
 }));
 
+// Mock Device Store to avoid Yjs middleware execution
+vi.mock('./store/useDeviceStore', () => ({
+  useDeviceStore: {
+    getState: vi.fn().mockReturnValue({
+      devices: {},
+      setDeviceName: vi.fn(),
+      registerDevice: vi.fn(),
+      touchDevice: vi.fn(),
+    })
+  }
+}));
+
 // Mock Router
 vi.mock('react-router-dom', () => ({
   BrowserRouter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
