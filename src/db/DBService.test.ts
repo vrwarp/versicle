@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
-import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, ReadingListEntry, NavigationItem } from '../types/db';
+import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, NavigationItem } from '../types/db';
 
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({

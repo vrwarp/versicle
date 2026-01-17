@@ -18,6 +18,8 @@ import { useLibraryStore, useBookStore } from './store/useLibraryStore';
 import { waitForYjsSync } from './store/yjs-provider';
 import { migrateToYjs } from './lib/migration/YjsMigration';
 import { backfillCoverPalettes } from './lib/migration/GhostBookBackfill';
+import { useDeviceStore } from './store/useDeviceStore';
+import { getDeviceId } from './lib/device-id';
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
 
 import './App.css';
@@ -94,6 +96,17 @@ function App() {
 
         setStatusMessage('Loading library...');
         await waitForYjsSync();
+
+        // Register device if not present
+        const deviceId = getDeviceId();
+        const deviceStore = useDeviceStore.getState();
+        if (!deviceStore.devices[deviceId]) {
+          console.log('[App] Registering new device:', deviceId);
+          deviceStore.registerDevice(deviceId, `Device ${deviceId.slice(-6)}`);
+        } else {
+          // Touch device to update last active
+          deviceStore.touchDevice(deviceId);
+        }
 
         // Wait for middleware to sync books (short poll)
         let attempts = 0;

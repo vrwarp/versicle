@@ -524,7 +524,7 @@ class DBService {
   private saveTTSStateTimeout: NodeJS.Timeout | null = null;
   private pendingTTSState: { [bookId: string]: CacheSessionState } = {};
 
-  saveTTSState(bookId: string, queue: TTSQueueItem[], _currentIndex: number, _sectionIndex?: number): void {
+  saveTTSState(bookId: string, queue: TTSQueueItem[]): void {
     this.pendingTTSState[bookId] = {
       bookId,
       playbackQueue: queue,

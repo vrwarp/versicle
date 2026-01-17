@@ -34,7 +34,8 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
 
     useEffect(() => {
         let mounted = true;
-        setLoading(true);
+        // Do not setLoading(true) here synchronously to avoid cascade
+
         dbService.getJourneyEvents(bookId).then(events => {
             if (mounted) {
                 setSessions(events);
