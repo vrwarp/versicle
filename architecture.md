@@ -80,6 +80,7 @@ graph TD
         CostEst[CostEstimator]
         TaskRunner[cancellable-task-runner.ts]
         MediaSession[MediaSessionManager]
+        ServiceWorker[ServiceWorker]
     end
 
     subgraph TTS [TTS Subsystem]
@@ -114,6 +115,7 @@ graph TD
     Reader --> AudioPanel
     Reader --> GlobalSettings
     Reader --> useEpub
+    Library --> ServiceWorker
 
     VisualSettings --> ReaderStore
     AudioPanel --> TTSStore
@@ -186,20 +188,20 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
     *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
 *   **Domain 2: User (Mutable/Syncable)** - *Managed by Yjs (via Middleware)*
-    *   `user_inventory`: User-specific metadata (Added Date, Custom Title, Tags, Status, Rating).
-    *   `user_reading_list`: Persistent reading history and status (Read/Reading/Want to Read).
-    *   `user_progress`: Reading state (CFI, Percentage, Last Read Timestamp, Queue Position).
+    *   **Note**: Most user data is now stored in Yjs binary blobs (`versicle-yjs`), but some legacy/transient stores remain or have been re-introduced for specific access patterns.
+    *   `user_inventory`: *Legacy/Sync Support*. Contains the list of books, status, and custom metadata.
+    *   `user_reading_list`: *Re-introduced in v21*. A lightweight "Shadow Inventory" tracking Read/Reading/Want to Read status and Ratings. This allows listing books even if the file (`static_resource`) is offloaded.
+    *   `user_ai_inference`: Expensive AI-derived data (Summaries, Accessibility Layers).
     *   `user_overrides`: Custom settings like Lexicon rules (pronunciation overrides).
     *   `user_annotations`: Highlights and notes.
     *   `user_journey`: Granular reading history sessions.
-    *   `user_ai_inference`: Expensive AI-derived data (Summaries, Accessibility Layers).
 *   **Domain 3: Cache (Transient/Regenerable)**
     *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
     *   `cache_audio_blobs`: Generated TTS audio segments.
     *   `cache_render_metrics`: Layout calculation results.
 
 **Key Functions:**
-*   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations).
+*   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations) and `user_reading_list` entry.
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
@@ -236,7 +238,15 @@ Handles the complex task of importing an EPUB file.
     1.  **Validation**: Enforces strict ZIP signature check (`PK\x03\x04`) to reject invalid files immediately.
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`) to render chapters.
         *   *Logic*: Scrapes text nodes for TTS and uses `@zumer/snapdom` to capture tables as structural `webp` images (enforcing white background).
-    3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head + Metadata + Tail) using a `cheapHash` function for O(1) duplicate detection.
+    3.  **Adaptive Contrast**: Generates a **Cover Palette** (5-color swatch) using a weighted K-Means algorithm (`cover-palette.ts`). This palette drives the UI's dynamic background gradients and text colors.
+    4.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head + Metadata + Tail) using a `cheapHash` function for O(1) duplicate detection.
+
+#### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
+*   **Goal**: Prevent memory leaks caused by `URL.createObjectURL` when displaying hundreds of book covers.
+*   **Logic**:
+    *   Instead of creating `blob:` URLs (which must be manually revoked and can leak memory if components unmount unexpectedly), the app uses a custom URL scheme: `/__versicle__/covers/:bookId`.
+    *   A **Service Worker** intercepts these requests, fetches the cover blob from IndexedDB (`static_manifests`), and responds with the image data directly.
+    *   *Trade-off*: Requires Service Worker installation and warm-up time; fails if SW is blocked or unsupported (though fallbacks exist).
 
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs.
@@ -340,15 +350,24 @@ Local WASM Neural TTS.
 
 ### State Management (`src/store/`)
 
-State is managed using **Zustand**.
+State is managed using **Zustand** with specialized strategies for different data types.
 
-*   **`useReaderStore`**: Persists visual preferences and reading state (font size, theme, current location) to **localStorage** (UI) and **IndexedDB** (Progress). Syncs via `SyncOrchestrator`.
-*   **`useTTSStore`**: Persists TTS settings (voice, speed, provider) to **localStorage**.
-*   **`useGenAIStore`**: Persists AI settings and usage stats to **localStorage**.
-*   **`useLibraryStore`**: Transient UI state. Hydrates book lists from `DBService` (IndexedDB) on mount.
-*   **`useSyncStore`**: Persists Sync credentials and settings to **localStorage**.
+*   **`useBookStore` (Synced)**: Manages the **User Inventory** (list of books, custom titles, tags). Backed by Yjs Map `books`.
+*   **`useReadingStateStore` (Per-Device Sync)**:
+    *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
+    *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., Phone vs Tablet). The UI selector (`useBookProgress`) aggregates these to find the "Furthest Read" point across all devices.
+*   **`usePreferencesStore` (Global Sync)**:
+    *   **Strategy**: Uses a global Yjs Map `preferences`.
+    *   **Why**: Themes and fonts are synced globally across all devices.
+*   **`useLibraryStore` (Local Only)**:
+    *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs.
+    *   **The "Ghost Book" Pattern**: The `useAllBooks` selector merges the *Synced Inventory* (Yjs) with the *Local Static Metadata* (IDB). If the local file is missing (Offloaded), the book still appears in the library ("Ghost") using the synced metadata.
 
 ### UI Layer
+
+#### Adaptive Contrast System
+*   **Logic**: Extracts perceptual lightness ($L^*$) from the book cover's dominant colors.
+*   **Application**: Dynamically assigns Tailwind utility classes (e.g., `text-slate-700` vs `text-white`) to ensure accessible contrast on book cards and headers.
 
 #### Mobile Integration
 *   **Safe Area**: Uses `@capacitor-community/safe-area`.

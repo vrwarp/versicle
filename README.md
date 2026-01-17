@@ -32,6 +32,7 @@
 ## Features
 
 ### Reading (The "Reading Room")
+*   **Adaptive Contrast**: The UI automatically adapts to your book covers, extracting dominant colors to create beautiful, accessible gradients and text themes.
 *   **Satellite FAB**: A dedicated floating action button for quick access to playback controls and menu actions.
 *   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
 *   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
@@ -39,7 +40,6 @@
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
 *   **Annotations**: Highlights and notes.
 *   **Table Snapshots**: Complex tables are captured as structural images for better readability and preservation.
-*   **Reprocessing**: Update existing books with improved text extraction or new parsing logic without losing your reading progress.
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
@@ -58,7 +58,8 @@
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
     *   **Google Drive Sync**: Keep your progress and annotations in sync across devices using your personal Google Drive.
-    *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization of reading progress and inventory.
+    *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
+    *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots protect against data loss during sync.
     *   **Android Backup**: Native integration with Android's Backup Manager.
 *   **Reading History**: Detailed session tracking with timeline visualization.
