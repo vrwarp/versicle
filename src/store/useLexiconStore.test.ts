@@ -1,7 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useLexiconStore } from './useLexiconStore';
 
-import * as Y from 'yjs';
 
 // Mock Yjs provider with a real Y.Doc instance
 // This ensures zustand-middleware-yjs works correctly with actual Yjs types

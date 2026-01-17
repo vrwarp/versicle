@@ -30,7 +30,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
 
     // Reactive progress from Yjs store
     const progress = useBookProgress(bookId);
-    const completedRanges = progress?.completedRanges || [];
+    const completedRanges = useMemo(() => progress?.completedRanges || [], [progress?.completedRanges]);
 
     useEffect(() => {
         let mounted = true;

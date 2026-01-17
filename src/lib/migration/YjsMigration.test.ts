@@ -89,7 +89,10 @@ describe('YjsMigration', () => {
                 if (storeName === 'user_progress') return Promise.resolve([]);
                 if (storeName === 'user_reading_list') return Promise.resolve([]);
                 return Promise.resolve([]);
-            })
+            }),
+            objectStoreNames: {
+                contains: vi.fn().mockReturnValue(false)
+            }
         };
 
         const { getDB } = await import('../../db/db');
@@ -175,7 +178,10 @@ describe('YjsMigration', () => {
                 if (storeName === 'user_progress') return Promise.resolve([]); // NO progress in user_progress
                 if (storeName === 'user_annotations') return Promise.resolve([]);
                 return Promise.resolve([]);
-            })
+            }),
+            objectStoreNames: {
+                contains: vi.fn().mockReturnValue(false)
+            }
         };
         const { getDB } = await import('../../db/db');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

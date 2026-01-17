@@ -105,7 +105,6 @@ describe('ReadingHistory Integration', () => {
 
     it('handles database fetch error gracefully', async () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getJourneyEvents as any).mockRejectedValue(new Error('Fetch failed'));
 
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
