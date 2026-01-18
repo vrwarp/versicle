@@ -22,7 +22,6 @@ interface MockFireProviderConfig {
     path: string;
     maxUpdatesThreshold?: number;
     maxWaitTime?: number;
-    maxWaitFirestoreTime?: number;
 }
 
 interface MockStorageData {
@@ -59,7 +58,7 @@ export class MockFireProvider extends ObservableV2<{
         this.doc = config.ydoc;
         this.documentPath = config.path;
         this.firebaseApp = config.firebaseApp;
-        this.maxWaitFirestoreTime = config.maxWaitFirestoreTime || 2000;
+        this.maxWaitFirestoreTime = config.maxWaitTime || 2000;
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         console.log(`[MockFireProvider] Initialized for path: ${config.path}`);

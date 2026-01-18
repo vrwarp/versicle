@@ -116,7 +116,7 @@ describe('MockFireProvider', () => {
                 firebaseApp: mockApp,
                 ydoc,
                 path: 'users/test-uid/versicle/main',
-                maxWaitFirestoreTime: 50
+                maxWaitTime: 50
             });
 
             // Wait for init
@@ -146,7 +146,7 @@ describe('MockFireProvider', () => {
                 firebaseApp: mockApp,
                 ydoc: firstDoc,
                 path,
-                maxWaitFirestoreTime: 50
+                maxWaitTime: 50
             });
 
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -177,7 +177,7 @@ describe('MockFireProvider', () => {
                 firebaseApp: mockApp,
                 ydoc,
                 path: 'test/path',
-                maxWaitFirestoreTime: 50
+                maxWaitTime: 50
             });
 
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -208,7 +208,7 @@ describe('MockFireProvider', () => {
                 firebaseApp: mockApp,
                 ydoc,
                 path: 'test/path',
-                maxWaitFirestoreTime: 50
+                maxWaitTime: 50
             });
 
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -225,7 +225,7 @@ describe('MockFireProvider', () => {
                 firebaseApp: mockApp,
                 ydoc,
                 path: 'test/path',
-                maxWaitFirestoreTime: 50
+                maxWaitTime: 50
             });
 
             await new Promise(resolve => setTimeout(resolve, 50));

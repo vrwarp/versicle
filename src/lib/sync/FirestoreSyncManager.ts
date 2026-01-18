@@ -8,7 +8,7 @@
  * - y-indexeddb: Primary (always active, source of truth for offline)
  * - y-fire: Secondary (active only when authenticated)
  */
-import { FireProvider } from 'y-fire';
+import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
@@ -191,12 +191,14 @@ class FirestoreSyncManager {
 
         this.setStatus('connecting');
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime;
+
         const providerConfig = {
             firebaseApp: app!,
             ydoc: yDoc,
             path: `users/${uid}/versicle/main`,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            maxWaitFirestoreTime: (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime,
+            maxWaitTime: maxWaitTime,
             maxUpdatesThreshold: this.config.maxUpdatesThreshold
         };
 
@@ -204,7 +206,8 @@ class FirestoreSyncManager {
             // Use MockFireProvider for testing when flag is set
             if (typeof window !== 'undefined' && window.__VERSICLE_MOCK_FIRESTORE__) {
                 console.log('[FirestoreSync] Using MockFireProvider (test mode)');
-                this.fireProvider = new MockFireProvider(providerConfig) as unknown as FireProvider;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                this.fireProvider = new MockFireProvider(providerConfig as any) as unknown as FireProvider;
             } else {
                 this.fireProvider = new FireProvider(providerConfig);
             }
