@@ -78,6 +78,12 @@ export const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
 // Used when Intl.Segmenter is not available.
 export const RE_SENTENCE_FALLBACK = /([^.!?]+[.!?]+)/g;
 
+// Optimized regexes for trim-less operations in refineSegments
+// These capture the relevant part in group 1, ignoring surrounding whitespace.
+const RE_LAST_WORD_TRIMLESS = /(\S+)\s*$/;
+const RE_LAST_TWO_WORDS_TRIMLESS = /((?:\S+\s+)\S+)\s*$/;
+const RE_FIRST_WORD_TRIMLESS = /^\s*(\S+)/;
+
 /**
  * Robust text segmentation utility using Intl.Segmenter with fallback and post-processing.
  * Handles edge cases like abbreviations (e.g., "Mr.", "i.e.") to prevent incorrect sentence splitting.
@@ -207,20 +213,25 @@ export class TextSegmenter {
         for (let i = 0; i < sentences.length; i++) {
             // Optimization: Assume sentences are already normalized by TextSegmenter.segment() during ingestion.
             // Avoiding re-normalization improves performance significantly.
-            // We MUST clone the object to avoid mutating the original input array during merging.
-            const current = { ...sentences[i] };
+
+            // Optimization: Delay cloning. We only clone if we are pushing to 'merged' to start a new segment.
+            // If we merge into the previous segment, we read from 'current' (immutable in this context)
+            // and write to 'last' (already cloned/created).
+            const current = sentences[i];
 
             if (merged.length > 0) {
                 const last = merged[merged.length - 1];
-                const lastTextTrimmed = last.text.trim();
+
+                // Optimization: Avoid trim() by using regexes that ignore whitespace.
+                // const lastTextTrimmed = last.text.trim();
 
                 // Check if last segment ends with an abbreviation
                 let isAbbreviation = false;
                 let lastWord = '';
 
                 // Try checking the last word
-                const oneWordMatch = RE_LAST_WORD.exec(lastTextTrimmed);
-                const rawLastWord = oneWordMatch ? oneWordMatch[0] : lastTextTrimmed;
+                const oneWordMatch = RE_LAST_WORD_TRIMLESS.exec(last.text);
+                const rawLastWord = oneWordMatch ? oneWordMatch[1] : '';
                 // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
                 const cleanLastWord = rawLastWord.replace(RE_LEADING_PUNCTUATION, '');
 
@@ -229,11 +240,9 @@ export class TextSegmenter {
                     lastWord = cleanLastWord;
                 } else {
                     // Try checking the last two words
-                    // Capture last two whitespace-separated tokens
-                    // (?: ... ) is non-capturing group
-                    const twoWordsMatch = RE_LAST_TWO_WORDS.exec(lastTextTrimmed);
+                    const twoWordsMatch = RE_LAST_TWO_WORDS_TRIMLESS.exec(last.text);
                     if (twoWordsMatch) {
-                        const rawLastTwo = twoWordsMatch[0];
+                        const rawLastTwo = twoWordsMatch[1];
                         // Remove leading punctuation from the phrase (e.g. "(et al." -> "et al.")
                         const cleanLastTwo = rawLastTwo.replace(RE_LEADING_PUNCTUATION, '');
 
@@ -252,9 +261,9 @@ export class TextSegmenter {
                         shouldMerge = true;
                     } else {
                         // Check the next segment (current)
-                        const nextTextTrimmed = current.text.trim();
-                        const match = RE_FIRST_WORD.exec(nextTextTrimmed);
-                        const nextFirstWord = match ? match[0] : nextTextTrimmed;
+                        // Optimization: Avoid trim() using regex
+                        const match = RE_FIRST_WORD_TRIMLESS.exec(current.text);
+                        const nextFirstWord = match ? match[1] : '';
                         const cleanNextWord = nextFirstWord.replace(RE_TRAILING_PUNCTUATION, '');
 
                         if (!starterSet.has(cleanNextWord)) {
@@ -291,7 +300,8 @@ export class TextSegmenter {
                 }
             }
 
-            merged.push(current);
+            // Not merged, start new segment (clone to separate from input)
+            merged.push({ ...current });
         }
 
         if (minSentenceLength <= 0) {
