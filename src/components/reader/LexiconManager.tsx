@@ -45,7 +45,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     const settings = useLexiconStore(state => state.settings);
 
     const rules = useMemo(() => {
-        let list = Object.values(rulesMap || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const list = Object.values(rulesMap || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         if (scope === 'global') {
             return list.filter(r => !r.bookId || r.bookId === 'global');
         } else if (currentBookId) {
@@ -264,8 +264,10 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             }
         >
             <div className="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-gray-700 pb-2 overflow-x-auto gap-4">
-                <div className="flex space-x-4 shrink-0">
+                <div className="flex space-x-4 shrink-0" role="tablist" aria-label="Lexicon Scope">
                     <button
+                        role="tab"
+                        aria-selected={scope === 'global'}
                         onClick={() => setScope('global')}
                         className={`pb-1 px-2 ${scope === 'global' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
                     >
@@ -273,6 +275,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     </button>
                     {currentBookId && (
                         <button
+                            role="tab"
+                            aria-selected={scope === 'book'}
                             onClick={() => setScope('book')}
                             className={`pb-1 px-2 ${scope === 'book' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
                         >
@@ -305,8 +309,10 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                 <h4 className="text-sm font-semibold">Bible Abbreviations & Lexicon</h4>
                                 <p className="text-xs text-muted-foreground">Override global setting for this book.</p>
                             </div>
-                            <div className="flex bg-muted rounded p-1">
+                            <div className="flex bg-muted rounded p-1" role="group" aria-label="Bible Lexicon Preference">
                                 <button
+                                    type="button"
+                                    aria-pressed={biblePreference === 'default'}
                                     data-testid="lexicon-pref-default"
                                     onClick={() => handleBiblePreferenceChange('default')}
                                     className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'default' ? 'bg-background shadow-sm font-medium' : 'hover:bg-background/50 text-muted-foreground'}`}
@@ -314,6 +320,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     Default
                                 </button>
                                 <button
+                                    type="button"
+                                    aria-pressed={biblePreference === 'on'}
                                     data-testid="lexicon-pref-on"
                                     onClick={() => handleBiblePreferenceChange('on')}
                                     className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'on' ? 'bg-background shadow-sm font-medium text-green-600' : 'hover:bg-background/50 text-muted-foreground'}`}
@@ -321,6 +329,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     On
                                 </button>
                                 <button
+                                    type="button"
+                                    aria-pressed={biblePreference === 'off'}
                                     data-testid="lexicon-pref-off"
                                     onClick={() => handleBiblePreferenceChange('off')}
                                     className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'off' ? 'bg-background shadow-sm font-medium text-red-600' : 'hover:bg-background/50 text-muted-foreground'}`}
@@ -384,8 +394,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 )}
                                             </div>
                                             <div className="flex gap-2">
-                                                <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
-                                                <button data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
+                                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
+                                                <button aria-label="Cancel editing" data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
                                             </div>
                                         </div>
                                     </div>
@@ -406,6 +416,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     <div className="flex gap-2 items-center">
                                         <div className="flex flex-col mr-2">
                                             <button
+                                                aria-label="Move rule up"
                                                 data-testid={`lexicon-move-up-${index}`}
                                                 onClick={() => moveRule(index, 'up')}
                                                 disabled={index === 0}
@@ -414,6 +425,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 <ArrowUp size={12} />
                                             </button>
                                             <button
+                                                aria-label="Move rule down"
                                                 data-testid={`lexicon-move-down-${index}`}
                                                 onClick={() => moveRule(index, 'down')}
                                                 disabled={index === rules.length - 1}
@@ -423,7 +435,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                             </button>
                                         </div>
                                         <button onClick={() => setEditingRule(rule)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                                        <button onClick={() => handleDelete(rule.id)} className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 p-1 rounded"><Trash2 size={16} /></button>
+                                        <button aria-label="Delete rule" onClick={() => handleDelete(rule.id)} className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 p-1 rounded"><Trash2 size={16} /></button>
                                     </div>
                                 </>
                             )}
@@ -486,8 +498,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                 )}
                             </div>
                             <div className="flex gap-2">
-                                <button data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
-                                <button data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
+                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
+                                <button aria-label="Cancel adding" data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
                             </div>
                         </div>
                     </div>
