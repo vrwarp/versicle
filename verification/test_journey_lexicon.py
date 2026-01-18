@@ -96,7 +96,7 @@ def test_journey_lexicon(page: Page):
     print("Testing Priority Toggle (Book Scope)...")
 
     # Switch to Book Scope
-    page.get_by_role("button", name="This Book").click()
+    page.get_by_role("tab", name="This Book").click()
 
     # Add Rule
     page.get_by_test_id("lexicon-add-rule-btn").click()
