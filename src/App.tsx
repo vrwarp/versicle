@@ -24,8 +24,11 @@ import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
 import type { DeviceProfile } from './types/device';
 import { useTTSStore } from './store/useTTSStore';
 import { usePreferencesStore } from './store/usePreferencesStore';
+import { createLogger } from './lib/logger';
 
 import './App.css';
+
+const logger = createLogger('App');
 
 /**
  * Main Application component.
@@ -50,7 +53,7 @@ function App() {
       try {
         await waitForServiceWorkerController();
       } catch (e) {
-        console.error('Service Worker wait failed:', e);
+        logger.error('Service Worker wait failed:', e);
         setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
       }
       setSwInitialized(true);
@@ -61,7 +64,7 @@ function App() {
   // Global Error Handler
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error('Unhandled Promise Rejection:', event.reason);
+      logger.error('Unhandled Promise Rejection:', event.reason);
 
       // Check for critical errors
       if (event.reason instanceof StorageFullError) {
@@ -93,7 +96,7 @@ function App() {
         try {
           await migrateToYjs();
         } catch (e) {
-          console.error('[App] Migration failed:', e);
+          logger.error('Migration failed:', e);
           // We proceed anyway, but log it
         }
 
@@ -119,7 +122,7 @@ function App() {
         };
 
         if (!deviceStore.devices[deviceId]) {
-          console.log('[App] Registering new device:', deviceId);
+          logger.info('Registering new device:', deviceId);
           deviceStore.registerCurrentDevice(deviceId, profile);
         } else {
           // Touch device to update last active and Sync Profile
@@ -143,11 +146,11 @@ function App() {
         await hydrateStaticMetadata();
 
         // Run non-blocking backfill
-        backfillCoverPalettes().catch(e => console.error('[App] Backfill failed:', e));
+        backfillCoverPalettes().catch(e => logger.error('Backfill failed:', e));
 
         setDbStatus('ready');
       } catch (err) {
-        console.error('Failed to initialize App:', err);
+        logger.error('Failed to initialize App:', err);
         setDbError(err);
         setDbStatus('error');
       }
@@ -184,7 +187,7 @@ function App() {
       // deleteDB('versicle-yjs'); 
       window.location.reload();
     } catch (err) {
-      console.error('Failed to delete DB:', err);
+      logger.error('Failed to delete DB:', err);
       alert('Failed to reset database. You may need to clear browser data manually.');
     }
   };

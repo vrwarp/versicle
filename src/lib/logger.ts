@@ -3,29 +3,35 @@
  */
 export type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
-/**
- * Represents a single log entry.
- */
-export interface LogEntry {
-  /** ISO timestamp of the log entry. */
-  timestamp: string;
-  /** The severity level of the log. */
-  level: LogLevel;
-  /** The context or component source of the log. */
-  context: string;
-  /** The log message. */
-  message: string;
-  /** Optional associated data. */
-  data?: unknown;
-  /** Optional associated error object. */
-  error?: unknown;
+const LEVELS: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3
+};
+
+interface ImportMetaEnv {
+  readonly VITE_LOG_LEVEL?: LogLevel;
+  readonly DEV: boolean;
 }
+
+// Helper to access env safely
+const getEnv = (): ImportMetaEnv => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (import.meta as any).env || { DEV: false };
+};
+
+const shouldLog = (level: LogLevel): boolean => {
+  const env = getEnv();
+  const configuredLevel = (env.VITE_LOG_LEVEL) || (env.DEV ? 'info' : 'warn');
+  return LEVELS[level] >= LEVELS[configuredLevel];
+};
 
 /**
  * Service for handling application logging with context and severity levels.
- * Currently writes to the console.
+ * This is the legacy singleton logger that requires manual context passing.
  */
-class LoggerService {
+class GlobalLoggerService {
   private formatMessage(context: string, message: string): string {
     return `[${context}] ${message}`;
   }
@@ -37,7 +43,9 @@ class LoggerService {
    * @param data Optional data to log.
    */
   info(context: string, message: string, data?: unknown): void {
-    console.log(this.formatMessage(context, message), data !== undefined ? data : '');
+    if (shouldLog('info')) {
+      console.info(this.formatMessage(context, message), data !== undefined ? data : '');
+    }
   }
 
   /**
@@ -47,7 +55,9 @@ class LoggerService {
    * @param data Optional data to log.
    */
   warn(context: string, message: string, data?: unknown): void {
-    console.warn(this.formatMessage(context, message), data !== undefined ? data : '');
+    if (shouldLog('warn')) {
+      console.warn(this.formatMessage(context, message), data !== undefined ? data : '');
+    }
   }
 
   /**
@@ -57,7 +67,9 @@ class LoggerService {
    * @param error Optional error object or data.
    */
   error(context: string, message: string, error?: unknown): void {
-    console.error(this.formatMessage(context, message), error !== undefined ? error : '');
+    if (shouldLog('error')) {
+      console.error(this.formatMessage(context, message), error !== undefined ? error : '');
+    }
   }
 
   /**
@@ -67,8 +79,51 @@ class LoggerService {
    * @param data Optional data to log.
    */
   debug(context: string, message: string, data?: unknown): void {
-    console.debug(this.formatMessage(context, message), data !== undefined ? data : '');
+    if (shouldLog('debug')) {
+      console.debug(this.formatMessage(context, message), data !== undefined ? data : '');
+    }
   }
 }
 
-export const Logger = new LoggerService();
+/**
+ * A logger instance bound to a specific namespace/context.
+ * Preferred for new code.
+ */
+export class ScopedLogger {
+  private namespace: string;
+
+  constructor(namespace: string) {
+    this.namespace = namespace;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  debug = (message: string, ...args: any[]) => {
+    if (shouldLog('debug')) {
+      console.debug(`[${this.namespace}]`, message, ...args);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  info = (message: string, ...args: any[]) => {
+    if (shouldLog('info')) {
+      console.info(`[${this.namespace}]`, message, ...args);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  warn = (message: string, ...args: any[]) => {
+    if (shouldLog('warn')) {
+      console.warn(`[${this.namespace}]`, message, ...args);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  error = (message: string, ...args: any[]) => {
+    if (shouldLog('error')) {
+      console.error(`[${this.namespace}]`, message, ...args);
+    }
+  }
+}
+
+export const Logger = new GlobalLoggerService();
+export const createLogger = (namespace: string) => new ScopedLogger(namespace);

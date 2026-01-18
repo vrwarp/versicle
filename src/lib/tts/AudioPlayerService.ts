@@ -12,6 +12,9 @@ import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
 import { YjsSyncService } from '../sync/YjsSyncService';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { createLogger } from '../logger';
+
+const logger = createLogger('AudioPlayerService');
 
 /**
  * Defines the possible states of the TTS playback.
@@ -111,12 +114,12 @@ export class AudioPlayerService {
             },
             onError: (error) => {
                 if (error?.type === 'fallback') {
-                    console.warn("Falling back to local provider due to cloud error");
+                    logger.warn("Falling back to local provider due to cloud error");
                     this.playInternal(true);
                     return;
                 }
 
-                console.error("TTS Provider Error", error);
+                logger.error("TTS Provider Error", error);
                 this.setStatus('stopped');
                 this.notifyError("Playback Error: " + (error?.message || "Unknown error"));
             },
@@ -173,7 +176,7 @@ export class AudioPlayerService {
             if (this.status !== 'stopped') {
                 this.setStatus('stopped');
                 this.providerManager.stop();
-                this.platformIntegration.stop().catch(console.error);
+                this.platformIntegration.stop().catch(e => logger.error("Failed to stop platform integration", e));
             }
             this.stateManager.reset();
 
@@ -185,7 +188,7 @@ export class AudioPlayerService {
                 this.playlistPromise = dbService.getSections(bookId).then(sections => {
                     this.playlist = sections;
                     this.restoreQueue(bookId);
-                }).catch(e => console.error("Failed to load playlist", e));
+                }).catch(e => logger.error("Failed to load playlist", e));
             } else {
                 this.playlist = [];
                 this.playlistPromise = null;
@@ -208,7 +211,7 @@ export class AudioPlayerService {
             this.platformIntegration.updatePlaybackState('playing');
             return true;
         } catch (e) {
-            console.error('Background engagement failed', e);
+            logger.error('Background engagement failed', e);
             return false;
         }
     }
@@ -238,7 +241,7 @@ export class AudioPlayerService {
                     // Subscription handles metadata and listeners
                 }
             } catch (e) {
-                console.error("Failed to restore TTS queue", e);
+                logger.error("Failed to restore TTS queue", e);
             }
         });
     }
@@ -375,7 +378,7 @@ export class AudioPlayerService {
                 });
 
             } catch (e) {
-                console.error("Preview error", e);
+                logger.error("Preview error", e);
                 this.setStatus('stopped');
                 this.isPreviewing = false;
                 this.notifyError(e instanceof Error ? e.message : "Preview error");
@@ -404,7 +407,7 @@ export class AudioPlayerService {
                     if (book.lastPauseTime) return this.resumeInternal();
                 }
             } catch (e) {
-                console.warn("Failed to restore playback state", e);
+                logger.warn("Failed to restore playback state", e);
             }
         }
 
@@ -453,7 +456,7 @@ export class AudioPlayerService {
             }
 
         } catch (e) {
-            console.error("Play error", e);
+            logger.error("Play error", e);
             this.setStatus('stopped');
             this.notifyError(e instanceof Error ? e.message : "Playback error");
         }
@@ -586,9 +589,9 @@ export class AudioPlayerService {
                     if (item && item.cfi && !item.isPreroll) {
                         try {
                             useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi);
-                            dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, true).catch(console.error);
+                            dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, true).catch(e => logger.error('Failed to update reading history', e));
                         } catch (e) {
-                            console.error("Failed to update history", e);
+                            logger.error("Failed to update history", e);
                         }
                     }
                 }
@@ -616,9 +619,9 @@ export class AudioPlayerService {
                 if (item && item.cfi && !item.isPreroll) {
                     try {
                         useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi);
-                        dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, false).catch(console.error);
+                        dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, false).catch(e => logger.error('Failed to update reading history', e));
                     } catch (e) {
-                        console.error("Failed to update history", e);
+                        logger.error("Failed to update history", e);
                     }
                 }
             }

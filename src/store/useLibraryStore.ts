@@ -6,6 +6,9 @@ import { useTTSStore } from './useTTSStore';
 import { useReadingListStore } from './useReadingListStore';
 import { processBatchImport } from '../lib/batch-ingestion';
 import { useBookStore } from './useBookStore';
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger('LibraryStore');
 
 export type SortOption = 'recent' | 'last_read' | 'author' | 'title';
 
@@ -129,14 +132,14 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       // Access books from the SYNCED store
       const books = useBookStore.getState().books;
       let bookIds = Object.keys(books);
-      console.debug(`[Hydrate] Called. Books in store: ${bookIds.length}`);
+      logger.debug(`Hydrate called. Books in store: ${bookIds.length}`);
 
       if (bookIds.length === 0) {
         // Self-healing: Check if user_inventory has items that Yjs missed (e.g. after restore)
         try {
           const legacyBooks = await injectedDB.getAllInventoryItems();
           if (legacyBooks && legacyBooks.length > 0) {
-            console.log(`[Library] Found ${legacyBooks.length} items in user_inventory but 0 in Yjs. Migrating...`);
+            logger.info(`Found ${legacyBooks.length} items in user_inventory but 0 in Yjs. Migrating...`);
 
             // Enrich legacy items with metadata from IDB if missing (Ghost Book requirements)
             await Promise.all(legacyBooks.map(async (item) => {
@@ -151,7 +154,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
                     if (!author || author === 'Unknown Author') author = meta.author;
                   }
                 } catch (e) {
-                  console.warn(`[Library] Failed to fetch metadata for legacy book ${item.bookId}`, e);
+                  logger.warn(`Failed to fetch metadata for legacy book ${item.bookId}`, e);
                 }
               }
 
@@ -170,7 +173,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             return;
           }
         } catch (e) {
-          console.error("[Library] Failed to self-heal from user_inventory", e);
+          logger.error("Failed to self-heal from user_inventory", e);
           return;
         }
       }
@@ -194,17 +197,17 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         // Hydrate Offload Status
         try {
           const offloadedMap = await injectedDB.getOffloadedStatus(bookIds);
-          // console.debug(`[Hydrate] Offloaded Map for ${bookIds.length} books: ${JSON.stringify(Array.from(offloadedMap.entries()))}`);
+          // logger.debug(`Offloaded Map for ${bookIds.length} books: ${JSON.stringify(Array.from(offloadedMap.entries()))}`);
           const offloadedSet = new Set<string>();
           offloadedMap.forEach((isOffloaded, id) => {
             if (isOffloaded) offloadedSet.add(id);
           });
           set({ offloadedBookIds: offloadedSet });
         } catch (e) {
-          console.error('Failed to hydrate offload status:', e);
+          logger.error('Failed to hydrate offload status:', e);
         }
       } catch (err) {
-        console.error('Failed to hydrate static metadata:', err);
+        logger.error('Failed to hydrate static metadata:', err);
         set({ isHydrating: false });
       }
     },
@@ -300,7 +303,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           rating: 0
         });
       } catch (err) {
-        console.error('Failed to import book:', err);
+        logger.error('Failed to import book:', err);
         let errorMessage = 'Failed to import book.';
         if (err instanceof StorageFullError) {
           errorMessage = 'Device storage full. Please delete some books.';
@@ -372,7 +375,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           uploadStatus: ''
         });
       } catch (err) {
-        console.error('Failed to batch import books:', err);
+        logger.error('Failed to batch import books:', err);
         let errorMessage = 'Failed to import books.';
         if (err instanceof StorageFullError) {
           errorMessage = 'Device storage full. Please delete some books.';
@@ -411,7 +414,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         // Clean up static blobs from IDB
         await injectedDB.deleteBook(id);
       } catch (err) {
-        console.error('Failed to remove book:', err);
+        logger.error('Failed to remove book:', err);
         set({ error: 'Failed to remove book.' });
         // Re-hydrate to revert on failure
         await get().hydrateStaticMetadata();
@@ -419,13 +422,13 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
     },
 
     offloadBook: async (id: string) => {
-      console.log('[Store] offloadBook called. ID:', id);
+      logger.debug('offloadBook called. ID:', id);
       // Optimistic update
       set((state) => {
         const set = state.offloadedBookIds || new Set();
-        console.log('[Store] prev offloaded set size:', set.size);
+        logger.debug('prev offloaded set size:', set.size);
         const newSet = new Set([...set, id]);
-        console.log('[Store] new offloaded set size:', newSet.size);
+        logger.debug('new offloaded set size:', newSet.size);
         return { offloadedBookIds: newSet };
       });
 
@@ -433,7 +436,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         await injectedDB.offloadBook(id);
         // Metadata remains in Yjs, just blob is removed from IDB
       } catch (err) {
-        console.error('Failed to offload book:', err);
+        logger.error('Failed to offload book:', err);
         // Revert optimistic update
         set((state) => ({
           error: 'Failed to offload book.',
@@ -453,7 +456,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           await injectedDB.restoreBook(id, file);
         } else {
           // Synced book download: no local manifest, need to fully import with existing ID
-          console.log(`[Library] Book ${id} has no local manifest. Importing with existing ID for synced book.`);
+          logger.info(`Book ${id} has no local manifest. Importing with existing ID for synced book.`);
 
           const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
 
@@ -495,7 +498,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           importStatus: ''
         }));
       } catch (err) {
-        console.error('Failed to restore book:', err);
+        logger.error('Failed to restore book:', err);
         set({ error: err instanceof Error ? err.message : 'Failed to restore book.', isImporting: false });
       }
     },
