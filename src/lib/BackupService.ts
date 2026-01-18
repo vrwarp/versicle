@@ -5,6 +5,9 @@ import { dbService } from '../db/DBService';
 import type { LexiconRule, BookLocations, StaticBookManifest, UserOverrides, UserInventoryItem } from '../types/db';
 import { getDB } from '../db/db';
 import { yDoc, waitForYjsSync } from '../store/yjs-provider';
+import { createLogger } from './logger';
+
+const logger = createLogger('BackupService');
 
 /**
  * V2 Backup Manifest using Yjs Snapshots
@@ -80,7 +83,7 @@ export class BackupService {
 
     for (const bookId of bookIds) {
       if (offloadedBookIds.has(bookId)) {
-        console.warn(`Skipping offloaded book ${bookId} in full backup`);
+        logger.warn(`Skipping offloaded book ${bookId} in full backup`);
         processed++;
         continue;
       }
@@ -90,10 +93,10 @@ export class BackupService {
         if (fileData) {
           filesFolder.file(`${bookId}.epub`, fileData);
         } else {
-          console.error(`Missing file for book ${bookId}`);
+          logger.error(`Missing file for book ${bookId}`);
         }
       } catch (e) {
-        console.error(`Failed to export file for book ${bookId}`, e);
+        logger.error(`Failed to export file for book ${bookId}`, e);
       }
 
       processed++;
@@ -222,16 +225,16 @@ export class BackupService {
     onProgress?: (percent: number, message: string) => void
   ): Promise<void> {
     if (manifest.version > this.BACKUP_VERSION) {
-      console.warn(`Backup version ${manifest.version} is newer than supported ${this.BACKUP_VERSION}. Proceeding with caution.`);
+      logger.warn(`Backup version ${manifest.version} is newer than supported ${this.BACKUP_VERSION}. Proceeding with caution.`);
     }
 
-    console.log('[BackupService] Starting v2 processManifest (Yjs snapshot)');
+    logger.info('Starting v2 processManifest (Yjs snapshot)');
 
     onProgress?.(10, 'Applying Yjs snapshot...');
 
     // === Apply Yjs Snapshot ===
     const stateUpdate = this.base64ToUint8Array(manifest.yjsSnapshot);
-    console.log(`[BackupService] Applying Yjs snapshot: ${stateUpdate.byteLength} bytes`);
+    logger.debug(`Applying Yjs snapshot: ${stateUpdate.byteLength} bytes`);
 
     // CRDT Issue: If we apply snapshot to current doc, deleted items remain deleted (Delete wins).
     // Solution: Wipe IDB data, then write snapshot using a fresh/isolated YDoc.
@@ -240,7 +243,7 @@ export class BackupService {
     // 1. Clear existing persistence
     const { yjsPersistence } = await import('../store/yjs-provider');
     if (yjsPersistence) {
-      console.log('[BackupService] Clearing existing database...');
+      logger.debug('Clearing existing database...');
       await yjsPersistence.clearData();
     }
 
@@ -253,7 +256,7 @@ export class BackupService {
     const tempPersistence = new IndexeddbPersistence('versicle-yjs', tempDoc);
 
     // 3. Wait for temp persistence to save
-    console.log('[BackupService] Writing snapshot to clean database...');
+    logger.debug('Writing snapshot to clean database...');
     await new Promise<void>((resolve) => {
       // IndexeddbPersistence saves updates immediately, but we wait for 'synced' to ensure connection
       // and then a small buffer for write completion.
@@ -381,7 +384,7 @@ export class BackupService {
         } catch {
           // Ignore store update errors during restore
         }
-        console.log(`[BackupService] Cleared offload status for ${restoredBookIds.length} restored books`);
+        logger.debug(`Cleared offload status for ${restoredBookIds.length} restored books`);
       }
     }
 
@@ -390,7 +393,7 @@ export class BackupService {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     onProgress?.(100, 'Restore complete!');
-    console.log('[BackupService] v2 restore complete (Yjs snapshot applied)');
+    logger.info('v2 restore complete (Yjs snapshot applied)');
   }
 
   // === Utility Methods ===

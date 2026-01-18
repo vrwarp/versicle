@@ -12,10 +12,15 @@
 import * as Y from 'yjs';
 import { ObservableV2 } from 'lib0/observable';
 import * as awarenessProtocol from 'y-protocols/awareness';
+import { createLogger } from '../../logger';
+
+const logger = createLogger('MockFireProvider');
 
 // Mock state stored in localStorage
 const MOCK_STORAGE_KEY = 'versicle_mock_firestore_snapshot';
 
+// Re-defining config interface to match usage (FireProviderConfig from y-cinder might differ but we need to match what's passed)
+// The original file used a local interface MockFireProviderConfig.
 interface MockFireProviderConfig {
     firebaseApp: unknown;
     ydoc: Y.Doc;
@@ -61,7 +66,7 @@ export class MockFireProvider extends ObservableV2<{
         this.maxWaitFirestoreTime = config.maxWaitTime || 2000;
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
-        console.log(`[MockFireProvider] Initialized for path: ${config.path}`);
+        logger.debug(`Initialized for path: ${config.path}`);
 
         // Simulate async initialization
         this.initializeAsync();
@@ -96,9 +101,9 @@ export class MockFireProvider extends ObservableV2<{
                 }
 
                 Y.applyUpdate(this.doc, snapshot);
-                console.log('[MockFireProvider] Applied stored snapshot');
+                logger.debug('Applied stored snapshot');
             } catch (e) {
-                console.error('[MockFireProvider] Failed to apply snapshot:', e);
+                logger.error('Failed to apply snapshot:', e);
             }
         }
 
@@ -108,7 +113,7 @@ export class MockFireProvider extends ObservableV2<{
         this._ready = true;
         this.emit('sync', [true]);
         this.emit('synced', []);
-        console.log('[MockFireProvider] Ready');
+        logger.debug('Ready');
     }
 
     private handleUpdate = (_update: Uint8Array, origin: unknown): void => {
@@ -133,7 +138,7 @@ export class MockFireProvider extends ObservableV2<{
                 return data[this.documentPath] || null;
             }
         } catch (e) {
-            console.error('[MockFireProvider] Failed to load from storage:', e);
+            logger.error('Failed to load from storage:', e);
         }
         return null;
     }
@@ -161,9 +166,9 @@ export class MockFireProvider extends ObservableV2<{
             };
 
             localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(allData));
-            console.log(`[MockFireProvider] Saved snapshot (${snapshot.byteLength} bytes)`);
+            // logger.debug(`Saved snapshot (${snapshot.byteLength} bytes)`);
         } catch (e) {
-            console.error('[MockFireProvider] Failed to save to storage:', e);
+            logger.error('Failed to save to storage:', e);
         }
     }
 
@@ -180,7 +185,7 @@ export class MockFireProvider extends ObservableV2<{
     destroy(): void {
         if (this.destroyed) return;
 
-        console.log('[MockFireProvider] Destroying');
+        logger.debug('Destroying');
         this.destroyed = true;
 
         if (this.syncTimeout) {
@@ -215,7 +220,7 @@ export class MockFireProvider extends ObservableV2<{
      */
     static clearMockStorage(): void {
         localStorage.removeItem(MOCK_STORAGE_KEY);
-        console.log('[MockFireProvider] Storage cleared');
+        logger.debug('Storage cleared');
     }
 
     /**
@@ -247,7 +252,7 @@ export class MockFireProvider extends ObservableV2<{
         };
 
         localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(allData));
-        console.log(`[MockFireProvider] Injected snapshot for path: ${path}`);
+        logger.debug(`Injected snapshot for path: ${path}`);
     }
 }
 

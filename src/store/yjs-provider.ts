@@ -1,6 +1,9 @@
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import { isStorageSupported } from '../lib/sync/support';
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger('YjsProvider');
 
 // Singleton Y.Doc instance - Source of Truth for User Data
 export const yDoc = new Y.Doc();
@@ -13,16 +16,16 @@ if (isStorageSupported()) {
         persistence = new IndexeddbPersistence('versicle-yjs', yDoc);
 
         persistence.on('synced', () => {
-            console.log('✅ [Yjs] Content loaded from IndexedDB (versicle-yjs)');
+            logger.info('Content loaded from IndexedDB (versicle-yjs)');
         });
 
         // Error handling for persistence layer
         // Note: IndexeddbPersistence doesn't emit 'error' in all versions, but good practice to have listeners if accessible
     } catch (error) {
-        console.error('❌ [Yjs] Failed to initialize IndexedDB persistence:', error);
+        logger.error('Failed to initialize IndexedDB persistence:', error);
     }
 } else {
-    console.warn('⚠️ [Yjs] IndexedDB not supported. Falling back to in-memory mode.');
+    logger.warn('IndexedDB not supported. Falling back to in-memory mode.');
 }
 
 /**
@@ -45,7 +48,7 @@ export const waitForYjsSync = (timeoutMs = 5000): Promise<void> => {
 
         const timer = setTimeout(() => {
             if (!resolved) {
-                console.warn('⚠️ [Yjs] Sync timeout reached. Proceeding with potentially stale data.');
+                logger.warn('Sync timeout reached. Proceeding with potentially stale data.');
                 resolved = true;
                 resolve();
             }
@@ -63,9 +66,9 @@ export const waitForYjsSync = (timeoutMs = 5000): Promise<void> => {
 
 export const disconnectYjs = async () => {
     if (persistence) {
-        console.log('🔌 [Yjs] Disconnecting persistence...');
+        logger.info('Disconnecting persistence...');
         await persistence.destroy();
         persistence = null;
-        console.log('🔌 [Yjs] Persistence disconnected.');
+        logger.info('Persistence disconnected.');
     }
 };

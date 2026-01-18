@@ -2,6 +2,9 @@ import { getDB } from '../../db/db';
 import { useBookStore } from '../../store/useLibraryStore';
 import { extractCoverPalette } from '../cover-palette';
 import { yDoc } from '../../store/yjs-provider';
+import { createLogger } from '../logger';
+
+const logger = createLogger('Backfill');
 
 /**
  * Backfills cover palettes for existing books that lack them.
@@ -15,7 +18,7 @@ export async function backfillCoverPalettes(): Promise<void> {
         return;
     }
 
-    console.log('[Backfill] Checking for missing or outdated cover palettes...');
+    logger.debug('Checking for missing or outdated cover palettes...');
 
     const books = useBookStore.getState().books;
     const db = await getDB();
@@ -39,13 +42,13 @@ export async function backfillCoverPalettes(): Promise<void> {
                     }
                 }
             } catch (e) {
-                console.warn(`[Backfill] Failed to process book ${book.bookId}:`, e);
+                logger.warn(`Failed to process book ${book.bookId}:`, e);
             }
         }
     }
 
     if (updatedCount > 0) {
-        console.log(`[Backfill] Generating palettes for ${updatedCount} books...`);
+        logger.info(`Generating palettes for ${updatedCount} books...`);
 
         // Update Yjs (via store actions) to ensure persistence and sync.
         // We use yDoc.transact to bundle the updates into a single transaction.
@@ -56,9 +59,9 @@ export async function backfillCoverPalettes(): Promise<void> {
             }
         });
 
-        console.log(`[Backfill] Successfully updated ${updatedCount} books.`);
+        logger.info(`Successfully updated ${updatedCount} books.`);
     } else {
-        console.log('[Backfill] No books needed palette generation.');
+        logger.debug('No books needed palette generation.');
     }
 
     // Mark complete

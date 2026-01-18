@@ -31,6 +31,9 @@ import type {
   SyncCheckpoint,
   SyncLogEntry
 } from '../types/db';
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger('DB');
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -234,7 +237,7 @@ export const initDB = () => {
 
         // --- MIGRATION LOGIC (v17 -> v18) ---
         if (oldVersion < 18) {
-          console.log('Migrating to v18 Data Architecture...');
+          logger.info('Migrating to v18 Data Architecture...');
 
           // Use 'any' casting for legacy store access within upgrade logic
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -573,7 +576,7 @@ export const initDB = () => {
 
         // --- MIGRATION LOGIC (v19 -> v20) ---
         if (oldVersion < 20) {
-          console.log('Migrating to v20: Fixing Reading List Progress...');
+          logger.info('Migrating to v20: Fixing Reading List Progress...');
           // ... (Previous v20 Logic remains but we don't need to duplicate it here if it's already executed)
           // However, since we are moving to v21, we can actually clean up the v20 block if we want,
           // but for safety we leave it.
@@ -649,7 +652,7 @@ export const initDB = () => {
 
         // --- MIGRATION LOGIC (v20 -> v21) ---
         if (oldVersion < 21) {
-          console.log('Migrating to v21: Seeding User Reading List...');
+          logger.info('Migrating to v21: Seeding User Reading List...');
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const tx: any = transaction;
           const invStore = tx.objectStore('user_inventory');
@@ -685,7 +688,7 @@ export const initDB = () => {
 
         // --- MIGRATION LOGIC (v21 -> v22) ---
         if (oldVersion < 22) {
-          console.log('Migrating to v22: Repairing corrupted filenames...');
+          logger.info('Migrating to v22: Repairing corrupted filenames...');
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const tx: any = transaction;
           const invStore = tx.objectStore('user_inventory');
@@ -711,7 +714,7 @@ export const initDB = () => {
               if (resource && resource.epubBlob && (resource.epubBlob as any).name) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const recoveredName = (resource.epubBlob as any).name;
-                console.log(`v22 Repair: Recovered "${recoveredName}" for book ${inv.bookId}`);
+                logger.debug(`v22 Repair: Recovered "${recoveredName}" for book ${inv.bookId}`);
 
                 // 2. Fix Inventory
                 inv.sourceFilename = recoveredName;
@@ -733,12 +736,12 @@ export const initDB = () => {
                   rating: inv.rating
                 });
               } else {
-                console.warn(`v22 Repair Failed: Could not recover filename for ${inv.bookId} (Resource missing or not a File).`);
+                logger.warn(`v22 Repair Failed: Could not recover filename for ${inv.bookId} (Resource missing or not a File).`);
               }
             }
             cursor = await cursor.continue();
           }
-          console.log(`v22 Migration Complete. Repaired ${fixedCount} books.`);
+          logger.info(`v22 Migration Complete. Repaired ${fixedCount} books.`);
         }
 
       },
