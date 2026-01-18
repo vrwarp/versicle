@@ -19,7 +19,8 @@
 
 *   **Framework**: React 19 + Vite 7
 *   **Language**: TypeScript
-*   **State**: Zustand + Yjs (CRDT)
+*   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs`
+*   **Sync**: `y-fire` (Firestore) + Google Drive API
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
@@ -57,7 +58,9 @@
 
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
-    *   **Google Drive Sync**: Keep your progress and annotations in sync across devices using your personal Google Drive.
+    *   **Dual Sync**:
+        *   **Snapshot Sync**: Keep your progress and annotations in sync across devices using your personal **Google Drive** (Serverless).
+        *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots protect against data loss during sync.
