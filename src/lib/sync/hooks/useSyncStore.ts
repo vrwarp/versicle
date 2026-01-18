@@ -5,7 +5,7 @@ import type { FirestoreSyncStatus, FirebaseAuthStatus } from '../FirestoreSyncMa
 /**
  * Sync provider types
  */
-export type SyncProvider = 'none' | 'google-drive' | 'firebase';
+export type SyncProvider = 'none' | 'firebase';
 
 /**
  * Firebase configuration stored in settings
@@ -25,15 +25,6 @@ interface SyncStore {
     /** Which sync provider is active */
     syncProvider: SyncProvider;
     setSyncProvider: (provider: SyncProvider) => void;
-
-    // === Google Drive Credentials (Legacy) ===
-    googleClientId: string;
-    googleApiKey: string;
-    setGoogleCredentials: (clientId: string, apiKey: string) => void;
-
-    // === Google Drive Status (Legacy) ===
-    isSyncEnabled: boolean;
-    setSyncEnabled: (enabled: boolean) => void;
 
     // === Firebase Configuration ===
     /** Firebase config (API key, project ID, etc.) */
@@ -79,14 +70,6 @@ export const useSyncStore = create<SyncStore>()(
             syncProvider: 'none',
             setSyncProvider: (provider) => set({ syncProvider: provider }),
 
-            // Google Drive (Legacy)
-            googleClientId: '',
-            googleApiKey: '',
-            setGoogleCredentials: (clientId, apiKey) => set({ googleClientId: clientId, googleApiKey: apiKey }),
-
-            isSyncEnabled: false,
-            setSyncEnabled: (enabled) => set({ isSyncEnabled: enabled }),
-
             // Firebase Configuration
             firebaseConfig: defaultFirebaseConfig,
             setFirebaseConfig: (config) => set((state) => ({
@@ -116,11 +99,6 @@ export const useSyncStore = create<SyncStore>()(
             partialize: (state) => ({
                 // Persist provider selection
                 syncProvider: state.syncProvider,
-
-                // Persist Google Drive settings
-                googleClientId: state.googleClientId,
-                googleApiKey: state.googleApiKey,
-                isSyncEnabled: state.isSyncEnabled,
 
                 // Persist Firebase configuration
                 firebaseConfig: state.firebaseConfig,

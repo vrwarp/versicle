@@ -27,19 +27,10 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     page_a.goto("/")
     expect(page_a.get_by_test_id("library-view")).to_be_visible()
 
-    # Enable Sync on A
-    page_a.get_by_test_id("header-settings-button").click()
-    page_a.get_by_role("button", name="Sync & Cloud").click()
-    time.sleep(1)
-    # Select Provider (Required for inputs to show)
-    page_a.get_by_role("combobox").click()
-    page_a.get_by_role("option", name="Google Drive (Legacy)").click()
-
-    page_a.get_by_placeholder("OAuth2 Client ID").fill("device-a")
-    page_a.get_by_placeholder("API Key").fill("key-a")
-    page_a.get_by_role("switch").click()
+    # Sync is auto-enabled via window.__VERSICLE_MOCK_SYNC__
 
     # Add Lexicon Rule on A
+    page_a.get_by_test_id("header-settings-button").click()
     page_a.get_by_role("button", name="Dictionary").click()
     page_a.get_by_role("button", name="Manage Rules").click()
     page_a.get_by_test_id("lexicon-add-rule-btn").click()
@@ -53,6 +44,9 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     # Close Lexicon and Settings
     page_a.get_by_test_id("lexicon-close-btn").click()
     page_a.keyboard.press("Escape")
+
+    # Wait for initial sync to stabilize
+    time.sleep(2)
 
     # DEBUG: Check DB content on Device A
     db_count = page_a.evaluate("""
@@ -127,21 +121,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
     assert injected == mock_data_str, "Device B failed to inject mock data correctly"
     print("Device B injection verified.")
 
-    # Enable Sync on B (to trigger pull)
-    page_b.get_by_test_id("header-settings-button").click()
-    page_b.get_by_role("button", name="Sync & Cloud").click()
-    time.sleep(1)
-
-    # Select Provider first (Switch is hidden otherwise)
-    page_b.get_by_role("combobox").click()
-    page_b.get_by_role("option", name="Google Drive (Legacy)").click()
-    
-    sync_switch = page_b.get_by_role("switch")
-    if sync_switch.get_attribute("aria-checked") == "false":
-        page_b.get_by_placeholder("OAuth2 Client ID").fill("device-b")
-        page_b.get_by_placeholder("API Key").fill("key-b")
-        sync_switch.click()
-        print("Device B sync enabled.")
+    # Enable Sync on B (to trigger pull) - Auto-enabled via Mock
 
     # Wait for initial pull.
     # We can poll DB instead of sleeping
@@ -170,6 +150,7 @@ def test_cross_device_sync_journey(browser: Browser, browser_context_args):
         time.sleep(1)
 
     # Verify Data Restored in UI
+    page_b.get_by_test_id("header-settings-button").click()
     page_b.get_by_role("button", name="Dictionary").click()
     page_b.get_by_role("button", name="Manage Rules").click()
 

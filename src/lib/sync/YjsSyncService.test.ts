@@ -146,28 +146,4 @@ describe('YjsSyncService', () => {
         });
     });
 
-    describe('Service Logic', () => {
-        it('should NOT push when sync is disabled', async () => {
-            // Setup store to return enabled=false
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (useSyncStore.getState as any).mockReturnValue({
-                isSyncEnabled: false, // Sync disabled
-                googleClientId: 'test',
-                googleApiKey: 'test',
-                setLastSyncTime: vi.fn(),
-            });
-
-            const service = new YjsSyncService(mockProvider);
-            vi.spyOn(mockProvider, 'uploadSnapshot');
-
-            // initialize will check isSyncEnabled and SKIP provider init
-            await service.initialize();
-
-            // Trigger forcePush
-            await service.forcePush('test');
-
-            // Should NOT call uploadSnapshot because sync is disabled
-            expect(mockProvider.uploadSnapshot).not.toHaveBeenCalled();
-        });
-    });
 });

@@ -34,35 +34,20 @@ export class YjsSyncService {
      * Initialize the sync service and perform initial sync
      */
     async initialize(): Promise<void> {
-        const { googleClientId, googleApiKey, isSyncEnabled } = useSyncStore.getState();
+        try {
+            await this.provider.initialize({});
+            console.log('[YjsSync] Provider initialized');
 
-        if (isSyncEnabled && googleClientId && googleApiKey) {
-            try {
-                await this.provider.initialize({ clientId: googleClientId, apiKey: googleApiKey });
-                console.log('[YjsSync] Provider initialized');
-
-                // Perform initial pull to get remote state
-                await this.sync('startup');
-            } catch (e) {
-                console.error('[YjsSync] Initialization failed', e);
-            }
+            // Perform initial pull to get remote state
+            await this.sync('startup');
+        } catch (e) {
+            console.error('[YjsSync] Initialization failed', e);
         }
 
         // Handle visibility change - push when going to background
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 this.forcePush('background');
-            }
-        });
-
-        // React to sync settings changes
-        useSyncStore.subscribe((state, prevState) => {
-            if (state.googleClientId !== prevState.googleClientId ||
-                state.googleApiKey !== prevState.googleApiKey ||
-                state.isSyncEnabled !== prevState.isSyncEnabled) {
-                if (state.isSyncEnabled) {
-                    this.initialize();
-                }
             }
         });
     }
@@ -90,9 +75,6 @@ export class YjsSyncService {
      */
     async sync(trigger: string): Promise<void> {
         if (this.isSyncing) return;
-
-        const { isSyncEnabled } = useSyncStore.getState();
-        if (!isSyncEnabled) return;
 
         this.isSyncing = true;
         try {
@@ -144,9 +126,6 @@ export class YjsSyncService {
      * Push local Yjs state as snapshot to remote
      */
     private async push(trigger: string): Promise<void> {
-        const { isSyncEnabled } = useSyncStore.getState();
-        if (!isSyncEnabled) return;
-
         // Ensure Yjs is synced from IndexedDB
         await waitForYjsSync();
 
@@ -171,6 +150,7 @@ export class YjsSyncService {
         // Flatten to LexiconRule array
         const lexicon: LexiconRule[] = [];
         for (const ov of overrides) {
+            if (!ov.lexicon) continue;
             for (const r of ov.lexicon) {
                 lexicon.push({
                     id: r.id,
@@ -185,7 +165,8 @@ export class YjsSyncService {
 
         // Store lexicon in a Yjs map for sync
         const lexiconMap = yDoc.getMap<LexiconRule>('lexicon');
-        for (const rule of lexicon) {
+        const cleanLexicon = JSON.parse(JSON.stringify(lexicon));
+        for (const rule of cleanLexicon) {
             lexiconMap.set(rule.id, rule);
         }
     }
@@ -196,7 +177,8 @@ export class YjsSyncService {
      */
     async restoreLexiconFromYjs(): Promise<void> {
         const lexiconMap = yDoc.getMap<LexiconRule>('lexicon');
-        const rules = Array.from(lexiconMap.values());
+        // Ensure we have plain objects to avoid DataCloneError with Proxies/functions
+        const rules = JSON.parse(JSON.stringify(Array.from(lexiconMap.values()))) as LexiconRule[];
 
         if (rules.length === 0) return;
 
@@ -215,21 +197,21 @@ export class YjsSyncService {
         }
 
         for (const [bookId, bookRules] of Object.entries(byBookId)) {
-            const existing = await tx.store.get(bookId) || {
+            const existingRaw = await tx.store.get(bookId);
+            // Ensure existing record is also clean
+            const existing = existingRaw ? JSON.parse(JSON.stringify(existingRaw)) : {
                 bookId,
                 lexicon: [],
-                // created/modified not part of UserOverrides type
             };
 
             // Merge rules
-            const existingMap = new Map(existing.lexicon.map(r => [r.id, r]));
+            const existingMap = new Map(existing.lexicon.map((r: LexiconRule) => [r.id, r]));
 
             for (const r of bookRules) {
                 existingMap.set(r.id, r);
             }
 
             existing.lexicon = Array.from(existingMap.values());
-            // existing.modified = Date.now();
 
             await tx.store.put(existing);
         }
