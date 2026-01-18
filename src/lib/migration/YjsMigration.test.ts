@@ -84,11 +84,21 @@ describe('YjsMigration', () => {
 
         // Mock getDB to return a mock DB object with getAll
         const dbMock = {
+            objectStoreNames: {
+                contains: vi.fn().mockReturnValue(true)
+            },
             getAll: vi.fn().mockImplementation((storeName) => {
                 if (storeName === 'user_annotations') return Promise.resolve([]);
                 if (storeName === 'user_progress') return Promise.resolve([]);
                 if (storeName === 'user_reading_list') return Promise.resolve([]);
                 return Promise.resolve([]);
+            }),
+            transaction: vi.fn().mockReturnValue({
+                objectStore: vi.fn().mockReturnValue({
+                    getAll: vi.fn().mockResolvedValue([]),
+                    getAllKeys: vi.fn().mockResolvedValue([])
+                }),
+                done: Promise.resolve()
             })
         };
 
@@ -170,11 +180,21 @@ describe('YjsMigration', () => {
         (dbService.getAllInventoryItems as any).mockResolvedValue(mockInventory);
 
         const dbMock = {
+            objectStoreNames: {
+                contains: vi.fn().mockReturnValue(true)
+            },
             getAll: vi.fn().mockImplementation((storeName) => {
                 if (storeName === 'user_reading_list') return Promise.resolve(mockReadingList);
                 if (storeName === 'user_progress') return Promise.resolve([]); // NO progress in user_progress
                 if (storeName === 'user_annotations') return Promise.resolve([]);
                 return Promise.resolve([]);
+            }),
+            transaction: vi.fn().mockReturnValue({
+                objectStore: vi.fn().mockReturnValue({
+                    getAll: vi.fn().mockResolvedValue([]),
+                    getAllKeys: vi.fn().mockResolvedValue([])
+                }),
+                done: Promise.resolve()
             })
         };
         const { getDB } = await import('../../db/db');

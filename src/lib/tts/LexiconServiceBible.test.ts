@@ -31,7 +31,7 @@ vi.mock('../../store/useLexiconStore', () => ({
 }));
 
 vi.mock('../../store/yjs-provider', () => ({
-  waitForYjsSync: vi.fn().mockImplementation((_timeout?: number) => Promise.resolve()),
+  waitForYjsSync: vi.fn().mockImplementation(() => Promise.resolve()),
 }));
 
 // Mock TTS Store for Bible preference check
