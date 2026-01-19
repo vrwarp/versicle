@@ -52,6 +52,7 @@
 *   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
 *   **Free Tier Rotation**: Automatically rotates between Gemini models (Flash Lite/Flash) to maximize free tier usage quotas.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
+*   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1").
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
