@@ -10,9 +10,11 @@ vi.mock('firebase/auth', () => ({
 
 // Mock y-cinder
 vi.mock('y-cinder', () => ({
-    FireProvider: vi.fn().mockImplementation(() => ({
-        destroy: vi.fn()
-    }))
+    FireProvider: vi.fn(function () {
+        return {
+            destroy: vi.fn()
+        };
+    })
 }));
 
 // Mock firebase-config
