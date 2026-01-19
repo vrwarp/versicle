@@ -8,8 +8,8 @@ vi.mock('firebase/auth', () => ({
     signOut: vi.fn()
 }));
 
-// Mock y-fire
-vi.mock('y-fire', () => ({
+// Mock y-cinder
+vi.mock('y-cinder', () => ({
     FireProvider: vi.fn().mockImplementation(() => ({
         destroy: vi.fn()
     }))
@@ -152,6 +152,27 @@ describe('FirestoreSyncManager', () => {
 
             // After destroy, the callback should not be in the set
             // We can verify this indirectly - a new getInstance would have no callbacks
+        });
+    });
+
+    describe('initialization', () => {
+        it('should initialize FireProvider with mapped maxWaitTime', async () => {
+            const { FireProvider } = await import('y-cinder');
+            const { onAuthStateChanged } = await import('firebase/auth');
+
+            // Mock auth state change to trigger connection
+            vi.mocked(onAuthStateChanged).mockImplementation((_auth, callback) => {
+                // @ts-expect-error Mocking user
+                callback({ uid: 'test-uid', email: 'test@example.com' });
+                return () => { };
+            });
+
+            const manager = getFirestoreSyncManager({ maxWaitFirestoreTime: 5000 });
+            await manager.initialize();
+
+            expect(FireProvider).toHaveBeenCalledWith(expect.objectContaining({
+                maxWaitTime: 5000
+            }));
         });
     });
 });

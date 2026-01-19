@@ -28,8 +28,14 @@ vi.mock('./lib/migration/YjsMigration', () => ({
 vi.mock('./store/yjs-provider', () => ({
   waitForYjsSync: vi.fn().mockResolvedValue(undefined),
   yDoc: {
-      getMap: vi.fn().mockReturnValue({ get: vi.fn(), set: vi.fn() }),
-      transact: vi.fn()
+    getMap: vi.fn().mockReturnValue({
+      get: vi.fn(),
+      set: vi.fn(),
+      delete: vi.fn(),
+      observeDeep: vi.fn(),
+      toJSON: vi.fn().mockReturnValue({})
+    }),
+    transact: vi.fn()
   }
 }));
 
@@ -98,8 +104,9 @@ vi.mock('./store/useDeviceStore', () => ({
   useDeviceStore: {
     getState: vi.fn().mockReturnValue({
       devices: {},
-      setDeviceName: vi.fn(),
-      registerDevice: vi.fn(),
+      renameDevice: vi.fn(),
+      registerCurrentDevice: vi.fn(),
+      deleteDevice: vi.fn(),
       touchDevice: vi.fn(),
     })
   }

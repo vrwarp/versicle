@@ -8,7 +8,7 @@
  * - y-indexeddb: Primary (always active, source of truth for offline)
  * - y-fire: Secondary (active only when authenticated)
  */
-import { FireProvider } from 'y-fire';
+import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
@@ -22,6 +22,9 @@ import {
     initializeFirebase
 } from './firebase-config';
 import { MockFireProvider } from './drivers/MockFireProvider';
+import { createLogger } from '../logger';
+
+const logger = createLogger('FirestoreSync');
 
 
 // Status types for the sync manager
@@ -105,7 +108,7 @@ class FirestoreSyncManager {
         // Support for Mock Firestore (Testing)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__) {
-            console.log('[FirestoreSync] Mock mode detected. Simulating auth and connection.');
+            logger.info('Mock mode detected. Simulating auth and connection.');
             this.setAuthStatus('signed-in');
             // Simulate a mock user
             this.currentUser = { uid: 'mock-user', email: 'mock@example.com' } as User;
@@ -114,20 +117,20 @@ class FirestoreSyncManager {
         }
 
         if (!isFirebaseConfigured()) {
-            console.warn('[FirestoreSync] Firebase not configured. Sync disabled.');
+            logger.warn('Firebase not configured. Sync disabled.');
             this.setAuthStatus('signed-out');
             return;
         }
 
         if (!initializeFirebase()) {
-            console.error('[FirestoreSync] Firebase initialization failed.');
+            logger.error('Firebase initialization failed.');
             this.setAuthStatus('signed-out');
             return;
         }
 
         const auth = getFirebaseAuth();
         if (!auth) {
-            console.error('[FirestoreSync] Firebase Auth not available.');
+            logger.error('Firebase Auth not available.');
             this.setAuthStatus('signed-out');
             return;
         }
@@ -138,7 +141,7 @@ class FirestoreSyncManager {
             this.handleAuthStateChange(user);
         });
 
-        console.log('[FirestoreSync] Manager initialized');
+        logger.debug('Manager initialized');
     }
 
     /**
@@ -148,11 +151,11 @@ class FirestoreSyncManager {
         this.currentUser = user;
 
         if (user) {
-            console.log(`[FirestoreSync] User signed in: ${user.email}`);
+            logger.info(`User signed in: ${user.email}`);
             this.setAuthStatus('signed-in');
             this.connectFireProvider(user.uid);
         } else {
-            console.log('[FirestoreSync] User signed out');
+            logger.info('User signed out');
             this.setAuthStatus('signed-out');
             this.disconnectFireProvider();
         }
@@ -165,10 +168,10 @@ class FirestoreSyncManager {
         if (this.fireProvider) {
             const currentApp = getFirebaseApp();
             if (currentApp !== this.currentApp) {
-                console.log('[FirestoreSync] Firebase app changed, reconnecting...');
+                logger.debug('Firebase app changed, reconnecting...');
                 this.disconnectFireProvider();
             } else {
-                console.log('[FirestoreSync] Already connected, skipping');
+                logger.debug('Already connected, skipping');
                 return;
             }
         }
@@ -183,7 +186,7 @@ class FirestoreSyncManager {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 app = {} as any;
             } else {
-                console.error('[FirestoreSync] Firebase app not available');
+                logger.error('Firebase app not available');
                 this.setStatus('error');
                 return;
             }
@@ -191,31 +194,34 @@ class FirestoreSyncManager {
 
         this.setStatus('connecting');
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime;
+
         const providerConfig = {
             firebaseApp: app!,
             ydoc: yDoc,
             path: `users/${uid}/versicle/main`,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            maxWaitFirestoreTime: (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime,
+            maxWaitTime: maxWaitTime,
             maxUpdatesThreshold: this.config.maxUpdatesThreshold
         };
 
         try {
             // Use MockFireProvider for testing when flag is set
             if (typeof window !== 'undefined' && window.__VERSICLE_MOCK_FIRESTORE__) {
-                console.log('[FirestoreSync] Using MockFireProvider (test mode)');
-                this.fireProvider = new MockFireProvider(providerConfig) as unknown as FireProvider;
+                logger.debug('Using MockFireProvider (test mode)');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                this.fireProvider = new MockFireProvider(providerConfig as any) as unknown as FireProvider;
             } else {
                 this.fireProvider = new FireProvider(providerConfig);
             }
             this.currentApp = app;
 
             // y-fire connects automatically
-            console.log(`[FirestoreSync] Connected to path: users/${uid}/versicle/main`);
+            logger.info(`Connected to path: users/${uid}/versicle/main`);
             this.setStatus('connected');
 
         } catch (error) {
-            console.error('[FirestoreSync] Failed to connect:', error);
+            logger.error('Failed to connect:', error);
             this.setStatus('error');
         }
     }
@@ -227,9 +233,9 @@ class FirestoreSyncManager {
         if (this.fireProvider) {
             try {
                 this.fireProvider.destroy();
-                console.log('[FirestoreSync] Provider destroyed');
+                logger.debug('Provider destroyed');
             } catch (error) {
-                console.error('[FirestoreSync] Error destroying provider:', error);
+                logger.error('Error destroying provider:', error);
             }
             this.fireProvider = null;
         }
@@ -251,7 +257,7 @@ class FirestoreSyncManager {
             await signInWithPopup(auth, provider);
             // Auth state change handler will connect the provider
         } catch (error) {
-            console.error('[FirestoreSync] Sign in failed:', error);
+            logger.error('Sign in failed:', error);
             throw error;
         }
     }
@@ -269,7 +275,7 @@ class FirestoreSyncManager {
             await signOut(auth);
             // Auth state change handler will disconnect the provider
         } catch (error) {
-            console.error('[FirestoreSync] Sign out failed:', error);
+            logger.error('Sign out failed:', error);
             throw error;
         }
     }
@@ -288,7 +294,7 @@ class FirestoreSyncManager {
         this.statusCallbacks.clear();
         this.authCallbacks.clear();
 
-        console.log('[FirestoreSync] Manager destroyed');
+        logger.debug('Manager destroyed');
     }
 
     // --- Status Management ---

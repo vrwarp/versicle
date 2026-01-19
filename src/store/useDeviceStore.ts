@@ -1,12 +1,8 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
+import { UAParser } from 'ua-parser-js';
 import { yDoc } from './yjs-provider';
-
-export interface DeviceInfo {
-    name: string;
-    lastActive: number;
-    created: number;
-}
+import type { DeviceInfo, DeviceProfile } from '../types/device';
 
 /**
  * Store for managing known devices in the sync mesh.
@@ -19,40 +15,96 @@ interface DeviceState {
 
     // === ACTIONS ===
     /**
-     * Registers or updates a device.
+     * Registers or updates the current device with full metadata and profile.
      */
-    registerDevice: (deviceId: string, name: string) => void;
+    registerCurrentDevice: (deviceId: string, profile: DeviceProfile) => void;
 
     /**
      * Updates the last active timestamp for a device.
+     * Throttled to avoid excessive CRDT updates (default: 5 mins).
      */
     touchDevice: (deviceId: string) => void;
+
+    /**
+     * Updates the user-friendly name of a device.
+     */
+    renameDevice: (deviceId: string, name: string) => void;
+
+    /**
+     * Removes a device from the sync mesh.
+     */
+    deleteDevice: (deviceId: string) => void;
 }
+
+const HEARTBEAT_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
 
 export const useDeviceStore = create<DeviceState>()(
     yjs(
         yDoc,
         'devices', // Shared map name in Yjs
-        (set) => ({
+        (set, get) => ({
             devices: {},
 
-            registerDevice: (deviceId, name) =>
-                set((state) => {
-                    const existing = state.devices[deviceId];
-                    const now = Date.now();
-                    return {
-                        devices: {
-                            ...state.devices,
-                            [deviceId]: {
-                                name,
-                                created: existing ? existing.created : now,
-                                lastActive: now
-                            }
-                        }
-                    };
-                }),
+            registerCurrentDevice: (deviceId, profile) => {
+                const state = get();
+                const existing = state.devices[deviceId];
+                const now = Date.now();
 
-            touchDevice: (deviceId) =>
+                // Parse UA if not already fully registered or update if needed
+                // We always update to capture browser upgrades etc.
+                const parser = new UAParser();
+                const result = parser.getResult();
+
+                // Smart Name Generation (only if new)
+                let name = existing?.name;
+                if (!name) {
+                    const browser = result.browser.name || 'Browser';
+                    const os = result.os.name || 'Unknown OS';
+                    const device = result.device.model ? ` ${result.device.model}` : '';
+                    name = `${browser} on ${os}${device}`;
+                }
+
+                set({
+                    devices: {
+                        ...state.devices,
+                        [deviceId]: {
+                            id: deviceId,
+                            name,
+                            platform: result.os.name || 'Unknown',
+                            browser: result.browser.name || 'Unknown',
+                            model: result.device.model || null,
+                            userAgent: result.ua,
+                            appVersion: '0.0.0', // TODO: wiring app version if available
+                            created: existing ? existing.created : now,
+                            lastActive: now,
+                            profile
+                        }
+                    }
+                });
+            },
+
+            touchDevice: (deviceId) => {
+                const state = get();
+                const existing = state.devices[deviceId];
+                if (!existing) return;
+
+                const now = Date.now();
+                if (now - existing.lastActive < HEARTBEAT_THROTTLE_MS) {
+                    return; // Throttle
+                }
+
+                set({
+                    devices: {
+                        ...state.devices,
+                        [deviceId]: {
+                            ...existing,
+                            lastActive: now
+                        }
+                    }
+                });
+            },
+
+            renameDevice: (deviceId, name) =>
                 set((state) => {
                     const existing = state.devices[deviceId];
                     if (!existing) return state;
@@ -61,10 +113,16 @@ export const useDeviceStore = create<DeviceState>()(
                             ...state.devices,
                             [deviceId]: {
                                 ...existing,
-                                lastActive: Date.now()
+                                name
                             }
                         }
                     };
+                }),
+
+            deleteDevice: (deviceId) =>
+                set((state) => {
+                    const { [deviceId]: _, ...rest } = state.devices;
+                    return { devices: rest };
                 }),
         })
     )

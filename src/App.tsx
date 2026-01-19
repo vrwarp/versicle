@@ -21,8 +21,14 @@ import { backfillCoverPalettes } from './lib/migration/GhostBookBackfill';
 import { useDeviceStore } from './store/useDeviceStore';
 import { getDeviceId } from './lib/device-id';
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
+import type { DeviceProfile } from './types/device';
+import { useTTSStore } from './store/useTTSStore';
+import { usePreferencesStore } from './store/usePreferencesStore';
+import { createLogger } from './lib/logger';
 
 import './App.css';
+
+const logger = createLogger('App');
 
 /**
  * Main Application component.
@@ -47,7 +53,7 @@ function App() {
       try {
         await waitForServiceWorkerController();
       } catch (e) {
-        console.error('Service Worker wait failed:', e);
+        logger.error('Service Worker wait failed:', e);
         setSwError("Service Worker failed to take control. This application requires a Service Worker for image loading. Please reload the page.");
       }
       setSwInitialized(true);
@@ -58,7 +64,7 @@ function App() {
   // Global Error Handler
   useEffect(() => {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error('Unhandled Promise Rejection:', event.reason);
+      logger.error('Unhandled Promise Rejection:', event.reason);
 
       // Check for critical errors
       if (event.reason instanceof StorageFullError) {
@@ -90,23 +96,45 @@ function App() {
         try {
           await migrateToYjs();
         } catch (e) {
-          console.error('[App] Migration failed:', e);
+          logger.error('Migration failed:', e);
           // We proceed anyway, but log it
         }
-
-        setStatusMessage('Loading library...');
-        await waitForYjsSync();
 
         // Register device if not present
         const deviceId = getDeviceId();
         const deviceStore = useDeviceStore.getState();
+
+        // Construct Profile
+        // We do this inside the effect to get latest values, though on mount they are initial.
+        // For meaningful profile updates, we might want to listen to changes or update on specific triggers.
+        // For now, on-launch registration is sufficient as per requirements.
+        await waitForYjsSync();
+
+        const prefs = usePreferencesStore.getState();
+        const tts = useTTSStore.getState();
+
+        const profile: DeviceProfile = {
+          theme: prefs.currentTheme,
+          fontSize: prefs.fontSize,
+          ttsVoiceURI: tts.voice ? tts.voice.id : null,
+          ttsRate: tts.rate,
+          ttsPitch: tts.pitch
+        };
+
         if (!deviceStore.devices[deviceId]) {
-          console.log('[App] Registering new device:', deviceId);
-          deviceStore.registerDevice(deviceId, `Device ${deviceId.slice(-6)}`);
+          logger.info('Registering new device:', deviceId);
+          deviceStore.registerCurrentDevice(deviceId, profile);
         } else {
-          // Touch device to update last active
-          deviceStore.touchDevice(deviceId);
+          // Touch device to update last active and Sync Profile
+          // We assume on app launch we want to sync the profile too
+          deviceStore.registerCurrentDevice(deviceId, profile);
         }
+
+        // Setup Heartbeat (every 5 mins)
+        // We assign to a ref or let variable if we wanted to clear it, but since this is inside async init, 
+        // we should move interval setup out or handle cleanup via a ref.
+        // For simplicity in this fix, we will just start the interval. 
+        // Ideally we'd hoist the intervalId to useEffect scope.
 
         // Wait for middleware to sync books (short poll)
         let attempts = 0;
@@ -118,16 +146,34 @@ function App() {
         await hydrateStaticMetadata();
 
         // Run non-blocking backfill
-        backfillCoverPalettes().catch(e => console.error('[App] Backfill failed:', e));
+        backfillCoverPalettes().catch(e => logger.error('Backfill failed:', e));
 
         setDbStatus('ready');
       } catch (err) {
-        console.error('Failed to initialize App:', err);
+        logger.error('Failed to initialize App:', err);
         setDbError(err);
         setDbStatus('error');
       }
     };
+
+    // Start Heartbeat independently or track it? 
+    // To fix properly, we track the interval ID.
+    const heartbeatInterval = setInterval(() => {
+      // We need to guard against using store if not ready? 
+      // Actually touchDevice is safe.
+      // But we probably want to start it only after init? 
+      // Existing code started it in init.
+      // Let's rely on init completing.
+      // Actually, let's keep it simple: cleanup is good but removing the return is priority.
+      const deviceId = getDeviceId();
+      useDeviceStore.getState().touchDevice(deviceId);
+    }, 5 * 60 * 1000);
+
     init();
+
+    return () => {
+      clearInterval(heartbeatInterval);
+    };
   }, [hydrateStaticMetadata]);
 
   const handleReset = async () => {
@@ -141,7 +187,7 @@ function App() {
       // deleteDB('versicle-yjs'); 
       window.location.reload();
     } catch (err) {
-      console.error('Failed to delete DB:', err);
+      logger.error('Failed to delete DB:', err);
       alert('Failed to reset database. You may need to clear browser data manually.');
     }
   };

@@ -14,13 +14,16 @@ import type {
     ReadingListEntry
 } from '../../types/db';
 import { migrateLexicon } from '../sync/migration';
+import { createLogger } from '../logger';
+
+const logger = createLogger('Migration');
 
 /**
  * Checks if migration from legacy IDB to Yjs is needed and executes it.
  * Should be called once on app startup, after Yjs has synced.
  */
 export async function migrateToYjs(): Promise<void> {
-    console.log('[Migration] Starting Yjs migration check...');
+    logger.info('Starting Yjs migration check...');
 
     // 1. Wait for Yjs to load from IndexedDB (may already have data from sync)
     await waitForYjsSync(10000);
@@ -30,7 +33,7 @@ export async function migrateToYjs(): Promise<void> {
     const migrationComplete = preferencesMap.get('migration_complete');
 
     if (migrationComplete === true) {
-        console.log('[Migration] ✅ Migration already complete. Skipping.');
+        logger.info('✅ Migration already complete. Skipping.');
         // Still run per-device migration in case it's pending
         await migrateProgressToPerDevice();
         await migratePreferencesToPerDevice();
@@ -42,7 +45,7 @@ export async function migrateToYjs(): Promise<void> {
     const hasExistingData = libraryMap.size > 0;
 
     if (hasExistingData) {
-        console.log('[Migration] 📦 Yjs has existing data from sync. Skipping legacy migration.');
+        logger.info('📦 Yjs has existing data from sync. Skipping legacy migration.');
         preferencesMap.set('migration_complete', true);
         // Migrate existing progress to per-device format
         await migrateProgressToPerDevice();
@@ -51,7 +54,7 @@ export async function migrateToYjs(): Promise<void> {
     }
 
     // 4. Yjs is empty - migrate from legacy IDB
-    console.log('[Migration] 🔄 Migrating from legacy IndexedDB...');
+    logger.info('🔄 Migrating from legacy IndexedDB...');
 
     try {
         await migrateLegacyData();
@@ -60,9 +63,9 @@ export async function migrateToYjs(): Promise<void> {
         preferencesMap.set('migration_complete', true);
         preferencesMap.set('migration_timestamp', Date.now());
 
-        console.log('[Migration] ✅ Migration complete!');
+        logger.info('✅ Migration complete!');
     } catch (error) {
-        console.error('[Migration] ❌ Migration failed:', error);
+        logger.error('❌ Migration failed:', error);
         // Don't mark complete - will retry on next startup
         throw error;
     }
@@ -94,7 +97,7 @@ async function migratePreferencesToPerDevice(): Promise<void> {
         'readerViewMode', 'libraryLayout'
     ];
 
-    console.log(`[Migration] Migrating preferences to per-device map for ${deviceId}...`);
+    logger.info(`Migrating preferences to per-device map for ${deviceId}...`);
 
     yDoc.transact(() => {
         let migratedCount = 0;
@@ -106,7 +109,7 @@ async function migratePreferencesToPerDevice(): Promise<void> {
             }
         }
         if (migratedCount > 0) {
-            console.log(`[Migration] Copied ${migratedCount} preferences to per-device map`);
+            logger.info(`Copied ${migratedCount} preferences to per-device map`);
         }
     });
 }
@@ -126,7 +129,7 @@ async function migrateProgressToPerDevice(): Promise<void> {
         return;
     }
 
-    console.log('[Migration] Checking for progress format migration...');
+    logger.debug('Checking for progress format migration...');
 
     const { progress } = useReadingStateStore.getState();
     const needsMigration: Record<string, Record<string, UserProgress>> = {};
@@ -151,14 +154,14 @@ async function migrateProgressToPerDevice(): Promise<void> {
     }
 
     if (migratedCount > 0) {
-        console.log(`[Migration] Converting ${migratedCount} progress entries to per-device format`);
+        logger.info(`Converting ${migratedCount} progress entries to per-device format`);
         useReadingStateStore.setState((state) => ({
             progress: { ...state.progress, ...needsMigration }
         }));
     }
 
     preferencesMap.set('progress_per_device_migration', true);
-    console.log('[Migration] Progress per-device migration complete');
+    logger.info('Progress per-device migration complete');
 }
 
 /**
@@ -182,7 +185,7 @@ async function migrateLegacyData(): Promise<void> {
         db.getAll('user_reading_list'),
     ]);
 
-    console.log(`[Migration] Found ${legacyInventory.length} books, ${legacyAnnotations.length} annotations, ${legacyProgress.length} progress entries, ${legacyReadingList.length} reading list entries`);
+    logger.debug(`Found ${legacyInventory.length} books, ${legacyAnnotations.length} annotations, ${legacyProgress.length} progress entries, ${legacyReadingList.length} reading list entries`);
 
     // Check if there is anything to migrate to avoid overwriting Yjs with empty state
     // (which causes race conditions with incoming cloud sync)
@@ -193,11 +196,11 @@ async function migrateLegacyData(): Promise<void> {
         legacyReadingList.length === 0;
 
     if (areAllLegacyStoresEmpty) {
-        console.log('[Migration] Legacy stores empty. Checking preferences only...');
+        logger.debug('Legacy stores empty. Checking preferences only...');
         yDoc.transact(() => {
             migratePreferences();
         });
-        console.log('[Migration] ✅ Migration complete (Preferences only)!');
+        logger.info('✅ Migration complete (Preferences only)!');
         return;
     }
 
@@ -219,12 +222,12 @@ async function migrateLegacyData(): Promise<void> {
 
     try {
         await migrateLexicon();
-        console.log('[Migration] Lexicon migration step completed.');
+        logger.info('Lexicon migration step completed.');
     } catch (e) {
-        console.error('[Migration] Lexicon migration failed:', e);
+        logger.error('Lexicon migration failed:', e);
     }
 
-    console.log('[Migration] All data migrated to Yjs');
+    logger.info('All data migrated to Yjs');
 }
 
 /**
@@ -302,7 +305,7 @@ function migrateBooksAndProgress(
     }
 
     if (fallbackCount > 0) {
-        console.log(`[Migration] Applied progress fallbacks for ${fallbackCount} books from reading list`);
+        logger.info(`Applied progress fallbacks for ${fallbackCount} books from reading list`);
     }
 
     // Batch update stores (middleware syncs to Yjs)
@@ -318,7 +321,7 @@ function migrateBooksAndProgress(
         entries: { ...state.entries, ...readingList }
     }));
 
-    console.log(`[Migration] Migrated ${Object.keys(books).length} books, ${Object.keys(progress).length} progress entries, and ${Object.keys(readingList).length} reading list entries`);
+    logger.debug(`Migrated ${Object.keys(books).length} books, ${Object.keys(progress).length} progress entries, and ${Object.keys(readingList).length} reading list entries`);
 }
 
 /**
@@ -342,7 +345,7 @@ function migrateAnnotations(legacyAnnotations: UserAnnotation[]): void {
         annotations: { ...state.annotations, ...annotations }
     }));
 
-    console.log(`[Migration] Migrated ${Object.keys(annotations).length} annotations`);
+    logger.debug(`Migrated ${Object.keys(annotations).length} annotations`);
 }
 
 /**
@@ -370,11 +373,11 @@ function migratePreferences(): void {
 
                     if (Object.keys(updates).length > 0) {
                         usePreferencesStore.setState(updates);
-                        console.log(`[Migration] Migrated ${Object.keys(updates).length} preferences from reader-storage`);
+                        logger.info(`Migrated ${Object.keys(updates).length} preferences from reader-storage`);
                     }
                 }
             } catch (e) {
-                console.warn('[Migration] Failed to parse reader-storage:', e);
+                logger.warn('Failed to parse reader-storage:', e);
             }
         }
 
@@ -402,9 +405,9 @@ function migratePreferences(): void {
 
         if (foundMode) {
             usePreferencesStore.setState({ readerViewMode: foundMode });
-            console.log(`[Migration] Migrated readerViewMode: ${foundMode}`);
+            logger.info(`Migrated readerViewMode: ${foundMode}`);
         }
     } catch (e) {
-        console.warn('[Migration] Failed to migrate preferences:', e);
+        logger.warn('Failed to migrate preferences:', e);
     }
 }

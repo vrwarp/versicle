@@ -4,6 +4,9 @@ import type { RemoteStorageProvider } from './types';
 import { useSyncStore } from './hooks/useSyncStore';
 import { getDB } from '../../db/db';
 import type { LexiconRule, UserOverrides } from '../../types/db';
+import { createLogger } from '../logger';
+
+const logger = createLogger('YjsSync');
 
 const DEBOUNCE_MS = 60000; // 60s
 
@@ -39,12 +42,12 @@ export class YjsSyncService {
         if (isSyncEnabled && googleClientId && googleApiKey) {
             try {
                 await this.provider.initialize({ clientId: googleClientId, apiKey: googleApiKey });
-                console.log('[YjsSync] Provider initialized');
+                logger.info('Provider initialized');
 
                 // Perform initial pull to get remote state
                 await this.sync('startup');
             } catch (e) {
-                console.error('[YjsSync] Initialization failed', e);
+                logger.error('Initialization failed', e);
             }
         }
 
@@ -96,7 +99,7 @@ export class YjsSyncService {
 
         this.isSyncing = true;
         try {
-            console.log(`[YjsSync] Starting sync (${trigger})...`);
+            logger.debug(`Starting sync (${trigger})...`);
 
             // Pull first to get any remote changes
             await this.pull();
@@ -105,9 +108,9 @@ export class YjsSyncService {
             await this.push(trigger);
 
             useSyncStore.getState().setLastSyncTime(Date.now());
-            console.log('[YjsSync] Sync complete');
+            logger.debug('Sync complete');
         } catch (e) {
-            console.error('[YjsSync] Sync failed', e);
+            logger.error('Sync failed', e);
         } finally {
             this.isSyncing = false;
         }
@@ -121,7 +124,7 @@ export class YjsSyncService {
             const remoteSnapshot = await this.provider.downloadSnapshot();
 
             if (remoteSnapshot) {
-                console.log(`[YjsSync] Applying remote snapshot (${remoteSnapshot.byteLength} bytes)`);
+                logger.debug(`Applying remote snapshot (${remoteSnapshot.byteLength} bytes)`);
 
                 // Y.applyUpdate merges using CRDT semantics
                 // This automatically handles conflicts via vector clocks
@@ -133,10 +136,10 @@ export class YjsSyncService {
                 // Middleware automatically syncs Yjs → Zustand stores
                 await new Promise(resolve => setTimeout(resolve, 100));
             } else {
-                console.log('[YjsSync] No remote snapshot found');
+                logger.debug('No remote snapshot found');
             }
         } catch (e) {
-            console.warn('[YjsSync] Pull failed (continuing with push)', e);
+            logger.warn('Pull failed (continuing with push)', e);
         }
     }
 
@@ -155,7 +158,7 @@ export class YjsSyncService {
 
         // Capture entire Y.Doc state
         const snapshot = Y.encodeStateAsUpdate(yDoc);
-        console.log(`[YjsSync] Pushing snapshot (${snapshot.byteLength} bytes, trigger: ${trigger})`);
+        logger.debug(`Pushing snapshot (${snapshot.byteLength} bytes, trigger: ${trigger})`);
 
         await this.provider.uploadSnapshot(snapshot);
     }
@@ -200,7 +203,7 @@ export class YjsSyncService {
 
         if (rules.length === 0) return;
 
-        console.log(`[YjsSync] Restoring ${rules.length} lexicon rules from sync`);
+        logger.debug(`Restoring ${rules.length} lexicon rules from sync`);
 
         const db = await getDB();
         const tx = db.transaction('user_overrides', 'readwrite');

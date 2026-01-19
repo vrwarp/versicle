@@ -39,6 +39,9 @@ import { useGenAIStore } from '../../store/useGenAIStore';
 import { ContentAnalysisLegend } from './ContentAnalysisLegend';
 import { TYPE_COLORS } from '../../types/content-analysis';
 import { CURRENT_BOOK_VERSION } from '../../lib/constants';
+import { createLogger } from '../../lib/logger';
+
+const logger = createLogger('ReaderView');
 
 /**
  * The main reader interface component.
@@ -100,7 +103,7 @@ export const ReaderView: React.FC = () => {
         resetUI: state.reset
     })));
 
-    console.log(`[ReaderView] viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
+    logger.debug(`viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
 
     const {
         updateLocation
@@ -218,7 +221,7 @@ export const ReaderView: React.FC = () => {
                             dbService.updateReadingHistory(id, range, type, label)
                                 .then(() => setHistoryTick(t => t + 1))
                                 .catch((err) => {
-                                    console.error("History update failed", err);
+                                    logger.error("History update failed", err);
                                     useToastStore.getState().showToast('Failed to save reading history', 'error');
                                 });
                         });
@@ -260,7 +263,7 @@ export const ReaderView: React.FC = () => {
             }
         },
         onError: (msg) => {
-            console.error("Reader Error:", msg);
+            logger.error("Reader Error:", msg);
         }
     }), [
         readerViewMode,
@@ -354,7 +357,7 @@ export const ReaderView: React.FC = () => {
                     const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
                     const type = mode === 'scrolled' ? 'scroll' : 'page';
                     const label = title || undefined;
-                    dbService.updateReadingHistory(id, range, type, label).catch(console.error);
+                    dbService.updateReadingHistory(id, range, type, label).catch(e => logger.error("History panic save failed", e));
                 }
             }
         };
@@ -411,7 +414,7 @@ export const ReaderView: React.FC = () => {
                         // dbService.saveProgress will be called by the subsequent onLocationChange
                     }
                 } catch (e) {
-                    console.error("Jump failed", e);
+                    logger.error("Jump failed", e);
                     useToastStore.getState().showToast('Failed to jump to location', 'error');
                 }
             }
@@ -447,7 +450,7 @@ export const ReaderView: React.FC = () => {
                     setShowImportJumpDialog(false);
                 }
             } catch (e) {
-                console.error("Deferred jump failed", e);
+                logger.error("Deferred jump failed", e);
                 useToastStore.getState().showToast('Failed to jump to location', 'error');
                 setIsWaitingForJump(false);
                 setShowImportJumpDialog(false);
@@ -495,11 +498,11 @@ export const ReaderView: React.FC = () => {
                     try {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, () => {
-                            // console.log("Clicked annotation", annotation.id);
+                            // logger.debug("Clicked annotation", annotation.id);
                         }, className, getAnnotationStyles(annotation.color));
                         addedAnnotations.current.add(annotation.id);
                     } catch (e) {
-                        console.warn(`Failed to add annotation ${annotation.id}`, e);
+                        logger.warn(`Failed to add annotation ${annotation.id}`, e);
                     }
                 }
             });
@@ -533,7 +536,7 @@ export const ReaderView: React.FC = () => {
                     // @ts-expect-error annotations is not typed fully
                     rendition.annotations.remove(cfi, 'highlight');
                 } catch (e) {
-                    console.warn("Failed to remove debug highlight", e);
+                    logger.warn("Failed to remove debug highlight", e);
                 }
             });
             addedDebugHighlights.current.clear();
@@ -574,13 +577,13 @@ export const ReaderView: React.FC = () => {
                                 });
                                 addedDebugHighlights.current.add(item.rootCfi);
                             } catch (e) {
-                                console.warn("Failed to add debug highlight", e);
+                                logger.warn("Failed to add debug highlight", e);
                             }
                         }
                     }
                 }
             } catch (e) {
-                console.error("Failed to apply debug highlights", e);
+                logger.error("Failed to apply debug highlights", e);
             }
         };
 
@@ -601,7 +604,7 @@ export const ReaderView: React.FC = () => {
                     (rendition as any).annotations.add('highlight', range, {}, null, 'reading-history-highlight', { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' });
                     addedRanges.push(range);
                 } catch (e) {
-                    console.warn("Failed to add history highlight", e);
+                    logger.warn("Failed to add history highlight", e);
                 }
             });
         }
@@ -613,7 +616,7 @@ export const ReaderView: React.FC = () => {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         (rendition as any).annotations.remove(range, 'highlight');
                     } catch (e) {
-                        console.warn("Failed to remove history highlight", e);
+                        logger.warn("Failed to remove history highlight", e);
                     }
                 });
             }
@@ -706,12 +709,12 @@ export const ReaderView: React.FC = () => {
 
 
     const handlePrev = useCallback(() => {
-        // console.log("Navigating to previous page");
+        // logger.debug("Navigating to previous page");
         rendition?.prev();
     }, [rendition]);
 
     const handleNext = useCallback(() => {
-        // console.log("Navigating to next page");
+        // logger.debug("Navigating to next page");
         rendition?.next();
     }, [rendition]);
 
@@ -833,7 +836,7 @@ export const ReaderView: React.FC = () => {
                 AudioPlayerService.getInstance().jumpTo(bestIndex);
             }
         } catch (e) {
-            console.error("Error matching CFI for playback", e);
+            logger.error("Error matching CFI for playback", e);
         }
     }, [rendition]);
 
