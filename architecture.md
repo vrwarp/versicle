@@ -66,6 +66,8 @@ graph TD
         YDoc[Y.Doc CRDT]
         YSync[YjsSyncService]
         GDrive[GoogleDriveProvider]
+        FireSync[FirestoreSyncManager]
+        FireProvider[y-fire]
     end
 
     subgraph Core [Core Services]
@@ -133,6 +135,8 @@ graph TD
     YjsProvider <--> YDB
     YjsProvider --> YSync
     YSync --> GDrive
+    YjsProvider --> FireSync
+    FireSync --> FireProvider
 
     LibStore --> DBService
     LibStore --> Ingestion
@@ -187,22 +191,25 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `static_manifests`: Lightweight metadata (Title, Author, Cover Thumbnail) for listing books.
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
     *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
-*   **Domain 2: User (Mutable/Syncable)** - *Managed by Yjs (via Middleware)*
-    *   **Note**: Most user data is now stored in Yjs binary blobs (`versicle-yjs`), but some legacy/transient stores remain or have been re-introduced for specific access patterns.
-    *   `user_inventory`: *Legacy/Sync Support*. Contains the list of books, status, and custom metadata.
-    *   `user_reading_list`: *Re-introduced in v21*. A lightweight "Shadow Inventory" tracking Read/Reading/Want to Read status and Ratings. This allows listing books even if the file (`static_resource`) is offloaded.
-    *   `user_ai_inference`: Expensive AI-derived data (Summaries, Accessibility Layers).
-    *   `user_overrides`: Custom settings like Lexicon rules (pronunciation overrides).
-    *   `user_annotations`: Highlights and notes.
-    *   `user_journey`: Granular reading history sessions.
+*   **Domain 2: User (Mutable/Syncable)** - *Hybrid Management*
+    *   **Yjs Primary**: `user_inventory`, `user_progress`, and `user_reading_list` are managed primarily by Yjs stores (`useBookStore`, `useReadingStateStore`).
+    *   **IDB Primary (Sync Overlay)**:
+        *   `user_overrides`: Custom settings like Lexicon rules. Synced manually by `YjsSyncService` to a Yjs Map.
+    *   **IDB Local/Hybrid**:
+        *   `user_ai_inference`: Expensive AI-derived data (Summaries, Accessibility Layers). Not automatically synced.
+        *   `user_annotations`: Highlights and notes. Managed via `useAnnotationStore` (often with IDB backing for indexing).
+        *   `user_journey`: Granular reading history sessions (Local only).
 *   **Domain 3: Cache (Transient/Regenerable)**
     *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
     *   `cache_audio_blobs`: Generated TTS audio segments.
     *   `cache_render_metrics`: Layout calculation results.
+    *   `cache_session_state`: Playback queue persistence.
+    *   `cache_tts_preparation`: Staging area for TTS text extraction.
 
 **Key Functions:**
 *   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations) and `user_reading_list` entry.
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
+*   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files).
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks.
@@ -212,22 +219,27 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 
 ### Sync & Cloud (`src/lib/sync/`)
 
-Versicle implements a "Serverless Sync" model using personal cloud storage (Google Drive) as a dumb file store.
+Versicle implements a Dual-Sync architecture: **Snapshot Sync** (Google Drive) for backup/restore and **Real-time Sync** (Firestore) for live collaboration.
 
-#### `YjsSyncService.ts` (Replaces SyncOrchestrator)
-The modern controller for synchronization. It leverages Yjs snapshots to sync state.
+#### `YjsSyncService.ts` (Primary: Google Drive)
+The main controller for synchronization, replacing the legacy `SyncOrchestrator`.
 
 *   **Logic**:
     *   **Snapshot-Based**: Periodically (or on demand) captures the entire Yjs state using `Y.encodeStateAsUpdate`.
-    *   **Binary Storage**: Uploads the binary blob (`versicle_yjs_state.bin`) to the user's Google Drive App Data folder.
-    *   **Conflict-Free**: Merges remote updates using Yjs `applyUpdate`, which handles CRDT conflicts automatically without manual "Last-Write-Wins" logic.
-    *   **Lexicon Sync**: Separately syncs `user_overrides` (Lexicon) by serializing them into a Yjs Map, as they are stored in a separate IDB store.
+    *   **Binary Storage**: Uploads the binary blob (`versicle_yjs_state.bin`) to the user's Google Drive App Data folder via `GoogleDriveProvider`.
+    *   **Conflict-Free**: Merges remote updates using Yjs `applyUpdate`, which handles CRDT conflicts automatically.
+    *   **Hybrid Data Sync**: Manually serializes non-Yjs IDB stores (like `user_overrides` / Lexicon) into Yjs Maps to ensure they are synced.
 *   **Trade-offs**:
-    *   **Bandwidth**: Uploads the full state snapshot on every sync (currently no delta sync optimization).
+    *   **Bandwidth**: Uploads the full state snapshot on every sync (no delta optimization).
 
-#### `GoogleDriveProvider.ts`
-*   **Goal**: Interface with Google Drive API.
-*   **Logic**: Uses the GAPI client to access the hidden `appDataFolder` to store the sync snapshot.
+#### `FirestoreSyncManager.ts` (Secondary: Real-Time)
+Provides a "Cloud Overlay" for real-time synchronization.
+
+*   **Logic**:
+    *   **Y-Fire**: Uses `y-fire` to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/main`).
+    *   **Mock Mode**: Includes a `MockFireProvider` for integration testing without a real Firebase project.
+*   **Trade-offs**:
+    *   **Complexity**: Requires maintaining a Firestore project. Currently acts as an optional overlay.
 
 ### Core Logic & Services (`src/lib/`)
 
@@ -251,19 +263,15 @@ Handles the complex task of importing an EPUB file.
 #### Generative AI (`src/lib/genai/`)
 Enhances the reading experience using LLMs.
 
-*   **Goal**: Enhance the reading and listening experience using LLMs (Gemini).
 *   **Logic**:
     *   **Free Tier Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite`, `gemini-2.5-flash`) to maximize quota. Automatically retries with a different model upon `429 RESOURCE_EXHAUSTED` errors.
     *   **Multimodal Input**: Accepts text and images (blobs) for tasks like table interpretation.
-    *   **Structured Output**: Enforces strict JSON schemas for all responses (e.g., Content Type classification, Table Adaptation).
-*   **Trade-off**: Requires an active internet connection and a Google API Key. Privacy implication: Book text snippets/images are sent to Google's servers.
+    *   **Structured Output**: Enforces strict JSON schemas for all responses.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
 
-*   **Logic**: Uses a simple **RegExp** scanning approach over in-memory text.
-    *   *Why*: `FlexSearch` (previously used) proved too memory-intensive for typical "find on page" use cases in personal libraries.
-    *   **Offloading**: XML parsing is offloaded to the worker (`DOMParser` in Worker).
+*   **Logic**: Uses a **RegExp** scanning approach over in-memory text via `SearchEngine` class, exposed via `Comlink`.
 *   **Trade-off**: The index is **transient** (in-memory only). It is rebuilt every time the user opens a book.
 
 #### Maintenance (`src/lib/MaintenanceService.ts`)
@@ -306,11 +314,11 @@ The Data Pipeline for TTS.
     2.  **Background Analysis**: Fires asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze the content in the background.
     3.  **Dynamic Updates**: When analysis completes, it triggers callbacks (`onMaskFound`, `onAdaptationsFound`) to update the *active* queue while it plays.
 *   **Content Filtering (Background Masking)**:
-    *   `detectContentSkipMask` runs asynchronously using GenAI to identify skip targets (e.g., footnotes, tables) based on user preferences.
+    *   `detectContentSkipMask` runs asynchronously using GenAI to identify skip targets (e.g., footnotes, tables).
     *   Returns a set of *source indices* to skip, which are applied to the active queue without interrupting playback.
 *   **Table Adaptation (Teleprompter)**:
     *   Uses **Multimodal GenAI** to "see" table images and convert them into narrative text.
-    *   Uses **Precise Grouping** to match table images to their source sentences by CFI structure.
+    *   **Precise Grouping**: Matches table images to their source sentences by CFI structure (e.g., `epubcfi(/6/14[table-id])`).
 *   **Trade-off**: The first few seconds of playback might contain un-adapted content (e.g., reading a footnote) before the mask is applied.
 
 #### `src/lib/tts/PlaybackStateManager.ts`
@@ -355,13 +363,16 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **`useBookStore` (Synced)**: Manages the **User Inventory** (list of books, custom titles, tags). Backed by Yjs Map `books`.
 *   **`useReadingStateStore` (Per-Device Sync)**:
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
-    *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., Phone vs Tablet). The UI selector (`useBookProgress`) aggregates these to find the "Furthest Read" point across all devices.
+    *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., Phone vs Tablet). The UI selector (`useAllBooks`/`useBook`) aggregates these to find the "Furthest Read" point across all devices.
 *   **`usePreferencesStore` (Global Sync)**:
     *   **Strategy**: Uses a global Yjs Map `preferences`.
     *   **Why**: Themes and fonts are synced globally across all devices.
 *   **`useLibraryStore` (Local Only)**:
     *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs.
-    *   **The "Ghost Book" Pattern**: The `useAllBooks` selector merges the *Synced Inventory* (Yjs) with the *Local Static Metadata* (IDB). If the local file is missing (Offloaded), the book still appears in the library ("Ghost") using the synced metadata.
+    *   **The "Ghost Book" Pattern**: The `useAllBooks` selector (in `selectors.ts`) merges the *Synced Inventory* (Yjs) with the *Local Static Metadata* (IDB).
+        *   It prioritizes Yjs data for mutable fields (Title, Author).
+        *   It uses IDB data for heavy assets (Covers).
+        *   If the local file is missing (Offloaded), the book still appears in the library ("Ghost") using the synced metadata.
 
 ### UI Layer
 
