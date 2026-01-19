@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Laptop, Smartphone, Globe, Edit2, Trash2, Copy, Check, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -48,6 +48,13 @@ interface DeviceItemProps {
 const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceItemProps) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editName, setEditName] = useState(device.name);
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        // Update relative time every minute
+        const timer = setInterval(() => setNow(Date.now()), 60000);
+        return () => clearInterval(timer);
+    }, []);
 
     const handleSave = () => {
         if (editName.trim()) {
@@ -64,14 +71,14 @@ const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceIt
     };
 
     const getStatusColor = (lastActive: number) => {
-        const diff = Date.now() - lastActive;
+        const diff = now - lastActive;
         if (diff < 10 * 60 * 1000) return 'bg-green-500'; // < 10 mins
         if (diff < 24 * 60 * 60 * 1000) return 'bg-yellow-500'; // < 24 hours
         return 'bg-gray-300 dark:bg-gray-600'; // Offline
     };
 
     const formatLastActive = (lastActive: number) => {
-        const diff = Date.now() - lastActive;
+        const diff = now - lastActive;
         if (diff < 60 * 1000) return 'Just now';
         if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)}m ago`;
         if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)}h ago`;
