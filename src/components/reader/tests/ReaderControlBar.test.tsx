@@ -65,13 +65,11 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('zustand/react/shallow', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   useShallow: (selector: any) => selector
 }));
 
 // Mock LexiconManager
 vi.mock('../LexiconManager', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   LexiconManager: ({ open, onOpenChange, initialTerm }: any) => (
     open ? (
       <div data-testid="lexicon-manager-mock">
@@ -84,7 +82,6 @@ vi.mock('../LexiconManager', () => ({
 
 // Mock CompassPill
 vi.mock('../../ui/CompassPill', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   CompassPill: ({ variant, onClick, onAnnotationAction, progress }: any) => (
     <div data-testid={`compass-pill-${variant}`} data-progress={progress} onClick={onClick}>
       {variant}
