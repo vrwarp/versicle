@@ -17,6 +17,7 @@ vi.mock('lucide-react', () => ({
     Mic: () => <span data-testid="icon-mic" />,
     Copy: () => <span data-testid="icon-copy" />,
     X: () => <span data-testid="icon-x" />,
+    BookOpen: () => <span data-testid="icon-book-open" />,
 }));
 
 // Mock useTTSStore
@@ -214,6 +215,50 @@ describe('CompassPill', () => {
 
         expect(prevButton).toHaveAttribute('aria-label', 'Previous chapter');
         expect(nextButton).toHaveAttribute('aria-label', 'Next chapter');
+    });
+
+    it('renders summary mode correctly and handles interactions', () => {
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: false,
+            queue: [],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
+
+        const mockClick = vi.fn();
+        render(
+            <CompassPill
+                variant="summary"
+                title="Test Book"
+                subtitle="Continue Reading"
+                progress={45}
+                onClick={mockClick}
+            />
+        );
+
+        const summaryElement = screen.getByTestId('compass-pill-summary');
+        expect(summaryElement).toBeInTheDocument();
+        expect(summaryElement).toHaveAttribute('role', 'button');
+        expect(summaryElement).toHaveAttribute('tabIndex', '0');
+        expect(summaryElement).toHaveAttribute('aria-label', 'Continue reading Test Book');
+        expect(screen.getByText('Test Book')).toBeInTheDocument();
+        expect(screen.getByText('Continue Reading')).toBeInTheDocument();
+        expect(screen.getByText('45% complete')).toBeInTheDocument();
+        expect(screen.getByTestId('icon-book-open')).toBeInTheDocument();
+
+        // Click interaction
+        fireEvent.click(summaryElement);
+        expect(mockClick).toHaveBeenCalledTimes(1);
+
+        // Keyboard interaction (Enter)
+        fireEvent.keyDown(summaryElement, { key: 'Enter' });
+        expect(mockClick).toHaveBeenCalledTimes(2);
+
+        // Keyboard interaction (Space)
+        fireEvent.keyDown(summaryElement, { key: ' ' });
+        expect(mockClick).toHaveBeenCalledTimes(3);
     });
 
     it('shows playback indicator in active mode', () => {
