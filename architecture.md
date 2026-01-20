@@ -249,9 +249,10 @@ Handles the complex task of importing an EPUB file.
 *   **`processEpub(file)`**:
     1.  **Validation**: Enforces strict ZIP signature check (`PK\x03\x04`) to reject invalid files immediately.
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`) to render chapters.
-        *   *Logic*: Scrapes text nodes for TTS and uses `@zumer/snapdom` to capture tables as structural `webp` images (enforcing white background).
+        *   *Logic*: Implements a **Time-Budgeted Yield Strategy** (pauses every 16ms) to prevent freezing the main thread during heavy parsing.
+        *   *Feature*: Scrapes text nodes for TTS and uses `@zumer/snapdom` to capture tables as structural `webp` images (enforcing white background).
     3.  **Adaptive Contrast**: Generates a **Cover Palette** (5-color swatch) using a weighted K-Means algorithm (`cover-palette.ts`). This palette drives the UI's dynamic background gradients and text colors.
-    4.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head + Metadata + Tail) using a `cheapHash` function for O(1) duplicate detection.
+    4.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head 4KB + Metadata + Tail 4KB) using a `cheapHash` function for O(1) duplicate detection.
 
 #### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
 *   **Goal**: Prevent memory leaks caused by `URL.createObjectURL` when displaying hundreds of book covers.
@@ -313,6 +314,7 @@ The Data Pipeline for TTS.
     1.  **Immediate Return**: Returns a raw, playable queue immediately so playback starts instantly.
     2.  **Background Analysis**: Fires asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze the content in the background.
     3.  **Dynamic Updates**: When analysis completes, it triggers callbacks (`onMaskFound`, `onAdaptationsFound`) to update the *active* queue while it plays.
+*   **Bible Lexicon**: Automatically injects specialized abbreviations for bible verses (e.g., "Gen. 1:1") during segmentation to ensure correct pronunciation.
 *   **Content Filtering (Background Masking)**:
     *   `detectContentSkipMask` runs asynchronously using GenAI to identify skip targets (e.g., footnotes, tables).
     *   Returns a set of *source indices* to skip, which are applied to the active queue without interrupting playback.

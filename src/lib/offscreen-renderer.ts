@@ -76,6 +76,8 @@ export async function extractContentOffscreen(
     }
 
     const totalItems = items.length;
+    // OPTIMIZATION: Track time to yield only when necessary to avoid artificial delays
+    let lastYieldTime = performance.now();
 
     for (let i = 0; i < totalItems; i++) {
       const item = items[i];
@@ -157,7 +159,13 @@ export async function extractContentOffscreen(
       }
 
       // Yield to main thread
-      await new Promise(r => setTimeout(r, 50));
+      // OPTIMIZATION: Instead of waiting 50ms every chapter (which adds seconds of delay for large books),
+      // we only yield if we've been blocking the main thread for more than 16ms (1 frame).
+      // When we do yield, we use setTimeout(0) to resume as soon as possible.
+      if (performance.now() - lastYieldTime > 16) {
+          await new Promise(r => setTimeout(r, 0));
+          lastYieldTime = performance.now();
+      }
     }
 
   } finally {

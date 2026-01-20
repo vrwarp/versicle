@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useAllBooks } from '../../store/selectors';
+import { useBook, useLastReadBook } from '../../store/selectors';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
 import type { ActionType } from '../ui/CompassPill';
@@ -41,29 +41,13 @@ export const ReaderControlBar: React.FC = () => {
     // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.
     // Now, we only re-render if the calculated `lastReadBook` or `currentBook` reference changes.
 
-    // Get all books with merged static metadata
-    const allBooks = useAllBooks();
-
     // Select the most recently read book
-    const lastReadBook = useMemo(() => {
-        const getProgress = useReadingStateStore.getState().getProgress;
-        return allBooks
-            .filter((b) => {
-                const bookProgress = getProgress(b.bookId);
-                return bookProgress?.lastRead;
-            })
-            .sort((a, b) => {
-                const aProgress = getProgress(a.bookId);
-                const bProgress = getProgress(b.bookId);
-                return (bProgress?.lastRead || 0) - (aProgress?.lastRead || 0);
-            })[0];
-    }, [allBooks]);
+    // OPTIMIZATION: Use specialized selector to avoid iterating all books
+    const lastReadBook = useLastReadBook();
 
     // Select the current book if active
-    const currentBook = useMemo(() => {
-        if (!currentBookId) return undefined;
-        return allBooks.find((b) => b.bookId === currentBookId);
-    }, [allBooks, currentBookId]);
+    // OPTIMIZATION: Use specialized selector
+    const currentBook = useBook(currentBookId);
 
     // Determine State Priority
     // 1. Annotation Mode
