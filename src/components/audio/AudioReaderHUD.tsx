@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useAllBooks } from '../../store/selectors';
+import { useLastReadBook } from '../../store/selectors';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useShallow } from 'zustand/react/shallow';
 import { CompassPill } from '../ui/CompassPill';
@@ -15,7 +15,8 @@ export const AudioReaderHUD: React.FC = () => {
         pause: state.pause
     })));
     const immersiveMode = useReaderUIStore(state => state.immersiveMode);
-    const books = useAllBooks();
+    // OPTIMIZATION: Use specialized selector
+    const lastReadBook = useLastReadBook();
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -28,21 +29,6 @@ export const AudioReaderHUD: React.FC = () => {
             pause();
         }
     }, [isLibrary, isPlaying, pause]);
-
-    const lastReadBook = useMemo(() => {
-        if (!books || books.length === 0) return null;
-        const getProgress = useReadingStateStore.getState().getProgress;
-        const startedBooks = books.filter(b => {
-            const bookProgress = getProgress(b.bookId);
-            return bookProgress?.lastRead && bookProgress.percentage > 0;
-        });
-        if (startedBooks.length === 0) return null;
-        return startedBooks.sort((a, b) => {
-            const aProgress = getProgress(a.bookId);
-            const bProgress = getProgress(b.bookId);
-            return (bProgress?.lastRead || 0) - (aProgress?.lastRead || 0);
-        })[0];
-    }, [books]);
 
     // Show last read book if in library and not playing audio
     const showLastRead = isLibrary && !isPlaying && lastReadBook;

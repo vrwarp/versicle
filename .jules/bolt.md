@@ -22,3 +22,8 @@
 - **Bottleneck:** `String.prototype.trim()` was allocating new strings in the `TextSegmenter.refineSegments` loop for every sentence, causing GC pressure.
 - **Solution:** Replaced `trim()` + Regex with Regex that handles whitespace directly (e.g., `/(\S+)\s*$/`).
 - **Learning:** Regexes can often perform "logic" (like ignoring whitespace) faster than allocating new strings. In hot text-processing loops, always prefer zero-allocation regexes over string mutation methods like `trim()` or `slice()`.
+
+## 2025-05-29 - Selector Granularity Optimization
+- **Bottleneck:** `useAllBooks` was being used in `ReaderControlBar` and `AudioReaderHUD` (always mounted components) to find the "Last Read" book. `useAllBooks` iterates and creates new objects for the entire library on every reading progress update.
+- **Solution:** Created `useLastReadBook` selector that scans only the `progressMap` (much smaller) to find the target ID, then uses `useBook(id)`.
+- **Learning:** Avoid "Catch-All" selectors like `useAllBooks` in always-mounted components. Specialized selectors that scan normalized state (IDs/Map keys) are `O(ActiveItems)` instead of `O(TotalItems)`.

@@ -109,3 +109,36 @@ export const useBook = (id: string | null) => {
         };
     }, [book, staticMeta, offloadedBookIds, progress]);
 };
+
+/**
+ * Returns the ID of the most recently read book.
+ *
+ * OPTIMIZATION: Efficiently scans the progress map to find the book with the latest timestamp.
+ * This avoids iterating over the entire book library or creating large intermediate arrays.
+ */
+export const useLastReadBookId = () => {
+    const progressMap = useReadingStateStore(state => state.progress);
+
+    return useMemo(() => {
+        let maxLastRead = 0;
+        let lastReadBookId: string | null = null;
+
+        for (const [bookId, deviceMap] of Object.entries(progressMap)) {
+            const maxDeviceProgress = getMaxProgress(deviceMap);
+            if (maxDeviceProgress && maxDeviceProgress.lastRead > maxLastRead) {
+                maxLastRead = maxDeviceProgress.lastRead;
+                lastReadBookId = bookId;
+            }
+        }
+        return lastReadBookId;
+    }, [progressMap]);
+};
+
+/**
+ * Returns the most recently read book with metadata merged.
+ * Uses useLastReadBookId and useBook to avoid full library iteration.
+ */
+export const useLastReadBook = () => {
+    const id = useLastReadBookId();
+    return useBook(id);
+};
