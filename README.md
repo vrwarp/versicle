@@ -24,7 +24,7 @@
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
-*   **AI**: Google Gemini (Flash Lite / Flash / Pro) via `@google/generative-ai`
+*   **AI**: Google Gemini (Flash Lite / Flash) via `@google/generative-ai`
 *   **Mobile**: Capacitor 7 (Android)
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
@@ -38,6 +38,8 @@
 *   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
 *   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
 *   **Drag & Drop**: Drag files anywhere to import.
+*   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata.
+*   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" and can be instantly restored by re-importing the file (verified via 3-point fingerprint).
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
 *   **Annotations**: Highlights and notes.
 *   **Table Snapshots**: Complex tables are captured as structural images for better readability and preservation.
