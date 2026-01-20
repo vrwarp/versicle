@@ -26,7 +26,6 @@ import { dbService } from '../db/DBService';
 import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
 import { useFirestoreSync } from '../lib/sync/hooks/useFirestoreSync';
-import { YjsSyncService } from '../lib/sync/YjsSyncService';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { exportFile } from '../lib/export';
 import { ReadingListDialog } from './ReadingListDialog';
@@ -82,7 +81,6 @@ export const GlobalSettingsDialog = () => {
     })));
 
     const {
-        googleClientId, googleApiKey, setGoogleCredentials, isSyncEnabled, setSyncEnabled,
         setFirebaseEnabled, firestoreStatus, firebaseAuthStatus, firebaseUserEmail,
         syncProvider, setSyncProvider, firebaseConfig, setFirebaseConfig
     } = useSyncStore();
@@ -393,14 +391,9 @@ export const GlobalSettingsDialog = () => {
                 setRecoveryStatus("Restoring...");
                 const manifest = await CheckpointService.restoreCheckpoint(id);
                 if (manifest) {
-                    const syncService = YjsSyncService.get();
-                    if (syncService) {
-                        // Note: Checkpoint restoration with legacy manifests is deprecated
-                        // TODO: Update checkpoint system to use Yjs snapshots
-                        setRecoveryStatus("Checkpoint system needs migration to Yjs. Please restore from backup instead.");
-                    } else {
-                        setRecoveryStatus("Sync service unavailable.");
-                    }
+                    // Note: Checkpoint restoration with legacy manifests is deprecated
+                    // TODO: Update checkpoint system to use Yjs snapshots
+                    setRecoveryStatus("Checkpoint system needs migration to Yjs. Please restore from backup instead.");
                 } else {
                     setRecoveryStatus("Failed to load checkpoint.");
                 }
@@ -982,19 +975,17 @@ export const GlobalSettingsDialog = () => {
                                     <div className="space-y-4 mb-6">
                                         <div className="space-y-2">
                                             <label className="text-sm font-medium">Sync Provider</label>
-                                            <Select value={syncProvider} onValueChange={(val) => setSyncProvider(val as 'none' | 'google-drive' | 'firebase')}>
+                                            <Select value={syncProvider} onValueChange={(val) => setSyncProvider(val as 'none' | 'firebase')}>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Select sync provider" />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="none">Disabled</SelectItem>
                                                     <SelectItem value="firebase">Firebase (Recommended)</SelectItem>
-                                                    <SelectItem value="google-drive">Google Drive (Legacy)</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                             <p className="text-xs text-muted-foreground">
                                                 {syncProvider === 'firebase' && 'Real-time sync with automatic conflict resolution.'}
-                                                {syncProvider === 'google-drive' && 'Manual sync using Google Drive App Data folder.'}
                                                 {syncProvider === 'none' && 'Sync is disabled. Data is stored locally only.'}
                                             </p>
                                         </div>
@@ -1188,46 +1179,6 @@ const firebaseConfig = {
                                         </div>
                                     )}
 
-                                    {/* Google Drive (Legacy) Section */}
-                                    {syncProvider === 'google-drive' && (
-                                        <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-                                            <h4 className="text-sm font-medium">Google Drive Sync (Legacy)</h4>
-                                            <div className="flex items-center justify-between">
-                                                <div className="space-y-0.5">
-                                                    <label className="text-sm font-medium">Enable Sync</label>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Requires Google Drive API credentials.
-                                                    </p>
-                                                </div>
-                                                <Switch
-                                                    checked={isSyncEnabled}
-                                                    onCheckedChange={setSyncEnabled}
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-medium">Google Client ID</label>
-                                                <Input
-                                                    type="text"
-                                                    value={googleClientId}
-                                                    onChange={(e) => setGoogleCredentials(e.target.value, googleApiKey)}
-                                                    placeholder="OAuth2 Client ID"
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-medium">Google API Key</label>
-                                                <Input
-                                                    type="password"
-                                                    value={googleApiKey}
-                                                    onChange={(e) => setGoogleCredentials(googleClientId, e.target.value)}
-                                                    placeholder="API Key"
-                                                />
-                                            </div>
-                                            <div className="pt-2 text-xs text-muted-foreground">
-                                                <p>Data is stored in your personal Google Drive (App Data folder).</p>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
                         )}
