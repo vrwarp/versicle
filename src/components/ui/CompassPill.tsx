@@ -3,7 +3,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
-import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -256,13 +256,26 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     return (
       <div
         data-testid="compass-pill-summary"
-        className={`relative flex flex-col items-center justify-center w-full max-w-sm px-4 py-2 mx-auto overflow-hidden text-center transition-all border shadow-lg h-24 rounded-xl bg-background/75 backdrop-blur-md border-border ${onClick ? 'cursor-pointer hover:bg-background/90' : ''}`}
+        className={cn(
+          "relative flex flex-col items-center justify-center w-full max-w-sm px-4 py-2 mx-auto overflow-hidden text-center transition-all border shadow-lg h-24 rounded-xl bg-background/75 backdrop-blur-md border-border",
+          onClick && "cursor-pointer hover:bg-background/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        )}
         onClick={onClick}
+        onKeyDown={(e) => {
+          if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={`Continue reading ${displayTitle}`}
       >
         <div className="text-xs font-bold truncate w-full opacity-90">
           {displayTitle}
         </div>
-        <div className="text-xs font-medium truncate w-full opacity-80 my-1">
+        <div className="text-xs font-medium truncate w-full opacity-80 my-1 flex items-center justify-center gap-1.5">
+          <BookOpen size={12} className="opacity-70" aria-hidden="true" />
           {displaySubtitle}
         </div>
         <div className="text-[10px] text-muted-foreground">
