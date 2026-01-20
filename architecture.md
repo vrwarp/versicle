@@ -192,7 +192,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
     *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
 *   **Domain 2: User (Mutable/Syncable)** - *Hybrid Management*
-    *   **Yjs Primary**: `user_inventory`, `user_progress`, and `user_reading_list` are managed primarily by Yjs stores (`useBookStore`, `useReadingStateStore`).
+    *   **Yjs Primary**: `user_inventory`, `user_progress`, and `user_reading_list` are managed primarily by Yjs stores (`useBookStore`, `useReadingStateStore`, `useReadingListStore`).
     *   **IDB Primary (Sync Overlay)**:
         *   `user_overrides`: Custom settings like Lexicon rules. Synced manually by `YjsSyncService` to a Yjs Map.
     *   **IDB Local/Hybrid**:
@@ -209,7 +209,8 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 **Key Functions:**
 *   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations) and `user_reading_list` entry.
     *   *Trade-off*: User must re-import the *exact same file* (verified via 3-point fingerprint) to read again.
-*   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files).
+*   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files). It bypasses new ID generation to match the existing Yjs record.
+*   **`ingestBook(data)`**: Performs a "Static Only" write. It persists the heavy immutable data (`static_manifests`, `static_resources`) to IDB but relies on the caller (Zustand) to update the Yjs `user_inventory`.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks.
@@ -246,7 +247,7 @@ Provides a "Cloud Overlay" for real-time synchronization.
 #### Ingestion (`src/lib/ingestion.ts`)
 Handles the complex task of importing an EPUB file.
 
-*   **`processEpub(file)`**:
+*   **`extractBookData(file)`** (replaced legacy `processEpub`):
     1.  **Validation**: Enforces strict ZIP signature check (`PK\x03\x04`) to reject invalid files immediately.
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`) to render chapters.
         *   *Logic*: Implements a **Time-Budgeted Yield Strategy** (pauses every 16ms) to prevent freezing the main thread during heavy parsing.
