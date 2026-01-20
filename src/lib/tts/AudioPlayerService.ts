@@ -10,7 +10,6 @@ import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
-import { YjsSyncService } from '../sync/YjsSyncService';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { createLogger } from '../logger';
 
@@ -631,8 +630,6 @@ export class AudioPlayerService {
 
         if (status === 'stopped' || status === 'paused') {
             this.activeLexiconRules = null;
-            // Trigger sync on pause/stop
-            YjsSyncService.get()?.scheduleSync();
         }
 
         this.platformIntegration.updatePlaybackState(status);
