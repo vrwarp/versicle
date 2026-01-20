@@ -94,11 +94,6 @@ vi.mock('./components/GlobalSettingsDialog', () => ({ GlobalSettingsDialog: () =
 vi.mock('./components/ui/ToastContainer', () => ({ ToastContainer: () => null }));
 vi.mock('./components/SafeModeView', () => ({ SafeModeView: () => <div>SafeMode</div> }));
 
-// Mock Yjs Sync
-vi.mock('./lib/sync/hooks/useYjsSync', () => ({
-  useYjsSync: vi.fn(),
-}));
-
 // Mock Device Store to avoid Yjs middleware execution
 vi.mock('./store/useDeviceStore', () => ({
   useDeviceStore: {
