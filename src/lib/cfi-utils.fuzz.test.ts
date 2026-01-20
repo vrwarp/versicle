@@ -1,31 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import { mergeCfiRanges, generateCfiRange, parseCfiRange, getParentCfi } from './cfi-utils';
+import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '../test/fuzz-utils';
 
 describe('cfi-utils Fuzzing', () => {
+    const SEED = DEFAULT_FUZZ_SEED;
 
-    const generateRandomCfi = (seed: number) => {
-        // Generate valid-looking CFI structure
-        // epubcfi(/6/14!/4/2/1:0)
-        // Let's vary the last part mainly for ranges
-        const step = Math.floor((seed * 9301 + 49297) % 233280);
-        const offset = Math.floor(seed % 100);
-        return `epubcfi(/6/${step}!/4/2/1:${offset})`;
+    /**
+     * Generates a valid-looking CFI using seeded RNG.
+     */
+    const generateRandomCfi = (rng: SeededRandom, step?: number) => {
+        const s = step ?? rng.nextInt(2, 100);
+        const offset = rng.nextInt(0, 500);
+        const hasId = rng.nextBool();
+        const id = hasId ? `[id${rng.nextInt(1, 99)}]` : '';
+        return `epubcfi(/6/${s}${id}!/4/2/1:${offset})`;
     };
 
-    const randomString = (length: number) => {
-        let result = '';
-        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+[]{}|;:,.<>?';
-        const charactersLength = characters.length;
-        for (let i = 0; i < length; i++) {
-            result += characters.charAt(Math.floor(Math.random() * charactersLength));
-        }
-        return result;
+    /**
+     * Generates a random string with potentially problematic characters.
+     */
+    const randomString = (rng: SeededRandom, length: number) => {
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+[]{}|;:,.<>?/\\"`~';
+        return rng.nextString(length, characters);
     };
 
     it('remains stable under random merges (Idempotency & Associativity)', () => {
-        const cfi1 = generateRandomCfi(1);
-        const cfi2 = generateRandomCfi(2);
-        const cfi3 = generateRandomCfi(3);
+        const rng = new SeededRandom(SEED);
+
+        const cfi1 = generateRandomCfi(rng, 10);
+        const cfi2 = generateRandomCfi(rng, 20);
+        const cfi3 = generateRandomCfi(rng, 30);
 
         const range1 = generateCfiRange(cfi1, cfi2); // Range 1-2
         const range2 = generateCfiRange(cfi2, cfi3); // Range 2-3
@@ -48,10 +52,10 @@ describe('cfi-utils Fuzzing', () => {
 
     it('handles large inputs without crashing', () => {
         const ranges: string[] = [];
-        for(let i=0; i<100; i++) {
+        for (let i = 0; i < 100; i++) {
             // Ensure strict ordering for generation
             const s = `epubcfi(/6/14!/4/2/1:${i})`;
-            const e = `epubcfi(/6/14!/4/2/1:${i+1})`;
+            const e = `epubcfi(/6/14!/4/2/1:${i + 1})`;
             ranges.push(generateCfiRange(s, e));
         }
 
@@ -67,9 +71,9 @@ describe('cfi-utils Fuzzing', () => {
     it('handles non-contiguous fuzz', () => {
         const ranges: string[] = [];
         // Even: 0-1, 2-3, 4-5...
-        for(let i=0; i<100; i+=2) {
+        for (let i = 0; i < 100; i += 2) {
             const s = `epubcfi(/6/14!/4/2/1:${i})`;
-            const e = `epubcfi(/6/14!/4/2/1:${i+1})`;
+            const e = `epubcfi(/6/14!/4/2/1:${i + 1})`;
             ranges.push(generateCfiRange(s, e));
         }
 
@@ -80,45 +84,91 @@ describe('cfi-utils Fuzzing', () => {
     });
 
     it('parseCfiRange survives random strings', () => {
-        for(let i=0; i<1000; i++) {
-            const str = randomString(Math.floor(Math.random() * 50));
+        const rng = new SeededRandom(SEED);
+
+        for (let i = 0; i < DEFAULT_FUZZ_ITERATIONS; i++) {
+            const str = randomString(rng, rng.nextInt(0, 50));
             // Should not throw
             try {
                 const res = parseCfiRange(str);
                 // It's likely null, but strict check is it doesn't crash
                 expect(res === null || typeof res === 'object').toBe(true);
             } catch (e) {
-                console.error(`Crashed on input: ${str}`);
+                console.error(`Crashed on input (seed=${SEED}, iteration=${i}): ${str}`);
                 throw e;
             }
         }
     });
 
     it('getParentCfi survives random strings', () => {
-        for(let i=0; i<1000; i++) {
-             const str = randomString(Math.floor(Math.random() * 50));
-             try {
-                 const res = getParentCfi(str);
-                 expect(typeof res).toBe('string');
-             } catch(e) {
-                 console.error(`Crashed on input: ${str}`);
-                 throw e;
-             }
+        const rng = new SeededRandom(SEED);
+
+        for (let i = 0; i < DEFAULT_FUZZ_ITERATIONS; i++) {
+            const str = randomString(rng, rng.nextInt(0, 50));
+            try {
+                const res = getParentCfi(str);
+                expect(typeof res).toBe('string');
+            } catch (e) {
+                console.error(`Crashed on input (seed=${SEED}, iteration=${i}): ${str}`);
+                throw e;
+            }
         }
     });
 
     it('getParentCfi handles deep random paths', () => {
-         for(let i=0; i<100; i++) {
-             let path = 'epubcfi(/6/2!';
-             const depth = Math.floor(Math.random() * 20); // up to 20 levels deep
-             for(let d=0; d<depth; d++) {
-                 path += `/${Math.floor(Math.random() * 10)}`;
-             }
-             path += ')';
+        const rng = new SeededRandom(SEED);
 
-             const res = getParentCfi(path);
-             expect(typeof res).toBe('string');
-             // It should potentially strip something but not crash
-         }
+        for (let i = 0; i < 100; i++) {
+            let path = 'epubcfi(/6/2!';
+            const depth = rng.nextInt(0, 20); // up to 20 levels deep
+            for (let d = 0; d < depth; d++) {
+                path += `/${rng.nextInt(0, 10)}`;
+            }
+            path += ')';
+
+            const res = getParentCfi(path);
+            expect(typeof res).toBe('string');
+            // It should potentially strip something but not crash
+        }
+    });
+
+    it('generateCfiRange survives random CFI pairs', () => {
+        const rng = new SeededRandom(SEED);
+
+        for (let i = 0; i < DEFAULT_FUZZ_ITERATIONS; i++) {
+            const cfi1 = generateRandomCfi(rng);
+            const cfi2 = generateRandomCfi(rng);
+
+            try {
+                const range = generateCfiRange(cfi1, cfi2);
+                expect(typeof range).toBe('string');
+            } catch (e) {
+                console.error(`Crashed on inputs (seed=${SEED}, iteration=${i}): ${cfi1}, ${cfi2}`);
+                throw e;
+            }
+        }
+    });
+
+    it('mergeCfiRanges survives random range inputs', () => {
+        const rng = new SeededRandom(SEED);
+
+        for (let i = 0; i < 100; i++) {
+            const numRanges = rng.nextInt(1, 20);
+            const ranges: string[] = [];
+
+            for (let j = 0; j < numRanges; j++) {
+                const cfi1 = generateRandomCfi(rng);
+                const cfi2 = generateRandomCfi(rng);
+                ranges.push(generateCfiRange(cfi1, cfi2));
+            }
+
+            try {
+                const result = mergeCfiRanges(ranges);
+                expect(Array.isArray(result)).toBe(true);
+            } catch (e) {
+                console.error(`Crashed on iteration ${i} (seed=${SEED}) with ${numRanges} ranges`);
+                throw e;
+            }
+        }
     });
 });
