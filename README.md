@@ -25,7 +25,7 @@
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
 *   **AI**: Google Gemini (Flash Lite / Flash) via `@google/generative-ai`
-*   **Mobile**: Capacitor 7 (Android)
+*   **Mobile**: Capacitor 7 (Android) + `@capawesome-team/capacitor-android-battery-optimization`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
 *   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`
@@ -58,6 +58,7 @@
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
+*   **Battery Guard**: Explicitly checks and warns about Android battery optimizations that might kill background playback.
 
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
