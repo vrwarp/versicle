@@ -32,11 +32,12 @@ export const useAllBooks = () => {
     // Subscribe to progress changes (per-device structure)
     const progressMap = useReadingStateStore(state => state.progress);
 
-    // OPTIMIZATION: Memoize the derived book list to prevent creating new object references
-    // on every render if the underlying stores haven't changed.
-    return useMemo(() => {
+    // OPTIMIZATION: Phase 1 - Base Books
+    // Memoize the "static" transformation of books (merging inventory + library metadata).
+    // This depends only on 'books', 'staticMetadata', and 'offloadedBookIds', which change rarely.
+    // It does NOT depend on 'progressMap', which changes frequently (on every page turn).
+    const baseBooks = useMemo(() => {
         return Object.values(books).map(book => {
-            const bookProgress = getMaxProgress(progressMap[book.bookId]);
             const hasCoverBlob = staticMetadata[book.bookId]?.coverBlob instanceof Blob;
 
             return {
@@ -60,12 +61,25 @@ export const useAllBooks = () => {
 
                 // Derive offloaded status from local set
                 isOffloaded: offloadedBookIds.has(book.bookId),
+            };
+        }).sort((a, b) => b.lastInteraction - a.lastInteraction);
+    }, [books, staticMetadata, offloadedBookIds]);
+
+    // OPTIMIZATION: Phase 2 - Progress Merge
+    // This memo runs when 'progressMap' updates (frequently), but it reuses the expensive
+    // 'baseBooks' objects and only shallow-copies them to attach the new progress.
+    // This avoids re-creating the entire book object structure and re-calculating metadata/urls.
+    return useMemo(() => {
+        return baseBooks.map(book => {
+            const bookProgress = getMaxProgress(progressMap[book.id]);
+            return {
+                ...book,
                 // Merge progress from reading state store (max across all devices)
                 progress: bookProgress?.percentage || 0,
                 currentCfi: bookProgress?.currentCfi || undefined
             };
-        }).sort((a, b) => b.lastInteraction - a.lastInteraction);
-    }, [books, staticMetadata, offloadedBookIds, progressMap]);
+        });
+    }, [baseBooks, progressMap]);
 };
 
 /**
