@@ -32,6 +32,8 @@ describe('LexiconService Sorting', () => {
 
   beforeEach(async () => {
     service = LexiconService.getInstance();
+    // Disable Bible lexicon for sorting tests to avoid polluting the rule list
+    service.setGlobalBibleLexiconEnabled(false);
 
     mockStore = {
       rules: {},

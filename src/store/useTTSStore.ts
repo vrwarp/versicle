@@ -11,6 +11,7 @@ import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
 import { Capacitor } from '@capacitor/core';
+import { LexiconService } from '../lib/tts/LexiconService';
 
 /**
  * State interface for the Text-to-Speech (TTS) store.
@@ -248,6 +249,7 @@ export const useTTSStore = create<TTSState>()(
             },
             setBibleLexiconEnabled: (enable) => {
                 set({ isBibleLexiconEnabled: enable });
+                LexiconService.getInstance().setGlobalBibleLexiconEnabled(enable);
             },
             setBackgroundAudioMode: (mode) => {
                 set({ backgroundAudioMode: mode });
@@ -362,6 +364,8 @@ export const useTTSStore = create<TTSState>()(
                 if (state.voice) {
                     player.setVoice(state.voice.id);
                 }
+                // Sync lexicon state
+                LexiconService.getInstance().setGlobalBibleLexiconEnabled(state.isBibleLexiconEnabled);
             }
         },
     }

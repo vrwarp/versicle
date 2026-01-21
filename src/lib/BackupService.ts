@@ -4,8 +4,10 @@ import { exportFile } from './export';
 import { dbService } from '../db/DBService';
 import type { LexiconRule, BookLocations, StaticBookManifest, UserOverrides, UserInventoryItem } from '../types/db';
 import { getDB } from '../db/db';
-import { yDoc, waitForYjsSync } from '../store/yjs-provider';
+import { yDoc, waitForYjsSync, yjsPersistence } from '../store/yjs-provider';
 import { createLogger } from './logger';
+import { useLibraryStore } from '../store/useLibraryStore';
+import { IndexeddbPersistence } from 'y-indexeddb';
 
 const logger = createLogger('BackupService');
 
@@ -78,7 +80,6 @@ export class BackupService {
     onProgress?.(10, `Processing ${totalBooks} books...`);
 
     // Get offloaded status
-    const { useLibraryStore } = await import('../store/useLibraryStore');
     const offloadedBookIds = useLibraryStore.getState().offloadedBookIds;
 
     for (const bookId of bookIds) {
@@ -241,7 +242,6 @@ export class BackupService {
     // The App must be reloaded after this to pick up the new state.
 
     // 1. Clear existing persistence
-    const { yjsPersistence } = await import('../store/yjs-provider');
     if (yjsPersistence) {
       logger.debug('Clearing existing database...');
       await yjsPersistence.clearData();
@@ -251,8 +251,6 @@ export class BackupService {
     const tempDoc = new Y.Doc();
     Y.applyUpdate(tempDoc, stateUpdate);
 
-    // Import IndexeddbPersistence dynamically to avoid circular deps if any
-    const { IndexeddbPersistence } = await import('y-indexeddb');
     const tempPersistence = new IndexeddbPersistence('versicle-yjs', tempDoc);
 
     // 3. Wait for temp persistence to save
@@ -376,7 +374,6 @@ export class BackupService {
       if (restoredBookIds.length > 0) {
         // We can try to update store, but since we require reload, this is mostly for UI feedback if any
         try {
-          const { useLibraryStore } = await import('../store/useLibraryStore');
           // Check if store is actually populated (might be empty due to delete wins)
           const currentOffloaded = useLibraryStore.getState().offloadedBookIds || new Set();
           const newOffloaded = new Set([...currentOffloaded].filter(id => !restoredBookIds.includes(id)));
