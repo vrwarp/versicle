@@ -3,6 +3,7 @@ import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import type { UserProgress } from '../types/db';
+import { getDeviceId } from '../lib/device-id';
 
 /**
  * Get the progress entry with the highest percentage for a book.
@@ -134,13 +135,14 @@ export const useLastReadBookId = () => {
     const progressMap = useReadingStateStore(state => state.progress);
 
     return useMemo(() => {
+        const deviceId = getDeviceId();
         let maxLastRead = 0;
         let lastReadBookId: string | null = null;
 
         for (const [bookId, deviceMap] of Object.entries(progressMap)) {
-            const maxDeviceProgress = getMaxProgress(deviceMap);
-            if (maxDeviceProgress && maxDeviceProgress.lastRead > maxLastRead) {
-                maxLastRead = maxDeviceProgress.lastRead;
+            const deviceProgress = deviceMap[deviceId];
+            if (deviceProgress && deviceProgress.lastRead > maxLastRead) {
+                maxLastRead = deviceProgress.lastRead;
                 lastReadBookId = bookId;
             }
         }
