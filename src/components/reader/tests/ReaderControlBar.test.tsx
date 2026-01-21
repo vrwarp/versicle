@@ -5,10 +5,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ReaderControlBar } from '../ReaderControlBar';
 
 // Hoisted mocks for selectors
-const { mockUseBook, mockUseLastReadBook } = vi.hoisted(() => {
+const { mockUseBook, mockUseLastReadBook, mockUseCurrentDeviceProgress } = vi.hoisted(() => {
   return {
     mockUseBook: vi.fn(),
     mockUseLastReadBook: vi.fn(),
+    mockUseCurrentDeviceProgress: vi.fn(),
   };
 });
 
@@ -42,7 +43,8 @@ vi.mock('../../../store/useReadingStateStore', () => ({
       setState: (state: unknown) => mockUseReadingStateStore.setState?.(state),
       subscribe: (listener: unknown) => mockUseReadingStateStore.subscribe?.(listener),
     }
-  )
+  ),
+  useCurrentDeviceProgress: (bookId: any) => mockUseCurrentDeviceProgress(bookId)
 }));
 
 // Mock selectors
@@ -100,6 +102,7 @@ describe('ReaderControlBar', () => {
     // Default mocks
     mockUseBook.mockReturnValue(null);
     mockUseLastReadBook.mockReturnValue(null);
+    mockUseCurrentDeviceProgress.mockReturnValue(null);
 
     // Default store states
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
@@ -155,10 +158,7 @@ describe('ReaderControlBar', () => {
     mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
 
     // Mock progress for calculating percentage
-    mockUseReadingStateStore.getState.mockReturnValue({
-      progress: {},
-      getProgress: (bookId: string) => bookId === '123' ? { percentage: 0.5, lastRead: 1000 } : null
-    });
+    mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.5 } : null);
 
     render(<ReaderControlBar />);
     const pill = screen.getByTestId('compass-pill-active');
@@ -175,10 +175,7 @@ describe('ReaderControlBar', () => {
 
     mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
 
-    mockUseReadingStateStore.getState.mockReturnValue({
-      progress: {},
-      getProgress: (bookId: string) => bookId === '123' ? { percentage: 0.75 } : null
-    });
+    mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.75 } : null);
 
     render(<ReaderControlBar />);
     const pill = screen.getByTestId('compass-pill-compact');
@@ -197,10 +194,7 @@ describe('ReaderControlBar', () => {
     }));
 
     // Mock progress
-    mockUseReadingStateStore.getState.mockReturnValue({
-      progress: {},
-      getProgress: (bookId: string) => bookId === '123' ? { percentage: 0.25, lastRead: 1000 } : null
-    });
+    mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.25 } : null);
 
     render(<ReaderControlBar />);
 
@@ -218,10 +212,7 @@ describe('ReaderControlBar', () => {
       currentBookId: null,
     }));
 
-    mockUseReadingStateStore.getState.mockReturnValue({
-      progress: {},
-      getProgress: (bookId: string) => bookId === '123' ? { percentage: 0.25, lastRead: 1000 } : null
-    });
+    mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.25 } : null);
 
     render(<ReaderControlBar />);
     fireEvent.click(screen.getByTestId('compass-pill-summary'));

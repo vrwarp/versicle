@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useCurrentDeviceProgress } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useBook, useLastReadBook } from '../../store/selectors';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
@@ -44,10 +44,12 @@ export const ReaderControlBar: React.FC = () => {
     // Select the most recently read book
     // OPTIMIZATION: Use specialized selector to avoid iterating all books
     const lastReadBook = useLastReadBook();
+    const lastReadBookProgress = useCurrentDeviceProgress(lastReadBook?.bookId || null);
 
     // Select the current book if active
     // OPTIMIZATION: Use specialized selector
     const currentBook = useBook(currentBookId);
+    const currentBookProgress = useCurrentDeviceProgress(currentBookId);
 
     // Determine State Priority
     // 1. Annotation Mode
@@ -151,9 +153,8 @@ export const ReaderControlBar: React.FC = () => {
     if (variant === 'summary' && lastReadBook) {
         title = lastReadBook.title;
         subtitle = "Continue Reading";
-        // Get progress from reading state (max across all devices)
-        const lastReadProgress = useReadingStateStore.getState().getProgress(lastReadBook.bookId);
-        progress = (lastReadProgress?.percentage || 0) * 100;
+        // Get progress from reading state (local device)
+        progress = (lastReadBookProgress?.percentage || 0) * 100;
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
         // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
         // If queue has items, CompassPill uses queue item title.
@@ -161,9 +162,8 @@ export const ReaderControlBar: React.FC = () => {
         if (!hasQueueItems) {
             title = currentBook.title;
             subtitle = currentSectionTitle || undefined;
-            // Get progress from reading state (max across all devices)
-            const currentProgress = useReadingStateStore.getState().getProgress(currentBook.bookId);
-            progress = (currentProgress?.percentage || 0) * 100;
+            // Get progress from reading state (local device)
+            progress = (currentBookProgress?.percentage || 0) * 100;
         }
     }
 
