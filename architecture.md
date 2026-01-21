@@ -19,6 +19,7 @@ Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook pla
         *   **Search**: Uses a **Web Worker** running a custom `SearchEngine` with **RegExp** scanning to find text in memory.
         *   **TTS**: Uses client-side logic (`TextSegmenter`) with JIT refinement to split text into sentences and caches audio segments locally (`TTSCache`).
         *   **Ingestion**: Parses EPUB files directly in the browser using `epub.js` and a custom **Offscreen Renderer** for accurate text extraction.
+        *   **Yield Strategy**: Implements a **Time-Budgeted Yield Strategy** (pauses every 16ms) to keep the main thread responsive during heavy parsing.
     *   **Trade-off**: Higher memory and CPU usage on the client device. Large books may take seconds to index for search or parse for ingestion.
 
 3.  **Hybrid Text-to-Speech (TTS) & GenAI**:
@@ -305,7 +306,8 @@ The Orchestrator. Manages playback state, provider selection, and UI updates.
 
 *   **Logic**:
     *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state management to `PlaybackStateManager`.
-    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods.
+    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods to prevent race conditions.
+    *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization that might kill background playback (`checkBatteryOptimization`).
 
 #### `src/lib/tts/AudioContentPipeline.ts`
 The Data Pipeline for TTS.
