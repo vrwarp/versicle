@@ -27,6 +27,7 @@ The `SyncManifest` interface (`src/types/db.ts`) defines the canonical state of 
 ### B. The "CRDT Layer" (Synchronization)
 We use `Yjs` for conflict-free replicated data types.
 *   **Stores:** `usePreferencesStore`, `useBookStore`, `useReadingStateStore` are wrapped with `zustand-middleware-yjs`.
+    *   *Note:* `useReadingStateStore` maintains a nested map `progress[bookId][deviceId]`. This allows the application to query the state of *any* connected device at any time, not just the local one.
 *   **Provider:** `y-fire` connects `Y.Doc` to Firestore.
 *   **Persistence:** `y-indexeddb` persists `Y.Doc` locally.
 
@@ -53,6 +54,13 @@ We use `Yjs` for conflict-free replicated data types.
 3.  `yjs` middleware updates local `Y.Doc`.
 4.  `y-indexeddb` saves to IDB (Instant).
 5.  `FirestoreSyncManager` pushes update to Firestore (Async).
+
+### Scenario: On-Demand Remote Progress Check (Pull)
+*   **Context:** User opens the "Sync Status" menu or Library View.
+*   **Action:** The UI selector calls `useReadingStateStore.getState().progress[bookId]`.
+*   **Result:** It returns an object containing keys for all synced devices (e.g., `{ "pixel-6": {...}, "ipad-pro": {...} }`).
+*   **Logic:** The UI filters out the current `deviceId` and sorts the remaining entries by `lastRead` timestamp to display the "Latest Active" remote device.
+*   **Benefit:** This requires no network call at render time because `Yjs` has already synchronized the state map in the background.
 
 ### Scenario: Library Import (Ghost Book Creation)
 1.  User adds Book A on Device 1.

@@ -20,14 +20,15 @@ Versicle aims to provide a reading experience that is robust, privacy-focused, a
 *   **Step 2:** As she arrives home, she closes the app on her phone. The phone (detecting network) pushes the latest `Y.Doc` state to Firestore and updates the "Moral Layer" snapshot via Android Backup.
 *   **Step 3:** Sarah settles on her couch and picks up her **iPad**. She opens Versicle.
 *   **Step 4:** The app background-syncs via Firestore.
-*   **Step 5:** A subtle toast appears: *"Resumed from Android Phone at Chapter 7"*.
-*   **Step 6:** Sarah taps "Resume". The book opens instantly to the exact sentence she left off.
-*   **Step 7:** She checks her highlights; the quote from Chapter 6 is present.
+*   **Step 5:** Sarah sees a **Persistent Badge** on the *Moby Dick* cover in the library: *"Continue from Phone"*.
+*   **Step 6:** A subtle toast also appears: *"Resumed from Android Phone at Chapter 7"*. Sarah misses the toast as she adjusts her brightness, but she taps the **Badge** on the book cover.
+*   **Step 7:** The book opens instantly to the exact sentence she left off on her phone (Chapter 7).
+*   **Step 8:** She checks her highlights; the quote from Chapter 6 is present.
 
 **Success Criteria:**
 *   Sync latency < 2 seconds on good network.
 *   Progress is accurate to the exact CFI (sentence/word).
-*   Annotations appear immediately.
+*   **Redundancy:** The resume action is available via both transient (toast) and persistent (badge/menu) UI elements.
 
 ### 2. The Offline Progression (The "Airplane" Scenario)
 **Persona:** David, a frequent flyer.
@@ -78,7 +79,7 @@ Versicle aims to provide a reading experience that is robust, privacy-focused, a
 
 ### 5. The "Device Conflict" (The Edge Case)
 **Persona:** The "Multi-Device" Reader.
-**Context:** Reading the same book on two devices simultaneously (e.g., testing or forgot to close one).
+**Context:** Reading the same book on two devices simultaneously.
 
 *   **Step 1:** User is reading Page 10 on **Tablet** (Online).
 *   **Step 2:** User picks up **Phone** (Offline, cached at Page 5) and reads to Page 15.
@@ -87,11 +88,14 @@ Versicle aims to provide a reading experience that is robust, privacy-focused, a
 *   **Step 5:** `Yjs` resolves the conflict. Since `useReadingStateStore` tracks progress *per device*, no data is overwritten.
 *   **Step 6:** User opens **Tablet**. It sees that **Phone** has a later timestamp/progress (Page 15).
 *   **Step 7:** A "Resume" toast appears: *"Pick up from Phone at Page 15?"*.
-*   **Step 8:** User accepts. Tablet jumps to Page 15.
+*   **Step 8:** The user accidentally dismisses the toast.
+*   **Step 9:** The user taps the **Book Action Menu** (three dots) -> **Sync Status**.
+*   **Step 10:** They see an entry: *"Phone: Page 15 (2 mins ago)"* and tap **"Jump Here"**.
+*   **Step 11:** Tablet jumps to Page 15.
 
 **Success Criteria:**
 *   No "Conflict Resolution" dialogs for the user (handled via CRDT/Per-Device tracking).
-*   Smart suggestion based on "Latest Active" logic.
+*   **Recoverability:** Users can manually trigger the jump if they miss the automated suggestion.
 
 ---
 
@@ -99,4 +103,4 @@ Versicle aims to provide a reading experience that is robust, privacy-focused, a
 1.  **Dual Sync Engine:** Real-time (Firestore) for active sessions, Snapshot (Backup) for recovery.
 2.  **Ghost Books:** Decouple Metadata (light) from Content (heavy).
 3.  **Per-Device Progress Tracking:** Avoid overwriting progress; aggregate it instead.
-4.  **Smart Resume UI:** proactive suggestions.
+4.  **Redundant Resume UI:** Proactive suggestions (toasts) backed by persistent access points (badges/menus).

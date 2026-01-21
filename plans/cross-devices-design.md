@@ -21,25 +21,25 @@ Users need confidence that their data is safe. However, sync should mostly be in
 *   **Trigger:** When a sync completes after being offline for > 1 hour, or when a new book is added from another device.
 *   **Design:** Small, non-blocking toast at the bottom. *"Library updated from 'Desktop'"*.
 
-## 2. Library View: Ghost Books
-
-When a book is synced from another device but the content (EPUB) hasn't been downloaded yet.
+## 2. Library View: Ghost Books & Resume Badges
 
 ### A. The Book Card
 *   **Cover:** Displays the gradient cover (derived from `coverPalette`) or the thumbnail if available in the snapshot.
-*   **Overlay Icon:** A distinct "Cloud Download" icon centered on the cover or in the corner.
-*   **Opacity:** Slight transparency (e.g., 80% opacity) to denote it's not locally fully available.
-*   **Action:** Tapping the book triggers the `importBookWithId` flow (fetching static resources).
-    *   _Loading State:_ A circular progress ring overlays the cover during download.
+*   **Overlay Icon:**
+    *   *Not Downloaded:* A distinct "Cloud Download" icon centered on the cover.
+    *   *Resume Available:* A small "Device" icon (e.g., Phone) in the bottom-right corner if another device is ahead of the current one.
+*   **Action:**
+    *   Tapping the book triggers the `importBookWithId` flow if content is missing.
+    *   If content exists, it opens the book.
 
 ### B. Filter / Sort
 *   **Filter Option:** Add "On this device" vs "All Books" toggle in the library filter menu.
 
 ## 3. The "Smart Resume" Experience
 
-The most critical interaction for cross-device reading.
+The most critical interaction for cross-device reading. This must be resilient to accidental dismissal.
 
-### A. The "Jump" Toast
+### A. The "Jump" Toast (Transient)
 *   **Context:** User opens a book that was recently read on another device.
 *   **Logic:** If `currentDevice.progress` < `remoteDevice.progress` AND `remoteDevice.lastRead` > `currentDevice.lastRead`.
 *   **UI Component:** A floating pill at the bottom center (similar to "Scroll to bottom").
@@ -48,12 +48,16 @@ The most critical interaction for cross-device reading.
     *   *Text:* "Pick up where you left off on **Pixel 7**?"
     *   *Subtext:* "Chapter 5 • 42%"
     *   *Actions:* "Jump" (Primary), "Dismiss" (X).
-*   **Behavior:**
-    *   Tapping "Jump" smooth-scrolls or re-renders to the new CFI.
-    *   Dismissing it ignores that specific remote session for this session.
 
-### B. Progress Visualization
-*   **TOC View:** Show "User's Avatar" or device icon next to the chapter where other devices are currently at.
+### B. Persistent Entry Points (Manual Recovery)
+*   **Library Context Menu:** Long-press on a book -> "Resume from..." -> Shows list of devices with their progress.
+*   **Reader "Sync Status" Menu:**
+    *   Inside the reader, the "Three Dots" menu contains a "Sync Status" item.
+    *   **Panel:** Displays a list of all devices and their current location in this book.
+    *   **Action:** Tapping an entry (e.g., "iPad - Ch 8") immediately jumps to that location.
+*   **Table of Contents (TOC):**
+    *   Chapters where other devices are currently located are marked with a small avatar/device icon.
+    *   _Tooltip/Label:_ "iPad Pro is here".
 
 ## 4. Settings & Device Management
 
@@ -71,13 +75,13 @@ Give users control over their "Device Graph".
     *   *Other Devices:* "iPad Pro" - Last seen 2 hours ago.
 *   **Actions per Device:**
     *   *Rename:* "Give this device a friendly name".
-    *   *Remove:* "Remove from sync". This stops syncing FROM this device, but does not wipe the device remotely (unless we implement remote wipe, which is out of scope).
+    *   *Remove:* "Remove from sync". This stops syncing FROM this device, but does not wipe the device remotely.
 
 ## 5. Conflict Resolution (The "Manual Merge")
 
-Since we use `Yjs`, conflicts are automatically resolved. However, semantic conflicts might occur (e.g., Book title changed on both devices while offline).
+Since we use `Yjs`, conflicts are automatically resolved. However, semantic conflicts might occur.
 
-*   **Strategy:** "Last Write Wins" (LWW) is the default UX. We do **not** burden the user with diff merging for metadata.
+*   **Strategy:** "Last Write Wins" (LWW) is the default UX.
 *   **Exception:** If a file (EPUB) is replaced with a different hash but same ID.
     *   *UI:* Show a "Version Conflict" badge on the book.
     *   *Action:* Ask user: "Keep Local Version" or "Download Remote Version"?
@@ -85,4 +89,5 @@ Since we use `Yjs`, conflicts are automatically resolved. However, semantic conf
 ## 6. Accessibility Considerations
 
 *   **Announcements:** Screen readers must announce "Sync started" and "Sync complete".
-*   **Focus Management:** The "Smart Resume" toast must be focusable (Cmd/Ctrl+F6 or Tab order) but not steal focus immediately on load.
+*   **Focus Management:** The "Smart Resume" toast must be focusable.
+*   **Redundancy:** Ensure the "Sync Status" menu is keyboard accessible so users can find remote progress without relying on the transient toast.
