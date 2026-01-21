@@ -11,6 +11,7 @@ import { Modal, ModalContent, ModalHeader, ModalTitle } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
 import { Input } from './ui/Input';
+import { Label } from './ui/Label';
 import { Slider } from './ui/Slider';
 import { Switch } from './ui/Switch';
 import { ThemeSelector } from './ThemeSelector';
@@ -702,8 +703,9 @@ export const GlobalSettingsDialog = () => {
 
                                         {providerId === 'google' && (
                                             <div className="space-y-2">
-                                                <label className="text-sm font-medium">Google API Key</label>
+                                                <Label htmlFor="tts-google-key">Google API Key</Label>
                                                 <Input
+                                                    id="tts-google-key"
                                                     type="password"
                                                     value={apiKeys.google}
                                                     onChange={(e) => setApiKey('google', e.target.value)}
@@ -712,8 +714,9 @@ export const GlobalSettingsDialog = () => {
                                         )}
                                         {providerId === 'openai' && (
                                             <div className="space-y-2">
-                                                <label className="text-sm font-medium">OpenAI API Key</label>
+                                                <Label htmlFor="tts-openai-key">OpenAI API Key</Label>
                                                 <Input
+                                                    id="tts-openai-key"
                                                     type="password"
                                                     value={apiKeys.openai}
                                                     onChange={(e) => setApiKey('openai', e.target.value)}
@@ -722,8 +725,9 @@ export const GlobalSettingsDialog = () => {
                                         )}
                                         {providerId === 'lemonfox' && (
                                             <div className="space-y-2">
-                                                <label className="text-sm font-medium">LemonFox API Key</label>
+                                                <Label htmlFor="tts-lemonfox-key">LemonFox API Key</Label>
                                                 <Input
+                                                    id="tts-lemonfox-key"
                                                     type="password"
                                                     value={apiKeys.lemonfox}
                                                     onChange={(e) => setApiKey('lemonfox', e.target.value)}
@@ -782,8 +786,9 @@ export const GlobalSettingsDialog = () => {
                                         {isGenAIEnabled && (
                                             <>
                                                 <div className="space-y-2">
-                                                    <label className="text-sm font-medium">Gemini API Key</label>
+                                                    <Label htmlFor="genai-api-key">Gemini API Key</Label>
                                                     <Input
+                                                        id="genai-api-key"
                                                         type="password"
                                                         value={genAIApiKey}
                                                         onChange={(e) => setGenAIApiKey(e.target.value)}
@@ -959,8 +964,9 @@ export const GlobalSettingsDialog = () => {
                                     <div className="space-y-4 mb-6 pb-6 border-b">
                                         <h4 className="text-sm font-medium">Device Identity</h4>
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium">Device Name</label>
+                                            <Label htmlFor="device-name-input">Device Name</Label>
                                             <Input
+                                                id="device-name-input"
                                                 value={devices[currentDeviceId]?.name || ''}
                                                 onChange={(e) => renameDevice(currentDeviceId, e.target.value)}
                                                 placeholder="My Device"
@@ -1058,8 +1064,9 @@ const firebaseConfig = {
                                                         <p className="text-xs text-muted-foreground mb-3">Or edit fields individually:</p>
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <label className="text-sm font-medium">API Key</label>
+                                                        <Label htmlFor="firebase-api-key">API Key</Label>
                                                         <Input
+                                                            id="firebase-api-key"
                                                             type="password"
                                                             value={firebaseConfig.apiKey}
                                                             onChange={(e) => setFirebaseConfig({ apiKey: e.target.value })}
@@ -1067,8 +1074,9 @@ const firebaseConfig = {
                                                         />
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <label className="text-sm font-medium">Auth Domain</label>
+                                                        <Label htmlFor="firebase-auth-domain">Auth Domain</Label>
                                                         <Input
+                                                            id="firebase-auth-domain"
                                                             type="text"
                                                             value={firebaseConfig.authDomain}
                                                             onChange={(e) => setFirebaseConfig({ authDomain: e.target.value })}
@@ -1076,8 +1084,9 @@ const firebaseConfig = {
                                                         />
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <label className="text-sm font-medium">Project ID</label>
+                                                        <Label htmlFor="firebase-project-id">Project ID</Label>
                                                         <Input
+                                                            id="firebase-project-id"
                                                             type="text"
                                                             value={firebaseConfig.projectId}
                                                             onChange={(e) => setFirebaseConfig({ projectId: e.target.value })}
@@ -1085,8 +1094,9 @@ const firebaseConfig = {
                                                         />
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <label className="text-sm font-medium">Storage Bucket</label>
+                                                        <Label htmlFor="firebase-storage-bucket">Storage Bucket</Label>
                                                         <Input
+                                                            id="firebase-storage-bucket"
                                                             type="text"
                                                             value={firebaseConfig.storageBucket}
                                                             onChange={(e) => setFirebaseConfig({ storageBucket: e.target.value })}
@@ -1094,8 +1104,9 @@ const firebaseConfig = {
                                                         />
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <label className="text-sm font-medium">Messaging Sender ID</label>
+                                                        <Label htmlFor="firebase-messaging-sender-id">Messaging Sender ID</Label>
                                                         <Input
+                                                            id="firebase-messaging-sender-id"
                                                             type="text"
                                                             value={firebaseConfig.messagingSenderId}
                                                             onChange={(e) => setFirebaseConfig({ messagingSenderId: e.target.value })}
@@ -1103,8 +1114,9 @@ const firebaseConfig = {
                                                         />
                                                     </div>
                                                     <div className="space-y-2">
-                                                        <label className="text-sm font-medium">App ID</label>
+                                                        <Label htmlFor="firebase-app-id">App ID</Label>
                                                         <Input
+                                                            id="firebase-app-id"
                                                             type="text"
                                                             value={firebaseConfig.appId}
                                                             onChange={(e) => setFirebaseConfig({ appId: e.target.value })}
