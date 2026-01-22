@@ -1,3 +1,7 @@
+import { createLogger } from '../logger';
+
+const logger = createLogger('TextMatching');
+
 /**
  * Utility functions for fuzzy text matching.
  */
@@ -38,7 +42,7 @@ export function findApproximateMatch(text: string, query: string): { start: numb
             return { start: match.index, end: match.index + match[0].length };
         }
     } catch (e) {
-        console.warn('Regex matching failed for query:', query, e);
+        logger.warn('Regex matching failed for query:', query, e);
     }
 
     return null;

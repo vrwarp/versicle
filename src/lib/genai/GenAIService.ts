@@ -1,5 +1,8 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import type { ContentType } from '../../types/content-analysis';
+import { createLogger } from '../logger';
+
+const logger = createLogger('GenAIService');
 
 export interface GenAILogEntry {
   id: string;
@@ -18,7 +21,7 @@ class GenAIService {
   private readonly ROTATION_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
   private logCallback: ((entry: GenAILogEntry) => void) | null = null;
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): GenAIService {
     if (!GenAIService.instance) {
@@ -57,7 +60,7 @@ class GenAIService {
   public isConfigured(): boolean {
     // Check for mock mode first
     if (typeof localStorage !== 'undefined' && (localStorage.getItem('mockGenAIResponse') || localStorage.getItem('mockGenAIError'))) {
-        return true;
+      return true;
     }
     return this.genAI !== null;
   }
@@ -86,21 +89,21 @@ class GenAIService {
     let lastError: any = null;
 
     for (const currentModelId of modelsToTry) {
-        try {
-            return await operation(this.genAI, currentModelId);
+      try {
+        return await operation(this.genAI, currentModelId);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (error: any) {
-            lastError = error;
-            const isResourceExhausted = error.message?.includes('429') || error.status === 429 || error.toString().includes('RESOURCE_EXHAUSTED');
+      } catch (error: any) {
+        lastError = error;
+        const isResourceExhausted = error.message?.includes('429') || error.status === 429 || error.toString().includes('RESOURCE_EXHAUSTED');
 
-            if (this.isRotationEnabled && isResourceExhausted) {
-                this.log('error', methodName, { message: `Model ${currentModelId} exhausted (429). Retrying with next model...`, error: error.message });
-                continue;
-            } else {
-                // If not 429 or rotation disabled, fail immediately
-                throw error;
-            }
+        if (this.isRotationEnabled && isResourceExhausted) {
+          this.log('error', methodName, { message: `Model ${currentModelId} exhausted (429). Retrying with next model...`, error: error.message });
+          continue;
+        } else {
+          // If not 429 or rotation disabled, fail immediately
+          throw error;
         }
+      }
     }
 
     throw lastError;
@@ -108,13 +111,13 @@ class GenAIService {
 
   public async generateContent(prompt: string): Promise<string> {
     return this.executeWithRetry(async (genAI, modelId) => {
-        this.log('request', 'generateContent', { prompt, model: modelId });
-        const model = genAI.getGenerativeModel({ model: modelId });
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
-        this.log('response', 'generateContent', { text });
-        return text;
+      this.log('request', 'generateContent', { prompt, model: modelId });
+      const model = genAI.getGenerativeModel({ model: modelId });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      this.log('response', 'generateContent', { text });
+      return text;
     }, 'generateContent');
   }
 
@@ -136,55 +139,55 @@ class GenAIService {
   public async generateStructured<T>(prompt: string | any, schema: any, generationConfigOverride?: any): Promise<T> {
     // Check for E2E Test Mocks
     if (typeof localStorage !== 'undefined') {
-        const mockError = localStorage.getItem('mockGenAIError');
-        if (mockError) {
-             const error = new Error('Simulated GenAI Error');
-             this.log('error', 'generateStructured', { message: error.message, isMock: true });
-             throw error;
-        }
+      const mockError = localStorage.getItem('mockGenAIError');
+      if (mockError) {
+        const error = new Error('Simulated GenAI Error');
+        this.log('error', 'generateStructured', { message: error.message, isMock: true });
+        throw error;
+      }
 
-        const mockResponse = localStorage.getItem('mockGenAIResponse');
-        if (mockResponse) {
-            console.log("Using Mock GenAI Response");
-            // Simulate network delay
-            await new Promise(resolve => setTimeout(resolve, 500));
-            try {
-                const parsed = JSON.parse(mockResponse) as T;
-                this.log('response', 'generateStructured', { parsed, isMock: true });
-                return parsed;
-            } catch {
-                console.error("Invalid mock response JSON");
-                this.log('error', 'generateStructured', { message: "Invalid mock response JSON", isMock: true });
-            }
+      const mockResponse = localStorage.getItem('mockGenAIResponse');
+      if (mockResponse) {
+        logger.info("Using Mock GenAI Response");
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+          const parsed = JSON.parse(mockResponse) as T;
+          this.log('response', 'generateStructured', { parsed, isMock: true });
+          return parsed;
+        } catch {
+          logger.error("Invalid mock response JSON");
+          this.log('error', 'generateStructured', { message: "Invalid mock response JSON", isMock: true });
         }
+      }
     }
 
     return this.executeWithRetry(async (genAI, modelId) => {
-        this.log('request', 'generateStructured', { prompt, schema, model: modelId, generationConfigOverride });
+      this.log('request', 'generateStructured', { prompt, schema, model: modelId, generationConfigOverride });
 
-        const model = genAI.getGenerativeModel({
-            model: modelId,
-            generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: schema,
-            ...(generationConfigOverride || {})
-            },
-        });
+      const model = genAI.getGenerativeModel({
+        model: modelId,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+          ...(generationConfigOverride || {})
+        },
+      });
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
 
-        try {
-            const parsed = JSON.parse(text) as T;
-            this.log('response', 'generateStructured', { text, parsed });
-            return parsed;
-        } catch (error) {
-            console.error('Failed to parse GenAI response as JSON:', text);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message });
-            throw error;
-        }
+      try {
+        const parsed = JSON.parse(text) as T;
+        this.log('response', 'generateStructured', { text, parsed });
+        return parsed;
+      } catch (error) {
+        logger.error('Failed to parse GenAI response as JSON:', text);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message });
+        throw error;
+      }
     }, 'generateStructured');
   }
 

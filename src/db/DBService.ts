@@ -21,7 +21,9 @@ import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
 
-import { Logger } from '../lib/logger';
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger('DBService');
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
 
@@ -31,7 +33,7 @@ class DBService {
   }
 
   private handleError(error: unknown): never {
-    Logger.error('DBService', 'Database operation failed', error);
+    logger.error('Database operation failed', error);
 
     if (error instanceof DatabaseError) {
       throw error;
@@ -360,9 +362,9 @@ class DBService {
         tx.objectStore('cache_session_state').delete(id),
       ]);
 
-      console.log(`[DBService] deleteBook: keys deleted for ${id}. Verifying static_resources deletion...`);
+      logger.debug(`deleteBook: keys deleted for ${id}. Verifying static_resources deletion...`);
       const res = await tx.objectStore('static_resources').get(id);
-      console.log(`[DBService] deleteBook: static_resources.get(${id}) after delete = ${res}`);
+      logger.debug(`deleteBook: static_resources.get(${id}) after delete = ${res}`);
 
       // Delete from index-based stores
       const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
@@ -455,7 +457,7 @@ class DBService {
       if (bookIds && bookIds.length > 0) {
         for (const id of bookIds) {
           const exists = resourceSet.has(id);
-          console.log(`[DBService] getOffloadedStatus: ${id} exists in static_resources? ${exists} (Keys: ${resourceKeys.length})`);
+          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists} (Keys: ${resourceKeys.length})`);
           result.set(id, !exists);
         }
       } else {
@@ -548,7 +550,7 @@ class DBService {
         }
         await tx.done;
       } catch (error) {
-        Logger.error('DBService', 'Failed to save TTS state', error);
+        logger.error('Failed to save TTS state', error);
       }
     }, 1000);
   }

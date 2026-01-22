@@ -9,6 +9,9 @@ import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from './constants';
 import { extractCoverPalette } from './cover-palette';
+import { createLogger } from './logger';
+
+const logger = createLogger('Ingestion');
 
 export { extractCoverPalette } from './cover-palette';
 
@@ -41,7 +44,7 @@ export async function validateZipSignature(file: File): Promise<boolean> {
             view.getUint8(2) === 0x03 &&
             view.getUint8(3) === 0x04;
     } catch (e) {
-        console.error("File validation failed", e);
+        logger.error("File validation failed", e);
         return false;
     }
 }
@@ -216,12 +219,12 @@ export async function extractBookData(
                         useWebWorker: true,
                     });
                 } catch (error) {
-                    console.warn('Failed to compress cover image, using original:', error);
+                    logger.warn('Failed to compress cover image, using original:', error);
                     thumbnailBlob = coverBlob;
                 }
             }
         } catch (error) {
-            console.warn('Failed to retrieve cover blob:', error);
+            logger.warn('Failed to retrieve cover blob:', error);
         }
     }
 
@@ -303,7 +306,7 @@ export async function extractBookData(
         candidateMetadata.author = s.author;
         candidateMetadata.description = s.description;
         if (check.wasModified) {
-            console.warn(`Metadata sanitized for "${candidateMetadata.title}":`, check.modifications);
+            logger.warn(`Metadata sanitized for "${candidateMetadata.title}":`, check.modifications);
         }
     }
 

@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
 import type { UserAnnotation } from '../types/db';
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger('AnnotationStore');
 
 /**
  * UI state for the annotation popover (not synced to Yjs).
@@ -115,7 +118,7 @@ export const createAnnotationStore = () => create<AnnotationState>()(
       update: (id, updates) => {
         set((state) => {
           if (!state.annotations[id]) {
-            console.warn(`Annotation ${id} not found`);
+            logger.warn(`Annotation ${id} not found`);
             return state;
           }
 
@@ -142,7 +145,7 @@ export const createAnnotationStore = () => create<AnnotationState>()(
       loadAnnotations: async (bookId: string) => {
         // No-op: With Yjs, annotations are always loaded
         // Kept for backwards compatibility with components
-        console.debug(`loadAnnotations called for book ${bookId} (no-op with Yjs)`);
+        logger.debug(`loadAnnotations called for book ${bookId} (no-op with Yjs)`);
       },
 
       getByBook: (bookId) => {
