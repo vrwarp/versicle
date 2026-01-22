@@ -12,7 +12,9 @@
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google) for studio-quality narration.
     *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening.
-*   **Serverless Sync**: Synchronize your reading progress and highlights across devices using your own Google Drive as a private storage backend.
+*   **Dual Sync**:
+    *   **Real-time**: Synchronize progress instantly across devices using Firestore.
+    *   **Native Backup**: Seamless integration with Android's built-in backup system.
 *   **Data Ownership**: Export your data at any time. Full backups (ZIP) or Metadata (JSON).
 
 ## Tech Stack
@@ -20,7 +22,7 @@
 *   **Framework**: React 19 + Vite 7
 *   **Language**: TypeScript
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs`
-*   **Sync**: `y-fire` (Firestore) + Google Drive API
+*   **Sync**: `y-fire` (Firestore) + Android Backup Service
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
@@ -58,17 +60,16 @@
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
-*   **Battery Guard**: Explicitly checks and warns about Android battery optimizations that might kill background playback.
+*   **Battery Guard**: Explicitly checks and warns about aggressive Android battery optimizations that might kill background playback.
 
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
     *   **Dual Sync**:
-        *   **Snapshot Sync**: Keep your progress and annotations in sync across devices using your personal **Google Drive** (Serverless).
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
+        *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots protect against data loss during sync.
-    *   **Android Backup**: Native integration with Android's Backup Manager.
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted. Export/Import to CSV (Goodreads compatible).
 *   **Backups**:
