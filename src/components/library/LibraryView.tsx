@@ -20,6 +20,7 @@ import { ReprocessingInterstitial } from './ReprocessingInterstitial';
 import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { DuplicateBookError } from '../../types/errors';
+import { ReplaceBookDialog } from './ReplaceBookDialog';
 
 /**
  * The main library view component.
@@ -75,6 +76,8 @@ export const LibraryView: React.FC = () => {
     book: BookMetadata;
   } | null>(null);
 
+  const [duplicateQueue, setDuplicateQueue] = useState<File[]>([]);
+  const currentDuplicate = duplicateQueue[0];
   const [bookToRestore, setBookToRestore] = useState<BookMetadata | null>(null);
   const [reprocessingBookId, setReprocessingBookId] = useState<string | null>(null);
 
@@ -136,13 +139,7 @@ export const LibraryView: React.FC = () => {
         showToast("Book imported successfully", "success");
       }).catch((err) => {
         if (err instanceof DuplicateBookError) {
-          if (window.confirm(`"${file.name}" already exists. Do you want to replace it?`)) {
-            addBook(file, { overwrite: true }).then(() => {
-              showToast("Book replaced successfully", "success");
-            }).catch(e2 => {
-              showToast(`Replace failed: ${e2.message}`, "error");
-            });
-          }
+          setDuplicateQueue(prev => [...prev, file]);
         } else {
           showToast(`Import failed: ${err.message}`, "error");
         }
@@ -151,6 +148,18 @@ export const LibraryView: React.FC = () => {
     // Reset input so same file can be selected again if needed
     if (e.target.value) {
       e.target.value = '';
+    }
+  };
+
+  const handleConfirmReplace = async () => {
+    if (!currentDuplicate) return;
+    try {
+      await addBook(currentDuplicate, { overwrite: true });
+      showToast("Book replaced successfully", "success");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      showToast(`Replace failed: ${msg}`, "error");
+      throw e;
     }
   };
 
@@ -205,13 +214,7 @@ export const LibraryView: React.FC = () => {
         showToast("Book imported successfully", "success", 5000);
       }).catch((err) => {
         if (err instanceof DuplicateBookError) {
-          if (window.confirm(`"${file.name}" already exists. Do you want to replace it?`)) {
-            addBook(file, { overwrite: true }).then(() => {
-              showToast("Book replaced successfully", "success");
-            }).catch(e2 => {
-              showToast(`Replace failed: ${e2.message}`, "error");
-            });
-          }
+          setDuplicateQueue(prev => [...prev, file]);
         } else {
           showToast(`Import failed: ${err.message}`, "error");
         }
@@ -343,6 +346,13 @@ export const LibraryView: React.FC = () => {
           if (id) navigate(`/read/${id}`);
         }}
         onClose={() => setReprocessingBookId(null)}
+      />
+
+      <ReplaceBookDialog
+        isOpen={!!currentDuplicate}
+        onClose={() => setDuplicateQueue(prev => prev.slice(1))}
+        onConfirm={handleConfirmReplace}
+        fileName={currentDuplicate?.name || ''}
       />
 
       <header className="mb-6 flex flex-col gap-4">
