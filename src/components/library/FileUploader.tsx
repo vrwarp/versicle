@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils';
 import { validateZipSignature } from '../../lib/ingestion';
 import { Progress } from '../ui/Progress';
 import { DuplicateBookError } from '../../types/errors';
+import { ReplaceBookDialog } from './ReplaceBookDialog';
 
 /**
  * A component for uploading EPUB files, ZIP archives, or directories via drag-and-drop or file selection.
@@ -26,6 +27,8 @@ export const FileUploader: React.FC = () => {
 
   const { showToast } = useToastStore();
   const [dragActive, setDragActive] = useState(false);
+  const [duplicateQueue, setDuplicateQueue] = useState<File[]>([]);
+  const currentDuplicate = duplicateQueue[0];
 
   /**
    * Validates and processes a single file.
@@ -39,9 +42,7 @@ export const FileUploader: React.FC = () => {
                    await addBook(file);
                } catch (error) {
                    if (error instanceof DuplicateBookError) {
-                       if (window.confirm(`"${file.name}" already exists. Do you want to replace it?`)) {
-                           await addBook(file, { overwrite: true });
-                       }
+                       setDuplicateQueue(prev => [...prev, file]);
                    }
                }
            } else {
@@ -194,6 +195,22 @@ export const FileUploader: React.FC = () => {
         </div>
       )}
     </div>
+
+    <ReplaceBookDialog
+        isOpen={!!currentDuplicate}
+        onClose={() => setDuplicateQueue(prev => prev.slice(1))}
+        onConfirm={async () => {
+            if (!currentDuplicate) return;
+            try {
+                await addBook(currentDuplicate, { overwrite: true });
+                showToast("Book replaced successfully", "success");
+            } catch (error) {
+                showToast(`Replace failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+                throw error;
+            }
+        }}
+        fileName={currentDuplicate?.name || ''}
+    />
 
     </div>
   );

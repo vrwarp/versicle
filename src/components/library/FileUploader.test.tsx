@@ -5,6 +5,7 @@ import { FileUploader } from './FileUploader';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { validateZipSignature } from '../../lib/ingestion';
+import { DuplicateBookError } from '../../types/errors';
 
 // Mock dependencies
 vi.mock('../../store/useLibraryStore');
@@ -25,6 +26,7 @@ describe('FileUploader', () => {
     (useLibraryStore as any).mockReturnValue({
       addBook: mockAddBook,
       isImporting: false,
+      addBooks: vi.fn(),
     });
 
     // Mock useToastStore
@@ -164,5 +166,39 @@ describe('FileUploader', () => {
           expect(mockAddBook).not.toHaveBeenCalled();
           expect(mockShowToast).toHaveBeenCalledWith('Invalid ZIP file (header mismatch): test.zip', 'error');
       });
+  });
+
+  it('should show replacement dialog when DuplicateBookError occurs', async () => {
+      // Mock addBook to throw DuplicateBookError on first call, succeed on second
+      mockAddBook.mockRejectedValueOnce(new DuplicateBookError("test.epub"));
+      mockAddBook.mockResolvedValueOnce(undefined); // Second call succeeds
+
+      const { container } = render(<FileUploader />);
+      const input = container.querySelector('input[type="file"]');
+      const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
+
+      // 1. Upload file
+      fireEvent.change(input!, { target: { files: [file] } });
+
+      // 2. Expect addBook to be called and fail
+      await waitFor(() => {
+          expect(mockAddBook).toHaveBeenCalledWith(file);
+      });
+
+      // 3. Expect Dialog to appear
+      expect(screen.getByText(/already exists in your library/)).toBeInTheDocument();
+      expect(screen.getByText('Replace Book?')).toBeInTheDocument();
+
+      // 4. Click Replace
+      const replaceBtn = screen.getByTestId('confirm-replace');
+      fireEvent.click(replaceBtn);
+
+      // 5. Expect addBook to be called again with overwrite: true
+      await waitFor(() => {
+          expect(mockAddBook).toHaveBeenCalledWith(file, { overwrite: true });
+      });
+
+      // 6. Expect toast success
+      expect(mockShowToast).toHaveBeenCalledWith("Book replaced successfully", "success");
   });
 });
