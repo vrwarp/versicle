@@ -197,10 +197,13 @@ class FirestoreSyncManager {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime;
 
+        const isDev = import.meta.env.DEV;
+        const path = isDev ? `users/${uid}/versicle/dev` : `users/${uid}/versicle/main`;
+
         const providerConfig = {
             firebaseApp: app!,
             ydoc: yDoc,
-            path: `users/${uid}/versicle/main`,
+            path,
             maxWaitTime: maxWaitTime,
             maxUpdatesThreshold: this.config.maxUpdatesThreshold
         };
@@ -217,7 +220,7 @@ class FirestoreSyncManager {
             this.currentApp = app;
 
             // y-fire connects automatically
-            logger.info(`Connected to path: users/${uid}/versicle/main`);
+            logger.info(`Connected to path: ${path}`);
             this.setStatus('connected');
 
         } catch (error) {
