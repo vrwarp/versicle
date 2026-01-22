@@ -3,13 +3,13 @@ import { getDB } from '../../db/db';
 import { useLexiconStore } from '../../store/useLexiconStore';
 import { waitForYjsSync } from '../../store/yjs-provider';
 import type { LexiconRule } from '../../types/db';
+import { Logger } from '../logger';
 
 /**
  * Migrates legacy lexicon rules from IndexedDB 'user_overrides' to Yjs store.
  * Should be called on app startup.
  */
 export async function migrateLexicon() {
-    console.log('[Migration] Checking for lexicon migration...');
     await waitForYjsSync();
 
     const store = useLexiconStore.getState();
@@ -18,7 +18,6 @@ export async function migrateLexicon() {
     // If we already have rules in Yjs, assume migration is done or not needed.
     // (Or maybe we want to merge? Safest is to only migrate if empty to avoid duplicating)
     if (existingRules.length > 0) {
-        console.log('[Migration] Lexicon store not empty, skipping migration.');
         return;
     }
 
@@ -26,7 +25,6 @@ export async function migrateLexicon() {
         const db = await getDB();
         // Check if object store exists (it should)
         if (!db.objectStoreNames.contains('user_overrides')) {
-            console.log('[Migration] No user_overrides store found.');
             return;
         }
 
@@ -35,11 +33,10 @@ export async function migrateLexicon() {
         const keys = await os.getAllKeys();
 
         if (keys.length === 0) {
-            console.log('[Migration] No legacy overrides found.');
             return;
         }
 
-        console.log(`[Migration] Found ${keys.length} legacy override entries. Migrating...`);
+        Logger.info('Migration', `Found ${keys.length} legacy override entries. Migrating...`);
 
         let rulesConverted = 0;
 
@@ -104,9 +101,9 @@ export async function migrateLexicon() {
             }
         }
 
-        console.log(`[Migration] Successfully migrated ${rulesConverted} rules.`);
+        Logger.info('Migration', `Successfully migrated ${rulesConverted} rules.`);
 
     } catch (e) {
-        console.error('[Migration] Failed to migrate lexicon:', e);
+        Logger.error('Migration', 'Failed to migrate lexicon:', e);
     }
 }
