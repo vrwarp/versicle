@@ -162,6 +162,7 @@ class GenAIService {
       }
     }
 
+
     return this.executeWithRetry(async (genAI, modelId) => {
       this.log('request', 'generateStructured', { prompt, schema, model: modelId, generationConfigOverride });
 

@@ -365,7 +365,6 @@ class DBService {
       logger.debug(`deleteBook: keys deleted for ${id}. Verifying static_resources deletion...`);
       const res = await tx.objectStore('static_resources').get(id);
       logger.debug(`deleteBook: static_resources.get(${id}) after delete = ${res}`);
-
       // Delete from index-based stores
       const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
         const store = tx.objectStore(storeName);

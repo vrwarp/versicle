@@ -1167,7 +1167,7 @@ const firebaseConfig = {
                                                                 await firebaseSignIn();
                                                                 setFirebaseEnabled(true);
                                                             } catch (e) {
-                                                                console.error('Firebase sign in failed:', e);
+                                                                logger.error('Firebase sign in failed:', e);
                                                                 showToast('Sign in failed. Please try again.', 'error');
                                                             } finally {
                                                                 setIsFirebaseSigningIn(false);
