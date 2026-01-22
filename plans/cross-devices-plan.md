@@ -1,25 +1,30 @@
-# Technical Design: Cross-Device Syncing Architecture (Expanded)
+# Technical Design: Cross-Device Syncing Architecture (Expanded & Revised)
 
 **Role:** Technical Architect
 **System:** Versicle Sync Engine
-**Version:** 2.0 (Dual Sync)
+**Version:** 2.0 (Dual Sync - Firestore/Manual)
 **Date:** 2023-10-27
 
 ---
 
 ## 1. Executive Summary
 
-The Versicle Cross-Device Syncing architecture employs a "Dual Sync" strategy to balance **real-time collaboration** (low latency, high cost) with **robust data ownership** (high latency, low cost). This architecture is designed to be "Local-First," meaning the device's IndexedDB is the absolute source of truth for the application state, while the cloud acts as a relay and disaster recovery vault.
+The Versicle Cross-Device Syncing architecture employs a "Dual Sync" strategy to balance **real-time collaboration** (low latency, high cost) with **robust data ownership** (high latency, low cost).
+
+**Changes from V1:**
+*   Removed `GoogleDriveSyncService` dependency entirely to avoid vendor lock-in and complexity.
+*   The "Cold Path" is now handled via **Native Android Backup** (on Android) and **Manual JSON Export/Import** (Cross-platform).
+*   Firestore usage is optimized for cost and security.
 
 **Core Pillars:**
 1.  **Hot Path (Real-time):** Uses `Yjs` (CRDTs) over `Firestore` to sync small, high-frequency updates (reading progress, preferences, annotations).
-2.  **Cold Path (Snapshot):** Uses `SyncManifest` snapshots stored in **Google Drive** (or Android Backup) to sync large datasets (library index, full history) and serve as a reliable restore point.
-3.  **Ghost Books:** A pattern to synchronize metadata and covers without transferring heavy EPUB blobs, preserving bandwidth.
+2.  **Cold Path (Snapshot):** Uses `SyncManifest` snapshots. On Android, this hooks into the OS backup. On Web/Desktop, this relies on user-initiated JSON exports.
+3.  **Ghost Books:** A pattern to synchronize metadata and covers without transferring heavy EPUB blobs, preserving bandwidth and storage costs.
 
 ## 2. Architecture Components
 
 ### A. The "Moral Layer" (Data Model)
-The `SyncManifest` interface (`src/types/db.ts`) defines the canonical state of a user's library. It is a simplified, strictly typed projection of the internal `Y.Doc`. It serves as the "Interchange Format" between the CRDT world and the File System world.
+The `SyncManifest` interface (`src/types/db.ts`) defines the canonical state of a user's library. It serves as the "Interchange Format" between the CRDT world and the File System world (Exports).
 
 ```typescript
 // Expanded definition for clarity
@@ -73,7 +78,6 @@ We use `Yjs` for conflict-free replicated data types. This allows multiple devic
             }
         }
         ```
-    *   This allows the application to query the state of *any* connected device at any time, enabling features like "Resume from iPad".
 
 ### C. The Services
 
@@ -83,11 +87,10 @@ We use `Yjs` for conflict-free replicated data types. This allows multiple devic
 *   **Responsibility:**
     *   Connects to `users/{uid}/versicle/main`.
     *   Broadcasts incremental updates (Vector Clocks).
-    *   Handles "Awareness" (Who is online?).
-*   **Lifecycle:**
-    *   *Init:* Connects on app launch if User is signed in.
-    *   *Throttle:* Debounces writes to save costs (2s buffer).
-    *   *Disconnect:* Gracefully closes on background/suspend.
+*   **Cost Optimization:**
+    *   **Debounce:** All writes are buffered for 2000ms.
+    *   **Batching:** Up to 500 updates are merged into a single Firestore transaction to minimize "Write Operations" (billing unit).
+    *   **Delta Compression:** Only the *diff* of the CRDT state vector is sent, not the full document.
 
 #### 2. `AndroidBackupService` (The Cold Path - Android)
 *   **Role:** System-level backup.
@@ -96,17 +99,15 @@ We use `Yjs` for conflict-free replicated data types. This allows multiple devic
     *   Periodically serializes the `SyncManifest` to `backup_payload.json` in the app's data directory.
     *   Android OS automatically uploads this file to Google Drive (invisible to user).
 *   **Pros:** Zero-config restore on new Android devices.
-*   **Cons:** No user visibility, Android only.
 
-#### 3. `GoogleDriveSyncService` (The Cold Path - Cross-Platform)
-*   **Role:** Explicit, user-visible snapshots.
-*   **Status:** **PROPOSED (High Priority)**.
-*   **Tech:** Google Drive API v3 (Rest).
+#### 3. `ExportImportService` (The Cold Path - Cross-Platform)
+*   **Role:** Explicit, user-visible portability.
 *   **Responsibility:**
-    *   **Scope:** `drive.appdata` (Hidden app folder) to avoid cluttering user's Drive.
-    *   **Upload:** `uploadSnapshot(manifest)` - Creates/Updates a file named `versicle_backup.json`.
-    *   **Download:** `downloadSnapshot()` - Fetches the latest JSON.
-    *   **Conflict:** Uses `appProperties` to store `deviceId` and `timestamp` to detect race conditions (Last Write Wins).
+    *   **Export:** Serializes `SyncManifest` to a JSON blob.
+        *   *Validation:* Calculates SHA-256 checksum.
+        *   *Formatting:* Pretty-printed (optional) or Minified.
+    *   **Import:** Parses JSON, validates schema version (migrating v21 -> v22 if needed), and hydrates the `Y.Doc`.
+    *   **Merge Logic:** If importing into an existing library, it uses `yDoc.transact` to merge fields intelligently (LWW for scalars, Union for arrays).
 
 ## 3. Data Flow & Logic
 
@@ -114,11 +115,10 @@ We use `Yjs` for conflict-free replicated data types. This allows multiple devic
 1.  **User Action:** User turns page on **Device A**.
 2.  **State Update:** `useReadingStateStore` updates `progress[bookId][DeviceA]`.
 3.  **Yjs Update:** The middleware encodes this change as a binary Uint8Array update.
-4.  **Local Persist:** `y-indexeddb` saves it to IDB immediately.
-5.  **Network Push:** `FirestoreSyncManager` pushes the update to Firestore.
+4.  **Local Persist:** `y-indexeddb` saves to IDB immediately.
+5.  **Network Push:** `FirestoreSyncManager` pushes the update to Firestore (Async).
 6.  **Network Pull:** **Device B** (listening) receives the update.
 7.  **Merge:** Device B's `Y.Doc` applies the update. `progress[bookId][DeviceA]` is now available on Device B.
-8.  **UI Reaction:** Device B's "Smart Resume" selector notices `DeviceA.lastRead > DeviceB.lastRead` and shows the Badge/Toast.
 
 ### Scenario B: The Ghost Book Import (Metadata Sync)
 1.  **User Action:** User adds "Moby Dick.epub" on **Device A**.
@@ -135,77 +135,89 @@ We use `Yjs` for conflict-free replicated data types. This allows multiple devic
     *   *Cover:* CSS Gradient (using `coverPalette`).
     *   *Status:* "Cloud Only" (no EPUB blob in `static_resources`).
 7.  **User Action:** User taps book on Device B.
-8.  **Hydration:** Device B calls `GoogleDriveSyncService` (or Firestore Blob Storage) to fetch the content. *Note: Currently we rely on user re-importing or a future "Blob Sync" service. For now, the user must re-add the file, but the metadata/progress is preserved.*
+8.  **Hydration:** Device B prompts user to import file. User shares file via AirDrop.
+9.  **Match:** App calculates hash of imported file, matches to Ghost Book ID, and saves blob to IDB.
 
-### Scenario C: On-Demand Remote Query (Pull)
-*   **Context:** User opens the "Sync Status" menu.
-*   **Action:** The UI needs to list all devices.
-*   **Mechanism:** `const allProgress = useReadingStateStore.getState().progress[bookId]`.
-*   **Logic:**
-    ```typescript
-    const remoteDevices = Object.entries(allProgress)
-      .filter(([id]) => id !== currentDeviceId)
-      .sort((a, b) => b.lastRead - a.lastRead);
-    return remoteDevices;
-    ```
-*   **Optimization:** This is synchronous and instant because `Yjs` maintains the full map in memory. No API call required at render time.
+## 4. Security Architecture
 
-## 4. Conflict Resolution Strategy
+### A. Firestore Security Rules
+We must enforce strict ownership.
 
-### 1. Mathematical Consistency (CRDTs)
-*   `Yjs` guarantees that all devices eventually converge to the same state.
-*   **Map Operations:** Last-Write-Wins (LWW) based on logical clock.
-*   **Text Operations:** Transforming updates (though we don't sync full text content, only CFIs).
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only authenticated users can access their own data
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
 
-### 2. Semantic Resolution (User Intent)
-*   **Metadata:** If Device A renames "Book X" to "Book Y" and Device B renames it to "Book Z" offline:
-    *   LWW applies. If Device B synced last, it becomes "Book Z".
-    *   *UX:* Accepted behavior for metadata.
-*   **Files (EPUBs):** If Device A replaces the EPUB (new hash) and Device B replaces it (different hash):
-    *   **Detection:** `fileHash` field mismatch.
-    *   **Resolution:** The "Version Conflict" UI (described in Design doc) is triggered. We cannot automatically merge binary blobs.
+    // Explicitly deny everything else
+    match /{document=**} {
+      allow read, write: false;
+    }
+  }
+}
+```
 
-## 5. Bandwidth & Battery Optimization
+### B. Encrypted Exports (Future Scope)
+To allow safe storage on insecure media (USB drives), the `ExportImportService` could offer an "Encrypt with Password" option using AES-GCM before generating the JSON file.
 
-### A. The "Battery Guard"
-*   **Logic:** If `BatteryLevel < 20%` AND `!Charging`, disable background sync intervals.
-*   **Library:** `@capawesome-team/capacitor-android-battery-optimization`.
+## 5. Conflict Resolution Matrix
 
-### B. The "Data Saver" Mode
-*   **Settings:** Toggle "Sync over Wi-Fi only".
-*   **Implementation:**
-    *   `FirestoreSyncManager` monitors `navigator.connection.type`.
-    *   If `type === 'cellular'` and setting is ON: Pause `FireProvider` connection.
-    *   Allow "Force Sync" via UI override.
+Since we removed the "Master Snapshot" in Drive, Firestore/Yjs is the primary arbiter.
 
-### C. Ghost Book Efficiency
-*   Sending `coverPalette` (10 bytes) vs `coverBlob` (50KB - 500KB) reduces initial sync payload by ~99.9%.
-*   Covers are only downloaded on demand or when on Wi-Fi.
+| Data Type | Scenario | Resolution Strategy |
+| :--- | :--- | :--- |
+| **Progress** | Device A and B read same book offline | **No Conflict.** Stored as `progress[bookId][DeviceA]` and `progress[bookId][DeviceB]`. Merged via Union. |
+| **Metadata** | Device A renames book, Device B changes tags | **Merge.** Properties are independent. If both change Title, **LWW** (Last Write Wins) based on logical clock. |
+| **Lexicon** | Device A adds Rule 1, Device B adds Rule 2 | **Union.** Both rules are added to the list. |
+| **Annotations** | Device A highlights Ch 1, Device B highlights Ch 2 | **Union.** Both highlights appear. |
+| **Settings** | Device A sets Dark Mode, Device B sets Light Mode | **LWW.** The last device to sync determines the global setting. |
 
-## 6. Implementation Roadmap
+## 6. Data Portability Specs (JSON Export)
+
+The export format is designed to be machine-readable and partially compatible with other readers (via transformation).
+
+```json
+{
+  "meta": {
+    "exporter": "Versicle",
+    "version": "1.2.0",
+    "timestamp": "2023-10-27T10:00:00Z"
+  },
+  "library": [
+    {
+      "title": "Dune",
+      "author": "Frank Herbert",
+      "identifiers": { "isbn": "...", "versicleId": "..." },
+      "progress": {
+        "percentage": 0.45,
+        "cfi": "epubcfi(/6/14[...])"
+      },
+      "annotations": [
+        { "text": "Fear is the mind-killer", "cfi": "...", "color": "#ff0000" }
+      ]
+    }
+  ]
+}
+```
+
+## 7. Implementation Roadmap
 
 ### Phase 1: Solidify Real-time (Completed)
 *   `FirestoreSyncManager` implemented.
 *   `Yjs` stores configured.
-*   Basic Auth handling.
 
-### Phase 2: Implement Explicit Google Drive Snapshot (Current Focus)
-**Objective:** Enable cross-platform restore (Web <-> Android <-> iOS).
-1.  **Auth Upgrade:** Add `https://www.googleapis.com/auth/drive.appdata` scope to Firebase Auth.
-2.  **Service Creation:** `src/lib/sync/GoogleDriveSync.ts`.
-3.  **Integration:** Hook into `CheckpointService`.
-4.  **UI:** Add "Backup" button in Settings.
+### Phase 2: Manual Export/Import (High Priority)
+**Objective:** Replace the gap left by removing Google Drive.
+1.  **Service:** Create `src/lib/sync/ExportImportService.ts`.
+2.  **UI:** Build the "Export Wizard" components.
+3.  **Integration:** Hook up "Import" to the `yDoc.transact` API to safely merge external data.
 
-### Phase 3: The "Blob Sync" (Future)
-**Objective:** Automatically sync the actual EPUB files via Google Drive.
-1.  **Storage:** Use Google Drive `appdata` folder.
-2.  **Linking:** Store `driveFileId` in `UserInventoryItem`.
-3.  **Flow:** When clicking a Ghost Book, download using `driveFileId`.
-
-## 7. Security & Privacy
-*   **Firestore Rules:** Strict `match /users/{userId}/{document=**} { allow read, write: if request.auth.uid == userId; }`.
-*   **Drive Scope:** `drive.appdata` ensures Versicle cannot see the user's personal files, only its own backups.
-*   **Encryption:** (Future) Client-side AES encryption of the `SyncManifest` using a key derived from the user's password/salt before upload.
+### Phase 3: Android Backup Polish
+*   Ensure `AndroidBackupService` writes frequently enough (e.g., `onPause`).
+*   Test restore flows on physical devices.
 
 ---
 

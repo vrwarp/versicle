@@ -1,4 +1,4 @@
-# User Interface Design: Cross-Device Syncing (Expanded)
+# User Interface Design: Cross-Device Syncing (Expanded & Revised)
 
 **Role:** Lead UX Designer
 **Focus:** Transparency, Control, and unobtrusive Intelligence.
@@ -14,7 +14,7 @@ Users need confidence that their data is safe. However, sync should mostly be in
 *   **Location:** Top-right corner of the Library/Home view, replacing the static avatar or alongside it. This is the "Heartbeat" of the app.
 *   **States & Animations:**
     *   **Idle (Synced):** Cloud icon with a checkmark (green dot or subtle opacity).
-        *   _Tooltip/Long Press:_ "Last synced: Just now".
+        *   _Tooltip/Long Press:_ "Last synced just now".
     *   **Syncing:** Cloud icon with a rotating refresh badge.
         *   _Animation:_ Smooth 360-degree spin, ease-in-out.
         *   _Tooltip:_ "Syncing changes..."
@@ -52,9 +52,11 @@ This is the primary interface for managing content across devices without downlo
         *   *Size:* 48x48dp.
         *   *Color:* White with drop shadow for contrast.
 *   **Interactions:**
-    *   **Tap:** Triggers the `importBookWithId` flow.
+    *   **Tap:**
+        *   *Scenario A (File Missing):* Opens the "Content Missing" dialog.
+        *   *Scenario B (File Present):* Opens the book.
     *   **Loading State:** The overlay icon transforms into a circular progress ring (determinate if size known, indeterminate if not).
-    *   **Long Press:** Opens context menu: "Download", "Remove from Library", "Properties".
+    *   **Long Press:** Opens context menu: "Import File...", "Remove from Library", "Properties".
 
 ### B. The "Resume" Badge
 *   **Condition:** Displayed when `remoteDevice.progress > localDevice.progress`.
@@ -108,18 +110,17 @@ The most critical interaction for cross-device reading. This must be resilient t
 
 Give users control over their "Device Graph" and bandwidth usage.
 
-### A. "Sync & Backup" Section
+### A. "Sync & Data" Section (Revised)
 *   **Master Toggle:** "Sync Library & Progress".
-    *   *Warning:* Disabling this prompts: "This device will stop backing up data. Are you sure?"
-*   **Bandwidth Control:**
-    *   **Toggle:** "Sync over Wi-Fi only" (Applies to heavy assets like EPUBs/Images).
-    *   **Toggle:** "Download Covers on Mobile Data" (Low data usage, usually acceptable).
+    *   *Description:* "Syncs your reading position and library structure via Firestore. Book files are not uploaded."
+*   **Manual Data Control:**
+    *   **"Export Data"**: Opens the Export Wizard (see Section 6).
+    *   **"Import Data"**: Opens the File Picker for JSON/ZIP imports.
 *   **Status Panel:**
     *   "Last Sync: 2 mins ago" (Green).
-    *   "Storage Used: 45MB / 2GB" (if quota exists).
+    *   "Storage Used: 45MB" (Local IndexedDB).
 *   **Manual Actions:**
-    *   **"Sync Now"**: Forces a full push/pull.
-    *   **"Force Upload"**: Re-uploads the local state (useful for conflict debugging).
+    *   **"Sync Now"**: Forces a full push/pull to Firestore.
 
 ### B. Manage Devices
 *   **List:** Shows all devices contributing to the `SyncManifest`.
@@ -130,7 +131,27 @@ Give users control over their "Device Graph" and bandwidth usage.
     *   *Remove:* "Remove from sync".
         *   *Confirmation:* "This will stop syncing progress FROM 'iPad Pro'. Data already synced will remain."
 
-## 5. Conflict Resolution (The "Manual Merge")
+## 5. The Data Export Wizard
+
+Replacing the automatic "Backup to Drive" flow with a robust Manual Export.
+
+### A. Step 1: Selection
+*   **Checkboxes:**
+    *   [x] Library Metadata (Books, Authors, Tags)
+    *   [x] Reading Progress (History, Locations)
+    *   [x] Annotations (Highlights, Notes)
+    *   [x] App Settings (Theme, Font)
+*   *Note:* "Book Files (EPUBs)" is explicitly excluded or marked as "Not supported in JSON export" (to manage expectations/size).
+
+### B. Step 2: Format
+*   **Option 1:** JSON (Lightweight). Best for migration to another Versicle instance.
+*   **Option 2:** CSV (Spreadsheet). Best for analytics/archiving.
+
+### C. Step 3: Action
+*   **Button:** "Generate Export".
+*   **Result:** Triggers browser download or native share sheet.
+
+## 6. Conflict Resolution (The "Manual Merge")
 
 Since we use `Yjs`, conflicts are automatically resolved at the data layer. However, *semantic* conflicts might occur.
 
@@ -150,7 +171,7 @@ Since we use `Yjs`, conflicts are automatically resolved at the data layer. Howe
             *   "Keep Local Version" (Marks local as authoritative, uploads it).
             *   "Keep Both" (Renames local to "Dune (Copy)").
 
-## 6. Accessibility & Haptics
+## 7. Accessibility & Haptics
 
 *   **Announcements:**
     *   Screen readers must announce "Sync started" and "Sync complete" via `aria-live` regions.
@@ -164,7 +185,7 @@ Since we use `Yjs`, conflicts are automatically resolved at the data layer. Howe
     *   Ensure the "Ghost Book" opacity (80%) still maintains contrast for text overlays.
     *   Use high-contrast icons for the Sync Status indicators.
 
-## 7. Error Handling & Empty States
+## 8. Error Handling & Empty States
 
 *   **Sync Error:**
     *   *UI:* Red warning icon in header.
@@ -173,4 +194,5 @@ Since we use `Yjs`, conflicts are automatically resolved at the data layer. Howe
 *   **Empty Library (New Device):**
     *   *Visual:* Illustration of a cloud connected to a book.
     *   *Text:* "No books found locally."
-    *   *Action:* "Check for Backups" (Primary Button) or "Import Book" (Secondary).
+    *   *Action:* "Sync from Cloud" (Primary Button) or "Import Book" (Secondary).
+    *   *Subtext:* "If you have a backup file, go to Settings -> Import Data."
