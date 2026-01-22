@@ -161,8 +161,6 @@ class GenAIService {
         }
       }
     }
-  }
-}
 
 <<<<<<< HEAD
 

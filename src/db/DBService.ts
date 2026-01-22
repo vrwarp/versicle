@@ -31,8 +31,6 @@ const logger = createLogger('DBService');
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
 
-const logger = createLogger('DBService');
-
 class DBService {
   private async getDB() {
     return getDB();
