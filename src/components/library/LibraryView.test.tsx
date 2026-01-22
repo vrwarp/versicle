@@ -131,16 +131,28 @@ describe('LibraryView', () => {
         });
 
         // Mock reading progress for sorting - using per-device structure
+        // The real useAllBooks selector uses the hook to get state.progress
+        const mockProgress = {
+            '1': { 'device-1': { percentage: 0.5, lastRead: 200 } },
+            '2': { 'device-1': { percentage: 0.1, lastRead: 100 } },
+            '3': { 'device-1': { percentage: 0.8, lastRead: 300 } }
+        };
+
+        // Mock the hook to return the progress map when selected
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (useReadingStateStore as any).mockImplementation((selector: any) => {
+            if (selector) return selector({ progress: mockProgress });
+            return { progress: mockProgress };
+        });
+
+        // Also mock getState for direct access if any (though LibraryView uses the hook via useAllBooks)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useReadingStateStore.getState as any).mockReturnValue({
-            progress: {},
+            progress: mockProgress,
             getProgress: (bookId: string) => {
-                const progressData: Record<string, { lastRead: number }> = {
-                    '1': { lastRead: 200 },
-                    '2': { lastRead: 100 },
-                    '3': { lastRead: 300 }
-                };
-                return progressData[bookId] || null;
+                // This mimics the real store's behavior roughly for tests that might call it
+                const entries = Object.values(mockProgress[bookId as keyof typeof mockProgress] || {});
+                return entries[0] || null;
             }
         });
 

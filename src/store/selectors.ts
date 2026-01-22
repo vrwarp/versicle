@@ -77,7 +77,8 @@ export const useAllBooks = () => {
                 ...book,
                 // Merge progress from reading state store (max across all devices)
                 progress: bookProgress?.percentage || 0,
-                currentCfi: bookProgress?.currentCfi || undefined
+                currentCfi: bookProgress?.currentCfi || undefined,
+                lastRead: bookProgress?.lastRead || 0
             };
         });
     }, [baseBooks, progressMap]);
