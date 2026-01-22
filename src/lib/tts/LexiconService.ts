@@ -12,6 +12,7 @@ import type { LexiconRule } from '../../types/db';
 export class LexiconService {
     private static instance: LexiconService;
     private regexCache = new Map<string, RegExp>();
+    private globalBibleLexiconEnabled: boolean = true;
 
     private constructor() { }
 
@@ -20,6 +21,10 @@ export class LexiconService {
             LexiconService.instance = new LexiconService();
         }
         return LexiconService.instance;
+    }
+
+    setGlobalBibleLexiconEnabled(enabled: boolean) {
+        this.globalBibleLexiconEnabled = enabled;
     }
 
     /**
@@ -63,16 +68,7 @@ export class LexiconService {
             rules = [...highPriority, ...globalRules];
 
             // Determine if we should apply Bible Lexicon rules
-            // Circular Dependency Fix: Dynamic import
-            let globalEnabled = true;
-            try {
-                const { useTTSStore } = await import('../../store/useTTSStore');
-                globalEnabled = useTTSStore.getState().isBibleLexiconEnabled;
-            } catch (e) {
-                console.warn('LexiconService: Failed to access useTTSStore, defaulting bible lexicon to enabled.', e);
-            }
-
-            const shouldApplyBible = bibleLexiconEnabled === 'on' || (bibleLexiconEnabled === 'default' && globalEnabled);
+            const shouldApplyBible = bibleLexiconEnabled === 'on' || (bibleLexiconEnabled === 'default' && this.globalBibleLexiconEnabled);
 
             if (shouldApplyBible) {
                 const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES.map((r, i) => ({
@@ -98,21 +94,9 @@ export class LexiconService {
         // If no bookId or falling through
         if (rules === globalRules) {
             // 3. Fallback for non-book context (just Global + potentially Bible)
-            // Re-evaluate bible toggle for global context if we haven't already
-            // Logic above for 'shouldApplyBible' was nested in 'if (bookId)'.
-            // We need valid logic here too.
 
-            let globalEnabled = true;
-            try {
-                const { useTTSStore } = await import('../../store/useTTSStore');
-                globalEnabled = useTTSStore.getState().isBibleLexiconEnabled;
-            } catch (e) {
-                console.warn('LexiconService: Failed to access useTTSStore, defaulting bible lexicon to enabled.', e);
-            }
-
-            // For global context (no book), we just use global toggle?
-            // "bibleLexiconEnabled" var was defaulted to 'default'.
-            const shouldApplyBible = globalEnabled; // Default/Global setting
+            // For global context (no book), we just use global toggle
+            const shouldApplyBible = this.globalBibleLexiconEnabled;
 
             if (shouldApplyBible) {
                 const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES.map((r, i) => ({
