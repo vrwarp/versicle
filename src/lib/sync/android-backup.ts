@@ -1,6 +1,8 @@
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import type { SyncManifest } from '../../types/db';
-import { Logger } from '../logger';
+import { createLogger } from '../logger';
+
+const logger = createLogger('AndroidBackupService');
 
 const BACKUP_FILENAME = 'backup_payload.json';
 
@@ -23,7 +25,7 @@ export class AndroidBackupService {
                 encoding: Encoding.UTF8
             });
         } catch (e) {
-            Logger.error('AndroidBackupService', 'Failed to write Android backup payload', e);
+            logger.error('Failed to write Android backup payload', e);
         }
     }
 
@@ -43,7 +45,7 @@ export class AndroidBackupService {
             }
             return null;
         } catch (e) {
-            Logger.warn('AndroidBackupService', 'No backup payload found or failed to read', e);
+            logger.warn('No backup payload found or failed to read', e);
             return null;
         }
     }
