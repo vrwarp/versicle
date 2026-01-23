@@ -23,9 +23,10 @@ import { extractBookData, type BookExtractionData, generateFileFingerprint } fro
 
 import { createLogger } from '../lib/logger';
 
-const logger = createLogger('DBService');
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
+
+const logger = createLogger('DBService');
 
 class DBService {
   private async getDB() {
