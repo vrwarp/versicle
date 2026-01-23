@@ -47,7 +47,6 @@ export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuPro
 
     const handleOffloadClick = () => {
         // e.stopPropagation();
-        console.error('[BookActionMenu] handleOffloadClick');
         onOffload();
     };
 

@@ -11,22 +11,16 @@ export async function getCoverFromDB(bookId: string): Promise<Blob | undefined> 
     // V18 Architecture
     if (db.objectStoreNames.contains(STATIC_MANIFESTS_STORE)) {
         const manifest = await db.get(STATIC_MANIFESTS_STORE, bookId);
-        // console.log(`[getCoverFromDB] Fetched from ${STATIC_MANIFESTS_STORE} for ${bookId}:`, manifest);
         return manifest?.coverBlob;
     }
 
     // Legacy Architecture (Fallback)
     if (db.objectStoreNames.contains(BOOKS_STORE)) {
         const book = await db.get(BOOKS_STORE, bookId);
-        // console.log(`[getCoverFromDB] Fetched from ${BOOKS_STORE} for ${bookId}:`, book);
         return book?.coverBlob;
     }
 
-    console.log('[getCoverFromDB] No suitable store found. Stores:', db.objectStoreNames);
     return undefined;
-  } catch (e) {
-      console.error('[getCoverFromDB] Error:', e);
-      throw e;
   } finally {
       db.close();
   }
@@ -47,8 +41,7 @@ export async function createCoverResponse(bookId: string): Promise<Response> {
     }
 
     return new Response('Cover not found', { status: 404 });
-  } catch (error) {
-    console.error('Failed to fetch cover from DB:', error);
+  } catch {
     return new Response('Internal Server Error', { status: 500 });
   }
 }
