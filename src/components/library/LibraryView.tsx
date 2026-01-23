@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useAllBooks } from '../../store/selectors';
+import { createLogger } from '../../lib/logger';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
@@ -27,6 +28,8 @@ import { DuplicateBookError } from '../../types/errors';
  *
  * @returns A React component rendering the library interface.
  */
+const logger = createLogger('LibraryView');
+
 export const LibraryView: React.FC = () => {
   // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
   const books = useAllBooks();
@@ -110,7 +113,6 @@ export const LibraryView: React.FC = () => {
     const needsInitialHydration = bookCount > 0 && hydratedCount === 0 && offloadedCount === 0;
 
     if (bookCountIncreased || needsInitialHydration) {
-      console.log(`[LibraryView] Hydration triggered: ${bookCount} books, ${hydratedCount} hydrated, ${offloadedCount} offloaded`);
       hydrateStaticMetadata();
     }
 
@@ -158,7 +160,7 @@ export const LibraryView: React.FC = () => {
       restoreBook(bookToRestore.id, e.target.files[0]).then(() => {
         showToast(`Restored "${bookToRestore.title}"`, 'success');
       }).catch((err) => {
-        console.error("Restore failed", err);
+        logger.error("Restore failed", err);
         showToast("Failed to restore book", "error");
       }).finally(() => {
         setBookToRestore(null);
@@ -224,12 +226,10 @@ export const LibraryView: React.FC = () => {
 
   // Action Handlers
   const handleDelete = useCallback((book: BookMetadata) => {
-    console.error(`[LibraryView] handleDelete called for ${book.id}`);
     setActiveModal({ type: 'delete', book });
   }, []);
 
   const handleOffload = useCallback((book: BookMetadata) => {
-    console.error(`[LibraryView] handleOffload called for ${book.id}`);
     setActiveModal({ type: 'offload', book });
   }, []);
 

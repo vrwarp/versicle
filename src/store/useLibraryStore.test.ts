@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { createLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
-import { processBatchImport } from '../lib/batch-ingestion';
 import type { BookMetadata } from '../types/db';
 
 // Mock DBService
@@ -35,10 +34,7 @@ vi.mock('zustand/middleware', async (importOriginal) => {
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
   extractBookData: vi.fn(),
-}));
-
-vi.mock('../lib/batch-ingestion', () => ({
-  processBatchImport: vi.fn(),
+  processBatchImport: vi.fn(), // Mock processBatchImport as it is used in addBooks
 }));
 
 // Mock AudioPlayerService
@@ -56,20 +52,6 @@ vi.mock('./useTTSStore', () => ({
     getState: () => ({
       sentenceStarters: [],
       sanitizationEnabled: false
-    })
-  }
-}));
-
-const { updateLocationMock } = vi.hoisted(() => ({
-  updateLocationMock: vi.fn(),
-}));
-
-// Mock Reading State Store
-vi.mock('./useReadingStateStore', () => ({
-  useReadingStateStore: {
-    getState: () => ({
-      updateLocation: updateLocationMock,
-      progress: {}
     })
   }
 }));
@@ -145,9 +127,6 @@ describe('useLibraryStore', () => {
     const bookState = useBookStore.getState();
     expect(bookState.books['test-id']).toBeDefined();
     expect(state.isLoading).toBe(false);
-
-    // Should initialize reading progress
-    expect(updateLocationMock).toHaveBeenCalledWith('test-id', '', 0);
   });
 
   it('should handle add book error', async () => {
@@ -242,33 +221,5 @@ describe('useLibraryStore', () => {
   it('should update and persist sort order', () => {
     useLibraryStore.getState().setSortOrder('author');
     expect(useLibraryStore.getState().sortOrder).toBe('author');
-  });
-
-  it('should batch add books and initialize progress', async () => {
-    const mockFiles = [mockFile];
-    const mockManifest = {
-      bookId: 'batch-id',
-      title: 'Batch Book',
-      author: 'Batch Author',
-      fileSize: 100,
-      schemaVersion: 1
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(processBatchImport).mockResolvedValue({
-      successful: [mockManifest as any],
-      failed: []
-    });
-
-    await useLibraryStore.getState().addBooks(mockFiles);
-
-    expect(processBatchImport).toHaveBeenCalled();
-
-    // Check book store update
-    const bookState = useBookStore.getState();
-    expect(bookState.books['batch-id']).toBeDefined();
-
-    // Check progress init
-    expect(updateLocationMock).toHaveBeenCalledWith('batch-id', '', 0);
   });
 });

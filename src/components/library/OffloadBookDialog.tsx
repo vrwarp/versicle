@@ -5,6 +5,9 @@ import { type BookMetadata } from '../../types/db';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
+import { createLogger } from '../../lib/logger';
+
+const logger = createLogger('OffloadBookDialog');
 
 interface OffloadBookDialogProps {
     isOpen: boolean;
@@ -16,13 +19,11 @@ export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, on
     const offloadBook = useLibraryStore(state => state.offloadBook);
     const showToast = useToastStore(state => state.showToast);
     const [isOffloading, setIsOffloading] = useState(false);
-    console.error(`[OffloadBookDialog] Rendered. isOpen: ${isOpen}, bookId: ${book?.id}, isOffloading: ${isOffloading}`);
 
     if (!book) return null;
 
     const confirmOffload = async () => {
         // e.stopPropagation(); // REMOVED
-        console.log('[OffloadBookDialog] confirmOffload clicked for', book?.id);
 
         if (isOffloading) return;
         setIsOffloading(true);
@@ -32,7 +33,7 @@ export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, on
             showToast(`Offloaded "${book.title}"`, 'success');
             onClose();
         } catch (error) {
-            console.error(error);
+            logger.error("Failed to offload book", error);
             showToast("Failed to offload book", "error");
         } finally {
             setIsOffloading(false);
@@ -59,7 +60,6 @@ export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, on
                     <Button
                         variant="default"
                         onClick={() => {
-                            console.log('BUTTON INLINE CLICK');
                             confirmOffload();
                         }}
                         disabled={isOffloading}

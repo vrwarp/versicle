@@ -4,6 +4,9 @@ import { useToastStore } from '../../store/useToastStore';
 import { Button } from '../ui/Button';
 import { Loader2, Library, BookOpen } from 'lucide-react';
 import { FileUploader } from './FileUploader';
+import { createLogger } from '../../lib/logger';
+
+const logger = createLogger('EmptyLibrary');
 
 /**
  * Props for EmptyLibrary component.
@@ -33,7 +36,7 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = () => {
       await addBook(file);
       showToast('Demo book loaded successfully', 'success');
     } catch (error) {
-      console.error('Error loading demo book:', error);
+      logger.error('Error loading demo book:', error);
       showToast('Failed to load demo book', 'error');
     }
   };

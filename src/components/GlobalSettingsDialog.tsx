@@ -35,6 +35,9 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { useDeviceStore } from '../store/useDeviceStore';
 import { getDeviceId } from '../lib/device-id';
 import { DeviceManager } from './devices/DeviceManager';
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger('GlobalSettingsDialog');
 
 /**
  * Global application settings dialog.
@@ -114,7 +117,7 @@ export const GlobalSettingsDialog = () => {
                 mimeType: 'text/csv'
             });
         } catch (e) {
-            console.error(e);
+            logger.error('Export reading list failed', e);
             alert('Failed to export reading list.');
         }
     };
@@ -162,7 +165,7 @@ export const GlobalSettingsDialog = () => {
                     setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
                     setCsvImportComplete(true);
                 } catch (err) {
-                    console.error(err);
+                    logger.error('CSV import failed', err);
                     setCsvImportMessage('Failed to import CSV.');
                     // Allow retry after a delay
                     setTimeout(() => setIsCsvImporting(false), 2000);
@@ -189,7 +192,7 @@ export const GlobalSettingsDialog = () => {
                 showToast(`Batch import started for ${files.length} items.`, 'success');
                 setGlobalSettingsOpen(false);
             } catch (err) {
-                console.error("Batch import failed", err);
+                logger.error("Batch import failed", err);
                 showToast("Failed to start batch import.", "error");
             }
         }
@@ -202,7 +205,7 @@ export const GlobalSettingsDialog = () => {
                 await dbService.clearContentAnalysis();
                 showToast("Content Analysis cache cleared.", "success");
             } catch (e) {
-                console.error("Failed to clear content analysis cache", e);
+                logger.error("Failed to clear content analysis cache", e);
                 showToast("Failed to clear cache.", "error");
             }
         }
@@ -311,7 +314,7 @@ export const GlobalSettingsDialog = () => {
                 setOrphanScanResult('Database is healthy. No orphans found.');
             }
         } catch (e) {
-            console.error(e);
+            logger.error('Repair DB failed', e);
             setOrphanScanResult('Error during repair check console.');
         } finally {
             setIsScanning(false);
@@ -324,7 +327,7 @@ export const GlobalSettingsDialog = () => {
             await backupService.createLightBackup();
             setBackupStatus('Metadata export complete.');
         } catch (error) {
-            console.error(error);
+            logger.error('Export light failed', error);
             setBackupStatus('Export failed.');
         }
     };
@@ -337,7 +340,7 @@ export const GlobalSettingsDialog = () => {
             });
             setTimeout(() => setBackupStatus('Full backup complete.'), 2000);
         } catch (error) {
-            console.error(error);
+            logger.error('Export full failed', error);
             setBackupStatus('Full backup failed. Check console.');
         }
     };
@@ -363,7 +366,7 @@ export const GlobalSettingsDialog = () => {
             setBackupStatus('Restore complete! Reloading...');
             setTimeout(() => window.location.reload(), 500);
         } catch (error) {
-            console.error(error);
+            logger.error('Restore failed', error);
             setBackupStatus(`Restore failed: ${error instanceof Error ? error.message : 'Unknown error'} `);
         } finally {
             e.target.value = '';
@@ -399,7 +402,7 @@ export const GlobalSettingsDialog = () => {
                     setRecoveryStatus("Failed to load checkpoint.");
                 }
             } catch (e) {
-                console.error(e);
+                logger.error('Restore checkpoint failed', e);
                 setRecoveryStatus("Error during restoration.");
             }
         }
@@ -1163,7 +1166,7 @@ const firebaseConfig = {
                                                                 await firebaseSignIn();
                                                                 setFirebaseEnabled(true);
                                                             } catch (e) {
-                                                                console.error('Firebase sign in failed:', e);
+                                                                logger.error('Firebase sign in failed:', e);
                                                                 showToast('Sign in failed. Please try again.', 'error');
                                                             } finally {
                                                                 setIsFirebaseSigningIn(false);

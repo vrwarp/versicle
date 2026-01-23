@@ -4,7 +4,6 @@ import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '../typ
 import { StorageFullError, DuplicateBookError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
 import { useReadingListStore } from './useReadingListStore';
-import { useReadingStateStore } from './useReadingStateStore';
 import { processBatchImport } from '../lib/batch-ingestion';
 import { useBookStore } from './useBookStore';
 import { createLogger } from '../lib/logger';
@@ -272,9 +271,6 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         // 3. Update Sync Store
         useBookStore.getState().addBook(inventoryItem);
 
-        // Initialize progress to bump "Recently Read"
-        useReadingStateStore.getState().updateLocation(manifest.bookId, '', 0);
-
         // 4. Update Local Static Metadata
         set((state) => ({
           staticMetadata: {
@@ -366,7 +362,6 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             lastInteraction: Date.now()
           };
           useBookStore.getState().addBook(inventoryItem);
-          useReadingStateStore.getState().updateLocation(manifest.bookId, '', 0);
         });
 
         // Hydrate newly imported books

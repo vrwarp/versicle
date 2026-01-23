@@ -5,6 +5,9 @@ import { genAIService } from '../lib/genai/GenAIService';
 import { dbService } from '../db/DBService';
 import { useGenAIStore } from '../store/useGenAIStore';
 import { useToastStore } from '../store/useToastStore';
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger('useSmartTOC');
 
 interface UseSmartTOCResult {
   enhanceTOC: () => Promise<void>;
@@ -63,8 +66,8 @@ export function useSmartTOC(
       showToast('Table of Contents enhanced successfully!', 'success');
 
     } catch (error) {
-      console.error('Failed to enhance TOC:', error);
-      showToast('Failed to enhance TOC. Check console for details.', 'error');
+      logger.error('Failed to enhance TOC:', error);
+      showToast('Failed to enhance TOC.', 'error');
     } finally {
       setIsEnhancing(false);
       setProgress(null);
@@ -118,7 +121,7 @@ async function collectSectionData(
         }
       }
     } catch (e) {
-      console.warn(`Failed to process TOC item: ${item.label}`, e);
+      logger.warn(`Failed to process TOC item: ${item.label}`, e);
     }
 
     onProgress(1);

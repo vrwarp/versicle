@@ -145,7 +145,6 @@ class GenAIService {
 
         const mockResponse = localStorage.getItem('mockGenAIResponse');
         if (mockResponse) {
-            console.log("Using Mock GenAI Response");
             // Simulate network delay
             await new Promise(resolve => setTimeout(resolve, 500));
             try {
@@ -153,7 +152,6 @@ class GenAIService {
                 this.log('response', 'generateStructured', { parsed, isMock: true });
                 return parsed;
             } catch {
-                console.error("Invalid mock response JSON");
                 this.log('error', 'generateStructured', { message: "Invalid mock response JSON", isMock: true });
             }
         }
@@ -180,7 +178,6 @@ class GenAIService {
             this.log('response', 'generateStructured', { text, parsed });
             return parsed;
         } catch (error) {
-            console.error('Failed to parse GenAI response as JSON:', text);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message });
             throw error;
