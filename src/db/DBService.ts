@@ -22,7 +22,10 @@ import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
 
 import { createLogger } from '../lib/logger';
+<<<<<<< HEAD
 
+=======
+>>>>>>> 7568fde2 (fix(library): initialize reading progress for imported books)
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
 

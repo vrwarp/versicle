@@ -118,11 +118,7 @@ export const GlobalSettingsDialog = () => {
                 mimeType: 'text/csv'
             });
         } catch (e) {
-<<<<<<< HEAD
-            logger.error('Failed to export reading list', e);
-=======
             logger.error('Export reading list failed', e);
->>>>>>> 8c621265 (Refactor logging to use createLogger and remove debug console statements)
             alert('Failed to export reading list.');
         }
     };
@@ -170,11 +166,7 @@ export const GlobalSettingsDialog = () => {
                     setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
                     setCsvImportComplete(true);
                 } catch (err) {
-<<<<<<< HEAD
-                    logger.error('Failed to parse CSV', err);
-=======
                     logger.error('CSV import failed', err);
->>>>>>> 8c621265 (Refactor logging to use createLogger and remove debug console statements)
                     setCsvImportMessage('Failed to import CSV.');
                     // Allow retry after a delay
                     setTimeout(() => setIsCsvImporting(false), 2000);
@@ -323,11 +315,7 @@ export const GlobalSettingsDialog = () => {
                 setOrphanScanResult('Database is healthy. No orphans found.');
             }
         } catch (e) {
-<<<<<<< HEAD
-            logger.error('Orphan scan failed', e);
-=======
             logger.error('Repair DB failed', e);
->>>>>>> 8c621265 (Refactor logging to use createLogger and remove debug console statements)
             setOrphanScanResult('Error during repair check console.');
         } finally {
             setIsScanning(false);
@@ -340,11 +328,7 @@ export const GlobalSettingsDialog = () => {
             await backupService.createLightBackup();
             setBackupStatus('Metadata export complete.');
         } catch (error) {
-<<<<<<< HEAD
-            logger.error('Light export failed', error);
-=======
             logger.error('Export light failed', error);
->>>>>>> 8c621265 (Refactor logging to use createLogger and remove debug console statements)
             setBackupStatus('Export failed.');
         }
     };
@@ -357,11 +341,7 @@ export const GlobalSettingsDialog = () => {
             });
             setTimeout(() => setBackupStatus('Full backup complete.'), 2000);
         } catch (error) {
-<<<<<<< HEAD
-            logger.error('Full backup failed', error);
-=======
             logger.error('Export full failed', error);
->>>>>>> 8c621265 (Refactor logging to use createLogger and remove debug console statements)
             setBackupStatus('Full backup failed. Check console.');
         }
     };
@@ -423,11 +403,7 @@ export const GlobalSettingsDialog = () => {
                     setRecoveryStatus("Failed to load checkpoint.");
                 }
             } catch (e) {
-<<<<<<< HEAD
-                logger.error('Checkpoint restore failed', e);
-=======
                 logger.error('Restore checkpoint failed', e);
->>>>>>> 8c621265 (Refactor logging to use createLogger and remove debug console statements)
                 setRecoveryStatus("Error during restoration.");
             }
         }
