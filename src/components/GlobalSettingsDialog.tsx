@@ -579,10 +579,10 @@ export const GlobalSettingsDialog = () => {
                                     <h3 className="text-lg font-medium mb-4">Provider Configuration</h3>
                                     <div className="space-y-4">
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium">Active Provider</label>
+                                            <Label htmlFor="tts-provider-select" className="text-sm font-medium">Active Provider</Label>
                                             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                             <Select value={providerId} onValueChange={(val: any) => setProviderId(val)}>
-                                                <SelectTrigger data-testid="tts-provider-select"><SelectValue /></SelectTrigger>
+                                                <SelectTrigger id="tts-provider-select" data-testid="tts-provider-select"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="local">Web Speech (Local)</SelectItem>
                                                     <SelectItem value="piper">Piper (High Quality Local)</SelectItem>
@@ -602,10 +602,10 @@ export const GlobalSettingsDialog = () => {
                                             </div>
 
                                             <div className="space-y-2">
-                                                <label className="text-sm font-medium">Mode</label>
+                                                <Label htmlFor="tts-mode-select" className="text-sm font-medium">Mode</Label>
                                                 {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                                 <Select value={backgroundAudioMode} onValueChange={(val: any) => setBackgroundAudioMode(val)}>
-                                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                                    <SelectTrigger id="tts-mode-select"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="silence">Silence (Default)</SelectItem>
                                                         <SelectItem value="noise">White Noise</SelectItem>
@@ -634,13 +634,13 @@ export const GlobalSettingsDialog = () => {
                                         {providerId === 'piper' && (
                                             <div className="space-y-4 pt-4 border-t">
                                                 <div className="space-y-2">
-                                                    <label className="text-sm font-medium">Select Voice</label>
+                                                    <Label htmlFor="tts-voice-select" className="text-sm font-medium">Select Voice</Label>
                                                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                                     <Select value={voice?.id} onValueChange={(val: any) => {
                                                         const v = voices.find(v => v.id === val);
                                                         setVoice(v || null);
                                                     }}>
-                                                        <SelectTrigger><SelectValue placeholder="Select a voice" /></SelectTrigger>
+                                                        <SelectTrigger id="tts-voice-select"><SelectValue placeholder="Select a voice" /></SelectTrigger>
                                                         <SelectContent>
                                                             {voices.map(v => (
                                                                 <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
@@ -818,10 +818,10 @@ export const GlobalSettingsDialog = () => {
                                                 </div>
 
                                                 <div className="space-y-2">
-                                                    <label className="text-sm font-medium">Model</label>
+                                                    <Label htmlFor="genai-model-select" className="text-sm font-medium">Model</Label>
                                                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                                                     <Select value={genAIModel} onValueChange={(val: any) => setGenAIModel(val)} disabled={isModelRotationEnabled}>
-                                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                                        <SelectTrigger id="genai-model-select"><SelectValue /></SelectTrigger>
                                                         <SelectContent>
                                                             <SelectItem value="gemini-flash-lite-latest">Gemini Flash-Lite Latest (Recommended)</SelectItem>
                                                             <SelectItem value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</SelectItem>
@@ -984,9 +984,9 @@ export const GlobalSettingsDialog = () => {
                                     {/* Provider Selection */}
                                     <div className="space-y-4 mb-6">
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium">Sync Provider</label>
+                                            <Label htmlFor="sync-provider-select" className="text-sm font-medium">Sync Provider</Label>
                                             <Select value={syncProvider} onValueChange={(val) => setSyncProvider(val as 'none' | 'firebase')}>
-                                                <SelectTrigger>
+                                                <SelectTrigger id="sync-provider-select">
                                                     <SelectValue placeholder="Select sync provider" />
                                                 </SelectTrigger>
                                                 <SelectContent>
