@@ -3,7 +3,9 @@ import { getDB } from '../../db/db';
 import { useLexiconStore } from '../../store/useLexiconStore';
 import { waitForYjsSync } from '../../store/yjs-provider';
 import type { LexiconRule } from '../../types/db';
-import { Logger } from '../logger';
+import { createLogger } from '../logger';
+
+const logger = createLogger('Migration');
 
 /**
  * Migrates legacy lexicon rules from IndexedDB 'user_overrides' to Yjs store.
@@ -36,7 +38,7 @@ export async function migrateLexicon() {
             return;
         }
 
-        Logger.info('Migration', `Found ${keys.length} legacy override entries. Migrating...`);
+        logger.info(`Found ${keys.length} legacy override entries. Migrating...`);
 
         let rulesConverted = 0;
 
@@ -101,9 +103,9 @@ export async function migrateLexicon() {
             }
         }
 
-        Logger.info('Migration', `Successfully migrated ${rulesConverted} rules.`);
+        logger.info(`Successfully migrated ${rulesConverted} rules.`);
 
     } catch (e) {
-        Logger.error('Migration', 'Failed to migrate lexicon:', e);
+        logger.error('Failed to migrate lexicon:', e);
     }
 }

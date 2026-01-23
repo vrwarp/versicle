@@ -5,7 +5,9 @@ import { type BookMetadata } from '../../types/db';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
-import { Logger } from '../../lib/logger';
+import { createLogger } from '../../lib/logger';
+
+const logger = createLogger('OffloadBookDialog');
 
 interface OffloadBookDialogProps {
     isOpen: boolean;
@@ -31,7 +33,7 @@ export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, on
             showToast(`Offloaded "${book.title}"`, 'success');
             onClose();
         } catch (error) {
-            Logger.error("OffloadBookDialog", "Failed to offload book", error);
+            logger.error("Failed to offload book", error);
             showToast("Failed to offload book", "error");
         } finally {
             setIsOffloading(false);
