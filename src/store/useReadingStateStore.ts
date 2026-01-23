@@ -73,14 +73,14 @@ interface ReadingState {
 const getMaxProgress = (bookProgress: Record<string, UserProgress> | undefined): UserProgress | null => {
     if (!bookProgress) return null;
 
-    const entries = Object.values(bookProgress);
-    if (entries.length === 0) return null;
-
-    // Find the entry with the highest percentage
-    return entries.reduce((max, current) => {
-        if (!max) return current;
-        return (current.percentage > max.percentage) ? current : max;
-    }, null as UserProgress | null);
+    let max: UserProgress | null = null;
+    for (const deviceId in bookProgress) {
+        const current = bookProgress[deviceId];
+        if (!max || current.percentage > max.percentage) {
+            max = current;
+        }
+    }
+    return max;
 };
 
 /**
