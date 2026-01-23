@@ -12,13 +12,14 @@ import { getDeviceId } from '../lib/device-id';
 function getMaxProgress(bookProgress: Record<string, UserProgress> | undefined): UserProgress | null {
     if (!bookProgress) return null;
 
-    const entries = Object.values(bookProgress);
-    if (entries.length === 0) return null;
-
-    return entries.reduce((max, current) => {
-        if (!max) return current;
-        return (current.percentage > max.percentage) ? current : max;
-    }, null as UserProgress | null);
+    let max: UserProgress | null = null;
+    for (const deviceId in bookProgress) {
+        const current = bookProgress[deviceId];
+        if (!max || current.percentage > max.percentage) {
+            max = current;
+        }
+    }
+    return max;
 }
 
 /**
@@ -140,7 +141,8 @@ export const useLastReadBookId = () => {
         let maxLastRead = 0;
         let lastReadBookId: string | null = null;
 
-        for (const [bookId, deviceMap] of Object.entries(progressMap)) {
+        for (const bookId in progressMap) {
+            const deviceMap = progressMap[bookId];
             const deviceProgress = deviceMap[deviceId];
             if (deviceProgress && deviceProgress.lastRead > maxLastRead) {
                 maxLastRead = deviceProgress.lastRead;
