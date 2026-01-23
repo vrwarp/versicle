@@ -21,9 +21,11 @@ import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
 
-import { Logger } from '../lib/logger';
+import { createLogger } from '../lib/logger';
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
+
+const logger = createLogger('DBService');
 
 class DBService {
   private async getDB() {
@@ -31,7 +33,7 @@ class DBService {
   }
 
   private handleError(error: unknown): never {
-    Logger.error('DBService', 'Database operation failed', error);
+    logger.error('Database operation failed', error);
 
     if (error instanceof DatabaseError) {
       throw error;
@@ -543,7 +545,7 @@ class DBService {
         }
         await tx.done;
       } catch (error) {
-        Logger.error('DBService', 'Failed to save TTS state', error);
+        logger.error('Failed to save TTS state', error);
       }
     }, 1000);
   }
