@@ -54,7 +54,7 @@
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
 *   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
-*   **Free Tier Rotation**: Automatically rotates between Gemini models (Flash Lite/Flash) to maximize free tier usage quotas.
+*   **Free Tier Rotation**: "Smart Rotation" strategy automatically switches between Gemini models (Flash Lite/Flash) to handle rate limits (429) and maximize free quotas.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
 *   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1").
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
@@ -69,7 +69,7 @@
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
-    *   **Checkpoints**: Automatic "Moral Layer" snapshots protect against data loss during sync.
+    *   **Checkpoints**: Automatic "Moral Layer" snapshots (`SyncManifest`) protect against data loss during sync (Last 10 states).
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted. Export/Import to CSV (Goodreads compatible).
 *   **Backups**:

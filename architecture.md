@@ -217,15 +217,39 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   **Magic Number Check**: Verifies ZIP signature (`50 4B 03 04`) before parsing.
     *   **Sanitization**: Delegates to `DOMPurify` to strip HTML tags from metadata.
 
+### Migration Layer (`src/lib/migration/`)
+
+Handles the critical data transition from Legacy IndexedDB to the modern Yjs/Local-First architecture.
+
+#### `YjsMigration.ts` (Legacy -> Yjs)
+*   **Goal**: Seamlessly upgrade users from the old IDB-only stores to the Yjs store structure without data loss.
+*   **Logic**:
+    *   **One-Time Run**: Checks a `migration_complete` flag in Yjs preferences.
+    *   **Per-Device Migration**: Converts global reading progress into the new **Per-Device** format (`progress[bookId][deviceId]`) to support the "Furthest Read" feature.
+    *   **Fallback**: If Yjs is empty, it populates it from the legacy IDB stores (`user_inventory`, `user_annotations`).
+
+#### `GhostBookBackfill.ts` (Sync Restoration)
+*   **Goal**: Handle the case where a user syncs a library from the cloud (metadata exists) but lacks the local files.
+*   **Logic**:
+    *   Detects "Ghost Books" (items in Yjs inventory but missing from `static_resources`).
+    *   Uses `importBookWithId` to restore the file content when the user provides the EPUB, verifying it against the 3-point fingerprint.
+
 ### Sync & Cloud (`src/lib/sync/`)
 
 Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for cross-device activity and **Native Backup** (via Android) for data safety.
+
+#### `CheckpointService.ts` (The Moral Layer)
+*   **Goal**: Prevent data loss during complex sync merges by creating "Safety Snapshots".
+*   **Logic**:
+    *   **Before Sync**: Creates a `SyncManifest` snapshot in the `checkpoints` IDB store.
+    *   **Rotation**: Maintains a rolling buffer of the last 10 checkpoints.
 
 #### `FirestoreSyncManager.ts` (Real-Time Cloud)
 Provides a "Cloud Overlay" for real-time synchronization.
 
 *   **Logic**:
-    *   **Y-Fire**: Uses `y-fire` to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/main`).
+    *   **Y-Fire**: Uses `y-fire` to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
+    *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
     *   **Authenticated**: Sync only occurs when the user is signed in via Firebase Auth.
     *   **Mock Mode**: Includes a `MockFireProvider` for integration testing without a real Firebase project.
 *   **Trade-offs**:
@@ -258,8 +282,9 @@ Handles the complex task of importing an EPUB file.
     *   A **Service Worker** intercepts these requests, fetches the cover blob from IndexedDB (`static_manifests`), and responds directly.
 
 #### Generative AI (`src/lib/genai/`)
-*   **Free Tier Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite`, `gemini-2.5-flash`) to maximize quota and handle `429 RESOURCE_EXHAUSTED` errors.
-*   **Multimodal Input**: Accepts text and images (blobs) for tasks like table interpretation.
+*   **Free Tier Rotation**: Implements a "Smart Rotation" strategy (`gemini-flash-lite-latest` <-> `gemini-2.5-flash`) to maximize free tier quotas.
+*   **Resilience**: Automatically retries requests with the fallback model upon encountering `429 RESOURCE_EXHAUSTED` errors.
+*   **Teleprompter**: Uses `generateTableAdaptations` to convert complex table images into narrative text for TTS accessibility.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
@@ -285,7 +310,7 @@ Manages manual internal state backup and restoration.
 The Orchestrator. Manages playback state, provider selection, and UI updates.
 
 *   **Logic**:
-    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods.
+    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods (play, pause) to prevent race conditions during rapid UI interaction.
     *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`).
     *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state to `PlaybackStateManager`.
 
@@ -305,6 +330,10 @@ Manages the virtual playback timeline.
 *   **Logic**:
     *   **Virtualized Timeline**: Maintains a queue where items can be marked `isSkipped` without being removed.
 
+#### `BackgroundAudio.ts`
+*   **Goal**: Ensure the app process remains active on Android/iOS when the screen is off.
+*   **Logic**: Plays a silent (or white noise) audio loop in the background to prevent the OS from killing the suspended app.
+
 #### `src/lib/tts/providers/CapacitorTTSProvider.ts`
 *   **Logic**: Uses `queueStrategy: 1` to preload the next utterance into the OS buffer while the current one plays.
 
@@ -319,6 +348,7 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
     *   **Why**: To prevent overwriting reading positions when switching between devices.
     *   **Aggregation**: The UI selector aggregates these to find the "Furthest Read" point.
+*   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
 *   **`useLibraryStore` (Local Only)**:
     *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs.
     *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). If the local file is missing, the book appears as a "Ghost Book" using synced metadata.
