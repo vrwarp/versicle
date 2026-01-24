@@ -22,12 +22,7 @@ import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
 
 import { createLogger } from '../lib/logger';
-<<<<<<< HEAD
-
-=======
-
 const logger = createLogger('DBService');
->>>>>>> 3753ccea (Merge remote-tracking branch 'origin/main')
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
 
