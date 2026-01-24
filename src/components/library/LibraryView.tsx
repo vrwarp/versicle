@@ -153,10 +153,21 @@ export const LibraryView: React.FC = () => {
   }, [navigate, staticMetadata, offloadedBookIds, handleRestore]);
 
   const handleResumeReading = useCallback((book: BookMetadata, _deviceId: string, cfi: string) => {
+    // Check if file is missing (Ghost or Offloaded)
+    const isGhost = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+    const isOffloaded = book.isOffloaded || offloadedBookIds.has(book.id);
+
+    if (isGhost || isOffloaded) {
+      // Just try to open (which triggers restore prompt) without updating location
+      // This preserves the resume badge if the user cancels restore
+      handleBookOpen(book);
+      return;
+    }
+
     // Update local state to match remote CFI before opening
     updateLocation(book.id, cfi, 0);
     handleBookOpen(book);
-  }, [updateLocation, handleBookOpen]);
+  }, [updateLocation, handleBookOpen, staticMetadata, offloadedBookIds]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
