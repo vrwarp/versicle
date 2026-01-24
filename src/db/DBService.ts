@@ -25,7 +25,9 @@ import { createLogger } from '../lib/logger';
 <<<<<<< HEAD
 
 =======
->>>>>>> 7568fde2 (fix(library): initialize reading progress for imported books)
+
+const logger = createLogger('DBService');
+>>>>>>> 3753ccea (Merge remote-tracking branch 'origin/main')
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
 

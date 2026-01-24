@@ -38,7 +38,7 @@ import { getDeviceId } from '../lib/device-id';
 import { DeviceManager } from './devices/DeviceManager';
 import { createLogger } from '../lib/logger';
 
-const logger = createLogger('GlobalSettingsDialog');
+const logger = createLogger('GlobalSettings');
 
 /**
  * Global application settings dialog.
@@ -118,7 +118,7 @@ export const GlobalSettingsDialog = () => {
                 mimeType: 'text/csv'
             });
         } catch (e) {
-            logger.error('Export reading list failed', e);
+            logger.error('Failed to export reading list', e);
             alert('Failed to export reading list.');
         }
     };
@@ -166,7 +166,7 @@ export const GlobalSettingsDialog = () => {
                     setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
                     setCsvImportComplete(true);
                 } catch (err) {
-                    logger.error('CSV import failed', err);
+                    logger.error('Failed to parse CSV', err);
                     setCsvImportMessage('Failed to import CSV.');
                     // Allow retry after a delay
                     setTimeout(() => setIsCsvImporting(false), 2000);
@@ -315,7 +315,7 @@ export const GlobalSettingsDialog = () => {
                 setOrphanScanResult('Database is healthy. No orphans found.');
             }
         } catch (e) {
-            logger.error('Repair DB failed', e);
+            logger.error('Orphan scan failed', e);
             setOrphanScanResult('Error during repair check console.');
         } finally {
             setIsScanning(false);
@@ -328,7 +328,7 @@ export const GlobalSettingsDialog = () => {
             await backupService.createLightBackup();
             setBackupStatus('Metadata export complete.');
         } catch (error) {
-            logger.error('Export light failed', error);
+            logger.error('Light export failed', error);
             setBackupStatus('Export failed.');
         }
     };
@@ -341,7 +341,7 @@ export const GlobalSettingsDialog = () => {
             });
             setTimeout(() => setBackupStatus('Full backup complete.'), 2000);
         } catch (error) {
-            logger.error('Export full failed', error);
+            logger.error('Full backup failed', error);
             setBackupStatus('Full backup failed. Check console.');
         }
     };
@@ -403,7 +403,7 @@ export const GlobalSettingsDialog = () => {
                     setRecoveryStatus("Failed to load checkpoint.");
                 }
             } catch (e) {
-                logger.error('Restore checkpoint failed', e);
+                logger.error('Checkpoint restore failed', e);
                 setRecoveryStatus("Error during restoration.");
             }
         }

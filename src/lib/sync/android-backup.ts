@@ -2,7 +2,7 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import type { SyncManifest } from '../../types/db';
 import { createLogger } from '../logger';
 
-const logger = createLogger('AndroidBackupService');
+const logger = createLogger('AndroidBackup');
 
 const BACKUP_FILENAME = 'backup_payload.json';
 

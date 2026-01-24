@@ -164,7 +164,10 @@ class GenAIService {
   }
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3753ccea (Merge remote-tracking branch 'origin/main')
 return this.executeWithRetry(async (genAI, modelId) => {
   this.log('request', 'generateStructured', { prompt, schema, model: modelId, generationConfigOverride });
 
