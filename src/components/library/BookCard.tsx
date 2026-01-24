@@ -2,7 +2,7 @@ import React from 'react';
 import { Smartphone, Monitor, Tablet, MoreVertical, Play, Trash2, CloudOff, RotateCcw } from 'lucide-react';
 import type { BookMetadata } from '../../types/db';
 import { BookCover } from './BookCover';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReadingStateStore, useBookProgress } from '../../store/useReadingStateStore';
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '../ui/DropdownMenu';
@@ -68,7 +68,11 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
 }) => {
   const currentDeviceId = getDeviceId();
 
-  // Get progress from all devices for this book
+  // Get active progress using the shared priority logic
+  const activeProgress = useBookProgress(book.id);
+  const progressPercent = activeProgress ? activeProgress.percentage : 0;
+
+  // Get raw progress from all devices to calculate resume badge
   const allProgress = useReadingStateStore((state) => state.progress[book.id]);
   const devices = useDeviceStore((state) => state.devices);
 
@@ -280,19 +284,19 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
           </p>
         )}
 
-        {book.progress !== undefined && book.progress > 0 && (
+        {progressPercent > 0 && (
           <div
             className="w-full h-1.5 bg-secondary rounded-full mt-3 overflow-hidden"
             data-testid="progress-container"
             role="progressbar"
-            aria-valuenow={Math.round(book.progress * 100)}
+            aria-valuenow={Math.round(progressPercent * 100)}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label={`Reading progress: ${Math.round(book.progress * 100)}%`}
+            aria-label={`Reading progress: ${Math.round(progressPercent * 100)}%`}
           >
             <div
               className="h-full bg-primary transition-all duration-300 ease-out"
-              style={{ width: `${Math.min(100, Math.max(0, book.progress * 100))}%` }}
+              style={{ width: `${Math.min(100, Math.max(0, progressPercent * 100))}%` }}
               data-testid="progress-bar"
             />
           </div>

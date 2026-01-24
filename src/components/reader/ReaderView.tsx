@@ -44,6 +44,7 @@ import { createLogger } from '../../lib/logger';
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
 import { DeviceIcon } from './DeviceIcon';
+import { SmartResumeToast } from './SmartResumeToast';
 
 const logger = createLogger('ReaderView');
 
@@ -109,11 +110,6 @@ export const ReaderView: React.FC = () => {
 
     logger.debug(`viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
 
-    const {
-        updateLocation
-    } = useReadingStateStore(useShallow(state => ({
-        updateLocation: state.updateLocation
-    })));
 
     const panicSaveState = useRef({ readerViewMode, currentSectionTitle });
 
@@ -238,7 +234,8 @@ export const ReaderView: React.FC = () => {
                 timestamp: Date.now()
             };
 
-            if (id) updateLocation(id, location.start.cfi, percentage);
+            // if (id) updateLocation(id, location.start.cfi, percentage); // updateLocation unused in this file now if we comment out the hook usage
+            if (id) useReadingStateStore.getState().updateLocation(id, location.start.cfi, percentage); // Access directly from store
             setCurrentSection(title, sectionId);
         },
         onTocLoaded: (newToc) => setToc(newToc),
@@ -278,7 +275,7 @@ export const ReaderView: React.FC = () => {
         lineHeight,
         shouldForceFont,
         id,
-        updateLocation,
+        // updateLocation,
         setToc,
         showPopover,
         hidePopover,
@@ -1313,6 +1310,24 @@ export const ReaderView: React.FC = () => {
                     rendition?.display(cfi);
                 }}
             />
+
+            {/* Smart Resume Toast */}
+            {id && (
+                <SmartResumeToast
+                    bookId={id}
+                    onJump={(cfi, _deviceId) => {
+                        if (rendition) {
+                            rendition.display(cfi);
+                            useReadingStateStore.getState().updateLocation(id, cfi, 0); // Progress will be recalculated by onLocationChange
+                            useToastStore.getState().showToast(`Resumed from device`, 'success');
+                        }
+                    }}
+                    onDismiss={() => {
+                        // Dismiss logic is handled internally by component state mostly
+                    }}
+                />
+            )}
+
 
         </div >
     );
