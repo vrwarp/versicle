@@ -4,6 +4,7 @@ import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useAllBooks } from '../../store/selectors';
 import { createLogger } from '../../lib/logger';
 import { useToastStore } from '../../store/useToastStore';
+import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
@@ -54,9 +55,13 @@ export const LibraryView: React.FC = () => {
     hydrateStaticMetadata: state.hydrateStaticMetadata
   })));
 
-  const { libraryLayout, setLibraryLayout } = usePreferencesStore(useShallow(state => ({
+  const updateLocation = useReadingStateStore(state => state.updateLocation);
+
+  const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode } = usePreferencesStore(useShallow(state => ({
     libraryLayout: state.libraryLayout,
-    setLibraryLayout: state.setLibraryLayout
+    setLibraryLayout: state.setLibraryLayout,
+    libraryFilterMode: state.libraryFilterMode,
+    setLibraryFilterMode: state.setLibraryFilterMode
   })));
 
   // Alias for backward compatibility in component
@@ -132,6 +137,12 @@ export const LibraryView: React.FC = () => {
       navigate(`/read/${book.id}`);
     }
   }, [navigate]);
+
+  const handleResumeReading = useCallback((book: BookMetadata, _deviceId: string, cfi: string) => {
+    // Update local state to match remote CFI before opening
+    updateLocation(book.id, cfi, 0);
+    handleBookOpen(book);
+  }, [updateLocation, handleBookOpen]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -259,11 +270,24 @@ export const LibraryView: React.FC = () => {
     const query = searchQuery.toLowerCase();
 
     // 1. Filter using the pre-computed index (fast string check)
-    const filtered = searchableBooks
+    let filtered = searchableBooks
       .filter(item => item.searchString.includes(query))
       .map(item => item.book);
 
-    // 2. Sort the filtered results
+    // 2. Apply "On Device" filter
+    if (libraryFilterMode === 'downloaded') {
+      filtered = filtered.filter(book => {
+        // A book is downloaded if it's in staticMetadata OR it's been offloaded (technically offloaded means NOT on device, 
+        // but for this filter we usually mean "File Present". 
+        // Ghost Book = !staticMetadata && !offloaded. 
+        // So "On Device" = staticMetadata[book.id] exists.
+        // Wait, "Offloaded" explicitly means file removed. So it is NOT on device.
+        // So we only keep books where staticMetadata[book.id] is truthy.
+        return !!staticMetadata[book.id];
+      });
+    }
+
+    // 3. Sort the filtered results
     return filtered.sort((a, b) => {
       switch (sortOrder) {
         case 'recent':
@@ -284,7 +308,7 @@ export const LibraryView: React.FC = () => {
           return 0;
       }
     });
-  }, [searchableBooks, searchQuery, sortOrder]);
+  }, [searchableBooks, searchQuery, sortOrder, libraryFilterMode, staticMetadata]);
 
   return (
     <div
@@ -416,27 +440,51 @@ export const LibraryView: React.FC = () => {
             </div>
           </div>
 
-          {/* Sort By */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="whitespace-nowrap" id="sort-by-label">Sort by:</span>
-            <Select
-              value={sortOrder}
-              onValueChange={(val) => setSortOrder(val as SortOption)}
-            >
-              <SelectTrigger
-                className="w-[180px] text-foreground"
-                data-testid="sort-select"
-                aria-labelledby="sort-by-label"
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+            {/* Filter Toggle */}
+            <div className="flex items-center bg-muted/50 p-1 rounded-lg border">
+              <Button
+                variant={libraryFilterMode === 'all' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setLibraryFilterMode('all')}
+                className="h-7 px-3 text-xs"
+                data-testid="filter-all-books"
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="recent">Recently Added</SelectItem>
-                <SelectItem value="last_read">Last Read</SelectItem>
-                <SelectItem value="author">Author</SelectItem>
-                <SelectItem value="title">Title</SelectItem>
-              </SelectContent>
-            </Select>
+                All Books
+              </Button>
+              <Button
+                variant={libraryFilterMode === 'downloaded' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setLibraryFilterMode('downloaded')}
+                className="h-7 px-3 text-xs"
+                data-testid="filter-downloaded-books"
+              >
+                On Device
+              </Button>
+            </div>
+
+            {/* Sort By */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="whitespace-nowrap" id="sort-by-label">Sort by:</span>
+              <Select
+                value={sortOrder}
+                onValueChange={(val) => setSortOrder(val as SortOption)}
+              >
+                <SelectTrigger
+                  className="w-[180px] text-foreground"
+                  data-testid="sort-select"
+                  aria-labelledby="sort-by-label"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Recently Added</SelectItem>
+                  <SelectItem value="last_read">Last Read</SelectItem>
+                  <SelectItem value="author">Author</SelectItem>
+                  <SelectItem value="title">Title</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </header>
@@ -472,30 +520,42 @@ export const LibraryView: React.FC = () => {
             <>
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
-                  {filteredAndSortedBooks.map((book) => (
-                    <div key={book.id} className="flex justify-center">
-                      <BookCard
+                  {filteredAndSortedBooks.map((book) => {
+
+
+                    const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+
+                    return (
+                      <div key={book.id} className="flex justify-center">
+                        <BookCard
+                          book={book}
+                          isGhostBook={isGhostBook}
+                          onOpen={handleBookOpen}
+                          onDelete={handleDelete}
+                          onOffload={handleOffload}
+                          onRestore={handleRestore}
+                          onResume={handleResumeReading}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 w-full">
+                  {filteredAndSortedBooks.map((book) => {
+                    const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+                    return (
+                      <BookListItem
+                        key={book.id}
                         book={book}
+                        isGhostBook={isGhostBook}
                         onOpen={handleBookOpen}
                         onDelete={handleDelete}
                         onOffload={handleOffload}
                         onRestore={handleRestore}
                       />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 w-full">
-                  {filteredAndSortedBooks.map((book) => (
-                    <BookListItem
-                      key={book.id}
-                      book={book}
-                      onOpen={handleBookOpen}
-                      onDelete={handleDelete}
-                      onOffload={handleOffload}
-                      onRestore={handleRestore}
-                    />
-                  ))}
+                    )
+                  })}
                 </div>
               )}
               {/* Spacer for bottom navigation or just breathing room */}

@@ -6,3 +6,4 @@ dist
 coverage
 plan
 *.md
+verification/screenshots

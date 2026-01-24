@@ -5,21 +5,25 @@ import { BrowserRouter } from 'react-router-dom';
 import { BookCard } from './BookCard';
 import type { BookMetadata } from '../../types/db';
 
-// Mock BookActionMenu
-vi.mock('./BookActionMenu', () => ({
-    BookActionMenu: ({ children, onDelete, onOffload, onRestore }: { children: React.ReactNode, onDelete: () => void, onOffload: () => void, onRestore: () => void, book: unknown }) => (
-        <div data-testid="mock-book-action-menu">
-            {/* Simulate the trigger wrapper behavior without invalid nesting */}
-            <div data-testid="menu-wrapper" onClick={(e) => e.stopPropagation()}>
-                {children}
-            </div>
+// Remove obsolete mock for BookActionMenu which is no longer used in BookCard
 
-            {/* Mocked menu items (usually hidden, but visible for test) */}
-            <button data-testid="menu-delete" onClick={(e) => { e.stopPropagation(); onDelete(); }}>Delete</button>
-            <button data-testid="menu-offload" onClick={(e) => { e.stopPropagation(); onOffload(); }}>Offload</button>
-            <button data-testid="menu-restore" onClick={(e) => { e.stopPropagation(); onRestore(); }}>Restore</button>
-        </div>
-    )
+// Mock UI DropdownMenu to avoid Radix issues in JSDOM
+vi.mock('../ui/DropdownMenu', () => ({
+  DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuItem: ({ children, onClick, ...props }: any) => (
+    <div
+      onClick={onClick}
+      {...props}
+    >
+      {children}
+    </div>
+  ),
+  DropdownMenuSeparator: () => <div />,
+  DropdownMenuSub: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuSubTrigger: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuSubContent: ({ children }: any) => <div>{children}</div>,
 }));
 
 describe('BookCard', () => {
@@ -35,19 +39,34 @@ describe('BookCard', () => {
   const mockOnDelete = vi.fn();
   const mockOnOffload = vi.fn();
   const mockOnRestore = vi.fn();
+  const mockOnOpen = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Polyfill PointerEvent for Radix UI if needed
+    if (!window.PointerEvent) {
+      // @ts-ignore
+      window.PointerEvent = class PointerEvent extends MouseEvent { };
+    }
+
+    // Polyfill ResizeObserver for Radix UI
+    global.ResizeObserver = class ResizeObserver {
+      observe() { }
+      unobserve() { }
+      disconnect() { }
+    };
   });
 
   const renderWithRouter = (ui: React.ReactElement) => {
-    return render(<BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{ui}</BrowserRouter>);
+    return render(<BrowserRouter>{ui}</BrowserRouter>);
   };
 
   const renderCard = (book = mockBook) => {
     return renderWithRouter(
       <BookCard
         book={book}
+        onOpen={mockOnOpen}
         onDelete={mockOnDelete}
         onOffload={mockOnOffload}
         onRestore={mockOnRestore}
@@ -121,12 +140,20 @@ describe('BookCard', () => {
     expect(card).toHaveAttribute('role', 'button');
     expect(card).toHaveAttribute('tabIndex', '0');
 
-    expect(screen.getByTestId('mock-book-action-menu')).toBeInTheDocument();
+    // Check for the menu trigger instead of the mocked menu
+    expect(screen.getByTestId('book-context-menu-trigger')).toBeInTheDocument();
   });
 
   it('should trigger onDelete when delete menu item is clicked', async () => {
     renderCard();
 
+    // 1. Trigger might be clicked (optional with mock)
+    // const trigger = screen.getByTestId('book-context-menu-trigger');
+    // await act(async () => {
+    //   fireEvent.click(trigger);
+    // });
+
+    // 2. Click the delete option (always visible with mock)
     const deleteButton = screen.getByTestId('menu-delete');
 
     await act(async () => {

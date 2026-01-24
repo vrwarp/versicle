@@ -29,7 +29,7 @@ def test_library_journey(page: Page):
     # 3. Test Delete (Smart Delete / Remove)
     print("Testing Delete Book...")
     book_card.hover()
-    page.get_by_test_id("book-menu-trigger").click()
+    page.get_by_test_id("book-context-menu-trigger").click()
     page.get_by_test_id("menu-delete").click()
     page.get_by_test_id("confirm-delete").click()
 

@@ -37,6 +37,7 @@ import { getDeviceId } from '../lib/device-id';
 
 import { DeviceManager } from './devices/DeviceManager';
 import { createLogger } from '../lib/logger';
+import { DataExportWizard } from './sync/DataExportWizard';
 
 const logger = createLogger('GlobalSettings');
 
@@ -69,6 +70,7 @@ export const GlobalSettingsDialog = () => {
     const [isCsvImporting, setIsCsvImporting] = useState(false);
     const [csvImportMessage, setCsvImportMessage] = useState('');
     const [csvImportComplete, setCsvImportComplete] = useState(false);
+    const [isExportWizardOpen, setIsExportWizardOpen] = useState(false);
 
     const {
         addBooks,
@@ -1306,8 +1308,13 @@ const firebaseConfig = {
                                             <Button onClick={handleExportFull} variant="outline" className="flex-1">
                                                 Export Full Backup (ZIP)
                                             </Button>
-                                            <Button onClick={handleExportLight} variant="outline" className="flex-1">
-                                                Export Metadata Only (JSON)
+                                            <Button onClick={() => setIsExportWizardOpen(true)} variant="outline" className="flex-1" data-testid="export-wizard-btn">
+                                                Export Wizard (JSON)
+                                            </Button>
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <Button onClick={() => handleExportLight()} variant="ghost" className="text-xs text-muted-foreground">
+                                                Quick JSON Export (Legacy)
                                             </Button>
                                         </div>
                                         <Button onClick={handleRestoreClick} variant="default" className="w-full">
@@ -1363,6 +1370,7 @@ const firebaseConfig = {
                 </ModalContent>
             </Modal>
             <ReadingListDialog open={isReadingListOpen} onOpenChange={setIsReadingListOpen} />
+            <DataExportWizard open={isExportWizardOpen} onOpenChange={setIsExportWizardOpen} />
         </>
     );
 };

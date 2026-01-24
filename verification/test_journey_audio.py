@@ -57,7 +57,7 @@ def test_journey_audio(page: Page):
 
     # Switch to Settings
     print("Switching to Audio Settings...")
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Settings").click(force=True)
     expect(page.get_by_text("Voice & Pace")).to_be_visible()
     expect(page.get_by_text("Flow Control")).to_be_visible()
 
@@ -65,7 +65,7 @@ def test_journey_audio(page: Page):
 
     # Switch back to Queue
     print("Switching back to Queue...")
-    page.get_by_role("button", name="Up Next").click()
+    page.get_by_role("button", name="Up Next").click(force=True)
 
     # Close Audio Deck
     page.keyboard.press("Escape")

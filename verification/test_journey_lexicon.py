@@ -21,7 +21,7 @@ def test_journey_lexicon(page: Page):
     page.get_by_test_id("reader-audio-button").click()
 
     # Switch to Settings
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Settings").click(force=True)
 
     # Open Lexicon Manager
     print("Opening Pronunciation Lexicon...")

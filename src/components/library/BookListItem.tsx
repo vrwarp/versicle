@@ -1,6 +1,6 @@
 import React from 'react';
 import type { BookMetadata } from '../../types/db';
-import { BookOpen, HardDriveDownload, MoreVertical } from 'lucide-react';
+import { BookOpen, HardDriveDownload, MoreVertical, CloudDownload } from 'lucide-react';
 import { useToastStore } from '../../store/useToastStore';
 import { cn } from '../../lib/utils';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
@@ -13,6 +13,8 @@ import { BookActionMenu } from './BookActionMenu';
 interface BookListItemProps {
     /** The metadata of the book to display. */
     book: BookMetadata;
+    /** Whether the book is a "Ghost Book" (synced metadata but no content on device). */
+    isGhostBook?: boolean;
     onOpen: (book: BookMetadata) => void;
     onDelete: (book: BookMetadata) => void;
     onOffload: (book: BookMetadata) => void;
@@ -47,7 +49,7 @@ const formatDuration = (chars?: number): string => {
  * @param props - Component props.
  * @returns The rendered list item.
  */
-export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onRestore }: BookListItemProps) => {
+export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, onOffload, onRestore }: BookListItemProps) => {
     const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderUIStore(state => state.setCurrentBookId);
 
@@ -56,6 +58,11 @@ export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onR
     const handleOpen = () => {
         if (book.isOffloaded) {
             showToast("Book is offloaded. Please restore it to read.", "error");
+            return;
+        }
+        if (isGhostBook) {
+            // Trigger restore flow for Ghost Books too
+            onRestore(book);
             return;
         }
         setBookId(book.id); // Set the active book ID in the store
@@ -71,7 +78,7 @@ export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onR
             <div
                 className={cn(
                     "flex items-center gap-4 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group h-full border border-transparent hover:border-border",
-                    book.isOffloaded && "opacity-75"
+                    (book.isOffloaded || isGhostBook) && "opacity-75"
                 )}
                 onClick={handleOpen}
             >
@@ -81,7 +88,10 @@ export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onR
                         <img
                             src={displayUrl}
                             alt={`Cover for ${book.title}`}
-                            className="w-full h-full object-cover"
+                            className={cn(
+                                "w-full h-full object-cover",
+                                isGhostBook && "opacity-60"
+                            )}
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center bg-secondary text-muted-foreground">
@@ -91,6 +101,11 @@ export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onR
                     {book.isOffloaded && (
                         <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
                             <HardDriveDownload className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                    )}
+                    {isGhostBook && !book.isOffloaded && (
+                        <div className="absolute inset-0 bg-background/30 flex items-center justify-center">
+                            <CloudDownload className="w-6 h-6 text-primary drop-shadow-md" />
                         </div>
                     )}
                 </div>
@@ -135,6 +150,9 @@ export const BookListItem = React.memo(({ book, onOpen, onDelete, onOffload, onR
 
                         {book.isOffloaded && (
                             <span className="text-amber-500 font-medium ml-1">(Offloaded)</span>
+                        )}
+                        {isGhostBook && !book.isOffloaded && (
+                            <span className="text-blue-500 font-medium ml-1">(Cloud)</span>
                         )}
                     </div>
                 </div>
