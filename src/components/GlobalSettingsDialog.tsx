@@ -37,6 +37,7 @@ import { getDeviceId } from '../lib/device-id';
 
 import { DeviceManager } from './devices/DeviceManager';
 import { createLogger } from '../lib/logger';
+import { DataExportWizard } from './sync/DataExportWizard';
 
 const logger = createLogger('GlobalSettingsDialog');
 
