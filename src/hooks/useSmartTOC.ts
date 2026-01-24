@@ -67,7 +67,7 @@ export function useSmartTOC(
 
     } catch (error) {
       logger.error('Failed to enhance TOC:', error);
-      showToast('Failed to enhance TOC. Check console for details.', 'error');
+      showToast('Failed to enhance TOC.', 'error');
     } finally {
       setIsEnhancing(false);
       setProgress(null);

@@ -161,35 +161,37 @@ class GenAIService {
         }
       }
     }
+  }
+}
 
 
-    return this.executeWithRetry(async (genAI, modelId) => {
-      this.log('request', 'generateStructured', { prompt, schema, model: modelId, generationConfigOverride });
+return this.executeWithRetry(async (genAI, modelId) => {
+  this.log('request', 'generateStructured', { prompt, schema, model: modelId, generationConfigOverride });
 
-      const model = genAI.getGenerativeModel({
-        model: modelId,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-          ...(generationConfigOverride || {})
-        },
-      });
+  const model = genAI.getGenerativeModel({
+    model: modelId,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+      ...(generationConfigOverride || {})
+    },
+  });
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  const text = response.text();
 
-      try {
-        const parsed = JSON.parse(text) as T;
-        this.log('response', 'generateStructured', { text, parsed });
-        return parsed;
-      } catch (error) {
-        logger.error('Failed to parse GenAI response as JSON:', text);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message });
-        throw error;
-      }
-    }, 'generateStructured');
+  try {
+    const parsed = JSON.parse(text) as T;
+    this.log('response', 'generateStructured', { text, parsed });
+    return parsed;
+  } catch (error) {
+    logger.error('Failed to parse GenAI response as JSON:', text);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message });
+    throw error;
+  }
+}, 'generateStructured');
   }
 
   /**
@@ -197,39 +199,39 @@ class GenAIService {
    * @param sections Array of objects with id and text.
    * @returns Array of objects with id and title.
    */
-  public async generateTOCForBatch(sections: { id: string, text: string }[]): Promise<{ id: string, title: string }[]> {
-    if (sections.length === 0) return [];
+  public async generateTOCForBatch(sections: { id: string, text: string }[]): Promise < { id: string, title: string }[] > {
+  if(sections.length === 0) return [];
 
-    const prompt = `Generate concise section titles (max 6 words) for the following text segments.
+  const prompt = `Generate concise section titles (max 6 words) for the following text segments.
     Return an array of objects with 'id' (matching the input) and 'title'.
 
     Sections:
     ${JSON.stringify(sections)}`;
 
-    const schema = {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          id: { type: SchemaType.STRING },
-          title: { type: SchemaType.STRING },
-        },
-        required: ['id', 'title'],
+  const schema = {
+    type: SchemaType.ARRAY,
+    items: {
+      type: SchemaType.OBJECT,
+      properties: {
+        id: { type: SchemaType.STRING },
+        title: { type: SchemaType.STRING },
       },
-    };
+      required: ['id', 'title'],
+    },
+  };
 
-    return this.generateStructured<{ id: string, title: string }[]>(prompt, schema);
-  }
+  return this.generateStructured<{ id: string, title: string }[]>(prompt, schema);
+}
 
   /**
    * Detects content types for a batch of root nodes.
    * @param nodes Array of objects with id and sampleText.
    * @returns Array of objects with id and type.
    */
-  public async detectContentTypes(nodes: { id: string, sampleText: string }[]): Promise<{ id: string, type: ContentType }[]> {
-    if (nodes.length === 0) return [];
+  public async detectContentTypes(nodes: { id: string, sampleText: string }[]): Promise < { id: string, type: ContentType }[] > {
+  if(nodes.length === 0) return [];
 
-    const prompt = `Analyze the provided text samples from an EPUB book section and classify them into exactly one of the types defined below.
+  const prompt = `Analyze the provided text samples from an EPUB book section and classify them into exactly one of the types defined below.
 
 ### Categories & Strict Criteria:
 1. **'title'**: Structural headers. Includes chapter titles, sub-headings (e.g., "Psalm 16", "Introductory Matters"), or bolded section markers that introduce a new topic.
@@ -250,26 +252,26 @@ Return an array of objects with 'id' (matching input) and 'type'.
 Samples:
 ${JSON.stringify(nodes)}`;
 
-    const schema = {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          id: { type: SchemaType.STRING },
-          type: { type: SchemaType.STRING, enum: ['title', 'footnote', 'main', 'table', 'other'] },
-        },
-        required: ['id', 'type'],
+  const schema = {
+    type: SchemaType.ARRAY,
+    items: {
+      type: SchemaType.OBJECT,
+      properties: {
+        id: { type: SchemaType.STRING },
+        type: { type: SchemaType.STRING, enum: ['title', 'footnote', 'main', 'table', 'other'] },
       },
-    };
+      required: ['id', 'type'],
+    },
+  };
 
-    return this.generateStructured<{ id: string, type: ContentType }[]>(prompt, schema);
-  }
+  return this.generateStructured<{ id: string, type: ContentType }[]>(prompt, schema);
+}
 
   public async generateTableAdaptations(
-    nodes: { rootCfi: string, imageBlob: Blob }[],
-    thinkingBudget: number = 512
-  ): Promise<{ cfi: string, adaptation: string }[]> {
-    const instructionPrompt = `ACT AS: An expert accessibility specialist and audiobook narrator.
+  nodes: { rootCfi: string, imageBlob: Blob }[],
+  thinkingBudget: number = 512
+): Promise < { cfi: string, adaptation: string }[] > {
+  const instructionPrompt = `ACT AS: An expert accessibility specialist and audiobook narrator.
 TASK: Convert each of the above table images into a "teleprompter adaptation" for Text-to-Speech playback.
   
 CORE RULES:
@@ -285,41 +287,41 @@ PROCESS:
   - Step 3: Match the 'cfi' identifier provided before each image exactly.
     `;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parts: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parts: any[] = [];
 
-    for (const node of nodes) {
-      const base64 = await this.blobToBase64(node.imageBlob);
-      // Anchor the image to its unique key in the prompt stream
-      parts.push({
-        inlineData: {
-          data: base64,
-          mimeType: node.imageBlob.type
-        }
-      });
-      parts.push({ text: `Table Image CFI: ${node.rootCfi}` });
-    }
+  for(const node of nodes) {
+    const base64 = await this.blobToBase64(node.imageBlob);
+    // Anchor the image to its unique key in the prompt stream
+    parts.push({
+      inlineData: {
+        data: base64,
+        mimeType: node.imageBlob.type
+      }
+    });
+    parts.push({ text: `Table Image CFI: ${node.rootCfi}` });
+  }
     parts.push({ text: instructionPrompt });
 
-    return this.generateStructured<{ cfi: string, adaptation: string }[]>(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { contents: [{ role: 'user', parts }] } as any,
-      {
-        type: SchemaType.ARRAY,
-        items: {
-          type: SchemaType.OBJECT,
-          properties: {
-            cfi: { type: SchemaType.STRING },
-            adaptation: { type: SchemaType.STRING },
-          },
-          required: ['cfi', 'adaptation'],
+  return this.generateStructured<{ cfi: string, adaptation: string }[]>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { contents: [{ role: 'user', parts }] } as any,
+    {
+      type: SchemaType.ARRAY,
+      items: {
+        type: SchemaType.OBJECT,
+        properties: {
+          cfi: { type: SchemaType.STRING },
+          adaptation: { type: SchemaType.STRING },
         },
+        required: ['cfi', 'adaptation'],
       },
-      {
-        thinkingConfig: { includeThoughts: false, thinkingBudget: thinkingBudget }
-      }
-    );
-  }
+    },
+    {
+      thinkingConfig: { includeThoughts: false, thinkingBudget: thinkingBudget }
+    }
+  );
+}
 }
 
 export const genAIService = GenAIService.getInstance();
