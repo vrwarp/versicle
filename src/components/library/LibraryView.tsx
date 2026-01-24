@@ -129,14 +129,28 @@ export const LibraryView: React.FC = () => {
 
   // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
 
+  const handleRestore = useCallback((book: BookMetadata) => {
+    setBookToRestore(book);
+    restoreFileInputRef.current?.click();
+  }, []);
+
   const handleBookOpen = useCallback((book: BookMetadata) => {
+    // Check if file is missing (Ghost or Offloaded)
+    const isGhost = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+    const isOffloaded = book.isOffloaded || offloadedBookIds.has(book.id);
+
+    if (isGhost || isOffloaded) {
+      handleRestore(book);
+      return;
+    }
+
     const effectiveVersion = book.version ?? 0;
     if (effectiveVersion < CURRENT_BOOK_VERSION) {
       setReprocessingBookId(book.id);
     } else {
       navigate(`/read/${book.id}`);
     }
-  }, [navigate]);
+  }, [navigate, staticMetadata, offloadedBookIds, handleRestore]);
 
   const handleResumeReading = useCallback((book: BookMetadata, _deviceId: string, cfi: string) => {
     // Update local state to match remote CFI before opening
@@ -247,12 +261,7 @@ export const LibraryView: React.FC = () => {
     setActiveModal({ type: 'offload', book });
   }, []);
 
-  const handleRestore = useCallback((book: BookMetadata) => {
-    setBookToRestore(book);
-    // Use setTimeout to ensure state is updated before click if needed, though usually not strictly necessary for simple refs
-    // But direct click is fine.
-    restoreFileInputRef.current?.click();
-  }, []);
+
 
   // OPTIMIZATION: Create a search index to avoid expensive re-calculation on every render
   // This memoized value updates only when the books array changes, not on every search keystroke.
