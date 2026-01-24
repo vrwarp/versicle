@@ -19,7 +19,7 @@
 
 ## Tech Stack
 
-*   **Framework**: React 19 + Vite 7
+*   **Framework**: React 19 + Vite 7 + React Router 7
 *   **Language**: TypeScript
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs`
 *   **Sync**: `y-fire` (Firestore) + Android Backup Service
@@ -68,6 +68,7 @@
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
+        *   **Device Mesh**: Real-time visibility of active devices with "Last Active" status.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots (`SyncManifest`) protect against data loss during sync (Last 10 states).
 *   **Reading History**: Detailed session tracking with timeline visualization.
