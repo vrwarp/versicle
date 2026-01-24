@@ -30,6 +30,17 @@ def test_visual_settings(page: Page):
     expect(page.get_by_text("Layout")).to_be_visible()
     utils.capture_screenshot(page, "visual_settings_01_open")
 
+    # 0. Test Default Layout Selection (Paginated)
+    print("Testing Default Layout Selection (Paginated)...")
+    paginated_tab = page.get_by_role("tab", name="Paginated")
+    expect(paginated_tab).to_be_visible()
+
+    # Check data-state attribute
+    paginated_state = paginated_tab.get_attribute("data-state")
+    print(f"Default Paginated State: {paginated_state}")
+
+    assert paginated_state == "active", "Paginated layout should be active by default"
+
     # 1. Test Theme Switching
     print("Testing Theme Switching (Sepia)...")
     sepia_btn = page.locator('button[aria-label="Select Sepia theme"]')
