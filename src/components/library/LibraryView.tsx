@@ -440,14 +440,14 @@ export const LibraryView: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+          <div className="flex flex-row items-center justify-between gap-2 w-full md:w-auto">
             {/* Filter Toggle */}
-            <div className="flex items-center bg-muted/50 p-1 rounded-lg border">
+            <div className="flex items-center bg-muted/50 p-1 rounded-lg border shrink-0">
               <Button
-                variant={libraryFilterMode === 'all' ? 'secondary' : 'ghost'}
+                variant={(!libraryFilterMode || libraryFilterMode === 'all') ? 'secondary' : 'ghost'}
                 size="sm"
                 onClick={() => setLibraryFilterMode('all')}
-                className="h-7 px-3 text-xs"
+                className="h-7 px-2 sm:px-3 text-xs"
                 data-testid="filter-all-books"
               >
                 All Books
@@ -456,7 +456,7 @@ export const LibraryView: React.FC = () => {
                 variant={libraryFilterMode === 'downloaded' ? 'secondary' : 'ghost'}
                 size="sm"
                 onClick={() => setLibraryFilterMode('downloaded')}
-                className="h-7 px-3 text-xs"
+                className="h-7 px-2 sm:px-3 text-xs"
                 data-testid="filter-downloaded-books"
               >
                 On Device
@@ -464,14 +464,14 @@ export const LibraryView: React.FC = () => {
             </div>
 
             {/* Sort By */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="whitespace-nowrap" id="sort-by-label">Sort by:</span>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+              <span className="whitespace-nowrap hidden sm:inline" id="sort-by-label">Sort by:</span>
               <Select
                 value={sortOrder}
                 onValueChange={(val) => setSortOrder(val as SortOption)}
               >
                 <SelectTrigger
-                  className="w-[180px] text-foreground"
+                  className="w-[130px] sm:w-[180px] text-foreground text-xs sm:text-sm h-8 sm:h-10"
                   data-testid="sort-select"
                   aria-labelledby="sort-by-label"
                 >
