@@ -689,6 +689,21 @@ export interface SyncManifest {
   /** Current reading queue and priority states. */
   readingList: Record<string, ReadingListEntry>;
 
+  /**
+   * App settings (theme, fonts, etc).
+   * Persisted via LWW.
+   */
+  settings?: {
+    theme?: string;
+    customTheme?: { bg: string; fg: string };
+    fontFamily?: string;
+    fontSize?: number;
+    lineHeight?: number;
+    shouldForceFont?: boolean;
+    readerViewMode?: string;
+    libraryLayout?: string;
+  };
+
   /** High-frequency "Handoff" state. */
   transientState: {
     ttsPositions: Record<string, TTSPosition>;

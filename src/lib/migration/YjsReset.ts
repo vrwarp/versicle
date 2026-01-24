@@ -1,4 +1,7 @@
 import { yDoc } from '../../store/yjs-provider';
+import { createLogger } from '../logger';
+
+const logger = createLogger('YjsReset');
 
 /**
  * DANGER: Clears all Yjs data and resets migration flag.
@@ -24,7 +27,7 @@ export async function resetYjsData(): Promise<void> {
         prefsMap.delete('migration_timestamp');
     });
 
-    console.log('[Reset] Yjs data cleared. Reload to re-migrate.');
+    logger.info('[Reset] Yjs data cleared. Reload to re-migrate.');
 
     // Force page reload
     setTimeout(() => window.location.reload(), 500);

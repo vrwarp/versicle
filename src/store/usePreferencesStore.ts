@@ -19,6 +19,7 @@ interface PreferencesState {
     shouldForceFont: boolean;
     readerViewMode: 'paginated' | 'scrolled';
     libraryLayout: 'grid' | 'list';
+    libraryFilterMode: 'all' | 'downloaded';
 
     // === ACTIONS (not synced to Yjs) ===
     setTheme: (theme: 'light' | 'dark' | 'sepia') => void;
@@ -29,6 +30,7 @@ interface PreferencesState {
     setShouldForceFont: (force: boolean) => void;
     setReaderViewMode: (mode: 'paginated' | 'scrolled') => void;
     setLibraryLayout: (layout: 'grid' | 'list') => void;
+    setLibraryFilterMode: (mode: 'all' | 'downloaded') => void;
 }
 
 const defaultPreferences = {
@@ -39,7 +41,8 @@ const defaultPreferences = {
     fontSize: 100,
     shouldForceFont: false,
     readerViewMode: 'paginated' as const,
-    libraryLayout: 'grid' as const
+    libraryLayout: 'grid' as const,
+    libraryFilterMode: 'all' as const
 };
 
 /**
@@ -63,6 +66,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             setShouldForceFont: (force) => set({ shouldForceFont: force }),
             setReaderViewMode: (mode) => set({ readerViewMode: mode }),
             setLibraryLayout: (layout) => set({ libraryLayout: layout }),
+            setLibraryFilterMode: (mode) => set({ libraryFilterMode: mode }),
         })
     )
 );

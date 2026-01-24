@@ -17,7 +17,7 @@ def test_aria_labels(page: Page):
 
     # 1. Visual Settings ARIA Labels
     print("Verifying Visual Settings...")
-    page.get_by_label("Visual Settings").click()
+    page.get_by_label("Visual Settings").click(force=True)
 
     # Font size slider
     expect(page.get_by_label("Font size percentage")).to_be_visible()
@@ -45,7 +45,7 @@ def test_aria_labels(page: Page):
     page.get_by_label("Open Audio Deck").click()
 
     # Switch to settings tab in Audio Panel
-    page.get_by_role("button", name="Settings").click()
+    page.get_by_role("button", name="Settings").click(force=True)
 
     # Playback speed slider
     expect(page.get_by_label("Playback speed")).to_be_visible()

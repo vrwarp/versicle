@@ -211,13 +211,86 @@ The export format is designed to be machine-readable and partially compatible wi
 
 ### Phase 2: Manual Export/Import (High Priority)
 **Objective:** Replace the gap left by removing Google Drive.
-1.  **Service:** Create `src/lib/sync/ExportImportService.ts`.
-2.  **UI:** Build the "Export Wizard" components.
-3.  **Integration:** Hook up "Import" to the `yDoc.transact` API to safely merge external data.
+
+#### 2.1 Service: `src/lib/sync/ExportImportService.ts`
+
+```typescript
+interface ExportOptions {
+  includeLibrary: boolean;      // Books, Authors, Tags
+  includeProgress: boolean;     // Reading locations, history
+  includeAnnotations: boolean;  // Highlights, Notes
+  includeSettings: boolean;     // Theme, Font preferences
+  prettyPrint?: boolean;        // Human-readable JSON
+}
+
+interface ExportResult {
+  blob: Blob;
+  filename: string;
+  checksum: string;  // SHA-256 for validation
+}
+
+interface ImportResult {
+  success: boolean;
+  booksImported: number;
+  annotationsImported: number;
+  conflicts: string[];  // Logged merge decisions
+}
+
+class ExportImportService {
+  // Export current SyncManifest to JSON blob
+  static async exportToJSON(options: ExportOptions): Promise<ExportResult>;
+  
+  // Parse and validate imported JSON file
+  static async parseImportFile(file: File): Promise<SyncManifest>;
+  
+  // Validate schema version and structure
+  static validateImportData(data: unknown): { valid: boolean; errors: string[] };
+  
+  // Migrate older schema versions to current
+  static migrateSchema(data: SyncManifest, fromVersion: number): SyncManifest;
+  
+  // Merge imported data into yDoc using transact
+  static async mergeIntoYDoc(manifest: SyncManifest): Promise<ImportResult>;
+}
+```
+
+#### 2.2 Merge Logic
+
+*   **Library Metadata:** LWW (Last Write Wins) based on `lastInteraction` timestamp.
+*   **Annotations:** Union - both local and imported annotations are kept, deduped by `id`.
+*   **Progress:** Per-device entries are merged via union. Max progress is computed at read time.
+*   **Lexicon:** Union - all rules are merged, deduped by `id`.
+*   **Settings:** LWW - imported settings overwrite if newer.
+
+#### 2.3 UI Components
+
+*   **DataExportWizard:** Multi-step dialog for export options.
+*   **ImportDataButton:** File picker + validation + merge confirmation.
 
 ### Phase 3: Android Backup Polish
-*   Ensure `AndroidBackupService` writes frequently enough (e.g., `onPause`).
-*   Test restore flows on physical devices.
+
+#### 3.1 Write Frequency
+*   `AndroidBackupService.writeBackupPayload()` called:
+    *   On app pause (`document.visibilitychange` = 'hidden')
+    *   After significant sync events (batch flush complete)
+    *   Debounced to max 1 write per 5 minutes
+
+#### 3.2 Restore Flow
+1.  On first launch, check for `backup_payload.json` in app data directory.
+2.  If found, show dialog: "Found backup from previous device. Merge with cloud?"
+3.  On "Yes", call `ExportImportService.mergeIntoYDoc()` with parsed backup.
+4.  On "No", optionally delete local backup to prevent re-prompting.
+
+### Phase 4: Ghost Book UI
+*   Detection: Book exists in `useBookStore` but not in `static_resources`
+*   Visual: 80% opacity, cloud overlay icon, gradient fallback
+*   Tap: Opens "Content Missing" dialog for file import
+
+### Phase 5: Smart Resume
+*   Detection: Remote device has `lastRead > local.lastRead && percentage > local.percentage`
+*   UI: Floating toast with "Jump" / "Dismiss" actions
+*   Menu: "Sync Status" panel showing all device positions
+
 
 ---
 

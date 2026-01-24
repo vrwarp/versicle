@@ -23,7 +23,8 @@ import { Label } from '../ui/Label';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
-import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones } from 'lucide-react';
+import { SyncStatusPanel } from './SyncStatusPanel';
+import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import { ReaderTTSController } from './ReaderTTSController';
 import { generateCfiRange, snapCfiToSentence } from '../../lib/cfi-utils';
@@ -40,6 +41,9 @@ import { ContentAnalysisLegend } from './ContentAnalysisLegend';
 import { TYPE_COLORS } from '../../types/content-analysis';
 import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 import { createLogger } from '../../lib/logger';
+import { useDeviceStore } from '../../store/useDeviceStore';
+import { getDeviceId } from '../../lib/device-id';
+import { DeviceIcon } from './DeviceIcon';
 
 const logger = createLogger('ReaderView');
 
@@ -679,6 +683,7 @@ export const ReaderView: React.FC = () => {
     const [activeSearchQuery, setActiveSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
+    const [syncPanelOpen, setSyncPanelOpen] = useState(false);
 
     // Indexing State
     const [isIndexing, setIsIndexing] = useState(false);
@@ -846,6 +851,42 @@ export const ReaderView: React.FC = () => {
         return () => setPlayFromSelection(undefined);
     }, [handlePlayFromSelection, setPlayFromSelection]);
 
+    // Compute device markers for TOC
+    const devices = useDeviceStore(state => state.devices);
+    const { progress: allProgress } = useReadingStateStore(useShallow(state => ({ progress: state.progress })));
+    const currentDeviceId = getDeviceId();
+
+    const deviceMarkers = useMemo(() => {
+        const markers: Record<string, Array<{ id: string; name: string; platform: string }>> = {};
+        if (!id || !allProgress[id] || !book) return markers;
+
+        Object.entries(allProgress[id]).forEach(([devId, prog]) => {
+            if (devId === currentDeviceId) return; // Skip current device
+            if (!prog.currentCfi) return;
+
+            try {
+                // Resolve CFI to Spine Item to get href
+                const section = book.spine.get(prog.currentCfi);
+                if (section && section.href) {
+                    // We match against the raw href from spine. 
+                    // Ideally TOC items matching this href (or base of it) should show the marker.
+                    const href = section.href;
+                    if (!markers[href]) markers[href] = [];
+
+                    const device = devices[devId];
+                    markers[href].push({
+                        id: devId,
+                        name: device?.name || 'Unknown Device',
+                        platform: device?.platform || 'desktop'
+                    });
+                }
+            } catch (e) {
+                // Ignore invalid CFIs
+            }
+        });
+        return markers;
+    }, [id, allProgress, book, devices, currentDeviceId]);
+
     const renderTOCItem = (item: NavigationItem, index: number, level: number = 0, parentId: string = 'toc-item') => {
         const hasSubitems = item.subitems && item.subitems.length > 0;
         // "up to three levels" -> 0, 1, 2.
@@ -855,12 +896,20 @@ export const ReaderView: React.FC = () => {
         const currentId = `${parentId}-${index}`;
         const isActive = item.id === activeTocId;
 
+        // Check for markers
+        // Match exact href or href without hash? 
+        // Spine getItem return href usually without hash if it's the whole chapter.
+        // TOC item might contain hash.
+        // Let's try matching base hrefs.
+        const itemHref = item.href.split('#')[0];
+        const markers = deviceMarkers[itemHref] || deviceMarkers[item.href];
+
         return (
             <li key={item.id}>
                 <button
                     data-testid={currentId}
                     className={cn(
-                        "text-left w-full text-sm py-1 block truncate transition-colors",
+                        "text-left w-full text-sm py-1 block truncate transition-colors flex items-center justify-between group",
                         isActive ? "text-primary font-medium bg-accent/50 rounded-md px-2 -ml-2" : "text-muted-foreground hover:text-primary"
                     )}
                     // Add extra padding when active to compensate for the negative margin (-ml-2 = -0.5rem),
@@ -871,7 +920,16 @@ export const ReaderView: React.FC = () => {
                         setSidebar('none');
                     }}
                 >
-                    {item.label.trim()}
+                    <span className="truncate">{item.label.trim()}</span>
+                    {markers && markers.length > 0 && (
+                        <div className="flex -space-x-1 ml-2 flex-shrink-0" title={`Read by: ${markers.map(m => m.name).join(', ')}`}>
+                            {markers.map(m => (
+                                <div key={m.id} className="bg-background rounded-full p-0.5 border border-border shadow-sm ring-1 ring-background z-10">
+                                    <DeviceIcon platform={m.platform} className="w-3 h-3 text-primary/70" />
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </button>
                 {showSubitems && (
                     <ul className="space-y-1 mt-1">
@@ -1049,6 +1107,16 @@ export const ReaderView: React.FC = () => {
                         <Button
                             variant="ghost"
                             size="icon"
+                            data-testid="reader-sync-status-button"
+                            aria-label="Sync Status"
+                            onClick={() => setSyncPanelOpen(true)}
+                            className="rounded-full text-muted-foreground"
+                        >
+                            <Monitor className="w-5 h-5" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
                             data-testid="reader-settings-button"
                             aria-label="Settings"
                             onClick={() => setGlobalSettingsOpen(true)}
@@ -1058,7 +1126,8 @@ export const ReaderView: React.FC = () => {
                         </Button>
                     </div>
                 </header>
-            )}
+            )
+            }
 
             {/* Main Content */}
             <div className="flex-1 relative overflow-hidden flex justify-center">
@@ -1236,6 +1305,15 @@ export const ReaderView: React.FC = () => {
             {/* Content Analysis Debug Legend */}
             <ContentAnalysisLegend rendition={rendition} />
 
-        </div>
+            <SyncStatusPanel
+                open={syncPanelOpen}
+                onOpenChange={setSyncPanelOpen}
+                bookId={id || ''}
+                onJump={(cfi) => {
+                    rendition?.display(cfi);
+                }}
+            />
+
+        </div >
     );
 };

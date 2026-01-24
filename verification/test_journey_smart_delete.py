@@ -34,7 +34,7 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
     print("Offloading book...")
     # Open menu (hover to show button, then click)
     book_card.hover()
-    page.get_by_test_id("book-menu-trigger").click()
+    page.get_by_test_id("book-context-menu-trigger").click()
     page.wait_for_timeout(1000) # Wait for menu animation
 
     # Click "Offload File"

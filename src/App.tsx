@@ -24,6 +24,7 @@ import type { DeviceProfile } from './types/device';
 import { useTTSStore } from './store/useTTSStore';
 import { usePreferencesStore } from './store/usePreferencesStore';
 import { createLogger } from './lib/logger';
+import { SyncToastPropagator } from './components/sync/SyncToastPropagator';
 
 import './App.css';
 
@@ -87,7 +88,6 @@ function App() {
         // Initialize DB
         await getDB();
 
-        setStatusMessage('Checking for upgrades...');
         setStatusMessage('Checking for upgrades...');
         try {
           await migrateToYjs();
@@ -155,12 +155,6 @@ function App() {
     // Start Heartbeat independently or track it? 
     // To fix properly, we track the interval ID.
     const heartbeatInterval = setInterval(() => {
-      // We need to guard against using store if not ready? 
-      // Actually touchDevice is safe.
-      // But we probably want to start it only after init? 
-      // Existing code started it in init.
-      // Let's rely on init completing.
-      // Actually, let's keep it simple: cleanup is good but removing the return is priority.
       const deviceId = getDeviceId();
       useDeviceStore.getState().touchDevice(deviceId);
     }, 5 * 60 * 1000);
@@ -179,8 +173,6 @@ function App() {
     try {
       dbService.cleanup();
       await deleteDB('EpubLibraryDB');
-      // Also clear Yjs DB if we really want a full reset?
-      // deleteDB('versicle-yjs'); 
       window.location.reload();
     } catch (err) {
       logger.error('Failed to delete DB:', err);
@@ -231,6 +223,7 @@ function App() {
 
   return (
     <Router>
+      <SyncToastPropagator />
       <ThemeSynchronizer />
       <ErrorBoundary>
         <GlobalSettingsDialog />

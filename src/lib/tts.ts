@@ -1,5 +1,8 @@
 import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './tts/TextSegmenter';
 import { Sanitizer } from './tts/processors/Sanitizer';
+import { createLogger } from './logger';
+
+const logger = createLogger('TTS-Utils');
 
 /**
  * Represents a sentence and its corresponding location (CFI) in the book.
@@ -21,11 +24,11 @@ export interface ExtractionOptions {
 }
 
 const BLOCK_TAGS = new Set([
-  'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-  'LI', 'BLOCKQUOTE', 'PRE', 'SECTION', 'ARTICLE',
-  'MAIN', 'ASIDE', 'HEADER', 'FOOTER', 'FIGURE', 'FIGCAPTION',
-  'TABLE', 'TBODY', 'THEAD', 'TFOOT', 'TR', 'TD', 'TH', 'DL', 'DT', 'DD',
-  'NAV', 'ADDRESS', 'HR'
+    'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+    'LI', 'BLOCKQUOTE', 'PRE', 'SECTION', 'ARTICLE',
+    'MAIN', 'ASIDE', 'HEADER', 'FOOTER', 'FIGURE', 'FIGCAPTION',
+    'TABLE', 'TBODY', 'THEAD', 'TFOOT', 'TR', 'TD', 'TH', 'DL', 'DT', 'DD',
+    'NAV', 'ADDRESS', 'HR'
 ]);
 
 /**
@@ -71,15 +74,15 @@ export const extractSentencesFromNode = (
             if (parent.closest) {
                 isPre = !!parent.closest('pre, PRE');
             } else {
-                 // Fallback if closest is missing
-                 let current: Element | null = parent;
-                 while (current) {
-                     if (current.tagName.toUpperCase() === 'PRE') {
-                         isPre = true;
-                         break;
-                     }
-                     current = current.parentElement;
-                 }
+                // Fallback if closest is missing
+                let current: Element | null = parent;
+                while (current) {
+                    if (current.tagName.toUpperCase() === 'PRE') {
+                        isPre = true;
+                        break;
+                    }
+                    current = current.parentElement;
+                }
             }
         }
 
@@ -105,9 +108,9 @@ export const extractSentencesFromNode = (
 
             for (const { node, length } of textNodes) {
                 if (!startSet && currentBase + length > start) {
-                     const offset = Math.max(0, start - currentBase);
-                     range.setStart(node, offset);
-                     startSet = true;
+                    const offset = Math.max(0, start - currentBase);
+                    range.setStart(node, offset);
+                    startSet = true;
                 }
 
                 if (!endSet && currentBase + length >= end) {
@@ -121,7 +124,7 @@ export const extractSentencesFromNode = (
             }
 
             if (startSet && endSet) {
-                 try {
+                try {
                     const cfi = cfiGenerator(range);
                     if (cfi) {
                         rawSentences.push({
@@ -130,7 +133,7 @@ export const extractSentencesFromNode = (
                         });
                     }
                 } catch (e) {
-                    console.warn("Failed to generate CFI for range", e);
+                    logger.warn("Failed to generate CFI for range", e);
                 }
             }
         }

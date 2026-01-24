@@ -5,6 +5,7 @@ import { StorageFullError, DuplicateBookError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
 import { useReadingListStore } from './useReadingListStore';
 import { processBatchImport } from '../lib/batch-ingestion';
+import { extractBookMetadata } from '../lib/ingestion';
 import { useBookStore } from './useBookStore';
 import { createLogger } from '../lib/logger';
 
@@ -241,6 +242,58 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             set({ isImporting: false, importProgress: 0, importStatus: '' });
             throw new DuplicateBookError(file.name);
           }
+        }
+
+        // Smart Matching: Check for "Ghost Books" (Synced but no local file)
+        try {
+          set({ importStatus: 'Checking for existing library entries...' });
+          const meta = await extractBookMetadata(file);
+          const staticMeta = get().staticMetadata;
+          const books = useBookStore.getState().books;
+
+          // Find a ghost book that matches Title + Author
+          const ghostMatch = Object.values(books).find(b => {
+            const isGhost = !staticMeta[b.bookId]; // Not in local static manifest
+            const isMatch = b.title.trim() === meta.title.trim() && b.author.trim() === meta.author.trim();
+            return isGhost && isMatch;
+          });
+
+          if (ghostMatch) {
+            logger.info(`Found Ghost Book match: "${ghostMatch.title}" (${ghostMatch.bookId}). Linking file...`);
+            set({ importStatus: `Linking to existing entry: ${ghostMatch.title}...` });
+
+            const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+
+            // Import using the EXISTING ID
+            const manifest = await injectedDB.importBookWithId(ghostMatch.bookId, file, {
+              abbreviations: [],
+              alwaysMerge: [],
+              sentenceStarters,
+              sanitizationEnabled
+            }, (progress, message) => {
+              set({ importProgress: progress, importStatus: message });
+            });
+
+            // Update Static Metadata
+            set((state) => ({
+              staticMetadata: {
+                ...state.staticMetadata,
+                [manifest.bookId]: {
+                  ...manifest,
+                  id: manifest.bookId,
+                  version: manifest.schemaVersion,
+                  addedAt: ghostMatch.addedAt
+                } as BookMetadata
+              },
+              offloadedBookIds: new Set([...state.offloadedBookIds].filter(id => id !== manifest.bookId)),
+              isImporting: false,
+              importProgress: 0,
+              importStatus: ''
+            }));
+            return; // Stop here, we served the request
+          }
+        } catch (e) {
+          logger.warn("Smart matching check failed, proceeding with standard import", e);
         }
 
         const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();

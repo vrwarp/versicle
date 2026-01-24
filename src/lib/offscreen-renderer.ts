@@ -3,6 +3,9 @@ import { snapdom } from '@zumer/snapdom';
 import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from './tts';
 import { sanitizeContent } from './sanitizer';
 import type { TableImage } from '../types/db';
+import { createLogger } from './logger';
+
+const logger = createLogger('OffscreenRenderer');
 
 export interface ProcessedChapter {
   href: string;
@@ -45,10 +48,10 @@ export async function extractContentOffscreen(
   // This prevents XSS attacks from malicious scripts in EPUB files during the ingestion phase.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ((book.spine as any).hooks?.serialize) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (book.spine as any).hooks.serialize.register((html: string) => {
-          return sanitizeContent(html);
-      });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (book.spine as any).hooks.serialize.register((html: string) => {
+      return sanitizeContent(html);
+    });
   }
 
   try {
@@ -69,10 +72,10 @@ export async function extractContentOffscreen(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items: any[] = [];
     if (spine.each) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        spine.each((item: any) => items.push(item));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      spine.each((item: any) => items.push(item));
     } else if (spine.items) {
-       items.push(...spine.items);
+      items.push(...spine.items);
     }
 
     const totalItems = items.length;
@@ -96,66 +99,66 @@ export async function extractContentOffscreen(
       const capturedTables: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[] = [];
 
       if (contents && contents.document && contents.document.body) {
-          const doc = contents.document;
-          const body = doc.body;
+        const doc = contents.document;
+        const body = doc.body;
 
-          // Determine title
-          let title = '';
-          const headings = doc.querySelectorAll('h1, h2, h3');
-          if (headings.length > 0) {
-              title = headings[0].textContent || '';
+        // Determine title
+        let title = '';
+        const headings = doc.querySelectorAll('h1, h2, h3');
+        if (headings.length > 0) {
+          title = headings[0].textContent || '';
+        }
+        if (!title.trim()) {
+          const p = doc.querySelector('p');
+          if (p && p.textContent) title = p.textContent;
+        }
+        if (!title.trim()) {
+          title = body.textContent || '';
+        }
+        title = title.replace(/\s+/g, ' ').trim();
+        if (title.length > 60) title = title.substring(0, 60) + '...';
+        if (!title) title = `Chapter ${i + 1}`;
+
+        // Extract sentences with CFIs
+        const sentences = extractSentencesFromNode(body, (range) => {
+          // contents.cfiFromRange returns the CFI for the range.
+          // It should include the base CFI (spine index) if correctly initialized.
+          return contents.cfiFromRange(range);
+        }, options);
+
+        // Table Capture
+        const tables = doc.querySelectorAll('table');
+        for (const table of tables) {
+          try {
+            const range = doc.createRange();
+            range.selectNode(table);
+            const cfi = contents.cfiFromRange(range);
+
+            const blob = await snapdom.toBlob(table, {
+              type: 'webp',
+              quality: 0.1,
+              scale: 0.5,
+              backgroundColor: '#ffffff',
+            });
+
+            if (blob) {
+              capturedTables.push({
+                cfi: cfi,
+                imageBlob: blob
+              });
+            }
+          } catch (e) {
+            logger.warn('Failed to snap table', e);
           }
-          if (!title.trim()) {
-              const p = doc.querySelector('p');
-              if (p && p.textContent) title = p.textContent;
-          }
-          if (!title.trim()) {
-              title = body.textContent || '';
-          }
-          title = title.replace(/\s+/g, ' ').trim();
-          if (title.length > 60) title = title.substring(0, 60) + '...';
-          if (!title) title = `Chapter ${i + 1}`;
+        }
 
-          // Extract sentences with CFIs
-          const sentences = extractSentencesFromNode(body, (range) => {
-              // contents.cfiFromRange returns the CFI for the range.
-              // It should include the base CFI (spine index) if correctly initialized.
-              return contents.cfiFromRange(range);
-          }, options);
-
-          // Table Capture
-          const tables = doc.querySelectorAll('table');
-          for (const table of tables) {
-              try {
-                  const range = doc.createRange();
-                  range.selectNode(table);
-                  const cfi = contents.cfiFromRange(range);
-
-                  const blob = await snapdom.toBlob(table, {
-                      type: 'webp',
-                      quality: 0.1,
-                      scale: 0.5,
-                      backgroundColor: '#ffffff',
-                  });
-
-                  if (blob) {
-                      capturedTables.push({
-                          cfi: cfi,
-                          imageBlob: blob
-                      });
-                  }
-              } catch (e) {
-                  console.warn('Failed to snap table', e);
-              }
-          }
-
-          results.push({
-              href: item.href,
-              sentences,
-              textContent: body.textContent || '',
-              title,
-              tables: capturedTables
-          });
+        results.push({
+          href: item.href,
+          sentences,
+          textContent: body.textContent || '',
+          title,
+          tables: capturedTables
+        });
       }
 
       // Yield to main thread
@@ -163,8 +166,8 @@ export async function extractContentOffscreen(
       // we only yield if we've been blocking the main thread for more than 16ms (1 frame).
       // When we do yield, we use setTimeout(0) to resume as soon as possible.
       if (performance.now() - lastYieldTime > 16) {
-          await new Promise(r => setTimeout(r, 0));
-          lastYieldTime = performance.now();
+        await new Promise(r => setTimeout(r, 0));
+        lastYieldTime = performance.now();
       }
     }
 

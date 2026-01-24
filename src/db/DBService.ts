@@ -22,6 +22,7 @@ import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
 
 import { createLogger } from '../lib/logger';
+
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
 
@@ -362,6 +363,9 @@ class DBService {
         tx.objectStore('cache_session_state').delete(id),
       ]);
 
+      logger.debug(`deleteBook: keys deleted for ${id}. Verifying static_resources deletion...`);
+      const res = await tx.objectStore('static_resources').get(id);
+      logger.debug(`deleteBook: static_resources.get(${id}) after delete = ${res}`);
       // Delete from index-based stores
       const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
         const store = tx.objectStore(storeName);
@@ -453,6 +457,7 @@ class DBService {
       if (bookIds && bookIds.length > 0) {
         for (const id of bookIds) {
           const exists = resourceSet.has(id);
+          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists} (Keys: ${resourceKeys.length})`);
           result.set(id, !exists);
         }
       } else {

@@ -2,6 +2,9 @@ import { BackgroundAudio, type BackgroundAudioMode } from './BackgroundAudio';
 import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { Capacitor } from '@capacitor/core';
 import type { TTSStatus } from './AudioPlayerService';
+import { createLogger } from '../logger';
+
+const logger = createLogger('PlatformIntegration');
 
 /**
  * Interface defining the platform control events received from the OS.
@@ -100,7 +103,7 @@ export class PlatformIntegration {
      * @param {TTSStatus} status The current player status.
      */
     updatePlaybackState(status: TTSStatus) {
-         this.mediaSessionManager.setPlaybackState(
+        this.mediaSessionManager.setPlaybackState(
             status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
         );
 
@@ -146,7 +149,7 @@ export class PlatformIntegration {
         if (Capacitor.isNativePlatform()) {
             try {
                 await this.mediaSessionManager.setPlaybackState('none');
-            } catch (e) { console.warn(e); }
+            } catch (e) { logger.warn('Error stopping media session:', e); }
         }
         this.backgroundAudio.forceStop();
     }

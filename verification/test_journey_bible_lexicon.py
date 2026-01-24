@@ -10,7 +10,7 @@ def test_journey_bible_lexicon(page: Page):
 
     # 1. Open Global Settings from Library View
     print("Opening Global Settings...")
-    page.click("button[data-testid='header-settings-button']")
+    page.click("button[data-testid='header-settings-button']", force=True)
     expect(page.get_by_role("dialog")).to_be_visible()
 
     # 2. Switch to Dictionary Tab
@@ -38,7 +38,7 @@ def test_journey_bible_lexicon(page: Page):
 
     # 5. Open Lexicon Manager (Dictionary) from Reader Settings
     print("Opening Reader Settings > Dictionary...")
-    page.click("button[data-testid='reader-settings-button']")
+    page.click("button[data-testid='reader-settings-button']", force=True)
     expect(page.get_by_role("dialog")).to_be_visible()
     page.get_by_role("button", name="Dictionary").click()
 

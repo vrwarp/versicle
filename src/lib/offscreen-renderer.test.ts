@@ -6,11 +6,11 @@ import { snapdom } from '@zumer/snapdom';
 // Mock dependencies
 vi.mock('epubjs');
 vi.mock('@zumer/snapdom', () => {
-    return {
-        snapdom: {
-            toBlob: vi.fn()
-        }
-    };
+  return {
+    snapdom: {
+      toBlob: vi.fn()
+    }
+  };
 });
 vi.mock('./tts', () => ({
   extractSentencesFromNode: vi.fn(() => []),
@@ -34,7 +34,7 @@ describe('extractContentOffscreen', () => {
       display: vi.fn().mockResolvedValue(undefined),
       getContents: vi.fn(() => []),
       hooks: {
-          content: { register: vi.fn() }
+        content: { register: vi.fn() }
       }
     };
 
@@ -45,7 +45,7 @@ describe('extractContentOffscreen', () => {
         { href: 'chapter2.xhtml' }
       ],
       hooks: {
-          serialize: { register: vi.fn() }
+        serialize: { register: vi.fn() }
       }
     };
 
@@ -64,15 +64,15 @@ describe('extractContentOffscreen', () => {
   });
 
   afterEach(() => {
-      vi.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should initialize epubjs and render chapters', async () => {
     // Mock getContents to return a dummy document
     const mockDoc = document.implementation.createHTMLDocument();
     mockRendition.getContents.mockReturnValue([{
-        document: mockDoc,
-        cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/1:0)')
+      document: mockDoc,
+      cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/1:0)')
     }]);
 
     const file = new Blob(['dummy content']);
@@ -93,8 +93,8 @@ describe('extractContentOffscreen', () => {
     mockDoc.body.appendChild(table);
 
     mockRendition.getContents.mockReturnValue([{
-        document: mockDoc,
-        cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/2)')
+      document: mockDoc,
+      cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/2)')
     }]);
 
     // Mock snapdom response
@@ -105,15 +105,15 @@ describe('extractContentOffscreen', () => {
     const results = await extractContentOffscreen(file);
 
     expect(snapdom.toBlob).toHaveBeenCalledWith(table, expect.objectContaining({
-        type: 'webp',
-        quality: 0.1,
-        scale: 0.5
+      type: 'webp',
+      quality: 0.1,
+      scale: 0.5
     }));
 
     expect(results[0].tables).toHaveLength(1);
     expect(results[0].tables?.[0]).toEqual({
-        cfi: 'epubcfi(/6/2!/4/2)',
-        imageBlob: mockBlob
+      cfi: 'epubcfi(/6/2!/4/2)',
+      imageBlob: mockBlob
     });
   });
 
@@ -123,8 +123,8 @@ describe('extractContentOffscreen', () => {
     mockDoc.body.appendChild(table);
 
     mockRendition.getContents.mockReturnValue([{
-        document: mockDoc,
-        cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/2)')
+      document: mockDoc,
+      cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/2)')
     }]);
 
     // Mock failure
@@ -132,13 +132,13 @@ describe('extractContentOffscreen', () => {
     (snapdom.toBlob as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(error);
 
     // Spy on console.warn to suppress the expected error log
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
     const file = new Blob(['dummy content']);
     const results = await extractContentOffscreen(file);
 
     expect(results[0].tables).toHaveLength(0);
-    expect(consoleSpy).toHaveBeenCalledWith('Failed to snap table', error);
+    expect(consoleSpy).toHaveBeenCalledWith('[OffscreenRenderer]', 'Failed to snap table', error);
 
     consoleSpy.mockRestore();
   });

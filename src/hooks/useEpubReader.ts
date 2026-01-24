@@ -4,6 +4,9 @@ import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
 import { sanitizeContent } from '../lib/sanitizer';
 import { runCancellable, CancellationError } from '../lib/cancellable-task-runner';
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger('useEpubReader');
 
 /**
  * Recursive helper to resolve a section title from the Table of Contents (ToC).
@@ -412,7 +415,7 @@ export function useEpubReader(
         if (err instanceof CancellationError) {
           return;
         }
-        console.error('Error loading book:', err);
+        logger.error('Error loading book:', err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error loading book';
         setError(errorMessage);
         if (optionsRef.current.onError) optionsRef.current.onError(errorMessage);

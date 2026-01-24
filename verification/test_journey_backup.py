@@ -44,7 +44,7 @@ def test_journey_backup_restore(page: Page):
     # Wait for settings button to be actionable
     page.wait_for_timeout(1000)
 
-    page.click("button[aria-label='Settings']") # Open Global Settings
+    page.click("button[aria-label='Settings']", force=True) # Open Global Settings
     page.get_by_role("button", name="Dictionary").click()
     page.get_by_role("button", name="Manage Rules").click()
     page.get_by_test_id("lexicon-add-rule-btn").click()
@@ -60,12 +60,17 @@ def test_journey_backup_restore(page: Page):
     page.click("data-testid=reader-back-button") # Back to library
 
     # 3. Export Backup
-    page.click("button[aria-label='Settings']")
-    page.get_by_role("button", name="Data Management").click()
+    page.wait_for_timeout(500)
+    page.click("button[aria-label='Settings']", force=True)
+    expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
+    
+    # Check if already on Data Management (persistent state)
+    if not page.get_by_role("button", name="Quick JSON Export (Legacy)").is_visible():
+        page.get_by_role("button", name="Data Management").click(force=True)
 
     # Setup download listener
     with page.expect_download() as download_info:
-        page.click("button:has-text('Export Metadata Only')")
+        page.click("button:has-text('Quick JSON Export (Legacy)')")
 
     download = download_info.value
     # Fix: Save with correct extension so re-upload works
@@ -92,7 +97,7 @@ def test_journey_backup_restore(page: Page):
     # Force click the menu trigger because on mobile emulation hover might not trigger opacity change reliably,
     # or the element might still be considered invisible by strict checks if opacity is 0.
     # However, forcing click usually bypasses visibility checks.
-    page.locator("data-testid=book-menu-trigger").click(force=True)
+    page.locator("data-testid=book-context-menu-trigger").click(force=True)
 
     # The menu option text is "Delete Book"
     # We must register the dialog handler BEFORE clicking
@@ -106,8 +111,12 @@ def test_journey_backup_restore(page: Page):
     expect(book_card).not_to_be_visible(timeout=5000)
 
     # 5. Restore Backup
-    page.click("button[aria-label='Settings']")
-    page.get_by_role("button", name="Data Management").click()
+    page.wait_for_timeout(500)
+    page.click("button[aria-label='Settings']", force=True)
+    expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
+    
+    if not page.get_by_role("button", name="Quick JSON Export (Legacy)").is_visible():
+        page.get_by_role("button", name="Data Management").click(force=True)
 
     # Handle the file chooser for restore
     # Register dialog handler for the merge confirmation BEFORE setting files
@@ -154,8 +163,12 @@ def test_journey_full_backup_restore(page: Page):
     expect(book_card).to_be_visible(timeout=5000)
 
     # 2. Export Full Backup
-    page.click("button[aria-label='Settings']") # Header settings
-    page.get_by_role("button", name="Data Management").click()
+    page.wait_for_timeout(500)
+    page.click("button[aria-label='Settings']", force=True) # Header settings
+    expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
+    
+    if not page.get_by_role("button", name="Export Full Backup (ZIP)").is_visible():
+        page.get_by_role("button", name="Data Management").click(force=True)
 
     with page.expect_download() as download_info:
         page.click("button:has-text('Export Full Backup (ZIP)')")
@@ -176,15 +189,19 @@ def test_journey_full_backup_restore(page: Page):
 
     # 3. Delete Book
     book_card.hover()
-    page.locator("data-testid=book-menu-trigger").click(force=True)
+    page.locator("data-testid=book-context-menu-trigger").click(force=True)
     page.click("data-testid=menu-delete")
     # Confirm in custom dialog
     page.click("data-testid=confirm-delete")
     expect(book_card).not_to_be_visible(timeout=5000)
 
     # 4. Restore Backup
-    page.click("button[aria-label='Settings']")
-    page.get_by_role("button", name="Data Management").click()
+    page.wait_for_timeout(500)
+    page.click("button[aria-label='Settings']", force=True)
+    expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
+    
+    if not page.get_by_role("button", name="Export Full Backup (ZIP)").is_visible():
+        page.get_by_role("button", name="Data Management").click(force=True)
 
     page.once("dialog", lambda dialog: dialog.accept())
     page.set_input_files("data-testid=backup-file-input", backup_path)

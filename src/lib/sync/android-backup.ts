@@ -24,6 +24,7 @@ export class AndroidBackupService {
                 directory: Directory.Data,
                 encoding: Encoding.UTF8
             });
+            logger.info('Backup payload written successfully.');
         } catch (e) {
             logger.error('Failed to write Android backup payload', e);
         }
