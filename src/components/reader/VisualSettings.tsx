@@ -35,7 +35,7 @@ export const VisualSettings = () => {
     setLineHeight: state.setLineHeight,
     shouldForceFont: state.shouldForceFont,
     setShouldForceFont: state.setShouldForceFont,
-    readerViewMode: state.readerViewMode,
+    readerViewMode: state.readerViewMode || 'paginated',
     setReaderViewMode: state.setReaderViewMode
   })));
 
