@@ -29,7 +29,7 @@ def test_theme(page: Page):
     # 4. Switch to Dark Theme
     print("Switching to Dark Theme...")
     page.get_by_label("Select Dark theme").click()
-    
+
     # Verify Dark Class
     expect(html).to_have_class(re.compile(r"\bdark\b"))
     utils.capture_screenshot(page, "theme_2_library_dark")

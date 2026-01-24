@@ -11,7 +11,7 @@ def test_journey_reading_tools(page: Page):
     # Open Book
     print("Clicking book card...")
     page.locator("[data-testid^='book-card-']").first.click()
-    
+
     print(f"Current URL: {page.url}")
     expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=5000)
     print("Reader View is visible")

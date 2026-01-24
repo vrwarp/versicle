@@ -7,7 +7,7 @@ from verification.utils import reset_app, capture_screenshot
 def test_journey_backup_restore(page: Page):
     # Enable console logging capture
     page.on("console", lambda msg: print(f"Browser Console: {msg.text}"))
-    
+
     """
     Test the full Backup & Restore journey:
     1. Import a book (Alice).

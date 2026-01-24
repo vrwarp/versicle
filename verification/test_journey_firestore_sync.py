@@ -18,7 +18,7 @@ import time
 def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args):
     """
     Verifies cross-device book syncing using MockFireProvider.
-    
+
     Scenario:
     1. Device A: Import book, verify it appears
     2. Device A: Trigger sync (MockFireProvider saves to localStorage)
@@ -64,7 +64,7 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
         }
     """)
     page_a.reload()
-    
+
     # Wait for app to load
     expect(page_a.get_by_test_id("library-view")).to_be_visible(timeout=15000)
     print("[A] Library view loaded")
@@ -77,7 +77,7 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
         "verification/frankenstein.epub",
         "verification/pride-and-prejudice.epub"
     ]
-    
+
     for book_path in books_to_upload:
         print(f"[A] Importing {book_path}...")
         page_a.set_input_files("data-testid=hidden-file-input", book_path)
@@ -107,15 +107,15 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     # Extract the mock Firestore snapshot from localStorage
     mock_data_str = page_a.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')")
     assert mock_data_str is not None, "Device A failed to sync data to mock Firestore storage"
-    
+
     # Parse and verify the snapshot
     mock_data = json.loads(mock_data_str)
     print(f"[A] Mock Firestore data keys: {list(mock_data.keys())}")
-    
+
     # The path should be users/mock-user/versicle/main
     sync_path = "users/mock-user/versicle/main"
     assert sync_path in mock_data, f"Expected path '{sync_path}' not found in mock data"
-    
+
     snapshot_b64 = mock_data[sync_path].get("snapshotBase64")
     assert snapshot_b64, "Snapshot base64 is empty"
     print(f"[A] Snapshot size: {len(snapshot_b64)} chars")
@@ -148,7 +148,7 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
 
     # Navigate to app (fresh device - no local IndexedDB)
     page_b.goto(base_url)
-    
+
     # Wait for app to load and sync to apply
     expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=15000)
     print("[B] Library view loaded")
@@ -158,26 +158,26 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     assert injected is not None, "Device B failed to inject mock data (None)"
     assert len(injected) > 0, "Device B mock data is empty"
     print("[B] Mock data injection verified (present)")
-    
+
     # Wait for Yjs sync to apply the book inventory
     # Poll for the book card to appear (synced metadata)
     for i in range(20):
         book_cards = page_b.locator("[data-testid^='book-card-']").count()
-        
+
         # Debug: Check Yjs document state directly
         debug_info = page_b.evaluate("""
             () => {
                 try {
                     const yDoc = window.__YJS_DOC__;
                     if (!yDoc) return { error: 'No global yDoc' };
-                    
+
                     const libraryMap = yDoc.getMap('library');
                     if (!libraryMap) return { error: 'No library map' };
-                    
+
                     // Get the books value - could be a Y.Map or plain object
                     const books = libraryMap.get('books');
                     let booksObj = {};
-                    
+
                     if (books) {
                         if (books.toJSON) {
                             booksObj = books.toJSON();
@@ -185,7 +185,7 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
                             booksObj = books;
                         }
                     }
-                    
+
                     return {
                         libraryKeys: Array.from(libraryMap.keys()),
                         booksType: books ? books.constructor.name : 'undefined',
@@ -197,12 +197,12 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
                 }
             }
         """)
-        
+
         print(f"[B] Polling attempt {i+1}: {book_cards} cards, debug: {debug_info}")
         if book_cards > 0:
             break
         time.sleep(0.5)
-    
+
     # Verify the books appear
     expected_count = 5
     expect(page_b.locator("[data-testid^='book-card-']")).to_have_count(expected_count, timeout=20000)
@@ -219,10 +219,10 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     print(f"[B] Refreshing page to verify persistence...")
     page_b.reload()
     expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=15000)
-    
+
     # Check count again
     expect(page_b.locator("[data-testid^='book-card-']")).to_have_count(expected_count, timeout=10000)
-    
+
     refreshed_titles = page_b.locator("[data-testid='book-title']").all_text_contents()
     print(f"[B] Refreshed titles: {refreshed_titles}")
     assert sorted(refreshed_titles) == sorted(book_titles_a), "Persistence failure on titles"
@@ -231,11 +231,11 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     # Check for the offload indicator on ONE card (e.g. Alice)
     book_card_alice = page_b.locator("[data-testid^='book-card-']").filter(has_text="Alice's Adventures in Wonderland").first
     expect(book_card_alice).to_be_visible()
-    
+
     offload_indicator = book_card_alice.locator(".bg-black\\/20")
     expect(offload_indicator).to_be_visible(timeout=5000)
     print("[B] Alice correctly shows as offloaded (cloud icon visible)")
-    
+
     # Store reference for restoration step
     book_card_b = book_card_alice
 
@@ -251,10 +251,10 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     # We need to provide the file via the restore file input
     # First, wait for the file input to be ready
     time.sleep(1)
-    
+
     # Set the file for restore
     page_b.set_input_files("data-testid=restore-file-input", "verification/alice.epub")
-    
+
     # Wait for import to complete
     time.sleep(3)
 
@@ -277,7 +277,7 @@ def test_firestore_sync_offload_status_hydration(browser: Browser, browser_conte
     """
     Verifies that when syncing from Firestore, books without local content
     are correctly marked as offloaded in the UI.
-    
+
     This tests the hydration logic in LibraryView that detects new synced books.
     """
     base_url = browser_context_args.get("base_url", "http://localhost:5173")
@@ -319,7 +319,7 @@ def test_firestore_sync_offload_status_hydration(browser: Browser, browser_conte
     page_a.set_input_files("data-testid=hidden-file-input", "verification/alice.epub")
     book_card_a = page_a.locator("[data-testid^='book-card-']").first
     expect(book_card_a).to_be_visible(timeout=15000)
-    
+
     # Let sync complete
     time.sleep(2)
     page_a.evaluate("window.dispatchEvent(new Event('beforeunload'));")
