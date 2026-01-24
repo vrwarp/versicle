@@ -265,6 +265,13 @@ Manages integration with the native Android Backup Service.
 
 ### Core Logic & Services (`src/lib/`)
 
+#### Logging (`src/lib/logger.ts`)
+*   **Goal**: Provide environment-aware logging with context isolation.
+*   **Logic**:
+    *   **Scoped Loggers**: Uses `createLogger('Namespace')` to create isolated logger instances.
+    *   **Filtering**: Filters logs based on `VITE_LOG_LEVEL` or environment (Info in Dev, Warn in Prod).
+    *   **Legacy**: The singleton `Logger` class is deprecated in favor of functional factory usage.
+
 #### Ingestion (`src/lib/ingestion.ts`)
 Handles the complex task of importing an EPUB file.
 
@@ -314,6 +321,12 @@ The Orchestrator. Manages playback state, provider selection, and UI updates.
     *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`).
     *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state to `PlaybackStateManager`.
 
+#### `src/lib/tts/CostEstimator.ts`
+*   **Goal**: Track and estimate usage costs for Cloud TTS providers.
+*   **Logic**:
+    *   **Session Tracking**: Uses a transient Zustand store (`useCostStore`) to track characters processed in the current session.
+    *   **Estimation**: Applies per-character pricing models (e.g., $0.000016/char for Google WaveNet).
+
 #### `src/lib/tts/AudioContentPipeline.ts`
 The Data Pipeline for TTS.
 
@@ -348,6 +361,10 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
     *   **Why**: To prevent overwriting reading positions when switching between devices.
     *   **Aggregation**: The UI selector aggregates these to find the "Furthest Read" point.
+*   **`useDeviceStore` (Sync Mesh)**:
+    *   **Strategy**: Maintains a Yjs Map of active devices in the mesh.
+    *   **Logic**: Updates a `lastActive` timestamp (Heartbeat) with throttling (5 mins) to track online status.
+    *   **Why**: Enables "Send to Device" features and provides visibility into the sync network.
 *   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
 *   **`useLibraryStore` (Local Only)**:
     *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs.
