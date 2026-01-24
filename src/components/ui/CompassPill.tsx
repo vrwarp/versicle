@@ -173,7 +173,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             <button
               key={color}
               data-testid={`popover-color-${color}`}
-              className={`w-6 h-6 rounded-full border border-border hover:scale-125 transition-transform`}
+              className={cn(
+                "w-6 h-6 rounded-full border border-border hover:scale-125 transition-transform",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background"
+              )}
               style={{ backgroundColor: color === 'yellow' ? '#fde047' : color === 'green' ? '#86efac' : color === 'blue' ? '#93c5fd' : '#fca5a5' }}
               onClick={() => onAnnotationAction?.('color', color)}
               aria-label={`Highlight ${color}`}

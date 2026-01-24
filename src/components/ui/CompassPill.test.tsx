@@ -294,4 +294,28 @@ describe('CompassPill', () => {
         expect(screen.getByTestId('active-pause-icon')).toBeInTheDocument();
         expect(screen.queryByTestId('active-play-icon')).not.toBeInTheDocument();
     });
+
+    it('renders annotation mode with accessible color buttons', () => {
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: false,
+            queue: [],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
+
+        render(<CompassPill variant="annotation" />);
+
+        const colors = ['yellow', 'green', 'blue', 'red'];
+        colors.forEach(color => {
+            const button = screen.getByTestId(`popover-color-${color}`);
+            expect(button).toBeInTheDocument();
+            expect(button).toHaveAttribute('aria-label', `Highlight ${color}`);
+            // Verify focus classes are present
+            expect(button).toHaveClass('focus-visible:ring-2');
+            expect(button).toHaveClass('focus-visible:ring-ring');
+            expect(button).toHaveClass('focus-visible:ring-offset-2');
+        });
+    });
 });
