@@ -35,6 +35,26 @@ export function parseCfiRange(range: string): CfiRangeData | null {
 }
 
 /**
+ * Standard (Slow) CFI merging logic using parsing and regeneration.
+ * Used as a fallback for tryFastMergeCfi and for equivalence testing.
+ */
+export function mergeCfiSlow(left: string, right: string): string | null {
+    const startCfi = parseCfiRange(left);
+    const endCfi = parseCfiRange(right);
+
+    // If startCfi/endCfi are null, it means they are point CFIs (or invalid).
+    // We use the raw CFI string in that case.
+    const startPoint = startCfi ? startCfi.fullStart : left;
+    const endPoint = endCfi ? endCfi.fullEnd : right;
+
+    if (startPoint && endPoint) {
+        // generateCfiRange takes two points (start and end) and finds the common parent.
+        return generateCfiRange(startPoint, endPoint);
+    }
+    return null;
+}
+
+/**
  * Extracts the parent block-level CFI from a given CFI string.
  * This handles both range CFIs and point/standard CFIs.
  * 

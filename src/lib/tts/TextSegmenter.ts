@@ -1,4 +1,4 @@
-import { generateCfiRange, parseCfiRange, tryFastMergeCfi } from '../cfi-utils';
+import { generateCfiRange, parseCfiRange, tryFastMergeCfi, mergeCfiSlow } from '../cfi-utils';
 import type { SentenceNode } from '../tts';
 import { getCachedSegmenter } from './segmenter-cache';
 
@@ -281,18 +281,9 @@ export class TextSegmenter {
                         if (fastMergedCfi) {
                             last.cfi = fastMergedCfi;
                         } else {
-                            const startCfi = parseCfiRange(last.cfi);
-                            const endCfi = parseCfiRange(current.cfi);
-
-                            // If startCfi/endCfi are null, it means they are point CFIs (or invalid).
-                            // We use the raw CFI string in that case.
-                            const startPoint = startCfi ? startCfi.fullStart : last.cfi;
-                            const endPoint = endCfi ? endCfi.fullEnd : current.cfi;
-
-                            if (startPoint && endPoint) {
-                                // We want the range from the START of the first segment to the END of the second segment.
-                                // generateCfiRange takes two points (start and end) and finds the common parent.
-                                last.cfi = generateCfiRange(startPoint, endPoint);
+                            const slowMergedCfi = mergeCfiSlow(last.cfi, current.cfi);
+                            if (slowMergedCfi) {
+                                last.cfi = slowMergedCfi;
                             }
                         }
 
@@ -348,14 +339,9 @@ export class TextSegmenter {
                 if (fastMergedCfi) {
                     buffer.cfi = fastMergedCfi;
                 } else {
-                    const startCfi = parseCfiRange(buffer.cfi);
-                    const endCfi = parseCfiRange(current.cfi);
-
-                    const startPoint = startCfi ? startCfi.fullStart : buffer.cfi;
-                    const endPoint = endCfi ? endCfi.fullEnd : current.cfi;
-
-                    if (startPoint && endPoint) {
-                        buffer.cfi = generateCfiRange(startPoint, endPoint);
+                    const slowMergedCfi = mergeCfiSlow(buffer.cfi, current.cfi);
+                    if (slowMergedCfi) {
+                        buffer.cfi = slowMergedCfi;
                     }
                 }
 
@@ -379,14 +365,9 @@ export class TextSegmenter {
                 if (fastMergedCfi) {
                     last.cfi = fastMergedCfi;
                 } else {
-                    const startCfi = parseCfiRange(last.cfi);
-                    const endCfi = parseCfiRange(buffer.cfi);
-
-                    const startPoint = startCfi ? startCfi.fullStart : last.cfi;
-                    const endPoint = endCfi ? endCfi.fullEnd : buffer.cfi;
-
-                    if (startPoint && endPoint) {
-                        last.cfi = generateCfiRange(startPoint, endPoint);
+                    const slowMergedCfi = mergeCfiSlow(last.cfi, buffer.cfi);
+                    if (slowMergedCfi) {
+                        last.cfi = slowMergedCfi;
                     }
                 }
 
