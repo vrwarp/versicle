@@ -1,4 +1,4 @@
-import { generateCfiRange, parseCfiRange, tryFastMergeCfi, mergeCfiSlow } from '../cfi-utils';
+import { tryFastMergeCfi, mergeCfiSlow } from '../cfi-utils';
 import type { SentenceNode } from '../tts';
 import { getCachedSegmenter } from './segmenter-cache';
 
