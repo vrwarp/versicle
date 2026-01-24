@@ -35,6 +35,26 @@ export function parseCfiRange(range: string): CfiRangeData | null {
 }
 
 /**
+ * Standard (Slow) CFI merging logic using parsing and regeneration.
+ * Used as a fallback for tryFastMergeCfi and for equivalence testing.
+ */
+export function mergeCfiSlow(left: string, right: string): string | null {
+    const startCfi = parseCfiRange(left);
+    const endCfi = parseCfiRange(right);
+
+    // If startCfi/endCfi are null, it means they are point CFIs (or invalid).
+    // We use the raw CFI string in that case.
+    const startPoint = startCfi ? startCfi.fullStart : left;
+    const endPoint = endCfi ? endCfi.fullEnd : right;
+
+    if (startPoint && endPoint) {
+        // generateCfiRange takes two points (start and end) and finds the common parent.
+        return generateCfiRange(startPoint, endPoint);
+    }
+    return null;
+}
+
+/**
  * Extracts the parent block-level CFI from a given CFI string.
  * This handles both range CFIs and point/standard CFIs.
  * 
@@ -338,4 +358,105 @@ export async function snapCfiToSentence(book: Book, cfi: string): Promise<string
         console.warn('snapCfiToSentence failed', e);
         return cfi;
     }
+}
+
+/**
+ * Optimistically tries to merge two CFIs if they share a common parent,
+ * avoiding the overhead of full string parsing and regeneration in generateCfiRange.
+ *
+ * Supports merging:
+ * - Range + Range (if parents match)
+ * - Range + Point (if Point is within Range's parent)
+ * - Point + Range (if Range is within Point's parent scope - less common)
+ *
+ * @returns The merged CFI string or null if fast merge is not possible.
+ */
+export function tryFastMergeCfi(left: string, right: string): string | null {
+    if (!left || !right || !left.startsWith('epubcfi(') || !right.startsWith('epubcfi(')) return null;
+
+    // Fast check for Range structure (has commas)
+    const lFirstComma = left.indexOf(',');
+
+    if (lFirstComma !== -1) {
+        // LEFT IS RANGE
+        // Check validity of Range structure
+        const lSecondComma = left.indexOf(',', lFirstComma + 1);
+        if (lSecondComma === -1) return null; // Invalid Range
+
+        // Extract Parent: epubcfi(PARENT, ...
+        // Slice from 8 to first comma
+        const parent = left.slice(8, lFirstComma);
+
+        const rFirstComma = right.indexOf(',');
+
+        if (rFirstComma !== -1) {
+            // RIGHT IS RANGE (Case 1)
+            // Check if right has same parent
+            // Compare substring directly
+            // right starts with "epubcfi(" + parent + "," ?
+            // Construct prefix to check
+            const rPrefix = `epubcfi(${parent},`;
+            if (right.startsWith(rPrefix)) {
+                // Parents match!
+                // We need: epubcfi(P, S, E)
+                // S = left start component = left.slice(lFirstComma + 1, lSecondComma) (includes comma? No, +1)
+                // But we want to include the comma before S.
+                // left is "epubcfi(P,S,E)".
+                // We want to construct "epubcfi(P,S,E_from_right)"
+                // "epubcfi(P,S," is left.slice(0, lSecondComma + 1)
+
+                // right is "epubcfi(P,S2,E2)"
+                // rFirstComma is after P. rSecondComma is after S2.
+                // E2 is right.slice(rSecondComma + 1, -1)
+                const rSecondComma = right.indexOf(',', rFirstComma + 1);
+                if (rSecondComma !== -1) {
+                     const rightEnd = right.slice(rSecondComma + 1, -1);
+                     // leftStartPart includes "epubcfi(P,S"
+                     const leftStartPart = left.slice(0, lSecondComma);
+                     return `${leftStartPart},${rightEnd})`;
+                }
+            }
+        } else {
+            // RIGHT IS POINT (Case 2)
+            // Check if right is child of parent
+            // right = "epubcfi(P/S)"
+            const prefix = `epubcfi(${parent}`;
+            if (right.startsWith(prefix)) {
+                 const remaining = right.slice(prefix.length);
+                 // Must start with separator
+                 if (['/', ':', '['].includes(remaining[0])) {
+                      // Valid child
+                      const rightEnd = remaining.endsWith(')') ? remaining.slice(0, -1) : remaining;
+                      // Construct: epubcfi(P, S, rightEnd)
+                      // leftStartPart = epubcfi(P,S
+                      const leftStartPart = left.slice(0, lSecondComma);
+                      return `${leftStartPart},${rightEnd})`;
+                 }
+            }
+        }
+    } else {
+        // LEFT IS POINT
+        // Check if Right is Range (Case 3)
+        const rFirstComma = right.indexOf(',');
+        if (rFirstComma !== -1) {
+             const rSecondComma = right.indexOf(',', rFirstComma + 1);
+             if (rSecondComma !== -1) {
+                 const parent = right.slice(8, rFirstComma);
+                 // Check if left is child
+                 const prefix = `epubcfi(${parent}`;
+                 if (left.startsWith(prefix)) {
+                     const remaining = left.slice(prefix.length);
+                     if (['/', ':', '['].includes(remaining[0])) {
+                          const leftStart = remaining.endsWith(')') ? remaining.slice(0, -1) : remaining;
+                          // Construct: epubcfi(P, leftStart, rightEnd)
+                          // rightEnd = right.slice(rSecondComma + 1, -1)
+                          const rightEnd = right.slice(rSecondComma + 1, -1);
+                          return `epubcfi(${parent},${leftStart},${rightEnd})`;
+                     }
+                 }
+             }
+        }
+    }
+
+    return null;
 }
