@@ -24,13 +24,14 @@ import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
-import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
+import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor, Loader2 } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import { ReaderTTSController } from './ReaderTTSController';
 import { generateCfiRange, snapCfiToSentence } from '../../lib/cfi-utils';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
 import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 import { useSmartTOC } from '../../hooks/useSmartTOC';
 import { Wand2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -704,6 +705,21 @@ export const ReaderView: React.FC = () => {
     const [isIndexing, setIsIndexing] = useState(false);
     const [indexingProgress, setIndexingProgress] = useState(0);
 
+    const handleSearch = useCallback(async () => {
+        if (!searchQuery.trim()) return;
+        setIsSearching(true);
+        setActiveSearchQuery(searchQuery);
+        try {
+            const results = await searchClient.search(searchQuery, id || '');
+            setSearchResults(results);
+        } catch (e) {
+            logger.error("Search failed", e);
+            showToast("Search failed", "error");
+        } finally {
+            setIsSearching(false);
+        }
+    }, [searchQuery, id, showToast]);
+
     const handleCheckIndex = useCallback(async () => {
         if (!id || !book) return;
         if (searchClient.isIndexed(id)) return;
@@ -895,7 +911,7 @@ export const ReaderView: React.FC = () => {
                         platform: device?.platform || 'desktop'
                     });
                 }
-            } catch (e) {
+            } catch {
                 // Ignore invalid CFIs
             }
         });
@@ -1233,25 +1249,30 @@ export const ReaderView: React.FC = () => {
                                 <h2 className="text-lg font-bold text-foreground">Search</h2>
                             </div>
                             <div className="flex gap-2">
-                                <input
+                                <Input
                                     data-testid="search-input"
                                     aria-label="Search query"
-                                    type="text"
+                                    type="search"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
-                                            setIsSearching(true);
-                                            setActiveSearchQuery(searchQuery);
-                                            searchClient.search(searchQuery, id || '').then(results => {
-                                                setSearchResults(results);
-                                                setIsSearching(false);
-                                            });
+                                            handleSearch();
                                         }
                                     }}
                                     placeholder="Search in book..."
-                                    className="w-full text-sm p-2 border rounded bg-background text-foreground border-border"
+                                    className="bg-background"
                                 />
+                                <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={handleSearch}
+                                    disabled={isSearching || !searchQuery}
+                                    aria-label="Search"
+                                    className="shrink-0"
+                                >
+                                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                </Button>
                             </div>
                             {isIndexing && (
                                 <div className="mt-3 space-y-1">
