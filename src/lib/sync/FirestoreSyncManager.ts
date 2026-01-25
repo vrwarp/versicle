@@ -1,28 +1,28 @@
 /**
-* Firestore Sync Manager
-* 
-* Manages y-fire provider for real-time cloud sync via Firestore.
-* Acts as a secondary "Cloud Overlay" - y-indexeddb remains primary.
-* 
-* Architecture:
-* - y-indexeddb: Primary (always active, source of truth for offline)
-* - y-fire: Secondary (active only when authenticated)
-*/
+ * Firestore Sync Manager
+ * 
+ * Manages y-fire provider for real-time cloud sync via Firestore.
+ * Acts as a secondary "Cloud Overlay" - y-indexeddb remains primary.
+ * 
+ * Architecture:
+ * - y-indexeddb: Primary (always active, source of truth for offline)
+ * - y-fire: Secondary (active only when authenticated)
+ */
 import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
 import { yDoc } from '../../store/yjs-provider';
 
 import {
     getFirebaseApp,
     getFirebaseAuth,
+    getGoogleProvider,
     isFirebaseConfigured,
     initializeFirebase
 } from './firebase-config';
 import { MockFireProvider } from './drivers/MockFireProvider';
 import { createLogger } from '../logger';
-import { signInWithGoogle, signOutWithGoogle } from './auth-helper';
 
 const logger = createLogger('FirestoreSync');
 
@@ -36,8 +36,8 @@ type StatusChangeCallback = (status: FirestoreSyncStatus) => void;
 type AuthChangeCallback = (status: FirebaseAuthStatus, user: User | null) => void;
 
 /**
-* FirestoreSyncManager Configuration
-*/
+ * FirestoreSyncManager Configuration
+ */
 interface FirestoreSyncConfig {
     /**
      * Maximum time to wait before flushing updates to Firestore.
@@ -59,8 +59,8 @@ const DEFAULT_CONFIG: Required<FirestoreSyncConfig> = {
 };
 
 /**
-* Singleton service managing Firestore sync via y-fire.
-*/
+ * Singleton service managing Firestore sync via y-fire.
+ */
 class FirestoreSyncManager {
     private static instance: FirestoreSyncManager | null = null;
 
@@ -249,8 +249,15 @@ class FirestoreSyncManager {
      * Sign in with Google
      */
     async signIn(): Promise<void> {
+        const auth = getFirebaseAuth();
+        const provider = getGoogleProvider();
+
+        if (!auth || !provider) {
+            throw new Error('Firebase Auth not initialized');
+        }
+
         try {
-            await signInWithGoogle();
+            await signInWithPopup(auth, provider);
             // Auth state change handler will connect the provider
         } catch (error) {
             logger.error('Sign in failed:', error);
@@ -268,7 +275,7 @@ class FirestoreSyncManager {
         }
 
         try {
-            await signOutWithGoogle(auth);
+            await signOut(auth);
             // Auth state change handler will disconnect the provider
         } catch (error) {
             logger.error('Sign out failed:', error);

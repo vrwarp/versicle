@@ -16,7 +16,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
 # Copy package files first to cache npm ci
 COPY package.json package-lock.json ./
 COPY scripts ./scripts
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 # Install Python dependencies
 # We pin playwright to 1.48.0 to match the base image's browser binaries.
