@@ -95,6 +95,7 @@ graph TD
         Piper[PiperProvider]
         PiperUtils[piper-utils.ts]
         BG[BackgroundAudio]
+        TaskSeq[TaskSequencer]
     end
 
     subgraph Workers [Web Workers]
@@ -158,6 +159,7 @@ graph TD
     APS --> CostEst
     APS --> BG
     APS --> MediaSession
+    APS --> TaskSeq
 
     Piper --> PiperUtils
 
@@ -272,6 +274,14 @@ Manages integration with the native Android Backup Service.
     *   **Filtering**: Filters logs based on `VITE_LOG_LEVEL` or environment (Info in Dev, Warn in Prod).
     *   **Legacy**: The singleton `Logger` class is deprecated in favor of functional factory usage.
 
+#### Performance: Hot Paths (`src/lib/cfi-utils.ts`)
+*   **Goal**: Minimize latency during heavy text segmentation and rendering operations.
+*   **Logic**:
+    *   **Fast Merge**: `tryFastMergeCfi` uses optimistic string manipulation to merge Canonical Fragment Identifiers (CFIs) without the expensive overhead of parsing/regenerating them via `epubjs`.
+    *   **Heuristic Fallback**: If the fast path fails (complex structure), it gracefully falls back to the standard, slower implementation.
+*   **Verification**:
+    *   **Fuzz Testing**: The optimization is verified using seeded Fuzz tests (`cfi-utils.fuzz.test.ts`) that generate random CFI inputs and assert that the Fast Path output matches the Slow Path reference implementation.
+
 #### Ingestion (`src/lib/ingestion.ts`)
 Handles the complex task of importing an EPUB file.
 
@@ -289,8 +299,8 @@ Handles the complex task of importing an EPUB file.
     *   A **Service Worker** intercepts these requests, fetches the cover blob from IndexedDB (`static_manifests`), and responds directly.
 
 #### Generative AI (`src/lib/genai/`)
-*   **Free Tier Rotation**: Implements a "Smart Rotation" strategy (`gemini-flash-lite-latest` <-> `gemini-2.5-flash`) to maximize free tier quotas.
-*   **Resilience**: Automatically retries requests with the fallback model upon encountering `429 RESOURCE_EXHAUSTED` errors.
+*   **Smart Rotation**: Implements a rotation strategy (`gemini-flash-lite-latest` <-> `gemini-2.5-flash`) to handle `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
+*   **Resilience**: Automatically retries requests with the fallback model.
 *   **Teleprompter**: Uses `generateTableAdaptations` to convert complex table images into narrative text for TTS accessibility.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
@@ -342,6 +352,13 @@ Manages the virtual playback timeline.
 *   **Goal**: Abstract the complexity of skipped items and dynamic replacements.
 *   **Logic**:
     *   **Virtualized Timeline**: Maintains a queue where items can be marked `isSkipped` without being removed.
+
+#### `src/lib/tts/LexiconService.ts`
+*   **Goal**: Manage pronunciation rules for TTS, handling book-specific and global overrides.
+*   **Logic**:
+    *   **Layered Application**: Applies rules in a strict order: Book Specific (High Priority) -> Global -> Bible Rules (if enabled) -> Book Specific (Low Priority).
+    *   **Regex Caching**: Caches compiled `RegExp` objects for performance during heavy text processing.
+    *   **Bible Lexicon**: Injects a specialized set of rules for Bible citations (e.g., "Gen 1:1") if enabled for the book.
 
 #### `BackgroundAudio.ts`
 *   **Goal**: Ensure the app process remains active on Android/iOS when the screen is off.
