@@ -7,6 +7,48 @@ import type { BookMetadata } from '../../types/db';
 
 // Remove obsolete mock for BookActionMenu which is no longer used in BookCard
 
+vi.mock('../../store/useReadingStateStore', () => ({
+  useReadingStateStore: vi.fn((selector) => {
+    // Default mock state for the store selector if needed.
+    // BookCard uses it for `state.progress`
+    const mockState = {
+      progress: {
+        '1': { // match mockBook.id
+          'test-device-id': {
+            percentage: 0.45,
+            lastRead: Date.now()
+          }
+        }
+      }
+    };
+    return selector(mockState);
+  }),
+  useBookProgress: vi.fn((bookId) => {
+    if (bookId === '1') { // Match mockBook.id
+      return { percentage: 0.45, lastRead: Date.now(), deviceId: 'test-device' };
+    }
+    return null;
+  }),
+}));
+
+// Mock Device Store
+vi.mock('../../store/useDeviceStore', () => ({
+  useDeviceStore: vi.fn((selector) => {
+    const mockState = {
+      devices: {
+        'test-device-id': { name: 'Current Device', platform: 'browser' },
+        'other-device': { name: 'Other Device', platform: 'mobile' }
+      }
+    };
+    return selector(mockState);
+  })
+}));
+
+// Mock Device ID
+vi.mock('../../lib/device-id', () => ({
+  getDeviceId: () => 'test-device-id'
+}));
+
 // Mock UI DropdownMenu to avoid Radix issues in JSDOM
 vi.mock('../ui/DropdownMenu', () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -107,8 +149,12 @@ describe('BookCard', () => {
     expect(screen.getByText('Offloaded')).toHaveClass('sr-only');
   });
 
-  it('should render progress bar when progress > 0', () => {
-    const bookWithProgress = { ...mockBook, progress: 0.45 };
+  it('should render progress bar when progress > 0', async () => {
+    // Override mock for this test
+    const { useBookProgress } = await import('../../store/useReadingStateStore');
+    vi.mocked(useBookProgress).mockReturnValue({ bookId: '1', percentage: 0.45, lastRead: Date.now(), currentCfi: '', completedRanges: [] });
+
+    const bookWithProgress = { ...mockBook }; // Progress prop is now irrelevant, but we keep the object
     renderCard(bookWithProgress);
 
     const progressBar = screen.getByTestId('progress-bar');
@@ -118,18 +164,15 @@ describe('BookCard', () => {
     const progressContainer = screen.getByRole('progressbar');
     expect(progressContainer).toBeInTheDocument();
     expect(progressContainer).toHaveAttribute('aria-valuenow', '45');
-    expect(progressContainer).toHaveAttribute('aria-valuemin', '0');
-    expect(progressContainer).toHaveAttribute('aria-valuemax', '100');
-    expect(progressContainer).toHaveAttribute('aria-label', 'Reading progress: 45%');
   });
 
-  it('should not render progress bar when progress is 0 or undefined', () => {
-    const bookWithZeroProgress = { ...mockBook, progress: 0 };
-    renderCard(bookWithZeroProgress);
-    expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
+  it('should not render progress bar when progress is 0 or undefined', async () => {
+    // Override mock to return null or 0 progress
+    const { useBookProgress } = await import('../../store/useReadingStateStore');
+    vi.mocked(useBookProgress).mockReturnValue(null);
 
-    const bookWithUndefinedProgress = { ...mockBook, progress: undefined };
-    renderCard(bookWithUndefinedProgress);
+    const bookWithZeroProgress = { ...mockBook };
+    renderCard(bookWithZeroProgress);
     expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
   });
 

@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { Progress } from '../ui/Progress';
 import { BookActionMenu } from './BookActionMenu';
+import { useBookProgress } from '../../store/useReadingStateStore';
 
 /**
  * Props for the BookListItem component.
@@ -53,6 +54,9 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
     const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderUIStore(state => state.setCurrentBookId);
 
+    const activeProgress = useBookProgress(book.id);
+    const progressPercent = activeProgress ? Math.round(activeProgress.percentage * 100) : 0;
+
     const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
 
     const handleOpen = () => {
@@ -69,7 +73,6 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
         onOpen(book);
     };
 
-    const progressPercent = book.progress ? Math.round(book.progress * 100) : 0;
     const durationString = book.totalChars ? formatDuration(book.totalChars) : null;
     const sizeString = formatFileSize(book.fileSize);
 

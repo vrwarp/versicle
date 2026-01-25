@@ -50,24 +50,26 @@ describe('useReadingStateStore - Per-Device Progress', () => {
     });
 
     describe('getProgress', () => {
-        it('should return the progress with highest percentage (max strategy)', () => {
+        it('should prioritize local device progress even if older', () => {
             const bookId = 'book-1';
 
-            // Set progress for multiple devices
+            // Set progress with Local (Old) and Remote (New)
+            vi.mocked(getDeviceId).mockReturnValue('test-device-id');
+
             useReadingStateStore.setState({
                 progress: {
                     [bookId]: {
-                        'device-A': {
+                        'test-device-id': { // Local
                             bookId,
-                            percentage: 0.5,
-                            currentCfi: 'epubcfi(/6/4)',
-                            lastRead: Date.now() - 1000,
+                            percentage: 0.1, // Old position
+                            currentCfi: 'epubcfi(/6/2)',
+                            lastRead: Date.now() - 10000,
                             completedRanges: []
                         },
-                        'device-B': {
+                        'remote-device': { // Remote
                             bookId,
-                            percentage: 0.1,
-                            currentCfi: 'epubcfi(/6/2)',
+                            percentage: 0.9, // Newer position
+                            currentCfi: 'epubcfi(/6/20)',
                             lastRead: Date.now(),
                             completedRanges: []
                         }
@@ -77,10 +79,43 @@ describe('useReadingStateStore - Per-Device Progress', () => {
 
             const result = useReadingStateStore.getState().getProgress(bookId);
 
-            // Should return Device A's progress (50%) not Device B's (10%)
+            // Should return Local progress (10%) NOT Remote (90%)
             expect(result).not.toBeNull();
-            expect(result?.percentage).toBe(0.5);
+            expect(result?.percentage).toBe(0.1);
         });
+
+        it('should fallback to most recent remote progress if no local state', () => {
+            const bookId = 'book-1';
+            vi.mocked(getDeviceId).mockReturnValue('test-device-id');
+
+            useReadingStateStore.setState({
+                progress: {
+                    [bookId]: {
+                        'remote-old': {
+                            bookId,
+                            percentage: 0.5,
+                            currentCfi: 'epubcfi(/6/10)',
+                            lastRead: Date.now() - 5000,
+                            completedRanges: []
+                        },
+                        'remote-new': {
+                            bookId,
+                            percentage: 0.8,
+                            currentCfi: 'epubcfi(/6/18)',
+                            lastRead: Date.now(), // Most Recent
+                            completedRanges: []
+                        }
+                    }
+                }
+            });
+
+            const result = useReadingStateStore.getState().getProgress(bookId);
+
+            // Should return Most Recent Remote (80%)
+            expect(result).not.toBeNull();
+            expect(result?.percentage).toBe(0.8);
+        });
+
 
         it('should return null for unknown book', () => {
             const result = useReadingStateStore.getState().getProgress('unknown-book');
@@ -97,7 +132,7 @@ describe('useReadingStateStore - Per-Device Progress', () => {
     });
 
     describe('useBookProgress hook', () => {
-        it('should return max progress across devices', () => {
+        it('should return most recent progress across devices', () => {
             const bookId = 'book-1';
 
             // Set progress for multiple devices
@@ -108,14 +143,14 @@ describe('useReadingStateStore - Per-Device Progress', () => {
                             bookId,
                             percentage: 0.25,
                             currentCfi: 'epubcfi(/6/2)',
-                            lastRead: Date.now(),
+                            lastRead: Date.now(), // Newer
                             completedRanges: []
                         },
                         'device-B': {
                             bookId,
                             percentage: 0.75,
                             currentCfi: 'epubcfi(/6/8)',
-                            lastRead: Date.now() - 5000,
+                            lastRead: Date.now() - 5000, // Older
                             completedRanges: []
                         }
                     }
@@ -129,38 +164,125 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             };
 
             const result = selector(useReadingStateStore.getState());
-            expect(result?.percentage).toBe(0.75); // Device B has highest
+            expect(result?.percentage).toBe(0.25); // Device A has newer
         });
     });
 
-    describe('Scenario 1: Cross-device progress conflict', () => {
-        it('Device A (50%) vs Device B (10%) should return 50% (max strategy)', () => {
+    describe('Scenario 1: New Device Setup (No Local State)', () => {
+        it('should pick up the most recent progress from cloud', () => {
             const bookId = 'test-book';
+            const now = Date.now();
+            vi.mocked(getDeviceId).mockReturnValue('new-device');
 
-            // Device A reads to 50%
-            vi.mocked(getDeviceId).mockReturnValue('device-A');
-            useReadingStateStore.getState().updateLocation(bookId, 'epubcfi(/6/10)', 0.5);
+            useReadingStateStore.setState({
+                progress: {
+                    [bookId]: {
+                        'old-phone': {
+                            bookId,
+                            percentage: 0.3,
+                            currentCfi: 'epubcfi(/6/6)',
+                            lastRead: now - 10000,
+                            completedRanges: []
+                        },
+                        'tablet': {
+                            bookId,
+                            percentage: 0.6,
+                            currentCfi: 'epubcfi(/6/12)',
+                            lastRead: now, // Most Recent
+                            completedRanges: []
+                        }
+                    }
+                }
+            });
 
-            // Device B reads to 10%
-            vi.mocked(getDeviceId).mockReturnValue('device-B');
-            useReadingStateStore.getState().updateLocation(bookId, 'epubcfi(/6/2)', 0.1);
+            const result = useReadingStateStore.getState().getProgress(bookId);
+            expect(result?.percentage).toBe(0.6);
+        });
+    });
 
-            // The max progress should be 50%
-            const progress = useReadingStateStore.getState().getProgress(bookId);
-            expect(progress?.percentage).toBe(0.5);
+    describe('Scenario 2: Existing Device (Has Local State)', () => {
+        it('should stick to local progress even if cloud is ahead', () => {
+            const bookId = 'test-book';
+            const now = Date.now();
+            vi.mocked(getDeviceId).mockReturnValue('my-device');
+
+            useReadingStateStore.setState({
+                progress: {
+                    [bookId]: {
+                        'my-device': {
+                            bookId,
+                            percentage: 0.1, // Valid (> 0.5%)
+                            currentCfi: 'epubcfi(/6/2)',
+                            lastRead: now - 100000,
+                            completedRanges: []
+                        },
+                        'tablet': {
+                            bookId,
+                            percentage: 0.9,
+                            currentCfi: 'epubcfi(/6/20)',
+                            lastRead: now,
+                            completedRanges: []
+                        }
+                    }
+                }
+            });
+
+            const result = useReadingStateStore.getState().getProgress(bookId);
+            expect(result?.percentage).toBe(0.1);
+        });
+    });
+
+    describe('Scenario 3: Ignore Tiny Progress (False Starts)', () => {
+        it('should ignore local progress if < 0.5% and prefer remote valid progress', () => {
+            const bookId = 'test-book';
+            const now = Date.now();
+            vi.mocked(getDeviceId).mockReturnValue('my-device');
+
+            useReadingStateStore.setState({
+                progress: {
+                    [bookId]: {
+                        'my-device': {
+                            bookId,
+                            percentage: 0.001, // 0.1% (INVALID)
+                            currentCfi: 'epubcfi(/6/2)',
+                            lastRead: now, // recent but false start
+                            completedRanges: []
+                        },
+                        'tablet': {
+                            bookId,
+                            percentage: 0.5, // 50% (VALID)
+                            currentCfi: 'epubcfi(/6/20)',
+                            lastRead: now - 5000,
+                            completedRanges: []
+                        }
+                    }
+                }
+            });
+
+            const result = useReadingStateStore.getState().getProgress(bookId);
+            expect(result?.percentage).toBe(0.5); // Should pick Tablet
         });
 
-        it('should preserve CFI from the max-progress device', () => {
+        it('should return local 0% if NO valid remote progress exists', () => {
             const bookId = 'test-book';
+            vi.mocked(getDeviceId).mockReturnValue('my-device');
 
-            vi.mocked(getDeviceId).mockReturnValue('device-A');
-            useReadingStateStore.getState().updateLocation(bookId, 'epubcfi(/6/50)', 0.5);
+            useReadingStateStore.setState({
+                progress: {
+                    [bookId]: {
+                        'my-device': {
+                            bookId,
+                            percentage: 0,
+                            currentCfi: '',
+                            lastRead: Date.now(),
+                            completedRanges: []
+                        }
+                    }
+                }
+            });
 
-            vi.mocked(getDeviceId).mockReturnValue('device-B');
-            useReadingStateStore.getState().updateLocation(bookId, 'epubcfi(/6/10)', 0.1);
-
-            const progress = useReadingStateStore.getState().getProgress(bookId);
-            expect(progress?.currentCfi).toBe('epubcfi(/6/50)');
+            const result = useReadingStateStore.getState().getProgress(bookId);
+            expect(result?.percentage).toBe(0);
         });
     });
 });

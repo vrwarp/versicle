@@ -4,7 +4,6 @@ import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useAllBooks } from '../../store/selectors';
 import { createLogger } from '../../lib/logger';
 import { useToastStore } from '../../store/useToastStore';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
@@ -55,7 +54,6 @@ export const LibraryView: React.FC = () => {
     hydrateStaticMetadata: state.hydrateStaticMetadata
   })));
 
-  const updateLocation = useReadingStateStore(state => state.updateLocation);
 
   const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode } = usePreferencesStore(useShallow(state => ({
     libraryLayout: state.libraryLayout,
@@ -129,20 +127,43 @@ export const LibraryView: React.FC = () => {
 
   // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
 
+  const handleRestore = useCallback((book: BookMetadata) => {
+    setBookToRestore(book);
+    restoreFileInputRef.current?.click();
+  }, []);
+
   const handleBookOpen = useCallback((book: BookMetadata) => {
+    // Check if file is missing (Ghost or Offloaded)
+    const isGhost = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+    const isOffloaded = book.isOffloaded || offloadedBookIds.has(book.id);
+
+    if (isGhost || isOffloaded) {
+      handleRestore(book);
+      return;
+    }
+
     const effectiveVersion = book.version ?? 0;
     if (effectiveVersion < CURRENT_BOOK_VERSION) {
       setReprocessingBookId(book.id);
     } else {
       navigate(`/read/${book.id}`);
     }
-  }, [navigate]);
+  }, [navigate, staticMetadata, offloadedBookIds, handleRestore]);
 
-  const handleResumeReading = useCallback((book: BookMetadata, _deviceId: string, cfi: string) => {
-    // Update local state to match remote CFI before opening
-    updateLocation(book.id, cfi, 0);
+  const handleResumeReading = useCallback((book: BookMetadata, _deviceId: string, _cfi: string) => {
+    // Check if file is missing (Ghost or Offloaded)
+    const isGhost = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+    const isOffloaded = book.isOffloaded || offloadedBookIds.has(book.id);
+
+    if (isGhost || isOffloaded) {
+      handleBookOpen(book);
+      return;
+    }
+
+    // Do NOT auto-update location. Let the Reader View's Smart Resume Toast handle the prompt.
+    // updateLocation(book.id, cfi, 0); 
     handleBookOpen(book);
-  }, [updateLocation, handleBookOpen]);
+  }, [handleBookOpen, staticMetadata, offloadedBookIds]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -247,12 +268,7 @@ export const LibraryView: React.FC = () => {
     setActiveModal({ type: 'offload', book });
   }, []);
 
-  const handleRestore = useCallback((book: BookMetadata) => {
-    setBookToRestore(book);
-    // Use setTimeout to ensure state is updated before click if needed, though usually not strictly necessary for simple refs
-    // But direct click is fine.
-    restoreFileInputRef.current?.click();
-  }, []);
+
 
   // OPTIMIZATION: Create a search index to avoid expensive re-calculation on every render
   // This memoized value updates only when the books array changes, not on every search keystroke.

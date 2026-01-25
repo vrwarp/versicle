@@ -53,10 +53,12 @@ interface ReadingState {
     updateTTSProgress: (bookId: string, index: number, sectionIndex: number) => void;
 
     /**
-     * Gets the progress for a specific book (aggregated across all devices).
-     * Returns the entry with the highest percentage.
+     * Gets the progress for a specific book.
+     * Strategy:
+     * 1. Local Priority: If the current device has progress, return it (even if stale).
+     * 2. Global Fallback: If no local progress, return the most recent from any device.
      * @param bookId - The book ID.
-     * @returns The progress object with max percentage, or null if not found.
+     * @returns The selected progress object, or null if not found.
      */
     getProgress: (bookId: string) => UserProgress | null;
 
@@ -66,21 +68,28 @@ interface ReadingState {
     reset: () => void;
 }
 
+const isValidProgress = (p: UserProgress | null | undefined): boolean => {
+    return !!(p && p.percentage > 0.005); // > 0.5%
+};
+
 /**
- * Get the progress entry with the highest percentage for a book.
- * Aggregates across all devices and returns the max.
+ * Get the progress entry with the most recent timestamp for a book.
+ * Aggregates across all devices and returns the one with the latest lastRead.
  */
-const getMaxProgress = (bookProgress: Record<string, UserProgress> | undefined): UserProgress | null => {
+const getMostRecentProgress = (bookProgress: Record<string, UserProgress> | undefined): UserProgress | null => {
     if (!bookProgress) return null;
 
-    let max: UserProgress | null = null;
+    let mostRecent: UserProgress | null = null;
     for (const deviceId in bookProgress) {
         const current = bookProgress[deviceId];
-        if (!max || current.percentage > max.percentage) {
-            max = current;
+        if (!isValidProgress(current)) continue;
+
+        // If we don't have a current best, or if the current one is newer than the best found so far
+        if (!mostRecent || current.lastRead > mostRecent.lastRead) {
+            mostRecent = current;
         }
     }
-    return max;
+    return mostRecent;
 };
 
 /**
@@ -228,7 +237,20 @@ export const useReadingStateStore = create<ReadingState>()(
 
             getProgress: (bookId) => {
                 const { progress } = get();
-                return getMaxProgress(progress[bookId]);
+                const deviceId = getDeviceId();
+                const bookProgress = progress[bookId];
+
+                // 1. Try Local (Must be Valid)
+                if (bookProgress && bookProgress[deviceId] && isValidProgress(bookProgress[deviceId])) {
+                    return bookProgress[deviceId];
+                }
+
+                // 2. Fallback to Most Recent (Valid)
+                const recent = getMostRecentProgress(bookProgress);
+                if (recent) return recent;
+
+                // 3. Final Fallback: Return Local (even if 0%) if exists, else null
+                return bookProgress?.[deviceId] || null;
             },
 
             reset: () => set({
@@ -240,14 +262,16 @@ export const useReadingStateStore = create<ReadingState>()(
 
 /**
  * Hook to get progress for a specific book.
- * Returns the entry with the HIGHEST percentage across all devices.
+ * Returns the entry with the MOST RECENT timestamp across all devices.
  * @param bookId - The book ID, or null.
  * @returns The progress object with max percentage, or null if not found.
  */
 export const useBookProgress = (bookId: string | null) => {
     return useReadingStateStore(state => {
         if (!bookId) return null;
-        return getMaxProgress(state.progress[bookId]);
+
+        // Use the selector logic which now includes local priority
+        return state.getProgress(bookId);
     });
 };
 

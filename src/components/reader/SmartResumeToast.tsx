@@ -141,8 +141,8 @@ export const SmartResumeToast: React.FC<SmartResumeToastProps> = ({
         >
             <DeviceIcon platform={remoteInfo.platform} className="w-4 h-4 text-muted-foreground shrink-0" />
 
-            <span className="text-sm">
-                Pick up where you left off on <strong>{remoteInfo.deviceName}</strong>?
+            <span className="text-sm px-2 whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px] sm:max-w-[300px]">
+                Pick up from <strong>{remoteInfo.deviceName}</strong>?
                 <span className="text-muted-foreground ml-1">
                     {Math.round(remoteInfo.percentage * 100)}%
                 </span>

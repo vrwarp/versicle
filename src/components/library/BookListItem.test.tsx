@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { BookListItem } from './BookListItem';
 import { BookMetadata } from '../../types/db';
 import { MemoryRouter } from 'react-router-dom';
-import { vi } from 'vitest';
+import { vi, describe, it, expect } from 'vitest';
 
 // Mock dependencies
 vi.mock('../../store/useLibraryStore', () => ({
@@ -20,6 +20,7 @@ vi.mock('../../store/useToastStore', () => ({
 
 vi.mock('../../store/useReadingStateStore', () => ({
     useReadingStateStore: vi.fn(() => vi.fn()),
+    useBookProgress: vi.fn(() => ({ percentage: 0.5, lastRead: Date.now() })),
 }));
 
 describe('BookListItem', () => {
@@ -36,12 +37,14 @@ describe('BookListItem', () => {
     const mockOnDelete = vi.fn();
     const mockOnOffload = vi.fn();
     const mockOnRestore = vi.fn();
+    const mockOnOpen = vi.fn();
 
     const renderItem = (book = mockBook) => {
         return render(
-            <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <MemoryRouter>
                 <BookListItem
                     book={book}
+                    onOpen={mockOnOpen}
                     onDelete={mockOnDelete}
                     onOffload={mockOnOffload}
                     onRestore={mockOnRestore}
