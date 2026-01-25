@@ -18,10 +18,15 @@ vi.mock('../db/DBService', () => ({
 vi.mock('epubjs', () => {
   return {
     default: vi.fn().mockImplementation(() => ({
-      renderTo: vi.fn().mockImplementation((element) => {
+      renderTo: vi.fn().mockImplementation((element, options) => {
         const iframe = document.createElement('iframe');
-        // Simulate epubjs default sandbox
-        iframe.setAttribute('sandbox', 'allow-same-origin');
+        // Simulate epubjs default sandbox or use provided options
+        if (options && options.sandbox) {
+          const sandboxVal = Array.isArray(options.sandbox) ? options.sandbox.join(' ') : options.sandbox;
+          iframe.setAttribute('sandbox', sandboxVal);
+        } else {
+          iframe.setAttribute('sandbox', 'allow-same-origin');
+        }
         element.appendChild(iframe);
         return {
           themes: { register: vi.fn(), select: vi.fn(), fontSize: vi.fn(), font: vi.fn(), default: vi.fn() },
