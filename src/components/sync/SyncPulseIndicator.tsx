@@ -29,7 +29,7 @@ const SyncIcon: React.FC<{ status: FirestoreSyncStatus }> = ({ status }) => {
         <div className="relative flex h-3 w-3">
             {(status === 'connecting' || status === 'connected') && (
                 <span className={cn(
-                    "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                    "animate-ping-slow absolute inline-flex h-full w-full rounded-full opacity-75",
                     colorClass
                 )}></span>
             )}
