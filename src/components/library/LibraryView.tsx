@@ -7,6 +7,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
+import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
 import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
@@ -395,8 +396,9 @@ export const LibraryView: React.FC = () => {
       <header className="mb-6 flex flex-col gap-4">
         {/* Top Row: Title and Actions */}
         <div className="flex justify-between items-center">
-          <div>
+          <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold text-foreground">My Library</h1>
+            <SyncPulseIndicator />
           </div>
 
           <div className="flex gap-2">

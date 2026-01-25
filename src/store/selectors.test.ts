@@ -4,6 +4,7 @@ import { useAllBooks, useLastReadBookId } from './selectors';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
+import { useReadingListStore } from './useReadingListStore';
 import { getDeviceId } from '../lib/device-id';
 
 // Mock stores
@@ -17,6 +18,10 @@ vi.mock('./useBookStore', () => ({
 
 vi.mock('./useReadingStateStore', () => ({
   useReadingStateStore: vi.fn(),
+}));
+
+vi.mock('./useReadingListStore', () => ({
+  useReadingListStore: vi.fn(),
 }));
 
 // Mock device ID
@@ -124,7 +129,63 @@ describe('selectors', () => {
       const { result } = renderHook(() => useAllBooks());
 
       expect(result.current).toHaveLength(1);
+      expect(result.current).toHaveLength(1);
       expect(result.current[0].title).toBe('Static Title');
+    });
+
+    it('should fallback to reading list progress if device progress is missing', () => {
+      const mockBookState = {
+        books: {
+          'b1': {
+            bookId: 'b1',
+            title: 'Book 1',
+            sourceFilename: 'book1.epub',
+            addedAt: 100,
+            lastInteraction: 100,
+            status: 'unread',
+            tags: []
+          }
+        }
+      };
+
+      const mockLibraryState = {
+        staticMetadata: {},
+        offloadedBookIds: new Set()
+      };
+
+      const mockReadingListState = {
+        entries: {
+          'book1.epub': {
+            filename: 'book1.epub',
+            percentage: 0.75,
+            lastUpdated: 200,
+            title: 'Book 1',
+            author: 'Author'
+          }
+        }
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useBookStore).mockImplementation((selector: any) => {
+        return selector(mockBookState);
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useLibraryStore).mockImplementation((selector: any) => {
+        return selector(mockLibraryState);
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
+        return selector({ progress: {} }); // No device progress
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useReadingListStore).mockImplementation((selector: any) => {
+        return selector(mockReadingListState);
+      });
+
+      const { result } = renderHook(() => useAllBooks());
+
+      expect(result.current).toHaveLength(1);
+      expect(result.current[0].progress).toBe(0.75);
     });
   });
 
