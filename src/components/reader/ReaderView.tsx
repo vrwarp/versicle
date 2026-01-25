@@ -45,7 +45,6 @@ import { createLogger } from '../../lib/logger';
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
 import { DeviceIcon } from './DeviceIcon';
-import { SmartResumeToast } from './SmartResumeToast';
 
 const logger = createLogger('ReaderView');
 
@@ -104,6 +103,7 @@ export const ReaderView: React.FC = () => {
         immersiveMode: state.immersiveMode,
         setImmersiveMode: state.setImmersiveMode,
         setPlayFromSelection: state.setPlayFromSelection,
+        setJumpToLocation: state.setJumpToLocation,
         setCurrentSection: state.setCurrentSection,
         setCurrentBookId: state.setCurrentBookId,
         resetUI: state.reset
@@ -325,6 +325,24 @@ export const ReaderView: React.FC = () => {
             (window as any).rendition = rendition;
         }
     }, [rendition]);
+
+    // Register jumpToLocation
+    const { setJumpToLocation } = useReaderUIStore(useShallow(state => ({
+        setJumpToLocation: state.setJumpToLocation
+    })));
+
+    useEffect(() => {
+        if (setJumpToLocation && rendition) {
+            setJumpToLocation((cfi) => {
+                try {
+                    rendition.display(cfi);
+                } catch (e) {
+                    logger.error("Failed to jump to location", e);
+                }
+            });
+            // Cleanup provided in store reset, effectively replacement overrides previous
+        }
+    }, [setJumpToLocation, rendition]);
 
     // Handle errors
     useEffect(() => {
@@ -1333,21 +1351,7 @@ export const ReaderView: React.FC = () => {
             />
 
             {/* Smart Resume Toast */}
-            {id && (
-                <SmartResumeToast
-                    bookId={id}
-                    onJump={(cfi, _deviceId) => {
-                        if (rendition) {
-                            rendition.display(cfi);
-                            useReadingStateStore.getState().updateLocation(id, cfi, 0); // Progress will be recalculated by onLocationChange
-                            useToastStore.getState().showToast(`Resumed from device`, 'success');
-                        }
-                    }}
-                    onDismiss={() => {
-                        // Dismiss logic is handled internally by component state mostly
-                    }}
-                />
-            )}
+
 
 
         </div >

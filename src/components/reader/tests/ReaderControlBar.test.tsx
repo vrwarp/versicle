@@ -120,7 +120,7 @@ describe('ReaderControlBar', () => {
       currentSectionTitle: null,
       currentBookId: null,
     }));
-    mockUseReadingStateStore.mockImplementation((selector: any) => selector({}));
+    mockUseReadingStateStore.mockImplementation((selector: any) => selector({ progress: {} }));
     mockUseReadingStateStore.getState = vi.fn().mockReturnValue({
       progress: {},
       getProgress: () => null

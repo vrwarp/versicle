@@ -45,6 +45,7 @@ export function useSyncToasts() {
                             const lastToast = lastToastTimeRef.current[bookId] || 0;
 
                             if (now - lastToast > 60000) {
+
                                 if (percentDiff > 0.05 || isJustCompleted) {
                                     // Get book title
                                     const book = useBookStore.getState().books[bookId];
