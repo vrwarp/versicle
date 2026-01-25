@@ -11,6 +11,8 @@ import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { LexiconManager } from './LexiconManager';
 
+import { useRemoteProgress } from '../../hooks/useRemoteProgress';
+
 export const ReaderControlBar: React.FC = () => {
     // Correctly using the store-based toast
     const showToast = useToastStore(state => state.showToast);
@@ -18,6 +20,7 @@ export const ReaderControlBar: React.FC = () => {
 
     const [lexiconOpen, setLexiconOpen] = React.useState(false);
     const [lexiconText, setLexiconText] = React.useState('');
+    const [dismissedSyncAlerts, setDismissedSyncAlerts] = React.useState<Set<string>>(new Set());
 
     // Store Subscriptions
     const { popover, add, hidePopover } = useAnnotationStore(useShallow(state => ({
@@ -31,11 +34,20 @@ export const ReaderControlBar: React.FC = () => {
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentSectionTitle, currentBookId } = useReaderUIStore(useShallow(state => ({
+    const { immersiveMode, currentSectionTitle, currentBookId, jumpToLocation } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         currentSectionTitle: state.currentSectionTitle,
-        currentBookId: state.currentBookId
+        currentBookId: state.currentBookId,
+        jumpToLocation: state.jumpToLocation
     })));
+
+    // Check for remote progress
+    const remoteProgress = useRemoteProgress(currentBookId);
+
+    // Determining if we should show the sync alert
+    // 1. Must have remote progress
+    // 2. Must not have been dismissed for this specific device/timestamp combo (simplified to deviceId for now)
+    const showSyncAlert = remoteProgress && !dismissedSyncAlerts.has(remoteProgress.deviceId);
 
     // OPTIMIZATION: Use granular selectors to avoid re-rendering on every library change.
     // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.
@@ -52,6 +64,9 @@ export const ReaderControlBar: React.FC = () => {
     const currentBookProgress = useCurrentDeviceProgress(currentBookId);
 
     // Determine State Priority
+    // 0. Sync Alert (High Priority)
+    const isSyncAlert = showSyncAlert;
+
     // 1. Annotation Mode
     const isAnnotationMode = popover.visible;
 
@@ -61,9 +76,11 @@ export const ReaderControlBar: React.FC = () => {
     const isReaderActive = !!currentBookId;
 
     // Logic:
-    let variant: 'annotation' | 'active' | 'summary' | 'compact' | null = null;
+    let variant: 'annotation' | 'active' | 'summary' | 'compact' | 'sync-alert' | null = null;
 
-    if (isAnnotationMode) {
+    if (isSyncAlert) {
+        variant = 'sync-alert';
+    } else if (isAnnotationMode) {
         variant = 'annotation';
     } else if (isReaderActive) {
         variant = immersiveMode ? 'compact' : 'active';
@@ -138,7 +155,11 @@ export const ReaderControlBar: React.FC = () => {
                 }
                 break;
             case 'dismiss':
-                hidePopover();
+                if (variant === 'sync-alert' && remoteProgress) {
+                    setDismissedSyncAlerts(prev => new Set(prev).add(remoteProgress.deviceId));
+                } else {
+                    hidePopover();
+                }
                 break;
         }
     };
@@ -150,7 +171,11 @@ export const ReaderControlBar: React.FC = () => {
     let subtitle: string | undefined;
     let progress: number | undefined;
 
-    if (variant === 'summary' && lastReadBook) {
+    if (variant === 'sync-alert' && remoteProgress) {
+        title = `Pick up from ${remoteProgress.deviceName}?`;
+        const percent = Math.round(remoteProgress.percentage * 100);
+        subtitle = `Jump to ${percent}%`;
+    } else if (variant === 'summary' && lastReadBook) {
         title = lastReadBook.title;
         subtitle = "Continue Reading";
         // Get progress from reading state (local device)
@@ -183,7 +208,10 @@ export const ReaderControlBar: React.FC = () => {
                             pronounce: true
                         }}
                         onClick={() => {
-                            if (variant === 'summary' && lastReadBook) {
+                            if (variant === 'sync-alert' && remoteProgress && jumpToLocation) {
+                                jumpToLocation(remoteProgress.cfi);
+                                setDismissedSyncAlerts(prev => new Set(prev).add(remoteProgress.deviceId));
+                            } else if (variant === 'summary' && lastReadBook) {
                                 navigate(`/read/${lastReadBook.id}`);
                             }
                         }}

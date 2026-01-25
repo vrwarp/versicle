@@ -3,7 +3,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
-import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -16,7 +16,7 @@ export type ActionType =
   | 'dismiss';   // Payload: null
 
 interface CompassPillProps {
-  variant: 'active' | 'summary' | 'compact' | 'annotation';
+  variant: 'active' | 'summary' | 'compact' | 'annotation' | 'sync-alert';
   title?: string;
   subtitle?: string;
   progress?: number;
@@ -337,6 +337,50 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           aria-label="Next"
         >
           <ChevronsRight size={18} />
+        </Button>
+      </div>
+    );
+  }
+
+  // Sync Alert Mode
+  if (variant === 'sync-alert') {
+    return (
+      <div
+        data-testid="compass-pill-sync-alert"
+        className="relative z-50 flex items-center justify-between w-full max-w-sm h-14 px-4 mx-auto overflow-hidden transition-all border shadow-lg rounded-full bg-background/90 backdrop-blur-md border-primary/20 animate-in fade-in slide-in-from-bottom-2"
+        role="alert"
+      >
+        <div className="flex items-center gap-3 flex-1 min-w-0" onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick && onClick();
+          }
+        }}>
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary animate-pulse">
+            <Smartphone size={16} />
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="text-xs font-medium text-foreground truncate">
+              {title || "Reading Progress Updated"}
+            </span>
+            <span className="text-[10px] text-muted-foreground truncate flex items-center gap-1">
+              <ArrowUpCircle size={10} />
+              {subtitle || "Tap to sync location"}
+            </span>
+          </div>
+        </div>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full w-8 h-8 -mr-1 text-muted-foreground hover:text-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAnnotationAction?.('dismiss');
+          }}
+          aria-label="Dismiss update"
+        >
+          <X size={16} />
         </Button>
       </div>
     );

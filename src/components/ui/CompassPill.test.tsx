@@ -18,6 +18,9 @@ vi.mock('lucide-react', () => ({
     Copy: () => <span data-testid="icon-copy" />,
     X: () => <span data-testid="icon-x" />,
     BookOpen: () => <span data-testid="icon-book-open" />,
+    Smartphone: () => <span data-testid="icon-smartphone" />,
+    RefreshCw: () => <span data-testid="icon-refresh-cw" />,
+    ArrowUpCircle: () => <span data-testid="icon-arrow-up-circle" />,
 }));
 
 // Mock useTTSStore
@@ -51,6 +54,44 @@ describe('CompassPill', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+    });
+
+    it('renders sync-alert mode correctly', () => {
+        vi.mocked(useTTSStore).mockReturnValue({
+            isPlaying: false,
+            queue: [],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
+
+        const handleAction = vi.fn();
+        const handleClick = vi.fn();
+
+        render(
+            <CompassPill
+                variant="sync-alert"
+                title="Pick up from Phone?"
+                subtitle="Jump to 45%"
+                onAnnotationAction={handleAction}
+                onClick={handleClick}
+            />
+        );
+
+        // Check text content
+        expect(screen.getByText('Pick up from Phone?')).toBeInTheDocument();
+        expect(screen.getByText('Jump to 45%')).toBeInTheDocument();
+
+        // Check click handler
+        const mainButton = screen.getByText('Pick up from Phone?').closest('[role="button"]');
+        fireEvent.click(mainButton!);
+        expect(handleClick).toHaveBeenCalled();
+
+        // Check dismiss
+        const dismissBtn = screen.getByLabelText('Dismiss update');
+        fireEvent.click(dismissBtn);
+        expect(handleAction).toHaveBeenCalledWith('dismiss');
     });
 
     it('dispatches reader:chapter-nav event when "prev" button is clicked and not playing', () => {
