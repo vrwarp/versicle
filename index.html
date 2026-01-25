@@ -11,6 +11,24 @@
 </head>
 
 <body>
+  <script>
+    // Critical Fix for epub.js iframe sandboxing
+    // epub.js sometimes creates iframes without the correct sandbox attributes,
+    // causing "Blocked script execution" errors with srcdoc.
+    // We intercept createElement to enforce permissions.
+    const originalCreateElement = document.createElement;
+    document.createElement = function (tagName, options) {
+      const element = originalCreateElement.call(document, tagName, options);
+      if (tagName.toLowerCase() === 'iframe') {
+        try {
+          element.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-forms');
+        } catch (e) {
+          console.warn('Failed to set sandbox on iframe', e);
+        }
+      }
+      return element;
+    };
+  </script>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>

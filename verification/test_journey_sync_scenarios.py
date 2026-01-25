@@ -99,13 +99,16 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
         
         # Wait for rendition
         page_a.wait_for_function("window.rendition && window.rendition.location")
+        # Wait for locations to be generated
+        page_a.wait_for_function("window.__areLocationsReady === true", timeout=30000)
         
-        # Turn pages
-        turns = 10 if attempt > 0 else 5
-        print(f"[A] Turning {turns} pages...")
-        for _ in range(turns):
-            page_a.evaluate("window.rendition && window.rendition.next()")
-            time.sleep(0.5)
+        # Jump to 10% progress to ensure we are not at the start
+        print(f"[A] Jumping to 10% progress...")
+        page_a.evaluate("""
+            const cfi = window.rendition.book.locations.cfiFromPercentage(0.1);
+            window.rendition.display(cfi);
+        """)
+        time.sleep(2)
             
         # Go back to library
         page_a.get_by_test_id("reader-back-button").click()

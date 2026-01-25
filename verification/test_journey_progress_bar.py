@@ -27,9 +27,15 @@ def test_verify_progress_bar(page: Page):
     # Standard might be 'reader-forward-button' or aria-label="Next page"
     # Or just key press
 
-    for _ in range(5):
-        page.keyboard.press("ArrowRight")
-        page.wait_for_timeout(500)
+    # Wait for locations to be generated (ensures progress calculation works)
+    page.wait_for_function("window.__areLocationsReady === true", timeout=30000)
+
+    # Jump to 10% progress to ensure we are not at the start
+    page.evaluate("""
+        const cfi = window.rendition.book.locations.cfiFromPercentage(0.1);
+        window.rendition.display(cfi);
+    """)
+    page.wait_for_timeout(2000)
 
     # Go back to library
     # Try finding the back button

@@ -354,6 +354,7 @@ export function useEpubReader(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const attachListeners = (contents: any) => {
           const doc = contents.document;
+          const win = contents.window;
           if (!doc) return;
 
           // Prevent duplicate listeners
@@ -369,21 +370,16 @@ export function useEpubReader(
           });
 
           doc.addEventListener('mouseup', () => {
+            // ... existing mouseup code ...
             const selection = contents.window.getSelection();
             if (!selection || selection.isCollapsed) return;
 
             setTimeout(() => {
-              // Re-check selection existence after delay to handle race conditions
-              // where a click event might have cleared it.
               if (selection.rangeCount === 0 || selection.isCollapsed) return;
-
               let range;
               try {
                 range = selection.getRangeAt(0);
-              } catch {
-                // Handle IndexSizeError if selection was cleared
-                return;
-              }
+              } catch { return; }
 
               if (!range) return;
               const cfi = contents.cfiFromRange(range);
@@ -392,6 +388,22 @@ export function useEpubReader(
               }
             }, 10);
           });
+
+          // Forward navigation keys to main window
+          // Listen on window to be sure
+          win.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+              // Dispatch event to main window so ReaderTTSController can handle it
+              const event = new KeyboardEvent('keydown', {
+                key: e.key,
+                code: e.code,
+                bubbles: true,
+                cancelable: true,
+                view: window
+              });
+              window.dispatchEvent(event);
+            }
+          }, true);
         };
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -401,7 +413,10 @@ export function useEpubReader(
 
         // Manually trigger extras for initially loaded content
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newRendition as any).getContents().forEach((contents: any) => injectExtras(contents));
+        (newRendition as any).getContents().forEach((contents: any) => {
+          injectExtras(contents);
+          attachListeners(contents);
+        });
 
       } catch (err) {
         if (err instanceof CancellationError) {

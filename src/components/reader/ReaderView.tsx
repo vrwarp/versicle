@@ -326,7 +326,9 @@ export const ReaderView: React.FC = () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (window as any).rendition = rendition;
         }
-    }, [rendition]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).__areLocationsReady = areLocationsReady;
+    }, [rendition, areLocationsReady]);
 
     // Handle errors
     useEffect(() => {

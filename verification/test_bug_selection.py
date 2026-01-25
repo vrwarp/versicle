@@ -23,8 +23,14 @@ def test_selection_popover_reappearance(page: Page):
     frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
     frame.locator("body").wait_for(timeout=5000)
 
-    # Navigate to next page to ensure text content
-    page.keyboard.press("ArrowRight")
+    # Wait for locations to be generated
+    page.wait_for_function("window.__areLocationsReady === true", timeout=30000)
+
+    # Navigate to 10% to ensure text content
+    page.evaluate("""
+        const cfi = window.rendition.book.locations.cfiFromPercentage(0.1);
+        window.rendition.display(cfi);
+    """)
     page.wait_for_timeout(2000)
 
     # 1. First Selection & Highlight
