@@ -54,7 +54,7 @@ vi.mock('../ui/DropdownMenu', () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DropdownMenuItem: ({ children, onClick, ...props }: any) => (
+  DropdownMenuItem: ({ children, onClick, ...props }: { children: React.ReactNode; onClick?: () => void; [key: string]: unknown }) => (
     <div
       onClick={onClick}
       {...props}
@@ -63,9 +63,9 @@ vi.mock('../ui/DropdownMenu', () => ({
     </div>
   ),
   DropdownMenuSeparator: () => <div />,
-  DropdownMenuSub: ({ children }: any) => <div>{children}</div>,
-  DropdownMenuSubTrigger: ({ children }: any) => <div>{children}</div>,
-  DropdownMenuSubContent: ({ children }: any) => <div>{children}</div>,
+  DropdownMenuSub: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuSubTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuSubContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 describe('BookCard', () => {
@@ -88,7 +88,7 @@ describe('BookCard', () => {
 
     // Polyfill PointerEvent for Radix UI if needed
     if (!window.PointerEvent) {
-      // @ts-ignore
+      // @ts-expect-error - Polyfill for JSDOM
       window.PointerEvent = class PointerEvent extends MouseEvent { };
     }
 
