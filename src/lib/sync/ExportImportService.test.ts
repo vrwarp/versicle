@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     ExportImportService,
-    DEFAULT_EXPORT_OPTIONS,
-    type ExportOptions,
-    type ExportResult
+    type ExportOptions
 } from './ExportImportService';
 
 // Mock all stores
