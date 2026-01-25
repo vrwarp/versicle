@@ -70,7 +70,9 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
 
   // Get active progress using the shared priority logic
   const activeProgress = useBookProgress(book.id);
-  const progressPercent = activeProgress ? activeProgress.percentage : 0;
+  // Use book.progress (from usage in selectors) as fallback if activeProgress is missing
+  // This ensures Reading List progress is used if no device progress exists
+  const progressPercent = activeProgress ? activeProgress.percentage : (book.progress || 0);
 
   // Get raw progress from all devices to calculate resume badge
   const allProgress = useReadingStateStore((state) => state.progress[book.id]);

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
+import { useReadingListStore } from './useReadingListStore';
 import type { UserProgress } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
 
@@ -33,6 +34,7 @@ export const useAllBooks = () => {
     const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
     // Subscribe to progress changes (per-device structure)
     const progressMap = useReadingStateStore(state => state.progress);
+    const readingListEntries = useReadingListStore(state => state.entries);
 
     // OPTIMIZATION: Phase 1 - Base Books
     // Memoize the "static" transformation of books (merging inventory + library metadata).
@@ -74,15 +76,19 @@ export const useAllBooks = () => {
     return useMemo(() => {
         return baseBooks.map(book => {
             const bookProgress = getMaxProgress(progressMap[book.id]);
+            const readingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
+            const progress = bookProgress?.percentage || readingListEntry?.percentage || 0;
+
             return {
                 ...book,
                 // Merge progress from reading state store (max across all devices)
-                progress: bookProgress?.percentage || 0,
+                // Fallback to reading list progress if no device progress is found
+                progress: progress,
                 currentCfi: bookProgress?.currentCfi || undefined,
-                lastRead: bookProgress?.lastRead || 0
+                lastRead: bookProgress?.lastRead || readingListEntry?.lastUpdated || 0
             };
         });
-    }, [baseBooks, progressMap]);
+    }, [baseBooks, progressMap, readingListEntries]);
 };
 
 /**
@@ -94,6 +100,7 @@ export const useBook = (id: string | null) => {
     const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
     // Subscribe to progress changes (per-device structure)
     const progressMap = useReadingStateStore(state => state.progress);
+    const readingListEntries = useReadingListStore(state => state.entries);
 
     // Get max progress across all devices for this book
     const progress = id ? getMaxProgress(progressMap[id]) : null;
@@ -103,6 +110,8 @@ export const useBook = (id: string | null) => {
         if (!book) return null;
 
         const hasCoverBlob = staticMeta?.coverBlob instanceof Blob;
+        const readingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
+        const progressPercentage = progress?.percentage || readingListEntry?.percentage || 0;
 
         return {
             ...book,
@@ -121,10 +130,10 @@ export const useBook = (id: string | null) => {
             isOffloaded: offloadedBookIds.has(book.bookId),
 
             // Merge progress (max across all devices)
-            progress: progress?.percentage || 0,
+            progress: progressPercentage,
             currentCfi: progress?.currentCfi || undefined
         };
-    }, [book, staticMeta, offloadedBookIds, progress]);
+    }, [book, staticMeta, offloadedBookIds, progress, readingListEntries]);
 };
 
 /**
