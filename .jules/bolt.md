@@ -32,3 +32,8 @@
 - **Bottleneck:** `TextSegmenter` was calling `generateCfiRange` (and `parseCfiRange`) thousands of times during sentence merging. `generateCfiRange` performs character-by-character string scanning.
 - **Solution:** Implemented `tryFastMergeCfi` using string slicing to optimistically merge CFIs that share the same parent path.
 - **Learning:** `epubjs` CFI utilities are robust but expensive. For sequential text merging where parent paths are identical, manual string concatenation is ~30% faster than full parsing/regeneration.
+
+## 2025-05-31 - Selector Array Item Memoization
+- **Bottleneck:** `useAllBooks` selector was creating new object references for every book whenever `progressMap` updated, causing the entire library list to re-render despite `React.memo` on list items.
+- **Solution:** Used `useRef` inside `useMemo` to track previous results and reuse object references for books whose progress hadn't changed.
+- **Learning:** `useMemo` only memoizes the *result array reference*, not the items inside. If you map over an array to merge data, you break reference equality for items. For lists with expensive items, manual reference reuse inside `useMemo` is necessary to make `React.memo` work.

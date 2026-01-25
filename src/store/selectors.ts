@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
@@ -71,17 +71,46 @@ export const useAllBooks = () => {
     // This memo runs when 'progressMap' updates (frequently), but it reuses the expensive
     // 'baseBooks' objects and only shallow-copies them to attach the new progress.
     // This avoids re-creating the entire book object structure and re-calculating metadata/urls.
+    const prevResultRef = useRef<any[]>([]);
+    const prevBaseBooksRef = useRef<any[]>([]);
+
     return useMemo(() => {
-        return baseBooks.map(book => {
+        const baseBooksChanged = prevBaseBooksRef.current !== baseBooks;
+
+        const result = baseBooks.map((book, index) => {
             const bookProgress = getMaxProgress(progressMap[book.id]);
+            const newProgress = bookProgress?.percentage || 0;
+            const newCurrentCfi = bookProgress?.currentCfi || undefined;
+            const newLastRead = bookProgress?.lastRead || 0;
+
+            // OPTIMIZATION: Reuse object reference if progress hasn't changed.
+            // This allows React.memo in BookListItem to skip re-renders.
+            // We can only safely reuse the previous object if 'baseBooks' hasn't changed
+            // (meaning the underlying metadata is stable) and the progress fields are identical.
+            if (!baseBooksChanged) {
+                const prevBook = prevResultRef.current[index];
+                // Sanity check: ensure IDs match (should always match if baseBooks is stable)
+                if (prevBook && prevBook.id === book.id) {
+                    if (prevBook.progress === newProgress &&
+                        prevBook.currentCfi === newCurrentCfi &&
+                        prevBook.lastRead === newLastRead) {
+                        return prevBook;
+                    }
+                }
+            }
+
             return {
                 ...book,
                 // Merge progress from reading state store (max across all devices)
-                progress: bookProgress?.percentage || 0,
-                currentCfi: bookProgress?.currentCfi || undefined,
-                lastRead: bookProgress?.lastRead || 0
+                progress: newProgress,
+                currentCfi: newCurrentCfi,
+                lastRead: newLastRead
             };
         });
+
+        prevResultRef.current = result;
+        prevBaseBooksRef.current = baseBooks;
+        return result;
     }, [baseBooks, progressMap]);
 };
 
