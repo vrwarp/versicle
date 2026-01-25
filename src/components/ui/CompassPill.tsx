@@ -353,7 +353,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         <div className="flex items-center gap-3 flex-1 min-w-0" onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onClick && onClick();
+            if (onClick) onClick();
           }
         }}>
           <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary animate-pulse">

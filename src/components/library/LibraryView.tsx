@@ -151,7 +151,7 @@ export const LibraryView: React.FC = () => {
     }
   }, [navigate, staticMetadata, offloadedBookIds, handleRestore]);
 
-  const handleResumeReading = useCallback((book: BookMetadata, _deviceId: string, _cfi: string) => {
+  const handleResumeReading = useCallback((book: BookMetadata) => {
     // Check if file is missing (Ghost or Offloaded)
     const isGhost = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
     const isOffloaded = book.isOffloaded || offloadedBookIds.has(book.id);

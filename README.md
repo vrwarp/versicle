@@ -54,7 +54,7 @@
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
 *   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
-*   **Free Tier Rotation**: "Smart Rotation" strategy automatically switches between Gemini models (Flash Lite/Flash) to handle rate limits (429) and maximize free quotas.
+*   **Smart Rotation**: Automatically switches between Gemini models (Flash Lite/Flash) to handle rate limits (429) and maximize free quotas.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
 *   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1").
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
