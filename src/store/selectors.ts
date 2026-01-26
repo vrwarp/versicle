@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
@@ -70,25 +70,71 @@ export const useAllBooks = () => {
     }, [books, staticMetadata, offloadedBookIds]);
 
     // OPTIMIZATION: Phase 2 - Progress Merge
-    // This memo runs when 'progressMap' updates (frequently), but it reuses the expensive
-    // 'baseBooks' objects and only shallow-copies them to attach the new progress.
-    // This avoids re-creating the entire book object structure and re-calculating metadata/urls.
-    return useMemo(() => {
-        return baseBooks.map(book => {
+    // This memo runs when 'progressMap' updates (frequently).
+    // It implements "Array Item Memoization" to ensure that if a book's progress hasn't changed,
+    // we return the exact same object reference. This allows React.memo in list items to work effectively.
+
+    // Cache structure: { [bookId]: { baseBook, progress, currentCfi, lastRead, result } }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const prevResultsRef = useRef<Record<string, any>>({});
+
+    const { results, nextCache } = useMemo(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nextResults: Record<string, any> = {};
+
+        // eslint-disable-next-line react-hooks/refs
+        const mapped = baseBooks.map(book => {
             const bookProgress = getMaxProgress(progressMap[book.id]);
             const readingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
             const progress = bookProgress?.percentage || readingListEntry?.percentage || 0;
+            const currentCfi = bookProgress?.currentCfi || undefined;
+            const lastRead = bookProgress?.lastRead || readingListEntry?.lastUpdated || 0;
 
-            return {
+            // Check if we can reuse the cached object
+            const cached = prevResultsRef.current[book.id];
+
+            if (cached &&
+                cached.baseBook === book && // Reference check: must match the exact base object
+                cached.progress === progress &&
+                cached.currentCfi === currentCfi &&
+                cached.lastRead === lastRead
+            ) {
+                // Reuse the cached result and carry it forward to the next cache
+                nextResults[book.id] = cached;
+                return cached.result;
+            }
+
+            // Create new result if anything changed
+            const newResult = {
                 ...book,
                 // Merge progress from reading state store (max across all devices)
                 // Fallback to reading list progress if no device progress is found
-                progress: progress,
-                currentCfi: bookProgress?.currentCfi || undefined,
-                lastRead: bookProgress?.lastRead || readingListEntry?.lastUpdated || 0
+                progress,
+                currentCfi,
+                lastRead
             };
+
+            // Update cache
+            nextResults[book.id] = {
+                baseBook: book,
+                progress,
+                currentCfi,
+                lastRead,
+                result: newResult
+            };
+
+            return newResult;
         });
+
+        return { results: mapped, nextCache: nextResults };
     }, [baseBooks, progressMap, readingListEntries]);
+
+    // Update the ref for the next render
+    useEffect(() => {
+        prevResultsRef.current = nextCache;
+    });
+
+    return results;
 };
 
 /**
