@@ -22,7 +22,7 @@
 *   **Framework**: React 19 + Vite 7 + React Router 7
 *   **Language**: TypeScript
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs`
-*   **Sync**: `y-fire` (Firestore) + Android Backup Service
+*   **Sync**: `y-cinder` (Firestore) + Android Backup Service
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API

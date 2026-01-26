@@ -250,7 +250,7 @@ Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for 
 Provides a "Cloud Overlay" for real-time synchronization.
 
 *   **Logic**:
-    *   **Y-Fire**: Uses `y-fire` to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
+    *   **Y-Cinder**: Uses `y-cinder` (a specialized fork of `y-fire`) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
     *   **Authenticated**: Sync only occurs when the user is signed in via Firebase Auth.
     *   **Mock Mode**: Includes a `MockFireProvider` for integration testing without a real Firebase project.
@@ -314,6 +314,27 @@ Manages manual internal state backup and restoration.
 
 *   **`createLightBackup()`**: JSON-only export (metadata, settings, history).
 *   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files.
+
+#### `MaintenanceService` (`src/lib/MaintenanceService.ts`)
+*   **Goal**: Maintain database hygiene by identifying and removing orphaned data (files without books, metadata without files).
+*   **Logic**:
+    *   **Scan**: Compares all IDB stores (`static_resources`, `user_annotations`, `cache_render_metrics`) against the `static_manifests` source of truth to find discrepancies.
+    *   **Prune**: Executes a multi-store transaction to delete orphaned records to free up storage space.
+*   **Trade-off**: Heavy pruning operations may cause temporary database contention, though they are designed to be run infrequently.
+
+#### `ExportService` (`src/lib/export.ts`)
+*   **Goal**: Unified file export abstraction for Web and Capacitor.
+*   **Logic**:
+    *   **Native**: Converts Blobs to Base64 to write to the device filesystem, then triggers the native OS "Share" sheet.
+    *   **Web**: Uses `file-saver` to trigger a browser download.
+*   **Trade-off**: Converting large EPUBs to Base64 strings for native writing increases memory usage significantly, which may risk OOM on low-end devices.
+
+#### `DeviceIdentity` (`src/lib/device-id.ts`)
+*   **Goal**: Stable identification for Per-Device Sync and the Device Mesh.
+*   **Logic**:
+    *   **Persistence**: Generates a UUID on first launch and persists it in `localStorage` (`versicle-device-id`).
+    *   **Stability**: Ensures the device maintains its identity across reloads and upgrades to preserve reading progress isolation.
+*   **Trade-off**: Relying on `localStorage` is fragile; if the user clears browser data, the device identity is lost, creating a "new" device in the mesh.
 
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
 *   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks.
