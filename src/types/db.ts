@@ -291,6 +291,8 @@ export interface CacheSessionState {
   bookId: string;
   /** The active playback queue. */
   playbackQueue: TTSQueueItem[];
+  /** The index of the section this queue belongs to. */
+  sectionIndex?: number;
   /** Last pause timestamp. */
   lastPauseTime?: number;
   /** Update timestamp. */

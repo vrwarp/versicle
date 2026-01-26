@@ -235,8 +235,22 @@ export class AudioPlayerService {
                 if (this.currentBookId !== bookId) return;
 
                 if (state && state.queue && state.queue.length > 0) {
+                    // Fetch progress from the authoritative store (Yjs)
+                    const progress = useReadingStateStore.getState().getProgress(bookId);
+
+                    let currentIndex = state.currentIndex ?? 0;
+                    let sectionIndex = state.sectionIndex ?? -1;
+
+                    // Only use store progress if it matches the cached section/queue
+                    // This prevents applying an index from Chapter 2 to the queue of Chapter 1
+                    // if the local cache is stale compared to the synced progress.
+                    if (progress && progress.currentSectionIndex === state.sectionIndex) {
+                        currentIndex = progress.currentQueueIndex ?? currentIndex;
+                        sectionIndex = progress.currentSectionIndex ?? sectionIndex;
+                    }
+
                     await this.stopInternal();
-                    this.stateManager.setQueue(state.queue, state.currentIndex || 0, state.sectionIndex ?? -1);
+                    this.stateManager.setQueue(state.queue, currentIndex, sectionIndex);
                     // Subscription handles metadata and listeners
                 }
             } catch (e) {
