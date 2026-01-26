@@ -104,11 +104,12 @@ const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceIt
                                     className="h-7 w-[150px]"
                                     autoFocus
                                     onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                                    aria-label="Device name"
                                 />
-                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave}>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} aria-label="Save name">
                                     <Check className="h-4 w-4 text-green-500" />
                                 </Button>
-                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsEditing(false)}>
+                                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setIsEditing(false)} aria-label="Cancel editing">
                                     <X className="h-4 w-4 text-red-500" />
                                 </Button>
                             </div>
@@ -116,9 +117,15 @@ const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceIt
                             <h4 className="font-medium truncate flex items-center gap-2">
                                 {device.name}
                                 {isCurrent && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">This Device</span>}
-                                <button className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" onClick={() => setIsEditing(true)}>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                    onClick={() => setIsEditing(true)}
+                                    aria-label="Rename device"
+                                >
                                     <Edit2 className="h-3 w-3 text-muted-foreground" />
-                                </button>
+                                </Button>
                             </h4>
                         )}
                     </div>
@@ -137,7 +144,14 @@ const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceIt
                             <Copy className="h-4 w-4 mr-2" />
                             Clone Settings
                         </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => onDelete(device.id)} title="Remove device">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => onDelete(device.id)}
+                            title="Remove device"
+                            aria-label="Remove device"
+                        >
                             <Trash2 className="h-4 w-4" />
                         </Button>
                     </>
