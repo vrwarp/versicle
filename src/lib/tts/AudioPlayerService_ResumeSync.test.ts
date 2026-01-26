@@ -181,4 +181,40 @@ describe('AudioPlayerService - Resume Fix', () => {
 
         expect(service['stateManager'].currentIndex).toBe(1);
     });
+
+    it('should trust store progress if cache sectionIndex is undefined (Legacy Cache)', async () => {
+        const bookId = 'book-123';
+        const queueItems = [
+            { text: 'Sentence 1', cfi: 'cfi1' },
+            { text: 'Sentence 2', cfi: 'cfi2' },
+            { text: 'Sentence 3', cfi: 'cfi3' }
+        ];
+
+        // 1. Mock Legacy DB state (Undefined sectionIndex)
+        vi.mocked(dbService.getTTSState).mockResolvedValue({
+            bookId,
+            queue: queueItems,
+            currentIndex: 0,
+            sectionIndex: undefined, // Legacy cache!
+            updatedAt: Date.now()
+        });
+
+        // 2. Mock Store (Chapter 1, Index 2)
+        getProgressMock.mockReturnValue({
+            bookId,
+            percentage: 0.5,
+            currentQueueIndex: 2,
+            currentSectionIndex: 1,
+            lastRead: Date.now(),
+            completedRanges: []
+        });
+
+        service.setBookId(bookId);
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // Should use Store index (2) because legacy cache is assumed to match
+        expect(service['stateManager'].currentIndex).toBe(2);
+        // And update section index to store's value
+        expect(service['stateManager'].currentSectionIndex).toBe(1);
+    });
 });

@@ -241,10 +241,12 @@ export class AudioPlayerService {
                     let currentIndex = state.currentIndex ?? 0;
                     let sectionIndex = state.sectionIndex ?? -1;
 
-                    // Only use store progress if it matches the cached section/queue
-                    // This prevents applying an index from Chapter 2 to the queue of Chapter 1
-                    // if the local cache is stale compared to the synced progress.
-                    if (progress && progress.currentSectionIndex === state.sectionIndex) {
+                    // Use store progress if:
+                    // 1. We have progress data
+                    // 2. AND (Cache is legacy/undefined OR Cache matches Store Section)
+                    // This allows legacy caches (from before the fix) to be restored using the store's position,
+                    // while preventing mismatches for new caches.
+                    if (progress && (state.sectionIndex === undefined || state.sectionIndex === progress.currentSectionIndex)) {
                         currentIndex = progress.currentQueueIndex ?? currentIndex;
                         sectionIndex = progress.currentSectionIndex ?? sectionIndex;
                     }
@@ -411,13 +413,18 @@ export class AudioPlayerService {
         if (this.status === 'stopped' && this.currentBookId && !this.sessionRestored) {
             this.sessionRestored = true;
             try {
-                const book = await dbService.getBookMetadata(this.currentBookId);
-                if (book) {
-                    if (book.lastPlayedCfi && this.stateManager.currentIndex === 0) {
-                        const index = this.stateManager.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
+                // Fetch authoritative progress from Yjs store instead of stale DB metadata
+                const progress = useReadingStateStore.getState().getProgress(this.currentBookId);
+
+                if (progress) {
+                    if (progress.lastPlayedCfi && this.stateManager.currentIndex === 0) {
+                        const index = this.stateManager.queue.findIndex(item => item.cfi === progress.lastPlayedCfi);
                         if (index >= 0) this.stateManager.jumpTo(index);
                     }
-                    if (book.lastPauseTime) return this.resumeInternal();
+                    // For auto-resume (e.g. from background kill), we might check timestamp?
+                    // But usually explicit play() is called by user.
+                    // The original code checked 'lastPauseTime', but that logic is vague.
+                    // If we are here, 'play()' was called. We just want to ensure we start at the right spot.
                 }
             } catch (e) {
                 logger.warn("Failed to restore playback state", e);

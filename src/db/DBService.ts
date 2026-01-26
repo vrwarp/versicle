@@ -560,14 +560,13 @@ class DBService {
     try {
       const db = await this.getDB();
       const session = await db.get('cache_session_state', bookId);
-      const progress = await db.get('user_progress', bookId);
 
       if (session) {
         return {
           bookId,
           queue: session.playbackQueue,
-          currentIndex: progress?.currentQueueIndex || 0,
-          sectionIndex: session.sectionIndex ?? progress?.currentSectionIndex ?? 0,
+          currentIndex: 0, // Default to 0, will be overridden by Store if valid
+          sectionIndex: session.sectionIndex, // Return undefined if missing (legacy)
           updatedAt: session.updatedAt
         };
       }
