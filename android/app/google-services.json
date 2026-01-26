@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "147759642926",
+    "project_id": "versicle",
+    "storage_bucket": "versicle.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:147759642926:android:4172bee9d760f156d162bf",
+        "android_client_info": {
+          "package_name": "com.vrwarp.versicle"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "147759642926-ki82b590k0dvkpndl2ik6qm9kt3nr13r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6152lBi5XRsD60LWFBSMlEaa6RExCH9M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "147759642926-ki82b590k0dvkpndl2ik6qm9kt3nr13r.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
