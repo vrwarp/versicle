@@ -34,7 +34,12 @@ vi.mock('zustand/middleware', async (importOriginal) => {
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
   extractBookData: vi.fn(),
-  processBatchImport: vi.fn(), // Mock processBatchImport as it is used in addBooks
+  extractBookMetadata: vi.fn(),
+}));
+
+// Mock batch ingestion
+vi.mock('../lib/batch-ingestion', () => ({
+  processBatchImport: vi.fn(),
 }));
 
 // Mock AudioPlayerService
