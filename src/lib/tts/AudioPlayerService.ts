@@ -232,11 +232,17 @@ export class AudioPlayerService {
         this.enqueue(async () => {
             try {
                 const state = await dbService.getTTSState(bookId);
+                const progress = useReadingStateStore.getState().getProgress(bookId);
+
                 if (this.currentBookId !== bookId) return;
 
                 if (state && state.queue && state.queue.length > 0) {
                     await this.stopInternal();
-                    this.stateManager.setQueue(state.queue, state.currentIndex || 0, state.sectionIndex ?? -1);
+
+                    const currentIndex = progress?.currentQueueIndex || 0;
+                    const sectionIndex = progress?.currentSectionIndex ?? -1;
+
+                    this.stateManager.setQueue(state.queue, currentIndex, sectionIndex);
                     // Subscription handles metadata and listeners
                 }
             } catch (e) {

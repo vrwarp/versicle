@@ -2,7 +2,7 @@ import JSZip from 'jszip';
 import * as Y from 'yjs';
 import { exportFile } from './export';
 import { dbService } from '../db/DBService';
-import type { LexiconRule, BookLocations, StaticBookManifest, UserOverrides, UserInventoryItem } from '../types/db';
+import type { BookLocations, StaticBookManifest, UserInventoryItem } from '../types/db';
 import { getDB } from '../db/db';
 import { yDoc, waitForYjsSync, yjsPersistence } from '../store/yjs-provider';
 import { createLogger } from './logger';
@@ -30,8 +30,6 @@ export interface BackupManifestV2 {
   // === Static/Cache Data (from IDB, not in Yjs) ===
   /** Static manifests for Ghost Book metadata support */
   staticManifests: StaticBookManifest[];
-  /** Lexicon rules (flattened from user_overrides) */
-  lexicon: LexiconRule[];
   /** Location data from cache_render_metrics */
   locations: BookLocations[];
 }
@@ -148,24 +146,7 @@ export class BackupService {
     // Read static/cache data from IDB
     const db = await getDB();
     const staticManifests = await db.getAll('static_manifests');
-    const overrides: UserOverrides[] = await db.getAll('user_overrides');
     const metrics = await db.getAll('cache_render_metrics');
-
-    // Flatten overrides to lexicon rules
-    const lexicon: LexiconRule[] = [];
-    for (const ov of overrides) {
-      for (const r of ov.lexicon) {
-        lexicon.push({
-          id: r.id,
-          original: r.original,
-          replacement: r.replacement,
-          isRegex: r.isRegex,
-          created: r.created,
-          bookId: ov.bookId === 'global' ? undefined : ov.bookId,
-          applyBeforeGlobal: ov.lexiconConfig?.applyBefore
-        });
-      }
-    }
 
     // Map metrics to locations
     const locations: BookLocations[] = metrics.map(met => ({
@@ -173,12 +154,13 @@ export class BackupService {
       locations: met.locations
     }));
 
+    // Note: Lexicon (formerly user_overrides) is now in Yjs, so it's captured in yjsSnapshot.
+
     return {
       version: this.BACKUP_VERSION,
       timestamp: new Date().toISOString(),
       yjsSnapshot,
       staticManifests,
-      lexicon,
       locations
     };
   }
@@ -282,41 +264,6 @@ export class BackupService {
       await tx.done;
     }
 
-    // Write lexicon rules
-    if (manifest.lexicon?.length > 0) {
-      onProgress?.(50, 'Restoring dictionary...');
-      const tx = db.transaction(['user_overrides'], 'readwrite');
-      const ovStore = tx.objectStore('user_overrides');
-
-      // Group by bookId
-      const ruleMap = new Map<string, LexiconRule[]>();
-      for (const r of manifest.lexicon) {
-        const bid = r.bookId || 'global';
-        if (!ruleMap.has(bid)) ruleMap.set(bid, []);
-        ruleMap.get(bid)?.push(r);
-      }
-
-      for (const [bid, rules] of ruleMap.entries()) {
-        const ov = await ovStore.get(bid) || { bookId: bid, lexicon: [] };
-        for (const r of rules) {
-          if (!ov.lexicon.some((lx: LexiconRule) => lx.id === r.id)) {
-            ov.lexicon.push({
-              id: r.id,
-              original: r.original,
-              replacement: r.replacement,
-              isRegex: r.isRegex,
-              created: r.created
-            });
-          }
-          if (r.applyBeforeGlobal !== undefined) {
-            ov.lexiconConfig = { applyBefore: r.applyBeforeGlobal };
-          }
-        }
-        await ovStore.put(ov);
-      }
-      await tx.done;
-    }
-
     // Write locations
     if (manifest.locations?.length > 0) {
       onProgress?.(60, 'Restoring locations...');
@@ -340,7 +287,6 @@ export class BackupService {
 
       if (filesFolder) {
         // Iterate over files in the zip folder directly
-        // This is safer than relying on YDoc state which might be pending reload
         const filePromises: Promise<void>[] = [];
 
         filesFolder.forEach((relativePath, zipFile) => {
@@ -372,9 +318,7 @@ export class BackupService {
 
       // Clear offloaded status for restored books
       if (restoredBookIds.length > 0) {
-        // We can try to update store, but since we require reload, this is mostly for UI feedback if any
         try {
-          // Check if store is actually populated (might be empty due to delete wins)
           const currentOffloaded = useLibraryStore.getState().offloadedBookIds || new Set();
           const newOffloaded = new Set([...currentOffloaded].filter(id => !restoredBookIds.includes(id)));
           useLibraryStore.setState({ offloadedBookIds: newOffloaded });

@@ -19,30 +19,7 @@ vi.mock('./db/DBService', () => ({
   }
 }));
 
-// Mock migration
-vi.mock('./lib/migration/YjsMigration', () => ({
-  migrateToYjs: vi.fn().mockResolvedValue(undefined)
-}));
 
-// Mock Yjs Provider
-vi.mock('./store/yjs-provider', () => ({
-  waitForYjsSync: vi.fn().mockResolvedValue(undefined),
-  yDoc: {
-    getMap: vi.fn().mockReturnValue({
-      get: vi.fn(),
-      set: vi.fn(),
-      delete: vi.fn(),
-      observeDeep: vi.fn(),
-      toJSON: vi.fn().mockReturnValue({})
-    }),
-    transact: vi.fn()
-  }
-}));
-
-// Mock GhostBookBackfill
-vi.mock('./lib/migration/GhostBookBackfill', () => ({
-  backfillCoverPalettes: vi.fn().mockResolvedValue(undefined)
-}));
 
 // Mock SW Utils - The key fix
 vi.mock('./lib/serviceWorkerUtils', () => ({

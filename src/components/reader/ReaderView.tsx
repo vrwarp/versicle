@@ -235,8 +235,12 @@ export const ReaderView: React.FC = () => {
                 timestamp: Date.now()
             };
 
-            // if (id) updateLocation(id, location.start.cfi, percentage); // updateLocation unused in this file now if we comment out the hook usage
-            if (id) useReadingStateStore.getState().updateLocation(id, location.start.cfi, percentage); // Access directly from store
+            if (id) {
+                useReadingStateStore.getState().updateLocation(id, location.start.cfi, percentage);
+                // Ensure current segment is in history so it appears at top of list
+                const range = generateCfiRange(location.start.cfi, location.end.cfi);
+                useReadingStateStore.getState().addCompletedRange(id, range);
+            }
             setCurrentSection(title, sectionId);
         },
         onTocLoaded: (newToc) => setToc(newToc),

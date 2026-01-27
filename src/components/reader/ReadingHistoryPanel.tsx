@@ -58,13 +58,10 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
             let label = explicitLabel || "Reading Segment";
             let percentage = 0;
             let subLabel = range;
-            let targetCfi = range;
+            let targetCfi = range; // DEFAULT: Use raw range for maximum jump accuracy
 
-            // Parse CFI to get start point for jumping
+            // Parse CFI to get start point for jumping (optional fallback)
             const parsed = parseCfiRange(range);
-            if (parsed) {
-                targetCfi = parsed.fullEnd;
-            }
 
             if (book) {
                 // Try to get percentage
@@ -134,7 +131,9 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
             for (const range of completedRanges) {
                 loadedItems.push(processItem(range));
             }
-            loadedItems.sort((a, b) => a.percentage - b.percentage);
+            // Sort DESC so latest (furthest) is at top. 
+            // Current segment (recorded in ReaderView) will be index 0.
+            loadedItems.sort((a, b) => b.percentage - a.percentage);
         }
 
         return loadedItems;

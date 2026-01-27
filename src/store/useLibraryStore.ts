@@ -103,9 +103,8 @@ interface IDBService {
   offloadBook: (id: string) => Promise<void>;
   restoreBook: (id: string, file: File) => Promise<void>;
   getBookMetadata: (id: string) => Promise<BookMetadata | undefined>;
-  getAllInventoryItems: () => Promise<UserInventoryItem[]>;
   getOffloadedStatus: (bookIds?: string[]) => Promise<Map<string, boolean>>;
-  getBookIdByFilename: (filename: string) => Promise<string | undefined>;
+  getBookIdByFilename: (filename: string) => string | undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -130,53 +129,13 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
     setSortOrder: (sort) => set({ sortOrder: sort }),
 
     hydrateStaticMetadata: async () => {
-      // Access books from the SYNCED store
+      // Access books from the SYNCED store (Yjs)
       const books = useBookStore.getState().books;
-      let bookIds = Object.keys(books);
+      const bookIds = Object.keys(books);
       logger.debug(`Hydrate called. Books in store: ${bookIds.length}`);
 
       if (bookIds.length === 0) {
-        // Self-healing: Check if user_inventory has items that Yjs missed (e.g. after restore)
-        try {
-          const legacyBooks = await injectedDB.getAllInventoryItems();
-          if (legacyBooks && legacyBooks.length > 0) {
-            logger.info(`Found ${legacyBooks.length} items in user_inventory but 0 in Yjs. Migrating...`);
-
-            // Enrich legacy items with metadata from IDB if missing (Ghost Book requirements)
-            await Promise.all(legacyBooks.map(async (item) => {
-              let { title, author } = item;
-
-              // If title/author missing (legacy), try to fetch from static manifest
-              if (!title || !author || author === 'Unknown Author') {
-                try {
-                  const meta = await injectedDB.getBookMetadata(item.bookId);
-                  if (meta) {
-                    if (!title) title = meta.title;
-                    if (!author || author === 'Unknown Author') author = meta.author;
-                  }
-                } catch (e) {
-                  logger.warn(`Failed to fetch metadata for legacy book ${item.bookId}`, e);
-                }
-              }
-
-              // Direct update to synced store
-              const inventoryItem = {
-                ...item,
-                title: title || 'Untitled',
-                author: author || 'Unknown Author'
-              };
-              useBookStore.getState().addBook(inventoryItem);
-            }));
-
-            // Refresh IDs
-            bookIds = Object.keys(useBookStore.getState().books);
-          } else {
-            return;
-          }
-        } catch (e) {
-          logger.error("Failed to self-heal from user_inventory", e);
-          return;
-        }
+        return; // No books to hydrate
       }
 
       set({ isHydrating: true });

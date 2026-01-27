@@ -20,8 +20,8 @@ vi.mock('y-indexeddb', () => ({
     constructor(_name: string, doc: any) {
       mocks.capturedDocs.push(doc);
     }
-    on() {}
-    destroy() {}
+    on() { }
+    destroy() { }
     clearData() { return mocks.persistenceMock.clearData(); }
     get synced() { return true; }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,7 +37,7 @@ vi.mock('../store/yjs-provider', async (importOriginal) => {
     waitForYjsSync: vi.fn(() => Promise.resolve()),
     // Ensure we expose a mock persistence if the real one isn't initialized
     yjsPersistence: {
-        clearData: mocks.persistenceMock.clearData
+      clearData: mocks.persistenceMock.clearData
     }
   };
 });
@@ -131,7 +131,6 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
 
       mockDB.getAll.mockImplementation((store: string) => {
         if (store === 'static_manifests') return Promise.resolve([{ bookId: 'b1', title: 'Test Book' }]);
-        if (store === 'user_overrides') return Promise.resolve([]);
         if (store === 'cache_render_metrics') return Promise.resolve([]);
         return Promise.resolve([]);
       });
@@ -207,7 +206,6 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
   describe('restoreBackup', () => {
     it('should restore from v2 light backup with Yjs snapshot', async () => {
       // Create a snapshot from test data using a separate doc
-      // The service will apply this to its internal yDoc
       const testDoc = new Y.Doc();
       testDoc.getMap('library').set('books', new Y.Map());
       const booksMap = testDoc.getMap('library').get('books') as Y.Map<unknown>;
@@ -224,7 +222,6 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
         timestamp: '2023-01-01',
         yjsSnapshot: snapshotBase64,
         staticManifests: [{ bookId: 'b1', title: 'Restored Book', author: 'Author', fileHash: 'abc', fileSize: 100, totalChars: 1000, schemaVersion: 1 }],
-        lexicon: [],
         locations: []
       };
 
@@ -273,42 +270,6 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       await expect(service.restoreBackup(file)).rejects.toThrow('v1 is no longer supported');
     });
 
-    it('should restore lexicon rules to IDB', async () => {
-      const testDoc = new Y.Doc();
-      const snapshot = Y.encodeStateAsUpdate(testDoc);
-      const snapshotBase64 = btoa(String.fromCharCode(...snapshot));
-
-      const manifest: BackupManifestV2 = {
-        version: 2,
-        timestamp: '2023-01-01',
-        yjsSnapshot: snapshotBase64,
-        staticManifests: [],
-        lexicon: [
-          { id: 'r1', original: 'foo', replacement: 'bar', isRegex: false, created: 123 }
-        ],
-        locations: []
-      };
-
-      const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
-
-      const putMock = vi.fn().mockResolvedValue(undefined);
-      const getMock = vi.fn().mockResolvedValue(undefined);
-
-      const mockTx = {
-        objectStore: vi.fn().mockReturnValue({
-          get: getMock,
-          put: putMock,
-        }),
-        done: Promise.resolve(),
-      };
-      mockDB.transaction.mockReturnValue(mockTx);
-
-      await service.restoreBackup(file);
-
-      // Should have written lexicon to user_overrides
-      expect(mockTx.objectStore).toHaveBeenCalledWith('user_overrides');
-      expect(putMock).toHaveBeenCalled();
-    });
   });
 
   describe('Yjs snapshot encoding/decoding', () => {
