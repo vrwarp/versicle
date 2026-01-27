@@ -7,16 +7,6 @@ import { useToastStore } from '../../store/useToastStore';
 import { validateZipSignature } from '../../lib/ingestion';
 import { DuplicateBookError } from '../../types/errors';
 
-// Mock logger
-vi.mock('../../lib/logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock dependencies
 vi.mock('../../store/useLibraryStore');
 vi.mock('../../store/useToastStore');
@@ -30,6 +20,7 @@ describe('FileUploader', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // Default mock implementation
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

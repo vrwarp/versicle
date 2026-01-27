@@ -4,16 +4,6 @@ import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
 import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, NavigationItem } from '../types/db';
 
-// Mock logger
-vi.mock('../lib/logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
   processEpub: vi.fn(),
@@ -66,6 +56,7 @@ describe('DBService', () => {
     });
 
     it('should handle error', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       const file = new File(['content'], 'test.epub', { type: 'application/epub+zip' });
       vi.mocked(ingestion.extractBookData).mockRejectedValue(new Error('Ingestion failed'));
 
@@ -146,6 +137,7 @@ describe('DBService', () => {
 
   describe('updateBookStructure', () => {
     it('should throw error if book structure not found', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
       const id = 'non-existent-book';
       await expect(dbService.updateBookStructure(id, [])).rejects.toThrow(`Book structure not found for ${id}`);
     });

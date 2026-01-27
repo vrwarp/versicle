@@ -2,16 +2,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { extractCoverPalette, unpackColorToRGB, rgbToL, getOptimizedTextColor } from './cover-palette';
 
-// Mock logger
-vi.mock('./logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 describe('extractCoverPalette', () => {
     it('should extract palette using OffscreenCanvas when available', async () => {
          // Mock OffscreenCanvas
@@ -81,6 +71,7 @@ describe('extractCoverPalette', () => {
     });
 
     it('should return empty array if context creation fails', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         (global as any).OffscreenCanvas = undefined;
 
         const mockCanvas = {
@@ -96,6 +87,7 @@ describe('extractCoverPalette', () => {
     });
 
     it('should return empty array if createImageBitmap fails', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         (global as any).OffscreenCanvas = undefined;
         global.createImageBitmap = vi.fn().mockRejectedValue(new Error('Failed'));
 

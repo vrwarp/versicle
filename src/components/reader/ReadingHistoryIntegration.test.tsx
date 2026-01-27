@@ -5,16 +5,6 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
 import { dbService } from '../../db/DBService';
 
-// Mock logger
-vi.mock('../../lib/logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock DBService
 vi.mock('../../db/DBService', () => ({
     dbService: {
@@ -117,6 +107,8 @@ describe('ReadingHistory Integration', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getJourneyEvents as any).mockRejectedValue(new Error('Fetch failed'));
 
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
         render(
             <ReadingHistoryPanel
                 bookId="book1"
@@ -134,6 +126,8 @@ describe('ReadingHistory Integration', () => {
 
         // It renders "No reading history" because items is empty [] by default and error catch block sets loading false.
         expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
+
+        expect(consoleSpy).toHaveBeenCalledWith('[ReadingHistoryPanel]', 'Failed to load journey events', expect.any(Error));
     });
 
     it('debounces rapid trigger updates (functionally via effect)', async () => {

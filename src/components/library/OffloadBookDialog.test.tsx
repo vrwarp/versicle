@@ -6,16 +6,6 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookMetadata } from '../../types/db';
 
-// Mock logger
-vi.mock('../../lib/logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock UI components
 vi.mock('../ui/Dialog', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,6 +44,10 @@ describe('OffloadBookDialog', () => {
     const mockOffloadBook = vi.fn();
     const mockShowToast = vi.fn();
     const mockOnClose = vi.fn();
+
+    beforeEach(() => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
 
     const mockBook: BookMetadata = {
         id: 'book-1',

@@ -2,16 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { AndroidBackupService } from './android-backup';
 import { Filesystem } from '@capacitor/filesystem';
 
-// Mock logger
-vi.mock('../logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock Capacitor Filesystem
 vi.mock('@capacitor/filesystem', () => ({
     Filesystem: {
@@ -43,6 +33,7 @@ describe('AndroidBackupService', () => {
     });
 
     it('should handle read errors gracefully', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         vi.mocked(Filesystem.readFile).mockRejectedValue(new Error('File not found'));
         const result = await AndroidBackupService.readBackupPayload();
         expect(result).toBeNull();

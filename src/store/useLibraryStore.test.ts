@@ -3,16 +3,6 @@ import { createLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import type { BookMetadata } from '../types/db';
 
-// Mock logger
-vi.mock('../lib/logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock DBService
 const mockDBService = {
   getLibrary: vi.fn(),
@@ -145,6 +135,7 @@ describe('useLibraryStore', () => {
   });
 
   it('should handle add book error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const error = new Error('Add failed');
     vi.mocked(mockDBService.addBook).mockRejectedValue(error);
 
@@ -157,6 +148,7 @@ describe('useLibraryStore', () => {
   });
 
   it('should detect duplicate book and throw error if not overwriting', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(mockDBService.getBookIdByFilename).mockResolvedValue('existing-id');
 
     await expect(useLibraryStore.getState().addBook(mockFile)).rejects.toThrow('A book with the filename "test.epub" already exists.');
@@ -192,6 +184,7 @@ describe('useLibraryStore', () => {
   });
 
   it('should remove a book calling dbService', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     // Setup initial state
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useBookStore.setState({ books: { 'test-id': { ...mockBook, lastInteraction: 1000, tags: [], status: 'unread' } as any } });

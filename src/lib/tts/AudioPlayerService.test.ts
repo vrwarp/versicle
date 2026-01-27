@@ -5,20 +5,6 @@ import { dbService } from '../../db/DBService';
 import { genAIService } from '../genai/GenAIService';
 import * as cfiUtils from '../cfi-utils';
 
-const { mockLoggerWarn } = vi.hoisted(() => {
-  return { mockLoggerWarn: vi.fn() }
-});
-
-// Mock logger
-vi.mock('../logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: mockLoggerWarn,
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock WebSpeechProvider class
 vi.mock('./providers/WebSpeechProvider', () => {
   return {
@@ -271,6 +257,8 @@ describe('AudioPlayerService', () => {
         // Setup queue
         await service.setQueue([{ text: "Hello", cfi: "cfi1" }]);
 
+        const consoleSpy = vi.spyOn(console, 'warn');
+
         const onCall = mockCloudProvider.on.mock.calls[0];
         const providerListener = onCall[0];
 
@@ -283,7 +271,7 @@ describe('AudioPlayerService', () => {
         // Wait for async logic (fallback provider init and re-play)
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        expect(mockLoggerWarn).toHaveBeenCalledWith(expect.stringContaining("Falling back"));
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("TTSProviderManager"), expect.stringContaining("Falling back"));
     });
 
     it('should continue playing background audio when status becomes completed', async () => {

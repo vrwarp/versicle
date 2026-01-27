@@ -9,16 +9,6 @@ vi.mock('@capacitor/core', () => ({
     }
 }));
 
-// Mock logger
-vi.mock('../logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock Providers
 const mockProviderOn = vi.fn();
 const mockProviderInit = vi.fn();
@@ -59,6 +49,8 @@ describe('TTSProviderManager', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         events = {
             onStart: vi.fn(),
             onEnd: vi.fn(),

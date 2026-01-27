@@ -6,16 +6,6 @@ import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 
-// Mock logger
-vi.mock('../logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock dependencies
 vi.mock('../../store/yjs-provider', () => {
     const doc = new Y.Doc();
@@ -168,6 +158,7 @@ describe('YjsMigration', () => {
     });
 
     it('should handle errors gracefully', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getAllInventoryItems as any).mockRejectedValue(new Error('DB Error'));
 

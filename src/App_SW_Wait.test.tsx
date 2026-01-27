@@ -49,16 +49,6 @@ vi.mock('./lib/serviceWorkerUtils', () => ({
   waitForServiceWorkerController: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock logger
-vi.mock('./lib/logger', () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  }))
-}));
-
 // Mock useLibraryStore
 vi.mock('./store/useLibraryStore', () => {
   const hydrate = vi.fn().mockResolvedValue(undefined);
@@ -130,6 +120,7 @@ import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
 describe('App Service Worker Wait (Refactored)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
