@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
@@ -73,21 +73,55 @@ export const useAllBooks = () => {
     // This memo runs when 'progressMap' updates (frequently), but it reuses the expensive
     // 'baseBooks' objects and only shallow-copies them to attach the new progress.
     // This avoids re-creating the entire book object structure and re-calculating metadata/urls.
+
+    // Use a ref to store the previous result array to enable item-level memoization.
+    // Store both the source object (from baseBooks) and the resulting enhanced object.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const prevResultRef = useRef<{ source: any, result: any }[]>([]);
+
     return useMemo(() => {
-        return baseBooks.map(book => {
+        const newRefArray: { source: unknown, result: unknown }[] = [];
+
+        const result = baseBooks.map((book, index) => {
             const bookProgress = getMaxProgress(progressMap[book.id]);
             const readingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
             const progress = bookProgress?.percentage || readingListEntry?.percentage || 0;
+            const currentCfi = bookProgress?.currentCfi || undefined;
+            const lastRead = bookProgress?.lastRead || readingListEntry?.lastUpdated || 0;
 
-            return {
+            // Check if we can reuse the previous item reference.
+            // We must ensure the SOURCE book reference is identical (handles metadata updates)
+            // AND the dynamic properties are unchanged (handles progress updates).
+            const prevEntry = prevResultRef.current[index];
+
+            if (prevEntry && prevEntry.source === book) {
+                const prevResult = prevEntry.result;
+                if (prevResult.progress === progress &&
+                    prevResult.currentCfi === currentCfi &&
+                    prevResult.lastRead === lastRead) {
+
+                    // Keep the entry in the new ref array
+                    newRefArray[index] = prevEntry;
+                    return prevResult;
+                }
+            }
+
+            const newResult = {
                 ...book,
                 // Merge progress from reading state store (max across all devices)
                 // Fallback to reading list progress if no device progress is found
                 progress: progress,
-                currentCfi: bookProgress?.currentCfi || undefined,
-                lastRead: bookProgress?.lastRead || readingListEntry?.lastUpdated || 0
+                currentCfi: currentCfi,
+                lastRead: lastRead
             };
+
+            newRefArray[index] = { source: book, result: newResult };
+            return newResult;
         });
+
+        // Update the ref with the new mapping for next render
+        prevResultRef.current = newRefArray;
+        return result;
     }, [baseBooks, progressMap, readingListEntries]);
 };
 
