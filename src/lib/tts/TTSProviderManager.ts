@@ -3,6 +3,9 @@ import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { Capacitor } from '@capacitor/core';
 import type { AlignmentData } from './SyncEngine';
+import { createLogger } from '../logger';
+
+const logger = createLogger('TTSProviderManager');
 
 /**
  * Interface defining the events emitted by the TTSProviderManager.
@@ -80,7 +83,7 @@ export class TTSProviderManager {
                 // If it's just an interruption (e.g. from cancel), ignore
                 if (errorType === 'interrupted' || errorType === 'canceled') return;
 
-                console.error("TTS Provider Error", event.error);
+                logger.error("TTS Provider Error", event.error);
 
                 // Fallback Logic
                 if (this.provider.id !== 'local') {
@@ -110,7 +113,7 @@ export class TTSProviderManager {
     }
 
     private async switchToLocalProvider() {
-         console.warn("Falling back to local provider...");
+         logger.warn("Falling back to local provider...");
          this.provider.stop(); // Ensure old provider is stopped
 
          if (Capacitor.isNativePlatform()) {
@@ -147,7 +150,7 @@ export class TTSProviderManager {
 
              // Check if it's not just a cancellation
              if (errorType !== 'interrupted' && errorType !== 'canceled') {
-                 console.error("TTS Provider Play Error", e);
+                 logger.error("TTS Provider Play Error", e);
                  if (this.provider.id !== 'local') {
                     this.events.onError({ type: 'fallback', message: e instanceof Error ? e.message : e });
                     await this.switchToLocalProvider();

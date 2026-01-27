@@ -5,6 +5,16 @@ import { ReadingHistoryPanel } from './ReadingHistoryPanel';
 import { dbService } from '../../db/DBService';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
+// Mock logger
+vi.mock('../../lib/logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+}));
+
 vi.mock('../../db/DBService', () => ({
   dbService: {
     getJourneyEvents: vi.fn()
@@ -107,7 +117,6 @@ describe('ReadingHistoryPanel', () => {
 
 
   it('handles errors in book.spine.get gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
     const sessions = [{ cfiRange: 'epubcfi(/6/18!/4/2/1:0)', timestamp: Date.now(), type: 'page' }];
     (dbService.getJourneyEvents as any).mockResolvedValue(sessions);
 
@@ -122,7 +131,6 @@ describe('ReadingHistoryPanel', () => {
     await waitFor(() => {
       expect(screen.getByText(/Segment at/)).toBeInTheDocument();
     });
-    consoleSpy.mockRestore();
   });
 
   it('calls onNavigate with correct CFI when an item is clicked', async () => {

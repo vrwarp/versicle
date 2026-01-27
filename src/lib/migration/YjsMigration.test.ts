@@ -6,6 +6,16 @@ import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReadingListStore } from '../../store/useReadingListStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 
+// Mock logger
+vi.mock('../logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+}));
+
 // Mock dependencies
 vi.mock('../../store/yjs-provider', () => {
     const doc = new Y.Doc();

@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { reprocessBook } from '../../lib/ingestion';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { createLogger } from '../../lib/logger';
+
+const logger = createLogger('ReprocessingInterstitial');
 
 interface ReprocessingInterstitialProps {
     isOpen: boolean;
@@ -29,7 +32,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
                 await useLibraryStore.getState().hydrateStaticMetadata();
                 onComplete();
             } catch (e) {
-                console.error("Reprocessing failed", e);
+                logger.error("Reprocessing failed", e);
                 setError(e instanceof Error ? e.message : 'Unknown error');
                 setProgress('error');
             }

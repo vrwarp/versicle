@@ -49,6 +49,16 @@ vi.mock('./lib/serviceWorkerUtils', () => ({
   waitForServiceWorkerController: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock logger
+vi.mock('./lib/logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+}));
+
 // Mock useLibraryStore
 vi.mock('./store/useLibraryStore', () => {
   const hydrate = vi.fn().mockResolvedValue(undefined);

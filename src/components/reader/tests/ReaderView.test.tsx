@@ -10,6 +10,16 @@ import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { CURRENT_BOOK_VERSION } from '../../../lib/constants';
 
+// Mock logger
+vi.mock('../../../lib/logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+}));
+
 // Mock dependencies
 vi.mock('epubjs');
 vi.mock('../../../db/db', () => ({

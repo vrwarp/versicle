@@ -2,6 +2,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { extractCoverPalette, unpackColorToRGB, rgbToL, getOptimizedTextColor } from './cover-palette';
 
+// Mock logger
+vi.mock('./logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+}));
+
 describe('extractCoverPalette', () => {
     it('should extract palette using OffscreenCanvas when available', async () => {
          // Mock OffscreenCanvas

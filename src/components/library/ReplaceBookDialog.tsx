@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
+import { createLogger } from '../../lib/logger';
+
+const logger = createLogger('ReplaceBookDialog');
 
 interface ReplaceBookDialogProps {
     isOpen: boolean;
@@ -28,7 +31,7 @@ export const ReplaceBookDialog: React.FC<ReplaceBookDialogProps> = ({
             await onConfirm();
             onClose();
         } catch (error) {
-            console.error("Failed to replace book:", error);
+            logger.error("Failed to replace book:", error);
             // We keep the dialog open if there's an error so the user can try again or cancel
         } finally {
             setIsReplacing(false);

@@ -3,6 +3,10 @@
  * Ensures that tasks are executed one after another in the order they were enqueued.
  * This is crucial for maintaining consistent state in the audio player during rapid user interactions.
  */
+import { createLogger } from '../logger';
+
+const logger = createLogger('TaskSequencer');
+
 export class TaskSequencer {
     private pendingPromise: Promise<void> = Promise.resolve();
     private isDestroyed = false;
@@ -20,7 +24,7 @@ export class TaskSequencer {
             try {
                 return await task();
             } catch (err) {
-                console.error("TaskSequencer task failed safely:", err);
+                logger.error("TaskSequencer task failed safely:", err);
             }
         });
 

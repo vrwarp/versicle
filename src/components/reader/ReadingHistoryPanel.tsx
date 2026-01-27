@@ -5,6 +5,9 @@ import { parseCfiRange } from '../../lib/cfi-utils';
 import type { Rendition } from 'epubjs';
 import { BookOpen, Headphones, ScrollText } from 'lucide-react';
 import type { ReadingEventType, ReadingSession } from '../../types/db';
+import { createLogger } from '../../lib/logger';
+
+const logger = createLogger('ReadingHistoryPanel');
 
 interface Props {
     bookId: string;
@@ -42,7 +45,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                 setLoading(false);
             }
         }).catch(e => {
-            console.error("Failed to load journey events", e);
+            logger.error("Failed to load journey events", e);
             if (mounted) setLoading(false);
         });
 
@@ -80,7 +83,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                     try {
                         section = book.spine.get(range);
                     } catch (e) {
-                        console.warn("Failed to get section from CFI", e);
+                        logger.warn("Failed to get section from CFI", e);
                     }
 
                     if (section) {

@@ -1,4 +1,8 @@
 
+import { createLogger } from './logger';
+
+const logger = createLogger('CoverPalette');
+
 // --- Weighted K-Means Clustering Utils ---
 
 interface Pixel {
@@ -183,7 +187,7 @@ export async function extractCoverPalette(blob: Blob): Promise<number[]> {
 
         return palette;
     } catch (e) {
-        console.warn('Failed to extract cover palette:', e);
+        logger.warn('Failed to extract cover palette:', e);
         return [];
     }
 }

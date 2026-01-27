@@ -6,6 +6,16 @@ import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { BookMetadata } from '../../types/db';
 
+// Mock logger
+vi.mock('../../lib/logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+}));
+
 // Mock UI components
 vi.mock('../ui/Dialog', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

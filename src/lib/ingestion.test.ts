@@ -3,6 +3,16 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { extractBookData, validateZipSignature } from './ingestion';
 import type { BookExtractionData } from './ingestion';
 
+// Mock logger
+vi.mock('./logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+}));
+
 // Mock browser-image-compression
 vi.mock('browser-image-compression', () => ({
   default: vi.fn(() => Promise.resolve(new Blob(['thumbnail'], { type: 'image/jpeg' })))
@@ -166,7 +176,6 @@ describe('ingestion', () => {
   });
 
   it('should always sanitize metadata', async () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
     const longTitle = 'A'.repeat(600);
 
     vi.resetModules();
@@ -192,6 +201,5 @@ describe('ingestion', () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(data.manifest.title.length).toBe(500);
     expect(data.manifest.title).not.toBe(longTitle);
-    consoleSpy.mockRestore();
   });
 });

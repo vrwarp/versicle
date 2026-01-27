@@ -3,6 +3,16 @@ import { createLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import type { BookMetadata } from '../types/db';
 
+// Mock logger
+vi.mock('../lib/logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+}));
+
 // Mock DBService
 const mockDBService = {
   getLibrary: vi.fn(),

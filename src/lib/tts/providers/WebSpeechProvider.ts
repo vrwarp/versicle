@@ -1,4 +1,7 @@
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice } from './types';
+import { createLogger } from '../../logger';
+
+const logger = createLogger('WebSpeechProvider');
 
 /**
  * TTS Provider implementation using the browser's native Web Speech API.
@@ -15,7 +18,7 @@ export class WebSpeechProvider implements ITTSProvider {
   constructor() {
     this.synth = window.speechSynthesis;
     if (!this.synth) {
-      console.warn("WebSpeechProvider: window.speechSynthesis is not available");
+      logger.warn("window.speechSynthesis is not available");
     }
   }
 
@@ -52,7 +55,7 @@ export class WebSpeechProvider implements ITTSProvider {
       }
       setTimeout(() => {
           if (!resolved) {
-              console.warn('WebSpeechProvider: Voice loading timed out or no voices available.');
+              logger.warn('Voice loading timed out or no voices available.');
               finish();
           }
       }, 1000);

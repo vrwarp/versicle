@@ -4,6 +4,16 @@ import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
 import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, NavigationItem } from '../types/db';
 
+// Mock logger
+vi.mock('../lib/logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }))
+}));
+
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
   processEpub: vi.fn(),
