@@ -70,6 +70,14 @@ vi.mock('./lib/ingestion', () => ({
       ttsContentBatches: [],
       tableBatches: []
     };
+  }),
+  extractBookMetadata: vi.fn(async () => {
+    return {
+      title: "Alice's Adventures in Wonderland",
+      author: "Lewis Carroll",
+      description: "Mock description",
+      fileHash: 'mock-hash',
+    };
   })
 }));
 
