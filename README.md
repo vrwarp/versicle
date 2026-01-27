@@ -22,7 +22,7 @@
 *   **Framework**: React 19 + Vite 7 + React Router 7
 *   **Language**: TypeScript
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs`
-*   **Sync**: `y-fire` (Firestore) + Android Backup Service
+*   **Sync**: `y-cinder` (Firestore) + Android Backup Service
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
@@ -73,9 +73,10 @@
     *   **Checkpoints**: Automatic "Moral Layer" snapshots (`SyncManifest`) protect against data loss during sync (Last 10 states).
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted. Export/Import to CSV (Goodreads compatible).
-*   **Backups**:
+*   **Backups & Export**:
     *   **Light**: JSON export of metadata/settings.
     *   **Full**: ZIP archive including all book files.
+    *   **Unified Export**: Share files natively (AirDrop, Nearby Share) or download via browser.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
 
