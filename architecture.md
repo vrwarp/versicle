@@ -77,6 +77,7 @@ graph TD
         BatchIngestion[batch-ingestion.ts]
         SearchClient[SearchClient]
         Backup[BackupService]
+        Export[ExportImportService]
         Maint[MaintenanceService]
         GenAI[GenAIService]
         CostEst[CostEstimator]
@@ -124,6 +125,7 @@ graph TD
     AudioPanel --> TTSStore
     GlobalSettings --> UIStore
     GlobalSettings --> SyncStore
+    GlobalSettings --> Export
 
     TTSStore --> APS
     Library --> LibStore
@@ -250,7 +252,7 @@ Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for 
 Provides a "Cloud Overlay" for real-time synchronization.
 
 *   **Logic**:
-    *   **Y-Fire**: Uses `y-fire` to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
+    *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
     *   **Authenticated**: Sync only occurs when the user is signed in via Firebase Auth.
     *   **Mock Mode**: Includes a `MockFireProvider` for integration testing without a real Firebase project.
@@ -315,6 +317,18 @@ Manages manual internal state backup and restoration.
 *   **`createLightBackup()`**: JSON-only export (metadata, settings, history).
 *   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files.
 
+#### Export (`src/lib/export.ts` & `src/lib/sync/ExportImportService.ts`)
+*   **Goal**: Provide a platform-agnostic way to export data.
+*   **Logic**:
+    *   **Unified Export (`export.ts`)**: Acts as a **Platform Adapter**.
+        *   **Web**: Uses `file-saver` to trigger a browser download.
+        *   **Native**: Writes the file to the app's cache directory and uses `Capacitor Share` API to open the native share sheet.
+    *   **Export/Import Service (`ExportImportService.ts`)**: The **Logic Provider** for the "Cold Path" (Manual Backup).
+        *   **Export**: Serializes Yjs state (Inventory, Progress, Annotations) into a JSON blob with a checksum.
+        *   **Import**: Validates schema and merges data into the local Yjs document using atomic transactions.
+*   **Trade-offs**:
+    *   **Memory Pressure**: On native devices, converting large Blobs to Base64 (for the Filesystem API) can cause Out-Of-Memory (OOM) crashes with very large backups.
+
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
 *   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks.
 *   **Logic**: Uses a **Generator** pattern (`function*`) to yield Promises. Calling `cancel()` throws a `CancellationError` into the generator.
@@ -330,6 +344,14 @@ The Orchestrator. Manages playback state, provider selection, and UI updates.
     *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods (play, pause) to prevent race conditions during rapid UI interaction.
     *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`).
     *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state to `PlaybackStateManager`.
+
+#### `src/lib/tts/TaskSequencer.ts`
+*   **Goal**: Prevent race conditions in async audio operations.
+*   **Logic**:
+    *   **Queue**: Maintains a promise chain (`pendingPromise`).
+    *   **Serialization**: Ensures tasks like `play()`, `pause()`, and `loadSection()` run sequentially, preventing "Double Play" or invalid state transitions.
+*   **Trade-offs**:
+    *   **Head-of-Line Blocking**: A single slow operation (e.g., a network timeout) will block all subsequent playback actions.
 
 #### `src/lib/tts/CostEstimator.ts`
 *   **Goal**: Track and estimate usage costs for Cloud TTS providers.
@@ -386,6 +408,16 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **`useLibraryStore` (Local Only)**:
     *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs.
     *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). If the local file is missing, the book appears as a "Ghost Book" using synced metadata.
+
+#### Selector Optimization (`src/store/selectors.ts`)
+*   **Goal**: Ensure smooth UI scrolling (60fps) by preventing unnecessary re-renders in the main `LibraryView`.
+*   **Logic**:
+    *   **Phase 1 (Base Book Memoization)**: Merges heavy static metadata (covers, titles) into book objects. Memoized on `books` + `staticMetadata` (rare changes).
+    *   **Phase 2 (Progress Merge)**: Merges frequent updates (Reading Progress) into the Base Books using **Reference Stability**.
+        *   *Array Item Memoization*: Reuses the *same* book object reference from the previous render if only the progress changed but the book identity/metadata is stable, allowing `React.memo` components to skip updates.
+*   **Trade-offs**:
+    *   **Complexity**: Requires manual management of dependency arrays and object identity, making the code harder to maintain than simple selectors.
+    *   **Stale Data Risk**: If a dependency is missed, the UI will not update even if the store changes.
 
 ### UI Layer
 
