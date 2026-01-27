@@ -10,7 +10,6 @@ import type {
   CacheSessionState,
   TTSState,
   ContentAnalysis,
-  UserInventoryItem,
   StaticBookManifest,
   NavigationItem,
   CachedSegment,
@@ -20,6 +19,9 @@ import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
+import { useContentAnalysisStore } from '../store/useContentAnalysisStore';
+import { useBookStore } from '../store/useBookStore';
+import { useAnnotationStore } from '../store/useAnnotationStore';
 
 import { createLogger } from '../lib/logger';
 
@@ -68,46 +70,40 @@ class DBService {
 
   /**
    * Retrieves only the metadata for a specific book.
-   * Post-Yjs migration: user_inventory is in Yjs, not IndexedDB.
-   * We only need static_manifests for static metadata.
+   * Post-Yjs migration: user_inventory is in Yjs (useBookStore), not IndexedDB.
    */
   async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['static_manifests', 'static_resources', 'user_inventory', 'user_progress'], 'readonly');
+      const tx = db.transaction(['static_manifests', 'static_resources'], 'readonly');
 
       const manifest = await tx.objectStore('static_manifests').get(id);
-
-      // Check existence of resource for isOffloaded
       const resourceKey = await tx.objectStore('static_resources').getKey(id);
-      const inventory = await tx.objectStore('user_inventory').get(id); // May be null (Yjs migration)
-      const progress = await tx.objectStore('user_progress').get(id);
 
       await tx.done;
 
       if (!manifest) {
-        return undefined; // Only manifest is required
+        return undefined;
       }
+
+      // Get inventory from Yjs store (primary source)
+      const inventory = useBookStore.getState().books[id];
 
       return {
         id: manifest.bookId,
-        title: inventory?.customTitle || manifest.title,
-        author: inventory?.customAuthor || manifest.author,
+        title: inventory?.customTitle || inventory?.title || manifest.title,
+        author: inventory?.customAuthor || inventory?.author || manifest.author,
         description: manifest.description,
-        coverBlob: manifest.coverBlob, // Use thumbnail
-        addedAt: inventory?.addedAt || Date.now(), // Fallback to now if no inventory
+        coverBlob: manifest.coverBlob,
+        addedAt: inventory?.addedAt || Date.now(),
 
         bookId: manifest.bookId,
-        filename: inventory?.sourceFilename || 'unknown.epub', // Fallback
+        filename: inventory?.sourceFilename || 'unknown.epub',
         fileHash: manifest.fileHash,
         fileSize: manifest.fileSize,
         totalChars: manifest.totalChars,
         version: manifest.schemaVersion,
 
-        lastRead: progress?.lastRead,
-        progress: progress?.percentage,
-        currentCfi: progress?.currentCfi,
-        lastPlayedCfi: progress?.lastPlayedCfi,
         isOffloaded: !resourceKey
       };
     } catch (error) {
@@ -116,39 +112,17 @@ class DBService {
   }
 
   /**
-   * Retrieves all inventory items directly from the IDB store.
-   * Used for migration and self-repair if Yjs data is missing.
-   */
-  async getAllInventoryItems(): Promise<UserInventoryItem[]> {
-    try {
-      const db = await this.getDB();
-      return await db.getAll('user_inventory');
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  /**
    * Retrieves the book ID associated with a given filename.
-   * Scans user_inventory as there is no index on sourceFilename.
+   * Uses Yjs store (useBookStore) instead of IDB.
    */
-  async getBookIdByFilename(filename: string): Promise<string | undefined> {
-    try {
-      const db = await this.getDB();
-      // Optimization: Try reading list first to fail fast?
-      // But reading list doesn't have ID.
-      // Just scan inventory.
-      let cursor = await db.transaction('user_inventory').store.openCursor();
-      while (cursor) {
-        if (cursor.value.sourceFilename === filename) {
-          return cursor.value.bookId;
-        }
-        cursor = await cursor.continue();
+  getBookIdByFilename(filename: string): string | undefined {
+    const books = useBookStore.getState().books;
+    for (const book of Object.values(books)) {
+      if (book.sourceFilename === filename) {
+        return book.bookId;
       }
-      return undefined;
-    } catch (error) {
-      this.handleError(error);
     }
+    return undefined;
   }
 
   /**
@@ -274,17 +248,14 @@ class DBService {
       const db = await this.getDB();
       const tx = db.transaction([
         'static_manifests', 'static_resources', 'static_structure',
-        'user_progress', 'user_overrides',
-        'cache_tts_preparation', 'cache_table_images',
-        'user_reading_list'
+        'cache_tts_preparation', 'cache_table_images'
       ], 'readwrite');
 
       await tx.objectStore('static_manifests').add(data.manifest);
       await tx.objectStore('static_resources').add(data.resource);
       await tx.objectStore('static_structure').add(data.structure);
-      // Phase 2: user_inventory, user_progress, user_reading_list NO LONGER written here
-      // Yjs store handles inventory. Reading State store handles progress/reading list.
-      await tx.objectStore('user_overrides').add(data.overrides);
+
+      // User data (overrides, progress, inventory) is now handled by Yjs stores exclusively.
 
       const ttsStore = tx.objectStore('cache_tts_preparation');
       for (const batch of data.ttsContentBatches) {
@@ -336,40 +307,32 @@ class DBService {
    */
   async deleteBook(id: string): Promise<void> {
     try {
+      // Clean up Yjs content analysis for this book
+      useContentAnalysisStore.getState().deleteBookAnalysis(id);
+
       const db = await this.getDB();
-      // Delete from all stores
+      // Delete from static and cache stores only
+      // User data stores are managed by Yjs and cleared via their respective stores
       const tx = db.transaction([
         'static_manifests', 'static_resources', 'static_structure',
-        'user_inventory', 'user_progress', 'user_annotations',
-        'user_overrides', 'user_journey', 'user_ai_inference',
         'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation',
-        'user_reading_list'
+        'cache_table_images'
       ], 'readwrite');
-
-      // Cleanup Reading List (Requires filename lookup)
-      const inv = await tx.objectStore('user_inventory').get(id);
-      if (inv && inv.sourceFilename) {
-        await tx.objectStore('user_reading_list').delete(inv.sourceFilename);
-      }
 
       await Promise.all([
         tx.objectStore('static_manifests').delete(id),
         tx.objectStore('static_resources').delete(id),
         tx.objectStore('static_structure').delete(id),
-        tx.objectStore('user_inventory').delete(id),
-        tx.objectStore('user_progress').delete(id),
-        tx.objectStore('user_overrides').delete(id),
         tx.objectStore('cache_render_metrics').delete(id),
         tx.objectStore('cache_session_state').delete(id),
       ]);
 
-      logger.debug(`deleteBook: keys deleted for ${id}. Verifying static_resources deletion...`);
-      const res = await tx.objectStore('static_resources').get(id);
-      logger.debug(`deleteBook: static_resources.get(${id}) after delete = ${res}`);
-      // Delete from index-based stores
-      const deleteFromIndex = async (storeName: 'user_annotations' | 'user_journey' | 'user_ai_inference' | 'cache_tts_preparation', indexName: string) => {
+      logger.debug(`deleteBook: keys deleted for ${id}`);
+
+      // Delete from index-based cache stores
+      const deleteFromIndex = async (storeName: 'cache_tts_preparation' | 'cache_table_images', indexName: string) => {
         const store = tx.objectStore(storeName);
-        // @ts-expect-error - index() types are tricky with generic strings, casting or expect error is needed
+        // @ts-expect-error - index() types are tricky with generic strings
         const index = store.index(indexName);
         let cursor = await index.openCursor(IDBKeyRange.only(id));
         while (cursor) {
@@ -378,11 +341,8 @@ class DBService {
         }
       };
 
-      await deleteFromIndex('user_annotations', 'by_bookId');
-      await deleteFromIndex('user_journey', 'by_bookId');
-      await deleteFromIndex('user_ai_inference', 'by_bookId');
-      // Added index support for cache_tts_preparation
       await deleteFromIndex('cache_tts_preparation', 'by_bookId');
+      await deleteFromIndex('cache_table_images', 'by_bookId');
 
       await tx.done;
     } catch (error) {
@@ -559,14 +519,11 @@ class DBService {
     try {
       const db = await this.getDB();
       const session = await db.get('cache_session_state', bookId);
-      const progress = await db.get('user_progress', bookId);
 
       if (session) {
         return {
           bookId,
           queue: session.playbackQueue,
-          currentIndex: progress?.currentQueueIndex || 0,
-          sectionIndex: progress?.currentSectionIndex || 0,
           updatedAt: session.updatedAt
         };
       }
@@ -577,16 +534,11 @@ class DBService {
   }
 
   // --- Annotation Operations ---
-  // Deprecated: addAnnotation/deleteAnnotation removed. Use useAnnotationStore.
+  // Uses useAnnotationStore (Yjs) as primary source.
 
-  async getAnnotations(bookId: string): Promise<Annotation[]> {
-    try {
-      const db = await this.getDB();
-      const anns = await db.getAllFromIndex('user_annotations', 'by_bookId', bookId);
-      return anns as Annotation[];
-    } catch (error) {
-      this.handleError(error);
-    }
+  getAnnotations(bookId: string): Annotation[] {
+    const allAnnotations = useAnnotationStore.getState().annotations;
+    return Object.values(allAnnotations).filter(ann => ann.bookId === bookId);
   }
 
   // --- TTS Cache Operations ---
@@ -647,64 +599,30 @@ class DBService {
 
 
 
-  // --- Content Analysis & Accessibility Operations (Restored) ---
+  // --- Content Analysis & Accessibility Operations ---
+  // Uses useContentAnalysisStore (Yjs) as primary and only source.
 
-  async getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined> {
-    try {
-      const db = await this.getDB();
-      const inference = await db.get('user_ai_inference', `${bookId}-${sectionId}`);
+  getContentAnalysis(bookId: string, sectionId: string): ContentAnalysis | undefined {
+    const yjsAnalysis = useContentAnalysisStore.getState().getAnalysis(bookId, sectionId);
+    if (!yjsAnalysis) return undefined;
 
-      if (!inference) return undefined;
-
-      // Map UserAiInference to Legacy ContentAnalysis for compatibility
-      return {
-        id: inference.id,
-        bookId: inference.bookId,
-        sectionId: inference.sectionId,
-        structure: inference.structure || { footnoteMatches: [] },
-        contentTypes: inference.semanticMap,
-        tableAdaptations: inference.accessibilityLayers
-          .filter(l => l.type === 'table-adaptation')
-          .map(l => ({ rootCfi: l.rootCfi, text: l.content })),
-        summary: inference.summary,
-        lastAnalyzed: inference.generatedAt
-      };
-    } catch (error) {
-      this.handleError(error);
-    }
+    return {
+      id: `${bookId}-${sectionId}`,
+      bookId,
+      sectionId,
+      structure: { title: yjsAnalysis.title, footnoteMatches: [] },
+      contentTypes: yjsAnalysis.semanticMap,
+      tableAdaptations: yjsAnalysis.tableAdaptations,
+      lastAnalyzed: yjsAnalysis.generatedAt
+    };
   }
 
-  async saveContentClassifications(bookId: string, sectionId: string, results: { rootCfi: string; type: ContentType }[]): Promise<void> {
-    try {
-      const db = await this.getDB();
-      const id = `${bookId}-${sectionId}`;
-      const tx = db.transaction('user_ai_inference', 'readwrite');
-      const store = tx.objectStore('user_ai_inference');
-
-      const existing = await store.get(id) || {
-        id, bookId, sectionId,
-        semanticMap: [],
-        accessibilityLayers: [],
-        generatedAt: Date.now()
-      };
-
-      existing.semanticMap = results;
-      existing.generatedAt = Date.now();
-
-      await store.put(existing);
-      await tx.done;
-    } catch (error) {
-      this.handleError(error);
-    }
+  saveContentClassifications(bookId: string, sectionId: string, results: { rootCfi: string; type: ContentType }[]): void {
+    useContentAnalysisStore.getState().saveClassifications(bookId, sectionId, results);
   }
 
-  async clearContentAnalysis(): Promise<void> {
-    try {
-      const db = await this.getDB();
-      await db.clear('user_ai_inference');
-    } catch (error) {
-      this.handleError(error);
-    }
+  clearContentAnalysis(): void {
+    useContentAnalysisStore.getState().clearAll();
   }
 
   async getTableImages(bookId: string): Promise<TableImage[]> {
@@ -716,129 +634,39 @@ class DBService {
     }
   }
 
-  async saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): Promise<void> {
-    try {
-      const db = await this.getDB();
-      const id = `${bookId}-${sectionId}`;
-      const tx = db.transaction('user_ai_inference', 'readwrite');
-      const store = tx.objectStore('user_ai_inference');
-
-      const existing = await store.get(id) || {
-        id, bookId, sectionId,
-        semanticMap: [],
-        accessibilityLayers: [],
-        generatedAt: Date.now()
-      };
-
-      // Merge or Overwrite adaptations
-      // Remove existing table adaptations for these CFIs (if any strategy needed? for now simple append/replace logic)
-      // Actually we should probably rebuild the table-adaptation layers.
-      const others = existing.accessibilityLayers.filter(l => l.type !== 'table-adaptation');
-      const newLayers = adaptations.map(a => ({
-        type: 'table-adaptation' as const,
-        rootCfi: a.rootCfi,
-        content: a.text
-      }));
-
-      existing.accessibilityLayers = [...others, ...newLayers];
-      existing.generatedAt = Date.now();
-
-      await store.put(existing);
-      await tx.done;
-    } catch (error) {
-      this.handleError(error);
-    }
+  saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): void {
+    useContentAnalysisStore.getState().saveTableAdaptations(bookId, sectionId, adaptations);
   }
 
   // --- Reading History Operations ---
 
-  private lastJourneyEntry: { bookId: string; timestamp: number; type: ReadingEventType } | null = null;
 
-  async updateReadingHistory(
-    bookId: string,
-    range: string,
-    type: ReadingEventType,
-    _data?: string,
-    _isStart?: boolean
-  ): Promise<void> {
-    void _data;
-    void _isStart;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+  async updateReadingHistory(bookId: string, range: string, _type: ReadingEventType, _label?: string, _isCompletion: boolean = false): Promise<void> {
+    // Phase 2 Cleanup: dedicated user_journey store is removed.
+    // We now rely on completedRanges in useReadingStateStore (Yjs) as a fallback for history display.
     try {
-      const db = await this.getDB();
-      const tx = db.transaction(['user_journey'], 'readwrite');
-      const journeyStore = tx.objectStore('user_journey');
-
-      // 2. Log Journey Event (with Coalescing)
-      const now = Date.now();
-      const COALESCE_WINDOW = 5 * 60 * 1000; // 5 minutes
-
-      let shouldLog = true;
-      if (type === 'scroll' && this.lastJourneyEntry) {
-        if (this.lastJourneyEntry.bookId === bookId &&
-          this.lastJourneyEntry.type === 'scroll' &&
-          (now - this.lastJourneyEntry.timestamp) < COALESCE_WINDOW) {
-          shouldLog = false;
-        }
-      }
-
-      if (shouldLog) {
-        await journeyStore.add({
-          // id is auto-incremented
-          bookId,
-          startTimestamp: now,
-          endTimestamp: now,
-          duration: 0,
-          cfiRange: range,
-          type: type === 'tts' || type === 'scroll' || type === 'page' ? type : 'page'
-        });
-        this.lastJourneyEntry = { bookId, timestamp: now, type };
-      }
-
-      await tx.done;
+      const { useReadingStateStore } = await import('../store/useReadingStateStore');
+      useReadingStateStore.getState().addCompletedRange(bookId, range);
     } catch (error) {
-      this.handleError(error);
+      logger.error('Failed to update reading history (completed ranges)', error);
     }
   }
 
 
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async logReadingEvent(bookId: string, eventType: ReadingEventType, _data?: any): Promise<void> {
-    void _data;
-    try {
-      const db = await this.getDB();
-      await db.add('user_journey', {
-        // id is auto-incremented
-        bookId,
-        startTimestamp: Date.now(),
-        endTimestamp: Date.now(),
-        duration: 0,
-        cfiRange: '', // Missing usage requires placeholder
-        type: eventType === 'tts' || eventType === 'scroll' || eventType === 'page' ? eventType : 'page'
-      });
-    } catch (error) {
-      this.handleError(error);
-    }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+  async logReadingEvent(_bookId: string, _eventType: ReadingEventType, _data?: any): Promise<void> {
+    // Deprecated: user_journey store removed.
+    return Promise.resolve();
   }
 
-  async getJourneyEvents(bookId: string): Promise<ReadingSession[]> {
-    try {
-      const db = await this.getDB();
-      const journey = await db.getAllFromIndex('user_journey', 'by_bookId', bookId);
-
-      return journey.map((step): ReadingSession => {
-        const mappedType = (step.type === 'visual' ? 'page' : step.type) as ReadingEventType;
-        return {
-          timestamp: step.startTimestamp,
-          duration: step.duration || 0,
-          cfiRange: step.cfiRange,
-          type: mappedType
-        };
-      }).sort((a, b) => b.timestamp - a.timestamp);
-    } catch (error) {
-      this.handleError(error);
-      return [];
-    }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async getJourneyEvents(_bookId: string): Promise<ReadingSession[]> {
+    // Deprecated: user_journey store removed.
+    return Promise.resolve([]);
   }
 
   // --- Cleanup ---

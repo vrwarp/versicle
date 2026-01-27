@@ -278,24 +278,21 @@ export const GlobalSettingsDialog = () => {
     const handleClearAllData = async () => {
         if (confirm("Are you sure you want to delete ALL data? This includes books, annotations, and settings.")) {
             dbService.cleanup();
-            // Clear IndexedDB (v18 stores)
+            // Clear IndexedDB (static and cache stores)
             const db = await getDB();
             await db.clear('static_manifests');
             await db.clear('static_resources');
             await db.clear('static_structure');
-            await db.clear('user_inventory');
-            await db.clear('user_progress');
-            await db.clear('user_annotations');
-            await db.clear('user_overrides');
+            await db.clear('cache_table_images');
             await db.clear('cache_render_metrics');
             await db.clear('cache_audio_blobs');
             await db.clear('cache_session_state');
             await db.clear('cache_tts_preparation');
 
-            // Clear LocalStorage
+            // Clear LocalStorage (includes Yjs persistence)
             localStorage.clear();
 
-            // Reload
+            // Reload to reset Yjs stores
             window.location.reload();
         }
     };
@@ -305,9 +302,9 @@ export const GlobalSettingsDialog = () => {
         setOrphanScanResult('Scanning...');
         try {
             const report = await maintenanceService.scanForOrphans();
-            const total = report.files + report.annotations + report.locations + report.lexicon + report.tts_position;
+            const total = report.files + report.locations + report.tts_prep;
             if (total > 0) {
-                if (confirm(`Found orphans: \n - Files: ${report.files} \n - Annotations: ${report.annotations} \n - Locations: ${report.locations} \n - Lexicon: ${report.lexicon} \n - TTS Pos: ${report.tts_position} \n\nDelete them ? `)) {
+                if (confirm(`Found orphans: \n - Files: ${report.files} \n - Locations: ${report.locations} \n - TTS Prep: ${report.tts_prep} \n\nDelete them?`)) {
                     await maintenanceService.pruneOrphans();
                     setOrphanScanResult('Repair complete. Orphans removed.');
                 } else {

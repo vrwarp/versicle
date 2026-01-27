@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
-import type { StaticBookManifest, UserInventoryItem, UserProgress, StaticResource, NavigationItem } from '../types/db';
+import type { StaticBookManifest, StaticResource, NavigationItem } from '../types/db';
 
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
@@ -67,52 +67,40 @@ describe('DBService', () => {
 
 
   describe('deleteBook', () => {
-    it('should delete book, file, and related data', async () => {
+    it('should delete static/cache data for a book', async () => {
       const db = await getDB();
       const id = 'del-1';
 
+      // Set up static and cache stores
       await db.put('static_manifests', { bookId: id, title: 'Del', author: 'A', schemaVersion: 1, fileHash: 'h', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, title: 'Del', author: 'A', addedAt: 100, status: 'unread', tags: [], lastInteraction: 100 } as UserInventoryItem);
-      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
       await db.put('static_resources', { bookId: id, epubBlob: new ArrayBuffer(0) } as StaticResource);
-
       await db.put('cache_render_metrics', { bookId: id, locations: 'loc' });
       await db.put('cache_session_state', { bookId: id, playbackQueue: [], updatedAt: 0 });
-      await db.put('user_annotations', { id: 'ann-1', bookId: id, cfiRange: 'cfi', text: 'note', color: 'red', created: 0, type: 'highlight' });
 
       await dbService.deleteBook(id);
 
+      // Verify static/cache stores are cleared
       expect(await db.get('static_manifests', id)).toBeUndefined();
-      expect(await db.get('user_inventory', id)).toBeUndefined();
-      expect(await db.get('user_progress', id)).toBeUndefined();
       expect(await db.get('static_resources', id)).toBeUndefined();
       expect(await db.get('cache_render_metrics', id)).toBeUndefined();
       expect(await db.get('cache_session_state', id)).toBeUndefined();
-      expect(await db.get('user_annotations', 'ann-1')).toBeUndefined();
     });
   });
 
   describe('offloadBook', () => {
-    it('should remove file and mark as offloaded', async () => {
+    it('should remove file blob from static_resources', async () => {
       const db = await getDB();
       const id = 'off-1';
       const fileContent = new Uint8Array([1, 2, 3]);
 
       await db.put('static_manifests', { bookId: id, title: 'Off', author: 'A', schemaVersion: 1, fileHash: 'existing-hash', fileSize: 0, totalChars: 0 } as StaticBookManifest);
-      await db.put('user_inventory', { bookId: id, title: 'Off', author: 'A', addedAt: 100, status: 'unread', tags: [], lastInteraction: 100, sourceFilename: 'f.epub' } as UserInventoryItem);
-      await db.put('user_progress', { bookId: id, percentage: 0, lastRead: 0, completedRanges: [] } as UserProgress);
       await db.put('static_resources', { bookId: id, epubBlob: fileContent.buffer } as StaticResource);
 
       await dbService.offloadBook(id);
 
       const resource = await db.get('static_resources', id);
-
-      // After fix: resource blob is undefined
+      // After offload: resource blob is set to undefined
       expect(resource?.epubBlob).toBeUndefined();
-
-      // Metadata helper check
-      const meta = await dbService.getBookMetadata(id);
-      expect(meta?.isOffloaded).toBe(true);
     });
   });
 
@@ -123,7 +111,7 @@ describe('DBService', () => {
       // Ensure no previous state
       await db.delete('cache_session_state', id);
 
-      dbService.saveTTSState(id, [], 1);
+      dbService.saveTTSState(id, []);
 
       dbService.cleanup();
 

@@ -30,10 +30,6 @@ vi.mock('./components/ErrorBoundary', () => ({
 vi.mock('./components/SafeModeView', () => ({
   SafeModeView: () => <div>SafeModeView</div>,
 }));
-// Mock migration to avoid DB calls
-vi.mock('./lib/migration/YjsMigration', () => ({
-  migrateToYjs: vi.fn().mockResolvedValue(undefined)
-}));
 
 vi.mock('@capacitor/core', () => ({
   Capacitor: {

@@ -22,12 +22,12 @@ def test_orphan_repair(page: Page):
     print("Injecting orphans...")
     # Using window.indexedDB directly because window.idb might not be exposed globally in the bundle
     page.evaluate("""async () => {
-            // Use version 22 (current)
-            const req = window.indexedDB.open('EpubLibraryDB', 22);
+            // Use version 23 (current)
+            const req = window.indexedDB.open('EpubLibraryDB', 23);
         req.onsuccess = (e) => {
             const db = e.target.result;
-            // Updated store names for v22
-            const tx = db.transaction(['static_resources', 'user_annotations'], 'readwrite');
+            // Target active stores for maintenance
+            const tx = db.transaction(['static_resources', 'cache_render_metrics'], 'readwrite');
 
             // Orphaned File -> static_resources
             tx.objectStore('static_resources').put({
@@ -35,19 +35,14 @@ def test_orphan_repair(page: Page):
                 epubBlob: new ArrayBuffer(10)
             });
 
-            // Orphaned Annotation -> user_annotations
-            tx.objectStore('user_annotations').put({
-                id: 'orphan-note',
+            // Orphaned Metadata -> cache_render_metrics
+            tx.objectStore('cache_render_metrics').put({
                 bookId: 'orphan-book-id',
-                cfiRange: 'epubcfi(/6/2!/4/2)',
-                text: 'Orphaned Text',
-                type: 'highlight',
-                color: '#ffff00',
-                created: Date.now()
+                locations: JSON.stringify({ test: true })
             });
         };
-        // Wait a bit for async ops to finish (simplistic)
-        await new Promise(r => setTimeout(r, 3000));
+        // Wait a bit for async ops to finish
+        await new Promise(r => setTimeout(r, 1000));
     }""")
 
     # Open Settings
@@ -55,7 +50,6 @@ def test_orphan_repair(page: Page):
     page.get_by_role("button", name="Settings").click()
 
     # Go to Data Management Tab
-    # Note: Tabs are buttons in the sidebar
     page.get_by_role("button", name="Data Management").click()
 
     # Set dialog handler BEFORE clicking
@@ -68,7 +62,7 @@ def test_orphan_repair(page: Page):
     # Wait for result text
     print("Waiting for completion...")
 
-    # Wait for either success or failure/healthy message
+    # Wait for either success or healthy message
     try:
         success_msg = page.get_by_text("Repair complete. Orphans removed.")
         healthy_msg = page.get_by_text("Database is healthy")
@@ -91,27 +85,27 @@ def test_orphan_repair(page: Page):
     print("Verifying cleanup...")
     orphans_exist = page.evaluate("""async () => {
         return new Promise((resolve, reject) => {
-            // Use version 22
-            const req = window.indexedDB.open('EpubLibraryDB', 22);
+            // Use version 23
+            const req = window.indexedDB.open('EpubLibraryDB', 23);
             req.onsuccess = (e) => {
                 const db = e.target.result;
-                const tx = db.transaction(['static_resources', 'user_annotations'], 'readonly');
+                const tx = db.transaction(['static_resources', 'cache_render_metrics'], 'readonly');
 
                 let fileExists = false;
-                let annExists = false;
+                let metricsExists = false;
 
                 const fileReq = tx.objectStore('static_resources').get('orphan-book-id');
                 fileReq.onsuccess = () => {
                     if (fileReq.result) fileExists = true;
                 };
 
-                const annReq = tx.objectStore('user_annotations').get('orphan-note');
-                annReq.onsuccess = () => {
-                    if (annReq.result) annExists = true;
+                const metricsReq = tx.objectStore('cache_render_metrics').get('orphan-book-id');
+                metricsReq.onsuccess = () => {
+                    if (metricsReq.result) metricsExists = true;
                 };
 
                 tx.oncomplete = () => {
-                    resolve(fileExists || annExists);
+                    resolve(fileExists || metricsExists);
                 };
             };
         });
