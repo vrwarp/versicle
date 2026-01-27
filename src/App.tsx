@@ -15,8 +15,6 @@ import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 import { useLibraryStore, useBookStore } from './store/useLibraryStore';
 import { waitForYjsSync } from './store/yjs-provider';
-import { migrateToYjs } from './lib/migration/YjsMigration';
-import { backfillCoverPalettes } from './lib/migration/GhostBookBackfill';
 import { useDeviceStore } from './store/useDeviceStore';
 import { getDeviceId } from './lib/device-id';
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
@@ -88,14 +86,6 @@ function App() {
         // Initialize DB
         await getDB();
 
-        setStatusMessage('Checking for upgrades...');
-        try {
-          await migrateToYjs();
-        } catch (e) {
-          logger.error('Migration failed:', e);
-          // We proceed anyway, but log it
-        }
-
         // Register device if not present
         const deviceId = getDeviceId();
         const deviceStore = useDeviceStore.getState();
@@ -140,9 +130,6 @@ function App() {
         }
 
         await hydrateStaticMetadata();
-
-        // Run non-blocking backfill
-        backfillCoverPalettes().catch(e => logger.error('Backfill failed:', e));
 
         setDbStatus('ready');
       } catch (err) {
