@@ -1015,8 +1015,9 @@ export const GlobalSettingsDialog = () => {
                                                         Paste your Firebase configuration snippet from the Firebase Console (Project Settings → General → Your apps), or enter credentials manually.
                                                     </p>
                                                     <div className="space-y-2">
-                                                        <label className="text-sm font-medium">Paste Firebase Config</label>
+                                                        <Label htmlFor="firebase-config-paste">Paste Firebase Config</Label>
                                                         <textarea
+                                                            id="firebase-config-paste"
                                                             className="w-full h-32 p-2 text-xs font-mono border rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                                                             placeholder={`// Paste your Firebase config here, e.g.:
 const firebaseConfig = {
