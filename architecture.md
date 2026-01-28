@@ -57,6 +57,7 @@ graph TD
         LibStore[useLibraryStore]
         AnnotStore[useAnnotationStore]
         GenAIStore[useGenAIStore]
+        ContentAnalysisStore[useContentAnalysisStore]
         UIStore[useUIStore]
         SyncStore[useSyncStore]
     end
@@ -150,6 +151,7 @@ graph TD
     APS --> PSM
     Pipeline --> GenAI
     Pipeline --> GenAIStore
+    Pipeline --> ContentAnalysisStore
     Pipeline --> DBService
 
     APS --> Providers
@@ -199,7 +201,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   **IDB Primary (Sync Overlay)**:
         *   `user_overrides`: Custom settings like Lexicon rules.
     *   **IDB Local/Hybrid**:
-        *   `user_ai_inference`: Expensive AI-derived data (Summaries, Accessibility Layers). Not automatically synced.
+        *   `user_ai_inference`: **(Deprecated/Replaced)** Expensive AI-derived data is now handled by the synced `useContentAnalysisStore`.
         *   `user_annotations`: Highlights and notes. Managed via `useAnnotationStore`.
         *   `user_journey`: Granular reading history sessions (Local only).
 *   **Domain 3: Cache (Transient/Regenerable)**
@@ -218,6 +220,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks.
 *   **Logic**:
+    *   **Quota Management**: Explicitly handles `QuotaExceededError` (including legacy code 22) and wraps it in a typed `StorageFullError` for UI handling.
     *   **Magic Number Check**: Verifies ZIP signature (`50 4B 03 04`) before parsing.
     *   **Sanitization**: Delegates to `DOMPurify` to strip HTML tags from metadata.
 
@@ -303,7 +306,8 @@ Handles the complex task of importing an EPUB file.
 #### Generative AI (`src/lib/genai/`)
 *   **Smart Rotation**: Implements a rotation strategy (`gemini-flash-lite-latest` <-> `gemini-2.5-flash`) to handle `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
 *   **Resilience**: Automatically retries requests with the fallback model.
-*   **Teleprompter**: Uses `generateTableAdaptations` to convert complex table images into narrative text for TTS accessibility.
+*   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to improve reasoning quality for complex data interpretation.
+*   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text for TTS accessibility.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
@@ -364,9 +368,9 @@ The Data Pipeline for TTS.
 
 *   **Goal**: Decouple "Content Loading" from "Playback Readiness".
 *   **Logic (Optimistic Playback)**:
-    1.  **Immediate Return**: Returns a raw, playable queue immediately.
-    2.  **Background Analysis**: Fires asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content.
-    3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`).
+    1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
+    2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
+    3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`), allowing the player to seamlessly skip content identified later without delaying the start of playback.
 
 #### `src/lib/tts/PlaybackStateManager.ts`
 Manages the virtual playback timeline.
@@ -405,6 +409,9 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Logic**: Updates a `lastActive` timestamp (Heartbeat) with throttling (5 mins) to track online status.
     *   **Why**: Enables "Send to Device" features and provides visibility into the sync network.
 *   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
+*   **`useContentAnalysisStore` (Synced)**:
+    *   **Goal**: Sync expensive AI artifacts (Table Adaptations, Semantic Maps) across devices.
+    *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the semantic map (footnotes/titles) and teleprompter scripts. Avoids re-running expensive GenAI queries on every device.
 *   **`useLibraryStore` (Local Only)**:
     *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs.
     *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). If the local file is missing, the book appears as a "Ghost Book" using synced metadata.
