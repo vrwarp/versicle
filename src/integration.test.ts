@@ -6,7 +6,7 @@ import { useReaderUIStore } from './store/useReaderUIStore';
 import { useReadingStateStore } from './store/useReadingStateStore';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { StaticBookManifest, StaticResource } from './types/db';
+import type { StaticBookManifest } from './types/db';
 
 // Mock zustand persistence
 vi.mock('zustand/middleware', async (importOriginal) => {
