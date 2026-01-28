@@ -187,6 +187,70 @@ describe('selectors', () => {
       expect(result.current).toHaveLength(1);
       expect(result.current[0].progress).toBe(0.75);
     });
+
+    it('should maintain object reference stability for unchanged books when progress updates', () => {
+      // Setup: 2 books. Book A and Book B.
+      const mockBookState = {
+        books: {
+          'book-a': { bookId: 'book-a', title: 'Book A', lastInteraction: 100, status: 'unread', tags: [] },
+          'book-b': { bookId: 'book-b', title: 'Book B', lastInteraction: 100, status: 'unread', tags: [] }
+        }
+      };
+
+      const mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
+
+      // Initial progress: both 0
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let mockProgress: any = {
+        'book-a': { 'device-1': { percentage: 0, lastRead: 100 } },
+        'book-b': { 'device-1': { percentage: 0, lastRead: 100 } }
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useBookStore).mockImplementation((selector: any) => selector(mockBookState));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useLibraryStore).mockImplementation((selector: any) => selector(mockLibraryState));
+
+      // Dynamic mock for reading state
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => selector({ progress: mockProgress }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useReadingListStore).mockImplementation((selector: any) => selector({ entries: {} }));
+      vi.mocked(getDeviceId).mockReturnValue('device-1');
+
+      const { result, rerender } = renderHook(() => useAllBooks());
+
+      const firstRender = result.current;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookA_v1 = firstRender.find((b: any) => b.id === 'book-a');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookB_v1 = firstRender.find((b: any) => b.id === 'book-b');
+
+      expect(bookA_v1).toBeDefined();
+      expect(bookB_v1).toBeDefined();
+
+      // Update progress for Book A
+      mockProgress = {
+        ...mockProgress,
+        'book-a': { 'device-1': { percentage: 0.5, lastRead: 200 } }
+      };
+
+      rerender();
+
+      const secondRender = result.current;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookA_v2 = secondRender.find((b: any) => b.id === 'book-a');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookB_v2 = secondRender.find((b: any) => b.id === 'book-b');
+
+      // Book A changed progress, should be new object
+      expect(bookA_v2?.progress).toBe(0.5);
+      expect(bookA_v2).not.toBe(bookA_v1);
+
+      // Book B did NOT change progress, should be SAME object reference
+      expect(bookB_v2?.progress).toBe(0);
+      expect(bookB_v2).toBe(bookB_v1); // This validates the optimization
+    });
   });
 
   describe('useLastReadBookId', () => {
