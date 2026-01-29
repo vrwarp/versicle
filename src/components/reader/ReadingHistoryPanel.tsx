@@ -58,7 +58,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
             let label = explicitLabel || "Reading Segment";
             let percentage = 0;
             let subLabel = range;
-            let targetCfi = range; // DEFAULT: Use raw range for maximum jump accuracy
+            const targetCfi = range; // DEFAULT: Use raw range for maximum jump accuracy
 
             // Parse CFI to get start point for jumping (optional fallback)
             const parsed = parseCfiRange(range);

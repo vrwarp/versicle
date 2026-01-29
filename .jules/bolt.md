@@ -32,3 +32,8 @@
 - **Bottleneck:** `TextSegmenter` was calling `generateCfiRange` (and `parseCfiRange`) thousands of times during sentence merging. `generateCfiRange` performs character-by-character string scanning.
 - **Solution:** Implemented `tryFastMergeCfi` using string slicing to optimistically merge CFIs that share the same parent path.
 - **Learning:** `epubjs` CFI utilities are robust but expensive. For sequential text merging where parent paths are identical, manual string concatenation is ~30% faster than full parsing/regeneration.
+
+## 2025-06-01 - Batch Store Updates
+- **Bottleneck:** Importing multiple books caused `O(N)` updates to the `useBookStore`, triggering listeners (like `useAllBooks`) and re-renders for every single book added.
+- **Solution:** Implemented `addBooks` action to batch updates into a single `set` call.
+- **Learning:** When processing batch operations (like imports), always provide a batch action in Zustand stores. Individual `set` calls trigger middleware (Yjs, Persistence) and listeners immediately, causing unnecessary cascade work.

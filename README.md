@@ -21,8 +21,8 @@
 
 *   **Framework**: React 19 + Vite 7 + React Router 7
 *   **Language**: TypeScript
-*   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs`
-*   **Sync**: `y-cinder` (Firestore) + Android Backup Service
+*   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (Custom Fork)
+*   **Sync**: `y-cinder` (Custom Fork / Firestore) + Android Backup Service
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
@@ -30,7 +30,7 @@
 *   **Mobile**: Capacitor 7 (Android) + `@capawesome-team/capacitor-android-battery-optimization`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
-*   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`
+*   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`
 
 ## Features
 
