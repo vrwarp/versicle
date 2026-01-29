@@ -224,23 +224,6 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   **Magic Number Check**: Verifies ZIP signature (`50 4B 03 04`) before parsing.
     *   **Sanitization**: Delegates to `DOMPurify` to strip HTML tags from metadata.
 
-### Migration Layer (`src/lib/migration/`)
-
-Handles the critical data transition from Legacy IndexedDB to the modern Yjs/Local-First architecture.
-
-#### `YjsMigration.ts` (Legacy -> Yjs)
-*   **Goal**: Seamlessly upgrade users from the old IDB-only stores to the Yjs store structure without data loss.
-*   **Logic**:
-    *   **One-Time Run**: Checks a `migration_complete` flag in Yjs preferences.
-    *   **Per-Device Migration**: Converts global reading progress into the new **Per-Device** format (`progress[bookId][deviceId]`) to support the "Furthest Read" feature.
-    *   **Fallback**: If Yjs is empty, it populates it from the legacy IDB stores (`user_inventory`, `user_annotations`).
-
-#### `GhostBookBackfill.ts` (Sync Restoration)
-*   **Goal**: Handle the case where a user syncs a library from the cloud (metadata exists) but lacks the local files.
-*   **Logic**:
-    *   Detects "Ghost Books" (items in Yjs inventory but missing from `static_resources`).
-    *   Uses `importBookWithId` to restore the file content when the user provides the EPUB, verifying it against the 3-point fingerprint.
-
 ### Sync & Cloud (`src/lib/sync/`)
 
 Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for cross-device activity and **Native Backup** (via Android) for data safety.
@@ -333,6 +316,12 @@ Manages manual internal state backup and restoration.
 *   **Trade-offs**:
     *   **Memory Pressure**: On native devices, converting large Blobs to Base64 (for the Filesystem API) can cause Out-Of-Memory (OOM) crashes with very large backups.
 
+#### `src/lib/MaintenanceService.ts`
+*   **Goal**: Perform database hygiene and remove orphaned data.
+*   **Logic**:
+    *   **Orphan Detection**: Scans `static_resources` (files) and `cache_` stores for keys that no longer exist in the Yjs `user_inventory`.
+    *   **Post-Migration Role**: Unlike legacy versions, it *does not* touch user data (inventory, progress) as those are managed by Yjs/Firestore sync. It strictly cleans up the heavy binary/cache data left behind.
+
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
 *   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks.
 *   **Logic**: Uses a **Generator** pattern (`function*`) to yield Promises. Calling `cancel()` throws a `CancellationError` into the generator.
@@ -386,6 +375,12 @@ Manages the virtual playback timeline.
     *   **Regex Caching**: Caches compiled `RegExp` objects for performance during heavy text processing.
     *   **Bible Lexicon**: Injects a specialized set of rules for Bible citations (e.g., "Gen 1:1") if enabled for the book.
 
+#### `src/lib/tts/processors/Sanitizer.ts`
+*   **Goal**: Clean raw text before segmentation to improve TTS quality.
+*   **Logic**:
+    *   **Regex Operations**: Removes non-narrative artifacts like page numbers, URLs (keeping domain), and citations (numeric/author-year).
+    *   **Efficiency**: Uses pre-compiled global regexes to minimize overhead during heavy processing.
+
 #### `BackgroundAudio.ts`
 *   **Goal**: Ensure the app process remains active on Android/iOS when the screen is off.
 *   **Logic**: Plays a silent (or white noise) audio loop in the background to prevent the OS from killing the suspended app.
@@ -400,6 +395,9 @@ Manages the virtual playback timeline.
 State is managed using **Zustand** with specialized strategies for different data types.
 
 *   **`useBookStore` (Synced)**: Manages **User Inventory**. Backed by Yjs Map.
+*   **`useReadingListStore` (Synced)**:
+    *   **Goal**: Functions as a **"Shadow Inventory"**.
+    *   **Logic**: Tracks book status (Read, Reading, Want to Read) and Rating independently of the file existence. Persists even if the book file is offloaded or deleted.
 *   **`useReadingStateStore` (Per-Device Sync)**:
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
     *   **Why**: To prevent overwriting reading positions when switching between devices.
