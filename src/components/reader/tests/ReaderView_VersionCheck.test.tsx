@@ -45,6 +45,7 @@ vi.mock('../../../store/usePreferencesStore', () => ({
         readerViewMode: 'paginated'
     })
 }));
+const MOCK_PROGRESS = { completedRanges: [] };
 vi.mock('../../../store/useReadingStateStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useReadingStateStore: (selector: any) => selector({
@@ -53,7 +54,7 @@ vi.mock('../../../store/useReadingStateStore', () => ({
         progress: {},
         getProgress: () => null
     }),
-    useBookProgress: vi.fn(() => ({ completedRanges: [] }))
+    useBookProgress: vi.fn(() => MOCK_PROGRESS)
 }));
 vi.mock('../../../store/useTTSStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

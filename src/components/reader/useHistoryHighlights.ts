@@ -24,10 +24,15 @@ export const useHistoryHighlights = (
     // but ensure updates happen on page turns (viewer updates)
     // or when not playing (to capture initial load or sync).
     useEffect(() => {
-        // If we have ranges...
-        if (completedRanges) {
-            setDisplayedRanges(completedRanges);
-        }
+        const targetRanges = completedRanges || [];
+        setDisplayedRanges(prev => {
+            // Prevent infinite update loops if the array reference changes but content is same.
+            if (prev === targetRanges) return prev;
+            if (prev.length === targetRanges.length && prev.every((val, index) => val === targetRanges[index])) {
+                return prev;
+            }
+            return targetRanges;
+        });
     }, [
         bookId,
         currentCfi, // Update triggers on page flip/scroll
@@ -43,15 +48,18 @@ export const useHistoryHighlights = (
         if (rendition && isRenditionReady && bookId && displayedRanges.length > 0) {
             displayedRanges.forEach(range => {
                 try {
-                    rendition.annotations.add(
-                        'highlight',
-                        range,
-                        {},
-                        null,
-                        'reading-history-highlight',
-                        { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' }
-                    );
-                    addedRanges.push(range);
+                    // Check if annotations API exists (it might not in limited mocks)
+                    if (rendition.annotations && typeof rendition.annotations.add === 'function') {
+                        rendition.annotations.add(
+                            'highlight',
+                            range,
+                            {},
+                            null,
+                            'reading-history-highlight',
+                            { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' }
+                        );
+                        addedRanges.push(range);
+                    }
                 } catch (e) {
                     logger.warn("Failed to add history highlight", e);
                 }
@@ -62,7 +70,9 @@ export const useHistoryHighlights = (
             if (rendition && addedRanges.length > 0) {
                 addedRanges.forEach(range => {
                     try {
-                        rendition.annotations.remove(range, 'highlight');
+                        if (rendition.annotations && typeof rendition.annotations.remove === 'function') {
+                            rendition.annotations.remove(range, 'highlight');
+                        }
                     } catch (e) {
                         logger.warn("Failed to remove history highlight", e);
                     }
