@@ -30,7 +30,7 @@
 *   **Mobile**: Capacitor 7 (Android) + `@capawesome-team/capacitor-android-battery-optimization`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
-*   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`
+*   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
 
 ## Features
 
