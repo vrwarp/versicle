@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "147759642926-2trdb8db52mahs6rsm4vo0h5gskl01oe.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.vrwarp.versicle",
+            "certificate_hash": "d66056e3f5b31ecbccfea6547305a370e533da25"
+          }
+        },
+        {
           "client_id": "147759642926-ki82b590k0dvkpndl2ik6qm9kt3nr13r.apps.googleusercontent.com",
           "client_type": 3
         }

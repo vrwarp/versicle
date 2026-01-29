@@ -34,7 +34,11 @@ const config: CapacitorConfig = {
     SafeArea: {
       "detectViewportFitCoverChanges": false,
       "initialViewportFitCover": false
-    }
+    },
+    FirebaseAuthentication: {
+      skipNativeAuth: false,
+      providers: ["google.com"],
+    },
   },
 };
 
