@@ -362,7 +362,8 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         );
 
         // Phase 2: Explicitly add new books to Yjs inventory
-        successful.forEach(manifest => {
+        // OPTIMIZATION: Use addBooks (batch) to avoid cascaded state updates
+        const newInventoryItems = successful.map(manifest => {
           const inventoryItem: UserInventoryItem = {
             bookId: manifest.bookId,
             title: manifest.title,
@@ -373,8 +374,12 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             status: 'unread',
             lastInteraction: Date.now()
           };
-          useBookStore.getState().addBook(inventoryItem);
+          return inventoryItem;
         });
+
+        if (newInventoryItems.length > 0) {
+          useBookStore.getState().addBooks(newInventoryItems);
+        }
 
         // Hydrate newly imported books
         await get().hydrateStaticMetadata();

@@ -227,4 +227,45 @@ describe('useLibraryStore', () => {
     useLibraryStore.getState().setSortOrder('author');
     expect(useLibraryStore.getState().sortOrder).toBe('author');
   });
+
+  it('should use batch addBooks when importing multiple files', async () => {
+    const mockFiles = [
+      new File([''], 'book1.epub'),
+      new File([''], 'book2.epub')
+    ];
+
+    const mockManifests = [
+      { bookId: 'b1', title: 'Book 1', author: 'A', fileSize: 0 },
+      { bookId: 'b2', title: 'Book 2', author: 'B', fileSize: 0 }
+    ];
+
+    // Mock processBatchImport to return successful manifests
+    const { processBatchImport } = await import('../lib/batch-ingestion');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(processBatchImport).mockResolvedValue({ successful: mockManifests, failed: [] } as any);
+
+    // Spy on addBooks
+    const addBooksSpy = vi.spyOn(useBookStore.getState(), 'addBooks');
+    const addBookSpy = vi.spyOn(useBookStore.getState(), 'addBook');
+
+    await useLibraryStore.getState().addBooks(mockFiles);
+
+    expect(processBatchImport).toHaveBeenCalled();
+
+    // Check that batch method was called once
+    expect(addBooksSpy).toHaveBeenCalledTimes(1);
+    // Check that individual add method was NOT called (optimization)
+    expect(addBookSpy).not.toHaveBeenCalled();
+
+    // Check args
+    const calledArgs = addBooksSpy.mock.calls[0][0];
+    expect(calledArgs).toHaveLength(2);
+    expect(calledArgs[0].bookId).toBe('b1');
+    expect(calledArgs[1].bookId).toBe('b2');
+
+    // Verify state update
+    const bookState = useBookStore.getState();
+    expect(bookState.books['b1']).toBeDefined();
+    expect(bookState.books['b2']).toBeDefined();
+  });
 });
