@@ -47,7 +47,7 @@ dependencies {
     testImplementation "androidx.test:core:1.5.0"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
-    implementation "com.google.android.gms:play-services-auth:21.3.0"
+    implementation "com.google.android.gms:play-services-auth:20.7.0"
     implementation project(':capacitor-cordova-android-plugins')
 }
 
