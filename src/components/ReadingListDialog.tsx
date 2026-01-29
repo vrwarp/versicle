@@ -3,7 +3,7 @@ import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
 import { useReadingListStore } from '../store/useReadingListStore';
 import type { ReadingListEntry } from '../types/db';
-import { ArrowUpDown, Trash2, Edit2, Download, CheckSquare, Square } from 'lucide-react';
+import { ArrowUpDown, Trash2, Edit2, Download, CheckSquare, Square, ArrowUp, ArrowDown } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
 
 interface ReadingListDialogProps {
@@ -199,24 +199,32 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                                 )}
                                             </div>
                                         </th>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('title')}>
-                                            <div className="flex items-center gap-1">Title <ArrowUpDown className="w-3 h-3" /></div>
-                                        </th>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('author')}>
-                                            <div className="flex items-center gap-1">Author <ArrowUpDown className="w-3 h-3" /></div>
-                                        </th>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('status')}>
-                                            <div className="flex items-center gap-1">Status <ArrowUpDown className="w-3 h-3" /></div>
-                                        </th>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('percentage')}>
-                                            <div className="flex items-center gap-1">Progress <ArrowUpDown className="w-3 h-3" /></div>
-                                        </th>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('rating')}>
-                                            <div className="flex items-center gap-1">Rating <ArrowUpDown className="w-3 h-3" /></div>
-                                        </th>
-                                        <th className="px-4 py-3 cursor-pointer hover:bg-muted transition-colors" onClick={() => handleSort('lastUpdated')}>
-                                            <div className="flex items-center gap-1">Last Read <ArrowUpDown className="w-3 h-3" /></div>
-                                        </th>
+                                        {[
+                                            { id: 'title', label: 'Title' },
+                                            { id: 'author', label: 'Author' },
+                                            { id: 'status', label: 'Status' },
+                                            { id: 'percentage', label: 'Progress' },
+                                            { id: 'rating', label: 'Rating' },
+                                            { id: 'lastUpdated', label: 'Last Read' }
+                                        ].map((column) => (
+                                            <th
+                                                key={column.id}
+                                                className="px-4 py-3"
+                                                aria-sort={sortField === column.id ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}
+                                            >
+                                                <button
+                                                    className="flex items-center gap-1 hover:text-foreground/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                                                    onClick={() => handleSort(column.id as keyof ReadingListEntry)}
+                                                >
+                                                    {column.label}
+                                                    {sortField === column.id ? (
+                                                        sortDirection === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                                                    ) : (
+                                                        <ArrowUpDown className="w-3 h-3 text-muted-foreground/50" />
+                                                    )}
+                                                </button>
+                                            </th>
+                                        ))}
                                         <th className="px-4 py-3 text-right">Actions</th>
                                     </tr>
                                 </thead>
