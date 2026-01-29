@@ -57,6 +57,9 @@ export const GlobalSettingsDialog = () => {
     const [isLexiconOpen, setIsLexiconOpen] = useState(false);
     const [orphanScanResult, setOrphanScanResult] = useState<string | null>(null);
     const [isScanning, setIsScanning] = useState(false);
+    const [isRegenerating, setIsRegenerating] = useState(false);
+    const [regenerationProgress, setRegenerationProgress] = useState<string | null>(null);
+    const [regenerationPercent, setRegenerationPercent] = useState(0);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
     const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
 
@@ -318,6 +321,33 @@ export const GlobalSettingsDialog = () => {
             setOrphanScanResult('Error during repair check console.');
         } finally {
             setIsScanning(false);
+        }
+    };
+
+    const handleRegenerateMetadata = async () => {
+        if (!confirm("This will regenerate all book metadata and content structure from the stored files. This may take a while. Continue?")) {
+            return;
+        }
+
+        setIsRegenerating(true);
+        setRegenerationProgress('Starting...');
+        setRegenerationPercent(0);
+
+        try {
+            await maintenanceService.regenerateAllMetadata((current, total, message) => {
+                setRegenerationProgress(message);
+                setRegenerationPercent(total > 0 ? Math.round((current / total) * 100) : 0);
+            });
+            setRegenerationProgress('Regeneration complete.');
+            setRegenerationPercent(100);
+            setTimeout(() => {
+                setIsRegenerating(false);
+                setRegenerationProgress(null);
+            }, 3000);
+        } catch (e) {
+            logger.error('Regenerate metadata failed', e);
+            setRegenerationProgress('Failed to regenerate metadata.');
+            setIsRegenerating(false);
         }
     };
 
@@ -1352,6 +1382,30 @@ const firebaseConfig = {
                                         </Button>
                                         {orphanScanResult && (
                                             <p className="text-sm text-muted-foreground">{orphanScanResult}</p>
+                                        )}
+                                        <Button onClick={handleRegenerateMetadata} variant="outline" disabled={isRegenerating}>
+                                            {isRegenerating ? (
+                                                <>
+                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                    Regenerating...
+                                                </>
+                                            ) : (
+                                                "Regenerate All Metadata"
+                                            )}
+                                        </Button>
+                                        {isRegenerating && (
+                                            <div className="w-full flex flex-col items-center space-y-1 mt-2">
+                                                <p className="text-xs text-muted-foreground">{regenerationProgress}</p>
+                                                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-primary transition-all duration-300 ease-out"
+                                                        style={{ width: `${regenerationPercent}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                        {regenerationProgress && !isRegenerating && (
+                                             <p className="text-sm text-muted-foreground">{regenerationProgress}</p>
                                         )}
                                     </div>
                                 </div>
