@@ -146,7 +146,7 @@ export class AudioPlayerService {
         // Subscribe to state manager changes
         this.stateManager.subscribe((snapshot) => {
             // Update Yjs Progress
-            if (this.currentBookId) {
+            if (this.currentBookId && snapshot.currentSectionIndex !== -1) {
                 useReadingStateStore.getState().updateTTSProgress(
                     this.currentBookId,
                     snapshot.currentIndex,

@@ -118,6 +118,7 @@ export const useReadingStateStore = create<ReadingState>()(
                             [bookId]: {
                                 ...bookProgress,
                                 [deviceId]: {
+                                    ...existingDeviceProgress,
                                     bookId,
                                     currentCfi: cfi,
                                     percentage,
