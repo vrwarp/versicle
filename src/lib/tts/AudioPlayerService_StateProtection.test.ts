@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
 
 // Mock AudioContentPipeline to avoid circular deps
 vi.mock('./AudioContentPipeline', () => ({
