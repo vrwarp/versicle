@@ -642,7 +642,7 @@ class DBService {
 
 
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async updateReadingHistory(bookId: string, range: string, _type: ReadingEventType, _label?: string, _isCompletion: boolean = false): Promise<void> {
     // Phase 2 Cleanup: dedicated user_journey store is removed.
     // We now rely on completedRanges in useReadingStateStore (Yjs) as a fallback for history display.
@@ -662,7 +662,6 @@ class DBService {
     return Promise.resolve();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async getJourneyEvents(_bookId: string): Promise<ReadingSession[]> {
     // Deprecated: user_journey store removed.
