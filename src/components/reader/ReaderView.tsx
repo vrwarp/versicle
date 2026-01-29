@@ -45,6 +45,7 @@ import { createLogger } from '../../lib/logger';
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
 import { DeviceIcon } from './DeviceIcon';
+import { useHistoryHighlights } from './useHistoryHighlights';
 
 const logger = createLogger('ReaderView');
 
@@ -619,33 +620,14 @@ export const ReaderView: React.FC = () => {
     // Reading History Highlights
     const bookProgress = useBookProgress(id || null);
 
-    useEffect(() => {
-        const addedRanges: string[] = [];
-        if (rendition && isRenditionReady && id && bookProgress?.completedRanges) {
-            bookProgress.completedRanges.forEach(range => {
-                try {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (rendition as any).annotations.add('highlight', range, {}, null, 'reading-history-highlight', { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' });
-                    addedRanges.push(range);
-                } catch (e) {
-                    logger.warn("Failed to add history highlight", e);
-                }
-            });
-        }
-
-        return () => {
-            if (rendition && addedRanges.length > 0) {
-                addedRanges.forEach(range => {
-                    try {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (rendition as any).annotations.remove(range, 'highlight');
-                    } catch (e) {
-                        logger.warn("Failed to remove history highlight", e);
-                    }
-                });
-            }
-        };
-    }, [rendition, isRenditionReady, id, bookProgress?.completedRanges]);
+    useHistoryHighlights(
+        rendition,
+        isRenditionReady,
+        id || null,
+        bookProgress?.completedRanges,
+        progress?.currentCfi,
+        isPlaying
+    );
 
     const [useSyntheticToc, setUseSyntheticToc] = useState(false);
     const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
