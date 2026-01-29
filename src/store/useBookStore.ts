@@ -34,6 +34,11 @@ interface BookState {
      * Adds a book to the synced inventory.
      */
     addBook: (book: UserInventoryItem) => void;
+
+    /**
+     * Adds multiple books to the synced inventory (Optimized for batch operations).
+     */
+    addBooks: (books: UserInventoryItem[]) => void;
 }
 
 export const useBookStore = create<BookState>()(
@@ -69,7 +74,22 @@ export const useBookStore = create<BookState>()(
                         ...state.books,
                         [book.bookId]: book
                     }
-                }))
+                })),
+
+            addBooks: (newBooks) =>
+                set((state) => {
+                    const booksMap = newBooks.reduce((acc, book) => {
+                        acc[book.bookId] = book;
+                        return acc;
+                    }, {} as Record<string, UserInventoryItem>);
+
+                    return {
+                        books: {
+                            ...state.books,
+                            ...booksMap
+                        }
+                    };
+                })
         })
     )
 );
