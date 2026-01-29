@@ -1,5 +1,10 @@
 import { getDB } from '../db/db';
 import { useBookStore } from '../store/useBookStore';
+import { dbService } from '../db/DBService';
+import { useTTSStore } from '../store/useTTSStore';
+import { createLogger } from './logger';
+
+const logger = createLogger('MaintenanceService');
 
 /**
  * Service to handle database maintenance and integrity checks.
@@ -97,6 +102,57 @@ export class MaintenanceService {
     }
 
     await tx.done;
+  }
+
+  /**
+   * Regenerates metadata for all books using the stored EPUB files.
+   *
+   * @param onProgress - Callback to report progress.
+   */
+  async regenerateAllMetadata(
+    onProgress: (current: number, total: number, message: string) => void
+  ): Promise<void> {
+    const books = useBookStore.getState().books;
+    const bookIds = Object.keys(books);
+    const total = bookIds.length;
+    let current = 0;
+
+    for (const bookId of bookIds) {
+      try {
+        const fileBlob = await dbService.getBookFile(bookId);
+        if (fileBlob) {
+          const file = new File([fileBlob], books[bookId].sourceFilename || 'book.epub', { type: 'application/epub+zip' });
+
+          // Get current settings for extraction
+          const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+
+          onProgress(current, total, `Regenerating ${books[bookId].title}...`);
+
+          const manifest = await dbService.importBookWithId(bookId, file, {
+            abbreviations: [],
+            alwaysMerge: [],
+            sentenceStarters,
+            sanitizationEnabled
+          });
+
+          // Update Inventory
+          // We only update fields that should be refreshed from source.
+          // Note: updateBook will merge with existing fields.
+          useBookStore.getState().updateBook(bookId, {
+            title: manifest.title,
+            author: manifest.author,
+            // We preserve addedAt, tags, status, etc.
+          });
+
+        } else {
+          logger.warn(`No file found for book ${bookId}, skipping regeneration.`);
+        }
+      } catch (e) {
+        logger.error(`Failed to regenerate metadata for ${bookId}`, e);
+      }
+      current++;
+      onProgress(current, total, `Completed ${current} of ${total}`);
+    }
   }
 }
 
