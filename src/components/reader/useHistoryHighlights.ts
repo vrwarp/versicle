@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createLogger } from '../../lib/logger';
 
 const logger = createLogger('useHistoryHighlights');
@@ -19,12 +19,16 @@ export const useHistoryHighlights = (
 ) => {
     const [displayedRanges, setDisplayedRanges] = useState<string[]>([]);
 
-    // Logic to control WHEN we update the displayed highlights.
-    // We want to avoid live updates while TTS is playing (distraction),
-    // but ensure updates happen on page turns (viewer updates)
-    // or when not playing (to capture initial load or sync).
+    // Store latest completedRanges in ref to access it in effects without dependency issues
+    const latestCompletedRanges = useRef(completedRanges);
+
+    // Update ref whenever completedRanges changes
     useEffect(() => {
-        const targetRanges = completedRanges || [];
+        latestCompletedRanges.current = completedRanges;
+    }, [completedRanges]);
+
+    const updateDisplayedRanges = useCallback((ranges: string[] | undefined) => {
+        const targetRanges = ranges || [];
         setDisplayedRanges(prev => {
             // Prevent infinite update loops if the array reference changes but content is same.
             if (prev === targetRanges) return prev;
@@ -33,13 +37,20 @@ export const useHistoryHighlights = (
             }
             return targetRanges;
         });
-    }, [
-        bookId,
-        currentCfi, // Update triggers on page flip/scroll
-        // If playing, we ignore live updates to completedRanges (by returning null).
-        // If not playing, we respect updates (e.g. initial load or sync).
-        isPlaying ? null : completedRanges
-    ]);
+    }, []);
+
+    // 1. Update when bookId or currentCfi changes (page turns), always using latest data
+    useEffect(() => {
+         updateDisplayedRanges(latestCompletedRanges.current);
+    }, [bookId, currentCfi, updateDisplayedRanges]);
+
+    // 2. Update when completedRanges changes, BUT only if not playing
+    useEffect(() => {
+        if (!isPlaying) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            updateDisplayedRanges(completedRanges);
+        }
+    }, [completedRanges, isPlaying, updateDisplayedRanges]);
 
     // Apply annotations based on displayedRanges
     useEffect(() => {
