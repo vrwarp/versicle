@@ -100,4 +100,56 @@ describe('TextSegmenter.mergeByLength', () => {
         expect(result).toHaveLength(1);
         expect(result[0].text).toBe('Hi.');
     });
+
+    it('should insert a period when merging segments without punctuation', () => {
+        const sentences = [
+            createNode('Title'),
+            createNode('Subtitle')
+        ];
+        // minLength 100 to force merge
+        const result = TextSegmenter.mergeByLength(sentences, 100);
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe('Title. Subtitle');
+    });
+
+    it('should not insert double periods if punctuation exists', () => {
+        const sentences = [
+            createNode('Title.'),
+            createNode('Subtitle')
+        ];
+        const result = TextSegmenter.mergeByLength(sentences, 100);
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe('Title. Subtitle');
+    });
+
+    it('should respect other punctuation', () => {
+        const sentences = [
+            createNode('Title!'),
+            createNode('Subtitle')
+        ];
+        const result = TextSegmenter.mergeByLength(sentences, 100);
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe('Title! Subtitle');
+    });
+
+    it('should insert period in backward merge if missing', () => {
+        const sentences = [
+            createNode('Long sentence here'), // No period
+            createNode('Short')
+        ];
+        const result = TextSegmenter.mergeByLength(sentences, 10);
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe('Long sentence here. Short');
+    });
+
+    it('should handle chain of merges with periods', () => {
+        const sentences = [
+            createNode('A'),
+            createNode('B'),
+            createNode('C')
+        ];
+        const result = TextSegmenter.mergeByLength(sentences, 100);
+        expect(result).toHaveLength(1);
+        expect(result[0].text).toBe('A. B. C');
+    });
 });

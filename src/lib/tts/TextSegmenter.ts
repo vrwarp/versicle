@@ -332,7 +332,10 @@ export class TextSegmenter {
             // Check if buffer is too short
             if (buffer.text.length < minLength) {
                 // Merge current into buffer
-                buffer.text += (buffer.text.endsWith(' ') ? '' : ' ') + current.text;
+                const textTrimmed = buffer.text.trimEnd();
+                const hasPunctuation = RE_TRAILING_PUNCTUATION.test(textTrimmed);
+                const separator = hasPunctuation ? ' ' : '. ';
+                buffer.text = textTrimmed + separator + current.text;
 
                 // Merge CFIs
                 const fastMergedCfi = tryFastMergeCfi(buffer.cfi, current.cfi);
@@ -359,7 +362,10 @@ export class TextSegmenter {
             // Handle last item: if it's still short, try to merge it BACK into the last pushed item
             if (buffer.text.length < minLength && lengthMerged.length > 0) {
                 const last = lengthMerged[lengthMerged.length - 1];
-                last.text += (last.text.endsWith(' ') ? '' : ' ') + buffer.text;
+                const textTrimmed = last.text.trimEnd();
+                const hasPunctuation = RE_TRAILING_PUNCTUATION.test(textTrimmed);
+                const separator = hasPunctuation ? ' ' : '. ';
+                last.text = textTrimmed + separator + buffer.text;
 
                 const fastMergedCfi = tryFastMergeCfi(last.cfi, buffer.cfi);
                 if (fastMergedCfi) {
