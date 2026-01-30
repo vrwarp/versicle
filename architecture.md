@@ -223,6 +223,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   **Quota Management**: Explicitly handles `QuotaExceededError` (including legacy code 22) and wraps it in a typed `StorageFullError` for UI handling.
     *   **Magic Number Check**: Verifies ZIP signature (`50 4B 03 04`) before parsing.
     *   **Sanitization**: Delegates to `DOMPurify` to strip HTML tags from metadata.
+    *   **Safe Mode**: A specialized UI state (`SafeModeView`) triggered by critical database initialization failures in `App.tsx`. It provides a last-resort "Factory Reset" option (`deleteDB`) to recover the application from a corrupted state without requiring user technical knowledge.
 
 ### Sync & Cloud (`src/lib/sync/`)
 
@@ -335,7 +336,7 @@ The Orchestrator. Manages playback state, provider selection, and UI updates.
 
 *   **Logic**:
     *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods (play, pause) to prevent race conditions during rapid UI interaction.
-    *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`).
+    *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`) via `BatteryGuard`.
     *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state to `PlaybackStateManager`.
 
 #### `src/lib/tts/TaskSequencer.ts`
@@ -360,6 +361,15 @@ The Data Pipeline for TTS.
     1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
     2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
     3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`), allowing the player to seamlessly skip content identified later without delaying the start of playback.
+
+#### `src/lib/tts/TextSegmenter.ts`
+*   **Goal**: Robustly split text into sentences and handle abbreviations.
+*   **Logic**:
+    *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
+    *   **Refinement**: Dynamically merges short segments using cached regex options for abbreviations and sentence starters.
+    *   **Optimization**: Uses `tryFastMergeCfi` to merge CFIs optimistically via string manipulation.
+*   **Trade-offs**:
+    *   **Maintenance**: The manual character scanning logic is more complex and brittle than standard regex or `String.trim()`, requiring careful regression testing.
 
 #### `src/lib/tts/PlaybackStateManager.ts`
 Manages the virtual playback timeline.

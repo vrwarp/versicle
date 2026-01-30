@@ -79,6 +79,7 @@
     *   **Unified Export**: Share files natively (AirDrop, Nearby Share) or download via browser.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
+*   **Safe Mode**: A fallback UI that activates on critical database failures, allowing users to export debug info or perform a factory reset to recover usability.
 
 ## Setup & Development
 
