@@ -231,7 +231,7 @@ class DBService {
         bookId
       }));
 
-      await this.ingestBook(data);
+      await this.ingestBook(data, 'overwrite');
       return data.manifest;
     } catch (error) {
       this.handleError(error);
@@ -243,7 +243,7 @@ class DBService {
    * Only writes to static_*, cache_*, and minimal legacy stores.
    * Does NOT write user_inventory - caller (Yjs store action) handles that.
    */
-  async ingestBook(data: BookExtractionData): Promise<void> {
+  async ingestBook(data: BookExtractionData, mode: 'add' | 'overwrite' = 'add'): Promise<void> {
     try {
       const db = await this.getDB();
       const tx = db.transaction([
@@ -251,25 +251,48 @@ class DBService {
         'cache_tts_preparation', 'cache_table_images'
       ], 'readwrite');
 
-      await tx.objectStore('static_manifests').add(data.manifest);
-      await tx.objectStore('static_resources').add(data.resource);
-      await tx.objectStore('static_structure').add(data.structure);
+      const manifestStore = tx.objectStore('static_manifests');
+      const resourceStore = tx.objectStore('static_resources');
+      const structureStore = tx.objectStore('static_structure');
+
+      if (mode === 'overwrite') {
+        await manifestStore.put(data.manifest);
+        await resourceStore.put(data.resource);
+        await structureStore.put(data.structure);
+      } else {
+        await manifestStore.add(data.manifest);
+        await resourceStore.add(data.resource);
+        await structureStore.add(data.structure);
+      }
 
       // User data (overrides, progress, inventory) is now handled by Yjs stores exclusively.
 
       const ttsStore = tx.objectStore('cache_tts_preparation');
       for (const batch of data.ttsContentBatches) {
-        await ttsStore.add({
-          id: batch.id,
-          bookId: batch.bookId,
-          sectionId: batch.sectionId,
-          sentences: batch.sentences
-        });
+        if (mode === 'overwrite') {
+          await ttsStore.put({
+            id: batch.id,
+            bookId: batch.bookId,
+            sectionId: batch.sectionId,
+            sentences: batch.sentences
+          });
+        } else {
+          await ttsStore.add({
+            id: batch.id,
+            bookId: batch.bookId,
+            sectionId: batch.sectionId,
+            sentences: batch.sentences
+          });
+        }
       }
 
       const tableStore = tx.objectStore('cache_table_images');
       for (const table of data.tableBatches) {
-        await tableStore.add(table);
+        if (mode === 'overwrite') {
+          await tableStore.put(table);
+        } else {
+          await tableStore.add(table);
+        }
       }
 
       await tx.done;
