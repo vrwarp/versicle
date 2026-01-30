@@ -518,7 +518,7 @@ export const GlobalSettingsDialog = () => {
                                     <h3 className="text-lg font-medium mb-4">Appearance</h3>
                                     <div className="space-y-4">
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium">Theme</label>
+                                            <h4 className="text-sm font-medium">Theme</h4>
                                             <ThemeSelector
                                                 currentTheme={currentTheme}
                                                 onThemeChange={setTheme}
@@ -646,10 +646,11 @@ export const GlobalSettingsDialog = () => {
                                             {backgroundAudioMode === 'noise' && (
                                                 <div className="space-y-2">
                                                     <div className="flex justify-between">
-                                                        <label className="text-sm font-medium">White Noise Volume</label>
+                                                        <div id="white-noise-label" className="text-sm font-medium">White Noise Volume</div>
                                                         <span className="text-sm text-muted-foreground">{Math.round(whiteNoiseVolume * 100)}%</span>
                                                     </div>
                                                     <Slider
+                                                        aria-labelledby="white-noise-label"
                                                         value={[whiteNoiseVolume]}
                                                         min={0}
                                                         max={1}
@@ -773,7 +774,7 @@ export const GlobalSettingsDialog = () => {
                                             <div className="space-y-2">
                                                 <div className="flex justify-between">
                                                     <div className="space-y-0.5">
-                                                        <label className="text-sm font-medium">Minimum Sentence Length</label>
+                                                        <div id="min-sentence-label" className="text-sm font-medium">Minimum Sentence Length</div>
                                                         <p className="text-xs text-muted-foreground">
                                                             Sentences shorter than this will be merged with adjacent ones.
                                                         </p>
@@ -781,6 +782,7 @@ export const GlobalSettingsDialog = () => {
                                                     <span className="text-sm text-muted-foreground">{minSentenceLength} chars</span>
                                                 </div>
                                                 <Slider
+                                                    aria-labelledby="min-sentence-label"
                                                     value={[minSentenceLength]}
                                                     min={0}
                                                     max={120}
