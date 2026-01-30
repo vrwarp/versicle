@@ -132,6 +132,31 @@ export class TextSegmenter {
     }
 
     /**
+     * Helper to merge two text strings with appropriate separation.
+     * Uses manual scanning to avoid expensive trimEnd() and regex allocations.
+     */
+    private static mergeText(left: string, right: string): string {
+        let i = left.length - 1;
+        // Check for whitespace (Space, NBSP, Tab, LF, CR)
+        while (i >= 0 && (left.charCodeAt(i) === 32 || left.charCodeAt(i) === 160 || left.charCodeAt(i) === 9 || left.charCodeAt(i) === 10 || left.charCodeAt(i) === 13)) {
+            i--;
+        }
+
+        let separator = '. ';
+        if (i >= 0) {
+            const code = left.charCodeAt(i);
+            // Check for punctuation: . , ! ? ; :
+            if (code === 46 || code === 44 || code === 33 || code === 63 || code === 59 || code === 58) {
+                separator = ' ';
+            }
+            return left.substring(0, i + 1) + separator + right;
+        } else {
+            // Left was empty or all whitespace
+            return separator + right;
+        }
+    }
+
+    /**
      * Fallback segmentation logic using simple regex if Intl.Segmenter is unavailable.
      *
      * @param text - The text to segment.
@@ -332,10 +357,7 @@ export class TextSegmenter {
             // Check if buffer is too short
             if (buffer.text.length < minLength) {
                 // Merge current into buffer
-                const textTrimmed = buffer.text.trimEnd();
-                const hasPunctuation = RE_TRAILING_PUNCTUATION.test(textTrimmed);
-                const separator = hasPunctuation ? ' ' : '. ';
-                buffer.text = textTrimmed + separator + current.text;
+                buffer.text = TextSegmenter.mergeText(buffer.text, current.text);
 
                 // Merge CFIs
                 const fastMergedCfi = tryFastMergeCfi(buffer.cfi, current.cfi);
@@ -362,10 +384,8 @@ export class TextSegmenter {
             // Handle last item: if it's still short, try to merge it BACK into the last pushed item
             if (buffer.text.length < minLength && lengthMerged.length > 0) {
                 const last = lengthMerged[lengthMerged.length - 1];
-                const textTrimmed = last.text.trimEnd();
-                const hasPunctuation = RE_TRAILING_PUNCTUATION.test(textTrimmed);
-                const separator = hasPunctuation ? ' ' : '. ';
-                last.text = textTrimmed + separator + buffer.text;
+
+                last.text = TextSegmenter.mergeText(last.text, buffer.text);
 
                 const fastMergedCfi = tryFastMergeCfi(last.cfi, buffer.cfi);
                 if (fastMergedCfi) {

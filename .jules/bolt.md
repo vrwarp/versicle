@@ -37,3 +37,8 @@
 - **Bottleneck:** Importing multiple books caused `O(N)` updates to the `useBookStore`, triggering listeners (like `useAllBooks`) and re-renders for every single book added.
 - **Solution:** Implemented `addBooks` action to batch updates into a single `set` call.
 - **Learning:** When processing batch operations (like imports), always provide a batch action in Zustand stores. Individual `set` calls trigger middleware (Yjs, Persistence) and listeners immediately, causing unnecessary cascade work.
+
+## 2025-06-03 - Manual String Scanning vs Trim
+- **Bottleneck:** `TextSegmenter.mergeByLength` was calling `trimEnd()` and regex testing inside the loop for every merge candidate, causing allocation overhead.
+- **Solution:** Implemented a manual backward character scan loop to check for punctuation and determine separation.
+- **Learning:** While regex is fast for matching, `trimEnd()` allocates. For high-frequency text loops (like merging thousands of segments), simple manual character scanning (imperative code) can be ~3x faster than declarative string methods. Extract this logic to a helper for readability.
