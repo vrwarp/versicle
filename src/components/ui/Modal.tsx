@@ -84,6 +84,18 @@ const ModalTitle = React.forwardRef<
 ))
 ModalTitle.displayName = DialogPrimitive.Title.displayName
 
+const ModalDescription = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Description>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
+>(({ className, ...props }, ref) => (
+  <DialogPrimitive.Description
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+))
+ModalDescription.displayName = DialogPrimitive.Description.displayName
+
 export {
   Modal,
   ModalPortal,
@@ -93,4 +105,5 @@ export {
   ModalContent,
   ModalHeader,
   ModalTitle,
+  ModalDescription,
 }
