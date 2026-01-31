@@ -18,8 +18,6 @@ export interface FirebaseConfigSettings {
     messagingSenderId: string;
     appId: string;
     measurementId?: string;
-    /** Whether to enable offline persistence (experimental) */
-    enablePersistence?: boolean;
 }
 
 interface SyncStore {
@@ -62,8 +60,7 @@ const defaultFirebaseConfig: FirebaseConfigSettings = {
     projectId: '',
     storageBucket: '',
     messagingSenderId: '',
-    appId: '',
-    enablePersistence: false
+    appId: ''
 };
 
 export const useSyncStore = create<SyncStore>()(
