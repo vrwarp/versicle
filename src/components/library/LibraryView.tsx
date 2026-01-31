@@ -32,6 +32,12 @@ import { ReplaceBookDialog } from './ReplaceBookDialog';
  */
 const logger = createLogger('LibraryView');
 
+// OPTIMIZATION: Cache for search strings to avoid redundant normalization/allocations
+// Key is the book object reference (which is stable thanks to selectors optimization).
+// Value is the cached search item object.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const searchCache = new WeakMap<object, { book: any, searchString: string }>();
+
 export const LibraryView: React.FC = () => {
   // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
   const books = useAllBooks();
@@ -275,11 +281,20 @@ export const LibraryView: React.FC = () => {
   // This memoized value updates only when the books array changes, not on every search keystroke.
   // This avoids calling toLowerCase() N times per frame during typing.
   const searchableBooks = useMemo(() => {
-    return books.map(book => ({
-      book,
-      // Pre-compute normalized strings
-      searchString: `${(book.title || '').toLowerCase()} ${(book.author || '').toLowerCase()}`
-    }));
+    return books.map(book => {
+      if (searchCache.has(book)) {
+        return searchCache.get(book)!;
+      }
+
+      const item = {
+        book,
+        // Pre-compute normalized strings
+        searchString: `${(book.title || '').toLowerCase()} ${(book.author || '').toLowerCase()}`
+      };
+
+      searchCache.set(book, item);
+      return item;
+    });
   }, [books]);
 
   // OPTIMIZATION: Memoize filtered and sorted books
