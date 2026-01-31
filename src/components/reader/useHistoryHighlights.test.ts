@@ -63,8 +63,6 @@ describe('useHistoryHighlights', () => {
         rerender({ completedRanges: completedRanges2, currentCfi: 'page1' });
 
         // It first removes cfi1 (cleanup), then adds cfi1, cfi2.
-        // Wait, does React strict mode run twice? Testing library doesn't enforce strict mode by default unless configured.
-        // The cleanup for previous render runs.
         expect(mockRendition.annotations.remove).toHaveBeenCalledWith('cfi1', 'highlight');
         expect(mockRendition.annotations.add).toHaveBeenCalledTimes(2);
     });
@@ -121,5 +119,59 @@ describe('useHistoryHighlights', () => {
 
         unmount();
         expect(mockRendition.annotations.remove).toHaveBeenCalledWith('cfi1', 'highlight');
+    });
+
+    it('respects highlightMode="last-read"', () => {
+        const completedRanges = ['cfi1', 'cfi2'];
+        const lastPlayedCfi = 'lastCfi';
+
+        renderHook(() => useHistoryHighlights(
+            mockRendition,
+            true,
+            'book1',
+            completedRanges,
+            'currentCfi',
+            false,
+            'last-read', // mode
+            lastPlayedCfi
+        ));
+
+        // Should ONLY add lastPlayedCfi
+        expect(mockRendition.annotations.add).toHaveBeenCalledTimes(1);
+        expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'lastCfi', expect.anything(), null, expect.anything(), expect.anything());
+    });
+
+    it('switches between modes dynamically', () => {
+        const completedRanges = ['cfi1'];
+        const lastPlayedCfi = 'lastCfi';
+
+        const { rerender } = renderHook(
+            ({ mode }) => useHistoryHighlights(
+                mockRendition,
+                true,
+                'book1',
+                completedRanges,
+                'currentCfi',
+                false,
+                mode,
+                lastPlayedCfi
+            ),
+            {
+                initialProps: { mode: 'all' as 'all' | 'last-read' }
+            }
+        );
+
+        // Initially 'all' -> cfi1
+        expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'cfi1', expect.anything(), null, expect.anything(), expect.anything());
+        mockRendition.annotations.add.mockClear();
+        mockRendition.annotations.remove.mockClear();
+
+        // Switch to 'last-read'
+        rerender({ mode: 'last-read' });
+
+        // Cleanup 'cfi1'
+        expect(mockRendition.annotations.remove).toHaveBeenCalledWith('cfi1', 'highlight');
+        // Add 'lastCfi'
+        expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'lastCfi', expect.anything(), null, expect.anything(), expect.anything());
     });
 });

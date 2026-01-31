@@ -15,20 +15,35 @@ export const useHistoryHighlights = (
     bookId: string | null,
     completedRanges: string[] | undefined,
     currentCfi: string | undefined,
-    isPlaying: boolean
+    isPlaying: boolean,
+    highlightMode: 'all' | 'last-read' = 'all',
+    lastPlayedCfi?: string
 ) => {
     const [displayedRanges, setDisplayedRanges] = useState<string[]>([]);
 
-    // Store latest completedRanges in ref to access it in effects without dependency issues
+    // Store latest data in ref to access it in effects/callbacks
     const latestCompletedRanges = useRef(completedRanges);
+    const latestLastPlayedCfi = useRef(lastPlayedCfi);
+    const latestHighlightMode = useRef(highlightMode);
 
-    // Update ref whenever completedRanges changes
     useEffect(() => {
         latestCompletedRanges.current = completedRanges;
-    }, [completedRanges]);
+        latestLastPlayedCfi.current = lastPlayedCfi;
+        latestHighlightMode.current = highlightMode;
+    }, [completedRanges, lastPlayedCfi, highlightMode]);
 
-    const updateDisplayedRanges = useCallback((ranges: string[] | undefined) => {
-        const targetRanges = ranges || [];
+    const updateDisplayedRanges = useCallback(() => {
+        let targetRanges: string[] = [];
+        const mode = latestHighlightMode.current;
+
+        if (mode === 'last-read') {
+            if (latestLastPlayedCfi.current) {
+                targetRanges = [latestLastPlayedCfi.current];
+            }
+        } else {
+            targetRanges = latestCompletedRanges.current || [];
+        }
+
         setDisplayedRanges(prev => {
             // Prevent infinite update loops if the array reference changes but content is same.
             if (prev === targetRanges) return prev;
@@ -39,18 +54,18 @@ export const useHistoryHighlights = (
         });
     }, []);
 
-    // 1. Update when bookId or currentCfi changes (page turns), always using latest data
+    // 1. Update when bookId or currentCfi changes (page turns) OR mode changes
+    // We update immediately on mode change to reflect user preference
     useEffect(() => {
-         updateDisplayedRanges(latestCompletedRanges.current);
-    }, [bookId, currentCfi, updateDisplayedRanges]);
+         updateDisplayedRanges();
+    }, [bookId, currentCfi, updateDisplayedRanges, highlightMode]);
 
-    // 2. Update when completedRanges changes, BUT only if not playing
+    // 2. Update when data (completedRanges/lastPlayed) changes, BUT only if not playing
     useEffect(() => {
         if (!isPlaying) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            updateDisplayedRanges(completedRanges);
+            updateDisplayedRanges();
         }
-    }, [completedRanges, isPlaying, updateDisplayedRanges]);
+    }, [completedRanges, lastPlayedCfi, isPlaying, updateDisplayedRanges]);
 
     // Apply annotations based on displayedRanges
     useEffect(() => {

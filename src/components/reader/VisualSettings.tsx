@@ -23,7 +23,8 @@ export const VisualSettings = () => {
     fontFamily, setFontFamily,
     lineHeight, setLineHeight,
     shouldForceFont, setShouldForceFont,
-    readerViewMode, setReaderViewMode
+    readerViewMode, setReaderViewMode,
+    highlightMode, setHighlightMode
   } = usePreferencesStore(useShallow(state => ({
     currentTheme: state.currentTheme,
     setTheme: state.setTheme,
@@ -36,7 +37,9 @@ export const VisualSettings = () => {
     shouldForceFont: state.shouldForceFont,
     setShouldForceFont: state.setShouldForceFont,
     readerViewMode: state.readerViewMode || 'paginated',
-    setReaderViewMode: state.setReaderViewMode
+    setReaderViewMode: state.setReaderViewMode,
+    highlightMode: state.highlightMode || 'all',
+    setHighlightMode: state.setHighlightMode
   })));
 
   return (
@@ -100,7 +103,21 @@ export const VisualSettings = () => {
         </div>
       </div>
 
-      {/* 3. The "Format" Row (Layout) */}
+      {/* 3. Reading History */}
+      <div className="mb-6">
+        <Label className="mb-3 block text-sm font-medium">Reading History</Label>
+        <Select value={highlightMode} onValueChange={(val) => setHighlightMode(val as 'all' | 'last-read')}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Highlight Mode" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Highlight All Read</SelectItem>
+            <SelectItem value="last-read">Highlight Last Only</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* 4. The "Format" Row (Layout) */}
       <div className="space-y-4">
         <Label className="block text-sm font-medium">Layout</Label>
         <Tabs value={readerViewMode} onValueChange={(val) => setReaderViewMode(val as 'paginated' | 'scrolled')} className="w-full">

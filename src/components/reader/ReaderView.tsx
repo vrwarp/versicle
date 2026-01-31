@@ -72,7 +72,8 @@ export const ReaderView: React.FC = () => {
         lineHeight,
         fontSize,
         shouldForceFont,
-        readerViewMode
+        readerViewMode,
+        highlightMode
     } = usePreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
         customTheme: state.customTheme || DEFAULT_CUSTOM_THEME,
@@ -80,7 +81,8 @@ export const ReaderView: React.FC = () => {
         lineHeight: state.lineHeight || 1.5,
         fontSize: state.fontSize,
         shouldForceFont: state.shouldForceFont,
-        readerViewMode: state.readerViewMode || 'paginated'
+        readerViewMode: state.readerViewMode || 'paginated',
+        highlightMode: state.highlightMode || 'all'
     })));
 
     const {
@@ -626,7 +628,9 @@ export const ReaderView: React.FC = () => {
         id || null,
         bookProgress?.completedRanges,
         progress?.currentCfi,
-        isPlaying
+        isPlaying,
+        highlightMode,
+        progress?.lastPlayedCfi
     );
 
     const [useSyntheticToc, setUseSyntheticToc] = useState(false);
