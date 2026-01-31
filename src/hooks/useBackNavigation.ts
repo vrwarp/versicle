@@ -1,13 +1,14 @@
-import { useEffect, useId, useCallback } from 'react';
+import { useEffect, useId } from 'react';
 import { useNavigationStore, type NavigationHandler } from '../store/useNavigationStore';
-import { useBlocker } from 'react-router-dom';
+// import { useBlocker } from 'react-router-dom';
 
 /**
  * Hook to register a back navigation handler (Android Back Button + Browser Navigation).
  *
  * When `enabled` is true:
  * 1. Registers a handler with `useNavigationStore` (for Android hardware button).
- * 2. Registers a React Router blocker (for browser back button).
+ * 2. [Pending] Registers a React Router blocker (for browser back button).
+ *    *Note: Browser blocking requires migrating App.tsx to use Data Router (createBrowserRouter).*
  *
  * If a navigation attempt is detected (or back button pressed), the handler is executed.
  *
@@ -30,9 +31,11 @@ export const useBackNavigation = (handler: NavigationHandler, priority: number, 
         };
     }, [id, handler, priority, enabled, register, unregister]);
 
-    // 2. Browser Navigation Blocking
-    // We block if enabled is true.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // 2. Browser Navigation Blocking (Unification)
+    // Disabled for now because `useBlocker` causes crashes if not inside a Data Router.
+    // The current architecture uses <BrowserRouter> which is a legacy router.
+    // To enable this, we must refactor App.tsx to use `createBrowserRouter` and <RouterProvider>.
+    /*
     const blocker = useBlocker(
         useCallback(
             ({ historyAction }: { historyAction: string }) => {
@@ -50,7 +53,6 @@ export const useBackNavigation = (handler: NavigationHandler, priority: number, 
     useEffect(() => {
         if (blocker.state === 'blocked') {
             // Execute the handler (e.g., close modal)
-            // We wrap in async to handle potential promises, though usually sync
             Promise.resolve(handler()).then(() => {
                 // After handling, we reset the blocker.
                 // We do NOT proceed with the navigation because the handler's purpose
@@ -59,4 +61,5 @@ export const useBackNavigation = (handler: NavigationHandler, priority: number, 
             });
         }
     }, [blocker, handler]);
+    */
 };

@@ -196,14 +196,14 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `static_manifests`: Lightweight metadata (Title, Author, Cover Thumbnail) for listing books.
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
     *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
-*   **Domain 2: User (Mutable/Syncable)** - *Hybrid Management*
-    *   **Yjs Primary**: `user_inventory` (Books), `user_progress` (Reading State), and `user_reading_list` are managed primarily by Yjs stores.
-    *   **IDB Primary (Sync Overlay)**:
-        *   `user_overrides`: Custom settings like Lexicon rules.
+*   **Domain 2: User (Mutable/Syncable)** - *Managed by Yjs*
+    *   **Yjs Exclusive**: `user_inventory` (Books), `user_progress` (Reading State), and `user_reading_list` are managed **exclusively** by Yjs stores. `DBService` only reads/writes static data.
     *   **IDB Local/Hybrid**:
-        *   `user_ai_inference`: **(Deprecated/Replaced)** Expensive AI-derived data is now handled by the synced `useContentAnalysisStore`.
+        *   `user_overrides`: Custom settings like Lexicon rules.
         *   `user_annotations`: Highlights and notes. Managed via `useAnnotationStore`.
-        *   `user_journey`: Granular reading history sessions (Local only).
+    *   **Deprecated/Replaced**:
+        *   `user_journey`: Granular reading history sessions (Deprecated/Removed).
+        *   `user_ai_inference`: **(Replaced)** Expensive AI-derived data is now handled by the synced `useContentAnalysisStore` (Yjs).
 *   **Domain 3: Cache (Transient/Regenerable)**
     *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
     *   `cache_audio_blobs`: Generated TTS audio segments.
@@ -271,13 +271,13 @@ Manages integration with the native Android Backup Service.
 *   **Verification**:
     *   **Fuzz Testing**: The optimization is verified using seeded Fuzz tests (`cfi-utils.fuzz.test.ts`) that generate random CFI inputs and assert that the Fast Path output matches the Slow Path reference implementation.
 
-#### Ingestion (`src/lib/ingestion.ts`)
+#### Ingestion (`src/lib/ingestion.ts` & `src/lib/offscreen-renderer.ts`)
 Handles the complex task of importing an EPUB file.
 
 *   **`extractBookData(file)`**:
     1.  **Validation**: Enforces strict ZIP signature check (`PK\x03\x04`).
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`).
-        *   *Yield Strategy*: Implements a **Time-Budgeted Yield Strategy** (pauses every 16ms) to prevent freezing the main thread.
+        *   **Time-Budgeted Yield Strategy**: Explicitly checks `performance.now()` and yields to the main thread every 16ms (1 frame) to prevent freezing the UI during heavy parsing.
     3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head 4KB + Metadata + Tail 4KB) using a `cheapHash` function for O(1) duplicate detection.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** using K-Means (`cover-palette.ts`).
 

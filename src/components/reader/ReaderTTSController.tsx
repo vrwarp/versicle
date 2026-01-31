@@ -32,8 +32,6 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   const queue = useTTSStore(state => state.queue);
   const jumpTo = useTTSStore(state => state.jumpTo);
 
-  const lastBackgroundCfi = useRef<string | null>(null);
-
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
       if (!rendition || !activeCfi || status === 'stopped') return;
@@ -58,9 +56,6 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 
       if (document.visibilityState === 'visible') {
            syncVisuals();
-      } else {
-           // Background mode: Store for later
-           lastBackgroundCfi.current = activeCfi;
       }
 
       // Remove highlight when activeCfi changes
@@ -75,29 +70,31 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   // --- Visibility Reconciliation ---
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && lastBackgroundCfi.current && rendition) {
+      if (document.visibilityState === 'visible' && rendition) {
          // We just came back to foreground.
-         // If we have a stored CFI that we missed syncing, jump to it now.
-         const cfiToSync = lastBackgroundCfi.current;
-         lastBackgroundCfi.current = null;
+         // Fetch the latest state directly from the store to avoid stale closure issues.
+         const { activeCfi: freshCfi, status: freshStatus } = useTTSStore.getState();
+
+         if (!freshCfi || freshStatus === 'stopped') return;
 
          if (viewMode === 'paginated') {
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (rendition as any).display(cfiToSync).catch((err: unknown) => console.warn("Reconciliation failed", err));
+             (rendition as any).display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
          }
 
-         // If the active CFI matches, ensure the highlight is present.
-         if (cfiToSync === activeCfi) {
-             try {
-                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                 (rendition as any).annotations.add('highlight', cfiToSync, {}, () => {}, 'tts-highlight');
-             } catch (e) { console.warn("Reconciliation highlight failed", e); }
-         }
+         // Ensure highlight is present
+         try {
+             // Remove any existing highlight first (just in case)
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (rendition as any).annotations.remove(freshCfi, 'highlight');
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             (rendition as any).annotations.add('highlight', freshCfi, {}, () => {}, 'tts-highlight');
+         } catch (e) { console.warn("Reconciliation highlight failed", e); }
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [rendition, viewMode, activeCfi]); // Added activeCfi dependency to ensure we have fresh value
+  }, [rendition, viewMode]);
 
   // --- Keyboard Navigation ---
   // Use a ref to access the latest state in the event listener without re-binding it constantly.
