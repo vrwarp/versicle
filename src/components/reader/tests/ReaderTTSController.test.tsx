@@ -5,8 +5,12 @@ import { ReaderTTSController } from '../ReaderTTSController';
 import { useTTSStore } from '../../../store/useTTSStore';
 
 // Mock the store
+const mockGetState = vi.fn();
+
 vi.mock('../../../store/useTTSStore', () => ({
-  useTTSStore: vi.fn(),
+  useTTSStore: Object.assign(vi.fn(), {
+    getState: () => mockGetState(),
+  }),
 }));
 
 describe('ReaderTTSController', () => {
@@ -18,6 +22,10 @@ describe('ReaderTTSController', () => {
     jumpToMock = vi.fn();
     onNextMock = vi.fn();
     onPrevMock = vi.fn();
+    mockGetState.mockReturnValue({
+        activeCfi: 'cfi-1',
+        status: 'playing',
+    });
 
     // Default store mock
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -103,4 +111,41 @@ describe('ReaderTTSController', () => {
     expect(jumpToMock).toHaveBeenCalledWith(0); // index - 1
   });
 
+  it('syncs position when returning to foreground', () => {
+    const displayMock = vi.fn().mockResolvedValue(undefined);
+    const annotationsAddMock = vi.fn();
+    const annotationsRemoveMock = vi.fn();
+
+    const mockRendition = {
+      display: displayMock,
+      annotations: {
+        add: annotationsAddMock,
+        remove: annotationsRemoveMock,
+      },
+    };
+
+    render(
+      <ReaderTTSController
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rendition={mockRendition as any}
+        viewMode="paginated"
+        onNext={onNextMock}
+        onPrev={onPrevMock}
+      />
+    );
+
+    // Mock store state update (simulating background update)
+    mockGetState.mockReturnValue({
+        activeCfi: 'cfi-updated',
+        status: 'playing',
+    });
+
+    // Simulate visibility change to visible
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true });
+    fireEvent(document, new Event('visibilitychange'));
+
+    expect(displayMock).toHaveBeenCalledWith('cfi-updated');
+    expect(annotationsRemoveMock).toHaveBeenCalledWith('cfi-updated', 'highlight');
+    expect(annotationsAddMock).toHaveBeenCalledWith('highlight', 'cfi-updated', {}, expect.any(Function), 'tts-highlight');
+  });
 });
