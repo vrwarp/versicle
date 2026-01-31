@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initializeFirebase, resetFirebase } from './firebase-config';
 import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
-import { useToastStore } from '../../store/useToastStore';
 
 // Mock firebase
 vi.mock('firebase/app', () => ({
