@@ -8,12 +8,7 @@ import { initializeApp } from 'firebase/app';
 import type { FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import type { Auth } from 'firebase/auth';
-import {
-    getFirestore,
-    initializeFirestore,
-    persistentLocalCache,
-    persistentMultipleTabManager
-} from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { useSyncStore } from './hooks/useSyncStore';
 import type { FirebaseConfigSettings } from './hooks/useSyncStore';
@@ -56,7 +51,7 @@ let currentConfigHash: string | null = null;
  * Generate a simple hash of config to detect changes
  */
 const getConfigHash = (config: FirebaseConfigSettings): string => {
-    return `${config.apiKey}|${config.authDomain}|${config.projectId}|${config.appId}|${config.enablePersistence}`;
+    return `${config.apiKey}|${config.authDomain}|${config.projectId}|${config.appId}`;
 };
 
 /**
@@ -97,18 +92,7 @@ export const initializeFirebase = (): boolean => {
     try {
         app = initializeApp(config);
         auth = getAuth(app);
-
-        if (config.enablePersistence) {
-            firestore = initializeFirestore(app, {
-                localCache: persistentLocalCache({
-                    tabManager: persistentMultipleTabManager()
-                })
-            });
-            console.log('[Firebase] Initialized with offline persistence');
-        } else {
-            firestore = getFirestore(app);
-        }
-
+        firestore = getFirestore(app);
         googleProvider = new GoogleAuthProvider();
         currentConfigHash = newConfigHash;
 
