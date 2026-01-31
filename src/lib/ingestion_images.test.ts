@@ -95,6 +95,7 @@ describe('Ingestion Image Optimization', () => {
     expect(imageCompression).toHaveBeenCalledWith(mockCoverBlob, expect.objectContaining({
       maxWidthOrHeight: 600,
       maxSizeMB: 0.1,
+      fileType: 'image/webp',
     }));
 
     expect(data.manifest.coverBlob).toBeDefined();
