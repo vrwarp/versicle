@@ -50,6 +50,7 @@
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
 *   **Optimistic Playback**: Audio starts playing instantly while content filtering (skip masks) and smart adaptations are applied asynchronously in the background.
 *   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural narrative speech.
+    *   **Thinking Budget**: Configurable "Thinking Budget" (default 512 tokens) allows the AI to reason about complex data layouts before speaking.
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
@@ -95,7 +96,7 @@
     ```bash
     npm install
     ```
-    *Note: If Piper assets are missing, run `npm run prepare-piper`.*
+    *Note: The `postinstall` script runs `npm run prepare-piper` to copy necessary WASM assets to `public/piper`.*
 
 3.  (Optional) Read `AGENTS.md` for AI assistant guidelines.
 
