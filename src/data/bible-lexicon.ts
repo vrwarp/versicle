@@ -474,8 +474,8 @@ export const BIBLE_LEXICON_RULES: Omit<LexiconRule, 'id' | 'created'>[] = [
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(v|vs|vv)\\.?(?=\\s?\\d+)",
-        replacement: "verse",
+        original: "\\b(v|vs|vv)\\.?\\s?(?=\\d+)",
+        replacement: "verse ",
         isRegex: true,
         applyBeforeGlobal: false
     },

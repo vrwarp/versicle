@@ -21,9 +21,9 @@ describe('Bible Lexicon Rules', () => {
         expect(result).toMatch(/Matthew 1:2 Ay$/);
 
         result = service.applyLexicon('v43a', rules);
-        // Note: Existing rules replace 'v' with 'verse' directly, so 'v43' becomes 'verse43' without space if none existed.
-        // We focus on verifying the 'a' suffix becomes ' Ay'.
-        expect(result).toMatch(/verse\s*43 Ay$/);
+        // "v43" -> "verse 43" (now with space)
+        // "43a" -> "43 Ay"
+        expect(result).toMatch(/verse 43 Ay$/);
 
         // "vv. 5b-7a" -> "verse 5b-7 Ay"
         result = service.applyLexicon('vv. 5b-7a', rules);
