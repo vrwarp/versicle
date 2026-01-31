@@ -90,6 +90,7 @@ vi.mock('react-router-dom', () => ({
   Routes: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Route: ({ element }: { element: React.ReactNode }) => <div>{element}</div>,
   useNavigate: vi.fn(),
+  useLocation: vi.fn().mockReturnValue({ pathname: '/' }),
 }));
 
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';

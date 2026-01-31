@@ -1,5 +1,5 @@
 import { useEffect, useId } from 'react';
-import { useBackButtonStore, BackButtonHandler } from '../store/useBackButtonStore';
+import { useBackButtonStore, type BackButtonHandler } from '../store/useBackButtonStore';
 
 /**
  * Hook to register a back button handler.
