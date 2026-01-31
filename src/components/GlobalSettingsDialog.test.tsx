@@ -18,6 +18,7 @@ vi.mock('./ui/Modal', () => {
         ),
         ModalHeader: ({ children }: { children: React.ReactNode }) => <header>{children}</header>,
         ModalTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
+        ModalDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
     };
 });
 

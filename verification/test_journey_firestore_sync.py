@@ -208,7 +208,7 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     # Verify the books appear
     card_ids = page_b.locator("[data-testid^='book-card-']").evaluate_all("els => els.map(e => e.getAttribute('data-testid'))")
     print(f"[B] Found {len(card_ids)} cards: {card_ids}")
-    
+
     expected_count = 5
     titles = page_b.locator("[data-testid='book-title']").all_text_contents()
     print(f"[B] Titles: {titles}")

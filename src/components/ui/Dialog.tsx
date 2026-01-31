@@ -4,6 +4,7 @@ import {
   ModalContent,
   ModalHeader,
   ModalTitle,
+  ModalDescription,
 } from './Modal';
 
 interface DialogProps {
@@ -30,14 +31,14 @@ interface DialogProps {
  * @returns The rendered Dialog component.
  */
 export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, description, children, footer, hideCloseButton }) => {
-  const descriptionId = React.useId();
-
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalContent className="max-w-md" aria-describedby={description ? descriptionId : undefined} hideCloseButton={hideCloseButton}>
+      <ModalContent className="max-w-md" hideCloseButton={hideCloseButton}>
         <ModalHeader>
           <ModalTitle>{title}</ModalTitle>
-          {description && <p id={descriptionId} className="text-sm text-muted-foreground">{description}</p>}
+          <ModalDescription className={description ? "" : "sr-only"}>
+            {description || "Dialog Content"}
+          </ModalDescription>
         </ModalHeader>
         <div className="mb-6 text-foreground min-w-0">{children}</div>
         {footer && <div className="flex justify-end gap-2">{footer}</div>}
