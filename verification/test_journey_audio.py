@@ -1,0 +1,153 @@
+import pytest
+import re
+import time
+from playwright.sync_api import Page, expect
+from verification import utils
+
+def test_journey_audio(page: Page):
+    print("Starting Audio Journey...")
+    utils.reset_app(page)
+    utils.ensure_library_with_book(page)
+
+    # Open Book
+    page.locator("[data-testid^='book-card-']").first.click()
+    expect(page.get_by_test_id("reader-back-button")).to_be_visible()
+
+    # Navigate to Chapter 5 via TOC to ensure we have content for audio
+    print("Navigating to Chapter 5...")
+    utils.navigate_to_chapter(page)
+
+    # --- Part 1: Audio HUD Interaction ---
+    print("--- Testing Audio HUD ---")
+    # Wait for HUD (Compass Pill) in Active/Compact mode (since we have content)
+    # The default state when content is available but not playing might be active (if queue populated) or nothing.
+    # But navigating to chapter usually populates the queue (as we found earlier).
+    # So we expect compass-pill-active.
+    expect(page.get_by_test_id("compass-pill-active")).to_be_visible(timeout=10000)
+    utils.capture_screenshot(page, "audio_1_hud_visible")
+
+    # Check for Play Button inside the Compass Pill
+    # The active variant Compass Pill exposes a Play/Pause toggle in its center section.
+    play_button = page.get_by_test_id("compass-pill-active").get_by_label("Play")
+    expect(play_button).to_be_visible()
+
+    # Click Play
+    print("Clicking Play...")
+    play_button.click()
+    expect(page.get_by_test_id("compass-pill-active").get_by_label("Pause")).to_be_visible(timeout=5000)
+
+    # Click Pause
+    print("Clicking Pause...")
+    page.get_by_test_id("compass-pill-active").get_by_label("Pause").click()
+    expect(play_button).to_be_visible()
+
+    # --- Part 2: Audio Deck ---
+    print("--- Testing Audio Deck ---")
+    # Open Audio Deck
+    page.get_by_test_id("reader-audio-button").click()
+
+    # Verify Sheet Content
+    expect(page.get_by_role("dialog")).to_be_visible()
+    expect(page.get_by_text("Audio Deck")).to_be_visible()
+
+    # Verify Stage Buttons
+    expect(page.get_by_role("dialog").get_by_label("Play")).to_be_visible()
+    expect(page.get_by_test_id("tts-rewind-button")).to_be_visible()
+    expect(page.get_by_test_id("tts-forward-button")).to_be_visible()
+
+    # Switch to Settings
+    print("Switching to Audio Settings...")
+    page.get_by_role("button", name="Settings").click(force=True)
+    expect(page.get_by_text("Voice & Pace")).to_be_visible()
+    expect(page.get_by_text("Flow Control")).to_be_visible()
+
+    utils.capture_screenshot(page, "audio_2_deck_settings")
+
+    # Switch back to Queue
+    print("Switching back to Queue...")
+    page.get_by_role("button", name="Up Next").click(force=True)
+
+    # Close Audio Deck
+    page.keyboard.press("Escape")
+    expect(page.get_by_test_id("tts-panel")).not_to_be_visible()
+
+    # --- Part 3: Flow Mode (Listening State) ---
+    print("--- Testing Flow Mode ---")
+
+    # Start Play via Pill (assuming we fixed it)
+    play_button.click()
+
+    # Enter Immersive Mode (required for Flow Mode overlay)
+    print("Entering Immersive Mode...")
+    page.get_by_test_id("reader-immersive-enter-button").click()
+
+    # Verify Overlay Appears (Listening State)
+    expect(page.get_by_test_id("flow-mode-breathing-border")).to_be_visible(timeout=5000)
+    utils.capture_screenshot(page, "audio_3_flow_mode_active")
+
+    # Verify Text Dimming
+    container = page.get_by_test_id("reader-iframe-container")
+    expect(container).to_have_css("opacity", "0.4")
+
+    # Verify Curtain Mode
+    viewport = page.viewport_size
+    width = viewport['width'] if viewport else 1280
+    height = viewport['height'] if viewport else 720
+    center_x = width / 2
+    center_y = height / 2
+
+    # Double Tap to enable Curtain
+    print("Enabling Curtain Mode...")
+    page.mouse.click(center_x, center_y)
+    page.mouse.click(center_x, center_y)
+
+    # Verify Curtain is active (black background)
+    overlay = page.get_by_test_id("flow-mode-overlay")
+    expect(overlay).to_have_class(re.compile(r"bg-black"))
+    expect(page.get_by_test_id("flow-mode-breathing-border")).not_to_be_visible()
+
+    # Verify Peek Mode
+    print("Testing Peek Mode...")
+    time.sleep(2.0)
+    page.mouse.click(center_x, center_y)
+    expect(overlay).to_contain_text(re.compile(r"\d+:\d+")) # Check for time format
+    utils.capture_screenshot(page, "audio_4_curtain_peek")
+
+    # Disable Curtain Mode (Double Tap)
+    print("Disabling Curtain Mode...")
+    time.sleep(1.0)
+    page.mouse.click(center_x, center_y)
+    page.mouse.click(center_x, center_y)
+
+    expect(page.get_by_test_id("flow-mode-breathing-border")).to_be_visible()
+    expect(overlay).not_to_have_class(re.compile(r"bg-black"))
+
+    # Stop Audio (via Center Tap on Overlay)
+    print("Stopping Audio...")
+    time.sleep(1.0)
+    page.mouse.click(center_x, center_y)
+
+    # Verify Overlay Disappears
+    expect(page.get_by_test_id("flow-mode-breathing-border")).not_to_be_visible(timeout=5000)
+    expect(container).to_have_css("opacity", "1")
+
+    # Exit Immersive Mode to see header
+    print("Exiting Immersive Mode...")
+    page.get_by_test_id("reader-immersive-exit-button").click()
+
+    # --- Part 4: Summary Mode in Library ---
+    print("--- Testing Summary Mode in Library ---")
+    page.get_by_test_id("reader-back-button").click()
+
+    # Wait for Library
+    expect(page).to_have_url("http://localhost:5173/")
+
+    # Check for Summary Pill
+    expect(page.get_by_test_id("compass-pill-summary")).to_be_visible()
+
+    # Ensure active pill is gone
+    expect(page.get_by_test_id("compass-pill-active")).not_to_be_visible()
+
+    utils.capture_screenshot(page, "audio_5_summary_mode")
+
+    print("Audio Journey Passed!")
