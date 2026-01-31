@@ -93,8 +93,8 @@ describe('Ingestion Image Optimization', () => {
 
     // Verify compression was called
     expect(imageCompression).toHaveBeenCalledWith(mockCoverBlob, expect.objectContaining({
-      maxWidthOrHeight: 800,
-      maxSizeMB: 0.5,
+      maxWidthOrHeight: 600,
+      maxSizeMB: 0.1,
     }));
 
     expect(data.manifest.coverBlob).toBeDefined();
