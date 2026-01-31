@@ -63,7 +63,7 @@ def test_journey_backup_restore(page: Page):
     page.wait_for_timeout(500)
     page.click("button[aria-label='Settings']", force=True)
     expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
-    
+
     # Check if already on Data Management (persistent state)
     if not page.get_by_role("button", name="Quick JSON Export (Legacy)").is_visible():
         page.get_by_role("button", name="Data Management").click(force=True)
@@ -114,7 +114,7 @@ def test_journey_backup_restore(page: Page):
     page.wait_for_timeout(500)
     page.click("button[aria-label='Settings']", force=True)
     expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
-    
+
     if not page.get_by_role("button", name="Quick JSON Export (Legacy)").is_visible():
         page.get_by_role("button", name="Data Management").click(force=True)
 
@@ -166,7 +166,7 @@ def test_journey_full_backup_restore(page: Page):
     page.wait_for_timeout(500)
     page.click("button[aria-label='Settings']", force=True) # Header settings
     expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
-    
+
     if not page.get_by_role("button", name="Export Full Backup (ZIP)").is_visible():
         page.get_by_role("button", name="Data Management").click(force=True)
 
@@ -199,7 +199,7 @@ def test_journey_full_backup_restore(page: Page):
     page.wait_for_timeout(500)
     page.click("button[aria-label='Settings']", force=True)
     expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
-    
+
     if not page.get_by_role("button", name="Export Full Backup (ZIP)").is_visible():
         page.get_by_role("button", name="Data Management").click(force=True)
 

@@ -506,7 +506,7 @@ export const LibraryView: React.FC = () => {
                 <SelectTrigger
                   className="w-[130px] sm:w-[180px] text-foreground text-xs sm:text-sm h-8 sm:h-10"
                   data-testid="sort-select"
-                  aria-labelledby="sort-by-label"
+                  aria-label="Sort library by"
                 >
                   <SelectValue />
                 </SelectTrigger>
