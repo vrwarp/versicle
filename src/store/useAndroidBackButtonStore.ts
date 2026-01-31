@@ -36,6 +36,18 @@ export enum BackButtonPriority {
  *   setIsOpen(false);
  * }, BackButtonPriority.MODAL, isOpen);
  * ```
+ *
+ * **Future Unification Note:**
+ * To unify this with browser-based navigation (e.g., preventing the user from accidentally navigating back
+ * when a modal is open in a web context), we would need to integrate `react-router-dom`'s `useBlocker` or `window.onpopstate`.
+ *
+ * Ideally, a shared `useNavigationGuard` hook would:
+ * 1. Register with this store (for Android hardware button).
+ * 2. Register a router blocker (for browser back button).
+ * 3. Execute the same handler when either event occurs.
+ *
+ * This would ensure that both the hardware button and the browser UI back button trigger the same
+ * "close modal" logic before actually navigating history.
  */
 export type BackButtonHandler = () => Promise<void> | void;
 
