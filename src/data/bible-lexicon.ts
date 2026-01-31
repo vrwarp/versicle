@@ -120,37 +120,37 @@ export const BIBLE_LEXICON_RULES: Omit<LexiconRule, 'id' | 'created'>[] = [
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(1\\s?Sam|1\\s?Sa|1S|I\\s?Sa|1\\s?Sm|1Sa|I\\s?Sam|1Sam|I\\s?Samuel|1st\\s?Samuel|First\\s?Samuel)\\.?(?=\\s?\\d+)",
+        original: "\\b(1\\s?Sam|1\\s?Sa|1S|I\\s?Sa|1\\s?Sm|1Sa|I\\s?Sam|1Sam|I\\s?Samuel|1st\\s?Samuel|First\\s?Samuel|1\\s?Samuel)\\.?(?=\\s?\\d+)",
         replacement: "First Samuel",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(2\\s?Sam|2\\s?Sa|2S|II\\s?Sa|2\\s?Sm|2Sa|II\\s?Sam|2Sam|II\\s?Samuel|2nd\\s?Samuel|Second\\s?Samuel)\\.?(?=\\s?\\d+)",
+        original: "\\b(2\\s?Sam|2\\s?Sa|2S|II\\s?Sa|2\\s?Sm|2Sa|II\\s?Sam|2Sam|II\\s?Samuel|2nd\\s?Samuel|Second\\s?Samuel|2\\s?Samuel)\\.?(?=\\s?\\d+)",
         replacement: "Second Samuel",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(1\\s?Kings|1\\s?Kgs|1\\s?Ki|1K|I\\s?Kgs|1Kgs|I\\s?Ki|1Ki|I\\s?Kings|1st\\s?Kings|First\\s?Kings)\\.?(?=\\s?\\d+)",
+        original: "\\b(1\\s?Kings|1\\s?Kgs|1\\s?Ki|1K|I\\s?Kgs|1Kgs|I\\s?Ki|1Ki|I\\s?Kings|1st\\s?Kings|First\\s?Kings|1\\s?King)\\.?(?=\\s?\\d+)",
         replacement: "First Kings",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(2\\s?Kings|2\\s?Kgs|2\\s?Ki|2K|II\\s?Kgs|2Kgs|II\\s?Ki|2Ki|II\\s?Kings|2nd\\s?Kings|Second\\s?Kings)\\.?(?=\\s?\\d+)",
+        original: "\\b(2\\s?Kings|2\\s?Kgs|2\\s?Ki|2K|II\\s?Kgs|2Kgs|II\\s?Ki|2Ki|II\\s?Kings|2nd\\s?Kings|Second\\s?Kings|2\\s?King)\\.?(?=\\s?\\d+)",
         replacement: "Second Kings",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(1\\s?Chron|1\\s?Chr|1\\s?Ch|1Ch|I\\s?Chr|1Chr|I\\s?Ch|1Ch|I\\s?Chron|1Chron|I\\s?Chronicles|1st\\s?Chronicles|First\\s?Chronicles)\\.?(?=\\s?\\d+)",
+        original: "\\b(1\\s?Chron|1\\s?Chr|1\\s?Ch|1Ch|I\\s?Chr|1Chr|I\\s?Ch|1Ch|I\\s?Chron|1Chron|I\\s?Chronicles|1st\\s?Chronicles|First\\s?Chronicles|1\\s?Chronicles)\\.?(?=\\s?\\d+)",
         replacement: "First Chronicles",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(2\\s?Chron|2\\s?Chr|2\\s?Ch|2Ch|II\\s?Chr|2Chr|II\\s?Ch|2Ch|II\\s?Chron|2Chron|II\\s?Chronicles|2nd\\s?Chronicles|Second\\s?Chronicles)\\.?(?=\\s?\\d+)",
+        original: "\\b(2\\s?Chron|2\\s?Chr|2\\s?Ch|2Ch|II\\s?Chr|2Chr|II\\s?Ch|2Ch|II\\s?Chron|2Chron|II\\s?Chronicles|2nd\\s?Chronicles|Second\\s?Chronicles|2\\s?Chronicles)\\.?(?=\\s?\\d+)",
         replacement: "Second Chronicles",
         isRegex: true,
         applyBeforeGlobal: false
@@ -175,7 +175,7 @@ export const BIBLE_LEXICON_RULES: Omit<LexiconRule, 'id' | 'created'>[] = [
     },
     {
         original: "\\b(Job|Jb)\\.?(?=\\s?\\d+)",
-        replacement: "Job",
+        replacement: "Jobe",
         isRegex: true,
         applyBeforeGlobal: false
     },
@@ -342,13 +342,13 @@ export const BIBLE_LEXICON_RULES: Omit<LexiconRule, 'id' | 'created'>[] = [
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(1\\s?Cor|1\\s?Co|I\\s?Cor|1Cor|I\\s?Co|1Co|I\\s?Corinthians|1st\\s?Corinthians|First\\s?Corinthians)\\.?(?=\\s?\\d+)",
+        original: "\\b(1\\s?Cor|1\\s?Co|I\\s?Cor|1Cor|I\\s?Co|1Co|I\\s?Corinthians|1st\\s?Corinthians|First\\s?Corinthians|1\\s?Corinthians)\\.?(?=\\s?\\d+)",
         replacement: "First Corinthians",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(2\\s?Cor|2\\s?Co|II\\s?Cor|2Cor|II\\s?Co|2Co|II\\s?Corinthians|2nd\\s?Corinthians|Second\\s?Corinthians)\\.?(?=\\s?\\d+)",
+        original: "\\b(2\\s?Cor|2\\s?Co|II\\s?Cor|2Cor|II\\s?Co|2Co|II\\s?Corinthians|2nd\\s?Corinthians|Second\\s?Corinthians|2\\s?Corinthians)\\.?(?=\\s?\\d+)",
         replacement: "Second Corinthians",
         isRegex: true,
         applyBeforeGlobal: false
@@ -378,25 +378,25 @@ export const BIBLE_LEXICON_RULES: Omit<LexiconRule, 'id' | 'created'>[] = [
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(1\\s?Thess|1\\s?Th|I\\s?Thess|1Thess|I\\s?Th|1Th|I\\s?Thessalonians|1st\\s?Thessalonians|First\\s?Thessalonians)\\.?(?=\\s?\\d+)",
+        original: "\\b(1\\s?Thess|1\\s?Th|I\\s?Thess|1Thess|I\\s?Th|1Th|I\\s?Thessalonians|1st\\s?Thessalonians|First\\s?Thessalonians|1\\s?Thessalonians)\\.?(?=\\s?\\d+)",
         replacement: "First Thessalonians",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(2\\s?Thess|2\\s?Th|II\\s?Thess|2Thess|II\\s?Th|2Th|II\\s?Thessalonians|2nd\\s?Thessalonians|Second\\s?Thessalonians)\\.?(?=\\s?\\d+)",
+        original: "\\b(2\\s?Thess|2\\s?Th|II\\s?Thess|2Thess|II\\s?Th|2Th|II\\s?Thessalonians|2nd\\s?Thessalonians|Second\\s?Thessalonians|2\\s?Thessalonians)\\.?(?=\\s?\\d+)",
         replacement: "Second Thessalonians",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(1\\s?Tim|1\\s?Ti|I\\s?Tim|1Tim|I\\s?Ti|1Ti|I\\s?Timothy|1st\\s?Timothy|First\\s?Timothy)\\.?(?=\\s?\\d+)",
+        original: "\\b(1\\s?Tim|1\\s?Ti|I\\s?Tim|1Tim|I\\s?Ti|1Ti|I\\s?Timothy|1st\\s?Timothy|First\\s?Timothy|1\\s?Timothy)\\.?(?=\\s?\\d+)",
         replacement: "First Timothy",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(2\\s?Tim|2\\s?Ti|II\\s?Tim|2Tim|II\\s?Ti|2Ti|II\\s?Timothy|2nd\\s?Timothy|Second\\s?Timothy)\\.?(?=\\s?\\d+)",
+        original: "\\b(2\\s?Tim|2\\s?Ti|II\\s?Tim|2Tim|II\\s?Ti|2Ti|II\\s?Timothy|2nd\\s?Timothy|Second\\s?Timothy|2\\s?Timothy)\\.?(?=\\s?\\d+)",
         replacement: "Second Timothy",
         isRegex: true,
         applyBeforeGlobal: false
@@ -426,13 +426,13 @@ export const BIBLE_LEXICON_RULES: Omit<LexiconRule, 'id' | 'created'>[] = [
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(1\\s?Pet|1\\s?Pe|1\\s?Pt|I\\s?Pet|1Pet|I\\s?Pe|1Pe|I\\s?Pt|1Pt|I\\s?Peter|1st\\s?Peter|First\\s?Peter)\\.?(?=\\s?\\d+)",
+        original: "\\b(1\\s?Pet|1\\s?Pe|1\\s?Pt|I\\s?Pet|1Pet|I\\s?Pe|1Pe|I\\s?Pt|1Pt|I\\s?Peter|1st\\s?Peter|First\\s?Peter|1\\s?Peter)\\.?(?=\\s?\\d+)",
         replacement: "First Peter",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(2\\s?Pet|2\\s?Pe|2\\s?Pt|II\\s?Pet|2Pet|II\\s?Pe|2Pe|II\\s?Pt|2Pt|II\\s?Peter|2nd\\s?Peter|Second\\s?Peter)\\.?(?=\\s?\\d+)",
+        original: "\\b(2\\s?Pet|2\\s?Pe|2\\s?Pt|II\\s?Pet|2Pet|II\\s?Pe|2Pe|II\\s?Pt|2Pt|II\\s?Peter|2nd\\s?Peter|Second\\s?Peter|2\\s?Peter)\\.?(?=\\s?\\d+)",
         replacement: "Second Peter",
         isRegex: true,
         applyBeforeGlobal: false
