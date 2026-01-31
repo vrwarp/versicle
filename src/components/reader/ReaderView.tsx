@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { NavigationItem } from 'epubjs';
-import { useReadingStateStore, useBookProgress } from '../../store/useReadingStateStore';
+import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useBook } from '../../store/selectors';
@@ -618,9 +618,6 @@ export const ReaderView: React.FC = () => {
     }, [rendition, isRenditionReady, isDebugModeEnabled, id, currentSectionId, book]);
 
     // Reading History Highlights
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const bookProgress = useBookProgress(id || null);
-
     useHistoryHighlights(
         rendition,
         isRenditionReady,
