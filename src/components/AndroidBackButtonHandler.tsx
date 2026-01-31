@@ -1,6 +1,6 @@
 import { App } from '@capacitor/app';
 import { useEffect, useRef } from 'react';
-import { useBackButtonStore } from '../store/useBackButtonStore';
+import { useAndroidBackButtonStore } from '../store/useAndroidBackButtonStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 /**
@@ -22,7 +22,7 @@ export const AndroidBackButtonHandler = () => {
 
     useEffect(() => {
         const listenerPromise = App.addListener('backButton', async () => {
-            const handlers = useBackButtonStore.getState().handlers;
+            const handlers = useAndroidBackButtonStore.getState().handlers;
 
             if (handlers.length > 0) {
                 // Execute the highest priority handler

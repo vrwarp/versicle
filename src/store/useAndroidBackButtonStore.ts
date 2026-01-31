@@ -1,6 +1,23 @@
 import { create } from 'zustand';
 
 /**
+ * Priority levels for Android back button handlers.
+ * Use these constants when registering a handler to ensure correct precedence.
+ */
+export enum BackButtonPriority {
+    /** Default application navigation behavior (lowest priority) */
+    DEFAULT = 0,
+    /** Standard UI elements (e.g., sidebars, minor interactions) */
+    UI_ELEMENT = 25,
+    /** Modals, Dialogs, Bottom Sheets */
+    MODAL = 50,
+    /** Full-screen overlays, Critical alerts */
+    OVERLAY = 100,
+    /** Critical system-level interruptions */
+    CRITICAL = 200,
+}
+
+/**
  * Store for managing Android back button handlers.
  *
  * This store allows components to register priority-based handlers for the hardware back button.
@@ -10,24 +27,25 @@ import { create } from 'zustand';
  * **Example Usage:**
  *
  * ```typescript
- * import { useBackButton } from '../hooks/useBackButton';
+ * import { useAndroidBackButton } from '../hooks/useAndroidBackButton';
+ * import { BackButtonPriority } from '../store/useAndroidBackButtonStore';
  *
  * // Inside a component (e.g., a Modal)
- * useBackButton(() => {
+ * useAndroidBackButton(() => {
  *   // Close the modal instead of navigating back
  *   setIsOpen(false);
- * }, 100, isOpen); // Priority 100, enabled only when isOpen is true
+ * }, BackButtonPriority.MODAL, isOpen);
  * ```
  */
 export type BackButtonHandler = () => Promise<void> | void;
 
-export interface BackButtonState {
+export interface AndroidBackButtonState {
     handlers: { id: string; handler: BackButtonHandler; priority: number }[];
     registerHandler: (id: string, handler: BackButtonHandler, priority: number) => void;
     unregisterHandler: (id: string) => void;
 }
 
-export const useBackButtonStore = create<BackButtonState>((set) => ({
+export const useAndroidBackButtonStore = create<AndroidBackButtonState>((set) => ({
     handlers: [],
     registerHandler: (id, handler, priority) =>
         set((state) => ({

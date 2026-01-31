@@ -38,7 +38,8 @@ import { getDeviceId } from '../lib/device-id';
 import { DeviceManager } from './devices/DeviceManager';
 import { createLogger } from '../lib/logger';
 import { DataExportWizard } from './sync/DataExportWizard';
-import { useBackButton } from '../hooks/useBackButton';
+import { useAndroidBackButton } from '../hooks/useAndroidBackButton';
+import { BackButtonPriority } from '../store/useAndroidBackButtonStore';
 
 const logger = createLogger('GlobalSettingsDialog');
 
@@ -102,7 +103,7 @@ export const GlobalSettingsDialog = () => {
     const { devices, renameDevice } = useDeviceStore();
     const currentDeviceId = getDeviceId();
 
-    useBackButton(() => {
+    useAndroidBackButton(() => {
         if (isExportWizardOpen) {
             setIsExportWizardOpen(false);
         } else if (isReadingListOpen) {
@@ -110,7 +111,7 @@ export const GlobalSettingsDialog = () => {
         } else {
             setGlobalSettingsOpen(false);
         }
-    }, 100, isGlobalSettingsOpen);
+    }, BackButtonPriority.OVERLAY, isGlobalSettingsOpen);
 
     useEffect(() => {
         if (activeTab === 'recovery') {
