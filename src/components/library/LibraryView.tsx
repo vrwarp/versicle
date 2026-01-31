@@ -22,8 +22,8 @@ import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { DuplicateBookError } from '../../types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
-import { useAndroidBackButton } from '../../hooks/useAndroidBackButton';
-import { BackButtonPriority } from '../../store/useAndroidBackButtonStore';
+import { useBackNavigation } from '../../hooks/useBackNavigation';
+import { NavigationPriority } from '../../store/useNavigationStore';
 
 /**
  * The main library view component.
@@ -95,13 +95,13 @@ export const LibraryView: React.FC = () => {
   const [bookToRestore, setBookToRestore] = useState<BookMetadata | null>(null);
   const [reprocessingBookId, setReprocessingBookId] = useState<string | null>(null);
 
-  useAndroidBackButton(() => {
+  useBackNavigation(() => {
     setActiveModal(null);
-  }, BackButtonPriority.MODAL, !!activeModal);
+  }, NavigationPriority.MODAL, !!activeModal);
 
-  useAndroidBackButton(() => {
+  useBackNavigation(() => {
     setDuplicateQueue(prev => prev.slice(1));
-  }, BackButtonPriority.MODAL, duplicateQueue.length > 0);
+  }, NavigationPriority.MODAL, duplicateQueue.length > 0);
 
   // Check for reprocessing request from navigation state
   useEffect(() => {
