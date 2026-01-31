@@ -32,9 +32,10 @@ export const useBackNavigation = (handler: NavigationHandler, priority: number, 
 
     // 2. Browser Navigation Blocking
     // We block if enabled is true.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const blocker = useBlocker(
         useCallback(
-            ({ historyAction }) => {
+            ({ historyAction }: { historyAction: string }) => {
                 // Only block POP actions (Back/Forward), not PUSH/REPLACE
                 if (enabled && historyAction === 'POP') {
                     return true;
