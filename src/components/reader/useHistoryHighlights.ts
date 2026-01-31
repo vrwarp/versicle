@@ -5,6 +5,7 @@ const logger = createLogger('useHistoryHighlights');
 
 /**
  * Hook to manage reading history highlights.
+ * Highlights ONLY the last sentence read by TTS (to avoid visual clutter).
  * Ensures highlights are not updated live during TTS playback,
  * but only on viewer updates (page turns) or when idle (initial load/sync).
  */
@@ -13,22 +14,22 @@ export const useHistoryHighlights = (
     rendition: any,
     isRenditionReady: boolean,
     bookId: string | null,
-    completedRanges: string[] | undefined,
     currentCfi: string | undefined,
-    isPlaying: boolean
+    isPlaying: boolean,
+    lastPlayedCfi?: string
 ) => {
     const [displayedRanges, setDisplayedRanges] = useState<string[]>([]);
 
-    // Store latest completedRanges in ref to access it in effects without dependency issues
-    const latestCompletedRanges = useRef(completedRanges);
+    // Store latest data in ref to access it in effects/callbacks
+    const latestLastPlayedCfi = useRef(lastPlayedCfi);
 
-    // Update ref whenever completedRanges changes
     useEffect(() => {
-        latestCompletedRanges.current = completedRanges;
-    }, [completedRanges]);
+        latestLastPlayedCfi.current = lastPlayedCfi;
+    }, [lastPlayedCfi]);
 
-    const updateDisplayedRanges = useCallback((ranges: string[] | undefined) => {
-        const targetRanges = ranges || [];
+    const updateDisplayedRanges = useCallback(() => {
+        const targetRanges: string[] = latestLastPlayedCfi.current ? [latestLastPlayedCfi.current] : [];
+
         setDisplayedRanges(prev => {
             // Prevent infinite update loops if the array reference changes but content is same.
             if (prev === targetRanges) return prev;
@@ -39,18 +40,17 @@ export const useHistoryHighlights = (
         });
     }, []);
 
-    // 1. Update when bookId or currentCfi changes (page turns), always using latest data
+    // 1. Update when bookId or currentCfi changes (page turns)
     useEffect(() => {
-         updateDisplayedRanges(latestCompletedRanges.current);
+         updateDisplayedRanges();
     }, [bookId, currentCfi, updateDisplayedRanges]);
 
-    // 2. Update when completedRanges changes, BUT only if not playing
+    // 2. Update when data (lastPlayedCfi) changes, BUT only if not playing
     useEffect(() => {
         if (!isPlaying) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            updateDisplayedRanges(completedRanges);
+            updateDisplayedRanges();
         }
-    }, [completedRanges, isPlaying, updateDisplayedRanges]);
+    }, [lastPlayedCfi, isPlaying, updateDisplayedRanges]);
 
     // Apply annotations based on displayedRanges
     useEffect(() => {
@@ -61,6 +61,8 @@ export const useHistoryHighlights = (
                 try {
                     // Check if annotations API exists (it might not in limited mocks)
                     if (rendition.annotations && typeof rendition.annotations.add === 'function') {
+                        // Apply highlight annotation
+                        // We use a custom style for "last read" highlight
                         rendition.annotations.add(
                             'highlight',
                             range,
