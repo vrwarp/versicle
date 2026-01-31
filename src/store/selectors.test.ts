@@ -251,6 +251,69 @@ describe('selectors', () => {
       expect(bookB_v2?.progress).toBe(0);
       expect(bookB_v2).toBe(bookB_v1); // This validates the optimization
     });
+
+    it('should maintain object reference stability for unchanged books when another book is updated in inventory', () => {
+      // Setup: 2 books. Book A and Book B.
+      // We need stable references for Book A and Book B inside the mock state to simulate real store behavior.
+      const bookA = { bookId: 'book-a', title: 'Book A', lastInteraction: 100, status: 'unread', tags: [] };
+      const bookB = { bookId: 'book-b', title: 'Book B', lastInteraction: 100, status: 'unread', tags: [] };
+
+      let mockBookState = {
+        books: {
+          'book-a': bookA,
+          'book-b': bookB
+        }
+      };
+
+      const mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
+      const mockProgress = { 'book-a': {}, 'book-b': {} };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useBookStore).mockImplementation((selector: any) => selector(mockBookState));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useLibraryStore).mockImplementation((selector: any) => selector(mockLibraryState));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => selector({ progress: mockProgress }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useReadingListStore).mockImplementation((selector: any) => selector({ entries: {} }));
+
+      const { result, rerender } = renderHook(() => useAllBooks());
+
+      const firstRender = result.current;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookA_v1 = firstRender.find((b: any) => b.id === 'book-a');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookB_v1 = firstRender.find((b: any) => b.id === 'book-b');
+
+      expect(bookA_v1).toBeDefined();
+      expect(bookB_v1).toBeDefined();
+
+      // Update Book A (new object reference)
+      const bookA_updated = { ...bookA, title: 'Book A Updated', lastInteraction: 200 };
+
+      mockBookState = {
+        books: {
+          'book-a': bookA_updated,
+          'book-b': bookB // Book B is SAME reference
+        }
+      };
+
+      rerender();
+
+      const secondRender = result.current;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookA_v2 = secondRender.find((b: any) => b.id === 'book-a');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookB_v2 = secondRender.find((b: any) => b.id === 'book-b');
+
+      // Book A changed, should be new object
+      expect(bookA_v2.title).toBe('Book A Updated');
+      expect(bookA_v2).not.toBe(bookA_v1);
+
+      // Book B did NOT change (same reference in store), should be SAME object reference in result
+      // This validates the Phase 1 WeakMap optimization
+      expect(bookB_v2).toBe(bookB_v1);
+    });
   });
 
   describe('useLastReadBookId', () => {

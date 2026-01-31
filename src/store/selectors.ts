@@ -3,7 +3,7 @@ import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
-import type { UserProgress } from '../types/db';
+import type { UserProgress, UserInventoryItem } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
 
 /**
@@ -40,11 +40,36 @@ export const useAllBooks = () => {
     // Memoize the "static" transformation of books (merging inventory + library metadata).
     // This depends only on 'books', 'staticMetadata', and 'offloadedBookIds', which change rarely.
     // It does NOT depend on 'progressMap', which changes frequently (on every page turn).
+
+    // Cache to maintain base book object identity across renders if raw book hasn't changed.
+    // We use a WeakMap keyed by the raw UserInventoryItem object.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const baseBookCacheRef = useRef(new WeakMap<UserInventoryItem, any>());
+
+    // Track external dependencies to invalidate cache if they change
+    const prevDepsRef = useRef({ staticMetadata, offloadedBookIds });
+
+    // Invalidate cache if static metadata or offloaded status changes, as these affect the base book result
+    // eslint-disable-next-line react-hooks/refs
+    if (prevDepsRef.current.staticMetadata !== staticMetadata ||
+        // eslint-disable-next-line react-hooks/refs
+        prevDepsRef.current.offloadedBookIds !== offloadedBookIds) {
+        // eslint-disable-next-line react-hooks/refs
+        baseBookCacheRef.current = new WeakMap();
+        // eslint-disable-next-line react-hooks/refs
+        prevDepsRef.current = { staticMetadata, offloadedBookIds };
+    }
+
     const baseBooks = useMemo(() => {
+        // eslint-disable-next-line react-hooks/refs
         return Object.values(books).map(book => {
+            // Check cache
+            const cached = baseBookCacheRef.current.get(book);
+            if (cached) return cached;
+
             const hasCoverBlob = staticMetadata[book.bookId]?.coverBlob instanceof Blob;
 
-            return {
+            const newBaseBook = {
                 ...book,
                 // Merge static metadata if available, otherwise use Ghost Book snapshots
                 id: book.bookId,  // Alias for backwards compatibility
@@ -66,6 +91,9 @@ export const useAllBooks = () => {
                 // Derive offloaded status from local set
                 isOffloaded: offloadedBookIds.has(book.bookId),
             };
+
+            baseBookCacheRef.current.set(book, newBaseBook);
+            return newBaseBook;
         }).sort((a, b) => b.lastInteraction - a.lastInteraction);
     }, [books, staticMetadata, offloadedBookIds]);
 
