@@ -72,8 +72,7 @@ export const ReaderView: React.FC = () => {
         lineHeight,
         fontSize,
         shouldForceFont,
-        readerViewMode,
-        highlightMode
+        readerViewMode
     } = usePreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
         customTheme: state.customTheme || DEFAULT_CUSTOM_THEME,
@@ -81,8 +80,7 @@ export const ReaderView: React.FC = () => {
         lineHeight: state.lineHeight || 1.5,
         fontSize: state.fontSize,
         shouldForceFont: state.shouldForceFont,
-        readerViewMode: state.readerViewMode || 'paginated',
-        highlightMode: state.highlightMode || 'all'
+        readerViewMode: state.readerViewMode || 'paginated'
     })));
 
     const {
@@ -620,16 +618,15 @@ export const ReaderView: React.FC = () => {
     }, [rendition, isRenditionReady, isDebugModeEnabled, id, currentSectionId, book]);
 
     // Reading History Highlights
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const bookProgress = useBookProgress(id || null);
 
     useHistoryHighlights(
         rendition,
         isRenditionReady,
         id || null,
-        bookProgress?.completedRanges,
         progress?.currentCfi,
         isPlaying,
-        highlightMode,
         progress?.lastPlayedCfi
     );
 

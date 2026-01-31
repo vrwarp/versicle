@@ -22,156 +22,125 @@ describe('useHistoryHighlights', () => {
         };
     });
 
-    it('adds annotations when completedRanges are provided', () => {
-        const completedRanges = ['cfi1', 'cfi2'];
+    it('adds annotation for lastPlayedCfi', () => {
+        const lastPlayedCfi = 'cfi1';
         renderHook(() => useHistoryHighlights(
             mockRendition,
             true,
             'book1',
-            completedRanges,
             'currentCfi',
-            false
+            false,
+            lastPlayedCfi
         ));
 
-        expect(mockRendition.annotations.add).toHaveBeenCalledTimes(2);
+        expect(mockRendition.annotations.add).toHaveBeenCalledTimes(1);
+        expect(mockRendition.annotations.add).toHaveBeenCalledWith(
+            'highlight',
+            'cfi1',
+            expect.anything(),
+            null,
+            'reading-history-highlight',
+            expect.objectContaining({ fill: 'gray' })
+        );
+    });
+
+    it('does not add annotation if lastPlayedCfi is missing', () => {
+        renderHook(() => useHistoryHighlights(
+            mockRendition,
+            true,
+            'book1',
+            'currentCfi',
+            false,
+            undefined
+        ));
+
+        expect(mockRendition.annotations.add).not.toHaveBeenCalled();
+    });
+
+    it('updates annotation when lastPlayedCfi changes', () => {
+        const { rerender } = renderHook(
+            ({ lastPlayedCfi }) => useHistoryHighlights(
+                mockRendition,
+                true,
+                'book1',
+                'currentCfi',
+                false,
+                lastPlayedCfi
+            ),
+            {
+                initialProps: { lastPlayedCfi: 'cfi1' as string | undefined }
+            }
+        );
+
         expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'cfi1', expect.anything(), null, expect.anything(), expect.anything());
+        mockRendition.annotations.add.mockClear();
+
+        // Update lastPlayedCfi
+        rerender({ lastPlayedCfi: 'cfi2' });
+
+        // Cleanup old cfi1
+        expect(mockRendition.annotations.remove).toHaveBeenCalledWith('cfi1', 'highlight');
+        // Add new cfi2
         expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'cfi2', expect.anything(), null, expect.anything(), expect.anything());
     });
 
-    it('updates annotations when currentCfi changes', () => {
-        const completedRanges1 = ['cfi1'];
-        const completedRanges2 = ['cfi1', 'cfi2'];
-
+    it('suppresses updates when isPlaying is true', () => {
         const { rerender } = renderHook(
-            ({ completedRanges, currentCfi }) => useHistoryHighlights(
+            ({ lastPlayedCfi, isPlaying }) => useHistoryHighlights(
                 mockRendition,
                 true,
                 'book1',
-                completedRanges,
-                currentCfi,
-                false
+                'currentCfi',
+                isPlaying,
+                lastPlayedCfi
             ),
             {
-                initialProps: { completedRanges: completedRanges1, currentCfi: 'page1' }
+                initialProps: { lastPlayedCfi: 'cfi1', isPlaying: true }
             }
         );
 
-        expect(mockRendition.annotations.add).toHaveBeenCalledTimes(1);
-        mockRendition.annotations.add.mockClear();
+        // Initial render (even if playing, initial state is applied?
+        // Actually, logic says: "Update when data changes, BUT only if not playing".
+        // But the initial state setting in `updateDisplayedRanges` is called in the first useEffect [bookId, currentCfi]
+        // because `updateDisplayedRanges` is in its dependency array.
+        // Wait, the hook has two effects.
+        // 1. [bookId, currentCfi, updateDisplayedRanges] -> Calls updateDisplayedRanges()
+        // 2. [lastPlayedCfi, isPlaying, updateDisplayedRanges] -> Calls updateDisplayedRanges() IF !isPlaying.
 
-        // Update completedRanges but NOT currentCfi -> updates because isPlaying=false (sync/load behavior)
-        rerender({ completedRanges: completedRanges2, currentCfi: 'page1' });
-
-        // It first removes cfi1 (cleanup), then adds cfi1, cfi2.
-        expect(mockRendition.annotations.remove).toHaveBeenCalledWith('cfi1', 'highlight');
-        expect(mockRendition.annotations.add).toHaveBeenCalledTimes(2);
-    });
-
-    it('suppresses updates when isPlaying is true and currentCfi is stable', () => {
-        const completedRanges1 = ['cfi1'];
-        const completedRanges2 = ['cfi1', 'cfi2'];
-
-        const { rerender } = renderHook(
-            ({ completedRanges, currentCfi, isPlaying }) => useHistoryHighlights(
-                mockRendition,
-                true,
-                'book1',
-                completedRanges,
-                currentCfi,
-                isPlaying
-            ),
-            {
-                initialProps: { completedRanges: completedRanges1, currentCfi: 'page1', isPlaying: true }
-            }
-        );
-
-        expect(mockRendition.annotations.add).toHaveBeenCalledTimes(1);
+        // Initial render: bookId is set. Effect 1 runs. updateDisplayedRanges sets state.
+        expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'cfi1', expect.anything(), null, expect.anything(), expect.anything());
         mockRendition.annotations.add.mockClear();
         mockRendition.annotations.remove.mockClear();
 
-        // Update completedRanges, isPlaying=true, currentCfi stable
-        rerender({ completedRanges: completedRanges2, currentCfi: 'page1', isPlaying: true });
+        // Update lastPlayedCfi while playing
+        rerender({ lastPlayedCfi: 'cfi2', isPlaying: true });
 
-        // Should NOT update (no remove, no add)
+        // Should NOT update (no remove, no add) because Effect 2 blocks it.
+        // And Effect 1 only runs on bookId/currentCfi change.
         expect(mockRendition.annotations.remove).not.toHaveBeenCalled();
         expect(mockRendition.annotations.add).not.toHaveBeenCalled();
 
-        // Now change currentCfi (page flip)
-        rerender({ completedRanges: completedRanges2, currentCfi: 'page2', isPlaying: true });
+        // Now stop playing
+        rerender({ lastPlayedCfi: 'cfi2', isPlaying: false });
 
         // Should update now:
-        // Cleanup old effect (removes cfi1)
+        // Cleanup old cfi1
         expect(mockRendition.annotations.remove).toHaveBeenCalledWith('cfi1', 'highlight');
-        // Add new ranges (cfi1, cfi2)
-        expect(mockRendition.annotations.add).toHaveBeenCalledTimes(2);
+        // Add new cfi2
+        expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'cfi2', expect.anything(), null, expect.anything(), expect.anything());
     });
 
     it('removes annotations on unmount', () => {
-        const completedRanges = ['cfi1'];
         const { unmount } = renderHook(() => useHistoryHighlights(
             mockRendition,
             true,
             'book1',
-            completedRanges,
             'currentCfi',
-            false
+            false,
+            'cfi1'
         ));
 
         unmount();
         expect(mockRendition.annotations.remove).toHaveBeenCalledWith('cfi1', 'highlight');
-    });
-
-    it('respects highlightMode="last-read"', () => {
-        const completedRanges = ['cfi1', 'cfi2'];
-        const lastPlayedCfi = 'lastCfi';
-
-        renderHook(() => useHistoryHighlights(
-            mockRendition,
-            true,
-            'book1',
-            completedRanges,
-            'currentCfi',
-            false,
-            'last-read', // mode
-            lastPlayedCfi
-        ));
-
-        // Should ONLY add lastPlayedCfi
-        expect(mockRendition.annotations.add).toHaveBeenCalledTimes(1);
-        expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'lastCfi', expect.anything(), null, expect.anything(), expect.anything());
-    });
-
-    it('switches between modes dynamically', () => {
-        const completedRanges = ['cfi1'];
-        const lastPlayedCfi = 'lastCfi';
-
-        const { rerender } = renderHook(
-            ({ mode }) => useHistoryHighlights(
-                mockRendition,
-                true,
-                'book1',
-                completedRanges,
-                'currentCfi',
-                false,
-                mode,
-                lastPlayedCfi
-            ),
-            {
-                initialProps: { mode: 'all' as 'all' | 'last-read' }
-            }
-        );
-
-        // Initially 'all' -> cfi1
-        expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'cfi1', expect.anything(), null, expect.anything(), expect.anything());
-        mockRendition.annotations.add.mockClear();
-        mockRendition.annotations.remove.mockClear();
-
-        // Switch to 'last-read'
-        rerender({ mode: 'last-read' });
-
-        // Cleanup 'cfi1'
-        expect(mockRendition.annotations.remove).toHaveBeenCalledWith('cfi1', 'highlight');
-        // Add 'lastCfi'
-        expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'lastCfi', expect.anything(), null, expect.anything(), expect.anything());
     });
 });

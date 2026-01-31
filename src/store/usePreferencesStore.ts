@@ -18,7 +18,6 @@ interface PreferencesState {
     fontSize: number;
     shouldForceFont: boolean;
     readerViewMode: 'paginated' | 'scrolled';
-    highlightMode: 'all' | 'last-read';
     libraryLayout: 'grid' | 'list';
     libraryFilterMode: 'all' | 'downloaded';
 
@@ -30,7 +29,6 @@ interface PreferencesState {
     setFontSize: (size: number) => void;
     setShouldForceFont: (force: boolean) => void;
     setReaderViewMode: (mode: 'paginated' | 'scrolled') => void;
-    setHighlightMode: (mode: 'all' | 'last-read') => void;
     setLibraryLayout: (layout: 'grid' | 'list') => void;
     setLibraryFilterMode: (mode: 'all' | 'downloaded') => void;
 }
@@ -43,7 +41,6 @@ const defaultPreferences = {
     fontSize: 100,
     shouldForceFont: false,
     readerViewMode: 'paginated' as const,
-    highlightMode: 'all' as const,
     libraryLayout: 'grid' as const,
     libraryFilterMode: 'all' as const
 };
@@ -68,7 +65,6 @@ export const usePreferencesStore = create<PreferencesState>()(
             setFontSize: (size) => set({ fontSize: size }),
             setShouldForceFont: (force) => set({ shouldForceFont: force }),
             setReaderViewMode: (mode) => set({ readerViewMode: mode }),
-            setHighlightMode: (mode) => set({ highlightMode: mode }),
             setLibraryLayout: (layout) => set({ libraryLayout: layout }),
             setLibraryFilterMode: (mode) => set({ libraryFilterMode: mode }),
         })
