@@ -99,17 +99,12 @@ export const initializeFirebase = (): boolean => {
         auth = getAuth(app);
 
         if (config.enablePersistence) {
-            try {
-                firestore = initializeFirestore(app, {
-                    localCache: persistentLocalCache({
-                        tabManager: persistentMultipleTabManager()
-                    })
-                });
-                console.log('[Firebase] Initialized with offline persistence');
-            } catch (err) {
-                console.warn('[Firebase] Failed to enable persistence, falling back to default:', err);
-                firestore = getFirestore(app);
-            }
+            firestore = initializeFirestore(app, {
+                localCache: persistentLocalCache({
+                    tabManager: persistentMultipleTabManager()
+                })
+            });
+            console.log('[Firebase] Initialized with offline persistence');
         } else {
             firestore = getFirestore(app);
         }

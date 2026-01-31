@@ -80,7 +80,7 @@ describe('firebase-config', () => {
         expect(mockPersistentMultipleTabManager).toHaveBeenCalled();
     });
 
-    it('should fallback to default if persistence initialization fails', () => {
+    it('should fail initialization if persistence is requested but fails', () => {
         vi.mocked(useSyncStore.getState).mockReturnValue({
             firebaseConfig: { ...validConfig, enablePersistence: true }
         } as any);
@@ -90,9 +90,9 @@ describe('firebase-config', () => {
         });
 
         const success = initializeFirebase();
-        expect(success).toBe(true);
+        expect(success).toBe(false);
         expect(mockInitializeFirestore).toHaveBeenCalled();
-        expect(mockGetFirestore).toHaveBeenCalled(); // Fallback
+        expect(mockGetFirestore).not.toHaveBeenCalled(); // No fallback
     });
 
     it('should not re-initialize if config has not changed', () => {
