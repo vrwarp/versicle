@@ -84,6 +84,14 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
                     (book.isOffloaded || isGhostBook) && "opacity-75"
                 )}
                 onClick={handleOpen}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleOpen();
+                    }
+                }}
+                role="button"
+                tabIndex={0}
             >
                 {/* Thumbnail */}
                 <div className="flex-none w-10 h-14 bg-muted rounded overflow-hidden shadow-sm relative">
