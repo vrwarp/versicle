@@ -5,7 +5,7 @@ import type { BookExtractionData } from './ingestion';
 
 // Mock browser-image-compression
 vi.mock('browser-image-compression', () => ({
-  default: vi.fn(() => Promise.resolve(new Blob(['thumbnail'], { type: 'image/jpeg' })))
+  default: vi.fn(() => Promise.resolve(new Blob(['thumbnail'], { type: 'image/webp' })))
 }));
 
 // Mock offscreen renderer

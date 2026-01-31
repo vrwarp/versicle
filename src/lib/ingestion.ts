@@ -217,6 +217,7 @@ export async function extractBookData(
                         maxSizeMB: 0.1,
                         maxWidthOrHeight: 600,
                         useWebWorker: true,
+                        fileType: 'image/webp',
                     });
                 } catch (error) {
                     logger.warn('Failed to compress cover image, using original:', error);
@@ -426,6 +427,7 @@ export async function extractBookMetadata(file: File): Promise<{
                         maxSizeMB: 0.1,
                         maxWidthOrHeight: 600,
                         useWebWorker: true,
+                        fileType: 'image/webp',
                     });
                 } catch (error) {
                     logger.warn('Failed to compress cover image, using original:', error);
