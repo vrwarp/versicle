@@ -484,5 +484,11 @@ export const BIBLE_LEXICON_RULES: Omit<LexiconRule, 'id' | 'created'>[] = [
         replacement: "chapter",
         isRegex: true,
         applyBeforeGlobal: false
+    },
+    {
+        original: "(\\d)a\\b",
+        replacement: "$1 A",
+        isRegex: true,
+        applyBeforeGlobal: false
     }
 ];
