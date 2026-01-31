@@ -73,7 +73,7 @@ vi.mock('uuid', () => ({
 describe('Ingestion Image Optimization', () => {
   const mockFile = new File(['PK\x03\x04'], 'test.epub', { type: 'application/epub+zip' });
   const mockCoverBlob = new Blob(['original'], { type: 'image/jpeg' });
-  const mockThumbnailBlob = new Blob(['thumbnail'], { type: 'image/jpeg' });
+  const mockThumbnailBlob = new Blob(['thumbnail'], { type: 'image/webp' });
 
   beforeEach(async () => {
     // Reset mocks
@@ -95,6 +95,7 @@ describe('Ingestion Image Optimization', () => {
     expect(imageCompression).toHaveBeenCalledWith(mockCoverBlob, expect.objectContaining({
       maxWidthOrHeight: 600,
       maxSizeMB: 0.1,
+      fileType: 'image/webp',
     }));
 
     expect(data.manifest.coverBlob).toBeDefined();
