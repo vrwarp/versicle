@@ -23,6 +23,7 @@ import { useTTSStore } from './store/useTTSStore';
 import { usePreferencesStore } from './store/usePreferencesStore';
 import { createLogger } from './lib/logger';
 import { SyncToastPropagator } from './components/sync/SyncToastPropagator';
+import { AndroidBackButtonHandler } from './components/AndroidBackButtonHandler';
 
 import './App.css';
 
@@ -210,6 +211,7 @@ function App() {
 
   return (
     <Router>
+      <AndroidBackButtonHandler />
       <SyncToastPropagator />
       <ThemeSynchronizer />
       <ErrorBoundary>

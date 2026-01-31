@@ -38,6 +38,7 @@ import { getDeviceId } from '../lib/device-id';
 import { DeviceManager } from './devices/DeviceManager';
 import { createLogger } from '../lib/logger';
 import { DataExportWizard } from './sync/DataExportWizard';
+import { useBackButton } from '../hooks/useBackButton';
 
 const logger = createLogger('GlobalSettingsDialog');
 
@@ -100,6 +101,16 @@ export const GlobalSettingsDialog = () => {
 
     const { devices, renameDevice } = useDeviceStore();
     const currentDeviceId = getDeviceId();
+
+    useBackButton(() => {
+        if (isExportWizardOpen) {
+            setIsExportWizardOpen(false);
+        } else if (isReadingListOpen) {
+            setIsReadingListOpen(false);
+        } else {
+            setGlobalSettingsOpen(false);
+        }
+    }, 100, isGlobalSettingsOpen);
 
     useEffect(() => {
         if (activeTab === 'recovery') {
