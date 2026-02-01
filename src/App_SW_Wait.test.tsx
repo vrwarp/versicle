@@ -26,6 +26,15 @@ vi.mock('./lib/serviceWorkerUtils', () => ({
   waitForServiceWorkerController: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock Capacitor App
+vi.mock('@capacitor/app', () => ({
+  App: {
+    addListener: vi.fn().mockReturnValue({ remove: vi.fn() }),
+    removeAllListeners: vi.fn(),
+    exitApp: vi.fn(),
+  }
+}));
+
 // Mock useLibraryStore
 vi.mock('./store/useLibraryStore', () => {
   const hydrate = vi.fn().mockResolvedValue(undefined);
@@ -70,6 +79,8 @@ vi.mock('./components/ThemeSynchronizer', () => ({ ThemeSynchronizer: () => null
 vi.mock('./components/GlobalSettingsDialog', () => ({ GlobalSettingsDialog: () => null }));
 vi.mock('./components/ui/ToastContainer', () => ({ ToastContainer: () => null }));
 vi.mock('./components/SafeModeView', () => ({ SafeModeView: () => <div>SafeMode</div> }));
+vi.mock('./components/BackNavigationManager', () => ({ BackNavigationManager: () => null }));
+vi.mock('./layouts/RootLayout', () => ({ RootLayout: () => <div data-testid="root-layout">RootLayout Mock</div> }));
 
 // Mock Device Store to avoid Yjs middleware execution
 vi.mock('./store/useDeviceStore', () => ({
@@ -86,10 +97,11 @@ vi.mock('./store/useDeviceStore', () => ({
 
 // Mock Router
 vi.mock('react-router-dom', () => ({
-  BrowserRouter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Routes: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Route: ({ element }: { element: React.ReactNode }) => <div>{element}</div>,
+  createBrowserRouter: vi.fn(),
+  RouterProvider: () => <div>Library View</div>,
+  Outlet: () => null,
   useNavigate: vi.fn(),
+  useLocation: vi.fn().mockReturnValue({ pathname: '/' }),
 }));
 
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';

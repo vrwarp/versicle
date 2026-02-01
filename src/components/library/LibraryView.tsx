@@ -22,6 +22,8 @@ import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { DuplicateBookError } from '../../types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
+import { useNavigationGuard } from '../../hooks/useNavigationGuard';
+import { BackButtonPriority } from '../../store/useBackNavigationStore';
 
 /**
  * The main library view component.
@@ -92,6 +94,14 @@ export const LibraryView: React.FC = () => {
   const currentDuplicate = duplicateQueue[0];
   const [bookToRestore, setBookToRestore] = useState<BookMetadata | null>(null);
   const [reprocessingBookId, setReprocessingBookId] = useState<string | null>(null);
+
+  useNavigationGuard(() => {
+    setActiveModal(null);
+  }, BackButtonPriority.MODAL, !!activeModal);
+
+  useNavigationGuard(() => {
+    setDuplicateQueue(prev => prev.slice(1));
+  }, BackButtonPriority.MODAL, duplicateQueue.length > 0);
 
   // Check for reprocessing request from navigation state
   useEffect(() => {
