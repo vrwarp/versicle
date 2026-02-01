@@ -85,10 +85,11 @@ vi.mock('./store/useDeviceStore', () => ({
 }));
 
 // Mock Router
+// Mock Router
 vi.mock('react-router-dom', () => ({
-  BrowserRouter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Routes: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Route: ({ element }: { element: React.ReactNode }) => <div>{element}</div>,
+  createBrowserRouter: vi.fn(),
+  RouterProvider: () => <div>Library View</div>,
+  Outlet: () => null,
   useNavigate: vi.fn(),
 }));
 
