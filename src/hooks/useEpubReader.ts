@@ -262,7 +262,7 @@ export function useEpubReader(
             const sectionId = item ? item.href : '';
 
             // Improve title resolution
-            if (item && (title === 'Chapter' || !item.label)) {
+            if (item) {
               const betterTitle = findTitleInToc(tocItems, item.href);
               if (betterTitle) {
                 title = betterTitle;
@@ -307,7 +307,7 @@ export function useEpubReader(
           const sectionId = item ? item.href : '';
 
           // Improve title resolution
-          if (item && (title === 'Chapter' || !item.label)) {
+          if (item) {
             const betterTitle = findTitleInToc(tocItems, item.href);
             if (betterTitle) {
               title = betterTitle;
