@@ -8,9 +8,15 @@ import { initializeApp } from 'firebase/app';
 import type { FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import type { Auth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+    getFirestore,
+    initializeFirestore,
+    persistentLocalCache,
+    persistentMultipleTabManager
+} from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { useSyncStore } from './hooks/useSyncStore';
+import { useToastStore } from '../../store/useToastStore';
 import type { FirebaseConfigSettings } from './hooks/useSyncStore';
 
 /**
@@ -92,7 +98,21 @@ export const initializeFirebase = (): boolean => {
     try {
         app = initializeApp(config);
         auth = getAuth(app);
-        firestore = getFirestore(app);
+
+        // Try to enable offline persistence
+        try {
+            firestore = initializeFirestore(app, {
+                localCache: persistentLocalCache({
+                    tabManager: persistentMultipleTabManager()
+                })
+            });
+            console.log('[Firebase] Offline persistence enabled');
+        } catch (err) {
+            console.warn('[Firebase] Persistence failed, falling back to default:', err);
+            useToastStore.getState().showToast('Offline sync unavailable (persistence failed)', 'error');
+            firestore = getFirestore(app);
+        }
+
         googleProvider = new GoogleAuthProvider();
         currentConfigHash = newConfigHash;
 

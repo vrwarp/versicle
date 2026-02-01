@@ -1,10 +1,6 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { LibraryView } from './components/library/LibraryView';
 import { ReaderView } from './components/reader/ReaderView';
-import { ReaderControlBar } from './components/reader/ReaderControlBar';
-import { ThemeSynchronizer } from './components/ThemeSynchronizer';
-import { GlobalSettingsDialog } from './components/GlobalSettingsDialog';
-import { ToastContainer } from './components/ui/ToastContainer';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useEffect, useState } from 'react';
 import { getDB } from './db/db';
@@ -22,17 +18,58 @@ import type { DeviceProfile } from './types/device';
 import { useTTSStore } from './store/useTTSStore';
 import { usePreferencesStore } from './store/usePreferencesStore';
 import { createLogger } from './lib/logger';
-import { SyncToastPropagator } from './components/sync/SyncToastPropagator';
-import { AndroidBackButtonHandler } from './components/AndroidBackButtonHandler';
+import { RootLayout } from './layouts/RootLayout';
 
 import './App.css';
 
 const logger = createLogger('App');
 
+// Define router outside of the component to avoid recreation on render
+// However, since we might want it to be static, this is fine.
+// Note: We use ErrorBoundary components within routes to isolate failures.
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <RootLayout />,
+    errorElement: (
+      <ErrorBoundary>
+        <div className="flex items-center justify-center h-screen bg-background text-foreground">
+          <div className="p-8 border border-destructive/50 rounded-lg bg-destructive/10">
+            <h2 className="text-xl font-bold mb-2">Application Error</h2>
+            <p>A critical error occurred in the application shell.</p>
+            <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded">
+              Reload Application
+            </button>
+          </div>
+        </div>
+      </ErrorBoundary>
+    ),
+    children: [
+      {
+        index: true,
+        element: (
+          <ErrorBoundary>
+            <LibraryView />
+          </ErrorBoundary>
+        ),
+      },
+      {
+        path: "read/:id",
+        element: (
+          <ErrorBoundary>
+            <ReaderView />
+          </ErrorBoundary>
+        ),
+      },
+    ],
+  },
+]);
+
 /**
  * Main Application component.
- * Sets up routing, global providers, error handling, and initial database connection.
+ * Sets up global providers, error handling, and initial database connection.
  * Handles "Safe Mode" if the database fails to initialize.
+ * Renders RouterProvider once ready.
  */
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -210,30 +247,7 @@ function App() {
   }
 
   return (
-    <Router>
-      <AndroidBackButtonHandler />
-      <SyncToastPropagator />
-      <ThemeSynchronizer />
-      <ErrorBoundary>
-        <GlobalSettingsDialog />
-      </ErrorBoundary>
-      <ToastContainer />
-      <ReaderControlBar />
-      <div className="min-h-screen bg-background text-foreground main_layout">
-        <Routes>
-          <Route path="/" element={
-            <ErrorBoundary>
-              <LibraryView />
-            </ErrorBoundary>
-          } />
-          <Route path="/read/:id" element={
-            <ErrorBoundary>
-              <ReaderView />
-            </ErrorBoundary>
-          } />
-        </Routes>
-      </div>
-    </Router>
+    <RouterProvider router={router} />
   );
 }
 

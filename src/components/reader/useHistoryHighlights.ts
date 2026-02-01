@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { createLogger } from '../../lib/logger';
 
 const logger = createLogger('useHistoryHighlights');
@@ -18,39 +18,51 @@ export const useHistoryHighlights = (
     isPlaying: boolean,
     lastPlayedCfi?: string
 ) => {
-    const [displayedRanges, setDisplayedRanges] = useState<string[]>([]);
+    // Initialize displayedRanges with current lastPlayedCfi to match behavior on mount
+    const [displayedRanges, setDisplayedRanges] = useState<string[]>(() =>
+        lastPlayedCfi ? [lastPlayedCfi] : []
+    );
 
-    // Store latest data in ref to access it in effects/callbacks
-    const latestLastPlayedCfi = useRef(lastPlayedCfi);
+    // State to track previous props for render-time updates
+    const [prevProps, setPrevProps] = useState({
+        bookId,
+        currentCfi,
+        lastPlayedCfi,
+        isPlaying
+    });
 
-    useEffect(() => {
-        latestLastPlayedCfi.current = lastPlayedCfi;
-    }, [lastPlayedCfi]);
+    // derived state logic: update displayedRanges based on props
+    // We do this during render to avoid cascading renders from useEffect
+    if (
+        prevProps.bookId !== bookId ||
+        prevProps.currentCfi !== currentCfi ||
+        prevProps.lastPlayedCfi !== lastPlayedCfi ||
+        prevProps.isPlaying !== isPlaying
+    ) {
+        let shouldUpdate = false;
 
-    const updateDisplayedRanges = useCallback(() => {
-        const targetRanges: string[] = latestLastPlayedCfi.current ? [latestLastPlayedCfi.current] : [];
+        const pageChanged = prevProps.bookId !== bookId || prevProps.currentCfi !== currentCfi;
 
-        setDisplayedRanges(prev => {
-            // Prevent infinite update loops if the array reference changes but content is same.
-            if (prev === targetRanges) return prev;
-            if (prev.length === targetRanges.length && prev.every((val, index) => val === targetRanges[index])) {
-                return prev;
-            }
-            return targetRanges;
-        });
-    }, []);
-
-    // 1. Update when bookId or currentCfi changes (page turns)
-    useEffect(() => {
-         updateDisplayedRanges();
-    }, [bookId, currentCfi, updateDisplayedRanges]);
-
-    // 2. Update when data (lastPlayedCfi) changes, BUT only if not playing
-    useEffect(() => {
-        if (!isPlaying) {
-            updateDisplayedRanges();
+        if (pageChanged) {
+            // Always update on page turn
+            shouldUpdate = true;
+        } else if (!isPlaying) {
+            // If not playing, we track updates (data changes or stop event)
+            shouldUpdate = true;
         }
-    }, [lastPlayedCfi, isPlaying, updateDisplayedRanges]);
+
+        if (shouldUpdate) {
+            const targetRanges = lastPlayedCfi ? [lastPlayedCfi] : [];
+            const isSame = displayedRanges.length === targetRanges.length &&
+                           displayedRanges.every((val, index) => val === targetRanges[index]);
+
+            if (!isSame) {
+                setDisplayedRanges(targetRanges);
+            }
+        }
+
+        setPrevProps({ bookId, currentCfi, lastPlayedCfi, isPlaying });
+    }
 
     // Apply annotations based on displayedRanges
     useEffect(() => {

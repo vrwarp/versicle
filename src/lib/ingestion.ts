@@ -214,9 +214,10 @@ export async function extractBookData(
             if (coverBlob) {
                 try {
                     thumbnailBlob = await imageCompression(coverBlob as File, {
-                        maxSizeMB: 0.05,
-                        maxWidthOrHeight: 300,
+                        maxSizeMB: 0.1,
+                        maxWidthOrHeight: 600,
                         useWebWorker: true,
+                        fileType: 'image/webp',
                     });
                 } catch (error) {
                     logger.warn('Failed to compress cover image, using original:', error);
@@ -423,9 +424,10 @@ export async function extractBookMetadata(file: File): Promise<{
             if (coverBlob) {
                 try {
                     thumbnailBlob = await imageCompression(coverBlob as File, {
-                        maxSizeMB: 0.05,
-                        maxWidthOrHeight: 300,
+                        maxSizeMB: 0.1,
+                        maxWidthOrHeight: 600,
                         useWebWorker: true,
+                        fileType: 'image/webp',
                     });
                 } catch (error) {
                     logger.warn('Failed to compress cover image, using original:', error);

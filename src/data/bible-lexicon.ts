@@ -474,14 +474,20 @@ export const BIBLE_LEXICON_RULES: Omit<LexiconRule, 'id' | 'created'>[] = [
         applyBeforeGlobal: false
     },
     {
-        original: "\\b(v|vs|vv)\\.?(?=\\s?\\d+)",
-        replacement: "verse",
+        original: "\\b(v|vs|vv)\\.?\\s?(?=\\d+)",
+        replacement: "verse ",
         isRegex: true,
         applyBeforeGlobal: false
     },
     {
         original: "\\b(ch|chap)\\.?(?=\\s?\\d+)",
         replacement: "chapter",
+        isRegex: true,
+        applyBeforeGlobal: false
+    },
+    {
+        original: "(\\d)a\\b",
+        replacement: "$1 Ay",
         isRegex: true,
         applyBeforeGlobal: false
     }
