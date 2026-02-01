@@ -83,4 +83,25 @@ describe('TextSegmenter', () => {
           expect(segments[0].text).toBe("Mr.");
       });
   });
+
+  describe('Manual Scanning Helpers (via refineSegments)', () => {
+      it('handles Unicode whitespace correctly', () => {
+          // "Mr." followed by Em Space (U+2003) and "Smith"
+          const sentences: SentenceNode[] = [
+              { text: "Hello Mr.\u2003", cfi: "1" },
+              { text: "Smith went.", cfi: "2" }
+          ];
+          const abbreviations = ['Mr.'];
+          const refined = TextSegmenter.refineSegments(
+              sentences,
+              abbreviations,
+              [],
+              []
+          );
+
+          // Should be merged because "Mr." is identified correctly despite Em Space
+          expect(refined).toHaveLength(1);
+          expect(refined[0].text).toContain("Mr.\u2003 Smith");
+      });
+  });
 });

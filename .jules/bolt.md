@@ -42,3 +42,8 @@
 - **Bottleneck:** `TextSegmenter.mergeByLength` was calling `trimEnd()` and regex testing inside the loop for every merge candidate, causing allocation overhead.
 - **Solution:** Implemented a manual backward character scan loop to check for punctuation and determine separation.
 - **Learning:** While regex is fast for matching, `trimEnd()` allocates. For high-frequency text loops (like merging thousands of segments), simple manual character scanning (imperative code) can be ~3x faster than declarative string methods. Extract this logic to a helper for readability.
+
+## 2025-06-04 - Unicode-Aware Manual Scanning
+- **Bottleneck:** `TextSegmenter.refineSegments` used Regexes (`\s`) in a hot loop, causing overhead.
+- **Solution:** Replaced with manual character scanning helpers.
+- **Learning:** When optimizing away from Regex `\s`, naïve checks (e.g., `code === 32`) cause regressions for content with Unicode spaces (Em Space, NBSP). Always replicate the full Unicode whitespace range (or relevant subset) when implementing manual scanners for text processing.
