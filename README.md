@@ -123,6 +123,11 @@ npm run test
 npx vitest src/lib/ingestion.test.ts
 ```
 
+#### Linting
+```bash
+npm run lint
+```
+
 #### Android Tests (Docker)
 We use Docker to run Android unit tests in a consistent environment.
 

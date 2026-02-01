@@ -202,7 +202,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
         *   `user_overrides`: Custom settings like Lexicon rules.
         *   `user_annotations`: Highlights and notes. Managed via `useAnnotationStore`.
     *   **Deprecated/Replaced**:
-        *   `user_journey`: Granular reading history sessions (Deprecated/Removed).
+        *   `user_journey`: **(Removed)** Granular reading history sessions are no longer stored in IDB.
         *   `user_ai_inference`: **(Replaced)** Expensive AI-derived data is now handled by the synced `useContentAnalysisStore` (Yjs).
 *   **Domain 3: Cache (Transient/Regenerable)**
     *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
@@ -216,6 +216,16 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   *Trade-off*: User must re-import the *exact same file* to read again.
 *   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files). It bypasses new ID generation to match the existing Yjs record.
 *   **`ingestBook(data)`**: Performs a "Static Only" write. It persists the heavy immutable data (`static_manifests`, `static_resources`) to IDB but relies on the caller (Zustand) to update the Yjs `user_inventory`.
+
+#### `src/lib/batch-ingestion.ts` (Batch Ingestion)
+*   **Goal**: Handle bulk import of books, including ZIP archives containing multiple EPUBs.
+*   **Logic**:
+    *   **Recursive Extraction**: Uses `JSZip` to extract EPUBs from uploaded ZIP files.
+    *   **Progress Tracking**: Provides granular callbacks for both upload/extraction progress and individual book ingestion status.
+    *   **Error Isolation**: A failure in one book (e.g., corruption) does not fail the entire batch.
+*   **Trade-offs**:
+    *   **Memory Pressure**: Loading a large ZIP file (e.g., 500MB+) entirely into memory (ArrayBuffer) for extraction can cause tab crashes on memory-constrained mobile devices.
+    *   **Main Thread Blocking**: While `JSZip` is async, large decompression tasks can still cause frame drops or UI jank during the extraction phase.
 
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks.
@@ -240,6 +250,7 @@ Provides a "Cloud Overlay" for real-time synchronization.
 
 *   **Logic**:
     *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
+    *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
     *   **Authenticated**: Sync only occurs when the user is signed in via Firebase Auth.
     *   **Mock Mode**: Includes a `MockFireProvider` for integration testing without a real Firebase project.
