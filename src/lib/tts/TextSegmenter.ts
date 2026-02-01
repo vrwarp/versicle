@@ -143,6 +143,21 @@ export class TextSegmenter {
     }
 
     /**
+     * Checks if a character code represents a common punctuation mark to strip.
+     * Includes quotes, brackets, and sentence delimiters.
+     */
+    private static isPunctuation(code: number): boolean {
+        return (code === 34) || (code === 39) || // " '
+            (code === 40) || (code === 41) || // ( )
+            (code === 91) || (code === 93) || // [ ]
+            (code === 60) || (code === 62) || // < >
+            (code === 123) || (code === 125) || // { }
+            (code === 46) || (code === 44) || // . ,
+            (code === 33) || (code === 63) || // ! ?
+            (code === 59) || (code === 58);   // ; :
+    }
+
+    /**
      * Extracts the last word from a string using manual scanning.
      * Skips trailing whitespace and strips leading punctuation.
      */
@@ -165,11 +180,8 @@ export class TextSegmenter {
 
         let start = i + 1;
         // Strip leading punctuation from the word
-        // ['"', "'", '(', '[', '<', '{']
-        // 34: ", 39: ', 40: (, 91: [, 60: <, 123: {
         while (start <= end) {
-            const code = text.charCodeAt(start);
-            if (code === 34 || code === 39 || code === 40 || code === 91 || code === 60 || code === 123) {
+            if (TextSegmenter.isPunctuation(text.charCodeAt(start))) {
                 start++;
             } else {
                 break;
@@ -217,8 +229,7 @@ export class TextSegmenter {
         let start = i + 1;
         // Strip leading punctuation
         while (start <= end) {
-            const code = text.charCodeAt(start);
-            if (code === 34 || code === 39 || code === 40 || code === 91 || code === 60 || code === 123) {
+            if (TextSegmenter.isPunctuation(text.charCodeAt(start))) {
                 start++;
             } else {
                 break;
@@ -251,11 +262,8 @@ export class TextSegmenter {
 
         let end = i - 1;
         // Strip trailing punctuation
-        // ['.', ',', '!', '?', ';', ':']
-        // 46: ., 44: ,, 33: !, 63: ?, 59: ;, 58: :
         while (end >= start) {
-            const code = text.charCodeAt(end);
-            if (code === 46 || code === 44 || code === 33 || code === 63 || code === 59 || code === 58) {
+            if (TextSegmenter.isPunctuation(text.charCodeAt(end))) {
                 end--;
             } else {
                 break;
