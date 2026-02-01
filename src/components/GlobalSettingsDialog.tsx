@@ -38,8 +38,8 @@ import { getDeviceId } from '../lib/device-id';
 import { DeviceManager } from './devices/DeviceManager';
 import { createLogger } from '../lib/logger';
 import { DataExportWizard } from './sync/DataExportWizard';
-import { useAndroidBackButton } from '../hooks/useAndroidBackButton';
-import { BackButtonPriority } from '../store/useAndroidBackButtonStore';
+import { useNavigationGuard } from '../hooks/useNavigationGuard';
+import { BackButtonPriority } from '../store/useBackNavigationStore';
 
 const logger = createLogger('GlobalSettingsDialog');
 
@@ -103,7 +103,7 @@ export const GlobalSettingsDialog = () => {
     const { devices, renameDevice } = useDeviceStore();
     const currentDeviceId = getDeviceId();
 
-    useAndroidBackButton(() => {
+    useNavigationGuard(() => {
         if (isExportWizardOpen) {
             setIsExportWizardOpen(false);
         } else if (isReadingListOpen) {
@@ -1419,7 +1419,7 @@ const firebaseConfig = {
                                             </div>
                                         )}
                                         {regenerationProgress && !isRegenerating && (
-                                             <p className="text-sm text-muted-foreground">{regenerationProgress}</p>
+                                            <p className="text-sm text-muted-foreground">{regenerationProgress}</p>
                                         )}
                                     </div>
                                 </div>

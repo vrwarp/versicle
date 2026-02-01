@@ -79,7 +79,7 @@ vi.mock('./components/ThemeSynchronizer', () => ({ ThemeSynchronizer: () => null
 vi.mock('./components/GlobalSettingsDialog', () => ({ GlobalSettingsDialog: () => null }));
 vi.mock('./components/ui/ToastContainer', () => ({ ToastContainer: () => null }));
 vi.mock('./components/SafeModeView', () => ({ SafeModeView: () => <div>SafeMode</div> }));
-vi.mock('./components/AndroidBackButtonHandler', () => ({ AndroidBackButtonHandler: () => null }));
+vi.mock('./components/BackNavigationManager', () => ({ BackNavigationManager: () => null }));
 vi.mock('./layouts/RootLayout', () => ({ RootLayout: () => <div data-testid="root-layout">RootLayout Mock</div> }));
 
 // Mock Device Store to avoid Yjs middleware execution

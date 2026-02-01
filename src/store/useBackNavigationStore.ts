@@ -18,46 +18,36 @@ export enum BackButtonPriority {
 }
 
 /**
- * Store for managing Android back button handlers.
+ * Store for managing back navigation handlers (Hardware button & Browser Back).
  *
- * This store allows components to register priority-based handlers for the hardware back button.
+ * This store allows components to register priority-based handlers for back navigation.
  * Handlers are executed in descending order of priority (highest priority first).
- * If a handler exists, it is executed. If no handlers exist, the default behavior (navigation or app exit) is used.
+ *
+ * - **Hardware Back Button (Android):** Triggered via Capacitor App plugin.
+ * - **Browser Back Button:** Triggered via React Router `useBlocker` or `popstate`.
  *
  * **Example Usage:**
  *
  * ```typescript
- * import { useAndroidBackButton } from '../hooks/useAndroidBackButton';
- * import { BackButtonPriority } from '../store/useAndroidBackButtonStore';
+ * import { useNavigationGuard } from '../hooks/useNavigationGuard';
+ * import { BackButtonPriority } from '../store/useBackNavigationStore';
  *
  * // Inside a component (e.g., a Modal)
- * useAndroidBackButton(() => {
+ * useNavigationGuard(() => {
  *   // Close the modal instead of navigating back
  *   setIsOpen(false);
  * }, BackButtonPriority.MODAL, isOpen);
  * ```
- *
- * **Future Unification Note:**
- * To unify this with browser-based navigation (e.g., preventing the user from accidentally navigating back
- * when a modal is open in a web context), we would need to integrate `react-router-dom`'s `useBlocker` or `window.onpopstate`.
- *
- * Ideally, a shared `useNavigationGuard` hook would:
- * 1. Register with this store (for Android hardware button).
- * 2. Register a router blocker (for browser back button).
- * 3. Execute the same handler when either event occurs.
- *
- * This would ensure that both the hardware button and the browser UI back button trigger the same
- * "close modal" logic before actually navigating history.
  */
 export type BackButtonHandler = () => Promise<void> | void;
 
-export interface AndroidBackButtonState {
+export interface BackNavigationState {
     handlers: { id: string; handler: BackButtonHandler; priority: number }[];
     registerHandler: (id: string, handler: BackButtonHandler, priority: number) => void;
     unregisterHandler: (id: string) => void;
 }
 
-export const useAndroidBackButtonStore = create<AndroidBackButtonState>((set) => ({
+export const useBackNavigationStore = create<BackNavigationState>((set) => ({
     handlers: [],
     registerHandler: (id, handler, priority) =>
         set((state) => ({

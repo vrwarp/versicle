@@ -6,12 +6,12 @@ import { ToastContainer } from '../components/ui/ToastContainer';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { SyncToastPropagator } from '../components/sync/SyncToastPropagator';
 
-import { AndroidBackButtonHandler } from '../components/AndroidBackButtonHandler';
+import { BackNavigationManager } from '../components/BackNavigationManager';
 
 export function RootLayout() {
     return (
         <>
-            <AndroidBackButtonHandler />
+            <BackNavigationManager />
             <SyncToastPropagator />
             <ThemeSynchronizer />
             <ErrorBoundary>

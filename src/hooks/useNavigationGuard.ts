@@ -1,16 +1,16 @@
 import { useEffect, useId } from 'react';
-import { useAndroidBackButtonStore, type BackButtonHandler } from '../store/useAndroidBackButtonStore';
+import { useBackNavigationStore, type BackButtonHandler } from '../store/useBackNavigationStore';
 
 /**
- * Hook to register a back button handler.
+ * Hook to register a navigation guard (back button handler).
  * @param handler The function to execute when the back button is pressed.
  * @param priority The priority of the handler (use BackButtonPriority enum).
  * @param enabled Whether the handler should be active.
  */
-export const useAndroidBackButton = (handler: BackButtonHandler, priority: number, enabled: boolean = true) => {
+export const useNavigationGuard = (handler: BackButtonHandler, priority: number, enabled: boolean = true) => {
     const id = useId();
-    const register = useAndroidBackButtonStore((state) => state.registerHandler);
-    const unregister = useAndroidBackButtonStore((state) => state.unregisterHandler);
+    const register = useBackNavigationStore((state) => state.registerHandler);
+    const unregister = useBackNavigationStore((state) => state.unregisterHandler);
 
     useEffect(() => {
         if (enabled) {
