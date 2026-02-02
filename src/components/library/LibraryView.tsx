@@ -8,7 +8,7 @@ import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
 import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
-import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search } from 'lucide-react';
+import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search, Loader2 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -541,8 +541,12 @@ export const LibraryView: React.FC = () => {
       )}
 
       {isLoading ? (
-        <div className="flex justify-center items-center py-12 flex-1">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div
+          className="flex justify-center items-center py-12 flex-1"
+          role="status"
+          aria-label="Loading library"
+        >
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
       ) : (
         <section className="flex-1 w-full">
