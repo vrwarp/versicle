@@ -58,6 +58,7 @@ graph TD
         AnnotStore[useAnnotationStore]
         GenAIStore[useGenAIStore]
         ContentAnalysisStore[useContentAnalysisStore]
+        BackNav[useBackNavigationStore]
         UIStore[useUIStore]
         SyncStore[useSyncStore]
     end
@@ -191,7 +192,7 @@ The data layer is built on **IndexedDB** using the `idb` library. It is accessed
 #### `src/db/DBService.ts`
 The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
 
-**Key Stores (Schema v22):**
+**Key Stores (Schema v23):**
 *   **Domain 1: Static (Immutable/Heavy)** - *Managed by DBService*
     *   `static_manifests`: Lightweight metadata (Title, Author, Cover Thumbnail) for listing books.
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
@@ -249,6 +250,7 @@ Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for 
 Provides a "Cloud Overlay" for real-time synchronization.
 
 *   **Logic**:
+    *   **Hybrid Auth**: Supports both Web (`signInWithPopup`) and Native Android (`FirebaseAuthentication` plugin) flows for Google Sign-In.
     *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
     *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
@@ -430,7 +432,12 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
 *   **`useContentAnalysisStore` (Synced)**:
     *   **Goal**: Sync expensive AI artifacts (Table Adaptations, Semantic Maps) across devices.
-    *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the semantic map (footnotes/titles) and teleprompter scripts. Avoids re-running expensive GenAI queries on every device.
+    *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the semantic map (footnotes/titles) and teleprompter scripts.
+    *   **Trade-off**: Large analysis objects (e.g., from books with many tables) increase the Yjs document size, potentially causing higher latency during initial sync/hydration.
+*   **`useBackNavigationStore` (Local Only)**:
+    *   **Goal**: Solve the "Back Button Hell" on Android where multiple components (Router, Modals, Menus) compete for the hardware back action.
+    *   **Logic**: Implements a **Priority Queue** (Modal > UI > Default). Components register handlers with a priority, and the store executes only the highest-priority handler.
+    *   **Trade-off**: Requires strict lifecycle management. If a component fails to unregister its handler on unmount (zombie handler), it can permanently hijack the back button and trap the user.
 *   **`useLibraryStore` (Local Only)**:
     *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs.
     *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). If the local file is missing, the book appears as a "Ghost Book" using synced metadata.
