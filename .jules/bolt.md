@@ -42,3 +42,8 @@
 - **Bottleneck:** `TextSegmenter.mergeByLength` was calling `trimEnd()` and regex testing inside the loop for every merge candidate, causing allocation overhead.
 - **Solution:** Implemented a manual backward character scan loop to check for punctuation and determine separation.
 - **Learning:** While regex is fast for matching, `trimEnd()` allocates. For high-frequency text loops (like merging thousands of segments), simple manual character scanning (imperative code) can be ~3x faster than declarative string methods. Extract this logic to a helper for readability.
+
+## 2025-06-04 - Regex Replacement Parity
+- **Bottleneck:** Replacing regex with manual scanning carries risk of subtle behavior changes (e.g., whitespace handling).
+- **Solution:** Created a dedicated test file that runs the *original* regex against the *new* manual implementation on the same inputs to assert exact parity.
+- **Learning:** When replacing "slow but correct" standard library features (like Regex) with "fast custom" logic, always write a parity test that compares them directly. Do not rely on loose existing tests.

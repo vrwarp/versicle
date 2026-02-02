@@ -78,12 +78,6 @@ export const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
 // Used when Intl.Segmenter is not available.
 export const RE_SENTENCE_FALLBACK = /([^.!?]+[.!?]+)/g;
 
-// Optimized regexes for trim-less operations in refineSegments
-// These capture the relevant part in group 1, ignoring surrounding whitespace.
-const RE_LAST_WORD_TRIMLESS = /(\S+)\s*$/;
-const RE_LAST_TWO_WORDS_TRIMLESS = /((?:\S+\s+)\S+)\s*$/;
-const RE_FIRST_WORD_TRIMLESS = /^\s*(\S+)/;
-
 /**
  * Robust text segmentation utility using Intl.Segmenter with fallback and post-processing.
  * Handles edge cases like abbreviations (e.g., "Mr.", "i.e.") to prevent incorrect sentence splitting.
@@ -154,6 +148,106 @@ export class TextSegmenter {
             // Left was empty or all whitespace
             return separator + right;
         }
+    }
+
+    /**
+     * Checks if a character code represents a whitespace character.
+     * Covers common and Unicode whitespace ranges to match Regex \s behavior.
+     */
+    private static isWhitespace(code: number): boolean {
+        return (
+            code === 32 || // Space
+            code === 160 || // No-Break Space
+            (code >= 9 && code <= 13) || // Tab, LF, VT, FF, CR
+            (code >= 8192 && code <= 8202) || // En Quad, Em Quad, En Space, Em Space, 3/em, 4/em, 6/em, Figure, Punctuation, Thin, Hair
+            code === 8239 || // Narrow No-Break Space
+            code === 8287 || // Medium Mathematical Space
+            code === 12288 || // Ideographic Space
+            code === 5760 || // Ogham Space Mark
+            code === 8232 || // Line Separator
+            code === 8233 // Paragraph Separator
+        );
+    }
+
+    /**
+     * Extracts the last word from a string, ignoring trailing whitespace.
+     * Replaces regex: /(\S+)\s*$/
+     */
+    public static getLastWord(text: string): string {
+        if (!text) return '';
+        let end = text.length - 1;
+        while (end >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(end))) {
+            end--;
+        }
+        if (end < 0) return '';
+
+        let start = end;
+        while (start >= 0 && !TextSegmenter.isWhitespace(text.charCodeAt(start))) {
+            start--;
+        }
+        return text.substring(start + 1, end + 1);
+    }
+
+    /**
+     * Extracts the last two words from a string, ignoring trailing whitespace.
+     * Replaces regex: /((?:\S+\s+)\S+)\s*$/
+     * Returns null if fewer than 2 words are found.
+     */
+    public static getLastTwoWords(text: string): string | null {
+        if (!text) return null;
+        let end = text.length - 1;
+        // Skip trailing whitespace
+        while (end >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(end))) {
+            end--;
+        }
+        if (end < 0) return null; // All whitespace
+
+        // End of 2nd word found at 'end'
+        // Scan backwards for start of 2nd word
+        let split = end;
+        while (split >= 0 && !TextSegmenter.isWhitespace(text.charCodeAt(split))) {
+            split--;
+        }
+        if (split < 0) return null; // Only one word found
+
+        // We found a space at 'split'.
+        // Scan backwards to find end of 1st word (skip whitespace between words)
+        let middle = split;
+        while (middle >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(middle))) {
+            middle--;
+        }
+        if (middle < 0) return null; // Space at start, then word: " Word" -> null
+
+        // End of 1st word at 'middle'
+        // Scan backwards for start of 1st word
+        let start = middle;
+        while (start >= 0 && !TextSegmenter.isWhitespace(text.charCodeAt(start))) {
+            start--;
+        }
+
+        return text.substring(start + 1, end + 1);
+    }
+
+    /**
+     * Extracts the first word from a string, ignoring leading whitespace.
+     * Replaces regex: /^\s*(\S+)/
+     */
+    public static getFirstWord(text: string): string {
+        if (!text) return '';
+        let start = 0;
+        const len = text.length;
+
+        // Skip leading whitespace
+        while (start < len && TextSegmenter.isWhitespace(text.charCodeAt(start))) {
+            start++;
+        }
+        if (start >= len) return '';
+
+        let end = start;
+        while (end < len && !TextSegmenter.isWhitespace(text.charCodeAt(end))) {
+            end++;
+        }
+        return text.substring(start, end);
     }
 
     /**
@@ -255,8 +349,7 @@ export class TextSegmenter {
                 let lastWord = '';
 
                 // Try checking the last word
-                const oneWordMatch = RE_LAST_WORD_TRIMLESS.exec(last.text);
-                const rawLastWord = oneWordMatch ? oneWordMatch[1] : '';
+                const rawLastWord = TextSegmenter.getLastWord(last.text);
                 // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
                 const cleanLastWord = rawLastWord.replace(RE_LEADING_PUNCTUATION, '');
 
@@ -265,9 +358,8 @@ export class TextSegmenter {
                     lastWord = cleanLastWord;
                 } else {
                     // Try checking the last two words
-                    const twoWordsMatch = RE_LAST_TWO_WORDS_TRIMLESS.exec(last.text);
-                    if (twoWordsMatch) {
-                        const rawLastTwo = twoWordsMatch[1];
+                    const rawLastTwo = TextSegmenter.getLastTwoWords(last.text);
+                    if (rawLastTwo) {
                         // Remove leading punctuation from the phrase (e.g. "(et al." -> "et al.")
                         const cleanLastTwo = rawLastTwo.replace(RE_LEADING_PUNCTUATION, '');
 
@@ -287,8 +379,7 @@ export class TextSegmenter {
                     } else {
                         // Check the next segment (current)
                         // Optimization: Avoid trim() using regex
-                        const match = RE_FIRST_WORD_TRIMLESS.exec(current.text);
-                        const nextFirstWord = match ? match[1] : '';
+                        const nextFirstWord = TextSegmenter.getFirstWord(current.text);
                         const cleanNextWord = nextFirstWord.replace(RE_TRAILING_PUNCTUATION, '');
 
                         if (!starterSet.has(cleanNextWord)) {
