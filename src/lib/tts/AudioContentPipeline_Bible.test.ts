@@ -13,6 +13,7 @@ vi.mock('../../db/DBService', () => ({
         getTTSContent: vi.fn(),
         getBookMetadata: vi.fn(),
         getContentAnalysis: vi.fn(),
+        getBookStructure: vi.fn(),
     }
 }));
 

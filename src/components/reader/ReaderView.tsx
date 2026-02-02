@@ -112,7 +112,6 @@ export const ReaderView: React.FC = () => {
 
     logger.debug(`viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
 
-
     const panicSaveState = useRef({ readerViewMode, currentSectionTitle });
 
     useEffect(() => {

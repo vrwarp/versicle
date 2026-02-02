@@ -60,6 +60,16 @@ export async function reprocessBook(bookId: string): Promise<void> {
     }
 
     const fileBlob = file instanceof Blob ? file : new Blob([file]);
+
+    // Capture Real TOC
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const book = (ePub as any)(fileBlob);
+    await book.ready;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const navigation = await (book.loaded as any).navigation;
+    const realToc: NavigationItem[] = navigation ? navigation.toc : [];
+    book.destroy();
+
     const chapters = await extractContentOffscreen(fileBlob, {});
 
     const syntheticToc: NavigationItem[] = [];
@@ -80,7 +90,8 @@ export async function reprocessBook(bookId: string): Promise<void> {
             bookId,
             sectionId: chapter.href,
             characterCount: chapter.textContent.length,
-            playOrder: i
+            playOrder: i,
+            title: chapter.title || `Chapter ${i + 1}`
         });
         totalChars += chapter.textContent.length;
 
@@ -122,7 +133,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
     const structStore = tx.objectStore('static_structure');
     await structStore.put({
         bookId,
-        toc: syntheticToc,
+        toc: realToc.length > 0 ? realToc : syntheticToc,
         spineItems: sections.map(s => ({
             id: s.sectionId,
             characterCount: s.characterCount,
@@ -235,6 +246,11 @@ export async function extractBookData(
         if (coverPalette.length === 0) coverPalette = undefined;
     }
 
+    // Extract Navigation (TOC)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const navigation = await (book.loaded as any).navigation;
+    const realToc: NavigationItem[] = navigation ? navigation.toc : [];
+
     book.destroy();
 
     const chapters = await extractContentOffscreen(file, ttsOptions, onProgress);
@@ -258,7 +274,8 @@ export async function extractBookData(
             bookId,
             sectionId: chapter.href,
             characterCount: chapter.textContent.length,
-            playOrder: i
+            playOrder: i,
+            title: chapter.title || `Chapter ${i + 1}`
         });
         totalChars += chapter.textContent.length;
 
@@ -331,7 +348,7 @@ export async function extractBookData(
 
     const structure = {
         bookId,
-        toc: syntheticToc,
+        toc: realToc.length > 0 ? realToc : syntheticToc,
         spineItems: sections.map(s => ({
             id: s.sectionId,
             characterCount: s.characterCount,
