@@ -66,7 +66,8 @@ export const BIBLE_ABBREVIATIONS = [
     "2 John", "2 Jn.", "2 Jhn.", "2 Jo.", "II John", "2John", "II Jn.", "2Jn.", "II Jo.", "2Jo.", "II John", "2nd John", "Second John",
     "3 John", "3 Jn.", "3 Jhn.", "3 Jo.", "III John", "3John", "III Jn.", "3Jn.", "III Jo.", "3Jo.", "III John", "3rd John", "Third John",
     "Jude", "Jd.",
-    "Rev.", "Rv.", "Revelation"
+    "Rev.", "Rv.", "Revelation",
+    "v.", "vs.", "vv.", "ch.", "chap."
 ];
 
 // Based on lexicon-bible.csv
