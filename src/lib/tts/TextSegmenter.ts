@@ -130,16 +130,16 @@ export class TextSegmenter {
      * Covers common ASCII and Unicode whitespace to match Regex `\s`.
      */
     private static isWhitespace(code: number): boolean {
-        return (code === 32) || // Space
-            (code >= 9 && code <= 13) || // Tab, LF, VT, FF, CR
-            (code === 160) || // NBSP
-            (code === 5760) || // Ogham Space Mark
-            (code >= 8192 && code <= 8202) || // U+2000-U+200A (En Quad...Hair Space)
-            (code === 8232) || (code === 8233) || // Line/Para Separator
-            (code === 8239) || // Narrow No-Break Space
-            (code === 8287) || // Medium Mathematical Space
-            (code === 12288) || // Ideographic Space
-            (code === 65279); // BOM
+        return (code === 0x0020) || // Space
+            (code >= 0x0009 && code <= 0x000D) || // Tab, LF, VT, FF, CR
+            (code === 0x00A0) || // NBSP
+            (code === 0x1680) || // Ogham Space Mark
+            (code >= 0x2000 && code <= 0x200A) || // U+2000-U+200A (En Quad...Hair Space)
+            (code === 0x2028) || (code === 0x2029) || // Line/Para Separator
+            (code === 0x202F) || // Narrow No-Break Space
+            (code === 0x205F) || // Medium Mathematical Space
+            (code === 0x3000) || // Ideographic Space
+            (code === 0xFEFF); // BOM
     }
 
     private static readonly CODE_QUOTE_DOUBLE = '"'.codePointAt(0)!;
