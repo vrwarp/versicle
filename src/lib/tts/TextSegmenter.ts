@@ -142,19 +142,36 @@ export class TextSegmenter {
             (code === 65279); // BOM
     }
 
+    private static readonly CODE_QUOTE_DOUBLE = '"'.codePointAt(0)!;
+    private static readonly CODE_QUOTE_SINGLE = "'".codePointAt(0)!;
+    private static readonly CODE_PAREN_OPEN = '('.codePointAt(0)!;
+    private static readonly CODE_PAREN_CLOSE = ')'.codePointAt(0)!;
+    private static readonly CODE_BRACKET_OPEN = '['.codePointAt(0)!;
+    private static readonly CODE_BRACKET_CLOSE = ']'.codePointAt(0)!;
+    private static readonly CODE_ANGLE_OPEN = '<'.codePointAt(0)!;
+    private static readonly CODE_ANGLE_CLOSE = '>'.codePointAt(0)!;
+    private static readonly CODE_BRACE_OPEN = '{'.codePointAt(0)!;
+    private static readonly CODE_BRACE_CLOSE = '}'.codePointAt(0)!;
+    private static readonly CODE_PERIOD = '.'.codePointAt(0)!;
+    private static readonly CODE_COMMA = ','.codePointAt(0)!;
+    private static readonly CODE_EXCLAMATION = '!'.codePointAt(0)!;
+    private static readonly CODE_QUESTION = '?'.codePointAt(0)!;
+    private static readonly CODE_SEMICOLON = ';'.codePointAt(0)!;
+    private static readonly CODE_COLON = ':'.codePointAt(0)!;
+
     /**
      * Checks if a character code represents a common punctuation mark to strip.
      * Includes quotes, brackets, and sentence delimiters.
      */
     private static isPunctuation(code: number): boolean {
-        return (code === 34) || (code === 39) || // " '
-            (code === 40) || (code === 41) || // ( )
-            (code === 91) || (code === 93) || // [ ]
-            (code === 60) || (code === 62) || // < >
-            (code === 123) || (code === 125) || // { }
-            (code === 46) || (code === 44) || // . ,
-            (code === 33) || (code === 63) || // ! ?
-            (code === 59) || (code === 58);   // ; :
+        return (code === TextSegmenter.CODE_QUOTE_DOUBLE) || (code === TextSegmenter.CODE_QUOTE_SINGLE) ||
+            (code === TextSegmenter.CODE_PAREN_OPEN) || (code === TextSegmenter.CODE_PAREN_CLOSE) ||
+            (code === TextSegmenter.CODE_BRACKET_OPEN) || (code === TextSegmenter.CODE_BRACKET_CLOSE) ||
+            (code === TextSegmenter.CODE_ANGLE_OPEN) || (code === TextSegmenter.CODE_ANGLE_CLOSE) ||
+            (code === TextSegmenter.CODE_BRACE_OPEN) || (code === TextSegmenter.CODE_BRACE_CLOSE) ||
+            (code === TextSegmenter.CODE_PERIOD) || (code === TextSegmenter.CODE_COMMA) ||
+            (code === TextSegmenter.CODE_EXCLAMATION) || (code === TextSegmenter.CODE_QUESTION) ||
+            (code === TextSegmenter.CODE_SEMICOLON) || (code === TextSegmenter.CODE_COLON);
     }
 
     /**
