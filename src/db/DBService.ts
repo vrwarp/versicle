@@ -11,6 +11,7 @@ import type {
   TTSState,
   ContentAnalysis,
   StaticBookManifest,
+  StaticStructure,
   NavigationItem,
   CachedSegment,
   ReadingSession
@@ -296,6 +297,18 @@ class DBService {
       }
 
       await tx.done;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Retrieves the full static structure (TOC, Spine) for a book.
+   */
+  async getBookStructure(bookId: string): Promise<StaticStructure | undefined> {
+    try {
+      const db = await this.getDB();
+      return await db.get('static_structure', bookId);
     } catch (error) {
       this.handleError(error);
     }

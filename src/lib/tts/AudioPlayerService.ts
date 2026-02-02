@@ -718,7 +718,7 @@ export class AudioPlayerService {
             sectionIndex,
             this.prerollEnabled,
             this.speed,
-            sectionTitle,
+            sectionTitle || section.title,
             onMaskFound,
             onAdaptationsFound
         );

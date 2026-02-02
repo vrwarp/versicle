@@ -1,10 +1,11 @@
 import { dbService } from '../../db/DBService';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
 import { getParentCfi, generateCfiRange, parseCfiRange } from '../cfi-utils';
-import type { SectionMetadata } from '../../types/db';
+import type { SectionMetadata, NavigationItem } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
 import type { SentenceNode } from '../tts';
@@ -45,13 +46,54 @@ export class AudioContentPipeline {
             const ttsContent = await dbService.getTTSContent(bookId, section.sectionId);
 
             // Determine Title
-            let title = sectionTitle || `Section ${sectionIndex + 1}`;
-            if (!sectionTitle) {
-                const analysis = await dbService.getContentAnalysis(bookId, section.sectionId);
-                if (analysis && analysis.structure && analysis.structure.title) {
-                    title = analysis.structure.title;
+            let title: string | undefined = undefined;
+
+            // Priority 1: AI-extracted title
+            const analysis = await dbService.getContentAnalysis(bookId, section.sectionId);
+            if (analysis && analysis.structure && analysis.structure.title) {
+                title = analysis.structure.title;
+            }
+
+            // Priority 2: Label from the Stored TOC
+            if (!title) {
+                const structure = await dbService.getBookStructure(bookId);
+
+                // Recursive helper to find TOC entry by href
+                const findTocEntry = (items: NavigationItem[], href: string): NavigationItem | undefined => {
+                    for (const item of items) {
+                        if (item.href === href) return item;
+
+                        // Loose match: Check if item.href matches the file path of the spine item
+                        // This covers cases where TOC points to a specific anchor but the section is the whole file
+                        const itemPath = item.href.split('#')[0];
+                        const sectionPath = href.split('#')[0];
+                        if (itemPath === sectionPath) return item;
+
+                        if (item.subitems && item.subitems.length > 0) {
+                            const found = findTocEntry(item.subitems, href);
+                            if (found) return found;
+                        }
+                    }
+                    return undefined;
+                };
+
+                const tocEntry = structure?.toc ? findTocEntry(structure.toc, section.sectionId) : undefined;
+
+                if (tocEntry) {
+                    title = tocEntry.label;
                 }
             }
+
+            // Priority 3: Use Spine Title (Provided Argument)
+            if (!title && sectionTitle) {
+                title = sectionTitle;
+            }
+
+            // Final generic fallback
+            title = title || `Section ${sectionIndex + 1}`;
+
+            // Sync the Reader UI Store to ensure CompassPill stays accurate during auto-advance
+            useReaderUIStore.getState().setCurrentSection(title, section.sectionId);
 
             const bookMetadata = await dbService.getBookMetadata(bookId);
             const coverUrl = bookMetadata?.coverUrl || (bookMetadata?.coverBlob ? `/__versicle__/covers/${bookId}` : undefined);
@@ -132,7 +174,7 @@ export class AudioContentPipeline {
                 const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled && genAISettings.isEnabled;
 
                 if (isContentAnalysisEnabled) {
-                     if (skipTypes.length > 0 && onMaskFound) {
+                    if (skipTypes.length > 0 && onMaskFound) {
                         // Trigger background detection
                         this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
                             .then(mask => {
@@ -141,7 +183,7 @@ export class AudioContentPipeline {
                                 }
                             })
                             .catch(err => console.warn("Background mask detection failed", err));
-                     }
+                    }
                 }
 
                 if (onAdaptationsFound && genAISettings.isTableAdaptationEnabled && genAISettings.isEnabled) {
@@ -252,7 +294,7 @@ export class AudioContentPipeline {
 
             if (targetSentences.length === 0) return indicesToSkip;
 
-             // Fetch Table CFIs for Grouping
+            // Fetch Table CFIs for Grouping
             const tableImages = await dbService.getTableImages(bookId);
             // OPTIMIZATION: Filter table images by the current section ID to avoid checking irrelevant tables.
             // This reduces getParentCfi complexity from O(N_sentences * N_total_book_tables) to O(N_sentences * N_section_tables).
@@ -264,11 +306,11 @@ export class AudioContentPipeline {
             const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
             if (detectedTypes && detectedTypes.length > 0) {
-                 const typeMap = new Map<string, ContentType>();
-                 detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
+                const typeMap = new Map<string, ContentType>();
+                detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
 
-                 const skipRoots = new Set<string>();
-                 groups.forEach(g => {
+                const skipRoots = new Set<string>();
+                groups.forEach(g => {
                     const type = typeMap.get(g.rootCfi);
                     if (type && skipTypes.includes(type)) {
                         skipRoots.add(g.rootCfi);
@@ -278,12 +320,12 @@ export class AudioContentPipeline {
                 if (skipRoots.size > 0) {
                     for (const g of groups) {
                         if (skipRoots.has(g.rootCfi)) {
-                             // Mark all segments in this group as skipped
-                             for (const segment of g.segments) {
-                                 if (segment.sourceIndices) {
-                                     segment.sourceIndices.forEach(idx => indicesToSkip.add(idx));
-                                 }
-                             }
+                            // Mark all segments in this group as skipped
+                            for (const segment of g.segments) {
+                                if (segment.sourceIndices) {
+                                    segment.sourceIndices.forEach(idx => indicesToSkip.add(idx));
+                                }
+                            }
                         }
                     }
                 }
@@ -336,37 +378,37 @@ export class AudioContentPipeline {
             if (workSet.length === 0) return;
 
             // 4. Check if GenAI is configured
-             const canUseGenAI = genAISettings.isEnabled && (genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
-             if (!canUseGenAI) return;
+            const canUseGenAI = genAISettings.isEnabled && (genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
+            if (!canUseGenAI) return;
 
-             // Ensure service is configured
-             if (!genAIService.isConfigured() && genAISettings.apiKey) {
-                 genAIService.configure(genAISettings.apiKey, 'gemini-1.5-flash');
-             }
+            // Ensure service is configured
+            if (!genAIService.isConfigured() && genAISettings.apiKey) {
+                genAIService.configure(genAISettings.apiKey, 'gemini-1.5-flash');
+            }
 
-             if (genAIService.isConfigured()) {
-                 const nodes = workSet.map(img => ({
-                     rootCfi: img.cfi,
-                     imageBlob: img.imageBlob
-                 }));
+            if (genAIService.isConfigured()) {
+                const nodes = workSet.map(img => ({
+                    rootCfi: img.cfi,
+                    imageBlob: img.imageBlob
+                }));
 
-                 const results = await genAIService.generateTableAdaptations(nodes);
+                const results = await genAIService.generateTableAdaptations(nodes);
 
-                 // 5. Update DB
-                 await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
-                     rootCfi: r.cfi,
-                     text: r.adaptation
-                 })));
+                // 5. Update DB
+                await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
+                    rootCfi: r.cfi,
+                    text: r.adaptation
+                })));
 
-                 // 6. Notify listeners with updated full set
-                 const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
-                 const finalAdaptations = new Map<string, string>(
-                     updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
-                 );
+                // 6. Notify listeners with updated full set
+                const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+                const finalAdaptations = new Map<string, string>(
+                    updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+                );
 
-                 const finalResult = this.mapSentencesToAdaptations(targetSentences, finalAdaptations);
-                 onAdaptationsFound(finalResult);
-             }
+                const finalResult = this.mapSentencesToAdaptations(targetSentences, finalAdaptations);
+                onAdaptationsFound(finalResult);
+            }
 
         } catch (e) {
             console.warn("Error processing table adaptations", e);
@@ -400,12 +442,12 @@ export class AudioContentPipeline {
             // We use the full string representation of the parent/path for comparison.
             let cleanRoot = root;
             if (range && range.parent) {
-                 // Reconstruct parent CFI string: epubcfi(parent)
-                 // But wait, parseCfiRange returns 'parent' as the path inside.
-                 cleanRoot = range.parent;
+                // Reconstruct parent CFI string: epubcfi(parent)
+                // But wait, parseCfiRange returns 'parent' as the path inside.
+                cleanRoot = range.parent;
             } else {
-                 // Strip wrapper manually if not a range or simple path
-                 cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1');
+                // Strip wrapper manually if not a range or simple path
+                cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1');
             }
             // Normalize: remove trailing ')' if present from lazy regex or range structure
             cleanRoot = cleanRoot.replace(/\)$/, '');
@@ -422,10 +464,10 @@ export class AudioContentPipeline {
 
             // Check if this sentence is a child of any known table adaptation root.
             const match = parsedRoots.find(({ clean }) => {
-                    // Check for prefix match with valid separator boundary
-                    // Include ',' for range handling
-                    return cleanCfi.startsWith(clean) &&
-                        (cleanCfi.length === clean.length || ['/', '!', '[', ':', ','].includes(cleanCfi[clean.length]));
+                // Check for prefix match with valid separator boundary
+                // Include ',' for range handling
+                return cleanCfi.startsWith(clean) &&
+                    (cleanCfi.length === clean.length || ['/', '!', '[', ':', ','].includes(cleanCfi[clean.length]));
             });
 
             if (match) {

@@ -465,6 +465,8 @@ export interface SectionMetadata {
   characterCount: number;
   /** The order of the section in the book. */
   playOrder: number;
+  /** The title of the section (chapter name). */
+  title?: string;
 }
 
 /**
