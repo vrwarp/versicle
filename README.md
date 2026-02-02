@@ -19,7 +19,7 @@
 
 ## Tech Stack
 
-*   **Framework**: React 19 + Vite 7 + React Router 7
+*   **Framework**: React 19.2.3 + Vite 7.3.0 + React Router 7
 *   **Language**: TypeScript
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (Custom Fork)
 *   **Sync**: `y-cinder` (Custom Fork / Firestore) + Android Backup Service
@@ -27,7 +27,7 @@
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
 *   **AI**: Google Gemini (Flash Lite / Flash) via `@google/generative-ai`
-*   **Mobile**: Capacitor 7 (Android) + `@capawesome-team/capacitor-android-battery-optimization`
+*   **Mobile**: Capacitor 7.0.0 (Android) + `@capawesome-team/capacitor-android-battery-optimization`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4 + Radix UI
 *   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
@@ -51,6 +51,7 @@
 *   **Optimistic Playback**: Audio starts playing instantly while content filtering (skip masks) and smart adaptations are applied asynchronously in the background.
 *   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural narrative speech.
     *   **Thinking Budget**: Configurable "Thinking Budget" (default 512 tokens) allows the AI to reason about complex data layouts before speaking.
+    *   **Synced Analysis**: AI-generated content (adaptations, semantic maps) is synchronized across devices via Yjs, so you only pay the generation cost once.
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
