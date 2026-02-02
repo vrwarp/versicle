@@ -78,12 +78,6 @@ export const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
 // Used when Intl.Segmenter is not available.
 export const RE_SENTENCE_FALLBACK = /([^.!?]+[.!?]+)/g;
 
-// Optimized regexes for trim-less operations in refineSegments
-// These capture the relevant part in group 1, ignoring surrounding whitespace.
-const RE_LAST_WORD_TRIMLESS = /(\S+)\s*$/;
-const RE_LAST_TWO_WORDS_TRIMLESS = /((?:\S+\s+)\S+)\s*$/;
-const RE_FIRST_WORD_TRIMLESS = /^\s*(\S+)/;
-
 /**
  * Robust text segmentation utility using Intl.Segmenter with fallback and post-processing.
  * Handles edge cases like abbreviations (e.g., "Mr.", "i.e.") to prevent incorrect sentence splitting.
@@ -129,6 +123,172 @@ export class TextSegmenter {
         }
 
         return this.fallbackSegment(normalizedText);
+    }
+
+    /**
+     * Checks if a character code represents a whitespace character.
+     * Covers common ASCII and Unicode whitespace to match Regex `\s`.
+     */
+    private static isWhitespace(code: number): boolean {
+        return (code === 0x0020) || // Space
+            (code >= 0x0009 && code <= 0x000D) || // Tab, LF, VT, FF, CR
+            (code === 0x00A0) || // NBSP
+            (code === 0x1680) || // Ogham Space Mark
+            (code >= 0x2000 && code <= 0x200A) || // U+2000-U+200A (En Quad...Hair Space)
+            (code === 0x2028) || (code === 0x2029) || // Line/Para Separator
+            (code === 0x202F) || // Narrow No-Break Space
+            (code === 0x205F) || // Medium Mathematical Space
+            (code === 0x3000) || // Ideographic Space
+            (code === 0xFEFF); // BOM
+    }
+
+    private static readonly CODE_QUOTE_DOUBLE = '"'.codePointAt(0)!;
+    private static readonly CODE_QUOTE_SINGLE = "'".codePointAt(0)!;
+    private static readonly CODE_PAREN_OPEN = '('.codePointAt(0)!;
+    private static readonly CODE_PAREN_CLOSE = ')'.codePointAt(0)!;
+    private static readonly CODE_BRACKET_OPEN = '['.codePointAt(0)!;
+    private static readonly CODE_BRACKET_CLOSE = ']'.codePointAt(0)!;
+    private static readonly CODE_ANGLE_OPEN = '<'.codePointAt(0)!;
+    private static readonly CODE_ANGLE_CLOSE = '>'.codePointAt(0)!;
+    private static readonly CODE_BRACE_OPEN = '{'.codePointAt(0)!;
+    private static readonly CODE_BRACE_CLOSE = '}'.codePointAt(0)!;
+    private static readonly CODE_PERIOD = '.'.codePointAt(0)!;
+    private static readonly CODE_COMMA = ','.codePointAt(0)!;
+    private static readonly CODE_EXCLAMATION = '!'.codePointAt(0)!;
+    private static readonly CODE_QUESTION = '?'.codePointAt(0)!;
+    private static readonly CODE_SEMICOLON = ';'.codePointAt(0)!;
+    private static readonly CODE_COLON = ':'.codePointAt(0)!;
+
+    /**
+     * Checks if a character code represents a common punctuation mark to strip.
+     * Includes quotes, brackets, and sentence delimiters.
+     */
+    private static isPunctuation(code: number): boolean {
+        return (code === TextSegmenter.CODE_QUOTE_DOUBLE) || (code === TextSegmenter.CODE_QUOTE_SINGLE) ||
+            (code === TextSegmenter.CODE_PAREN_OPEN) || (code === TextSegmenter.CODE_PAREN_CLOSE) ||
+            (code === TextSegmenter.CODE_BRACKET_OPEN) || (code === TextSegmenter.CODE_BRACKET_CLOSE) ||
+            (code === TextSegmenter.CODE_ANGLE_OPEN) || (code === TextSegmenter.CODE_ANGLE_CLOSE) ||
+            (code === TextSegmenter.CODE_BRACE_OPEN) || (code === TextSegmenter.CODE_BRACE_CLOSE) ||
+            (code === TextSegmenter.CODE_PERIOD) || (code === TextSegmenter.CODE_COMMA) ||
+            (code === TextSegmenter.CODE_EXCLAMATION) || (code === TextSegmenter.CODE_QUESTION) ||
+            (code === TextSegmenter.CODE_SEMICOLON) || (code === TextSegmenter.CODE_COLON);
+    }
+
+    /**
+     * Extracts the last word from a string using manual scanning.
+     * Skips trailing whitespace and strips leading punctuation.
+     */
+    private static getLastWord(text: string): string {
+        let i = text.length - 1;
+        // Skip trailing whitespace
+        while (i >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+            i--;
+        }
+        if (i < 0) return '';
+
+        const end = i;
+        // Scan backwards until whitespace
+        while (i >= 0) {
+            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+                break;
+            }
+            i--;
+        }
+
+        let start = i + 1;
+        // Strip leading punctuation from the word
+        while (start <= end) {
+            if (TextSegmenter.isPunctuation(text.charCodeAt(start))) {
+                start++;
+            } else {
+                break;
+            }
+        }
+
+        if (start > end) return '';
+        return text.substring(start, end + 1);
+    }
+
+    /**
+     * Extracts the last two words from a string using manual scanning.
+     * Skips trailing whitespace and strips leading punctuation from the phrase.
+     */
+    private static getLastTwoWords(text: string): string | null {
+        let i = text.length - 1;
+        // Skip trailing whitespace
+        while (i >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+            i--;
+        }
+        if (i < 0) return null;
+
+        const end = i;
+
+        // Scan word 1 backwards
+        while (i >= 0) {
+            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
+            i--;
+        }
+        if (i < 0) return null; // Only one word found or less
+
+        // Scan whitespace between words
+        while (i >= 0) {
+            if (!TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
+            i--;
+        }
+        if (i < 0) return null; // Only whitespace before last word
+
+        // Scan word 2 backwards
+        while (i >= 0) {
+            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
+            i--;
+        }
+
+        let start = i + 1;
+        // Strip leading punctuation
+        while (start <= end) {
+            if (TextSegmenter.isPunctuation(text.charCodeAt(start))) {
+                start++;
+            } else {
+                break;
+            }
+        }
+
+        if (start > end) return null;
+        return text.substring(start, end + 1);
+    }
+
+    /**
+     * Extracts the first word from a string using manual scanning.
+     * Skips leading whitespace and strips trailing punctuation.
+     */
+    private static getFirstWord(text: string): string {
+        let i = 0;
+        const len = text.length;
+        // Skip leading whitespace
+        while (i < len && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+            i++;
+        }
+        if (i >= len) return '';
+
+        const start = i;
+        // Scan forward until whitespace
+        while (i < len) {
+            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
+            i++;
+        }
+
+        let end = i - 1;
+        // Strip trailing punctuation
+        while (end >= start) {
+            if (TextSegmenter.isPunctuation(text.charCodeAt(end))) {
+                end--;
+            } else {
+                break;
+            }
+        }
+
+        if (end < start) return '';
+        return text.substring(start, end + 1);
     }
 
     /**
@@ -255,26 +415,20 @@ export class TextSegmenter {
                 let lastWord = '';
 
                 // Try checking the last word
-                const oneWordMatch = RE_LAST_WORD_TRIMLESS.exec(last.text);
-                const rawLastWord = oneWordMatch ? oneWordMatch[1] : '';
-                // Remove leading punctuation (e.g., "(Mr." -> "Mr.")
-                const cleanLastWord = rawLastWord.replace(RE_LEADING_PUNCTUATION, '');
+                // Optimization: Use manual scan instead of regex for performance
+                const cleanLastWord = TextSegmenter.getLastWord(last.text);
 
                 if (abbrSet.has(cleanLastWord.toLowerCase())) {
                     isAbbreviation = true;
                     lastWord = cleanLastWord;
                 } else {
                     // Try checking the last two words
-                    const twoWordsMatch = RE_LAST_TWO_WORDS_TRIMLESS.exec(last.text);
-                    if (twoWordsMatch) {
-                        const rawLastTwo = twoWordsMatch[1];
-                        // Remove leading punctuation from the phrase (e.g. "(et al." -> "et al.")
-                        const cleanLastTwo = rawLastTwo.replace(RE_LEADING_PUNCTUATION, '');
+                    // Optimization: Use manual scan instead of regex for performance
+                    const cleanLastTwo = TextSegmenter.getLastTwoWords(last.text);
 
-                        if (abbrSet.has(cleanLastTwo.toLowerCase())) {
-                            isAbbreviation = true;
-                            lastWord = cleanLastTwo;
-                        }
+                    if (cleanLastTwo && abbrSet.has(cleanLastTwo.toLowerCase())) {
+                        isAbbreviation = true;
+                        lastWord = cleanLastTwo;
                     }
                 }
 
@@ -286,10 +440,8 @@ export class TextSegmenter {
                         shouldMerge = true;
                     } else {
                         // Check the next segment (current)
-                        // Optimization: Avoid trim() using regex
-                        const match = RE_FIRST_WORD_TRIMLESS.exec(current.text);
-                        const nextFirstWord = match ? match[1] : '';
-                        const cleanNextWord = nextFirstWord.replace(RE_TRAILING_PUNCTUATION, '');
+                        // Optimization: Use manual scan instead of regex for performance
+                        const cleanNextWord = TextSegmenter.getFirstWord(current.text);
 
                         if (!starterSet.has(cleanNextWord)) {
                             shouldMerge = true;
