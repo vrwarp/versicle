@@ -2,7 +2,6 @@ import { Capacitor } from '@capacitor/core';
 import {
     GoogleAuthProvider,
     signInWithCredential,
-    signInWithPopup,
     signInWithRedirect,
     signOut as firebaseSignOut,
     type UserCredential,
