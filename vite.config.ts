@@ -12,7 +12,6 @@ export default defineConfig({
     headers: {
       'X-Frame-Options': 'SAMEORIGIN',
       'X-Content-Type-Options': 'nosniff',
-      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://*.firebaseapp.com; style-src 'self' 'unsafe-inline' blob:; img-src 'self' data: blob: https:; connect-src 'self' https: blob: https://*.googleapis.com https://*.firebaseio.com; font-src 'self' data:;"
     }
