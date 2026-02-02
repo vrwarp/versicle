@@ -46,23 +46,11 @@ export const signInWithGoogle = async (): Promise<UserCredential | undefined> =>
 
     // 2. Web / PWA Flow
     else {
-        try {
-            return await signInWithPopup(auth, provider);
-        } catch (error: any) {
-            // Check for COOP/COEP errors or general popup blocks
-            // This happens when COOP is set to same-origin (required for SharedArrayBuffer/Piper)
-            // preventing access to window.closed on the popup.
-            if (
-                error?.code === 'auth/popup-blocked' ||
-                error?.code === 'auth/cancelled-popup-request' ||
-                error?.message?.includes('Cross-Origin-Opener-Policy')
-            ) {
-                console.warn('Popup blocked or COOP restriction detected. Falling back to redirect.');
-                await signInWithRedirect(auth, provider);
-                return undefined;
-            }
-            throw error;
-        }
+        // Web / PWA Flow: Use Redirect instead of Popup
+        // This avoids COOP/COEP restrictions which block popups in this environment
+        await signInWithRedirect(auth, provider);
+        // Execution stops here as the page redirects.
+        return undefined;
     }
 };
 

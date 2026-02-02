@@ -5,7 +5,13 @@ import { FirestoreSyncManager, getFirestoreSyncManager } from './FirestoreSyncMa
 vi.mock('firebase/auth', () => ({
     onAuthStateChanged: vi.fn(),
     signInWithPopup: vi.fn(),
-    signOut: vi.fn()
+    signInWithRedirect: vi.fn(),
+    getRedirectResult: vi.fn(() => Promise.resolve(null)),
+    signInWithCredential: vi.fn(),
+    signOut: vi.fn(),
+    GoogleAuthProvider: {
+        credential: vi.fn()
+    }
 }));
 
 // Mock y-cinder

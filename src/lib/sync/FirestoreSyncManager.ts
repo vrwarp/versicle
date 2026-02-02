@@ -10,7 +10,7 @@
 */
 import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
 import { yDoc } from '../../store/yjs-provider';
 
@@ -133,6 +133,18 @@ class FirestoreSyncManager {
             logger.error('Firebase Auth not available.');
             this.setAuthStatus('signed-out');
             return;
+        }
+
+        // Handle the result of a redirect sign-in
+        try {
+            const result = await getRedirectResult(auth);
+            if (result) {
+                logger.info('Redirect sign-in successful');
+                this.handleAuthStateChange(result.user);
+            }
+        } catch (error) {
+            logger.error('Redirect sign-in error:', error);
+            this.setStatus('error');
         }
 
         // Set up auth state listener
