@@ -32,7 +32,6 @@ vi.mock('./EmptyLibrary', () => ({
 
 // Mock ReprocessingInterstitial
 vi.mock('./ReprocessingInterstitial', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ReprocessingInterstitial: () => null
 }));
 
