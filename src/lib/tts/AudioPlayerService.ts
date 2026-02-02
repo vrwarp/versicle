@@ -11,6 +11,7 @@ import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { createLogger } from '../logger';
 
 const logger = createLogger('AudioPlayerService');
@@ -724,6 +725,10 @@ export class AudioPlayerService {
         );
 
         if (newQueue && newQueue.length > 0) {
+            // Update Reader UI Store to ensure CompassPill matches
+            const newTitle = newQueue[0].title || `Section ${sectionIndex + 1}`;
+            useReaderUIStore.getState().setCurrentSection(newTitle, currentSectionId);
+
             if (autoPlay) {
                 this.providerManager.stop();
                 await this.persistPlaybackState('stopped');
