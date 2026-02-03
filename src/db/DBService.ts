@@ -13,8 +13,7 @@ import type {
   StaticBookManifest,
   StaticStructure,
   NavigationItem,
-  CachedSegment,
-  ReadingSession
+  CachedSegment
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
 import type { ContentType } from '../types/content-analysis';
@@ -488,13 +487,6 @@ class DBService {
   }
 
 
-  // --- Progress Operations ---
-  // Deprecated: saveProgress removed. Use useReadingStateStore.
-
-  // --- Reading List Operations (Legacy/Mapped) ---
-  // Mapping UserInventory to ReadingListEntry for backward compatibility
-
-
 
   // --- Playback State ---
 
@@ -676,32 +668,15 @@ class DBService {
 
   // --- Reading History Operations ---
 
-
-
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async updateReadingHistory(bookId: string, range: string, _type: ReadingEventType, _label?: string, _isCompletion: boolean = false): Promise<void> {
-    // Phase 2 Cleanup: dedicated user_journey store is removed.
-    // We now rely on completedRanges in useReadingStateStore (Yjs) as a fallback for history display.
+    // Stores reading history in completedRanges via Yjs store
     try {
       const { useReadingStateStore } = await import('../store/useReadingStateStore');
       useReadingStateStore.getState().addCompletedRange(bookId, range);
     } catch (error) {
       logger.error('Failed to update reading history (completed ranges)', error);
     }
-  }
-
-
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
-  async logReadingEvent(_bookId: string, _eventType: ReadingEventType, _data?: any): Promise<void> {
-    // Deprecated: user_journey store removed.
-    return Promise.resolve();
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async getJourneyEvents(_bookId: string): Promise<ReadingSession[]> {
-    // Deprecated: user_journey store removed.
-    return Promise.resolve([]);
   }
 
   // --- Cleanup ---
