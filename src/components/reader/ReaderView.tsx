@@ -18,22 +18,18 @@ import { UnifiedInputController } from './UnifiedInputController';
 import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
-import { Switch } from '../ui/Switch';
-import { Label } from '../ui/Label';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { dbService } from '../../db/DBService';
 import { searchClient, type SearchResult } from '../../lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
-import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor, Loader2 } from 'lucide-react';
+import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
 import { ReaderTTSController } from './ReaderTTSController';
 import { generateCfiRange, snapCfiToSentence } from '../../lib/cfi-utils';
-import { ReadingHistoryPanel } from './ReadingHistoryPanel';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
+import { TOCPanel, SearchPanel } from './panels';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
 import { useSmartTOC } from '../../hooks/useSmartTOC';
-import { Wand2 } from 'lucide-react';
+
 import { cn } from '../../lib/utils';
 import { Dialog } from '../ui/Dialog';
 import { useSidebarState } from '../../hooks/useSidebarState';
@@ -1147,68 +1143,27 @@ export const ReaderView: React.FC = () => {
             <div className="flex-1 relative overflow-hidden flex justify-center">
                 {/* TOC Sidebar (now includes History) */}
                 {showToc && (
-                    <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border z-50 absolute inset-y-0 left-0 md:static flex flex-col">
-                        <Tabs defaultValue="chapters" className="w-full h-full flex flex-col">
-                            <div className="p-4 pb-0">
-                                <TabsList className="grid w-full grid-cols-2">
-                                    <TabsTrigger value="chapters" data-testid="tab-chapters">Chapters</TabsTrigger>
-                                    <TabsTrigger value="history" data-testid="tab-history">History</TabsTrigger>
-                                </TabsList>
-                            </div>
-
-                            <TabsContent value="chapters" className="flex-1 overflow-y-auto mt-2 min-h-0">
-                                <div className="p-4 pt-0">
-                                    <div className="flex flex-col gap-3 mb-4 mt-2">
-                                        <div className="flex items-center space-x-2">
-                                            <Switch
-                                                id="synthetic-toc-mode"
-                                                checked={useSyntheticToc}
-                                                onCheckedChange={setUseSyntheticToc}
-                                            />
-                                            <Label htmlFor="synthetic-toc-mode" className="text-sm font-medium">Generated Titles</Label>
-                                        </div>
-
-                                        {useSyntheticToc && (
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="w-full text-xs"
-                                                onClick={enhanceTOC}
-                                                disabled={isEnhancing}
-                                            >
-                                                {isEnhancing ? (
-                                                    <span>Enhancing... {tocProgress ? `(${tocProgress.current}/${tocProgress.total})` : ''}</span>
-                                                ) : (
-                                                    <>
-                                                        <Wand2 className="w-3 h-3 mr-2" />
-                                                        Enhance Titles with AI
-                                                    </>
-                                                )}
-                                            </Button>
-                                        )}
-                                    </div>
-
-                                    <ul className="space-y-2">
-                                        {(useSyntheticToc ? syntheticToc : toc).map((item, index) => renderTOCItem(item, index))}
-                                        {useSyntheticToc && syntheticToc.length === 0 && (
-                                            <li className="text-sm text-muted-foreground">No generated titles available.</li>
-                                        )}
-                                    </ul>
-                                </div>
-                            </TabsContent>
-
-                            <TabsContent value="history" className="flex-1 overflow-y-auto mt-0 min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
-                                <ReadingHistoryPanel
-                                    bookId={id || ''}
-                                    rendition={rendition}
-                                    trigger={historyTick}
-                                    onNavigate={(cfi) => {
-                                        rendition?.display(cfi);
-                                    }}
-                                />
-                            </TabsContent>
-                        </Tabs>
-                    </div>
+                    <TOCPanel
+                        toc={toc}
+                        syntheticToc={syntheticToc}
+                        useSyntheticToc={useSyntheticToc}
+                        onUseSyntheticTocChange={setUseSyntheticToc}
+                        activeTocId={activeTocId ?? undefined}
+                        deviceMarkers={deviceMarkers}
+                        onNavigate={(href) => {
+                            rendition?.display(href);
+                            setSidebar('none');
+                        }}
+                        isEnhancing={isEnhancing}
+                        tocProgress={tocProgress}
+                        onEnhanceTOC={enhanceTOC}
+                        bookId={id || ''}
+                        rendition={rendition ?? undefined}
+                        historyTick={historyTick}
+                        onHistoryNavigate={(cfi) => {
+                            rendition?.display(cfi);
+                        }}
+                    />
                 )}
 
                 {/* Annotations Sidebar */}
@@ -1226,86 +1181,24 @@ export const ReaderView: React.FC = () => {
 
                 {/* Search Sidebar */}
                 {showSearch && (
-                    <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
-                        <div className="p-4 border-b border-border">
-                            <div className="flex items-center justify-between mb-2">
-                                <h2 className="text-lg font-bold text-foreground">Search</h2>
-                            </div>
-                            <div className="flex gap-2">
-                                <Input
-                                    data-testid="search-input"
-                                    aria-label="Search query"
-                                    type="search"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            handleSearch();
-                                        }
-                                    }}
-                                    placeholder="Search in book..."
-                                    className="bg-background"
-                                />
-                                <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    onClick={handleSearch}
-                                    disabled={isSearching || !searchQuery}
-                                    aria-label="Search"
-                                    className="shrink-0"
-                                >
-                                    {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                                </Button>
-                            </div>
-                            {isIndexing && (
-                                <div className="mt-3 space-y-1">
-                                    <div className="flex justify-between text-xs text-muted-foreground">
-                                        <span>Indexing book...</span>
-                                        <span>{indexingProgress}%</span>
-                                    </div>
-                                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden w-full">
-                                        <div
-                                            className="h-full bg-primary transition-all duration-300 ease-in-out"
-                                            style={{ width: `${indexingProgress}%` }}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4">
-                            {isSearching ? (
-                                <div className="text-center text-muted-foreground">Searching...</div>
-                            ) : (
-                                <ul className="space-y-4">
-                                    {searchResults.map((result, idx) => (
-                                        <li key={idx} className="border-b border-border pb-2 last:border-0">
-                                            <button
-                                                data-testid={`search-result-${idx}`}
-                                                className="text-left w-full"
-                                                onClick={async () => {
-                                                    if (rendition) {
-                                                        await rendition.display(result.href);
-                                                        // Small delay to ensure rendering is complete before searching DOM
-                                                        setTimeout(() => {
-                                                            scrollToText(activeSearchQuery);
-                                                        }, 500);
-                                                    }
-                                                }}
-                                            >
-                                                <p className="text-xs text-muted-foreground mb-1">Result {idx + 1}</p>
-                                                <p className="text-sm text-foreground line-clamp-3">
-                                                    {result.excerpt}
-                                                </p>
-                                            </button>
-                                        </li>
-                                    ))}
-                                    {searchResults.length === 0 && searchQuery && !isSearching && (
-                                        <div className="text-center text-muted-foreground text-sm">No results found</div>
-                                    )}
-                                </ul>
-                            )}
-                        </div>
-                    </div>
+                    <SearchPanel
+                        searchQuery={searchQuery}
+                        onSearchQueryChange={setSearchQuery}
+                        onSearch={handleSearch}
+                        isSearching={isSearching}
+                        searchResults={searchResults}
+                        activeSearchQuery={activeSearchQuery}
+                        isIndexing={isIndexing}
+                        indexingProgress={indexingProgress}
+                        onResultClick={async (result) => {
+                            if (rendition) {
+                                await rendition.display(result.href);
+                                setTimeout(() => {
+                                    scrollToText(activeSearchQuery);
+                                }, 500);
+                            }
+                        }}
+                    />
                 )}
 
                 {/* Reader Area */}

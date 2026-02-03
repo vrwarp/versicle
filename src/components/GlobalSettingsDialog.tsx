@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { useTTSStore } from '../store/useTTSStore';
 import { useLibraryStore, useBookStore } from '../store/useLibraryStore';
@@ -9,17 +9,12 @@ import { useToastStore } from '../store/useToastStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Modal, ModalContent, ModalHeader, ModalTitle } from './ui/Modal';
 import { Button } from './ui/Button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/Select';
-import { Input } from './ui/Input';
-import { Label } from './ui/Label';
-import { Slider } from './ui/Slider';
-import { Switch } from './ui/Switch';
-import { ThemeSelector } from './ThemeSelector';
+
+
 import { useGenAIStore } from '../store/useGenAIStore';
 import { TTSAbbreviationSettings } from './reader/TTSAbbreviationSettings';
 import { LexiconManager } from './reader/LexiconManager';
-import { Checkbox } from './ui/Checkbox';
-import type { ContentType } from '../types/content-analysis';
+
 import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
@@ -30,7 +25,7 @@ import { useFirestoreSync } from '../lib/sync/hooks/useFirestoreSync';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { exportFile } from '../lib/export';
 import { ReadingListDialog } from './ReadingListDialog';
-import { Trash2, Download, Loader2, RotateCcw } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { useDeviceStore } from '../store/useDeviceStore';
 import { getDeviceId } from '../lib/device-id';
@@ -38,8 +33,16 @@ import { getDeviceId } from '../lib/device-id';
 import { DeviceManager } from './devices/DeviceManager';
 import { createLogger } from '../lib/logger';
 import { DataExportWizard } from './sync/DataExportWizard';
-import { useNavigationGuard } from '../hooks/useNavigationGuard';
 import { BackButtonPriority } from '../store/useBackNavigationStore';
+import { useNavigationGuard } from '../hooks/useNavigationGuard';
+import {
+    GeneralSettingsTab,
+    TTSSettingsTab,
+    GenAISettingsTab,
+    SyncSettingsTab,
+    RecoverySettingsTab,
+    DataManagementTab
+} from './settings';
 
 const logger = createLogger('GlobalSettingsDialog');
 
@@ -65,10 +68,7 @@ export const GlobalSettingsDialog = () => {
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
     const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
 
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const csvInputRef = useRef<HTMLInputElement>(null);
-    const zipImportRef = useRef<HTMLInputElement>(null);
-    const folderImportRef = useRef<HTMLInputElement>(null);
+
     const readingListEntries = useReadingListStore(state => state.entries);
     const readingListCount = Object.keys(readingListEntries).length;
     const [isReadingListOpen, setIsReadingListOpen] = useState(false);
@@ -140,59 +140,7 @@ export const GlobalSettingsDialog = () => {
         }
     };
 
-    const handleImportReadingListClick = () => {
-        csvInputRef.current?.click();
-    };
 
-    const handleCsvFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setIsCsvImporting(true);
-        setCsvImportComplete(false);
-        setCsvImportMessage('Reading file...');
-
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            const text = ev.target?.result as string;
-            if (text) {
-                try {
-                    setCsvImportMessage('Parsing CSV...');
-                    // Artificial delay for UX
-                    await new Promise(r => setTimeout(r, 500));
-                    const entries = parseReadingListCSV(text);
-
-                    setCsvImportMessage(`Importing ${entries.length} entries and syncing with library...`);
-                    // Another small delay to ensure the user sees the message
-                    await new Promise(r => setTimeout(r, 500));
-
-                    const store = useReadingListStore.getState();
-                    const rsStore = useReadingStateStore.getState();
-                    for (const entry of entries) {
-                        store.upsertEntry(entry);
-                        if (entry.percentage !== undefined) {
-                            // Find bookId by filename (sourceFilename in inventory)
-                            const book = Object.values(useBookStore.getState().books).find(b => b.sourceFilename === entry.filename);
-                            const targetId = book ? book.bookId : entry.filename;
-                            rsStore.updateLocation(targetId, '', entry.percentage);
-                        }
-                    }
-
-                    // No need to setReadingListCount, it's reactive.
-
-                    setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
-                    setCsvImportComplete(true);
-                } catch (err) {
-                    logger.error('CSV import failed', err);
-                    setCsvImportMessage('Failed to import CSV.');
-                    // Allow retry after a delay
-                    setTimeout(() => setIsCsvImporting(false), 2000);
-                }
-            }
-            e.target.value = ''; // Reset
-        };
-        reader.readAsText(file);
-    };
 
     const handleReturnToLibrary = async () => {
         setIsCsvImporting(false);
@@ -200,21 +148,6 @@ export const GlobalSettingsDialog = () => {
         setCsvImportMessage('');
         // Phase 2: No need to fetchBooks - Yjs auto-syncs
         setGlobalSettingsOpen(false);
-    };
-
-    const handleBatchImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            const files = Array.from(e.target.files);
-            try {
-                await addBooks(files);
-                showToast(`Batch import started for ${files.length} items.`, 'success');
-                setGlobalSettingsOpen(false);
-            } catch (err) {
-                logger.error("Batch import failed", err);
-                showToast("Failed to start batch import.", "error");
-            }
-        }
-        e.target.value = '';
     };
 
     const handleClearContentAnalysis = async () => {
@@ -387,33 +320,7 @@ export const GlobalSettingsDialog = () => {
         }
     };
 
-    const handleRestoreClick = () => {
-        fileInputRef.current?.click();
-    };
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        if (!confirm('Restoring a backup will merge data into your library. Existing books will be updated. Continue?')) {
-            e.target.value = '';
-            return;
-        }
-
-        try {
-            setBackupStatus('Starting restore...');
-            await backupService.restoreBackup(file, (percent, msg) => {
-                setBackupStatus(`Restore: ${percent}% - ${msg} `);
-            });
-            setBackupStatus('Restore complete! Reloading...');
-            setTimeout(() => window.location.reload(), 500);
-        } catch (error) {
-            logger.error('Restore failed', error);
-            setBackupStatus(`Restore failed: ${error instanceof Error ? error.message : 'Unknown error'} `);
-        } finally {
-            e.target.value = '';
-        }
-    };
 
     const handleDownloadGenAILogs = async () => {
         const content = genAILogs.map(log =>
@@ -462,6 +369,64 @@ export const GlobalSettingsDialog = () => {
                 measurementId: ''
             });
             setFirebaseEnabled(false);
+        }
+    };
+
+    const handleImportReadingListFile = async (file: File) => {
+        setIsCsvImporting(true);
+        setCsvImportComplete(false);
+        setCsvImportMessage('Reading file...');
+
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            const text = ev.target?.result as string;
+            if (text) {
+                try {
+                    setCsvImportMessage('Parsing CSV...');
+                    await new Promise(r => setTimeout(r, 500));
+                    const entries = parseReadingListCSV(text);
+
+                    setCsvImportMessage(`Importing ${entries.length} entries and syncing with library...`);
+                    await new Promise(r => setTimeout(r, 500));
+
+                    const store = useReadingListStore.getState();
+                    const rsStore = useReadingStateStore.getState();
+                    for (const entry of entries) {
+                        store.upsertEntry(entry);
+                        if (entry.percentage !== undefined) {
+                            const book = Object.values(useBookStore.getState().books).find(b => b.sourceFilename === entry.filename);
+                            const targetId = book ? book.bookId : entry.filename;
+                            rsStore.updateLocation(targetId, '', entry.percentage);
+                        }
+                    }
+
+                    setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
+                    setCsvImportComplete(true);
+                } catch (err) {
+                    logger.error('CSV import failed', err);
+                    setCsvImportMessage('Failed to import CSV.');
+                    setTimeout(() => setIsCsvImporting(false), 2000);
+                }
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    const handleRestoreBackupFile = async (file: File) => {
+        if (!confirm('Restoring a backup will merge data into your library. Existing books will be updated. Continue?')) {
+            return;
+        }
+
+        try {
+            setBackupStatus('Starting restore...');
+            await backupService.restoreBackup(file, (percent, msg) => {
+                setBackupStatus(`Restore: ${percent}% - ${msg} `);
+            });
+            setBackupStatus('Restore complete! Reloading...');
+            setTimeout(() => window.location.reload(), 500);
+        } catch (error) {
+            logger.error('Restore failed', error);
+            setBackupStatus(`Restore failed: ${error instanceof Error ? error.message : 'Unknown error'} `);
         }
     };
 
@@ -525,916 +490,167 @@ export const GlobalSettingsDialog = () => {
                     {/* Content */}
                     <div className="w-full sm:w-3/4 p-4 sm:p-8 overflow-y-auto flex-1">
                         {activeTab === 'general' && (
-                            <div className="space-y-6">
-                                <div>
-                                    <h3 className="text-lg font-medium mb-4">Appearance</h3>
-                                    <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <h4 className="text-sm font-medium">Theme</h4>
-                                            <ThemeSelector
-                                                currentTheme={currentTheme}
-                                                onThemeChange={setTheme}
-                                                className="w-full sm:w-[400px]"
-                                            />
-                                            <p className="text-sm text-muted-foreground pt-1">
-                                                Choose the application theme.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="border-t pt-6">
-                                    <h3 className="text-lg font-medium mb-4">Advanced Import</h3>
-                                    <p className="text-sm text-muted-foreground mb-4">
-                                        Tools for importing multiple books at once.
-                                    </p>
-                                    <div className="flex flex-col gap-2">
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => zipImportRef.current?.click()}
-                                            disabled={isImporting}
-                                        >
-                                            Import ZIP Archive
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => folderImportRef.current?.click()}
-                                            disabled={isImporting}
-                                        >
-                                            Import Folder
-                                        </Button>
-                                    </div>
-                                    <input
-                                        type="file"
-                                        ref={zipImportRef}
-                                        accept=".zip"
-                                        className="hidden"
-                                        onChange={handleBatchImport}
-                                    />
-                                    <input
-                                        type="file"
-                                        ref={folderImportRef}
-                                        // @ts-expect-error webkitdirectory is non-standard
-                                        webkitdirectory=""
-                                        directory=""
-                                        className="hidden"
-                                        onChange={handleBatchImport}
-                                    />
-
-                                    {isImporting && (
-                                        <div className="flex flex-col items-center justify-center space-y-3 mt-4 p-4 bg-muted/30 rounded-lg">
-                                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-
-                                            {/* Upload/Processing Progress */}
-                                            <div className="w-full flex flex-col items-center space-y-1">
-                                                <p className="text-sm text-muted-foreground">{uploadStatus || 'Processing files...'}</p>
-                                                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-primary/70 transition-all duration-300 ease-out"
-                                                        style={{ width: `${uploadProgress}% ` }}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Import Progress (only show if upload is done or if import started) */}
-                                            {(importProgress > 0 || uploadProgress >= 100) && (
-                                                <div className="w-full flex flex-col items-center space-y-1 mt-2">
-                                                    <p className="text-muted-foreground font-medium">{importStatus || 'Importing books...'}</p>
-                                                    <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-primary transition-all duration-300 ease-out"
-                                                            style={{ width: `${importProgress}% ` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                            <GeneralSettingsTab
+                                currentTheme={currentTheme}
+                                onThemeChange={setTheme}
+                                isImporting={isImporting}
+                                importProgress={importProgress}
+                                importStatus={importStatus}
+                                uploadProgress={uploadProgress}
+                                uploadStatus={uploadStatus}
+                                onBatchImport={(files) => {
+                                    addBooks(Array.from(files));
+                                    setGlobalSettingsOpen(false);
+                                }}
+                            />
                         )}
 
                         {activeTab === 'tts' && (
-                            <div className="space-y-6">
-                                <div>
-                                    <h3 className="text-lg font-medium mb-4">Provider Configuration</h3>
-                                    <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="tts-provider-select" className="text-sm font-medium">Active Provider</Label>
-                                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                            <Select value={providerId} onValueChange={(val: any) => setProviderId(val)}>
-                                                <SelectTrigger id="tts-provider-select" data-testid="tts-provider-select"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="local">Web Speech (Local)</SelectItem>
-                                                    <SelectItem value="piper">Piper (High Quality Local)</SelectItem>
-                                                    <SelectItem value="google">Google Cloud TTS</SelectItem>
-                                                    <SelectItem value="openai">OpenAI</SelectItem>
-                                                    <SelectItem value="lemonfox">LemonFox.ai</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="space-y-4 pt-4 border-t">
-                                            <div className="space-y-1">
-                                                <h4 className="text-sm font-medium">Background Audio & Keep-Alive</h4>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Prevents playback from stopping when the screen is locked.
-                                                </p>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <Label htmlFor="tts-mode-select" className="text-sm font-medium">Mode</Label>
-                                                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                                <Select value={backgroundAudioMode} onValueChange={(val: any) => setBackgroundAudioMode(val)}>
-                                                    <SelectTrigger id="tts-mode-select"><SelectValue /></SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="silence">Silence (Default)</SelectItem>
-                                                        <SelectItem value="noise">White Noise</SelectItem>
-                                                        <SelectItem value="off">Off (Save Battery)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-
-                                            {backgroundAudioMode === 'noise' && (
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between">
-                                                        <div id="white-noise-label" className="text-sm font-medium">White Noise Volume</div>
-                                                        <span className="text-sm text-muted-foreground">{Math.round(whiteNoiseVolume * 100)}%</span>
-                                                    </div>
-                                                    <Slider
-                                                        aria-labelledby="white-noise-label"
-                                                        value={[whiteNoiseVolume]}
-                                                        min={0}
-                                                        max={1}
-                                                        step={0.01}
-                                                        onValueChange={(vals) => setWhiteNoiseVolume(vals[0])}
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {providerId === 'piper' && (
-                                            <div className="space-y-4 pt-4 border-t">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="tts-voice-select" className="text-sm font-medium">Select Voice</Label>
-                                                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                                    <Select value={voice?.id} onValueChange={(val: any) => {
-                                                        const v = voices.find(v => v.id === val);
-                                                        setVoice(v || null);
-                                                    }}>
-                                                        <SelectTrigger id="tts-voice-select"><SelectValue placeholder="Select a voice" /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {voices.map(v => (
-                                                                <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-
-                                                {voice && (
-                                                    <div className="space-y-3 p-3 bg-muted/50 rounded-md">
-                                                        <div className="flex flex-col gap-2">
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-sm font-medium">Voice Data</span>
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    {isVoiceReady ? "Downloaded" : "Not Downloaded"}
-                                                                </span>
-                                                            </div>
-
-                                                            {isDownloading ? (
-                                                                <div className="space-y-2">
-                                                                    <div className="flex justify-between text-xs">
-                                                                        <span>{downloadStatus}</span>
-                                                                        <span>{Math.round(downloadProgress)}%</span>
-                                                                    </div>
-                                                                    <div className="h-2 bg-secondary rounded overflow-hidden">
-                                                                        <div className="h-full bg-primary transition-all duration-300" style={{ width: `${downloadProgress}% ` }} />
-                                                                    </div>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="flex gap-2">
-                                                                    <Button
-                                                                        onClick={() => downloadVoice(voice.id)}
-                                                                        variant={isVoiceReady ? "outline" : "default"}
-                                                                        disabled={isVoiceReady}
-                                                                        size="sm"
-                                                                        className="flex-1"
-                                                                    >
-                                                                        {isVoiceReady ? "Ready to Use" : "Download Voice Data"}
-                                                                    </Button>
-                                                                    {isVoiceReady && (
-                                                                        <Button
-                                                                            onClick={() => {
-                                                                                if (confirm('Delete downloaded voice data?')) {
-                                                                                    deleteVoice(voice.id).then(() => {
-                                                                                        setIsVoiceReady(false);
-                                                                                    });
-                                                                                }
-                                                                            }}
-                                                                            variant="destructive"
-                                                                            size="icon"
-                                                                            title="Delete Voice Data"
-                                                                            aria-label="Delete Voice Data"
-                                                                        >
-                                                                            <Trash2 className="h-4 w-4" />
-                                                                        </Button>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {providerId === 'google' && (
-                                            <div className="space-y-2">
-                                                <Label htmlFor="tts-google-key">Google API Key</Label>
-                                                <Input
-                                                    id="tts-google-key"
-                                                    type="password"
-                                                    value={apiKeys.google}
-                                                    onChange={(e) => setApiKey('google', e.target.value)}
-                                                />
-                                            </div>
-                                        )}
-                                        {providerId === 'openai' && (
-                                            <div className="space-y-2">
-                                                <Label htmlFor="tts-openai-key">OpenAI API Key</Label>
-                                                <Input
-                                                    id="tts-openai-key"
-                                                    type="password"
-                                                    value={apiKeys.openai}
-                                                    onChange={(e) => setApiKey('openai', e.target.value)}
-                                                />
-                                            </div>
-                                        )}
-                                        {providerId === 'lemonfox' && (
-                                            <div className="space-y-2">
-                                                <Label htmlFor="tts-lemonfox-key">LemonFox API Key</Label>
-                                                <Input
-                                                    id="tts-lemonfox-key"
-                                                    type="password"
-                                                    value={apiKeys.lemonfox}
-                                                    onChange={(e) => setApiKey('lemonfox', e.target.value)}
-                                                />
-                                            </div>
-                                        )}
-
-                                        <div className="pt-4 border-t space-y-4">
-                                            <h4 className="text-sm font-medium">Text Processing</h4>
-                                            <div className="space-y-2">
-                                                <div className="flex justify-between">
-                                                    <div className="space-y-0.5">
-                                                        <div id="min-sentence-label" className="text-sm font-medium">Minimum Sentence Length</div>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Sentences shorter than this will be merged with adjacent ones.
-                                                        </p>
-                                                    </div>
-                                                    <span className="text-sm text-muted-foreground">{minSentenceLength} chars</span>
-                                                </div>
-                                                <Slider
-                                                    aria-labelledby="min-sentence-label"
-                                                    value={[minSentenceLength]}
-                                                    min={0}
-                                                    max={120}
-                                                    step={6}
-                                                    onValueChange={(vals) => setMinSentenceLength(vals[0])}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <TTSSettingsTab
+                                providerId={providerId}
+                                onProviderChange={setProviderId}
+                                apiKeys={apiKeys}
+                                onApiKeyChange={setApiKey}
+                                backgroundAudioMode={backgroundAudioMode}
+                                onBackgroundAudioModeChange={setBackgroundAudioMode}
+                                whiteNoiseVolume={whiteNoiseVolume}
+                                onWhiteNoiseVolumeChange={setWhiteNoiseVolume}
+                                voice={voice}
+                                voices={voices}
+                                onVoiceChange={setVoice}
+                                isVoiceReady={isVoiceReady}
+                                isDownloading={isDownloading}
+                                downloadProgress={downloadProgress}
+                                downloadStatus={downloadStatus}
+                                onDownloadVoice={downloadVoice}
+                                onDeleteVoice={(voiceId) => {
+                                    deleteVoice(voiceId).then(() => setIsVoiceReady(false));
+                                }}
+                                minSentenceLength={minSentenceLength}
+                                onMinSentenceLengthChange={setMinSentenceLength}
+                            />
                         )}
 
                         {activeTab === 'genai' && (
-                            <div className="space-y-6">
-                                <div>
-                                    <h3 className="text-lg font-medium mb-4">Generative AI Configuration</h3>
-                                    <p className="text-sm text-muted-foreground mb-4">
-                                        Enable advanced features powered by Google Gemini (e.g., smart TOC, pronunciation guides).
-                                    </p>
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="space-y-0.5">
-                                                <label htmlFor="genai-toggle" className="text-sm font-medium">Enable AI Features</label>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Allows the app to send content to the AI provider.
-                                                </p>
-                                            </div>
-                                            <Switch
-                                                id="genai-toggle"
-                                                checked={isGenAIEnabled}
-                                                onCheckedChange={setGenAIEnabled}
-                                            />
-                                        </div>
-
-                                        {isGenAIEnabled && (
-                                            <>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="genai-api-key">Gemini API Key</Label>
-                                                    <Input
-                                                        id="genai-api-key"
-                                                        type="password"
-                                                        value={genAIApiKey}
-                                                        onChange={(e) => setGenAIApiKey(e.target.value)}
-                                                        placeholder="Enter your Google Gemini API Key"
-                                                    />
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Your key is stored locally on this device.
-                                                    </p>
-                                                </div>
-
-                                                <div className="flex items-center justify-between border-b pb-4">
-                                                    <div className="space-y-0.5">
-                                                        <label htmlFor="genai-rotation" className="text-sm font-medium">Free Tier Rotation</label>
-                                                        <p className="text-xs text-muted-foreground max-w-sm">
-                                                            Maximizes free quota by randomly rotating between gemini-2.5-flash-lite and gemini-2.5-flash on each request. Retries with a different model if one is exhausted (429).
-                                                        </p>
-                                                    </div>
-                                                    <Switch
-                                                        id="genai-rotation"
-                                                        checked={isModelRotationEnabled}
-                                                        onCheckedChange={setModelRotationEnabled}
-                                                    />
-                                                </div>
-
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="genai-model-select" className="text-sm font-medium">Model</Label>
-                                                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                                    <Select value={genAIModel} onValueChange={(val: any) => setGenAIModel(val)} disabled={isModelRotationEnabled}>
-                                                        <SelectTrigger id="genai-model-select"><SelectValue /></SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="gemini-flash-lite-latest">Gemini Flash-Lite Latest (Recommended)</SelectItem>
-                                                            <SelectItem value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</SelectItem>
-                                                            <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
-                                                            <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
-                                                            <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                    {isModelRotationEnabled && (
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Model selection is handled automatically when rotation is enabled.
-                                                        </p>
-                                                    )}
-                                                </div>
-
-                                                <div className="pt-4 border-t space-y-4">
-                                                    <h4 className="text-sm font-medium">Advanced Features</h4>
-                                                    <div className="space-y-4">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="space-y-0.5">
-                                                                <label htmlFor="genai-content-detection" className="text-sm font-medium">Content Type Detection & Filtering</label>
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    Automatically detects and skips non-narrative content (e.g., tables, footnotes).
-                                                                </p>
-                                                            </div>
-                                                            <Switch
-                                                                id="genai-content-detection"
-                                                                checked={isContentAnalysisEnabled}
-                                                                onCheckedChange={setContentAnalysisEnabled}
-                                                            />
-                                                        </div>
-
-                                                        {isContentAnalysisEnabled && (
-                                                            <div className="space-y-3 pl-4 border-l-2 border-muted">
-                                                                <h5 className="text-sm font-medium">Skip Content Types</h5>
-                                                                <p className="text-xs text-muted-foreground mb-2">
-                                                                    Select which detected content types should be skipped during playback.
-                                                                </p>
-                                                                <div className="grid grid-cols-2 gap-2">
-                                                                    {(['footnote', 'table', 'other', 'title', 'main'] as ContentType[]).map((type) => (
-                                                                        <div key={type} className="flex items-center space-x-2">
-                                                                            <Checkbox
-                                                                                id={`skip - ${type} `}
-                                                                                checked={contentFilterSkipTypes.includes(type)}
-                                                                                onCheckedChange={(checked) => {
-                                                                                    if (checked) {
-                                                                                        setContentFilterSkipTypes([...contentFilterSkipTypes, type]);
-                                                                                    } else {
-                                                                                        setContentFilterSkipTypes(contentFilterSkipTypes.filter(t => t !== type));
-                                                                                    }
-                                                                                }}
-                                                                            />
-                                                                            <label
-                                                                                htmlFor={`skip - ${type} `}
-                                                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 capitalize"
-                                                                            >
-                                                                                {type}
-                                                                            </label>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-
-                                                                <div className="pt-4">
-                                                                    <div className="flex items-center justify-between">
-                                                                        <div className="space-y-0.5">
-                                                                            <label htmlFor="genai-debug" className="text-sm font-medium">Enable Content Analysis Debugging</label>
-                                                                            <p className="text-xs text-muted-foreground">
-                                                                                Highlights content based on its detected type in the reader.
-                                                                            </p>
-                                                                        </div>
-                                                                        <Switch
-                                                                            id="genai-debug"
-                                                                            checked={isDebugModeEnabled}
-                                                                            onCheckedChange={setDebugModeEnabled}
-                                                                        />
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className="pt-2">
-                                                                    <Button variant="outline" size="sm" onClick={handleClearContentAnalysis}>
-                                                                        Clear Content Analysis Cache
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
-                                                        )}
-
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="space-y-0.5">
-                                                                <label htmlFor="genai-table-adaptation" className="text-sm font-medium">Table Teleprompter</label>
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    Uses GenAI to convert table images into natural speech narration.
-                                                                </p>
-                                                            </div>
-                                                            <Switch
-                                                                id="genai-table-adaptation"
-                                                                checked={isTableAdaptationEnabled}
-                                                                onCheckedChange={setTableAdaptationEnabled}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="pt-4 border-t space-y-4">
-                                                    <div className="flex items-center justify-between">
-                                                        <h4 className="text-sm font-medium">Debug Logs</h4>
-                                                        <Button variant="outline" size="sm" onClick={handleDownloadGenAILogs} disabled={genAILogs.length === 0}>
-                                                            <Download className="h-4 w-4 mr-2" />
-                                                            Download Logs
-                                                        </Button>
-                                                    </div>
-                                                    <div className="bg-muted p-2 rounded-md h-40 overflow-y-auto font-mono text-xs">
-                                                        {genAILogs.length === 0 ? (
-                                                            <span className="text-muted-foreground">No logs available.</span>
-                                                        ) : (
-                                                            genAILogs.slice().reverse().map(log => (
-                                                                <div key={log.id} className="mb-2 border-b last:border-0 pb-2">
-                                                                    <div className="font-semibold text-primary">
-                                                                        [{new Date(log.timestamp).toLocaleTimeString()}] {log.type.toUpperCase()} - {log.method}
-                                                                    </div>
-                                                                    <div className="whitespace-pre-wrap truncate line-clamp-2">
-                                                                        {JSON.stringify(log.payload)}
-                                                                    </div>
-                                                                </div>
-                                                            ))
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
+                            <GenAISettingsTab
+                                isEnabled={isGenAIEnabled}
+                                onEnabledChange={setGenAIEnabled}
+                                apiKey={genAIApiKey}
+                                onApiKeyChange={setGenAIApiKey}
+                                model={genAIModel}
+                                onModelChange={setGenAIModel}
+                                isModelRotationEnabled={isModelRotationEnabled}
+                                onModelRotationChange={setModelRotationEnabled}
+                                isContentAnalysisEnabled={isContentAnalysisEnabled}
+                                onContentAnalysisChange={setContentAnalysisEnabled}
+                                contentFilterSkipTypes={contentFilterSkipTypes}
+                                onContentFilterSkipTypesChange={setContentFilterSkipTypes}
+                                isDebugModeEnabled={isDebugModeEnabled}
+                                onDebugModeChange={setDebugModeEnabled}
+                                onClearContentAnalysis={handleClearContentAnalysis}
+                                isTableAdaptationEnabled={isTableAdaptationEnabled}
+                                onTableAdaptationChange={setTableAdaptationEnabled}
+                                logs={genAILogs}
+                                onDownloadLogs={handleDownloadGenAILogs}
+                            />
                         )}
 
                         {activeTab === 'sync' && (
-                            <div className="space-y-6">
-                                <div>
-                                    <h3 className="text-lg font-medium mb-4">Cross-Device Sync</h3>
-                                    <p className="text-sm text-muted-foreground mb-4">
-                                        Sync your reading progress, annotations, and reading list across devices.
-                                    </p>
-
-                                    {/* Device Identity */}
-                                    <div className="space-y-4 mb-6 pb-6 border-b">
-                                        <h4 className="text-sm font-medium">Device Identity</h4>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="device-name-input">Device Name</Label>
-                                            <Input
-                                                id="device-name-input"
-                                                value={devices[currentDeviceId]?.name || ''}
-                                                onChange={(e) => renameDevice(currentDeviceId, e.target.value)}
-                                                placeholder="My Device"
-                                            />
-                                            <p className="text-xs text-muted-foreground">
-                                                ID: {currentDeviceId}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Provider Selection */}
-                                    <div className="space-y-4 mb-6">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="sync-provider-select" className="text-sm font-medium">Sync Provider</Label>
-                                            <Select value={syncProvider} onValueChange={(val) => setSyncProvider(val as 'none' | 'firebase')}>
-                                                <SelectTrigger id="sync-provider-select">
-                                                    <SelectValue placeholder="Select sync provider" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="none">Disabled</SelectItem>
-                                                    <SelectItem value="firebase">Firebase (Recommended)</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <p className="text-xs text-muted-foreground">
-                                                {syncProvider === 'firebase' && 'Real-time sync with automatic conflict resolution.'}
-                                                {syncProvider === 'none' && 'Sync is disabled. Data is stored locally only.'}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Firebase Sync Section */}
-                                    {syncProvider === 'firebase' && (
-                                        <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-                                            <h4 className="text-sm font-medium">Firebase Configuration</h4>
-
-                                            {!isFirebaseAvailable ? (
-                                                /* Configuration Form */
-                                                <div className="space-y-3">
-                                                    <p className="text-sm text-muted-foreground">
-                                                        Paste your Firebase configuration snippet from the Firebase Console (Project Settings → General → Your apps), or enter credentials manually.
-                                                    </p>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="firebase-config-paste">Paste Firebase Config</Label>
-                                                        <textarea
-                                                            id="firebase-config-paste"
-                                                            className="w-full h-32 p-2 text-xs font-mono border rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                                                            placeholder={`// Paste your Firebase config here, e.g.:
-const firebaseConfig = {
-    apiKey: "AIza...",
-    authDomain: "your-project.firebaseapp.com",
-    projectId: "your-project",
-    storageBucket: "your-project.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abc123",
-    measurementId: "G-XXXXXXX"
-}; `}
-                                                            onChange={(e) => {
-                                                                const text = e.target.value;
-                                                                // Parse the pasted Firebase config
-                                                                const extractValue = (key: string): string => {
-                                                                    const patterns = [
-                                                                        new RegExp(`${key}\\s*:\\s*["']([^"']+)["']`),
-                                                                        new RegExp(`"${key}"\\s*:\\s*["']([^"']+)["']`),
-                                                                    ];
-                                                                    for (const pattern of patterns) {
-                                                                        const match = text.match(pattern);
-                                                                        if (match) return match[1];
-                                                                    }
-                                                                    return '';
-                                                                };
-
-                                                                const apiKey = extractValue('apiKey');
-                                                                const authDomain = extractValue('authDomain');
-                                                                const projectId = extractValue('projectId');
-                                                                const storageBucket = extractValue('storageBucket');
-                                                                const messagingSenderId = extractValue('messagingSenderId');
-                                                                const appId = extractValue('appId');
-                                                                const measurementId = extractValue('measurementId');
-
-                                                                // Only update if we found at least some values
-                                                                if (apiKey || authDomain || projectId || appId) {
-                                                                    setFirebaseConfig({
-                                                                        ...(apiKey && { apiKey }),
-                                                                        ...(authDomain && { authDomain }),
-                                                                        ...(projectId && { projectId }),
-                                                                        ...(storageBucket && { storageBucket }),
-                                                                        ...(messagingSenderId && { messagingSenderId }),
-                                                                        ...(appId && { appId }),
-                                                                        ...(measurementId && { measurementId }),
-                                                                    });
-                                                                }
-                                                            }}
-                                                        />
-                                                    </div>
-                                                    <div className="border-t pt-3 mt-2">
-                                                        <p className="text-xs text-muted-foreground mb-3">Or edit fields individually:</p>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="firebase-api-key">API Key</Label>
-                                                        <Input
-                                                            id="firebase-api-key"
-                                                            type="password"
-                                                            value={firebaseConfig.apiKey}
-                                                            onChange={(e) => setFirebaseConfig({ apiKey: e.target.value })}
-                                                            placeholder="AIza..."
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="firebase-auth-domain">Auth Domain</Label>
-                                                        <Input
-                                                            id="firebase-auth-domain"
-                                                            type="text"
-                                                            value={firebaseConfig.authDomain}
-                                                            onChange={(e) => setFirebaseConfig({ authDomain: e.target.value })}
-                                                            placeholder="your-project.firebaseapp.com"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="firebase-project-id">Project ID</Label>
-                                                        <Input
-                                                            id="firebase-project-id"
-                                                            type="text"
-                                                            value={firebaseConfig.projectId}
-                                                            onChange={(e) => setFirebaseConfig({ projectId: e.target.value })}
-                                                            placeholder="your-project-id"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="firebase-storage-bucket">Storage Bucket</Label>
-                                                        <Input
-                                                            id="firebase-storage-bucket"
-                                                            type="text"
-                                                            value={firebaseConfig.storageBucket}
-                                                            onChange={(e) => setFirebaseConfig({ storageBucket: e.target.value })}
-                                                            placeholder="your-project.appspot.com"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="firebase-messaging-sender-id">Messaging Sender ID</Label>
-                                                        <Input
-                                                            id="firebase-messaging-sender-id"
-                                                            type="text"
-                                                            value={firebaseConfig.messagingSenderId}
-                                                            onChange={(e) => setFirebaseConfig({ messagingSenderId: e.target.value })}
-                                                            placeholder="123456789"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="firebase-app-id">App ID</Label>
-                                                        <Input
-                                                            id="firebase-app-id"
-                                                            type="text"
-                                                            value={firebaseConfig.appId}
-                                                            onChange={(e) => setFirebaseConfig({ appId: e.target.value })}
-                                                            placeholder="1:123456789:web:abc123"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            ) : firebaseAuthStatus === 'signed-in' ? (
-                                                /* Connected State */
-                                                <div className="space-y-3">
-                                                    <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-md">
-                                                        <div className="space-y-0.5">
-                                                            <p className="text-sm font-medium text-green-700 dark:text-green-400">
-                                                                {firestoreStatus === 'connected' ? '✓ Connected' : 'Connecting...'}
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground">
-                                                                Signed in as {firebaseUserEmail}
-                                                            </p>
-                                                        </div>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            onClick={async () => {
-                                                                await firebaseSignOut();
-                                                            }}
-                                                        >
-                                                            Sign Out
-                                                        </Button>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        Your data is syncing automatically in real-time.
-                                                    </p>
-                                                </div>
-                                            ) : (
-                                                /* Sign In State */
-                                                <div className="space-y-3">
-                                                    <p className="text-sm text-muted-foreground">
-                                                        Sign in with your Google account to enable real-time sync.
-                                                    </p>
-                                                    <Button
-                                                        onClick={async () => {
-                                                            setIsFirebaseSigningIn(true);
-                                                            try {
-                                                                await firebaseSignIn();
-                                                                setFirebaseEnabled(true);
-                                                            } catch (e) {
-                                                                logger.error('Firebase sign in failed:', e);
-                                                                showToast('Sign in failed. Please try again.', 'error');
-                                                            } finally {
-                                                                setIsFirebaseSigningIn(false);
-                                                            }
-                                                        }}
-                                                        disabled={isFirebaseSigningIn}
-                                                        className="w-full"
-                                                    >
-                                                        {isFirebaseSigningIn ? (
-                                                            <>
-                                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                                Signing in...
-                                                            </>
-                                                        ) : (
-                                                            'Sign in with Google'
-                                                        )}
-                                                    </Button>
-                                                    <div className="flex justify-center pt-2">
-                                                        <Button variant="ghost" size="sm" onClick={handleClearConfig}>
-                                                            Clear Configuration
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                </div>
-                            </div>
+                            <SyncSettingsTab
+                                currentDeviceId={currentDeviceId}
+                                currentDeviceName={devices[currentDeviceId]?.name || 'Unknown Device'}
+                                onDeviceRename={(name) => renameDevice(currentDeviceId, name)}
+                                syncProvider={syncProvider}
+                                onSyncProviderChange={setSyncProvider}
+                                isFirebaseAvailable={isFirebaseAvailable}
+                                firebaseAuthStatus={firebaseAuthStatus}
+                                firestoreStatus={firestoreStatus}
+                                firebaseUserEmail={firebaseUserEmail}
+                                isFirebaseSigningIn={isFirebaseSigningIn}
+                                firebaseConfig={firebaseConfig}
+                                onFirebaseConfigChange={(updates) => setFirebaseConfig({ ...firebaseConfig, ...updates })}
+                                onFirebaseSignIn={async () => {
+                                    setIsFirebaseSigningIn(true);
+                                    try {
+                                        await firebaseSignIn();
+                                    } finally {
+                                        setIsFirebaseSigningIn(false);
+                                    }
+                                }}
+                                onFirebaseSignOut={async () => {
+                                    await firebaseSignOut();
+                                }}
+                                onClearConfig={handleClearConfig}
+                            />
                         )}
 
-                        {activeTab === 'devices' && (
-                            <div className="space-y-6">
-                                <DeviceManager />
-                            </div>
-                        )}
+                        {
+                            activeTab === 'devices' && (
+                                <div className="space-y-6">
+                                    <DeviceManager />
+                                </div>
+                            )
+                        }
 
-                        {activeTab === 'recovery' && (
-                            <div className="space-y-6">
-                                <div>
-                                    <h3 className="text-lg font-medium mb-4">Disaster Recovery</h3>
-                                    <p className="text-sm text-muted-foreground mb-4">
-                                        Restore your library state from local checkpoints. Checkpoints are created automatically before sync.
-                                    </p>
-                                    {recoveryStatus && (
-                                        <div className="mb-4 p-2 bg-muted text-sm rounded">
-                                            {recoveryStatus}
-                                        </div>
-                                    )}
-                                    <div className="space-y-2">
-                                        {checkpoints.length === 0 ? (
-                                            <p className="text-sm text-muted-foreground">No checkpoints available.</p>
-                                        ) : (
-                                            checkpoints.map((cp) => (
-                                                <div key={cp.id} className="flex items-center justify-between p-3 border rounded-md">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-medium text-sm">
-                                                            {new Date(cp.timestamp).toLocaleString()}
-                                                        </span>
-                                                        <span className="text-xs text-muted-foreground capitalize">
-                                                            Trigger: {cp.trigger}
-                                                        </span>
-                                                    </div>
-                                                    <Button size="sm" variant="outline" onClick={() => handleRestoreCheckpoint(cp.id)}>
-                                                        <RotateCcw className="h-4 w-4 mr-2" />
-                                                        Restore
-                                                    </Button>
-                                                </div>
-                                            ))
-                                        )}
+                        {
+                            activeTab === 'recovery' && (
+                                <RecoverySettingsTab
+                                    checkpoints={checkpoints}
+                                    recoveryStatus={recoveryStatus}
+                                    onRestoreCheckpoint={handleRestoreCheckpoint}
+                                />
+                            )
+                        }
+
+                        {
+                            activeTab === 'dictionary' && (
+                                <div className="space-y-8">
+                                    <div className="space-y-4">
+                                        <h3 className="text-lg font-medium">Pronunciation Lexicon</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            Manage global and book-specific pronunciation rules.
+                                        </p>
+                                        <Button onClick={() => setIsLexiconOpen(true)}>Manage Rules</Button>
+                                        <LexiconManager open={isLexiconOpen} onOpenChange={setIsLexiconOpen} />
+                                    </div>
+
+                                    <div className="border-t pt-4 space-y-4">
+                                        <h3 className="text-lg font-medium">Text Segmentation & Abbreviations</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            Define abbreviations that should not trigger a sentence break, and enable built-in lexicon packs.
+                                        </p>
+                                        <TTSAbbreviationSettings />
                                     </div>
                                 </div>
-                            </div>
-                        )}
+                            )
+                        }
 
-                        {activeTab === 'dictionary' && (
-                            <div className="space-y-8">
-                                <div className="space-y-4">
-                                    <h3 className="text-lg font-medium">Pronunciation Lexicon</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        Manage global and book-specific pronunciation rules.
-                                    </p>
-                                    <Button onClick={() => setIsLexiconOpen(true)}>Manage Rules</Button>
-                                    <LexiconManager open={isLexiconOpen} onOpenChange={setIsLexiconOpen} />
-                                </div>
-
-                                <div className="border-t pt-4 space-y-4">
-                                    <h3 className="text-lg font-medium">Text Segmentation & Abbreviations</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        Define abbreviations that should not trigger a sentence break, and enable built-in lexicon packs.
-                                    </p>
-                                    <TTSAbbreviationSettings />
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === 'data' && (
-                            <div className="space-y-6">
-                                <div className="space-y-4">
-                                    <h3 className="text-lg font-medium">Reading List & Sync</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        Manage your reading history separately from book files. Syncs with Goodreads CSV.
-                                    </p>
-                                    <div className="p-3 bg-muted/50 rounded-md flex items-center justify-between mb-2">
-                                        <span className="text-sm font-medium">Entries in Reading List</span>
-                                        <span className="text-sm">{readingListCount !== null ? readingListCount : '...'}</span>
-                                    </div>
-                                    <div className="flex flex-col sm:flex-row gap-2">
-                                        <Button onClick={() => setIsReadingListOpen(true)} variant="default" className="flex-1">
-                                            View List
-                                        </Button>
-                                        <Button onClick={handleExportReadingList} variant="outline" className="flex-1">
-                                            Export to CSV
-                                        </Button>
-                                        <Button onClick={handleImportReadingListClick} variant="outline" className="flex-1">
-                                            Import CSV
-                                        </Button>
-                                        <input
-                                            type="file"
-                                            ref={csvInputRef}
-                                            className="hidden"
-                                            accept=".csv"
-                                            onChange={handleCsvFileChange}
-                                            data-testid="reading-list-csv-input"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="border-t pt-4 space-y-4">
-                                    <h3 className="text-lg font-medium">Backup & Restore</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        Export your library and settings to a file, or restore from a previous backup.
-                                    </p>
-                                    <div className="flex flex-col gap-2">
-                                        <div className="flex flex-col sm:flex-row gap-2">
-                                            <Button onClick={handleExportFull} variant="outline" className="flex-1">
-                                                Export Full Backup (ZIP)
-                                            </Button>
-                                            <Button onClick={() => setIsExportWizardOpen(true)} variant="outline" className="flex-1" data-testid="export-wizard-btn">
-                                                Export Wizard (JSON)
-                                            </Button>
-                                        </div>
-                                        <div className="flex flex-col gap-2">
-                                            <Button onClick={() => handleExportLight()} variant="ghost" className="text-xs text-muted-foreground">
-                                                Quick JSON Export (Legacy)
-                                            </Button>
-                                        </div>
-                                        <Button onClick={handleRestoreClick} variant="default" className="w-full">
-                                            Restore Backup
-                                        </Button>
-                                        <input
-                                            type="file"
-                                            ref={fileInputRef}
-                                            className="hidden"
-                                            accept=".zip,.json,.vbackup"
-                                            onChange={handleFileChange}
-                                            data-testid="backup-file-input"
-                                        />
-                                        {backupStatus && (
-                                            <p className="text-sm text-blue-600 dark:text-blue-400 font-medium animate-pulse">
-                                                {backupStatus}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="border-t pt-4 space-y-4">
-                                    <h3 className="text-lg font-medium">Maintenance</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        Tools to keep the database healthy.
-                                    </p>
-                                    <div className="flex flex-col gap-2">
-                                        <Button onClick={handleRepairDB} variant="outline" disabled={isScanning}>
-                                            {isScanning ? (
-                                                <>
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                    Scanning...
-                                                </>
-                                            ) : (
-                                                "Check & Repair Database"
-                                            )}
-                                        </Button>
-                                        {orphanScanResult && (
-                                            <p className="text-sm text-muted-foreground">{orphanScanResult}</p>
-                                        )}
-                                        <Button onClick={handleRegenerateMetadata} variant="outline" disabled={isRegenerating}>
-                                            {isRegenerating ? (
-                                                <>
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                    Regenerating...
-                                                </>
-                                            ) : (
-                                                "Regenerate All Metadata"
-                                            )}
-                                        </Button>
-                                        {isRegenerating && (
-                                            <div className="w-full flex flex-col items-center space-y-1 mt-2">
-                                                <p className="text-xs text-muted-foreground">{regenerationProgress}</p>
-                                                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-primary transition-all duration-300 ease-out"
-                                                        style={{ width: `${regenerationPercent}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
-                                        {regenerationProgress && !isRegenerating && (
-                                            <p className="text-sm text-muted-foreground">{regenerationProgress}</p>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="border-t pt-4 space-y-4">
-                                    <h3 className="text-lg font-medium text-destructive">Danger Zone</h3>
-                                    <Button variant="destructive" onClick={handleClearAllData}>
-                                        Clear All Data
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </ModalContent>
-            </Modal>
+                        {
+                            activeTab === 'data' && (
+                                <DataManagementTab
+                                    readingListCount={readingListCount}
+                                    onViewReadingList={() => setIsReadingListOpen(true)}
+                                    onExportReadingList={handleExportReadingList}
+                                    onImportReadingList={handleImportReadingListFile}
+                                    backupStatus={backupStatus}
+                                    onExportFull={handleExportFull}
+                                    onExportWizard={() => setIsExportWizardOpen(true)}
+                                    onExportLight={handleExportLight}
+                                    onRestoreBackup={handleRestoreBackupFile}
+                                    isScanning={isScanning}
+                                    orphanScanResult={orphanScanResult}
+                                    onRepairDB={handleRepairDB}
+                                    isRegenerating={isRegenerating}
+                                    regenerationProgress={regenerationProgress}
+                                    regenerationPercent={regenerationPercent}
+                                    onRegenerateMetadata={handleRegenerateMetadata}
+                                    onClearAllData={handleClearAllData}
+                                />
+                            )
+                        }
+                    </div >
+                </ModalContent >
+            </Modal >
             <ReadingListDialog open={isReadingListOpen} onOpenChange={setIsReadingListOpen} />
             <DataExportWizard open={isExportWizardOpen} onOpenChange={setIsExportWizardOpen} />
         </>
