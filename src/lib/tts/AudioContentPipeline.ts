@@ -20,6 +20,9 @@ export class AudioContentPipeline {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private analysisPromises = new Map<string, Promise<any>>();
 
+    private lastAbbrInputs: { custom: string[], bible: boolean } | null = null;
+    private lastAbbrResult: string[] | null = null;
+
     /**
      * Loads a section, processes its text, and returns a playable queue.
      *
@@ -118,16 +121,12 @@ export class AudioContentPipeline {
 
                 // Dynamic Refinement: Merge segments based on current settings
                 const settings = useTTSStore.getState();
-                let abbreviations = settings.customAbbreviations;
 
                 // Inject Bible abbreviations if enabled
                 const biblePref = await LexiconService.getInstance().getBibleLexiconPreference(bookId);
                 const shouldIncludeBible = biblePref === 'on' || (biblePref === 'default' && settings.isBibleLexiconEnabled);
 
-                if (shouldIncludeBible) {
-                    // Create a new array to avoid mutating the store state or cached array
-                    abbreviations = [...abbreviations, ...BIBLE_ABBREVIATIONS];
-                }
+                const abbreviations = this.getMergedAbbreviations(settings.customAbbreviations, shouldIncludeBible);
 
                 const finalSentences = TextSegmenter.refineSegments(
                     workingSentences,
@@ -210,6 +209,30 @@ export class AudioContentPipeline {
             console.error("Failed to load section content", e);
             return null;
         }
+    }
+
+    /**
+     * Helper to merge custom and Bible abbreviations with memoization.
+     * Prevents creating a new array reference on every call, allowing TextSegmenter
+     * to skip rebuilding its internal Set cache.
+     */
+    private getMergedAbbreviations(customAbbreviations: string[], shouldIncludeBible: boolean): string[] {
+        if (
+            this.lastAbbrInputs &&
+            this.lastAbbrInputs.custom === customAbbreviations &&
+            this.lastAbbrInputs.bible === shouldIncludeBible
+        ) {
+            return this.lastAbbrResult!;
+        }
+
+        let merged = customAbbreviations;
+        if (shouldIncludeBible) {
+            merged = [...customAbbreviations, ...BIBLE_ABBREVIATIONS];
+        }
+
+        this.lastAbbrInputs = { custom: customAbbreviations, bible: shouldIncludeBible };
+        this.lastAbbrResult = merged;
+        return merged;
     }
 
     /**
