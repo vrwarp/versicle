@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { reprocessBook } from '../../lib/ingestion';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { Loader2 } from 'lucide-react';
 
 interface ReprocessingInterstitialProps {
     isOpen: boolean;
@@ -47,7 +48,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
 
                 {progress === 'processing' && (
                     <div className="flex flex-col items-center gap-4 py-4">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         <p className="text-sm text-muted-foreground text-center">
                             We're updating this book to the latest format to improve performance and features.
                         </p>

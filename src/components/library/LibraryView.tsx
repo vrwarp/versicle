@@ -455,7 +455,7 @@ export const LibraryView: React.FC = () => {
               data-testid="header-add-button"
             >
               {isImporting ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Upload className="w-4 h-4" />
               )}
