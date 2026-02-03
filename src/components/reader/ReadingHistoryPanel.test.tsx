@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
-import { dbService } from '../../db/DBService';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-vi.mock('../../db/DBService', () => ({
-  dbService: {
-    getJourneyEvents: vi.fn()
-  }
+// Mock the Yjs store hook
+vi.mock('../../store/useReadingStateStore', () => ({
+  useBookProgress: vi.fn()
 }));
+
+import { useBookProgress } from '../../store/useReadingStateStore';
 
 describe('ReadingHistoryPanel', () => {
   const mockBook = {
@@ -35,59 +35,43 @@ describe('ReadingHistoryPanel', () => {
     vi.clearAllMocks();
   });
 
-  // This test expects initial loading state.
-  // We avoid wrapping render in act(async) here because we want to assert the state *before* the async effect resolves.
-  // However, React 18/19 might batch updates.
-  // To test initial state, we just render and assert. The useEffect is async.
-  it('renders "Loading history..." initially', async () => {
-    // Delay resolution to allow assertion of loading state
-    (dbService.getJourneyEvents as any).mockReturnValue(new Promise(() => { }));
-
-    // We intentionally do NOT await this act, or use a sync act, because we want to catch the loading state
-    // but React Testing Library requires act for effects.
-    // Actually, simply rendering without waiting for the promise should show the initial state.
+  it('renders "No reading history recorded yet." when completedRanges is empty', () => {
+    (useBookProgress as any).mockReturnValue({ completedRanges: [] });
 
     render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
 
-    expect(screen.getByText('Loading history...')).toBeInTheDocument();
+    expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
   });
 
-  it('renders "No reading history recorded yet." when history is empty', async () => {
-    (dbService.getJourneyEvents as any).mockResolvedValue([]);
-    await act(async () => {
-      render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
-    });
+  it('renders "No reading history recorded yet." when progress is undefined', () => {
+    (useBookProgress as any).mockReturnValue(undefined);
 
-    await waitFor(() => {
-      expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
-    });
+    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
+
+    expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
   });
 
-  it('correctly displays chapter titles based on sessions', async () => {
-    const sessions = [{ cfiRange: 'epubcfi(/6/14!/4/2/1:0)', timestamp: Date.now(), type: 'page' }];
-    (dbService.getJourneyEvents as any).mockResolvedValue(sessions);
+  it('correctly displays chapter titles based on completedRanges', () => {
+    (useBookProgress as any).mockReturnValue({
+      completedRanges: ['epubcfi(/6/14!/4/2/1:0)']
+    });
 
     // Mock spine.get to return a section
     const mockSection = { href: 'chapter1.html', index: 0 };
     mockBook.spine.get.mockReturnValue(mockSection);
     // Mock navigation.get to return a label
     mockBook.navigation.get.mockReturnValue({ label: 'Chapter One' });
-
-    // Mock spine items for index fallback if needed (not needed if index is present)
     mockBook.spine.items = [mockSection];
 
-    await act(async () => {
-      render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
-    });
+    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Chapter One')).toBeInTheDocument();
-    });
+    expect(screen.getByText('Chapter One')).toBeInTheDocument();
   });
 
-  it('falls back to "Chapter X" if TOC label is missing', async () => {
-    const sessions = [{ cfiRange: 'epubcfi(/6/16!/4/2/1:0)', timestamp: Date.now(), type: 'page' }];
-    (dbService.getJourneyEvents as any).mockResolvedValue(sessions);
+  it('falls back to "Chapter X" if TOC label is missing', () => {
+    (useBookProgress as any).mockReturnValue({
+      completedRanges: ['epubcfi(/6/16!/4/2/1:0)']
+    });
 
     // Mock spine.get to return a section
     const mockSection = { href: 'chapter2.html', index: 1 };
@@ -95,82 +79,72 @@ describe('ReadingHistoryPanel', () => {
     // Mock navigation.get to return null
     mockBook.navigation.get.mockReturnValue(null);
 
-    await act(async () => {
-      render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
-    });
+    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText('Chapter 2')).toBeInTheDocument();
-    });
+    expect(screen.getByText('Chapter 2')).toBeInTheDocument();
   });
 
-
-
-  it('handles errors in book.spine.get gracefully', async () => {
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
-    const sessions = [{ cfiRange: 'epubcfi(/6/18!/4/2/1:0)', timestamp: Date.now(), type: 'page' }];
-    (dbService.getJourneyEvents as any).mockResolvedValue(sessions);
+  it('handles errors in book.spine.get gracefully', () => {
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+    (useBookProgress as any).mockReturnValue({
+      completedRanges: ['epubcfi(/6/18!/4/2/1:0)']
+    });
 
     mockBook.spine.get.mockImplementation(() => {
       throw new Error("Invalid CFI");
     });
 
-    await act(async () => {
-      render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
-    });
+    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Segment at/)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/Segment at/)).toBeInTheDocument();
     consoleSpy.mockRestore();
   });
 
-  it('calls onNavigate with correct CFI when an item is clicked', async () => {
+  it('calls onNavigate with correct CFI when an item is clicked', () => {
     const cfi = 'epubcfi(/6/14!/4/2/1:0)';
-    const sessions = [{ cfiRange: cfi, timestamp: Date.now(), type: 'page' }];
-    (dbService.getJourneyEvents as any).mockResolvedValue(sessions);
+    (useBookProgress as any).mockReturnValue({
+      completedRanges: [cfi]
+    });
 
     const mockSection = { href: 'chapter1.html', index: 0 };
     mockBook.spine.get.mockReturnValue(mockSection);
     mockBook.navigation.get.mockReturnValue({ label: 'Chapter One' });
 
     const onNavigate = vi.fn();
-    await act(async () => {
-      render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={onNavigate} />);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Chapter One')).toBeInTheDocument();
-    });
+    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={onNavigate} />);
 
     fireEvent.click(screen.getByText('Chapter One'));
-    // Since it's not a range, it falls back to the original CFI
     expect(onNavigate).toHaveBeenCalledWith(cfi);
   });
 
-  it('navigates to the start of the session range (using exact range)', async () => {
-    // proper range
+  it('navigates to the start of the range (using exact range)', () => {
     const rangeCfi = 'epubcfi(/6/14!/4/2,/1:0,/1:10)';
-    // The component logic now prefers using the raw range for exact positioning
-    const expected = rangeCfi;
-
-    const sessions = [{ cfiRange: rangeCfi, timestamp: Date.now(), type: 'page' }];
-    (dbService.getJourneyEvents as any).mockResolvedValue(sessions);
+    (useBookProgress as any).mockReturnValue({
+      completedRanges: [rangeCfi]
+    });
 
     const mockSection = { href: 'chapter1.html', index: 0 };
     mockBook.spine.get.mockReturnValue(mockSection);
     mockBook.navigation.get.mockReturnValue({ label: 'Chapter One' });
 
     const onNavigate = vi.fn();
-    await act(async () => {
-      render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={onNavigate} />);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Chapter One')).toBeInTheDocument();
-    });
+    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={onNavigate} />);
 
     fireEvent.click(screen.getByText('Chapter One'));
-    expect(onNavigate).toHaveBeenCalledWith(expected);
+    expect(onNavigate).toHaveBeenCalledWith(rangeCfi);
+  });
+
+  it('displays multiple history items', () => {
+    (useBookProgress as any).mockReturnValue({
+      completedRanges: ['cfi1', 'cfi2', 'cfi3']
+    });
+
+    mockBook.spine.get.mockReturnValue(null);
+    mockBook.locations.percentageFromCfi.mockReturnValue(0.5);
+
+    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
+
+    const items = screen.getAllByRole('button');
+    expect(items).toHaveLength(3);
   });
 });

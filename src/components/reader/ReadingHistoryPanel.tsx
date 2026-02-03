@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { dbService } from '../../db/DBService';
+import React, { useMemo } from 'react';
 import { useBookProgress } from '../../store/useReadingStateStore';
 import { parseCfiRange } from '../../lib/cfi-utils';
 import type { Rendition } from 'epubjs';
 import { BookOpen, Headphones, ScrollText } from 'lucide-react';
-import type { ReadingEventType, ReadingSession } from '../../types/db';
+import type { ReadingEventType } from '../../types/db';
 
 interface Props {
     bookId: string;
@@ -24,30 +23,10 @@ interface HistoryItem {
     type: ReadingEventType;
 }
 
-export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavigate, trigger = 0 }) => {
-    const [sessions, setSessions] = useState<ReadingSession[]>([]);
-    const [loading, setLoading] = useState(true);
-
+export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavigate }) => {
     // Reactive progress from Yjs store
     const progress = useBookProgress(bookId);
     const completedRanges = useMemo(() => progress?.completedRanges || [], [progress]);
-
-    useEffect(() => {
-        let mounted = true;
-        // Do not setLoading(true) here synchronously to avoid cascade
-
-        dbService.getJourneyEvents(bookId).then(events => {
-            if (mounted) {
-                setSessions(events);
-                setLoading(false);
-            }
-        }).catch(e => {
-            console.error("Failed to load journey events", e);
-            if (mounted) setLoading(false);
-        });
-
-        return () => { mounted = false; };
-    }, [bookId, trigger]);
 
     const items = useMemo(() => {
         const loadedItems: HistoryItem[] = [];
@@ -58,20 +37,17 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
             let label = explicitLabel || "Reading Segment";
             let percentage = 0;
             let subLabel = range;
-            const targetCfi = range; // DEFAULT: Use raw range for maximum jump accuracy
+            const targetCfi = range;
 
-            // Parse CFI to get start point for jumping (optional fallback)
             const parsed = parseCfiRange(range);
 
             if (book) {
-                // Try to get percentage
                 if (parsed) {
                     if (book.locations && book.locations.length() > 0) {
                         percentage = book.locations.percentageFromCfi(parsed.fullStart);
                     }
                 }
 
-                // If no explicit label, try to generate one
                 if (!explicitLabel) {
                     let section;
                     try {
@@ -102,7 +78,6 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                 }
             }
 
-            // Format subLabel
             const date = timestamp > 0 ? new Date(timestamp) : new Date();
             const dateStr = date.toLocaleDateString();
             const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -120,27 +95,16 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
             };
         };
 
-        // Prefer sessions if available
-        if (sessions.length > 0) {
-            for (const session of sessions) {
-                loadedItems.push(processItem(session.cfiRange, session.timestamp, session.type, session.label));
-            }
-            loadedItems.sort((a, b) => b.timestamp - a.timestamp);
-        } else if (completedRanges.length > 0) {
-            // Fallback to legacy ranges (now from Store)
-            for (const range of completedRanges) {
-                loadedItems.push(processItem(range));
-            }
-            // Sort DESC so latest (furthest) is at top. 
-            // Current segment (recorded in ReaderView) will be index 0.
-            loadedItems.sort((a, b) => b.percentage - a.percentage);
+        // Use completedRanges from Yjs store
+        for (const range of completedRanges) {
+            loadedItems.push(processItem(range));
         }
+        // Sort DESC so latest (furthest) is at top
+        loadedItems.sort((a, b) => b.percentage - a.percentage);
 
         return loadedItems;
-    }, [sessions, completedRanges, rendition]);
+    }, [completedRanges, rendition]);
 
-
-    if (loading) return <div className="p-4 text-sm text-foreground">Loading history...</div>;
 
     if (items.length === 0) {
         return <div className="p-4 text-sm text-muted-foreground text-center">No reading history recorded yet.</div>;
