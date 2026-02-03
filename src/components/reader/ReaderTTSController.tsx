@@ -34,62 +34,61 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
-      if (!rendition || !activeCfi || status === 'stopped') return;
+    if (!rendition || !activeCfi || status === 'stopped') return;
 
-      const syncVisuals = () => {
-         // Non-blocking display call
-         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         (rendition as any).display(activeCfi).catch((err: unknown) => {
-             console.warn("[TTS] Sync skipped", err);
-         });
+    const syncVisuals = () => {
+      // Non-blocking display call
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (rendition as any).display(activeCfi).catch((err: unknown) => {
+        console.warn("[TTS] Sync skipped", err);
+      });
 
-         // Add highlight
-         try {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
-                 // Click handler for TTS highlight
-             }, 'tts-highlight');
-         } catch (e) {
-             console.warn("[TTS] Highlight failed", e);
-         }
-      };
-
-      if (document.visibilityState === 'visible') {
-           syncVisuals();
+      // Add highlight
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
+          // Click handler for TTS highlight
+        }, 'tts-highlight');
+      } catch (e) {
+        console.warn("[TTS] Highlight failed", e);
       }
+    };
 
-      // Remove highlight when activeCfi changes
-      return () => {
-          try {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (rendition as any).annotations.remove(activeCfi, 'highlight');
-          } catch { /* ignore removal errors */ }
-      };
+    if (document.visibilityState === 'visible') {
+      syncVisuals();
+    }
+
+    // Remove highlight when activeCfi changes
+    return () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (rendition as any).annotations.remove(activeCfi, 'highlight');
+      } catch { /* ignore removal errors */ }
+    };
   }, [activeCfi, viewMode, rendition, status]);
 
   // --- Visibility Reconciliation ---
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible' && rendition) {
-         // We just came back to foreground.
-         // Fetch the latest state directly from the store to avoid stale closure issues.
-         const { activeCfi: freshCfi, status: freshStatus } = useTTSStore.getState();
+        // We just came back to foreground.
+        // Fetch the latest state directly from the store to avoid stale closure issues.
+        const { activeCfi: freshCfi, status: freshStatus } = useTTSStore.getState();
 
-         if (!freshCfi || freshStatus === 'stopped') return;
+        if (!freshCfi || freshStatus === 'stopped') return;
 
-         if (viewMode === 'paginated') {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (rendition as any).display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
-         }
+        // Sync visual state regardless of view mode (paginated or scrolled)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (rendition as any).display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
 
-         // Ensure highlight is present
-         try {
-             // Remove any existing highlight first (just in case)
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (rendition as any).annotations.remove(freshCfi, 'highlight');
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             (rendition as any).annotations.add('highlight', freshCfi, {}, () => {}, 'tts-highlight');
-         } catch (e) { console.warn("Reconciliation highlight failed", e); }
+        // Ensure highlight is present
+        try {
+          // Remove any existing highlight first (just in case)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition as any).annotations.remove(freshCfi, 'highlight');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (rendition as any).annotations.add('highlight', freshCfi, {}, () => { }, 'tts-highlight');
+        } catch (e) { console.warn("Reconciliation highlight failed", e); }
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
