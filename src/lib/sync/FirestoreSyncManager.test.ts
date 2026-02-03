@@ -5,6 +5,8 @@ import { FirestoreSyncManager, getFirestoreSyncManager } from './FirestoreSyncMa
 vi.mock('firebase/auth', () => ({
     onAuthStateChanged: vi.fn(),
     signInWithPopup: vi.fn(),
+    signInWithRedirect: vi.fn(),
+    getRedirectResult: vi.fn(() => Promise.resolve(null)),
     signOut: vi.fn()
 }));
 
@@ -158,6 +160,15 @@ describe('FirestoreSyncManager', () => {
     });
 
     describe('initialization', () => {
+        it('should check for redirect result on initialization', async () => {
+            const { getRedirectResult } = await import('firebase/auth');
+
+            const manager = getFirestoreSyncManager();
+            await manager.initialize();
+
+            expect(getRedirectResult).toHaveBeenCalled();
+        });
+
         it('should initialize FireProvider with mapped maxWaitTime', async () => {
             const { FireProvider } = await import('y-cinder');
             const { onAuthStateChanged } = await import('firebase/auth');

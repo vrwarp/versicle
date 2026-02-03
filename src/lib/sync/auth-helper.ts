@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import {
     GoogleAuthProvider,
     signInWithCredential,
-    signInWithPopup,
+    signInWithRedirect,
     signOut as firebaseSignOut,
     type UserCredential,
     type Auth
@@ -13,9 +13,9 @@ import { getFirebaseAuth, getGoogleProvider } from './firebase-config';
 /**
  * Sign in with Google using a hybrid approach:
  * - On Native (Android/iOS): Uses native Google Sign-In via @capacitor-firebase/authentication.
- * - On Web: Uses standard Firebase JS SDK signInWithPopup.
+ * - On Web: Uses standard Firebase JS SDK signInWithRedirect.
  */
-export const signInWithGoogle = async (): Promise<UserCredential | undefined> => {
+export const signInWithGoogle = async (): Promise<UserCredential | undefined | void> => {
     const auth = getFirebaseAuth();
     const provider = getGoogleProvider();
 
@@ -45,7 +45,8 @@ export const signInWithGoogle = async (): Promise<UserCredential | undefined> =>
 
     // 2. Web / PWA Flow
     else {
-        return await signInWithPopup(auth, provider);
+        await signInWithRedirect(auth, provider);
+        return;
     }
 };
 
