@@ -40,7 +40,6 @@ import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 import { createLogger } from '../../lib/logger';
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
-import { DeviceIcon } from './DeviceIcon';
 import { useHistoryHighlights } from './useHistoryHighlights';
 
 const logger = createLogger('ReaderView');
@@ -896,59 +895,6 @@ export const ReaderView: React.FC = () => {
         });
         return markers;
     }, [id, allProgress, book, devices, currentDeviceId]);
-
-    const renderTOCItem = (item: NavigationItem, index: number, level: number = 0, parentId: string = 'toc-item') => {
-        const hasSubitems = item.subitems && item.subitems.length > 0;
-        // "up to three levels" -> 0, 1, 2.
-        // If level is 2, we don't render subitems.
-        const showSubitems = hasSubitems && level < 2;
-
-        const currentId = `${parentId}-${index}`;
-        const isActive = item.id === activeTocId;
-
-        // Check for markers
-        // Match exact href or href without hash? 
-        // Spine getItem return href usually without hash if it's the whole chapter.
-        // TOC item might contain hash.
-        // Let's try matching base hrefs.
-        const itemHref = item.href.split('#')[0];
-        const markers = deviceMarkers[itemHref] || deviceMarkers[item.href];
-
-        return (
-            <li key={item.id}>
-                <button
-                    data-testid={currentId}
-                    className={cn(
-                        "text-left w-full text-sm py-1 block truncate transition-colors flex items-center justify-between group",
-                        isActive ? "text-primary font-medium bg-accent/50 rounded-md px-2 -ml-2" : "text-muted-foreground hover:text-primary"
-                    )}
-                    // Add extra padding when active to compensate for the negative margin (-ml-2 = -0.5rem),
-                    // ensuring text alignment remains consistent.
-                    style={{ paddingLeft: `${level * 1.0 + (isActive ? 0.5 : 0)}rem` }}
-                    onClick={() => {
-                        rendition?.display(item.href);
-                        setSidebar('none');
-                    }}
-                >
-                    <span className="truncate">{item.label.trim()}</span>
-                    {markers && markers.length > 0 && (
-                        <div className="flex -space-x-1 ml-2 flex-shrink-0" title={`Read by: ${markers.map(m => m.name).join(', ')}`}>
-                            {markers.map(m => (
-                                <div key={m.id} className="bg-background rounded-full p-0.5 border border-border shadow-sm ring-1 ring-background z-10">
-                                    <DeviceIcon platform={m.platform} className="w-3 h-3 text-primary/70" />
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </button>
-                {showSubitems && (
-                    <ul className="space-y-1 mt-1">
-                        {item.subitems!.map((subitem, subIndex) => renderTOCItem(subitem, subIndex, level + 1, currentId))}
-                    </ul>
-                )}
-            </li>
-        );
-    }
 
     const showToc = activeSidebar === 'toc';
     const showAnnotations = activeSidebar === 'annotations';
