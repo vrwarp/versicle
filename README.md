@@ -42,6 +42,7 @@
 *   **Drag & Drop**: Drag files anywhere to import.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata.
 *   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" and can be instantly restored by re-importing the file (verified via 3-point fingerprint).
+*   **High-Performance Rendering**: Uses a two-stage memoization strategy to ensure the library view remains silky smooth (60fps) even with thousands of books.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
 *   **Annotations**: Highlights and notes.
 *   **Table Snapshots**: Complex tables are captured as structural images for better readability and preservation.
