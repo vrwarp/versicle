@@ -265,6 +265,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
           className="absolute bottom-[calc(100%-var(--cover-height)+1rem)] right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-md hover:bg-primary/90 transition-colors translate-y-[-50%]"
           data-testid="resume-badge"
           title={`Continue from ${resumeInfo.deviceName} at ${Math.round(resumeInfo.percentage * 100)}%`}
+          aria-label={`Continue from ${resumeInfo.deviceName} at ${Math.round(resumeInfo.percentage * 100)}%`}
           style={{ bottom: '90px' }} // Approximate position above text
         >
           <DeviceIcon platform={devices[resumeInfo.deviceId]?.platform || ''} className="w-3 h-3" />
