@@ -10,7 +10,7 @@
 */
 import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
 import { yDoc } from '../../store/yjs-provider';
 
@@ -135,6 +135,17 @@ class FirestoreSyncManager {
             return;
         }
 
+        // Check if we just returned from a Redirect
+        try {
+            const result = await getRedirectResult(auth);
+            if (result && result.user) {
+                logger.info('Auth', 'Successfully returned from redirect flow', result.user.uid);
+            }
+        } catch (error) {
+            logger.error('Redirect login failed', error);
+            this.setStatus('error');
+        }
+
         // Set up auth state listener
         if (this.unsubscribeAuth) this.unsubscribeAuth();
         this.unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -250,10 +261,19 @@ class FirestoreSyncManager {
      */
     async signIn(): Promise<void> {
         try {
-            await signInWithGoogle();
-            // Auth state change handler will connect the provider
+            this.setAuthStatus('loading');
+            const result = await signInWithGoogle();
+
+            if (result) {
+                // Native flow returns a credential
+                logger.debug('Sign in returned credential (Native flow)');
+            } else {
+                // Web flow returns void (redirecting)
+                logger.debug('Sign in redirected (Web flow)');
+            }
         } catch (error) {
             logger.error('Sign in failed:', error);
+            this.setAuthStatus('signed-out');
             throw error;
         }
     }
