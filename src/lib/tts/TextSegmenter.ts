@@ -78,6 +78,142 @@ export const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
 // Used when Intl.Segmenter is not available.
 export const RE_SENTENCE_FALLBACK = /([^.!?]+[.!?]+)/g;
 
+interface TrieNode {
+    [key: string]: TrieNode | boolean | undefined;
+    _end?: boolean;
+}
+
+/**
+ * A specialized Trie implementation for fast string matching without allocations.
+ * Optimized for case-insensitive matching.
+ */
+class Trie {
+    private root: TrieNode = {};
+
+    /**
+     * Inserts a string into the Trie.
+     * @param text - The text to insert.
+     * @param reverse - Whether to insert the text in reverse order (for suffix matching).
+     */
+    insert(text: string, reverse: boolean = false) {
+        const normalized = text.normalize('NFKD');
+        let node = this.root;
+        const len = normalized.length;
+
+        if (reverse) {
+            for (let i = len - 1; i >= 0; i--) {
+                const char = normalized[i].toLowerCase();
+                if (!node[char]) {
+                    node[char] = {};
+                }
+                node = node[char] as TrieNode;
+            }
+        } else {
+            for (let i = 0; i < len; i++) {
+                const char = normalized[i].toLowerCase();
+                if (!node[char]) {
+                    node[char] = {};
+                }
+                node = node[char] as TrieNode;
+            }
+        }
+        node._end = true;
+    }
+
+    /**
+     * Checks if the text ends with any string in the Trie.
+     * Scans backwards from the end of the text, skipping trailing whitespace.
+     *
+     * @param text - The text to check.
+     * @returns The matching word if found, or null.
+     */
+    matchesEnd(text: string): string | null {
+        let i = text.length - 1;
+        // Skip trailing whitespace
+        while (i >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+            i--;
+        }
+        if (i < 0) return null;
+
+        let node = this.root;
+        const startScan = i;
+        let lastMatch: string | null = null;
+
+        // Scan backwards through the text
+        while (i >= 0) {
+            const char = text[i].toLowerCase();
+            if (!node[char]) {
+                break;
+            }
+            node = node[char] as TrieNode;
+
+            // If we found a potential match in the Trie
+            if (node._end) {
+                // Verify boundary: Previous char must be Punctuation, Whitespace, or Start
+                const prevIndex = i - 1;
+                const isBoundary = prevIndex < 0 ||
+                                   TextSegmenter.isWhitespace(text.charCodeAt(prevIndex)) ||
+                                   TextSegmenter.isPunctuation(text.charCodeAt(prevIndex));
+
+                if (isBoundary) {
+                    // Valid match found.
+                    // Note: We continue scanning to find the *longest* match if needed?
+                    // "et al." vs "al.".
+                    // If text is "et al.", we match "." -> "l" -> "a" -> " " -> "t" -> "e".
+                    // If we stopped at "al.", we might miss "et al.".
+                    // So we record this match but keep going.
+                    lastMatch = text.substring(i, startScan + 1);
+                }
+            }
+            i--;
+        }
+
+        return lastMatch;
+    }
+
+    /**
+     * Checks if the text starts with any string in the Trie.
+     * Scans forward from the start of the text, skipping leading whitespace.
+     *
+     * @param text - The text to check.
+     * @returns The matching word if found, or null.
+     */
+    matchesStart(text: string): boolean {
+        let i = 0;
+        const len = text.length;
+        // Skip leading whitespace
+        while (i < len && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+            i++;
+        }
+        if (i >= len) return false;
+
+        let node = this.root;
+
+        // Scan forward
+        while (i < len) {
+            const char = text[i].toLowerCase();
+            if (!node[char]) {
+                return false; // No path
+            }
+            node = node[char] as TrieNode;
+
+            if (node._end) {
+                // Verify boundary: Next char must be Punctuation, Whitespace, or End
+                const nextIndex = i + 1;
+                const isBoundary = nextIndex >= len ||
+                                   TextSegmenter.isWhitespace(text.charCodeAt(nextIndex)) ||
+                                   TextSegmenter.isPunctuation(text.charCodeAt(nextIndex));
+
+                if (isBoundary) {
+                    return true;
+                }
+            }
+            i++;
+        }
+        return false;
+    }
+}
+
 /**
  * Robust text segmentation utility using Intl.Segmenter with fallback and post-processing.
  * Handles edge cases like abbreviations (e.g., "Mr.", "i.e.") to prevent incorrect sentence splitting.
@@ -88,11 +224,11 @@ export class TextSegmenter {
     // Static cache for refined segments options
     private static cache = {
         abbreviations: [] as string[],
-        abbrSet: new Set<string>(),
+        abbrTrie: new Trie(),
         alwaysMerge: [] as string[],
-        mergeSet: new Set<string>(),
+        mergeTrie: new Trie(),
         sentenceStarters: [] as string[],
-        starterSet: new Set<string>()
+        starterTrie: new Trie()
     };
 
     /**
@@ -129,7 +265,7 @@ export class TextSegmenter {
      * Checks if a character code represents a whitespace character.
      * Covers common ASCII and Unicode whitespace to match Regex `\s`.
      */
-    private static isWhitespace(code: number): boolean {
+    public static isWhitespace(code: number): boolean {
         return (code === 0x0020) || // Space
             (code >= 0x0009 && code <= 0x000D) || // Tab, LF, VT, FF, CR
             (code === 0x00A0) || // NBSP
@@ -163,7 +299,7 @@ export class TextSegmenter {
      * Checks if a character code represents a common punctuation mark to strip.
      * Includes quotes, brackets, and sentence delimiters.
      */
-    private static isPunctuation(code: number): boolean {
+    public static isPunctuation(code: number): boolean {
         return (code === TextSegmenter.CODE_QUOTE_DOUBLE) || (code === TextSegmenter.CODE_QUOTE_SINGLE) ||
             (code === TextSegmenter.CODE_PAREN_OPEN) || (code === TextSegmenter.CODE_PAREN_CLOSE) ||
             (code === TextSegmenter.CODE_BRACKET_OPEN) || (code === TextSegmenter.CODE_BRACKET_CLOSE) ||
@@ -172,123 +308,6 @@ export class TextSegmenter {
             (code === TextSegmenter.CODE_PERIOD) || (code === TextSegmenter.CODE_COMMA) ||
             (code === TextSegmenter.CODE_EXCLAMATION) || (code === TextSegmenter.CODE_QUESTION) ||
             (code === TextSegmenter.CODE_SEMICOLON) || (code === TextSegmenter.CODE_COLON);
-    }
-
-    /**
-     * Extracts the last word from a string using manual scanning.
-     * Skips trailing whitespace and strips leading punctuation.
-     */
-    private static getLastWord(text: string): string {
-        let i = text.length - 1;
-        // Skip trailing whitespace
-        while (i >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
-            i--;
-        }
-        if (i < 0) return '';
-
-        const end = i;
-        // Scan backwards until whitespace
-        while (i >= 0) {
-            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) {
-                break;
-            }
-            i--;
-        }
-
-        let start = i + 1;
-        // Strip leading punctuation from the word
-        while (start <= end) {
-            if (TextSegmenter.isPunctuation(text.charCodeAt(start))) {
-                start++;
-            } else {
-                break;
-            }
-        }
-
-        if (start > end) return '';
-        return text.substring(start, end + 1);
-    }
-
-    /**
-     * Extracts the last two words from a string using manual scanning.
-     * Skips trailing whitespace and strips leading punctuation from the phrase.
-     */
-    private static getLastTwoWords(text: string): string | null {
-        let i = text.length - 1;
-        // Skip trailing whitespace
-        while (i >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
-            i--;
-        }
-        if (i < 0) return null;
-
-        const end = i;
-
-        // Scan word 1 backwards
-        while (i >= 0) {
-            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
-            i--;
-        }
-        if (i < 0) return null; // Only one word found or less
-
-        // Scan whitespace between words
-        while (i >= 0) {
-            if (!TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
-            i--;
-        }
-        if (i < 0) return null; // Only whitespace before last word
-
-        // Scan word 2 backwards
-        while (i >= 0) {
-            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
-            i--;
-        }
-
-        let start = i + 1;
-        // Strip leading punctuation
-        while (start <= end) {
-            if (TextSegmenter.isPunctuation(text.charCodeAt(start))) {
-                start++;
-            } else {
-                break;
-            }
-        }
-
-        if (start > end) return null;
-        return text.substring(start, end + 1);
-    }
-
-    /**
-     * Extracts the first word from a string using manual scanning.
-     * Skips leading whitespace and strips trailing punctuation.
-     */
-    private static getFirstWord(text: string): string {
-        let i = 0;
-        const len = text.length;
-        // Skip leading whitespace
-        while (i < len && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
-            i++;
-        }
-        if (i >= len) return '';
-
-        const start = i;
-        // Scan forward until whitespace
-        while (i < len) {
-            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
-            i++;
-        }
-
-        let end = i - 1;
-        // Strip trailing punctuation
-        while (end >= start) {
-            if (TextSegmenter.isPunctuation(text.charCodeAt(end))) {
-                end--;
-            } else {
-                break;
-            }
-        }
-
-        if (end < start) return '';
-        return text.substring(start, end + 1);
     }
 
     /**
@@ -377,23 +396,29 @@ export class TextSegmenter {
         // Check cache for abbreviations
         if (TextSegmenter.cache.abbreviations !== abbreviations) {
             TextSegmenter.cache.abbreviations = abbreviations;
-            TextSegmenter.cache.abbrSet = new Set(abbreviations.map(s => s.normalize('NFKD').toLowerCase()));
+            const trie = new Trie();
+            abbreviations.forEach(s => trie.insert(s, true)); // Insert reversed
+            TextSegmenter.cache.abbrTrie = trie;
         }
-        const abbrSet = TextSegmenter.cache.abbrSet;
+        const abbrTrie = TextSegmenter.cache.abbrTrie;
 
         // Check cache for alwaysMerge
         if (TextSegmenter.cache.alwaysMerge !== alwaysMerge) {
             TextSegmenter.cache.alwaysMerge = alwaysMerge;
-            TextSegmenter.cache.mergeSet = new Set(alwaysMerge.map(s => s.normalize('NFKD').toLowerCase()));
+            const trie = new Trie();
+            alwaysMerge.forEach(s => trie.insert(s, true)); // Insert reversed
+            TextSegmenter.cache.mergeTrie = trie;
         }
-        const mergeSet = TextSegmenter.cache.mergeSet;
+        const mergeTrie = TextSegmenter.cache.mergeTrie;
 
         // Check cache for sentenceStarters
         if (TextSegmenter.cache.sentenceStarters !== sentenceStarters) {
             TextSegmenter.cache.sentenceStarters = sentenceStarters;
-            TextSegmenter.cache.starterSet = new Set(sentenceStarters.map(s => s.normalize('NFKD')));
+            const trie = new Trie();
+            sentenceStarters.forEach(s => trie.insert(s, false)); // Insert forward
+            TextSegmenter.cache.starterTrie = trie;
         }
-        const starterSet = TextSegmenter.cache.starterSet;
+        const starterTrie = TextSegmenter.cache.starterTrie;
 
         for (let i = 0; i < sentences.length; i++) {
             // Optimization: Assume sentences are already normalized by TextSegmenter.segment() during ingestion.
@@ -407,43 +432,34 @@ export class TextSegmenter {
             if (merged.length > 0) {
                 const last = merged[merged.length - 1];
 
-                // Optimization: Avoid trim() by using regexes that ignore whitespace.
-                // const lastTextTrimmed = last.text.trim();
-
                 // Check if last segment ends with an abbreviation
-                let isAbbreviation = false;
-                let lastWord = '';
+                // OPTIMIZATION: Use Trie scan to avoid substring allocation and lowercasing
+                const matchedAbbr = abbrTrie.matchesEnd(last.text);
 
-                // Try checking the last word
-                // Optimization: Use manual scan instead of regex for performance
-                const cleanLastWord = TextSegmenter.getLastWord(last.text);
-
-                if (abbrSet.has(cleanLastWord.toLowerCase())) {
-                    isAbbreviation = true;
-                    lastWord = cleanLastWord;
-                } else {
-                    // Try checking the last two words
-                    // Optimization: Use manual scan instead of regex for performance
-                    const cleanLastTwo = TextSegmenter.getLastTwoWords(last.text);
-
-                    if (cleanLastTwo && abbrSet.has(cleanLastTwo.toLowerCase())) {
-                        isAbbreviation = true;
-                        lastWord = cleanLastTwo;
-                    }
-                }
-
-                if (isAbbreviation) {
+                if (matchedAbbr) {
                     let shouldMerge = false;
 
-                    // Check if the abbreviation (either full text or last word) is in the alwaysMerge list
-                    if (mergeSet.has(lastWord.toLowerCase())) {
+                    // Check if the abbreviation is in the alwaysMerge list
+                    // Since mergeTrie is a subset of abbrTrie (usually), we check the matched string
+                    // Note: mergeTrie is also a Trie, so we can check if the *found match* is in it.
+                    // Or cleaner: scan last.text with mergeTrie as well?
+                    // To avoid double scan: we have the matched string. Check if that string is in alwaysMerge set?
+                    // But we replaced Sets with Tries.
+                    // Actually, re-scanning with mergeTrie is cheap (it's short).
+                    // Or: We could merge the Tries?
+                    // For now, simpler to just scan again or check membership.
+                    // Since we have the exact text of the abbreviation, we can just check if mergeTrie has it?
+                    // matchesEnd returns the matched string.
+                    // We can check `mergeTrie.matchesEnd(last.text)`.
+                    // But wait, if `abbrTrie` matched "Mr.", `mergeTrie` should also match "Mr.".
+                    // Let's just use mergeTrie.matchesEnd(last.text).
+
+                    if (mergeTrie.matchesEnd(last.text)) {
                         shouldMerge = true;
                     } else {
                         // Check the next segment (current)
-                        // Optimization: Use manual scan instead of regex for performance
-                        const cleanNextWord = TextSegmenter.getFirstWord(current.text);
-
-                        if (!starterSet.has(cleanNextWord)) {
+                        // OPTIMIZATION: Use Trie scan to avoid substring allocation
+                        if (!starterTrie.matchesStart(current.text)) {
                             shouldMerge = true;
                         }
                     }
