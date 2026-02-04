@@ -2,29 +2,20 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import * as Y from 'yjs';
 import { CheckpointInspector } from './CheckpointInspector';
 import { yDoc } from '../../store/yjs-provider';
-import { SHARED_STORE_SCHEMA } from './CheckpointService';
 
 describe('CheckpointInspector', () => {
   beforeEach(() => {
     // Clear live doc
     yDoc.transact(() => {
-        // Clear all schema types
-        for (const [key, type] of Object.entries(SHARED_STORE_SCHEMA)) {
-            if (type === 'Map') {
-                const map = yDoc.getMap(key);
-                Array.from(map.keys()).forEach(k => map.delete(k));
-            } else if (type === 'Array') {
-                const arr = yDoc.getArray(key);
-                arr.delete(0, arr.length);
+        const keys = Array.from(yDoc.share.keys());
+        for (const key of keys) {
+            const type = yDoc.share.get(key);
+            if (type instanceof Y.Map) {
+                Array.from(type.keys()).forEach(k => type.delete(k));
+            } else if (type instanceof Y.Array) {
+                type.delete(0, type.length);
             }
         }
-        // Clear dynamic
-        Array.from(yDoc.share.keys()).forEach(key => {
-            if (key.startsWith('preferences/')) {
-                const map = yDoc.getMap(key);
-                Array.from(map.keys()).forEach(k => map.delete(k));
-            }
-        });
     });
   });
 

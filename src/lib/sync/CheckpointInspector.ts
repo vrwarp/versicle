@@ -1,6 +1,5 @@
 import * as Y from 'yjs';
 import { yDoc as liveDoc } from '../../store/yjs-provider';
-import { SHARED_STORE_SCHEMA } from './CheckpointService';
 
 // Type definitions for the Diff result
 export interface DiffResult {
@@ -9,8 +8,6 @@ export interface DiffResult {
   modified: Record<string, { old: any; new: any }>;
   unchangedCount: number;
 }
-
-const DYNAMIC_STORE_PREFIXES = ['preferences/'];
 
 export class CheckpointInspector {
   /**
@@ -42,31 +39,34 @@ export class CheckpointInspector {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json: Record<string, any> = {};
 
-    // 1. Static Schema
-    for (const [key, type] of Object.entries(SHARED_STORE_SCHEMA)) {
-      if (type === 'Map') {
-        const map = doc.getMap(key);
-        // Only add if it has content or exists in share (to differentiate empty vs missing)
-        // Actually, getMap always returns a Map. We check keys size or if it's in doc.share?
-        // To be safe and consistent, we always include it if it's in the schema.
-        json[key] = map.toJSON();
-      } else if (type === 'Array') {
-        const arr = doc.getArray(key);
-        json[key] = arr.toJSON();
-      }
-    }
-
-    // 2. Dynamic Keys (iterate doc.share)
+    // Iterate all shared types in the document
+    // doc.share contains all top-level types (Map, Array, etc.)
     const allKeys = Array.from(doc.share.keys());
-    for (const key of allKeys) {
-      if (SHARED_STORE_SCHEMA[key]) continue; // Already handled
 
-      const isDynamic = DYNAMIC_STORE_PREFIXES.some(prefix => key.startsWith(prefix));
-      if (isDynamic) {
-        // Dynamic keys (preferences) are Maps. Force getMap to ensure correct instantiation.
-        // doc.share.get() might return a generic AbstractType that hasn't fully hydrated to Y.Map yet.
+    for (const key of allKeys) {
+      // Dynamic Type Discovery
+      // When hydrating a doc from blob, items in share are AbstractType.
+      // We must attempt to retrieve them as specific types to access content.
+      try {
+        // Try Map (most common)
         const map = doc.getMap(key);
+        // access toJSON to verify it works (might throw if type mismatch actually happens on access?)
+        // actually getMap throws if type mismatch.
         json[key] = map.toJSON();
+      } catch {
+        try {
+          // Try Array
+          const arr = doc.getArray(key);
+          json[key] = arr.toJSON();
+        } catch {
+          // Try Text or others if needed, or ignore
+          try {
+             const text = doc.getText(key);
+             json[key] = text.toJSON();
+          } catch {
+             // Unknown type or Xml, skip
+          }
+        }
       }
     }
 

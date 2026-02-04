@@ -47,19 +47,23 @@ import { yDoc } from '../../store/yjs-provider';
 describe('CheckpointService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mocks.get.mockReset();
+        mocks.getAll.mockReset();
+        mocks.add.mockReset();
+        mocks.count.mockReset();
+        mocks.openCursor.mockReset();
+
         // Clear yDoc
         yDoc.transact(() => {
-            // Use same clearing logic as in tests (manual clear for simplicity)
-            ['library', 'reading-list', 'progress', 'annotations', 'lexicon', 'preferences', 'contentAnalysis'].forEach(key => {
-                 const type = yDoc.share.get(key);
-                 if (type) {
-                     if (type instanceof Y.Map) {
-                        Array.from(type.keys()).forEach(k => type.delete(k));
-                    } else if (type instanceof Y.Array) {
-                        type.delete(0, type.length);
-                    }
-                 }
-            });
+            const keys = Array.from(yDoc.share.keys());
+            for (const key of keys) {
+                const type = yDoc.share.get(key);
+                if (type instanceof Y.Map) {
+                    Array.from(type.keys()).forEach(k => type.delete(k));
+                } else if (type instanceof Y.Array) {
+                    type.delete(0, type.length);
+                }
+            }
         });
     });
 
@@ -123,5 +127,32 @@ describe('CheckpointService', () => {
         const lib = yDoc.getMap('library');
         expect(lib.has('current')).toBe(false);
         expect(lib.get('restored')).toBe(true);
+    });
+
+    it('should clear both Map and Array types during restore', async () => {
+        // Setup checkpoint with different data
+        const tempDoc = new Y.Doc();
+        tempDoc.getMap('library').set('restored', true);
+        const blob = Y.encodeStateAsUpdate(tempDoc);
+        mocks.get.mockResolvedValue({ blob });
+
+        // Setup current state with MIXED types
+        yDoc.getMap('library').set('current', true);
+        const lexiconArr = yDoc.getArray('lexicon'); // Force Array for test
+        lexiconArr.push(['rule1']);
+        yDoc.getMap('preferences').set('theme', 'dark');
+
+        await CheckpointService.restoreCheckpoint(1);
+
+        // Verify everything is cleared/replaced
+        const lib = yDoc.getMap('library');
+        expect(lib.has('current')).toBe(false);
+        expect(lib.get('restored')).toBe(true);
+
+        const lex = yDoc.getArray('lexicon');
+        expect(lex.length).toBe(0); // Should be cleared (and empty in checkpoint)
+
+        const prefs = yDoc.getMap('preferences');
+        expect(prefs.size).toBe(0);
     });
 });

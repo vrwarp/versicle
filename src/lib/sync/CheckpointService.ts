@@ -5,18 +5,6 @@ import type { SyncCheckpoint } from '../../types/db';
 
 const CHECKPOINT_LIMIT = 10;
 
-// Schema definition
-export const SHARED_STORE_SCHEMA: Record<string, 'Map' | 'Array'> = {
-  'library': 'Map',
-  'reading-list': 'Map',
-  'progress': 'Map',
-  'annotations': 'Map',
-  'lexicon': 'Map',
-  'contentAnalysis': 'Map'
-};
-
-const DYNAMIC_STORE_PREFIXES = ['preferences/'];
-
 /**
  * Service to manage synchronization checkpoints.
  * Handles creation, restoration, and pruning of checkpoints.
@@ -70,32 +58,25 @@ export class CheckpointService {
 
     // Atomic transaction to swap state
     yDoc.transact(() => {
-      // 1. Wipe known types using Schema and Dynamic Prefixes
-
-      // Clear static schema types
-      for (const [key, type] of Object.entries(SHARED_STORE_SCHEMA)) {
-        if (type === 'Map') {
-          const map = yDoc.getMap(key);
-          Array.from(map.keys()).forEach(k => map.delete(k));
-        } else if (type === 'Array') {
-          const arr = yDoc.getArray(key);
-          arr.delete(0, arr.length);
-        }
-      }
-
-      // Clear dynamic types (e.g. preferences/123)
-      // We must iterate existing keys in the doc to find them
+      // 1. Wipe all existing shared types
+      // We iterate doc.share to find all initialized types and clear them dynamically.
+      // This handles any schema changes (e.g. Map vs Array) or dynamic keys (preferences/).
       const allKeys = Array.from(yDoc.share.keys());
+
       for (const key of allKeys) {
-        const isDynamic = DYNAMIC_STORE_PREFIXES.some(prefix => key.startsWith(prefix));
-        if (isDynamic) {
-           // We assume dynamic types are Maps for now (preferences)
-           const type = yDoc.share.get(key);
-           if (type instanceof Y.Map) {
-             Array.from(type.keys()).forEach(k => type.delete(k));
-           } else if (type instanceof Y.Array) {
-             type.delete(0, type.length);
-           }
+        const type = yDoc.share.get(key);
+
+        if (type instanceof Y.Map) {
+          // Clear Map
+          Array.from(type.keys()).forEach(k => type.delete(k));
+        } else if (type instanceof Y.Array) {
+          // Clear Array
+          type.delete(0, type.length);
+        } else if (type instanceof Y.XmlFragment) {
+            // Should not be used in our store, but safe handling
+            type.delete(0, type.length);
+        } else if (type instanceof Y.Text) {
+            type.delete(0, type.length);
         }
       }
 
