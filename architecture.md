@@ -301,7 +301,7 @@ Handles the complex task of importing an EPUB file.
     *   A **Service Worker** intercepts these requests, fetches the cover blob from IndexedDB (`static_manifests`), and responds directly.
 
 #### Generative AI (`src/lib/genai/`)
-*   **Smart Rotation**: Implements a rotation strategy (`gemini-flash-lite-latest` <-> `gemini-2.5-flash`) to handle `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
+*   **Smart Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite` <-> `gemini-2.5-flash`) to handle `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
 *   **Resilience**: Automatically retries requests with the fallback model.
 *   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to improve reasoning quality for complex data interpretation.
 *   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text for TTS accessibility.
@@ -374,6 +374,7 @@ The Data Pipeline for TTS.
     1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
     2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
     3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`), allowing the player to seamlessly skip content identified later without delaying the start of playback.
+    4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
 
 #### `src/lib/tts/TextSegmenter.ts`
 *   **Goal**: Robustly split text into sentences and handle abbreviations.
@@ -451,6 +452,12 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **Trade-offs**:
     *   **Complexity**: Requires manual management of dependency arrays and object identity, making the code harder to maintain than simple selectors.
     *   **Stale Data Risk**: If a dependency is missed, the UI will not update even if the store changes.
+
+### Hardening & Safety Rails
+
+*   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
+*   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
+*   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.
 
 ### UI Layer
 

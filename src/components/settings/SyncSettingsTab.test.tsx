@@ -5,7 +5,7 @@ import { SyncSettingsTab, SyncSettingsTabProps } from './SyncSettingsTab';
 
 // Mock UI components
 vi.mock('../ui/Select', () => ({
-    Select: ({ children, value, onValueChange }: { children: React.ReactNode; value: string; onValueChange: (v: string) => void }) => (
+    Select: ({ children, value }: { children: React.ReactNode; value: string; onValueChange: (v: string) => void }) => (
         <div data-testid="select" data-value={value}>{children}</div>
     ),
     SelectTrigger: ({ children, id }: { children: React.ReactNode; id?: string }) => <button id={id}>{children}</button>,

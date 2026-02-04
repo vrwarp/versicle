@@ -5,7 +5,7 @@ import { GenAISettingsTab, GenAISettingsTabProps } from './GenAISettingsTab';
 
 // Mock UI components
 vi.mock('../ui/Select', () => ({
-    Select: ({ children, value, onValueChange, disabled }: { children: React.ReactNode; value: string; onValueChange: (v: string) => void; disabled?: boolean }) => (
+    Select: ({ children, value, disabled }: { children: React.ReactNode; value: string; onValueChange: (v: string) => void; disabled?: boolean }) => (
         <div data-testid="select" data-value={value} data-disabled={disabled}>{children}</div>
     ),
     SelectTrigger: ({ children, id }: { children: React.ReactNode; id?: string }) => <button id={id}>{children}</button>,
