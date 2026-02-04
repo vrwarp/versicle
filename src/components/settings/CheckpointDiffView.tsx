@@ -28,8 +28,7 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
     setExpandedStores(newExpanded);
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const renderDiffSection = (title: string, data: Record<string, any>, colorClass: string, icon: React.ReactNode) => {
+  const renderDiffSection = (title: string, data: Record<string, unknown>, colorClass: string, icon: React.ReactNode) => {
     if (Object.keys(data).length === 0) return null;
     return (
       <div className={`mt-2 p-2 rounded border ${colorClass} bg-opacity-10 text-xs`}>
@@ -47,8 +46,7 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
     );
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const renderModifiedSection = (data: Record<string, { old: any; new: any }>) => {
+  const renderModifiedSection = (data: Record<string, { old: unknown; new: unknown }>) => {
     if (Object.keys(data).length === 0) return null;
     return (
       <div className="mt-2 p-2 rounded border border-blue-200 bg-blue-50 text-xs dark:bg-blue-900/20 dark:border-blue-800">

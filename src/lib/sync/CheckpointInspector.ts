@@ -3,9 +3,9 @@ import { yDoc as liveDoc } from '../../store/yjs-provider';
 
 // Type definitions for the Diff result
 export interface DiffResult {
-  added: Record<string, any>;
-  removed: Record<string, any>;
-  modified: Record<string, { old: any; new: any }>;
+  added: Record<string, unknown>;
+  removed: Record<string, unknown>;
+  modified: Record<string, { old: unknown; new: unknown }>;
   unchangedCount: number;
 }
 
@@ -28,16 +28,14 @@ export class CheckpointInspector {
 
     // 3. Diff each store individually
     for (const store of allStores) {
-      diffs[store] = this.deepDiff(liveJson[store] || {}, checkpointJson[store] || {});
+      diffs[store] = this.deepDiff(liveJson[store], checkpointJson[store]);
     }
 
     return diffs;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private static docToJson(doc: Y.Doc): Record<string, any> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json: Record<string, any> = {};
+  private static docToJson(doc: Y.Doc): Record<string, unknown> {
+    const json: Record<string, unknown> = {};
 
     // Iterate all shared types in the document
     // doc.share contains all top-level types (Map, Array, etc.)
@@ -73,25 +71,21 @@ export class CheckpointInspector {
     return json;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private static deepDiff(live: any, checkpoint: any): DiffResult {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const added: Record<string, any> = {};
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const removed: Record<string, any> = {};
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const modified: Record<string, { old: any; new: any }> = {};
+  private static deepDiff(live: unknown, checkpoint: unknown): DiffResult {
+    const added: Record<string, unknown> = {};
+    const removed: Record<string, unknown> = {};
+    const modified: Record<string, { old: unknown; new: unknown }> = {};
     let unchangedCount = 0;
 
     // Handle non-object types safely
-    if (typeof live !== 'object' || live === null) live = {};
-    if (typeof checkpoint !== 'object' || checkpoint === null) checkpoint = {};
+    const liveObj = (typeof live === 'object' && live !== null) ? (live as Record<string, unknown>) : {};
+    const checkpointObj = (typeof checkpoint === 'object' && checkpoint !== null) ? (checkpoint as Record<string, unknown>) : {};
 
-    const allKeys = new Set([...Object.keys(live), ...Object.keys(checkpoint)]);
+    const allKeys = new Set([...Object.keys(liveObj), ...Object.keys(checkpointObj)]);
 
     for (const key of allKeys) {
-      const liveVal = live[key];
-      const cpVal = checkpoint[key];
+      const liveVal = liveObj[key];
+      const cpVal = checkpointObj[key];
 
       if (cpVal === undefined) {
         // Exists in Live, not in Checkpoint.
