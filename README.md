@@ -19,7 +19,7 @@
 
 ## Tech Stack
 
-*   **Framework**: React 19.2.3 + Vite 7.3.0 + React Router 7
+*   **Framework**: React 19.2.3 + Vite 7.3.0 + React Router 7.11.0
 *   **Language**: TypeScript
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (Custom Fork)
 *   **Sync**: `y-cinder` (Custom Fork / Firestore) + Android Backup Service
@@ -29,7 +29,7 @@
 *   **AI**: Google Gemini (Flash Lite / Flash) via `@google/generative-ai`
 *   **Mobile**: Capacitor 7.0.0 (Android) + `@capawesome-team/capacitor-android-battery-optimization`
 *   **Workers**: Comlink + Web Workers
-*   **Styling**: Tailwind CSS v4 + Radix UI
+*   **Styling**: Tailwind CSS v4.1.18 + Radix UI
 *   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
 
 ## Features
@@ -82,6 +82,7 @@
     *   **Unified Export**: Share files natively (AirDrop, Nearby Share) or download via browser.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
+*   **Checkpoint Forensics**: Inspect the exact data difference between your live state and any backup checkpoint.
 *   **Safe Mode**: A fallback UI that activates on critical database failures, allowing users to export debug info or perform a factory reset to recover usability.
 
 ## Setup & Development

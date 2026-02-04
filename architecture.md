@@ -267,6 +267,14 @@ Manages integration with the native Android Backup Service.
     *   **Native Handoff**: The Android OS automatically backs up this file to the user's Google Drive (if enabled in Android settings).
 *   **Trade-off**: Restore is all-or-nothing and handled by the OS during app installation/restore.
 
+#### `CheckpointInspector.ts` (Forensic Layer)
+*   **Goal**: Provide deep visibility into binary checkpoints for debugging and support.
+*   **Logic**:
+    *   **Hydration**: Hydrates a binary checkpoint blob into a temporary `Y.Doc`.
+    *   **Deep Diff**: Converts both the live document and the checkpoint to JSON and performs a recursive object difference (Added, Removed, Modified).
+    *   **Dynamic Discovery**: Iterates over `doc.share` keys to dynamically discover and deserialize map/array types, handling `AbstractType` hydration issues.
+*   **Trade-off**: High CPU and memory cost (full document serialization). Strictly on-demand.
+
 ### Core Logic & Services (`src/lib/`)
 
 #### Logging (`src/lib/logger.ts`)
@@ -380,7 +388,8 @@ The Data Pipeline for TTS.
 *   **Goal**: Robustly split text into sentences and handle abbreviations.
 *   **Logic**:
     *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
-    *   **Refinement**: Dynamically merges short segments using cached regex options for abbreviations and sentence starters.
+    *   **Zero-Allocation Scanning**: Uses `TextScanningTrie`, a specialized Trie implementation, to match abbreviations and sentence starters without creating intermediate substrings or using expensive Regex in hot loops.
+    *   **Segmenter Cache**: Caches `Intl.Segmenter` instances via `segmenter-cache` to avoid the heavy cost of instantiating locale data repeatedly.
     *   **Optimization**: Uses `tryFastMergeCfi` to merge CFIs optimistically via string manipulation.
 *   **Trade-offs**:
     *   **Maintenance**: The manual character scanning logic is more complex and brittle than standard regex or `String.trim()`, requiring careful regression testing.
