@@ -44,6 +44,8 @@ vi.mock('../../store/yjs-provider', async () => {
 });
 import { yDoc } from '../../store/yjs-provider';
 
+let tempDocCounter = 0;
+
 describe('CheckpointService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -113,6 +115,10 @@ describe('CheckpointService', () => {
     it('should restore a checkpoint by applying update', async () => {
         // Setup checkpoint
         const tempDoc = new Y.Doc();
+        // Prevent collision if Math.random is mocked
+        // @ts-expect-error Writing to readonly clientID to prevent test flakiness
+        tempDoc.clientID = yDoc.clientID + (++tempDocCounter);
+
         tempDoc.getMap('library').set('restored', true);
         const blob = Y.encodeStateAsUpdate(tempDoc);
 
@@ -132,6 +138,10 @@ describe('CheckpointService', () => {
     it('should clear both Map and Array types during restore', async () => {
         // Setup checkpoint with different data
         const tempDoc = new Y.Doc();
+        // Prevent collision if Math.random is mocked
+        // @ts-expect-error Writing to readonly clientID to prevent test flakiness
+        tempDoc.clientID = yDoc.clientID + (++tempDocCounter);
+
         tempDoc.getMap('library').set('restored', true);
         const blob = Y.encodeStateAsUpdate(tempDoc);
         mocks.get.mockResolvedValue({ blob });
