@@ -15,19 +15,19 @@ describe('Bible Lexicon Rules', () => {
     }));
 
     it('pronounces verse suffixes correctly', () => {
-        // We expect "a" suffix to be replaced with "Ay" to force long vowel pronunciation
-        // "Matthew 1:2a" -> "Matthew 1:2 Ay"
+        // We expect "a" suffix to be replaced with "ae" to force long vowel pronunciation
+        // "Matthew 1:2a" -> "Matthew 1:2 ae"
         let result = service.applyLexicon('Matthew 1:2a', rules);
-        expect(result).toMatch(/Matthew 1:2 Ay$/);
+        expect(result).toMatch(/Matthew 1:2 ae$/);
 
         result = service.applyLexicon('v43a', rules);
         // "v43" -> "verse 43" (now with space)
-        // "43a" -> "43 Ay"
-        expect(result).toMatch(/verse 43 Ay$/);
+        // "43a" -> "43 ae"
+        expect(result).toMatch(/verse 43 ae$/);
 
-        // "vv. 5b-7a" -> "verse 5b-7 Ay"
+        // "vv. 5b-7a" -> "verse 5b-7 ae"
         result = service.applyLexicon('vv. 5b-7a', rules);
-        expect(result).toContain('verse 5b-7 Ay');
+        expect(result).toContain('verse 5b-7 ae');
     });
 
     it('preserves other text', () => {
