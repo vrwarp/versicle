@@ -159,6 +159,46 @@ export class LexiconService {
         ids.forEach(id => store.deleteRule(id));
     }
 
+    applyLexiconWithTrace(text: string, rules: LexiconRule[]): { final: string, trace: { rule: LexiconRule, before: string, after: string }[] } {
+        let processedText = text.normalize('NFKD');
+        const trace: { rule: LexiconRule, before: string, after: string }[] = [];
+
+        for (const rule of rules) {
+            if (!rule.original || !rule.replacement) continue;
+            const normalizedOriginal = rule.original.normalize('NFKD');
+            const normalizedReplacement = rule.replacement.normalize('NFKD');
+
+            try {
+                const cacheKey = `${rule.id}-${normalizedOriginal}-${rule.isRegex}`;
+                let regex = this.regexCache.get(cacheKey);
+
+                if (!regex) {
+                    if (rule.isRegex) {
+                        regex = new RegExp(normalizedOriginal, 'gi');
+                    } else {
+                        const escapedOriginal = normalizedOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const startIsWord = /^\w/.test(normalizedOriginal);
+                        const endIsWord = /\w$/.test(normalizedOriginal);
+                        const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
+                        regex = new RegExp(regexStr, 'gi');
+                    }
+                    this.regexCache.set(cacheKey, regex);
+                }
+
+                const before = processedText;
+                const after = processedText.replace(regex, normalizedReplacement);
+
+                if (before !== after) {
+                    trace.push({ rule, before, after });
+                    processedText = after;
+                }
+            } catch (e) {
+                console.warn(`Invalid regex for lexicon rule: ${normalizedOriginal}`, e);
+            }
+        }
+        return { final: processedText, trace };
+    }
+
     applyLexicon(text: string, rules: LexiconRule[]): string {
         let processedText = text.normalize('NFKD');
         for (const rule of rules) {
