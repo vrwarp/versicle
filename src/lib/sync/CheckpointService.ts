@@ -1,5 +1,7 @@
 import { getDB } from '../../db/db';
-import type { SyncCheckpoint, SyncManifest } from '../../types/db';
+import * as Y from 'yjs';
+import { yDoc } from '../../store/yjs-provider';
+import type { SyncCheckpoint } from '../../types/db';
 
 const CHECKPOINT_LIMIT = 10;
 
@@ -9,39 +11,33 @@ const CHECKPOINT_LIMIT = 10;
  */
 export class CheckpointService {
   /**
-   * Creates a new checkpoint from the current SyncManifest.
-   * Prunes old checkpoints if the limit is exceeded.
-   *
-   * @param manifest The SyncManifest to snapshot.
-   * @param trigger The reason for creating the checkpoint (e.g., 'pre-sync', 'manual').
-   * @returns The ID of the created checkpoint.
+   * Captures the current Yjs state as a binary update.
    */
-  static async createCheckpoint(manifest: SyncManifest, trigger: string): Promise<number> {
+  static async createCheckpoint(trigger: string): Promise<number> {
+    const stateBlob = Y.encodeStateAsUpdate(yDoc);
     const db = await getDB();
-    const checkpoint: Omit<SyncCheckpoint, 'id'> = {
+
+    // SyncCheckpoint has 'id', 'timestamp', 'blob', 'size', 'trigger'.
+    // id is auto-incremented, so we cast to any to satisfy TS or Omit it.
+    const checkpoint = {
       timestamp: Date.now(),
-      manifest,
       trigger,
+      blob: stateBlob,
+      size: Math.round(stateBlob.byteLength / 1024) || 1 // Min 1KB display
     };
 
-    // Use a transaction to ensure atomicity of add and prune
     const tx = db.transaction('checkpoints', 'readwrite');
-    const store = tx.objectStore('checkpoints');
-    const id = await store.add(checkpoint as SyncCheckpoint); // ID is auto-incremented
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const id = await tx.store.add(checkpoint as any);
 
     // Prune old checkpoints
-    const count = await store.count();
+    const count = await tx.store.count();
     if (count > CHECKPOINT_LIMIT) {
       // Get the oldest keys
       // Since keys are auto-incrementing integers, the smallest keys are the oldest.
-      // We need to delete (count - CHECKPOINT_LIMIT) items.
-      // idb doesn't have a direct "limit" on getAllKeys, so we might need to iterate or assume keys.
-      // A cursor is safest.
       let deleted = 0;
-      const numberToDelete = count - CHECKPOINT_LIMIT;
-      let cursor = await store.openCursor();
-
-      while (cursor && deleted < numberToDelete) {
+      let cursor = await tx.store.openCursor();
+      while (cursor && deleted < count - CHECKPOINT_LIMIT) {
         await cursor.delete();
         deleted++;
         cursor = await cursor.continue();
@@ -50,6 +46,43 @@ export class CheckpointService {
 
     await tx.done;
     return id as number;
+  }
+
+  /**
+   * Destructive Restore: Clears current Yjs types and applies snapshot.
+   */
+  static async restoreCheckpoint(id: number): Promise<void> {
+    const db = await getDB();
+    const checkpoint = await db.get('checkpoints', id);
+    if (!checkpoint || !checkpoint.blob) throw new Error('Checkpoint corrupted');
+
+    // Atomic transaction to swap state
+    yDoc.transact(() => {
+      // 1. Wipe all existing shared types
+      // We iterate doc.share to find all initialized types and clear them dynamically.
+      // This handles any schema changes (e.g. Map vs Array) or dynamic keys (preferences/).
+      const allKeys = Array.from(yDoc.share.keys());
+
+      for (const key of allKeys) {
+        const type = yDoc.share.get(key);
+
+        if (type instanceof Y.Map) {
+          // Clear Map
+          Array.from(type.keys()).forEach(k => type.delete(k));
+        } else if (type instanceof Y.Array) {
+          // Clear Array
+          type.delete(0, type.length);
+        } else if (type instanceof Y.XmlFragment) {
+            // Should not be used in our store, but safe handling
+            type.delete(0, type.length);
+        } else if (type instanceof Y.Text) {
+            type.delete(0, type.length);
+        }
+      }
+
+      // 2. Apply binary snapshot
+      Y.applyUpdate(yDoc, checkpoint.blob);
+    }, 'restore-checkpoint');
   }
 
   /**
@@ -67,16 +100,5 @@ export class CheckpointService {
   static async getCheckpoint(id: number): Promise<SyncCheckpoint | undefined> {
     const db = await getDB();
     return db.get('checkpoints', id);
-  }
-
-  /**
-   * Restores a checkpoint by returning its manifest.
-   * NOTE: The actual application state restoration logic should be handled by the SyncManager
-   * or a higher-level orchestrator that knows how to write the manifest back to the DB.
-   * This method serves as a retrieval helper.
-   */
-  static async restoreCheckpoint(id: number): Promise<SyncManifest | undefined> {
-    const checkpoint = await this.getCheckpoint(id);
-    return checkpoint?.manifest;
   }
 }

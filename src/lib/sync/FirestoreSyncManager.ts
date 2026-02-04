@@ -13,6 +13,7 @@ import type { User } from 'firebase/auth';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
 import { yDoc } from '../../store/yjs-provider';
+import { CheckpointService } from './CheckpointService';
 
 import {
     getFirebaseApp,
@@ -175,7 +176,7 @@ class FirestoreSyncManager {
     /**
      * Connect y-fire provider for the given user
      */
-    private connectFireProvider(uid: string): void {
+    private async connectFireProvider(uid: string): Promise<void> {
         if (this.fireProvider) {
             const currentApp = getFirebaseApp();
             if (currentApp !== this.currentApp) {
@@ -185,6 +186,15 @@ class FirestoreSyncManager {
                 logger.debug('Already connected, skipping');
                 return;
             }
+        }
+
+        // Create a safety checkpoint before connecting (which triggers download)
+        try {
+            logger.debug('Creating pre-sync checkpoint...');
+            await CheckpointService.createCheckpoint('pre-sync');
+        } catch (error) {
+            logger.warn('Failed to create pre-sync checkpoint', error);
+            // Non-blocking: proceed with sync even if checkpoint fails
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

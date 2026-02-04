@@ -7,7 +7,7 @@ describe('RecoverySettingsTab', () => {
     const defaultProps: RecoverySettingsTabProps = {
         checkpoints: [],
         recoveryStatus: null,
-        onRestoreCheckpoint: vi.fn()
+        onCreateCheckpoint: vi.fn()
     };
 
     it('renders disaster recovery header', () => {
@@ -24,14 +24,15 @@ describe('RecoverySettingsTab', () => {
 
     it('renders checkpoints when present', () => {
         const checkpoints = [
-            { id: 1, timestamp: 1706900000000, trigger: 'manual' },
-            { id: 2, timestamp: 1706900100000, trigger: 'sync' }
+            // Using blobs as per new type
+            { id: 1, timestamp: 1706900000000, trigger: 'manual', blob: new Uint8Array(), size: 10 },
+            { id: 2, timestamp: 1706900100000, trigger: 'sync', blob: new Uint8Array(), size: 20 }
         ];
         render(<RecoverySettingsTab {...defaultProps} checkpoints={checkpoints} />);
 
-        expect(screen.getByText('Trigger: manual')).toBeInTheDocument();
-        expect(screen.getByText('Trigger: sync')).toBeInTheDocument();
-        expect(screen.getAllByText('Restore')).toHaveLength(2);
+        expect(screen.getByText('manual')).toBeInTheDocument();
+        expect(screen.getByText('sync')).toBeInTheDocument();
+        expect(screen.getAllByText('Inspect')).toHaveLength(2);
     });
 
     it('shows recovery status when present', () => {
@@ -40,18 +41,16 @@ describe('RecoverySettingsTab', () => {
         expect(screen.getByText('Restoring...')).toBeInTheDocument();
     });
 
-    it('calls onRestoreCheckpoint when restore clicked', () => {
-        const onRestoreCheckpoint = vi.fn();
-        const checkpoints = [{ id: 42, timestamp: Date.now(), trigger: 'manual' }];
+    it('calls onCreateCheckpoint when create button clicked', () => {
+        const onCreateCheckpoint = vi.fn();
         render(
             <RecoverySettingsTab
                 {...defaultProps}
-                checkpoints={checkpoints}
-                onRestoreCheckpoint={onRestoreCheckpoint}
+                onCreateCheckpoint={onCreateCheckpoint}
             />
         );
 
-        fireEvent.click(screen.getByText('Restore'));
-        expect(onRestoreCheckpoint).toHaveBeenCalledWith(42);
+        fireEvent.click(screen.getByText('Create Snapshot'));
+        expect(onCreateCheckpoint).toHaveBeenCalled();
     });
 });

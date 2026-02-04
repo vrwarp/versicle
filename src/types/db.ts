@@ -724,8 +724,10 @@ export interface SyncCheckpoint {
   id: number;
   /** Timestamp when the checkpoint was created. */
   timestamp: number;
-  /** The snapshot data. */
-  manifest: SyncManifest;
+  /** The snapshot data (Yjs binary state vector). */
+  blob: Uint8Array;
+  /** Size in KB (metadata for UI). */
+  size: number;
   /** What triggered this checkpoint (e.g., 'pre-sync', 'manual'). */
   trigger: string;
 }
