@@ -136,6 +136,7 @@ function App() {
 
         const prefs = usePreferencesStore.getState();
         const tts = useTTSStore.getState();
+        tts.initialize();
 
         const profile: DeviceProfile = {
           theme: prefs.currentTheme,

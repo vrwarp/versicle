@@ -1,7 +1,6 @@
 import { tryFastMergeCfi, mergeCfiSlow } from '../cfi-utils';
 import type { SentenceNode } from '../tts';
 import { getCachedSegmenter } from './segmenter-cache';
-import { TextScanningTrie } from './TextScanningTrie';
 
 /**
  * Represents a segment of text (e.g., a sentence) with its location.
@@ -89,11 +88,11 @@ export class TextSegmenter {
     // Static cache for refined segments options
     private static cache = {
         abbreviations: [] as string[],
-        abbrTrie: new TextScanningTrie(),
+        abbrSet: new Set<string>(),
         alwaysMerge: [] as string[],
-        mergeTrie: new TextScanningTrie(),
+        mergeSet: new Set<string>(),
         sentenceStarters: [] as string[],
-        starterTrie: new TextScanningTrie()
+        starterSet: new Set<string>()
     };
 
     /**
@@ -130,16 +129,166 @@ export class TextSegmenter {
      * Checks if a character code represents a whitespace character.
      * Covers common ASCII and Unicode whitespace to match Regex `\s`.
      */
-    public static isWhitespace(code: number): boolean {
-        return TextScanningTrie.isWhitespace(code);
+    private static isWhitespace(code: number): boolean {
+        return (code === 0x0020) || // Space
+            (code >= 0x0009 && code <= 0x000D) || // Tab, LF, VT, FF, CR
+            (code === 0x00A0) || // NBSP
+            (code === 0x1680) || // Ogham Space Mark
+            (code >= 0x2000 && code <= 0x200A) || // U+2000-U+200A (En Quad...Hair Space)
+            (code === 0x2028) || (code === 0x2029) || // Line/Para Separator
+            (code === 0x202F) || // Narrow No-Break Space
+            (code === 0x205F) || // Medium Mathematical Space
+            (code === 0x3000) || // Ideographic Space
+            (code === 0xFEFF); // BOM
     }
+
+    private static readonly CODE_QUOTE_DOUBLE = '"'.codePointAt(0)!;
+    private static readonly CODE_QUOTE_SINGLE = "'".codePointAt(0)!;
+    private static readonly CODE_PAREN_OPEN = '('.codePointAt(0)!;
+    private static readonly CODE_PAREN_CLOSE = ')'.codePointAt(0)!;
+    private static readonly CODE_BRACKET_OPEN = '['.codePointAt(0)!;
+    private static readonly CODE_BRACKET_CLOSE = ']'.codePointAt(0)!;
+    private static readonly CODE_ANGLE_OPEN = '<'.codePointAt(0)!;
+    private static readonly CODE_ANGLE_CLOSE = '>'.codePointAt(0)!;
+    private static readonly CODE_BRACE_OPEN = '{'.codePointAt(0)!;
+    private static readonly CODE_BRACE_CLOSE = '}'.codePointAt(0)!;
+    private static readonly CODE_PERIOD = '.'.codePointAt(0)!;
+    private static readonly CODE_COMMA = ','.codePointAt(0)!;
+    private static readonly CODE_EXCLAMATION = '!'.codePointAt(0)!;
+    private static readonly CODE_QUESTION = '?'.codePointAt(0)!;
+    private static readonly CODE_SEMICOLON = ';'.codePointAt(0)!;
+    private static readonly CODE_COLON = ':'.codePointAt(0)!;
 
     /**
      * Checks if a character code represents a common punctuation mark to strip.
      * Includes quotes, brackets, and sentence delimiters.
      */
-    public static isPunctuation(code: number): boolean {
-        return TextScanningTrie.isPunctuation(code);
+    private static isPunctuation(code: number): boolean {
+        return (code === TextSegmenter.CODE_QUOTE_DOUBLE) || (code === TextSegmenter.CODE_QUOTE_SINGLE) ||
+            (code === TextSegmenter.CODE_PAREN_OPEN) || (code === TextSegmenter.CODE_PAREN_CLOSE) ||
+            (code === TextSegmenter.CODE_BRACKET_OPEN) || (code === TextSegmenter.CODE_BRACKET_CLOSE) ||
+            (code === TextSegmenter.CODE_ANGLE_OPEN) || (code === TextSegmenter.CODE_ANGLE_CLOSE) ||
+            (code === TextSegmenter.CODE_BRACE_OPEN) || (code === TextSegmenter.CODE_BRACE_CLOSE) ||
+            (code === TextSegmenter.CODE_PERIOD) || (code === TextSegmenter.CODE_COMMA) ||
+            (code === TextSegmenter.CODE_EXCLAMATION) || (code === TextSegmenter.CODE_QUESTION) ||
+            (code === TextSegmenter.CODE_SEMICOLON) || (code === TextSegmenter.CODE_COLON);
+    }
+
+    /**
+     * Extracts the last word from a string using manual scanning.
+     * Skips trailing whitespace and strips leading punctuation.
+     */
+    private static getLastWord(text: string): string {
+        let i = text.length - 1;
+        // Skip trailing whitespace
+        while (i >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+            i--;
+        }
+        if (i < 0) return '';
+
+        const end = i;
+        // Scan backwards until whitespace
+        while (i >= 0) {
+            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+                break;
+            }
+            i--;
+        }
+
+        let start = i + 1;
+        // Strip leading punctuation from the word
+        while (start <= end) {
+            if (TextSegmenter.isPunctuation(text.charCodeAt(start))) {
+                start++;
+            } else {
+                break;
+            }
+        }
+
+        if (start > end) return '';
+        return text.substring(start, end + 1);
+    }
+
+    /**
+     * Extracts the last two words from a string using manual scanning.
+     * Skips trailing whitespace and strips leading punctuation from the phrase.
+     */
+    private static getLastTwoWords(text: string): string | null {
+        let i = text.length - 1;
+        // Skip trailing whitespace
+        while (i >= 0 && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+            i--;
+        }
+        if (i < 0) return null;
+
+        const end = i;
+
+        // Scan word 1 backwards
+        while (i >= 0) {
+            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
+            i--;
+        }
+        if (i < 0) return null; // Only one word found or less
+
+        // Scan whitespace between words
+        while (i >= 0) {
+            if (!TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
+            i--;
+        }
+        if (i < 0) return null; // Only whitespace before last word
+
+        // Scan word 2 backwards
+        while (i >= 0) {
+            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
+            i--;
+        }
+
+        let start = i + 1;
+        // Strip leading punctuation
+        while (start <= end) {
+            if (TextSegmenter.isPunctuation(text.charCodeAt(start))) {
+                start++;
+            } else {
+                break;
+            }
+        }
+
+        if (start > end) return null;
+        return text.substring(start, end + 1);
+    }
+
+    /**
+     * Extracts the first word from a string using manual scanning.
+     * Skips leading whitespace and strips trailing punctuation.
+     */
+    private static getFirstWord(text: string): string {
+        let i = 0;
+        const len = text.length;
+        // Skip leading whitespace
+        while (i < len && TextSegmenter.isWhitespace(text.charCodeAt(i))) {
+            i++;
+        }
+        if (i >= len) return '';
+
+        const start = i;
+        // Scan forward until whitespace
+        while (i < len) {
+            if (TextSegmenter.isWhitespace(text.charCodeAt(i))) break;
+            i++;
+        }
+
+        let end = i - 1;
+        // Strip trailing punctuation
+        while (end >= start) {
+            if (TextSegmenter.isPunctuation(text.charCodeAt(end))) {
+                end--;
+            } else {
+                break;
+            }
+        }
+
+        if (end < start) return '';
+        return text.substring(start, end + 1);
     }
 
     /**
@@ -228,29 +377,23 @@ export class TextSegmenter {
         // Check cache for abbreviations
         if (TextSegmenter.cache.abbreviations !== abbreviations) {
             TextSegmenter.cache.abbreviations = abbreviations;
-            const trie = new TextScanningTrie();
-            abbreviations.forEach(s => trie.insert(s, true)); // Insert reversed
-            TextSegmenter.cache.abbrTrie = trie;
+            TextSegmenter.cache.abbrSet = new Set(abbreviations.map(s => s.normalize('NFKD').toLowerCase()));
         }
-        const abbrTrie = TextSegmenter.cache.abbrTrie;
+        const abbrSet = TextSegmenter.cache.abbrSet;
 
         // Check cache for alwaysMerge
         if (TextSegmenter.cache.alwaysMerge !== alwaysMerge) {
             TextSegmenter.cache.alwaysMerge = alwaysMerge;
-            const trie = new TextScanningTrie();
-            alwaysMerge.forEach(s => trie.insert(s, true)); // Insert reversed
-            TextSegmenter.cache.mergeTrie = trie;
+            TextSegmenter.cache.mergeSet = new Set(alwaysMerge.map(s => s.normalize('NFKD').toLowerCase()));
         }
-        const mergeTrie = TextSegmenter.cache.mergeTrie;
+        const mergeSet = TextSegmenter.cache.mergeSet;
 
         // Check cache for sentenceStarters
         if (TextSegmenter.cache.sentenceStarters !== sentenceStarters) {
             TextSegmenter.cache.sentenceStarters = sentenceStarters;
-            const trie = new TextScanningTrie();
-            sentenceStarters.forEach(s => trie.insert(s, false)); // Insert forward
-            TextSegmenter.cache.starterTrie = trie;
+            TextSegmenter.cache.starterSet = new Set(sentenceStarters.map(s => s.normalize('NFKD')));
         }
-        const starterTrie = TextSegmenter.cache.starterTrie;
+        const starterSet = TextSegmenter.cache.starterSet;
 
         for (let i = 0; i < sentences.length; i++) {
             // Optimization: Assume sentences are already normalized by TextSegmenter.segment() during ingestion.
@@ -264,20 +407,43 @@ export class TextSegmenter {
             if (merged.length > 0) {
                 const last = merged[merged.length - 1];
 
-                // Check if last segment ends with an abbreviation
-                // OPTIMIZATION: Use Trie scan to avoid substring allocation and lowercasing
-                const matchedAbbr = abbrTrie.matchesEnd(last.text);
+                // Optimization: Avoid trim() by using regexes that ignore whitespace.
+                // const lastTextTrimmed = last.text.trim();
 
-                if (matchedAbbr) {
+                // Check if last segment ends with an abbreviation
+                let isAbbreviation = false;
+                let lastWord = '';
+
+                // Try checking the last word
+                // Optimization: Use manual scan instead of regex for performance
+                const cleanLastWord = TextSegmenter.getLastWord(last.text);
+
+                if (abbrSet.has(cleanLastWord.toLowerCase())) {
+                    isAbbreviation = true;
+                    lastWord = cleanLastWord;
+                } else {
+                    // Try checking the last two words
+                    // Optimization: Use manual scan instead of regex for performance
+                    const cleanLastTwo = TextSegmenter.getLastTwoWords(last.text);
+
+                    if (cleanLastTwo && abbrSet.has(cleanLastTwo.toLowerCase())) {
+                        isAbbreviation = true;
+                        lastWord = cleanLastTwo;
+                    }
+                }
+
+                if (isAbbreviation) {
                     let shouldMerge = false;
 
-                    // Check if the abbreviation is in the alwaysMerge list
-                    if (mergeTrie.matchesEnd(last.text)) {
+                    // Check if the abbreviation (either full text or last word) is in the alwaysMerge list
+                    if (mergeSet.has(lastWord.toLowerCase())) {
                         shouldMerge = true;
                     } else {
                         // Check the next segment (current)
-                        // OPTIMIZATION: Use Trie scan to avoid substring allocation
-                        if (!starterTrie.matchesStart(current.text)) {
+                        // Optimization: Use manual scan instead of regex for performance
+                        const cleanNextWord = TextSegmenter.getFirstWord(current.text);
+
+                        if (!starterSet.has(cleanNextWord)) {
                             shouldMerge = true;
                         }
                     }
