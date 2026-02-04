@@ -76,5 +76,8 @@ def test_lexicon_trace(page: Page):
     # The regex for Genesis is complex, so we just check the replacement
     expect(page.get_by_text("→ Genesis")).to_be_visible()
 
+    # Scroll to the bottom to ensure the trace is fully visible in the screenshot
+    page.get_by_test_id("lexicon-list-container").evaluate("el => el.scrollTop = el.scrollHeight")
+
     utils.capture_screenshot(page, "lexicon_trace_verified")
     print("Lexicon Trace Test Passed!")
