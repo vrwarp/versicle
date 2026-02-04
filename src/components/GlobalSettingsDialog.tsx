@@ -66,7 +66,6 @@ export const GlobalSettingsDialog = () => {
     const [regenerationProgress, setRegenerationProgress] = useState<string | null>(null);
     const [regenerationPercent, setRegenerationPercent] = useState(0);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
-    const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null);
 
 
     const readingListEntries = useReadingListStore(state => state.entries);
@@ -338,25 +337,6 @@ export const GlobalSettingsDialog = () => {
         });
     };
 
-    const handleRestoreCheckpoint = async (id: number) => {
-        if (confirm("Are you sure you want to restore this checkpoint? Current state will be overwritten.")) {
-            try {
-                setRecoveryStatus("Restoring...");
-                const manifest = await CheckpointService.restoreCheckpoint(id);
-                if (manifest) {
-                    // Note: Checkpoint restoration with legacy manifests is deprecated
-                    // TODO: Update checkpoint system to use Yjs snapshots
-                    setRecoveryStatus("Checkpoint system needs migration to Yjs. Please restore from backup instead.");
-                } else {
-                    setRecoveryStatus("Failed to load checkpoint.");
-                }
-            } catch (e) {
-                logger.error('Restore checkpoint failed', e);
-                setRecoveryStatus("Error during restoration.");
-            }
-        }
-    };
-
     const handleClearConfig = () => {
         if (confirm("Are you sure you want to clear the Firebase configuration?")) {
             setFirebaseConfig({
@@ -410,6 +390,18 @@ export const GlobalSettingsDialog = () => {
             }
         };
         reader.readAsText(file);
+    };
+
+    const handleCreateCheckpoint = async () => {
+        try {
+            await CheckpointService.createCheckpoint('manual');
+            const list = await CheckpointService.listCheckpoints();
+            setCheckpoints(list);
+            showToast('Snapshot created', 'success');
+        } catch (e) {
+            logger.error('Failed to create checkpoint', e);
+            showToast('Failed to create snapshot', 'error');
+        }
     };
 
     const handleRestoreBackupFile = async (file: File) => {
@@ -596,8 +588,8 @@ export const GlobalSettingsDialog = () => {
                             activeTab === 'recovery' && (
                                 <RecoverySettingsTab
                                     checkpoints={checkpoints}
-                                    recoveryStatus={recoveryStatus}
-                                    onRestoreCheckpoint={handleRestoreCheckpoint}
+                                    recoveryStatus={null}
+                                    onCreateCheckpoint={handleCreateCheckpoint}
                                 />
                             )
                         }

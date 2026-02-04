@@ -29,11 +29,12 @@ vi.mock('./firebase-config', () => ({
 }));
 
 // Mock yjs-provider
-vi.mock('../../store/yjs-provider', () => ({
-    yDoc: {
-        getMap: vi.fn(() => new Map())
-    }
-}));
+vi.mock('../../store/yjs-provider', async () => {
+    const Y = await import('yjs');
+    return {
+        yDoc: new Y.Doc()
+    };
+});
 
 describe('FirestoreSyncManager', () => {
     beforeEach(() => {
@@ -183,9 +184,11 @@ describe('FirestoreSyncManager', () => {
             const manager = getFirestoreSyncManager({ maxWaitFirestoreTime: 5000 });
             await manager.initialize();
 
-            expect(FireProvider).toHaveBeenCalledWith(expect.objectContaining({
-                maxWaitTime: 5000
-            }));
+            await vi.waitFor(() => {
+                expect(FireProvider).toHaveBeenCalledWith(expect.objectContaining({
+                    maxWaitTime: 5000
+                }));
+            });
         });
     });
 });

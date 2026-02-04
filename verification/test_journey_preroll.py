@@ -46,9 +46,15 @@ def test_preroll_journey(page: Page):
 
     # Navigate back to settings
     page.get_by_test_id("reader-audio-button").click()
+    # Wait for TTS panel to be visible to ensure stability
+    expect(page.get_by_test_id("tts-panel")).to_be_visible()
+
     page.get_by_role("button", name="Settings").click(force=True)
 
     preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
+
+    # Wait for switch to be visible before checking attribute
+    expect(preroll_switch).to_be_visible()
     expect(preroll_switch).to_have_attribute("aria-checked", "true")
 
     utils.capture_screenshot(page, "preroll_02_persisted")
