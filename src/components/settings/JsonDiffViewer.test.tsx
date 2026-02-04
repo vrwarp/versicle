@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeDiff } from './JsonDiffViewer';
+import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '../../test/fuzz-utils';
 
 describe('computeDiff', () => {
   it('should detect added keys', () => {
@@ -80,5 +81,66 @@ describe('computeDiff', () => {
       expect(result.children![0].key).toBe('b');
       expect(result.children![1].type).toBe('unchanged');
       expect(result.children![2].type).toBe('unchanged');
+  });
+
+  describe('Fuzzing', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const createRandomJson = (rng: SeededRandom, depth: number = 0, maxDepth: number = 3): any => {
+          if (depth >= maxDepth || rng.next() < 0.3) {
+              // Return primitive
+              const type = rng.nextInt(0, 3);
+              switch (type) {
+                  case 0: return rng.nextString(rng.nextInt(1, 10));
+                  case 1: return rng.nextInt(0, 1000);
+                  case 2: return rng.nextBool();
+                  case 3: return null;
+              }
+          }
+
+          if (rng.nextBool()) {
+              // Array
+              const len = rng.nextInt(0, 5);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const arr: any[] = [];
+              for (let i = 0; i < len; i++) {
+                  arr.push(createRandomJson(rng, depth + 1, maxDepth));
+              }
+              return arr;
+          } else {
+              // Object
+              const numKeys = rng.nextInt(0, 5);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const obj: Record<string, any> = {};
+              for (let i = 0; i < numKeys; i++) {
+                  obj[rng.nextString(5)] = createRandomJson(rng, depth + 1, maxDepth);
+              }
+              return obj;
+          }
+      };
+
+      it('should handle random inputs without crashing', () => {
+          const rng = new SeededRandom(DEFAULT_FUZZ_SEED);
+
+          for (let i = 0; i < DEFAULT_FUZZ_ITERATIONS; i++) {
+              const oldVal = createRandomJson(rng);
+              const newVal = createRandomJson(rng);
+
+              try {
+                  const result = computeDiff(oldVal, newVal);
+                  expect(result).toBeDefined();
+                  expect(result.type).toBeDefined();
+                  expect(['added', 'removed', 'modified', 'unchanged']).toContain(result.type);
+
+                  if (result.children) {
+                      expect(Array.isArray(result.children)).toBe(true);
+                  }
+              } catch (e) {
+                  console.error(`Fuzz crash on iteration ${i} (seed=${DEFAULT_FUZZ_SEED})`);
+                  console.error('oldVal:', JSON.stringify(oldVal, null, 2));
+                  console.error('newVal:', JSON.stringify(newVal, null, 2));
+                  throw e;
+              }
+          }
+      });
   });
 });
