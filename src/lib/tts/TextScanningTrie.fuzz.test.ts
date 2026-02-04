@@ -55,8 +55,8 @@ describe('TextScanningTrie Fuzz Testing', () => {
         const trie = new TextScanningTrie();
         const inserted = new Set<string>();
 
-        // Insert 50 random words
-        for (let i = 0; i < 50; i++) {
+        // Insert 500 random words
+        for (let i = 0; i < 500; i++) {
             const word = prng.nextString(prng.nextInt(3, 10)).trim();
             if (word.length > 0) {
                 trie.insert(word, false);
@@ -65,7 +65,7 @@ describe('TextScanningTrie Fuzz Testing', () => {
         }
 
         // Fuzz check matchesStart
-        for (let i = 0; i < 1000; i++) {
+        for (let i = 0; i < 1000000; i++) {
             const text = prng.nextString(20);
             // We can't easily verify correctness against a Set without re-implementing logic,
             // but we can ensure it doesn't crash.
