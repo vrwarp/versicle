@@ -1,37 +1,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { TextScanningTrie } from './TextScanningTrie';
+import { SeededRandom, DEFAULT_FUZZ_SEED } from '../../test/fuzz-utils';
 
 describe('TextScanningTrie Fuzz Testing', () => {
-    // Simple PRNG (Linear Congruential Generator) for reproducible tests
-    class PRNG {
-        private seed: number;
-        constructor(seed: number) {
-            this.seed = seed;
-        }
-        next(): number {
-            this.seed = (this.seed * 1664525 + 1013904223) % 4294967296;
-            return this.seed / 4294967296;
-        }
-        range(min: number, max: number): number {
-            return Math.floor(this.next() * (max - min)) + min;
-        }
-        choice<T>(arr: T[]): T {
-            return arr[this.range(0, arr.length)];
-        }
-    }
-
-    const prng = new PRNG(12345);
-
-    const CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!? ";
-
-    function generateRandomString(length: number): string {
-        let str = "";
-        for (let i = 0; i < length; i++) {
-            str += prng.choice(CHARS.split(''));
-        }
-        return str;
-    }
+    const prng = new SeededRandom(DEFAULT_FUZZ_SEED);
 
     it('matches inserted strings correctly (Forward)', () => {
         const trie = new TextScanningTrie();
@@ -39,8 +12,8 @@ describe('TextScanningTrie Fuzz Testing', () => {
         words.forEach(w => trie.insert(w, false));
 
         for (let i = 0; i < 1000; i++) {
-            const word = prng.choice(words);
-            const noise = generateRandomString(10);
+            const word = prng.nextElement(words);
+            const noise = prng.nextString(10);
 
             // Should match "word + boundary"
             expect(trie.matchesStart(word + " " + noise)).toBe(true);
@@ -61,8 +34,8 @@ describe('TextScanningTrie Fuzz Testing', () => {
         words.forEach(w => trie.insert(w, true));
 
         for (let i = 0; i < 1000; i++) {
-            const word = prng.choice(words);
-            const noise = generateRandomString(10);
+            const word = prng.nextElement(words);
+            const noise = prng.nextString(10);
 
             // Should match "noise + word" (matchesEnd checks end of string)
             // e.g. "hello apple"
@@ -84,7 +57,7 @@ describe('TextScanningTrie Fuzz Testing', () => {
 
         // Insert 50 random words
         for (let i = 0; i < 50; i++) {
-            const word = generateRandomString(prng.range(3, 10)).trim();
+            const word = prng.nextString(prng.nextInt(3, 10)).trim();
             if (word.length > 0) {
                 trie.insert(word, false);
                 inserted.add(word.toLowerCase());
@@ -93,7 +66,7 @@ describe('TextScanningTrie Fuzz Testing', () => {
 
         // Fuzz check matchesStart
         for (let i = 0; i < 1000; i++) {
-            const text = generateRandomString(20);
+            const text = prng.nextString(20);
             // We can't easily verify correctness against a Set without re-implementing logic,
             // but we can ensure it doesn't crash.
             // And we can check basic properties.
