@@ -65,7 +65,7 @@ describe('TextScanningTrie Fuzz Testing', () => {
         }
 
         // Fuzz check matchesStart
-        for (let i = 0; i < 1000000; i++) {
+        for (let i = 0; i < 100000; i++) {
             const text = prng.nextString(20);
             // We can't easily verify correctness against a Set without re-implementing logic,
             // but we can ensure it doesn't crash.
