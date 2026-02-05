@@ -1,5 +1,6 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment } from './types';
+import type { IAudioPlayer } from '../IAudioPlayer';
 
 /**
  * TTS Provider for LemonFox.ai API.
@@ -9,8 +10,8 @@ export class LemonFoxProvider extends BaseCloudProvider {
   id = 'lemonfox';
   private apiKey: string | null = null;
 
-  constructor(apiKey?: string) {
-    super();
+  constructor(audioPlayer: IAudioPlayer, apiKey?: string) {
+    super(audioPlayer);
     if (apiKey) this.apiKey = apiKey;
     this.voices = [
       // English (US)

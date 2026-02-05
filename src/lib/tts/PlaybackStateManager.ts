@@ -1,4 +1,4 @@
-import type { TTSQueueItem, TTSStatus } from './AudioPlayerService';
+import type { TTSQueueItem, TTSStatus } from './types';
 import { dbService } from '../../db/DBService';
 
 
@@ -94,7 +94,7 @@ export class PlaybackStateManager {
             // Only skip if ALL source indices are in the skipped set
             let shouldSkip = false;
             if (item.sourceIndices && item.sourceIndices.length > 0) {
-                shouldSkip = item.sourceIndices.every(idx => rawSkippedIndices.has(idx));
+                shouldSkip = item.sourceIndices.every((idx: number) => rawSkippedIndices.has(idx));
             }
 
             if (item.isSkipped !== shouldSkip) {
@@ -138,7 +138,7 @@ export class PlaybackStateManager {
                 const item = newQueue[i];
                 if (item.sourceIndices && item.sourceIndices.length > 0) {
                     // Check if all source indices of this item are in the adaptation's set
-                    const isMatch = item.sourceIndices.every(idx => adaptIndicesSet.has(idx));
+                    const isMatch = item.sourceIndices.every((idx: number) => adaptIndicesSet.has(idx));
                     if (isMatch) {
                         matchingQueueIndices.push(i);
                     }
@@ -270,8 +270,6 @@ export class PlaybackStateManager {
             // Even if we jump to a skipped item (e.g. manually), we allow it?
             // Or should we snap to nearest visible?
             // For now, allow direct jumps, assuming UI handles visibility.
-            // But if auto-playing, it might be weird.
-            // Let's assume if user clicks it, they want to hear it even if skipped.
             // BUT, for consistency, let's just update index.
             this._currentIndex = index;
             this.persistQueue();
@@ -379,10 +377,6 @@ export class PlaybackStateManager {
      * Persists the current queue and playback position to the database.
      * Optimizes writes by checking if the queue structure has changed.
      */
-    /**
-     * Persists the current queue and playback position.
-     * Optimizes writes by checking if the queue structure has changed.
-     */
     persistQueue() {
         if (this.currentBookId) {
             // Optimization: If queue has not changed since last persist,
@@ -404,8 +398,6 @@ export class PlaybackStateManager {
 
         const isPaused = status === 'paused';
         const lastPauseTime = isPaused ? Date.now() : null;
-
-
 
         try {
             // Only update pause time in local cache session state

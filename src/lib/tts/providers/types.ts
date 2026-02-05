@@ -56,6 +56,45 @@ export type TTSEvent =
   | { type: 'download-progress'; percent: number; status: string; voiceId: string };
 
 /**
+ * Interface defining the events emitted by the TTSProviderManager.
+ */
+export interface TTSProviderEvents {
+    /** Triggered when playback starts. */
+    onStart: () => void;
+    /** Triggered when playback completes successfully. */
+    onEnd: () => void;
+    /**
+     * Triggered when an error occurs during playback.
+     * @param error The error object or message.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onError: (error: any) => void;
+    /**
+     * Triggered periodically during playback with the current timestamp.
+     * @param currentTime The current playback position in seconds.
+     */
+    onTimeUpdate: (currentTime: number) => void;
+    /**
+     * Triggered when a word or sentence boundary is reached.
+     * @param charIndex The character index of the boundary.
+     */
+    onBoundary: (charIndex: number) => void;
+    /**
+     * Triggered when alignment metadata is available.
+     * @param alignment The alignment data.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onMeta: (alignment: any[]) => void;
+    /**
+     * Triggered during voice download progress.
+     * @param voiceId The ID of the voice being downloaded.
+     * @param percent The progress percentage (0-100).
+     * @param status A status message.
+     */
+    onDownloadProgress: (voiceId: string, percent: number, status: string) => void;
+}
+
+/**
  * Interface that all TTS providers must implement.
  */
 export interface ITTSProvider {

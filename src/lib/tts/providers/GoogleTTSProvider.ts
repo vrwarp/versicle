@@ -1,5 +1,6 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment, Timepoint } from './types';
+import type { IAudioPlayer } from '../IAudioPlayer';
 
 /**
  * TTS Provider for Google Cloud Text-to-Speech API.
@@ -9,8 +10,8 @@ export class GoogleTTSProvider extends BaseCloudProvider {
   id = 'google';
   private apiKey: string | null = null;
 
-  constructor(apiKey?: string) {
-    super();
+  constructor(audioPlayer: IAudioPlayer, apiKey?: string) {
+    super(audioPlayer);
     if (apiKey) {
       this.apiKey = apiKey;
     }

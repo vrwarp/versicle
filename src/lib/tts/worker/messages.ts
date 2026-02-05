@@ -1,10 +1,10 @@
-import type { TTSQueueItem, TTSStatus, DownloadInfo } from '../AudioPlayerService';
-import type { AlignmentData } from '../SyncEngine';
+import type { TTSQueueItem, TTSStatus } from '../types';
 
 // --- Main -> Worker Messages ---
 
 export type MainToWorkerMessage =
-    | { type: 'INIT'; isNative: boolean }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    | { type: 'INIT'; isNative: boolean; provider?: string; config?: any }
     | { type: 'PLAY' }
     | { type: 'PAUSE' }
     | { type: 'STOP' }
@@ -12,6 +12,7 @@ export type MainToWorkerMessage =
     | { type: 'PREV' }
     | { type: 'SEEK'; offset: number }
     | { type: 'SEEK_TO'; time: number }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     | { type: 'SET_BOOK'; bookId: string | null; initialProgress?: any }
     | { type: 'LOAD_SECTION'; index: number; autoPlay: boolean; title?: string }
     | { type: 'LOAD_SECTION_BY_ID'; sectionId: string; autoPlay: boolean; title?: string }
@@ -19,17 +20,22 @@ export type MainToWorkerMessage =
     | { type: 'JUMP_TO'; index: number }
     | { type: 'SET_SPEED'; speed: number }
     | { type: 'SET_VOICE'; voiceId: string }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     | { type: 'SET_PROVIDER'; providerId: string; config?: any }
     | { type: 'SET_PREROLL'; enabled: boolean }
-    | { type: 'SET_BG_AUDIO'; mode: any }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    | { type: 'SET_BG_MODE'; mode: any }
     | { type: 'SET_BG_VOLUME'; volume: number }
     | { type: 'PREVIEW'; text: string }
+    | { type: 'SKIP_NEXT_SECTION' }
+    | { type: 'SKIP_PREV_SECTION' }
     // Remote Provider Feedback (Main -> Worker)
     | { type: 'REMOTE_PLAY_ENDED'; provider: 'local' | 'native' }
     | { type: 'REMOTE_PLAY_ERROR'; provider: 'local' | 'native'; error: string }
     | { type: 'REMOTE_TIME_UPDATE'; provider: 'local' | 'native'; time: number; duration: number }
     | { type: 'REMOTE_PLAY_START'; provider: 'local' | 'native' }
     | { type: 'REMOTE_BOUNDARY'; provider: 'local' | 'native'; charIndex: number }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     | { type: 'LOCAL_VOICES_LIST'; voices: any[]; reqId: string }
     // Audio Player (Blob) Feedback
     | { type: 'AUDIO_ENDED' }
@@ -58,6 +64,7 @@ export type WorkerToMainMessage =
     | { type: 'STOP_PLAYBACK' }
     | { type: 'SET_PLAYBACK_RATE'; speed: number }
     // UI/Store Updates
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     | { type: 'UPDATE_METADATA'; metadata: any }
     | { type: 'UPDATE_TTS_PROGRESS'; bookId: string; index: number; sectionIndex: number }
     | { type: 'ADD_COMPLETED_RANGE'; bookId: string; cfi: string }
@@ -67,4 +74,5 @@ export type WorkerToMainMessage =
     // Provider Management Responses
     | { type: 'GET_LOCAL_VOICES'; reqId: string }
     | { type: 'CHECK_VOICE_RESULT'; reqId: string; isDownloaded: boolean }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     | { type: 'GET_ALL_VOICES_RESULT'; reqId: string; voices: any[] };

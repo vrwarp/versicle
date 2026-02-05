@@ -1,5 +1,6 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, TTSVoice, SpeechSegment } from './types';
+import type { IAudioPlayer } from '../IAudioPlayer';
 import { piperGenerate, isModelPersisted, deleteCachedModel, fetchWithBackoff, cacheModel, stitchWavs } from './piper-utils';
 import { TextSegmenter } from '../TextSegmenter';
 
@@ -27,8 +28,8 @@ export class PiperProvider extends BaseCloudProvider {
   private voiceMap: Map<string, { modelPath: string; configPath: string; speakerId?: number }> = new Map();
   private segmenter: TextSegmenter;
 
-  constructor() {
-    super();
+  constructor(audioPlayer: IAudioPlayer) {
+    super(audioPlayer);
     this.segmenter = new TextSegmenter();
   }
 

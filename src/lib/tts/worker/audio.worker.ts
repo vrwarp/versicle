@@ -1,96 +1,103 @@
 import { WorkerAudioPlayerService } from './WorkerAudioPlayerService';
 import type { MainToWorkerMessage } from './messages';
 
-let service: WorkerAudioPlayerService | null = null;
+// The worker instance
+let service: WorkerAudioPlayerService;
 
-self.addEventListener('message', (event) => {
-    const msg = event.data as MainToWorkerMessage;
+self.onmessage = async (e: MessageEvent<MainToWorkerMessage>) => {
+    const msg = e.data;
 
     if (msg.type === 'INIT') {
-        if (!service) {
-            service = WorkerAudioPlayerService.getInstance(msg.isNative);
-            service.init();
+        service = WorkerAudioPlayerService.getInstance(msg.isNative);
+        // We might want to set initial provider here if passed
+        if (msg.provider) {
+             await service.setProvider(msg.provider, msg.config);
         }
+        await service.init();
         return;
     }
 
     if (!service) {
-        // Some messages might be for other listeners (like WorkerAudioPlayer)
-        // so we shouldn't strictly warn unless we are sure.
-        // But WorkerAudioPlayer listens to 'message' independently.
-        // So this listener handles Service Logic.
+        console.error("WorkerAudioPlayerService not initialized");
         return;
     }
 
     switch (msg.type) {
-        case 'PLAY':
-            service.play();
-            break;
-        case 'PAUSE':
-            service.pause();
-            break;
-        case 'STOP':
-            service.stop();
-            break;
-        case 'NEXT':
-            service.next();
-            break;
-        case 'PREV':
-            service.prev();
-            break;
-        case 'SEEK':
-            service.seek(msg.offset);
-            break;
-        case 'SEEK_TO':
-            service.seekTo(msg.time);
-            break;
         case 'SET_BOOK':
             service.setBookId(msg.bookId);
             break;
-        case 'LOAD_SECTION':
-            service.loadSection(msg.index, msg.autoPlay, msg.title);
+        case 'SET_PROVIDER':
+            await service.setProvider(msg.providerId, msg.config);
             break;
-        case 'LOAD_SECTION_BY_ID':
-            service.loadSectionBySectionId(msg.sectionId, msg.autoPlay, msg.title);
+        case 'PLAY':
+            await service.play();
             break;
-        case 'SET_QUEUE':
-            service.setQueue(msg.items, msg.startIndex);
+        case 'PAUSE':
+            await service.pause();
+            break;
+        case 'STOP':
+            await service.stop();
+            break;
+        case 'NEXT':
+            await service.next();
+            break;
+        case 'PREV':
+            await service.prev();
             break;
         case 'JUMP_TO':
-            service.jumpTo(msg.index);
+            await service.jumpTo(msg.index);
+            break;
+        case 'SEEK_TO':
+            await service.seekTo(msg.time);
+            break;
+        case 'SEEK':
+            await service.seek(msg.offset);
             break;
         case 'SET_SPEED':
-            service.setSpeed(msg.speed);
+            await service.setSpeed(msg.speed);
             break;
         case 'SET_VOICE':
-            service.setVoice(msg.voiceId);
+            await service.setVoice(msg.voiceId);
             break;
-        case 'SET_PROVIDER':
-            service.setProvider(msg.providerId, msg.config);
+        case 'PREVIEW':
+            await service.preview(msg.text);
+            break;
+        case 'LOAD_SECTION':
+            // Ensure we pass both arguments, defaulting autoPlay to true if not specified
+            await service.loadSection(msg.index, msg.autoPlay ?? true);
+            break;
+        case 'LOAD_SECTION_BY_ID':
+             await service.loadSectionBySectionId(msg.sectionId, msg.autoPlay ?? true, msg.title);
+             break;
+        case 'SET_QUEUE':
+            await service.setQueue(msg.items, msg.startIndex);
+            break;
+        case 'SKIP_NEXT_SECTION':
+            await service.skipToNextSection();
+            break;
+        case 'SKIP_PREV_SECTION':
+            await service.skipToPreviousSection();
+            break;
+        case 'GET_ALL_VOICES':
+            await service.getVoices(msg.reqId);
+            break;
+        case 'CHECK_VOICE':
+            await service.isVoiceDownloaded(msg.voiceId, msg.reqId);
+            break;
+        case 'DOWNLOAD_VOICE':
+            await service.downloadVoice(msg.voiceId);
+            break;
+        case 'DELETE_VOICE':
+            await service.deleteVoice(msg.voiceId);
             break;
         case 'SET_PREROLL':
             service.setPrerollEnabled(msg.enabled);
             break;
-        case 'SET_BG_AUDIO':
+        case 'SET_BG_MODE':
             service.setBackgroundAudioMode(msg.mode);
             break;
         case 'SET_BG_VOLUME':
             service.setBackgroundVolume(msg.volume);
             break;
-        case 'PREVIEW':
-            service.preview(msg.text);
-            break;
-        case 'DOWNLOAD_VOICE':
-            service.downloadVoice(msg.voiceId);
-            break;
-        case 'DELETE_VOICE':
-            service.deleteVoice(msg.voiceId);
-            break;
-        case 'CHECK_VOICE':
-            service.isVoiceDownloaded(msg.voiceId, msg.reqId);
-            break;
-        case 'GET_ALL_VOICES':
-            service.getVoices(msg.reqId);
-            break;
     }
-});
+};

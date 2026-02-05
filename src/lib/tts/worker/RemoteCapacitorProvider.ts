@@ -18,23 +18,31 @@ export class RemoteCapacitorProvider implements ITTSProvider {
             if (resolve) resolve(msg.voices);
         }
 
-        if (msg.provider === 'native') {
-            switch (msg.type) {
-                case 'REMOTE_PLAY_START':
-                    this.emit({ type: 'start' });
-                    break;
-                case 'REMOTE_PLAY_ENDED':
-                    this.emit({ type: 'end' });
-                    break;
-                case 'REMOTE_PLAY_ERROR':
-                    this.emit({ type: 'error', error: msg.error });
-                    break;
-                case 'REMOTE_TIME_UPDATE':
-                    this.emit({ type: 'timeupdate', currentTime: msg.time, duration: msg.duration });
-                    break;
-                case 'REMOTE_BOUNDARY':
-                    this.emit({ type: 'boundary', charIndex: msg.charIndex });
-                    break;
+        // Check for provider specific messages by narrowing union type based on type property
+        if (msg.type === 'REMOTE_PLAY_START' ||
+            msg.type === 'REMOTE_PLAY_ENDED' ||
+            msg.type === 'REMOTE_PLAY_ERROR' ||
+            msg.type === 'REMOTE_TIME_UPDATE' ||
+            msg.type === 'REMOTE_BOUNDARY') {
+
+            if (msg.provider === 'native') {
+                switch (msg.type) {
+                    case 'REMOTE_PLAY_START':
+                        this.emit({ type: 'start' });
+                        break;
+                    case 'REMOTE_PLAY_ENDED':
+                        this.emit({ type: 'end' });
+                        break;
+                    case 'REMOTE_PLAY_ERROR':
+                        this.emit({ type: 'error', error: msg.error });
+                        break;
+                    case 'REMOTE_TIME_UPDATE':
+                        this.emit({ type: 'timeupdate', currentTime: msg.time, duration: msg.duration });
+                        break;
+                    case 'REMOTE_BOUNDARY':
+                        this.emit({ type: 'boundary', charIndex: msg.charIndex });
+                        break;
+                }
             }
         }
     }
@@ -59,7 +67,7 @@ export class RemoteCapacitorProvider implements ITTSProvider {
         });
     }
 
-    preload(text: string, options: TTSOptions): void {
+    async preload(text: string, options: TTSOptions): Promise<void> {
         (self as any).postMessage({
             type: 'PRELOAD_NATIVE',
             text,

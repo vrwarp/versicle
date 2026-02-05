@@ -48,6 +48,7 @@ vi.mock('../providers/WebSpeechProvider', () => ({
         on = vi.fn();
         pause = vi.fn();
         resume = vi.fn();
+        preload = vi.fn().mockResolvedValue(undefined);
     }
 }));
 
@@ -61,6 +62,7 @@ vi.mock('./RemoteWebSpeechProvider', () => ({
         on = vi.fn();
         pause = vi.fn();
         resume = vi.fn();
+        preload = vi.fn().mockResolvedValue(undefined);
     }
 }));
 
@@ -74,6 +76,7 @@ vi.mock('./RemoteCapacitorProvider', () => ({
         on = vi.fn();
         pause = vi.fn();
         resume = vi.fn();
+        preload = vi.fn().mockResolvedValue(undefined);
     }
 }));
 
@@ -99,7 +102,7 @@ describe('WorkerAudioPlayerService', () => {
 
     it('should initialize and set provider', async () => {
         await service.init();
-        // provider logic is internal but shouldn't crash
+        await service.setProvider('local');
     });
 
     it('should set book ID and load queue', async () => {
@@ -109,6 +112,7 @@ describe('WorkerAudioPlayerService', () => {
     });
 
     it('should load section and play', async () => {
+        await service.setProvider('local');
         service.setBookId('book1');
         await service.loadSection(0, true);
 
@@ -125,6 +129,7 @@ describe('WorkerAudioPlayerService', () => {
     });
 
     it('should send playback updates', async () => {
+        await service.setProvider('local');
         service.setBookId('book1');
         await service.setQueue([{ text: "Test", cfi: "cfi1" }]);
         await service.play();

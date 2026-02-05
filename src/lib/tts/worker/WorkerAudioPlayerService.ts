@@ -1,4 +1,4 @@
-import type { ITTSProvider, TTSVoice } from '../providers/types';
+import type { ITTSProvider } from '../providers/types';
 import { SyncEngine } from '../SyncEngine';
 import { LexiconService } from '../LexiconService';
 import { dbService } from '../../../db/DBService';
@@ -16,7 +16,7 @@ import { LemonFoxProvider } from '../providers/LemonFoxProvider';
 import { RemoteCapacitorProvider } from './RemoteCapacitorProvider';
 import { RemoteWebSpeechProvider } from './RemoteWebSpeechProvider';
 import { useCostStore } from '../CostEstimator';
-import type { TTSQueueItem, TTSStatus, DownloadInfo } from '../AudioPlayerService';
+import type { TTSQueueItem, TTSStatus } from '../types';
 import type { WorkerToMainMessage } from './messages';
 
 const logger = createLogger('WorkerAudioPlayerService');
@@ -61,7 +61,8 @@ export class WorkerAudioPlayerService {
                 this.playNext();
             },
             onError: (error) => {
-                if (error?.type === 'fallback') {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                if ((error as any)?.type === 'fallback') {
                     logger.warn("Falling back to local provider due to cloud error");
                     this.playInternal(true);
                     return;
@@ -222,33 +223,21 @@ export class WorkerAudioPlayerService {
         }
     }
 
-    public setBackgroundAudioMode(mode: any) {
-        // Main handles the actual plugin call. The UI store sends this message to Worker,
-        // but maybe it should just handle it on Main?
-        // Since we are proxying everything, maybe Main -> Worker -> (does nothing?)
-        // Wait, "background audio" often means "noise".
-        // If the noise generator is on Main, then Worker logic is irrelevant unless we want to pause noise on TTS pause?
-        // Original logic: platformIntegration.setBackgroundAudioMode(mode, status === playing)
-        // Since status changes happen in Worker, Worker needs to tell Main: "Update BG Audio State".
-        // We send UPDATE_METADATA or similar?
-        // Or we send a specific message?
-        // Currently we rely on STATUS_UPDATE. Main observes status and updates BG audio?
-        // But Main needs to know the 'mode'.
-        // So Worker should probably echo back "SET_BG_AUDIO" to main if it changes?
-        // Actually, if UI changes mode, it can update Main directly.
-        // But if `status` changes, Main needs to check `mode`.
-        // So `mode` should live in Main or Store.
-        // So this method is probably a no-op in Worker or just keeps local state if needed.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+    public setBackgroundAudioMode(_mode: any) {
+        // No-op in worker
     }
 
-    public setBackgroundVolume(volume: number) {
-        // Similar to above.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    public setBackgroundVolume(_volume: number) {
+        // No-op in worker
     }
 
     public setPrerollEnabled(enabled: boolean) {
         this.prerollEnabled = enabled;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public setProvider(providerId: string, config?: any) {
         return this.enqueue(async () => {
             await this.stopInternal();
@@ -401,7 +390,6 @@ export class WorkerAudioPlayerService {
                          const index = this.stateManager.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
                          if (index >= 0) this.stateManager.jumpTo(index);
                     }
-                    // We don't have direct access to "resume" signal from DB other than this.
                 }
             } catch (e) {
                 logger.warn("Failed to restore playback state", e);
@@ -415,7 +403,6 @@ export class WorkerAudioPlayerService {
         }
 
         if (this.status !== 'playing') {
-            // Background mode engagement is handled by Main observing status='playing'.
             this.setStatus('loading');
         }
 
@@ -670,7 +657,7 @@ export class WorkerAudioPlayerService {
         this.postMessage({
             type: 'STATUS_UPDATE',
             status: this.status,
-            activeCfi,
+            cfi: activeCfi, // Fix: Map activeCfi to cfi
             index: this.stateManager.currentIndex,
             queue: this.stateManager.queue as any
         });

@@ -1,5 +1,6 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment } from './types';
+import type { IAudioPlayer } from '../IAudioPlayer';
 
 /**
  * A mock cloud provider for testing purposes.
@@ -8,8 +9,8 @@ import type { TTSOptions, SpeechSegment } from './types';
 export class MockCloudProvider extends BaseCloudProvider {
   id = 'mock-cloud';
 
-  constructor() {
-    super();
+  constructor(audioPlayer: IAudioPlayer) {
+    super(audioPlayer);
     this.voices = [
       { id: 'mock-male', name: 'Mock Male (Cloud)', lang: 'en-US', provider: 'google' },
       { id: 'mock-female', name: 'Mock Female (Cloud)', lang: 'en-US', provider: 'openai' }

@@ -3,14 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TTSVoice } from '../lib/tts/providers/types';
 import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 import type { TTSStatus, TTSQueueItem } from '../lib/tts/AudioPlayerService';
-import { GoogleTTSProvider } from '../lib/tts/providers/GoogleTTSProvider';
-import { OpenAIProvider } from '../lib/tts/providers/OpenAIProvider';
-import { LemonFoxProvider } from '../lib/tts/providers/LemonFoxProvider';
-import { PiperProvider } from '../lib/tts/providers/PiperProvider';
-import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
-import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
-import { Capacitor } from '@capacitor/core';
 import { LexiconService } from '../lib/tts/LexiconService';
 
 /**
@@ -163,9 +156,7 @@ export const useTTSStore = create<TTSState>()(
                     player.subscribe((status, activeCfi, currentIndex, queue, error, downloadInfo) => {
                         set(() => ({
                             status,
-                            // Treat 'loading' as playing to prevent UI flicker (play/pause button)
-                            // during transitions between sentences or while buffering.
-                            // Treat 'completed' as playing to keep background audio and UI active (immersive mode).
+                            // Treat 'loading' as playing to prevent UI flicker
                             isPlaying: status === 'playing' || status === 'loading' || status === 'completed',
                             activeCfi,
                             currentIndex,
@@ -255,27 +246,14 @@ export const useTTSStore = create<TTSState>()(
                 },
                 loadVoices: async () => {
                     const player = AudioPlayerService.getInstance();
-                    // Ensure provider is set on player (in case of fresh load)
                     const { providerId, apiKeys } = get();
-                    // We might need to check if player already has correct provider type
-                    // But simplified: just set it.
-                    let newProvider;
-                    if (providerId === 'google') {
-                        newProvider = new GoogleTTSProvider(apiKeys.google);
-                    } else if (providerId === 'openai') {
-                        newProvider = new OpenAIProvider(apiKeys.openai);
-                    } else if (providerId === 'lemonfox') {
-                        newProvider = new LemonFoxProvider(apiKeys.lemonfox);
-                    } else if (providerId === 'piper') {
-                        newProvider = new PiperProvider();
-                    } else {
-                        if (Capacitor.isNativePlatform()) {
-                            newProvider = new CapacitorTTSProvider();
-                        } else {
-                            newProvider = new WebSpeechProvider();
-                        }
-                    }
-                    await player.setProvider(newProvider);
+
+                    let config: string | undefined = undefined;
+                    if (providerId === 'google') config = apiKeys.google;
+                    if (providerId === 'openai') config = apiKeys.openai;
+                    if (providerId === 'lemonfox') config = apiKeys.lemonfox;
+
+                    await player.setProvider(providerId, config);
 
                     await player.init();
                     const voices = await player.getVoices();

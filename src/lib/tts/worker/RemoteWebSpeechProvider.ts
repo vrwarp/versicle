@@ -52,7 +52,7 @@ export class RemoteWebSpeechProvider implements ITTSProvider {
         });
     }
 
-    preload(text: string, options: TTSOptions): void {
+    async preload(text: string, options: TTSOptions): Promise<void> {
         (self as any).postMessage({
             type: 'PRELOAD_LOCAL',
             text,

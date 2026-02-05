@@ -1,18 +1,18 @@
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment } from './types';
-import { AudioElementPlayer } from '../AudioElementPlayer';
+import type { IAudioPlayer } from '../IAudioPlayer';
 import { TTSCache } from '../TTSCache';
 import { CostEstimator } from '../CostEstimator';
 
 export abstract class BaseCloudProvider implements ITTSProvider {
   abstract id: string;
   protected voices: TTSVoice[] = [];
-  protected audioPlayer: AudioElementPlayer;
+  protected audioPlayer: IAudioPlayer;
   protected cache: TTSCache;
   protected eventListeners: ((event: TTSEvent) => void)[] = [];
   protected requestRegistry: Map<string, Promise<SpeechSegment>> = new Map();
 
-  constructor() {
-    this.audioPlayer = new AudioElementPlayer();
+  constructor(audioPlayer: IAudioPlayer) {
+    this.audioPlayer = audioPlayer;
     this.cache = new TTSCache();
     this.setupAudioPlayer();
   }
