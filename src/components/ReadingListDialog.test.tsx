@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ReadingListDialog } from './ReadingListDialog';
 
 // Mock Radix UI Modal
@@ -8,6 +8,9 @@ vi.mock('./ui/Modal', () => {
     return {
         Modal: ({ open, children }: { open: boolean, children: React.ReactNode }) => open ? <div role="dialog">{children}</div> : null,
         ModalContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+        ModalHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+        ModalTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+        ModalDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     };
 });
 
@@ -47,6 +50,10 @@ const mockEntries = {
     }
 };
 
+const { mockRemoveEntry } = vi.hoisted(() => ({
+    mockRemoveEntry: vi.fn(),
+}));
+
 vi.mock('../store/useReadingListStore', () => ({
     useReadingListStore: Object.assign(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,7 +61,7 @@ vi.mock('../store/useReadingListStore', () => ({
         {
             getState: () => ({
                 entries: mockEntries,
-                removeEntry: vi.fn(),
+                removeEntry: mockRemoveEntry,
                 upsertEntry: vi.fn()
             })
         }
@@ -62,6 +69,9 @@ vi.mock('../store/useReadingListStore', () => ({
 }));
 
 describe('ReadingListDialog', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
     it('renders correctly', () => {
         render(<ReadingListDialog open={true} onOpenChange={vi.fn()} />);
         expect(screen.getByText('Reading List')).toBeInTheDocument();
@@ -107,5 +117,31 @@ describe('ReadingListDialog', () => {
             const th = button.closest('th');
             expect(th).toBeInTheDocument();
         });
+    });
+
+    it('shows confirmation dialog when deleting an entry', () => {
+        render(<ReadingListDialog open={true} onOpenChange={vi.fn()} />);
+
+        // Find delete button for "Book A"
+        // Note: The delete button is in the same row as "Book A".
+        // We can find the row first.
+        const row = screen.getByRole('row', { name: /Book A/i });
+        const deleteButton = within(row).getByRole('button', { name: /delete/i });
+
+        fireEvent.click(deleteButton);
+
+        // Check if confirmation dialog appears
+        expect(screen.getByText('Delete Entry')).toBeInTheDocument();
+        expect(screen.getByText(/Are you sure you want to delete "Book A"/i)).toBeInTheDocument();
+
+        // Click confirm
+        // Use within to scope to the confirmation dialog to avoid ambiguity with the row delete button
+        const confirmationDialog = screen.getByText(/Are you sure you want to delete "Book A"/i).closest('div[role="dialog"]');
+        expect(confirmationDialog).toBeInTheDocument();
+
+        const confirmButton = within(confirmationDialog as HTMLElement).getByRole('button', { name: 'Delete' });
+        fireEvent.click(confirmButton);
+
+        expect(mockRemoveEntry).toHaveBeenCalledWith('book1.epub');
     });
 });

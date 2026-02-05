@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
 import { useReadingListStore } from '../store/useReadingListStore';
 import type { ReadingListEntry } from '../types/db';
 import { ArrowUpDown, Trash2, Edit2, Download, CheckSquare, Square, ArrowUp, ArrowDown } from 'lucide-react';
@@ -24,6 +25,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
     const [editEntry, setEditEntry] = useState<ReadingListEntry | null>(null);
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{ type: 'single', filename: string } | { type: 'batch' } | null>(null);
 
     // No need for useEffect -> refreshEntries, store is reactive
 
@@ -88,23 +90,30 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         }
     };
 
-    const handleDelete = async (filename: string) => {
-        if (confirm('Are you sure you want to delete this entry?')) {
-            useReadingListStore.getState().removeEntry(filename);
-            setSelectedEntries(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(filename);
-                return newSet;
-            });
-        }
+    const handleDelete = (filename: string) => {
+        setDeleteConfirmation({ type: 'single', filename });
     };
 
-    const handleBatchDelete = async () => {
-        if (confirm(`Are you sure you want to delete ${selectedEntries.size} entries?`)) {
+    const handleBatchDelete = () => {
+        setDeleteConfirmation({ type: 'batch' });
+    };
+
+    const confirmDelete = () => {
+        if (!deleteConfirmation) return;
+
+        if (deleteConfirmation.type === 'single') {
+            useReadingListStore.getState().removeEntry(deleteConfirmation.filename);
+            setSelectedEntries(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(deleteConfirmation.filename);
+                return newSet;
+            });
+        } else if (deleteConfirmation.type === 'batch') {
             const batch = Array.from(selectedEntries);
             batch.forEach(f => useReadingListStore.getState().removeEntry(f));
             setSelectedEntries(new Set());
         }
+        setDeleteConfirmation(null);
     };
 
     /**
@@ -316,6 +325,23 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                 onOpenChange={(open) => !open && setEditEntry(null)}
                 entry={editEntry}
                 onSave={handleEditSave}
+            />
+
+            <Dialog
+                isOpen={!!deleteConfirmation}
+                onClose={() => setDeleteConfirmation(null)}
+                title={deleteConfirmation?.type === 'batch' ? "Delete Entries" : "Delete Entry"}
+                description={
+                    deleteConfirmation?.type === 'batch'
+                        ? `Are you sure you want to delete ${selectedEntries.size} entries?`
+                        : `Are you sure you want to delete "${entriesMap[deleteConfirmation?.filename || '']?.title || 'this book'}"?`
+                }
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setDeleteConfirmation(null)}>Cancel</Button>
+                        <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+                    </>
+                }
             />
         </>
     );
