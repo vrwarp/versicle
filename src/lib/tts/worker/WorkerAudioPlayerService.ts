@@ -255,7 +255,8 @@ export class WorkerAudioPlayerService implements IWorkerAudioService {
         });
     }
 
-    async getVoices(reqId: string): Promise<TTSVoice[]> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    async getVoices(_reqId: string): Promise<TTSVoice[]> {
         return await this.providerManager.getVoices();
     }
 
@@ -267,7 +268,8 @@ export class WorkerAudioPlayerService implements IWorkerAudioService {
         await this.providerManager.deleteVoice(voiceId);
     }
 
-    async isVoiceDownloaded(voiceId: string, reqId: string): Promise<boolean> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    async isVoiceDownloaded(voiceId: string, _reqId: string): Promise<boolean> {
         return await this.providerManager.isVoiceDownloaded(voiceId);
     }
 
@@ -275,8 +277,8 @@ export class WorkerAudioPlayerService implements IWorkerAudioService {
         return this.stateManager.queue;
     }
 
-    public loadSection(sectionIndex: number, autoPlay: boolean = true) {
-        return this.enqueue(() => this.loadSectionInternal(sectionIndex, autoPlay));
+    public async loadSection(sectionIndex: number, autoPlay: boolean = true): Promise<void> {
+        await this.enqueue(() => this.loadSectionInternal(sectionIndex, autoPlay));
     }
 
     public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {

@@ -1,7 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import { PlatformIntegration } from './PlatformIntegration';
 import { Capacitor } from '@capacitor/core';
+
+// Define mockService using vi.hoisted to handle hoisting
+const { mockService } = vi.hoisted(() => {
+    return {
+        mockService: {
+            init: vi.fn(),
+            play: vi.fn(),
+            pause: vi.fn(),
+            stop: vi.fn(),
+        }
+    };
+});
 
 // Mock dependencies
 vi.mock('@capacitor/core', () => ({
@@ -53,7 +64,15 @@ vi.mock('./providers/CapacitorTTSProvider', () => {
     }
 });
 
-// Mock WorkerWrapper (from setup.ts mock)
+vi.mock('comlink', () => {
+    return {
+        wrap: vi.fn().mockReturnValue(mockService),
+        proxy: vi.fn(cb => cb),
+        expose: vi.fn()
+    }
+});
+
+// Mock WorkerWrapper
 vi.mock('./worker/audio.worker?worker', () => {
     return {
         default: class MockWorker {
@@ -69,9 +88,9 @@ vi.mock('./worker/audio.worker?worker', () => {
 describe('AudioPlayerService MediaSession Integration', () => {
     let service: AudioPlayerService;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let mockWorker: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let platformIntegrationMock: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let workerCallback: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -80,13 +99,17 @@ describe('AudioPlayerService MediaSession Integration', () => {
         AudioPlayerService.instance = undefined;
 
         service = AudioPlayerService.getInstance();
-        // @ts-expect-error Access private
-        mockWorker = service.worker;
+
+        // Capture the callback passed to mockService.init
+        if (mockService.init.mock.calls.length > 0) {
+            workerCallback = mockService.init.mock.calls[0][0];
+        }
+
         // @ts-expect-error Access private
         platformIntegrationMock = service.platformIntegration;
     });
 
-    it('should update metadata on UPDATE_METADATA message', () => {
+    it('should update metadata on UPDATE_METADATA callback', () => {
         const metadata = {
             title: 'Title',
             artist: 'Author',
@@ -94,48 +117,28 @@ describe('AudioPlayerService MediaSession Integration', () => {
             artwork: [{ src: 'cover.jpg' }]
         };
 
-        const msg = {
-            type: 'UPDATE_METADATA',
-            metadata: {
-                metadata
-            }
-        };
-
-        mockWorker.onmessage({ data: msg } as MessageEvent);
+        // Simulate worker callback
+        workerCallback.updateMetadata({ metadata });
 
         expect(platformIntegrationMock.updateMetadata).toHaveBeenCalledWith(metadata);
     });
 
-    it('should update position state on UPDATE_METADATA message', () => {
+    it('should update position state on UPDATE_METADATA callback', () => {
         const positionState = {
             duration: 100,
             playbackRate: 1.0,
             position: 50
         };
 
-        const msg = {
-            type: 'UPDATE_METADATA',
-            metadata: {
-                metadata: {},
-                positionState
-            }
-        };
-
-        mockWorker.onmessage({ data: msg } as MessageEvent);
+        // Simulate worker callback
+        workerCallback.updateMetadata({ positionState });
 
         expect(platformIntegrationMock.setPositionState).toHaveBeenCalledWith(positionState);
     });
 
-    it('should update playback state on STATUS_UPDATE', () => {
-        const msg = {
-            type: 'STATUS_UPDATE',
-            status: 'playing',
-            cfi: null,
-            index: 0,
-            queue: []
-        };
-
-        mockWorker.onmessage({ data: msg } as MessageEvent);
+    it('should update playback state on STATUS_UPDATE callback', () => {
+        // Simulate worker callback
+        workerCallback.onStatusUpdate('playing', null, 0, []);
 
         expect(platformIntegrationMock.updatePlaybackState).toHaveBeenCalledWith('playing');
     });

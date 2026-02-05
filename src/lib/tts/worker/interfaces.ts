@@ -3,7 +3,7 @@ import type { TTSVoice } from '../providers/types';
 
 export interface IMainThreadAudioCallback {
     // Status Updates
-    onStatusUpdate(status: TTSStatus, cfi: string | null, index: number, queue: TTSQueueItem[]): void;
+    onStatusUpdate(status: TTSStatus, cfi: string | null, index: number, queue: readonly TTSQueueItem[]): void;
     onError(message: string): void;
     onDownloadProgress(voiceId: string, percent: number, status: string): void;
 
