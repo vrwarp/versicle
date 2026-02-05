@@ -75,7 +75,8 @@
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots (`SyncManifest`) protect against data loss during sync (Last 10 states).
 *   **Reading History**: Detailed session tracking with timeline visualization.
-*   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted. Export/Import to CSV (Goodreads compatible).
+*   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted.
+    *   **Goodreads Integration**: Import/Export your reading list via CSV, with intelligent filename matching (ISBN/Title fallback) to restore your library context.
 *   **Backups & Export**:
     *   **Light**: JSON export of metadata/settings.
     *   **Full**: ZIP archive including all book files.
