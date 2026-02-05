@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeDiff } from './JsonDiffViewer';
+import { computeDiff } from '../../lib/json-diff';
 import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '../../test/fuzz-utils';
 
 describe('computeDiff', () => {
