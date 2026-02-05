@@ -25,7 +25,7 @@ export class AudioPlayerService {
     private status: TTSStatus = 'stopped';
     private activeCfi: string | null = null;
     private currentIndex: number = 0;
-    private queue: TTSQueueItem[] = [];
+    private queue: ReadonlyArray<TTSQueueItem> = [];
 
     // Audio Players
     private audioPlayer: AudioElementPlayer;
