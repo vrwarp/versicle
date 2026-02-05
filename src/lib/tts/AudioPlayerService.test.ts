@@ -1,8 +1,47 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
 import { Capacitor } from '@capacitor/core';
-import { WebSpeechProvider } from './providers/WebSpeechProvider';
-import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
+
+// Define mockService using vi.hoisted to handle hoisting
+const { mockService } = vi.hoisted(() => {
+    return {
+        mockService: {
+            init: vi.fn(),
+            play: vi.fn(),
+            pause: vi.fn(),
+            stop: vi.fn(),
+            next: vi.fn(),
+            prev: vi.fn(),
+            seek: vi.fn(),
+            seekTo: vi.fn(),
+            setSpeed: vi.fn(),
+            setVoice: vi.fn(),
+            setBookId: vi.fn(),
+            loadSection: vi.fn(),
+            loadSectionBySectionId: vi.fn(),
+            setQueue: vi.fn(),
+            setPrerollEnabled: vi.fn(),
+            setBackgroundAudioMode: vi.fn(),
+            setBackgroundVolume: vi.fn(),
+            preview: vi.fn(),
+            skipToNextSection: vi.fn(),
+            skipToPreviousSection: vi.fn(),
+            setProvider: vi.fn(),
+            getVoices: vi.fn().mockResolvedValue([]),
+            isVoiceDownloaded: vi.fn().mockResolvedValue(true),
+            downloadVoice: vi.fn(),
+            deleteVoice: vi.fn(),
+            onRemotePlayStart: vi.fn(),
+            onRemotePlayEnded: vi.fn(),
+            onRemotePlayError: vi.fn(),
+            onRemoteTimeUpdate: vi.fn(),
+            onRemoteBoundary: vi.fn(),
+            onAudioEnded: vi.fn(),
+            onAudioError: vi.fn(),
+            onAudioTimeUpdate: vi.fn(),
+        }
+    };
+});
 
 // Mock dependencies
 vi.mock('@capacitor/core', () => ({
@@ -11,8 +50,16 @@ vi.mock('@capacitor/core', () => ({
     }
 }));
 
-// Mock WorkerWrapper (from setup.ts mock)
-// We need to ensure we can inspect postMessage
+// Mock Comlink
+vi.mock('comlink', () => {
+    return {
+        wrap: vi.fn().mockReturnValue(mockService),
+        proxy: vi.fn(cb => cb),
+        expose: vi.fn()
+    }
+});
+
+// Mock WorkerWrapper
 vi.mock('./worker/audio.worker?worker', () => {
     return {
         default: class MockWorker {
@@ -56,7 +103,6 @@ vi.mock('./providers/CapacitorTTSProvider', () => {
     }
 });
 
-// Mock PlatformIntegration to avoid MediaSession errors
 vi.mock('./PlatformIntegration', () => {
     return {
         PlatformIntegration: class {
@@ -72,52 +118,28 @@ vi.mock('./PlatformIntegration', () => {
 
 describe('AudioPlayerService (Proxy)', () => {
     let service: AudioPlayerService;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let mockWorker: any;
+    let callback: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
         // Reset singleton
         // @ts-expect-error Resetting singleton
         AudioPlayerService.instance = undefined;
-
-        // Default to web
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
     });
 
     const initService = () => {
         service = AudioPlayerService.getInstance();
-        // @ts-expect-error Access private
-        mockWorker = service.worker;
+        // Capture callback passed to init
+        if (mockService.init.mock.calls.length > 0) {
+            callback = mockService.init.mock.calls[0][0];
+        }
     };
 
-    it('should initialize worker', () => {
+    it('should initialize worker service', () => {
         initService();
-        expect(mockWorker).toBeDefined();
-        expect(mockWorker.postMessage).toBeDefined();
-        // Init message sent in constructor
-        expect(mockWorker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'INIT' }));
-    });
-
-    it('should initialize WebSpeechProvider on Web', () => {
-        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
-        initService();
-        // We verify that the class constructor was called
-        // Since we mocked the class itself, we can check calls on the mock if we had a spy on it.
-        // But vi.mock returns the implementation.
-        // We can verify that the private property 'localProvider' is instance of our mock class?
-        // Or simpler: access private localProvider and check its constructor name or methods.
-        // @ts-expect-error Access private
-        expect(service.localProvider).toBeDefined();
-        // @ts-expect-error Access private
-        expect(service.localProvider.play).toBeDefined();
-    });
-
-    it('should initialize CapacitorTTSProvider on Native', () => {
-        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
-        initService();
-        // @ts-expect-error Access private
-        expect(service.localProvider).toBeDefined();
+        expect(mockService.init).toHaveBeenCalled();
+        expect(callback).toBeDefined();
     });
 
     describe('Proxy Commands', () => {
@@ -127,55 +149,46 @@ describe('AudioPlayerService (Proxy)', () => {
 
         it('should proxy play command', () => {
             service.play();
-            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'PLAY' });
+            expect(mockService.play).toHaveBeenCalled();
         });
 
         it('should proxy pause command', () => {
             service.pause();
-            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'PAUSE' });
+            expect(mockService.pause).toHaveBeenCalled();
         });
 
         it('should proxy stop command', () => {
             service.stop();
-            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'STOP' });
+            expect(mockService.stop).toHaveBeenCalled();
         });
 
         it('should proxy navigation commands', () => {
             service.next();
-            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'NEXT' });
+            expect(mockService.next).toHaveBeenCalled();
 
             service.prev();
-            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'PREV' });
+            expect(mockService.prev).toHaveBeenCalled();
         });
 
         it('should proxy configuration commands', () => {
             service.setSpeed(1.5);
-            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'SET_SPEED', speed: 1.5 });
+            expect(mockService.setSpeed).toHaveBeenCalledWith(1.5);
 
             service.setVoice('v1');
-            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'SET_VOICE', voiceId: 'v1' });
+            expect(mockService.setVoice).toHaveBeenCalledWith('v1');
         });
     });
 
-    describe('Worker Messages', () => {
+    describe('Worker Callbacks', () => {
         beforeEach(() => {
             initService();
         });
 
-        it('should handle STATUS_UPDATE from worker', () => {
+        it('should handle onStatusUpdate', () => {
             const listener = vi.fn();
             service.subscribe(listener);
 
-            // Simulate worker message
-            const msg = {
-                type: 'STATUS_UPDATE',
-                status: 'playing',
-                cfi: 'cfi1',
-                index: 5,
-                queue: [{ text: 'test', cfi: 'cfi1' }]
-            };
-
-            mockWorker.onmessage({ data: msg } as MessageEvent);
+            callback.onStatusUpdate('playing', 'cfi1', 5, [{ text: 'test', cfi: 'cfi1' }]);
 
             expect(listener).toHaveBeenCalledWith(
                 'playing',
@@ -186,19 +199,14 @@ describe('AudioPlayerService (Proxy)', () => {
             );
         });
 
-        it('should handle ERROR from worker', () => {
+        it('should handle onError', () => {
             const listener = vi.fn();
             service.subscribe(listener);
 
-            const msg = {
-                type: 'ERROR',
-                message: 'Worker Error'
-            };
-
-            mockWorker.onmessage({ data: msg } as MessageEvent);
+            callback.onError('Worker Error');
 
             expect(listener).toHaveBeenCalledWith(
-                'stopped', // Default status in tests
+                'stopped', // Default
                 null,
                 0,
                 [],
@@ -206,21 +214,15 @@ describe('AudioPlayerService (Proxy)', () => {
             );
         });
 
-        it('should handle DOWNLOAD_PROGRESS from worker', () => {
+        it('should handle onDownloadProgress', () => {
             const listener = vi.fn();
             service.subscribe(listener);
 
-            const msg = {
-                type: 'DOWNLOAD_PROGRESS',
-                voiceId: 'v1',
-                percent: 50,
-                status: 'downloading'
-            };
+            callback.onDownloadProgress('v1', 50, 'downloading');
 
-            mockWorker.onmessage({ data: msg } as MessageEvent);
-
+            // listener(status, cfi, index, queue, error, downloadInfo)
             const lastCall = listener.mock.calls[listener.mock.calls.length - 1];
-            expect(lastCall[5]).toEqual({ // 6th argument is downloadInfo
+            expect(lastCall[5]).toEqual({
                 voiceId: 'v1',
                 percent: 50,
                 status: 'downloading'

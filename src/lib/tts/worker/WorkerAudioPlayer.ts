@@ -1,54 +1,50 @@
 import type { IAudioPlayer } from '../IAudioPlayer';
-import type { MainToWorkerMessage, WorkerToMainMessage } from './messages';
+import type { IMainThreadAudioCallback } from './interfaces';
 
 export class WorkerAudioPlayer implements IAudioPlayer {
     private onTimeUpdateCallback: ((time: number) => void) | null = null;
     private onEndedCallback: (() => void) | null = null;
     private onErrorCallback: ((error: string) => void) | null = null;
     private duration: number = 0;
+    private callback: IMainThreadAudioCallback;
 
-    constructor() {
-        self.addEventListener('message', this.handleMessage.bind(this));
+    constructor(callback: IMainThreadAudioCallback) {
+        this.callback = callback;
     }
 
-    private handleMessage(event: MessageEvent) {
-        const msg = event.data as MainToWorkerMessage;
-        switch (msg.type) {
-            case 'AUDIO_TIME_UPDATE':
-                this.duration = msg.duration;
-                if (this.onTimeUpdateCallback) this.onTimeUpdateCallback(msg.time);
-                break;
-            case 'AUDIO_ENDED':
-                if (this.onEndedCallback) this.onEndedCallback();
-                break;
-            case 'AUDIO_ERROR':
-                if (this.onErrorCallback) this.onErrorCallback(msg.error);
-                break;
-        }
+    // Methods called by Service when events arrive
+    handleAudioTimeUpdate(time: number, duration: number) {
+        this.duration = duration;
+        if (this.onTimeUpdateCallback) this.onTimeUpdateCallback(time);
     }
 
-    playBlob(blob: Blob): Promise<void> {
-        // We can't really "wait" for playback to start in the same way as DOM Audio
-        // unless we add a handshake. For now, assume fire-and-forget success.
-        // BaseCloudProvider awaits this.
-        this.postMessage({ type: 'PLAY_BLOB', blob, playbackRate: 1.0 }); // Rate will be set separately or default
-        return Promise.resolve();
+    handleAudioEnded() {
+        if (this.onEndedCallback) this.onEndedCallback();
+    }
+
+    handleAudioError(error: string) {
+        if (this.onErrorCallback) this.onErrorCallback(error);
+    }
+
+    async playBlob(blob: Blob): Promise<void> {
+        // We assume playbackRate 1.0 initially, it can be updated
+        await this.callback.playBlob(blob, 1.0);
     }
 
     pause(): void {
-        this.postMessage({ type: 'PAUSE_PLAYBACK' });
+        this.callback.pausePlayback();
     }
 
     resume(): void {
-        this.postMessage({ type: 'RESUME_PLAYBACK' });
+        this.callback.resumePlayback();
     }
 
     stop(): void {
-        this.postMessage({ type: 'STOP_PLAYBACK' });
+        this.callback.stopPlayback();
     }
 
     setRate(rate: number): void {
-        this.postMessage({ type: 'SET_PLAYBACK_RATE', speed: rate });
+        this.callback.setPlaybackRate(rate);
     }
 
     getDuration(): number {
@@ -65,9 +61,5 @@ export class WorkerAudioPlayer implements IAudioPlayer {
 
     setOnError(callback: (error: string) => void): void {
         this.onErrorCallback = callback;
-    }
-
-    private postMessage(msg: WorkerToMainMessage) {
-        self.postMessage(msg);
     }
 }

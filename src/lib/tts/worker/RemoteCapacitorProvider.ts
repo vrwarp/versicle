@@ -1,50 +1,23 @@
 import type { ITTSProvider, TTSVoice, TTSOptions, TTSEvent } from '../providers/types';
-import type { MainToWorkerMessage } from './messages';
+import type { IMainThreadAudioCallback } from './interfaces';
 
 export class RemoteCapacitorProvider implements ITTSProvider {
     id = 'local';
     private listeners: ((event: TTSEvent) => void)[] = [];
-    private pendingRequests = new Map<string, (voices: TTSVoice[]) => void>();
+    private callback: IMainThreadAudioCallback;
 
-    constructor() {
-        self.addEventListener('message', this.handleMessage.bind(this));
+    constructor(callback: IMainThreadAudioCallback) {
+        this.callback = callback;
     }
 
-    private handleMessage(event: MessageEvent) {
-        const msg = event.data as MainToWorkerMessage;
-        if (msg.type === 'LOCAL_VOICES_LIST' && this.pendingRequests.has(msg.reqId)) {
-            const resolve = this.pendingRequests.get(msg.reqId);
-            this.pendingRequests.delete(msg.reqId);
-            if (resolve) resolve(msg.voices);
-        }
-
-        // Check for provider specific messages by narrowing union type based on type property
-        if (msg.type === 'REMOTE_PLAY_START' ||
-            msg.type === 'REMOTE_PLAY_ENDED' ||
-            msg.type === 'REMOTE_PLAY_ERROR' ||
-            msg.type === 'REMOTE_TIME_UPDATE' ||
-            msg.type === 'REMOTE_BOUNDARY') {
-
-            if (msg.provider === 'native') {
-                switch (msg.type) {
-                    case 'REMOTE_PLAY_START':
-                        this.emit({ type: 'start' });
-                        break;
-                    case 'REMOTE_PLAY_ENDED':
-                        this.emit({ type: 'end' });
-                        break;
-                    case 'REMOTE_PLAY_ERROR':
-                        this.emit({ type: 'error', error: msg.error });
-                        break;
-                    case 'REMOTE_TIME_UPDATE':
-                        this.emit({ type: 'timeupdate', currentTime: msg.time, duration: msg.duration });
-                        break;
-                    case 'REMOTE_BOUNDARY':
-                        this.emit({ type: 'boundary', charIndex: msg.charIndex });
-                        break;
-                }
-            }
-        }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handleRemoteEvent(event: any) {
+        // Events dispatched by Service
+        if (event.type === 'start') this.emit({ type: 'start' });
+        if (event.type === 'end') this.emit({ type: 'end' });
+        if (event.type === 'error') this.emit({ type: 'error', error: event.error });
+        if (event.type === 'timeupdate') this.emit({ type: 'timeupdate', currentTime: event.time, duration: event.duration });
+        if (event.type === 'boundary') this.emit({ type: 'boundary', charIndex: event.charIndex });
     }
 
     async init(): Promise<void> {
@@ -52,39 +25,27 @@ export class RemoteCapacitorProvider implements ITTSProvider {
     }
 
     async getVoices(): Promise<TTSVoice[]> {
-        return new Promise((resolve) => {
-            const reqId = Math.random().toString(36).substring(7);
-            this.pendingRequests.set(reqId, resolve);
-            (self as any).postMessage({ type: 'GET_LOCAL_VOICES', reqId });
-        });
+        return await this.callback.getLocalVoices();
     }
 
     async play(text: string, options: TTSOptions): Promise<void> {
-        (self as any).postMessage({
-            type: 'PLAY_NATIVE',
-            text,
-            options: { voiceId: options.voiceId, speed: options.speed }
-        });
+        await this.callback.playLocal(text, { voiceId: options.voiceId, speed: options.speed }, 'native');
     }
 
     async preload(text: string, options: TTSOptions): Promise<void> {
-        (self as any).postMessage({
-            type: 'PRELOAD_NATIVE',
-            text,
-            options: { voiceId: options.voiceId, speed: options.speed }
-        });
+        await this.callback.preloadLocal(text, { voiceId: options.voiceId, speed: options.speed }, 'native');
     }
 
     pause(): void {
-        (self as any).postMessage({ type: 'PAUSE_PLAYBACK' });
+        this.callback.pausePlayback();
     }
 
     resume(): void {
-        (self as any).postMessage({ type: 'RESUME_PLAYBACK' });
+        this.callback.resumePlayback();
     }
 
     stop(): void {
-        (self as any).postMessage({ type: 'STOP_PLAYBACK' });
+        this.callback.stopPlayback();
     }
 
     on(callback: (event: TTSEvent) => void): void {

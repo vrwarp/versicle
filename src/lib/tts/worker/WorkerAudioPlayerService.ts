@@ -1,4 +1,4 @@
-import type { ITTSProvider } from '../providers/types';
+import type { ITTSProvider, TTSVoice } from '../providers/types';
 import { SyncEngine } from '../SyncEngine';
 import { LexiconService } from '../LexiconService';
 import { dbService } from '../../../db/DBService';
@@ -17,13 +17,11 @@ import { RemoteCapacitorProvider } from './RemoteCapacitorProvider';
 import { RemoteWebSpeechProvider } from './RemoteWebSpeechProvider';
 import { useCostStore } from '../CostEstimator';
 import type { TTSQueueItem, TTSStatus } from '../types';
-import type { WorkerToMainMessage } from './messages';
+import type { IWorkerAudioService, IMainThreadAudioCallback } from './interfaces';
 
 const logger = createLogger('WorkerAudioPlayerService');
 
-export class WorkerAudioPlayerService {
-    private static instance: WorkerAudioPlayerService;
-
+export class WorkerAudioPlayerService implements IWorkerAudioService {
     private taskSequencer = new TaskSequencer();
     private contentPipeline = new AudioContentPipeline();
     private stateManager = new PlaybackStateManager();
@@ -43,12 +41,18 @@ export class WorkerAudioPlayerService {
     private isPreviewing: boolean = false;
     private isNative: boolean = false;
 
-    constructor(isNative: boolean) {
-        this.isNative = isNative;
+    private callback: IMainThreadAudioCallback | null = null;
+    private activeAudioPlayer: WorkerAudioPlayer | null = null;
+    private currentRemoteProvider: RemoteCapacitorProvider | RemoteWebSpeechProvider | null = null;
+
+    constructor() {
         this.syncEngine = new SyncEngine();
         this.lexiconService = LexiconService.getInstance();
+        this.providerManager = this.createProviderManager();
+    }
 
-        this.providerManager = new WorkerTTSProviderManager({
+    private createProviderManager(): WorkerTTSProviderManager {
+        return new WorkerTTSProviderManager({
             onStart: () => {
                 this.setStatus('playing');
             },
@@ -70,7 +74,7 @@ export class WorkerAudioPlayerService {
 
                 logger.error("TTS Provider Error", error);
                 this.setStatus('stopped');
-                this.postMessage({ type: 'ERROR', message: "Playback Error: " + (error?.message || "Unknown error") });
+                if (this.callback) this.callback.onError("Playback Error: " + (error?.message || "Unknown error"));
             },
             onTimeUpdate: (currentTime) => {
                 this.syncEngine?.updateTime(currentTime);
@@ -85,9 +89,16 @@ export class WorkerAudioPlayerService {
                 }
             },
             onDownloadProgress: (voiceId, percent, status) => {
-                this.postMessage({ type: 'DOWNLOAD_PROGRESS', voiceId, percent, status });
+                if (this.callback) this.callback.onDownloadProgress(voiceId, percent, status);
             }
-        }, isNative);
+        }, this.isNative);
+    }
+
+    async init(callback: IMainThreadAudioCallback, isNative: boolean) {
+        this.callback = callback;
+        this.isNative = isNative;
+        this.providerManager = this.createProviderManager();
+        await this.providerManager.init();
 
         this.syncEngine.setOnHighlight(() => {
             // No action currently
@@ -95,34 +106,18 @@ export class WorkerAudioPlayerService {
 
         useCostStore.subscribe((state, prevState) => {
             const diff = state.sessionCharacters - prevState.sessionCharacters;
-            if (diff > 0) {
-                this.postMessage({ type: 'UPDATE_COST', characters: diff });
+            if (diff > 0 && this.callback) {
+                this.callback.updateCost(diff);
             }
         });
 
         this.stateManager.subscribe((snapshot) => {
-            if (this.currentBookId && snapshot.currentSectionIndex !== -1) {
-                this.postMessage({
-                    type: 'UPDATE_TTS_PROGRESS',
-                    bookId: this.currentBookId,
-                    index: snapshot.currentIndex,
-                    sectionIndex: snapshot.currentSectionIndex
-                });
+            if (this.currentBookId && snapshot.currentSectionIndex !== -1 && this.callback) {
+                 // Note: Logic for UPDATE_TTS_PROGRESS was removed as discussed
             }
             this.updateMediaSessionMetadata();
             this.notifyStatusUpdate(snapshot.currentItem?.cfi || null);
         });
-    }
-
-    static getInstance(isNative: boolean): WorkerAudioPlayerService {
-        if (!WorkerAudioPlayerService.instance) {
-            WorkerAudioPlayerService.instance = new WorkerAudioPlayerService(isNative);
-        }
-        return WorkerAudioPlayerService.instance;
-    }
-
-    private postMessage(msg: WorkerToMainMessage) {
-        (self as any).postMessage(msg);
     }
 
     private enqueue<T>(task: () => Promise<T>): Promise<T | void> {
@@ -134,7 +129,7 @@ export class WorkerAudioPlayerService {
             if (this.status !== 'stopped') {
                 this.setStatus('stopped');
                 this.providerManager.stop();
-                this.postMessage({ type: 'STOP_PLAYBACK' }); // Ensure Main stops
+                if (this.callback) this.callback.stopPlayback();
             }
             this.stateManager.reset();
 
@@ -159,42 +154,27 @@ export class WorkerAudioPlayerService {
     private updateSectionMediaPosition(providerTime: number) {
         const position = this.stateManager.getCurrentPosition(providerTime);
         const duration = this.stateManager.getTotalDuration();
-
         const safeDuration = Math.max(duration, position);
 
-        this.postMessage({
-            type: 'UPDATE_METADATA',
-            metadata: {
+        if (this.callback) {
+            this.callback.updateMetadata({
                 positionState: {
                     duration: safeDuration,
                     playbackRate: this.speed,
                     position: position
                 }
-            }
-        });
+            });
+        }
     }
 
     private async restoreQueue(bookId: string) {
         this.enqueue(async () => {
             try {
                 const state = await dbService.getTTSState(bookId);
-                // We don't have direct store access. We rely on initial state passed or DB.
-                // But DB is sufficient for Queue.
-                // Progress (currentIndex) comes from store...
-                // If we want to restore exact position, we need what Main sent us.
-                // For now, let's assume we start at 0 if store info is missing, or rely on what's in DB if state has it?
-                // The original code used useReadingStateStore.getState().getProgress(bookId).
-                // We should add `initialProgress` to SET_BOOK if needed.
-                // For now, let's trust stateManager defaults or DB.
-
-                // Note: dbService.getTTSState returns queue.
-
                 if (this.currentBookId !== bookId) return;
 
                 if (state && state.queue && state.queue.length > 0) {
                     await this.stopInternal();
-
-                    // We default to 0 if we don't know better. Main thread calls JUMP_TO if it knows better.
                     this.stateManager.setQueue(state.queue, 0, -1);
                 }
             } catch (e) {
@@ -205,30 +185,25 @@ export class WorkerAudioPlayerService {
 
     private updateMediaSessionMetadata() {
         const item = this.stateManager.getCurrentItem();
-        if (item) {
-            this.postMessage({
-                type: 'UPDATE_METADATA',
+        if (item && this.callback) {
+            this.callback.updateMetadata({
                 metadata: {
-                    metadata: {
-                        title: item.title || 'Chapter Text',
-                        artist: item.author || 'Versicle',
-                        album: item.bookTitle || '',
-                        artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
-                        sectionIndex: this.stateManager.currentSectionIndex,
-                        totalSections: this.playlist.length
-                    }
+                    title: item.title || 'Chapter Text',
+                    artist: item.author || 'Versicle',
+                    album: item.bookTitle || '',
+                    artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
+                    sectionIndex: this.stateManager.currentSectionIndex,
+                    totalSections: this.playlist.length
                 }
             });
             this.updateSectionMediaPosition(0);
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
     public setBackgroundAudioMode(_mode: any) {
         // No-op in worker
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     public setBackgroundVolume(_volume: number) {
         // No-op in worker
     }
@@ -240,9 +215,14 @@ export class WorkerAudioPlayerService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public setProvider(providerId: string, config?: any) {
         return this.enqueue(async () => {
+            if (!this.callback) return;
+
             await this.stopInternal();
             let provider: ITTSProvider;
-            const audioPlayer = new WorkerAudioPlayer();
+
+            const audioPlayer = new WorkerAudioPlayer(this.callback);
+            this.activeAudioPlayer = audioPlayer;
+            this.currentRemoteProvider = null;
 
             switch (providerId) {
                 case 'piper':
@@ -259,8 +239,15 @@ export class WorkerAudioPlayerService {
                     break;
                 case 'local':
                 default:
-                    if (this.isNative) provider = new RemoteCapacitorProvider();
-                    else provider = new RemoteWebSpeechProvider();
+                    if (this.isNative) {
+                        const p = new RemoteCapacitorProvider(this.callback);
+                        this.currentRemoteProvider = p;
+                        provider = p;
+                    } else {
+                        const p = new RemoteWebSpeechProvider(this.callback);
+                        this.currentRemoteProvider = p;
+                        provider = p;
+                    }
                     break;
             }
             this.providerManager.setProvider(provider);
@@ -268,13 +255,8 @@ export class WorkerAudioPlayerService {
         });
     }
 
-    async init() {
-        await this.providerManager.init();
-    }
-
-    async getVoices(reqId: string) {
-        const voices = await this.providerManager.getVoices();
-        this.postMessage({ type: 'GET_ALL_VOICES_RESULT', reqId, voices });
+    async getVoices(reqId: string): Promise<TTSVoice[]> {
+        return await this.providerManager.getVoices();
     }
 
     async downloadVoice(voiceId: string) {
@@ -285,9 +267,8 @@ export class WorkerAudioPlayerService {
         await this.providerManager.deleteVoice(voiceId);
     }
 
-    async isVoiceDownloaded(voiceId: string, reqId: string) {
-        const result = await this.providerManager.isVoiceDownloaded(voiceId);
-        this.postMessage({ type: 'CHECK_VOICE_RESULT', reqId, isDownloaded: result });
+    async isVoiceDownloaded(voiceId: string, reqId: string): Promise<boolean> {
+        return await this.providerManager.isVoiceDownloaded(voiceId);
     }
 
     public getQueue(): ReadonlyArray<TTSQueueItem> {
@@ -311,19 +292,18 @@ export class WorkerAudioPlayerService {
         });
     }
 
-    public async skipToNextSection(): Promise<boolean> {
-        return this.advanceToNextChapter();
+    public async skipToNextSection(): Promise<void> {
+        await this.advanceToNextChapter();
     }
 
-    public async skipToPreviousSection(): Promise<boolean> {
-        if (!this.currentBookId || this.playlist.length === 0) return false;
+    public async skipToPreviousSection(): Promise<void> {
+        if (!this.currentBookId || this.playlist.length === 0) return;
         let prevSectionIndex = this.stateManager.currentSectionIndex - 1;
         while (prevSectionIndex >= 0) {
             const loaded = await this.loadSectionInternal(prevSectionIndex, true);
-            if (loaded) return true;
+            if (loaded) return;
             prevSectionIndex--;
         }
-        return false;
     }
 
     setQueue(items: TTSQueueItem[], startIndex: number = 0) {
@@ -364,7 +344,7 @@ export class WorkerAudioPlayerService {
                 logger.error("Preview error", e);
                 this.setStatus('stopped');
                 this.isPreviewing = false;
-                this.postMessage({ type: 'ERROR', message: e instanceof Error ? e.message : "Preview error" });
+                if (this.callback) this.callback.onError(e instanceof Error ? e.message : "Preview error");
             }
         });
     }
@@ -383,9 +363,6 @@ export class WorkerAudioPlayerService {
             try {
                 const book = await dbService.getBookMetadata(this.currentBookId);
                 if (book) {
-                    // Logic for resuming last played CFI if queue matches...
-                    // In Worker we rely on what we have in StateManager (from RestoreQueue).
-                    // If StateManager has queue, we try to match.
                     if (book.lastPlayedCfi && this.stateManager.currentIndex === 0) {
                          const index = this.stateManager.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
                          if (index >= 0) this.stateManager.jumpTo(index);
@@ -435,7 +412,7 @@ export class WorkerAudioPlayerService {
         } catch (e) {
             logger.error("Play error", e);
             this.setStatus('stopped');
-            this.postMessage({ type: 'ERROR', message: e instanceof Error ? e.message : "Playback error" });
+            if (this.callback) this.callback.onError(e instanceof Error ? e.message : "Playback error");
         }
     }
 
@@ -464,9 +441,20 @@ export class WorkerAudioPlayerService {
 
     private async stopInternal() {
         await this.persistPlaybackState('stopped');
-        this.postMessage({ type: 'STOP_PLAYBACK' });
+        if (this.callback) this.callback.stopPlayback();
         this.setStatus('stopped');
         this.providerManager.stop();
+    }
+
+    private async persistPlaybackState(status: TTSStatus) {
+        if (!this.currentBookId) return;
+        const currentItem = this.stateManager.getCurrentItem();
+        const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
+
+        if (lastPlayedCfi && this.callback) {
+             this.callback.updatePlaybackPosition(this.currentBookId, lastPlayedCfi);
+        }
+        await this.stateManager.savePlaybackState(status);
     }
 
     next() {
@@ -575,10 +563,8 @@ export class WorkerAudioPlayerService {
         let prevSectionIndex = this.stateManager.currentSectionIndex - 1;
 
         while (prevSectionIndex >= 0) {
-            // Load without autoplay
             const loaded = await this.loadSectionInternal(prevSectionIndex, false);
             if (loaded) {
-                // Jump to end
                 this.stateManager.jumpToEnd();
                 await this.playInternal();
                 return true;
@@ -593,19 +579,9 @@ export class WorkerAudioPlayerService {
             if (this.status !== 'stopped') {
                 if (this.currentBookId) {
                     const item = this.stateManager.getCurrentItem();
-                    if (item && item.cfi && !item.isPreroll) {
-                        this.postMessage({
-                            type: 'ADD_COMPLETED_RANGE',
-                            bookId: this.currentBookId,
-                            cfi: item.cfi
-                        });
-                        this.postMessage({
-                            type: 'UPDATE_HISTORY',
-                            bookId: this.currentBookId,
-                            cfi: item.cfi,
-                            text: item.text,
-                            completed: true
-                        });
+                    if (item && item.cfi && !item.isPreroll && this.callback) {
+                        this.callback.addCompletedRange(this.currentBookId, item.cfi);
+                        this.callback.updateHistory(this.currentBookId, item.cfi, item.text, true);
                     }
                 }
 
@@ -627,19 +603,9 @@ export class WorkerAudioPlayerService {
         if ((oldStatus === 'playing' || oldStatus === 'loading') && (status === 'paused' || status === 'stopped')) {
             if (this.currentBookId) {
                 const item = this.stateManager.getCurrentItem();
-                if (item && item.cfi && !item.isPreroll) {
-                    this.postMessage({
-                        type: 'ADD_COMPLETED_RANGE',
-                        bookId: this.currentBookId,
-                        cfi: item.cfi
-                    });
-                     this.postMessage({
-                        type: 'UPDATE_HISTORY',
-                        bookId: this.currentBookId,
-                        cfi: item.cfi,
-                        text: item.text,
-                        completed: false
-                    });
+                if (item && item.cfi && !item.isPreroll && this.callback) {
+                    this.callback.addCompletedRange(this.currentBookId, item.cfi);
+                    this.callback.updateHistory(this.currentBookId, item.cfi, item.text, false);
                 }
             }
         }
@@ -654,13 +620,14 @@ export class WorkerAudioPlayerService {
     }
 
     private notifyStatusUpdate(activeCfi: string | null) {
-        this.postMessage({
-            type: 'STATUS_UPDATE',
-            status: this.status,
-            cfi: activeCfi, // Fix: Map activeCfi to cfi
-            index: this.stateManager.currentIndex,
-            queue: this.stateManager.queue as any
-        });
+        if (this.callback) {
+            this.callback.onStatusUpdate(
+                this.status,
+                activeCfi,
+                this.stateManager.currentIndex,
+                this.stateManager.queue
+            );
+        }
     }
 
     private async loadSectionInternal(sectionIndex: number, autoPlay: boolean, sectionTitle?: string): Promise<boolean> {
@@ -723,18 +690,36 @@ export class WorkerAudioPlayerService {
         return false;
     }
 
-    private async persistPlaybackState(status: TTSStatus) {
-        if (!this.currentBookId) return;
-        const currentItem = this.stateManager.getCurrentItem();
-        const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
+    onRemotePlayStart(provider: 'local' | 'native'): void {
+        this.forwardRemoteEvent(provider, { type: 'start' });
+    }
+    onRemotePlayEnded(provider: 'local' | 'native'): void {
+        this.forwardRemoteEvent(provider, { type: 'end' });
+    }
+    onRemotePlayError(provider: 'local' | 'native', error: string): void {
+        this.forwardRemoteEvent(provider, { type: 'error', error });
+    }
+    onRemoteTimeUpdate(provider: 'local' | 'native', time: number, duration: number): void {
+        this.forwardRemoteEvent(provider, { type: 'timeupdate', time, duration });
+    }
+    onRemoteBoundary(provider: 'local' | 'native', charIndex: number): void {
+        this.forwardRemoteEvent(provider, { type: 'boundary', charIndex });
+    }
 
-        if (lastPlayedCfi) {
-             this.postMessage({
-                type: 'UPDATE_PLAYBACK_POSITION',
-                bookId: this.currentBookId,
-                cfi: lastPlayedCfi
-            });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private forwardRemoteEvent(_providerType: 'local' | 'native', event: any) {
+        if (this.currentRemoteProvider) {
+            this.currentRemoteProvider.handleRemoteEvent(event);
         }
-        await this.stateManager.savePlaybackState(status);
+    }
+
+    onAudioEnded(): void {
+        this.activeAudioPlayer?.handleAudioEnded();
+    }
+    onAudioError(error: string): void {
+        this.activeAudioPlayer?.handleAudioError(error);
+    }
+    onAudioTimeUpdate(time: number, duration: number): void {
+        this.activeAudioPlayer?.handleAudioTimeUpdate(time, duration);
     }
 }

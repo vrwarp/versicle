@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WorkerAudioPlayerService } from './WorkerAudioPlayerService';
 import { dbService } from '../../../db/DBService';
+import type { IMainThreadAudioCallback } from './interfaces';
 
 // Mock dependencies
 vi.mock('../../../db/DBService', () => ({
@@ -80,60 +81,69 @@ vi.mock('./RemoteCapacitorProvider', () => ({
     }
 }));
 
-// Mock postMessage
-const postMessageSpy = vi.fn();
-global.postMessage = postMessageSpy;
-// Mock self
-global.self = {
-    addEventListener: vi.fn(),
-    postMessage: postMessageSpy
-} as any;
-
-
 describe('WorkerAudioPlayerService', () => {
     let service: WorkerAudioPlayerService;
+    let mockCallback: IMainThreadAudioCallback;
 
     beforeEach(() => {
         vi.clearAllMocks();
-        // @ts-expect-error Reset singleton
-        WorkerAudioPlayerService.instance = undefined;
-        service = WorkerAudioPlayerService.getInstance(false);
+        service = new WorkerAudioPlayerService();
+
+        mockCallback = {
+            onStatusUpdate: vi.fn(),
+            onError: vi.fn(),
+            onDownloadProgress: vi.fn(),
+            playBlob: vi.fn().mockResolvedValue(undefined),
+            playLocal: vi.fn().mockResolvedValue(undefined),
+            preloadLocal: vi.fn().mockResolvedValue(undefined),
+            pausePlayback: vi.fn(),
+            resumePlayback: vi.fn(),
+            stopPlayback: vi.fn(),
+            setPlaybackRate: vi.fn(),
+            updateMetadata: vi.fn(),
+            updatePlaybackPosition: vi.fn(),
+            addCompletedRange: vi.fn(),
+            updateHistory: vi.fn(),
+            updateCost: vi.fn(),
+            getLocalVoices: vi.fn().mockResolvedValue([]),
+        };
     });
 
     it('should initialize and set provider', async () => {
-        await service.init();
+        await service.init(mockCallback, false);
         await service.setProvider('local');
     });
 
     it('should set book ID and load queue', async () => {
+        await service.init(mockCallback, false);
         service.setBookId('book1');
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(dbService.getSections).toHaveBeenCalledWith('book1');
     });
 
     it('should load section and play', async () => {
+        await service.init(mockCallback, false);
         await service.setProvider('local');
         service.setBookId('book1');
         await service.loadSection(0, true);
 
-        // Should post STATUS_UPDATE
+        // Should call onStatusUpdate
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        const calls = postMessageSpy.mock.calls;
-        const statusUpdates = calls.filter((c: any) => c[0].type === 'STATUS_UPDATE');
-        expect(statusUpdates.length).toBeGreaterThan(0);
-
-        const lastStatus = statusUpdates[statusUpdates.length - 1][0];
+        expect(mockCallback.onStatusUpdate).toHaveBeenCalled();
+        const calls = (mockCallback.onStatusUpdate as any).mock.calls;
+        const lastStatus = calls[calls.length - 1][0];
         // It might be 'loading' or 'playing' depending on provider mock speed
-        expect(['loading', 'playing']).toContain(lastStatus.status);
+        expect(['loading', 'playing']).toContain(lastStatus);
     });
 
     it('should send playback updates', async () => {
+        await service.init(mockCallback, false);
         await service.setProvider('local');
         service.setBookId('book1');
-        await service.setQueue([{ text: "Test", cfi: "cfi1" }]);
+        await service.setQueue([{ text: "Test", cfi: "cfi1" }], 0);
         await service.play();
 
-        expect(postMessageSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'STATUS_UPDATE' }));
+        expect(mockCallback.onStatusUpdate).toHaveBeenCalled();
     });
 });

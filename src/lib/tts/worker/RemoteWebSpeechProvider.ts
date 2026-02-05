@@ -1,35 +1,21 @@
 import type { ITTSProvider, TTSVoice, TTSOptions, TTSEvent } from '../providers/types';
-import type { MainToWorkerMessage } from './messages';
+import type { IMainThreadAudioCallback } from './interfaces';
 
 export class RemoteWebSpeechProvider implements ITTSProvider {
     id = 'local';
     private listeners: ((event: TTSEvent) => void)[] = [];
-    private pendingRequests = new Map<string, (voices: TTSVoice[]) => void>();
+    private callback: IMainThreadAudioCallback;
 
-    constructor() {
-        self.addEventListener('message', this.handleMessage.bind(this));
+    constructor(callback: IMainThreadAudioCallback) {
+        this.callback = callback;
     }
 
-    private handleMessage(event: MessageEvent) {
-        const msg = event.data as MainToWorkerMessage;
-        if (msg.type === 'LOCAL_VOICES_LIST' && this.pendingRequests.has(msg.reqId)) {
-            const resolve = this.pendingRequests.get(msg.reqId);
-            this.pendingRequests.delete(msg.reqId);
-            if (resolve) resolve(msg.voices);
-        }
-
-        if (msg.type === 'REMOTE_PLAY_START' && msg.provider === 'local') {
-            this.emit({ type: 'start' });
-        }
-        if (msg.type === 'REMOTE_PLAY_ENDED' && msg.provider === 'local') {
-            this.emit({ type: 'end' });
-        }
-        if (msg.type === 'REMOTE_PLAY_ERROR' && msg.provider === 'local') {
-            this.emit({ type: 'error', error: msg.error });
-        }
-        if (msg.type === 'REMOTE_TIME_UPDATE' && msg.provider === 'local') {
-            this.emit({ type: 'timeupdate', currentTime: msg.time, duration: msg.duration });
-        }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handleRemoteEvent(event: any) {
+         if (event.type === 'start') this.emit({ type: 'start' });
+         if (event.type === 'end') this.emit({ type: 'end' });
+         if (event.type === 'error') this.emit({ type: 'error', error: event.error });
+         if (event.type === 'timeupdate') this.emit({ type: 'timeupdate', currentTime: event.time, duration: event.duration });
     }
 
     async init(): Promise<void> {
@@ -37,39 +23,27 @@ export class RemoteWebSpeechProvider implements ITTSProvider {
     }
 
     async getVoices(): Promise<TTSVoice[]> {
-        return new Promise((resolve) => {
-            const reqId = Math.random().toString(36).substring(7);
-            this.pendingRequests.set(reqId, resolve);
-            (self as any).postMessage({ type: 'GET_LOCAL_VOICES', reqId });
-        });
+        return await this.callback.getLocalVoices();
     }
 
     async play(text: string, options: TTSOptions): Promise<void> {
-        (self as any).postMessage({
-            type: 'PLAY_LOCAL',
-            text,
-            options: { voiceId: options.voiceId, speed: options.speed }
-        });
+        await this.callback.playLocal(text, { voiceId: options.voiceId, speed: options.speed }, 'local');
     }
 
     async preload(text: string, options: TTSOptions): Promise<void> {
-        (self as any).postMessage({
-            type: 'PRELOAD_LOCAL',
-            text,
-            options: { voiceId: options.voiceId, speed: options.speed }
-        });
+        await this.callback.preloadLocal(text, { voiceId: options.voiceId, speed: options.speed }, 'local');
     }
 
     pause(): void {
-        (self as any).postMessage({ type: 'PAUSE_PLAYBACK' });
+        this.callback.pausePlayback();
     }
 
     resume(): void {
-        (self as any).postMessage({ type: 'RESUME_PLAYBACK' });
+        this.callback.resumePlayback();
     }
 
     stop(): void {
-        (self as any).postMessage({ type: 'STOP_PLAYBACK' });
+        this.callback.stopPlayback();
     }
 
     on(callback: (event: TTSEvent) => void): void {

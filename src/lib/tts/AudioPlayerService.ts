@@ -5,7 +5,9 @@ import { AudioElementPlayer } from './AudioElementPlayer';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { PlatformIntegration } from './PlatformIntegration';
-import type { MainToWorkerMessage, WorkerToMainMessage } from './worker/messages';
+import type { IWorkerAudioService, IMainThreadAudioCallback } from './worker/interfaces';
+import * as Comlink from 'comlink';
+
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import Worker from './worker/audio.worker?worker';
@@ -17,6 +19,7 @@ type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentInd
 export class AudioPlayerService {
     private static instance: AudioPlayerService;
     private worker: Worker;
+    private service: Comlink.Remote<IWorkerAudioService>;
     private listeners: PlaybackListener[] = [];
 
     private status: TTSStatus = 'stopped';
@@ -29,23 +32,22 @@ export class AudioPlayerService {
     private localProvider: ITTSProvider;
     private platformIntegration: PlatformIntegration;
 
-    // Callbacks for local providers (proxied from worker)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private localProviderCallbacks: Map<string, (result: any) => void> = new Map();
+    private callback: IMainThreadAudioCallback;
 
     private constructor() {
         this.worker = new Worker();
+        this.service = Comlink.wrap<IWorkerAudioService>(this.worker);
         this.audioPlayer = new AudioElementPlayer();
 
-        // Initialize Platform Integration (Media Session, Lock Screen)
+        // Initialize Platform Integration
         this.platformIntegration = new PlatformIntegration({
-            onPlay: () => this.postMessage({ type: 'PLAY' }),
-            onPause: () => this.postMessage({ type: 'PAUSE' }),
-            onStop: () => this.postMessage({ type: 'STOP' }),
-            onPrev: () => this.postMessage({ type: 'PREV' }),
-            onNext: () => this.postMessage({ type: 'NEXT' }),
-            onSeek: (offset) => this.postMessage({ type: 'SEEK', offset }),
-            onSeekTo: (time) => this.postMessage({ type: 'SEEK_TO', time }),
+            onPlay: () => this.service.play(),
+            onPause: () => this.service.pause(),
+            onStop: () => this.service.stop(),
+            onPrev: () => this.service.prev(),
+            onNext: () => this.service.next(),
+            onSeek: (offset) => this.service.seek(offset),
+            onSeekTo: (time) => this.service.seekTo(time),
         });
 
         // Initialize Local Provider
@@ -56,14 +58,88 @@ export class AudioPlayerService {
         }
         this.setupLocalProviderListeners();
 
-        this.setupWorkerListeners();
         this.setupAudioPlayerListeners();
 
-        // Initialize Worker
-        this.postMessage({
-            type: 'INIT',
-            isNative: Capacitor.isNativePlatform()
-        });
+        // Create callback implementation
+        this.callback = {
+            onStatusUpdate: (status, cfi, index, queue) => {
+                this.status = status;
+                this.activeCfi = cfi;
+                this.currentIndex = index;
+                this.queue = queue;
+                this.platformIntegration.updatePlaybackState(status);
+                this.notifyListeners();
+            },
+            onError: (message) => {
+                this.notifyError(message);
+            },
+            onDownloadProgress: (voiceId, percent, status) => {
+                this.notifyDownloadProgress(voiceId, percent, status);
+            },
+            playBlob: async (blob, playbackRate) => {
+                this.audioPlayer.setRate(playbackRate);
+                try {
+                    await this.audioPlayer.playBlob(blob);
+                } catch (err: any) {
+                    console.error("Main Thread Audio Playback Failed", err);
+                    this.service.onAudioError(err.message || String(err));
+                }
+            },
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            playLocal: async (text, options, _provider) => {
+                await this.localProvider.play(text, options);
+            },
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            preloadLocal: async (text, options, _provider) => {
+                await this.localProvider.preload(text, options);
+            },
+            pausePlayback: () => {
+                this.audioPlayer.pause();
+                this.localProvider.pause();
+            },
+            resumePlayback: () => {
+                this.audioPlayer.resume();
+                this.localProvider.resume();
+            },
+            stopPlayback: () => {
+                this.audioPlayer.stop();
+                this.localProvider.stop();
+                this.platformIntegration.stop();
+            },
+            setPlaybackRate: (speed) => {
+                this.audioPlayer.setRate(speed);
+            },
+            updateMetadata: (metadata) => {
+                if (metadata.metadata) {
+                    this.platformIntegration.updateMetadata(metadata.metadata);
+                }
+                if (metadata.positionState) {
+                    this.platformIntegration.setPositionState(metadata.positionState);
+                }
+            },
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            updatePlaybackPosition: (_bookId, _cfi) => {
+            },
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            addCompletedRange: (_bookId, _cfi) => {
+            },
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            updateHistory: (_bookId, _cfi, _text, _completed) => {
+            },
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            updateCost: (_characters) => {
+            },
+            getLocalVoices: async () => {
+                await this.localProvider.init();
+                return await this.localProvider.getVoices();
+            }
+        };
+
+        // Initialize Worker Service
+        this.service.init(
+            Comlink.proxy(this.callback),
+            Capacitor.isNativePlatform()
+        );
     }
 
     static getInstance(): AudioPlayerService {
@@ -73,10 +149,6 @@ export class AudioPlayerService {
         return AudioPlayerService.instance;
     }
 
-    private postMessage(msg: MainToWorkerMessage) {
-        this.worker.postMessage(msg);
-    }
-
     private setupLocalProviderListeners() {
         this.localProvider.on((event) => {
             const isNative = Capacitor.isNativePlatform();
@@ -84,120 +156,38 @@ export class AudioPlayerService {
 
             switch (event.type) {
                 case 'start':
-                    this.postMessage({ type: 'REMOTE_PLAY_START', provider: providerType });
+                    this.service.onRemotePlayStart(providerType);
                     break;
                 case 'end':
-                    this.postMessage({ type: 'REMOTE_PLAY_ENDED', provider: providerType });
+                    this.service.onRemotePlayEnded(providerType);
                     break;
                 case 'error':
-                    this.postMessage({ type: 'REMOTE_PLAY_ERROR', provider: providerType, error: String(event.error) });
+                    this.service.onRemotePlayError(providerType, String(event.error));
                     break;
                 case 'timeupdate':
-                    this.postMessage({ type: 'REMOTE_TIME_UPDATE', provider: providerType, time: event.currentTime, duration: event.duration });
+                    this.service.onRemoteTimeUpdate(providerType, event.currentTime, event.duration);
                     break;
                 case 'boundary':
-                     this.postMessage({ type: 'REMOTE_BOUNDARY', provider: providerType, charIndex: event.charIndex });
+                     this.service.onRemoteBoundary(providerType, event.charIndex);
                      break;
             }
         });
     }
 
-    private setupWorkerListeners() {
-        this.worker.onmessage = async (e: MessageEvent<WorkerToMainMessage>) => {
-            const msg = e.data;
-            switch (msg.type) {
-                case 'STATUS_UPDATE':
-                    this.status = msg.status;
-                    this.activeCfi = msg.cfi;
-                    this.currentIndex = msg.index;
-                    this.queue = msg.queue;
-                    this.platformIntegration.updatePlaybackState(msg.status);
-                    this.notifyListeners();
-                    break;
-                case 'ERROR':
-                    this.notifyError(msg.message);
-                    break;
-                case 'DOWNLOAD_PROGRESS':
-                    this.notifyDownloadProgress(msg.voiceId, msg.percent, msg.status);
-                    break;
-
-                // --- Audio Playback ---
-                case 'PLAY_BLOB':
-                    this.audioPlayer.setRate(msg.playbackRate);
-                    this.audioPlayer.playBlob(msg.blob).catch(err => {
-                        console.error("Main Thread Audio Playback Failed", err);
-                        this.postMessage({ type: 'AUDIO_ERROR', error: err.message });
-                    });
-                    break;
-                case 'PLAY_LOCAL':
-                case 'PLAY_NATIVE':
-                    await this.localProvider.play(msg.text, msg.options);
-                    break;
-                case 'PRELOAD_LOCAL':
-                case 'PRELOAD_NATIVE':
-                    await this.localProvider.preload(msg.text, msg.options);
-                    break;
-
-                case 'PAUSE_PLAYBACK':
-                    this.audioPlayer.pause();
-                    this.localProvider.pause();
-                    break;
-                case 'RESUME_PLAYBACK':
-                    this.audioPlayer.resume();
-                    this.localProvider.resume();
-                    break;
-                case 'STOP_PLAYBACK':
-                    this.audioPlayer.stop();
-                    this.localProvider.stop();
-                    this.platformIntegration.stop(); // Clear notification
-                    break;
-                case 'SET_PLAYBACK_RATE':
-                    this.audioPlayer.setRate(msg.speed);
-                    // Local provider speed is set per play() call, so we don't need to set it here globally
-                    break;
-
-                // --- Metadata & UI ---
-                case 'UPDATE_METADATA':
-                    this.platformIntegration.updateMetadata(msg.metadata.metadata);
-                    if (msg.metadata.positionState) {
-                        this.platformIntegration.setPositionState(msg.metadata.positionState);
-                    }
-                    break;
-
-                // --- Provider Management ---
-                case 'GET_LOCAL_VOICES':
-                    await this.localProvider.init();
-                    const voices = await this.localProvider.getVoices();
-                    this.postMessage({ type: 'LOCAL_VOICES_LIST', voices, reqId: msg.reqId });
-                    break;
-
-                case 'GET_ALL_VOICES_RESULT':
-                case 'CHECK_VOICE_RESULT':
-                    const cb = this.localProviderCallbacks.get(msg.reqId);
-                    if (cb) {
-                        if (msg.type === 'GET_ALL_VOICES_RESULT') cb(msg.voices);
-                        if (msg.type === 'CHECK_VOICE_RESULT') cb(msg.isDownloaded);
-                        this.localProviderCallbacks.delete(msg.reqId);
-                    }
-                    break;
-            }
-        };
-    }
-
     private setupAudioPlayerListeners() {
         this.audioPlayer.setOnEnded(() => {
-            this.postMessage({ type: 'AUDIO_ENDED' });
+            this.service.onAudioEnded();
         });
         this.audioPlayer.setOnError((e) => {
              const errorMsg = typeof e === 'string' ? e : "Audio Error";
-             this.postMessage({ type: 'AUDIO_ERROR', error: errorMsg });
+             this.service.onAudioError(errorMsg);
         });
         this.audioPlayer.setOnTimeUpdate((time) => {
-             this.postMessage({ type: 'AUDIO_TIME_UPDATE', time, duration: this.audioPlayer.getDuration() });
+             this.service.onAudioTimeUpdate(time, this.audioPlayer.getDuration());
         });
     }
 
-    // --- Public API (Proxies) ---
+    // --- Public API ---
 
     subscribe(listener: PlaybackListener) {
         this.listeners.push(listener);
@@ -209,58 +199,58 @@ export class AudioPlayerService {
         };
     }
 
-    play() { this.postMessage({ type: 'PLAY' }); }
-    pause() { this.postMessage({ type: 'PAUSE' }); }
-    stop() { this.postMessage({ type: 'STOP' }); }
-    next() { this.postMessage({ type: 'NEXT' }); }
-    prev() { this.postMessage({ type: 'PREV' }); }
+    play() { this.service.play(); }
+    pause() { this.service.pause(); }
+    stop() { this.service.stop(); }
+    next() { this.service.next(); }
+    prev() { this.service.prev(); }
 
-    setSpeed(speed: number) { this.postMessage({ type: 'SET_SPEED', speed }); }
-    setVoice(voiceId: string) { this.postMessage({ type: 'SET_VOICE', voiceId }); }
+    setSpeed(speed: number) { this.service.setSpeed(speed); }
+    setVoice(voiceId: string) { this.service.setVoice(voiceId); }
 
-    jumpTo(index: number) { this.postMessage({ type: 'JUMP_TO', index }); }
-    seek(offset: number) { this.postMessage({ type: 'SEEK', offset }); }
-    seekTo(time: number) { this.postMessage({ type: 'SEEK_TO', time }); }
+    jumpTo(index: number) { this.service.jumpTo(index); }
+    seek(offset: number) { this.service.seek(offset); }
+    seekTo(time: number) { this.service.seekTo(time); }
 
-    setBookId(bookId: string | null) { this.postMessage({ type: 'SET_BOOK', bookId }); }
+    setBookId(bookId: string | null) { this.service.setBookId(bookId); }
 
     loadSection(index: number, autoPlay: boolean = true) {
-         this.postMessage({ type: 'LOAD_SECTION', index, autoPlay });
+         this.service.loadSection(index, autoPlay);
     }
 
     loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, title?: string) {
-        this.postMessage({ type: 'LOAD_SECTION_BY_ID', sectionId, autoPlay, title });
+        this.service.loadSectionBySectionId(sectionId, autoPlay, title);
     }
 
     setQueue(items: TTSQueueItem[], startIndex: number = 0) {
-        this.postMessage({ type: 'SET_QUEUE', items, startIndex });
+        this.service.setQueue(items, startIndex);
     }
 
     setPrerollEnabled(enabled: boolean) {
-        this.postMessage({ type: 'SET_PREROLL', enabled });
+        this.service.setPrerollEnabled(enabled);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setBackgroundAudioMode(mode: any) {
         this.platformIntegration.setBackgroundAudioMode(mode, this.status === 'playing' || this.status === 'loading');
-        this.postMessage({ type: 'SET_BG_MODE', mode });
+        this.service.setBackgroundAudioMode(mode);
     }
 
     setBackgroundVolume(volume: number) {
          this.platformIntegration.setBackgroundVolume(volume);
-         this.postMessage({ type: 'SET_BG_VOLUME', volume });
+         this.service.setBackgroundVolume(volume);
     }
 
     preview(text: string) {
-        this.postMessage({ type: 'PREVIEW', text });
+        this.service.preview(text);
     }
 
     skipToNextSection() {
-        this.postMessage({ type: 'SKIP_NEXT_SECTION' });
+        this.service.skipToNextSection();
     }
 
     skipToPreviousSection() {
-        this.postMessage({ type: 'SKIP_PREV_SECTION' });
+        this.service.skipToPreviousSection();
     }
 
     getQueue(): ReadonlyArray<TTSQueueItem> {
@@ -273,40 +263,32 @@ export class AudioPlayerService {
         if (typeof providerId !== 'string') {
             console.warn("AudioPlayerService.setProvider called with object. Expecting providerId string.");
             if ('id' in providerId) {
-                this.postMessage({ type: 'SET_PROVIDER', providerId: providerId.id, config });
+                this.service.setProvider(providerId.id, config);
             }
             return;
         }
-        this.postMessage({ type: 'SET_PROVIDER', providerId, config });
+        this.service.setProvider(providerId, config);
     }
 
     async init() {
     }
 
     // Async Methods with Response
-    getVoices(): Promise<TTSVoice[]> {
-        return new Promise((resolve) => {
-            const reqId = crypto.randomUUID();
-            this.localProviderCallbacks.set(reqId, resolve);
-            this.postMessage({ type: 'GET_ALL_VOICES', reqId });
-        });
+    async getVoices(): Promise<TTSVoice[]> {
+        return await this.service.getVoices(crypto.randomUUID());
     }
 
-    isVoiceDownloaded(voiceId: string): Promise<boolean> {
-        return new Promise((resolve) => {
-             const reqId = crypto.randomUUID();
-             this.localProviderCallbacks.set(reqId, resolve);
-             this.postMessage({ type: 'CHECK_VOICE', voiceId, reqId });
-        });
+    async isVoiceDownloaded(voiceId: string): Promise<boolean> {
+        return await this.service.isVoiceDownloaded(voiceId, crypto.randomUUID());
     }
 
     downloadVoice(voiceId: string) {
-        this.postMessage({ type: 'DOWNLOAD_VOICE', voiceId });
+        this.service.downloadVoice(voiceId);
         return Promise.resolve();
     }
 
     deleteVoice(voiceId: string) {
-        this.postMessage({ type: 'DELETE_VOICE', voiceId });
+        this.service.deleteVoice(voiceId);
         return Promise.resolve();
     }
 
