@@ -1,449 +1,230 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import { BackgroundAudio } from './BackgroundAudio';
-import { dbService } from '../../db/DBService';
-import { genAIService } from '../genai/GenAIService';
-import * as cfiUtils from '../cfi-utils';
+import { Capacitor } from '@capacitor/core';
+import { WebSpeechProvider } from './providers/WebSpeechProvider';
+import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 
-// Mock WebSpeechProvider class
-vi.mock('./providers/WebSpeechProvider', () => {
-  return {
-    WebSpeechProvider: class {
-      id = 'local';
-      init = vi.fn().mockResolvedValue(undefined);
-      getVoices = vi.fn().mockResolvedValue([]);
-      play = vi.fn().mockResolvedValue(undefined);
-      preload = vi.fn();
-      stop = vi.fn();
-      on = vi.fn();
-      setConfig = vi.fn();
-      pause = vi.fn();
-      resume = vi.fn();
+// Mock dependencies
+vi.mock('@capacitor/core', () => ({
+    Capacitor: {
+        isNativePlatform: vi.fn().mockReturnValue(false)
     }
-  };
+}));
+
+// Mock WorkerWrapper (from setup.ts mock)
+// We need to ensure we can inspect postMessage
+vi.mock('./worker/audio.worker?worker', () => {
+    return {
+        default: class MockWorker {
+            onmessage = null;
+            postMessage = vi.fn();
+            terminate = vi.fn();
+            addEventListener = vi.fn();
+            removeEventListener = vi.fn();
+        }
+    };
 });
 
-// Mock CapacitorTTSProvider class
-vi.mock('./providers/CapacitorTTSProvider', () => {
+// Mock Local Providers
+vi.mock('./providers/WebSpeechProvider', () => {
     return {
-        CapacitorTTSProvider: class {
-            id = 'local';
-            init = vi.fn().mockResolvedValue(undefined);
-            getVoices = vi.fn().mockResolvedValue([]);
-            play = vi.fn().mockResolvedValue(undefined);
+        WebSpeechProvider: class {
+            on = vi.fn();
+            play = vi.fn();
             preload = vi.fn();
             stop = vi.fn();
-            on = vi.fn();
             pause = vi.fn();
             resume = vi.fn();
+            init = vi.fn();
+            getVoices = vi.fn();
         }
     }
 });
 
-// Mock Dependencies
-vi.mock('./SyncEngine');
-vi.mock('./LexiconService', () => ({
-    LexiconService: {
-        getInstance: vi.fn(() => ({
-            getRules: vi.fn().mockResolvedValue([]),
-            applyLexicon: vi.fn((text) => text),
-            getRulesHash: vi.fn().mockResolvedValue('hash'),
-            getBibleLexiconPreference: vi.fn().mockResolvedValue('default')
-        }))
+vi.mock('./providers/CapacitorTTSProvider', () => {
+    return {
+        CapacitorTTSProvider: class {
+            on = vi.fn();
+            play = vi.fn();
+            preload = vi.fn();
+            stop = vi.fn();
+            pause = vi.fn();
+            resume = vi.fn();
+            init = vi.fn();
+            getVoices = vi.fn();
+        }
     }
-}));
-vi.mock('./MediaSessionManager');
-vi.mock('../../db/DBService', () => ({
-  dbService: {
-    getBookMetadata: vi.fn().mockResolvedValue({
-        title: 'Test Book',
-        author: 'Test Author',
-        coverUrl: 'http://example.com/cover.jpg'
-    }),
-    updatePlaybackState: vi.fn().mockResolvedValue(undefined),
-    getTTSState: vi.fn().mockResolvedValue(null),
-    saveTTSState: vi.fn(),
-    updateReadingHistory: vi.fn().mockResolvedValue(undefined),
-    getSections: vi.fn().mockResolvedValue([
-        { sectionId: 'sec1', characterCount: 100 },
-        { sectionId: 'sec2', characterCount: 0 }, // Empty section
-        { sectionId: 'sec3', characterCount: 100 }
-    ]),
-    getContentAnalysis: vi.fn().mockResolvedValue({ structure: { title: 'Chapter 1' } }),
-    getTTSContent: vi.fn().mockImplementation((bookId, sectionId) => {
-        if (sectionId === 'sec2') return Promise.resolve({ sentences: [] });
-        return Promise.resolve({
-            sentences: [{ text: "Sentence " + sectionId, cfi: "cfi_" + sectionId }]
-        });
-    }),
-    saveTTSPosition: vi.fn(),
-    saveContentClassifications: vi.fn(),
-    getTableImages: vi.fn().mockResolvedValue([]), // Added mock
-  }
-}));
-vi.mock('./CostEstimator');
+});
 
-// Mock useTTSStore to avoid circular dependency
-vi.mock('../../store/useTTSStore', () => ({
-  useTTSStore: {
-    getState: vi.fn().mockReturnValue({
-        customAbbreviations: [],
-        alwaysMerge: [],
-        sentenceStarters: [],
-        minSentenceLength: 0,
-        isBibleLexiconEnabled: false
-    })
-  }
-}));
-
-vi.mock('../../store/useGenAIStore', () => ({
-    useGenAIStore: {
-        getState: vi.fn().mockReturnValue({
-            isContentAnalysisEnabled: true,
-            isEnabled: true, // Default to true for tests
-            contentFilterSkipTypes: ['footnote'],
-            apiKey: 'test-key'
-        })
+// Mock PlatformIntegration to avoid MediaSession errors
+vi.mock('./PlatformIntegration', () => {
+    return {
+        PlatformIntegration: class {
+            updatePlaybackState = vi.fn();
+            updateMetadata = vi.fn();
+            setPositionState = vi.fn();
+            setBackgroundAudioMode = vi.fn();
+            setBackgroundVolume = vi.fn();
+            stop = vi.fn();
+        }
     }
-}));
+});
 
-vi.mock('../genai/GenAIService', () => ({
-    genAIService: {
-        isConfigured: vi.fn().mockReturnValue(true),
-        configure: vi.fn(),
-        detectContentTypes: vi.fn().mockResolvedValue([
-            { id: '0', type: 'text' }
-        ])
-    }
-}));
-
-vi.mock('./TextSegmenter', () => ({
-    TextSegmenter: {
-        refineSegments: vi.fn((segments) => segments)
-    }
-}));
-
-describe('AudioPlayerService', () => {
+describe('AudioPlayerService (Proxy)', () => {
     let service: AudioPlayerService;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockWorker: any;
 
     beforeEach(() => {
-        vi.spyOn(console, 'error').mockImplementation(() => {});
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
-
+        vi.clearAllMocks();
         // Reset singleton
-        // @ts-expect-error Resetting singleton for testing
+        // @ts-expect-error Resetting singleton
         AudioPlayerService.instance = undefined;
+
+        // Default to web
+        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+    });
+
+    const initService = () => {
         service = AudioPlayerService.getInstance();
-    });
-
-    it('should be a singleton', () => {
-        const s2 = AudioPlayerService.getInstance();
-        expect(s2).toBe(service);
-    });
-
-    it('should notify listeners on subscribe', () => {
-        return new Promise<void>((resolve) => {
-            service.subscribe((status, activeCfi, currentIndex, queue, error) => {
-                expect(status).toBe('stopped');
-                expect(error).toBeNull();
-                resolve();
-            });
-        });
-    });
-
-    it('should include coverUrl in queue items including Preroll', async () => {
-        // Enable preroll
-        service.setPrerollEnabled(true);
-        service.setBookId('book1');
-
-        // Load section 0 (normal content)
-        await service.loadSection(0, false);
-
-        // Wait for async tasks in queue
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        const queue = service.getQueue();
-        expect(queue.length).toBeGreaterThan(0);
-
-        // Check Preroll item (first item)
-        expect(queue[0].isPreroll).toBe(true);
-        expect(queue[0].coverUrl).toBe('http://example.com/cover.jpg');
-
-        // Check Content item
-        expect(queue[1].coverUrl).toBe('http://example.com/cover.jpg');
-    });
-
-    it('should include coverUrl in queue items for empty chapters', async () => {
-        service.setBookId('book1');
-
-        // Load section 1 (empty content)
-        await service.loadSection(1, false);
-
-        // Wait for async tasks in queue
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        const queue = service.getQueue();
-        expect(queue.length).toBe(1);
-        expect(queue[0].isPreroll).toBe(true); // Empty message is marked as preroll
-
-        expect(queue[0].coverUrl).toBe('http://example.com/cover.jpg');
-    });
-
-    it('should transition to completed status when queue finishes', async () => {
-        // Use the WebSpeechProvider mock class to create a mock instance that passes instanceof checks
-        const { WebSpeechProvider } = await import('./providers/WebSpeechProvider');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mockInstance = new WebSpeechProvider() as any;
-
-        await service.setProvider(mockInstance);
-
-        // Ensure listeners registered
-        // The service registers listeners internally on setProvider
-        // We need to access the callback passed to `mockInstance.on`
-
-        // Wait for setProvider task to complete
-        await new Promise(resolve => setTimeout(resolve, 10));
-
-        // Get the listener
-        expect(mockInstance.on).toHaveBeenCalled();
-        const onCall = mockInstance.on.mock.calls[0];
-        const listener = onCall[0];
-
-        // Set queue with 1 item
-        await service.setQueue([{ text: "1", cfi: "1" }]);
-
-        // Call play() to set status to 'loading'/'playing'
-        void service.play();
-
-        // Wait for play to finish calling provider.play
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        // Spy on notifyListeners to verify outcome
-        // @ts-expect-error Access private method
-        const notifySpy = vi.spyOn(service, 'notifyListeners');
-
-        // Trigger 'end' event on the provider listener
-        listener({ type: 'end' });
-
-        // Wait for playNext logic
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        // Check status transition
-        // @ts-expect-error Access private property
-        expect(service.status).toBe('completed');
-        expect(notifySpy).toHaveBeenCalledWith(null);
-    });
-
-    it('should handle fallback from cloud to local on error', async () => {
-        // Setup a mock cloud provider that fails
-        const mockCloudProvider = {
-            id: 'cloud',
-            init: vi.fn().mockResolvedValue(undefined),
-            getVoices: vi.fn().mockResolvedValue([]),
-            // play returns normally to simulate async start
-            play: vi.fn().mockResolvedValue(undefined),
-            preload: vi.fn(),
-            on: vi.fn(),
-            stop: vi.fn(),
-            pause: vi.fn(),
-            resume: vi.fn(),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any;
-
-        // Force provider to be cloud
-        await service.setProvider(mockCloudProvider);
-        await new Promise(resolve => setTimeout(resolve, 0));
-
-        // Setup queue
-        await service.setQueue([{ text: "Hello", cfi: "cfi1" }]);
-
-        const consoleSpy = vi.spyOn(console, 'warn');
-
-        const onCall = mockCloudProvider.on.mock.calls[0];
-        const providerListener = onCall[0];
-
-        // Trigger play.
-        void service.play();
-
-        // Emit error event to trigger TTSProviderManager's fallback logic.
-        providerListener({ type: 'error', error: new Error("API Quota Exceeded") });
-
-        // Wait for async logic (fallback provider init and re-play)
-        await new Promise(resolve => setTimeout(resolve, 10));
-
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Falling back"));
-    });
-
-    it('should continue playing background audio when status becomes completed', async () => {
-        const playSpy = vi.spyOn(BackgroundAudio.prototype, 'play');
-        const forceStopSpy = vi.spyOn(BackgroundAudio.prototype, 'forceStop');
-
-        // Ensure we are in a playing state
         // @ts-expect-error Access private
-        service.setStatus('playing');
+        mockWorker = service.worker;
+    };
 
-        expect(playSpy).toHaveBeenCalled();
-        playSpy.mockClear();
-
-        // Transition to completed
-        // @ts-expect-error Access private
-        service.setStatus('completed');
-
-        expect(playSpy).toHaveBeenCalled();
-        expect(forceStopSpy).not.toHaveBeenCalled();
+    it('should initialize worker', () => {
+        initService();
+        expect(mockWorker).toBeDefined();
+        expect(mockWorker.postMessage).toBeDefined();
+        // Init message sent in constructor
+        expect(mockWorker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'INIT' }));
     });
 
-    it('should trigger content analysis for the next chapter', async () => {
-        service.setBookId('book1');
-
-        // Mock getTTSContent to spy on it
-        const getTTSContentSpy = vi.mocked(dbService.getTTSContent);
-
-        // Load section 1 (sec2, empty) -> should trigger analysis for section 2 (sec3)
-        // section index 1 corresponds to sec2
-        // next section is index 2, which is sec3
-
-        await service.loadSection(1, false);
-
-        // Wait for background promise (run in next tick)
-        await new Promise(resolve => setTimeout(resolve, 10));
-
-        // Check if getTTSContent was called for sec3
-        // It's called with 'book1', 'sec3'
-        expect(getTTSContentSpy).toHaveBeenCalledWith('book1', 'sec3');
-
-        // Check if GenAI detection was triggered
-        expect(genAIService.detectContentTypes).toHaveBeenCalled();
+    it('should initialize WebSpeechProvider on Web', () => {
+        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+        initService();
+        // We verify that the class constructor was called
+        // Since we mocked the class itself, we can check calls on the mock if we had a spy on it.
+        // But vi.mock returns the implementation.
+        // We can verify that the private property 'localProvider' is instance of our mock class?
+        // Or simpler: access private localProvider and check its constructor name or methods.
+        // @ts-expect-error Access private
+        expect(service.localProvider).toBeDefined();
+        // @ts-expect-error Access private
+        expect(service.localProvider.play).toBeDefined();
     });
 
-    it('should synchronously stop playback and reset state when switching book IDs', async () => {
-        // 1. Setup initial state: Book 1 playing
-        service.setBookId('book1');
-        await service.setQueue([{ text: "Book 1", cfi: "cfi1" }]);
+    it('should initialize CapacitorTTSProvider on Native', () => {
+        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+        initService();
         // @ts-expect-error Access private
-        service.setStatus('playing');
-
-        // Verify initial state
-        // @ts-expect-error Access private
-        expect(service.currentBookId).toBe('book1');
-        // @ts-expect-error Access private
-        expect(service.status).toBe('playing');
-        expect(service.getQueue().length).toBe(1);
-
-        // Mock notifyListeners to verify cleared state is broadcasted
-        // @ts-expect-error Access private
-        const notifySpy = vi.spyOn(service, 'notifyListeners');
-
-        // 2. Switch to Book 2
-        service.setBookId('book2');
-
-        // 3. Verify synchronous reset
-        // @ts-expect-error Access private
-        expect(service.status).toBe('stopped');
-        // @ts-expect-error Access private
-        expect(service.currentBookId).toBe('book2');
-
-        // Queue should be empty immediately (before restoreQueue completes)
-        expect(service.getQueue().length).toBe(0);
-
-        // Should have notified listeners with null CFI (cleared state)
-        expect(notifySpy).toHaveBeenCalledWith(null);
+        expect(service.localProvider).toBeDefined();
     });
 
-    describe('Grouping Logic', () => {
-        // We access the content pipeline instance attached to the service to verify
-        // low-level grouping behavior. Ideally, these tests would live in AudioContentPipeline.test.ts,
-        // but they are preserved here to ensure integration context or legacy coverage.
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let contentPipeline: any;
-
+    describe('Proxy Commands', () => {
         beforeEach(() => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            contentPipeline = (service as any).contentPipeline;
-
-            // Spy on cfi utils
-            vi.spyOn(cfiUtils, 'getParentCfi');
-            vi.spyOn(cfiUtils, 'generateCfiRange');
+            initService();
         });
 
-        it('groups sentences by parent and generates Range CFIs for rootCfi', () => {
-            const sentences = [
-                { text: "A", cfi: "epubcfi(/6/14!/4/2/1:0)" },
-                { text: "B", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Same parent /4/2
-                { text: "C", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // New parent /4/4
-            ];
-
-            const groups = contentPipeline.groupSentencesByRoot(sentences);
-
-            expect(groups).toHaveLength(2);
-
-            // Group 1: Parent /6/14!/4/2
-            expect(groups[0].segments).toHaveLength(2);
-            // Expected: Range spanning 1:0 to 3:0
-            // Since actual implementation of generateCfiRange in environment is used:
-            const expectedRange1 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/2/1:0)", "epubcfi(/6/14!/4/2/3:0)");
-            expect(groups[0].rootCfi).toBe(expectedRange1);
-
-            // Group 2: Parent /6/14!/4/4
-            expect(groups[1].segments).toHaveLength(1);
-            const expectedRange2 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/4/1:0)", "epubcfi(/6/14!/4/4/1:0)");
-            expect(groups[1].rootCfi).toBe(expectedRange2);
+        it('should proxy play command', () => {
+            service.play();
+            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'PLAY' });
         });
 
-        it('generates unique rootCfi for adjacent groups sharing same parent (Map Collision Fix)', () => {
-            // Scenario: Groups separated by an intervening different parent
-            // P1 (Parent A)
-            // P2 (Parent B)
-            // P3 (Parent A)
-
-            const sentences = [
-                { text: "A1", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Parent A
-                { text: "B1", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // Parent B
-                { text: "A2", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Parent A again
-            ];
-
-            const groups = contentPipeline.groupSentencesByRoot(sentences);
-
-            expect(groups).toHaveLength(3);
-
-            // Group 1: A1
-            const root1 = groups[0].rootCfi;
-            // Group 3: A2
-            const root3 = groups[2].rootCfi;
-
-            // Verify they have different root CFIs despite sharing parent "/6/14!/4/2"
-            expect(root1).not.toBe(root3);
-            expect(groups[0].rootCfi).toContain('1:0');
-            expect(groups[2].rootCfi).toContain('3:0');
+        it('should proxy pause command', () => {
+            service.pause();
+            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'PAUSE' });
         });
 
-        it('detectContentSkipMask handles colliding parents correctly', async () => {
-            const sentences = [
-                { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)", sourceIndices: [0] }, // Group 1 (Parent A)
-                { text: "Interruption", cfi: "epubcfi(/6/14!/4/4/1:0)", sourceIndices: [1] }, // Group 2 (Parent B)
-                { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)", sourceIndices: [2] }, // Group 3 (Parent A)
-            ];
+        it('should proxy stop command', () => {
+            service.stop();
+            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'STOP' });
+        });
 
-            // Mock GenAI response
-            // IDs correspond to indices: '0', '1', '2'
-            // @ts-expect-error Mock implementation
-            genAIService.detectContentTypes.mockResolvedValue([
-                { id: '0', type: 'narrative' },
-                { id: '1', type: 'narrative' },
-                { id: '2', type: 'footnote' } // Skip this one
-            ]);
+        it('should proxy navigation commands', () => {
+            service.next();
+            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'NEXT' });
 
-            // Check the mask generation
-            // @ts-expect-error casting for test compatibility
-            const mask = await contentPipeline.detectContentSkipMask('book1', 'sec1', ['footnote'], sentences);
+            service.prev();
+            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'PREV' });
+        });
 
-            // Should skip index 2 ("Footnote")
-            expect(mask.has(2)).toBe(true);
-            // Should NOT skip index 0 ("Narrative")
-            expect(mask.has(0)).toBe(false);
-            // Should NOT skip index 1 ("Interruption")
-            expect(mask.has(1)).toBe(false);
+        it('should proxy configuration commands', () => {
+            service.setSpeed(1.5);
+            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'SET_SPEED', speed: 1.5 });
+
+            service.setVoice('v1');
+            expect(mockWorker.postMessage).toHaveBeenCalledWith({ type: 'SET_VOICE', voiceId: 'v1' });
+        });
+    });
+
+    describe('Worker Messages', () => {
+        beforeEach(() => {
+            initService();
+        });
+
+        it('should handle STATUS_UPDATE from worker', () => {
+            const listener = vi.fn();
+            service.subscribe(listener);
+
+            // Simulate worker message
+            const msg = {
+                type: 'STATUS_UPDATE',
+                status: 'playing',
+                cfi: 'cfi1',
+                index: 5,
+                queue: [{ text: 'test', cfi: 'cfi1' }]
+            };
+
+            mockWorker.onmessage({ data: msg } as MessageEvent);
+
+            expect(listener).toHaveBeenCalledWith(
+                'playing',
+                'cfi1',
+                5,
+                [{ text: 'test', cfi: 'cfi1' }],
+                null
+            );
+        });
+
+        it('should handle ERROR from worker', () => {
+            const listener = vi.fn();
+            service.subscribe(listener);
+
+            const msg = {
+                type: 'ERROR',
+                message: 'Worker Error'
+            };
+
+            mockWorker.onmessage({ data: msg } as MessageEvent);
+
+            expect(listener).toHaveBeenCalledWith(
+                'stopped', // Default status in tests
+                null,
+                0,
+                [],
+                'Worker Error'
+            );
+        });
+
+        it('should handle DOWNLOAD_PROGRESS from worker', () => {
+            const listener = vi.fn();
+            service.subscribe(listener);
+
+            const msg = {
+                type: 'DOWNLOAD_PROGRESS',
+                voiceId: 'v1',
+                percent: 50,
+                status: 'downloading'
+            };
+
+            mockWorker.onmessage({ data: msg } as MessageEvent);
+
+            const lastCall = listener.mock.calls[listener.mock.calls.length - 1];
+            expect(lastCall[5]).toEqual({ // 6th argument is downloadInfo
+                voiceId: 'v1',
+                percent: 50,
+                status: 'downloading'
+            });
         });
     });
 });

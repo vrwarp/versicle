@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BaseCloudProvider } from './BaseCloudProvider';
 import { CostEstimator } from '../CostEstimator';
 import type { TTSOptions, SpeechSegment } from './types';
+import type { IAudioPlayer } from '../IAudioPlayer';
 
 // Mock dependencies
 vi.mock('../CostEstimator', () => {
@@ -18,22 +19,6 @@ vi.mock('../CostEstimator', () => {
   };
 });
 
-vi.mock('../AudioElementPlayer', () => {
-    return {
-        AudioElementPlayer: class {
-            setOnTimeUpdate = vi.fn();
-            setOnEnded = vi.fn();
-            setOnError = vi.fn();
-            setRate = vi.fn();
-            playBlob = vi.fn().mockResolvedValue(undefined);
-            pause = vi.fn();
-            resume = vi.fn();
-            stop = vi.fn();
-            getDuration = () => 0;
-        }
-    };
-});
-
 // Mock TTSCache
 const mockGet = vi.fn();
 const mockPut = vi.fn();
@@ -47,6 +32,19 @@ vi.mock('../TTSCache', () => {
       generateKey = mockGenerateKey;
     }
   };
+});
+
+// Create a mock AudioPlayer
+const createMockAudioPlayer = (): IAudioPlayer => ({
+    playBlob: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    stop: vi.fn(),
+    setRate: vi.fn(),
+    getDuration: vi.fn().mockReturnValue(0),
+    setOnTimeUpdate: vi.fn(),
+    setOnEnded: vi.fn(),
+    setOnError: vi.fn(),
 });
 
 // Concrete implementation of BaseCloudProvider for testing
@@ -76,12 +74,14 @@ class TestProvider extends BaseCloudProvider {
 
 describe('BaseCloudProvider Request Registry', () => {
   let provider: TestProvider;
+  let mockAudioPlayer: IAudioPlayer;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let trackSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new TestProvider();
+    mockAudioPlayer = createMockAudioPlayer();
+    provider = new TestProvider(mockAudioPlayer);
     trackSpy = CostEstimator.getInstance().track;
   });
 

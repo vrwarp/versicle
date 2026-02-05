@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PiperProvider } from './PiperProvider';
+import type { IAudioPlayer } from '../IAudioPlayer';
 
 // Mock data representing a subset of voices.json
 const mockVoicesJson = {
@@ -41,11 +42,26 @@ const mockVoicesJson = {
   }
 };
 
+// Create a mock AudioPlayer
+const createMockAudioPlayer = (): IAudioPlayer => ({
+    playBlob: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    stop: vi.fn(),
+    setRate: vi.fn(),
+    getDuration: vi.fn().mockReturnValue(0),
+    setOnTimeUpdate: vi.fn(),
+    setOnEnded: vi.fn(),
+    setOnError: vi.fn(),
+});
+
 describe('PiperProvider Voice Filtering', () => {
     let provider: PiperProvider;
+    let mockAudioPlayer: IAudioPlayer;
 
     beforeEach(() => {
-        provider = new PiperProvider();
+        mockAudioPlayer = createMockAudioPlayer();
+        provider = new PiperProvider(mockAudioPlayer);
         // @ts-expect-error Mocking global fetch
         global.fetch = vi.fn().mockResolvedValue({
             ok: true,

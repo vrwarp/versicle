@@ -1,214 +1,142 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import type { TTSEvent, ITTSProvider } from './providers/types';
+import { PlatformIntegration } from './PlatformIntegration';
+import { Capacitor } from '@capacitor/core';
 
-// Mock WebSpeechProvider
-vi.mock('./providers/WebSpeechProvider', () => {
-  return {
-    WebSpeechProvider: class {
-      id = 'local'; // Added id='local'
-      init = vi.fn().mockResolvedValue(undefined);
-      getVoices = vi.fn().mockResolvedValue([]);
-      play = vi.fn().mockResolvedValue(undefined);
-      stop = vi.fn();
-      on = vi.fn();
-      pause = vi.fn();
-      resume = vi.fn();
+// Mock dependencies
+vi.mock('@capacitor/core', () => ({
+    Capacitor: {
+        isNativePlatform: vi.fn().mockReturnValue(false)
     }
-  };
-});
+}));
 
-// Mock TTSCache
-vi.mock('./TTSCache', () => {
-  return {
-    TTSCache: class {
-      generateKey = vi.fn().mockResolvedValue('key');
-      get = vi.fn().mockResolvedValue(null);
-      put = vi.fn().mockResolvedValue(undefined);
-    }
-  };
-});
-
-// Mock CostEstimator
-vi.mock('./CostEstimator', () => {
+vi.mock('./PlatformIntegration', () => {
     return {
-        CostEstimator: {
-            getInstance: vi.fn(() => ({
-                track: vi.fn()
-            }))
+        PlatformIntegration: class {
+            updateMetadata = vi.fn();
+            setPositionState = vi.fn();
+            updatePlaybackState = vi.fn();
+            stop = vi.fn();
+            setBackgroundAudioMode = vi.fn();
+            setBackgroundVolume = vi.fn();
         }
     }
 });
 
-// Mock useTTSStore
-vi.mock('../../store/useTTSStore', () => ({
-    useTTSStore: {
-        getState: vi.fn(() => ({
-            lastPauseTime: null,
-            setLastPauseTime: vi.fn(),
-        }))
-    }
-}));
-
-// Mock DBService
-vi.mock('../../db/DBService', () => ({
-  dbService: {
-    getBookMetadata: vi.fn().mockResolvedValue({}),
-    updatePlaybackState: vi.fn().mockResolvedValue(undefined),
-    getTTSState: vi.fn().mockResolvedValue(null),
-    saveTTSState: vi.fn(),
-    getSections: vi.fn().mockResolvedValue([]),
-    getContentAnalysis: vi.fn(),
-    getTTSContent: vi.fn(),
-    updateReadingHistory: vi.fn(),
-  }
-}));
-
-// Mock AudioElementPlayer with shared spies
-const sharedSpies = {
-    setOnTimeUpdate: vi.fn(),
-    seek: vi.fn(),
-    getDuration: vi.fn().mockReturnValue(120),
-};
-
-vi.mock('./AudioElementPlayer', () => {
+vi.mock('./providers/WebSpeechProvider', () => {
     return {
-        AudioElementPlayer: class {
-            setOnTimeUpdate = sharedSpies.setOnTimeUpdate;
-            setOnEnded = vi.fn();
-            setOnError = vi.fn();
-            getDuration = sharedSpies.getDuration;
-            getCurrentTime = vi.fn().mockReturnValue(10);
-            seek = sharedSpies.seek;
-            playBlob = vi.fn().mockResolvedValue(undefined);
-            setRate = vi.fn();
+        WebSpeechProvider: class {
+            on = vi.fn();
+            play = vi.fn();
+            preload = vi.fn();
             stop = vi.fn();
             pause = vi.fn();
             resume = vi.fn();
-            playUrl = vi.fn();
-            setVolume = vi.fn();
-            destroy = vi.fn();
+            init = vi.fn();
+            getVoices = vi.fn();
+        }
+    }
+});
+
+vi.mock('./providers/CapacitorTTSProvider', () => {
+    return {
+        CapacitorTTSProvider: class {
+            on = vi.fn();
+            play = vi.fn();
+            preload = vi.fn();
+            stop = vi.fn();
+            pause = vi.fn();
+            resume = vi.fn();
+            init = vi.fn();
+            getVoices = vi.fn();
+        }
+    }
+});
+
+// Mock WorkerWrapper (from setup.ts mock)
+vi.mock('./worker/audio.worker?worker', () => {
+    return {
+        default: class MockWorker {
+            onmessage = null;
+            postMessage = vi.fn();
+            terminate = vi.fn();
+            addEventListener = vi.fn();
+            removeEventListener = vi.fn();
         }
     };
 });
 
-// Mock Audio globally using stubGlobal
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockAudioInstances: any[] = [];
-class MockAudio {
-    play = vi.fn().mockImplementation(() => {
-        this.paused = false;
-        return Promise.resolve();
-    });
-    pause = vi.fn().mockImplementation(() => {
-        this.paused = true;
-    });
-    loop = false;
-    currentTime = 0;
-    src = '';
-    paused = true; // Default to paused
-
-    constructor(src?: string) {
-        this.src = src || '';
-        mockAudioInstances.push(this);
-    }
-    getAttribute = vi.fn((attr) => {
-        if (attr === 'src') return this.src;
-        return null;
-    });
-}
-vi.stubGlobal('Audio', MockAudio);
-
 describe('AudioPlayerService MediaSession Integration', () => {
     let service: AudioPlayerService;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let mediaSessionMock: any;
+    let mockWorker: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let platformIntegrationMock: any;
 
     beforeEach(() => {
-        // Reset shared spies
-        sharedSpies.setOnTimeUpdate.mockClear();
-        sharedSpies.seek.mockClear();
-        sharedSpies.getDuration.mockClear();
-        mockAudioInstances.length = 0;
+        vi.clearAllMocks();
+        // Reset singleton
+        // @ts-expect-error Resetting singleton
+        AudioPlayerService.instance = undefined;
 
-        // Setup Media Session Mock
-        mediaSessionMock = {
-            setActionHandler: vi.fn(),
-            playbackState: 'none',
-            metadata: null,
-            setPositionState: vi.fn(),
+        service = AudioPlayerService.getInstance();
+        // @ts-expect-error Access private
+        mockWorker = service.worker;
+        // @ts-expect-error Access private
+        platformIntegrationMock = service.platformIntegration;
+    });
+
+    it('should update metadata on UPDATE_METADATA message', () => {
+        const metadata = {
+            title: 'Title',
+            artist: 'Author',
+            album: 'Book',
+            artwork: [{ src: 'cover.jpg' }]
         };
 
-        // Stub navigator.mediaSession BEFORE creating the service
-        vi.stubGlobal('navigator', {
-            mediaSession: mediaSessionMock,
-            userAgent: 'test-agent'
-        });
+        const msg = {
+            type: 'UPDATE_METADATA',
+            metadata: {
+                metadata
+            }
+        };
 
-        // Mock MediaMetadata constructor
-        vi.stubGlobal('MediaMetadata', class {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            constructor(public init: any) {}
-        });
+        mockWorker.onmessage({ data: msg } as MessageEvent);
 
-        // Ensure Audio is mocked correctly in window as well
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).Audio = MockAudio;
-
-        // Reset AudioPlayerService singleton
-        // @ts-expect-error Resetting singleton for testing
-        AudioPlayerService.instance = undefined;
-        service = AudioPlayerService.getInstance();
+        expect(platformIntegrationMock.updateMetadata).toHaveBeenCalledWith(metadata);
     });
 
-    afterEach(() => {
-        vi.unstubAllGlobals();
+    it('should update position state on UPDATE_METADATA message', () => {
+        const positionState = {
+            duration: 100,
+            playbackRate: 1.0,
+            position: 50
+        };
+
+        const msg = {
+            type: 'UPDATE_METADATA',
+            metadata: {
+                metadata: {},
+                positionState
+            }
+        };
+
+        mockWorker.onmessage({ data: msg } as MessageEvent);
+
+        expect(platformIntegrationMock.setPositionState).toHaveBeenCalledWith(positionState);
     });
 
-    it('should register all media session handlers including seekto', () => {
-        const actions = mediaSessionMock.setActionHandler.mock.calls.map((call: string[]) => call[0]);
+    it('should update playback state on STATUS_UPDATE', () => {
+        const msg = {
+            type: 'STATUS_UPDATE',
+            status: 'playing',
+            cfi: null,
+            index: 0,
+            queue: []
+        };
 
-        expect(actions).toContain('play');
-        expect(actions).toContain('pause');
-        expect(actions).toContain('stop');
-        expect(actions).toContain('previoustrack');
-        expect(actions).toContain('nexttrack');
-        expect(actions).toContain('seekbackward');
-        expect(actions).toContain('seekforward');
-        expect(actions).toContain('seekto');
-    });
+        mockWorker.onmessage({ data: msg } as MessageEvent);
 
-    it('should update position state during cloud playback', async () => {
-        // Setup cloud provider
-        let providerListener: ((e: TTSEvent) => void) | undefined;
-        const mockCloudProvider = {
-            id: 'cloud',
-            init: vi.fn().mockResolvedValue(undefined),
-            getVoices: vi.fn().mockResolvedValue([]),
-            play: vi.fn().mockResolvedValue(undefined),
-            stop: vi.fn(),
-            pause: vi.fn(),
-            resume: vi.fn(),
-            preload: vi.fn(),
-            on: vi.fn((cb) => { providerListener = cb; }),
-        } as unknown as ITTSProvider;
-
-        await service.setProvider(mockCloudProvider);
-
-        // Setup queue and play
-        await service.setQueue([{ text: "Text", cfi: "cfi" }]);
-        await service.play();
-
-        // Trigger timeupdate via listener directly
-        expect(providerListener).toBeDefined();
-        providerListener!({ type: 'timeupdate', currentTime: 10, duration: 120 });
-
-        // Verify setPositionState called
-        // Note: We check if it was called at least once with the correct duration and playbackRate.
-        // The position might be 0 initially or updated later depending on when the update triggers.
-        expect(mediaSessionMock.setPositionState).toHaveBeenCalledWith(expect.objectContaining({
-            duration: expect.any(Number),
-            playbackRate: 1,
-        }));
+        expect(platformIntegrationMock.updatePlaybackState).toHaveBeenCalledWith('playing');
     });
 });

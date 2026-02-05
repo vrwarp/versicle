@@ -95,3 +95,22 @@ Object.defineProperty(window, 'SpeechSynthesisUtterance', {
   value: vi.fn(),
   writable: true
 });
+
+// Mock Worker
+// This ensures that `new Worker()` inside AudioPlayerService doesn't fail in JSDOM.
+// We also need to handle the Vite ?worker import mock.
+class MockWorker {
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  postMessage = vi.fn();
+  terminate = vi.fn();
+  addEventListener = vi.fn();
+  removeEventListener = vi.fn();
+}
+// Assign to global
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(global as any).Worker = MockWorker;
+
+// Mock the module import for vite worker imports
+vi.mock('./worker/audio.worker?worker', () => ({
+  default: MockWorker
+}));

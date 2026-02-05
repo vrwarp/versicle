@@ -1,17 +1,33 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { GoogleTTSProvider } from './GoogleTTSProvider';
 import type { TTSOptions } from './types';
+import type { IAudioPlayer } from '../IAudioPlayer';
 
 // Mock base dependencies to avoid instantiation issues if any
 vi.mock('../AudioElementPlayer');
 vi.mock('../TTSCache');
 vi.mock('../CostEstimator');
 
+// Create a mock AudioPlayer
+const createMockAudioPlayer = (): IAudioPlayer => ({
+    playBlob: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    stop: vi.fn(),
+    setRate: vi.fn(),
+    getDuration: vi.fn().mockReturnValue(0),
+    setOnTimeUpdate: vi.fn(),
+    setOnEnded: vi.fn(),
+    setOnError: vi.fn(),
+});
+
 describe('GoogleTTSProvider', () => {
   let provider: GoogleTTSProvider;
+  let mockAudioPlayer: IAudioPlayer;
 
   beforeEach(() => {
-    provider = new GoogleTTSProvider('test-api-key');
+    mockAudioPlayer = createMockAudioPlayer();
+    provider = new GoogleTTSProvider(mockAudioPlayer, 'test-api-key');
     global.fetch = vi.fn();
     // mock window.atob if needed, but JSDOM usually has it.
     // If running in node without JSDOM, we might need polyfill.
@@ -28,7 +44,7 @@ describe('GoogleTTSProvider', () => {
 
   describe('constructor', () => {
     it('should set api key if provided', () => {
-      const p = new GoogleTTSProvider('key-1');
+      const p = new GoogleTTSProvider(mockAudioPlayer, 'key-1');
       // @ts-expect-error - accessing private field
       expect(p.apiKey).toBe('key-1');
     });
@@ -44,7 +60,7 @@ describe('GoogleTTSProvider', () => {
 
   describe('init', () => {
     it('should return if no api key', async () => {
-      const p = new GoogleTTSProvider();
+      const p = new GoogleTTSProvider(mockAudioPlayer);
       await p.init();
       expect(global.fetch).not.toHaveBeenCalled();
     });

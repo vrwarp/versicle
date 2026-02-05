@@ -1,16 +1,32 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { LemonFoxProvider } from './LemonFoxProvider';
 import type { TTSOptions } from './types';
+import type { IAudioPlayer } from '../IAudioPlayer';
 
 vi.mock('../AudioElementPlayer');
 vi.mock('../TTSCache');
 vi.mock('../CostEstimator');
 
+// Create a mock AudioPlayer
+const createMockAudioPlayer = (): IAudioPlayer => ({
+    playBlob: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    stop: vi.fn(),
+    setRate: vi.fn(),
+    getDuration: vi.fn().mockReturnValue(0),
+    setOnTimeUpdate: vi.fn(),
+    setOnEnded: vi.fn(),
+    setOnError: vi.fn(),
+});
+
 describe('LemonFoxProvider', () => {
   let provider: LemonFoxProvider;
+  let mockAudioPlayer: IAudioPlayer;
 
   beforeEach(() => {
-    provider = new LemonFoxProvider('test-api-key');
+    mockAudioPlayer = createMockAudioPlayer();
+    provider = new LemonFoxProvider(mockAudioPlayer, 'test-api-key');
     // Mock global fetch
     global.fetch = vi.fn();
   });
@@ -21,13 +37,13 @@ describe('LemonFoxProvider', () => {
 
   describe('constructor', () => {
     it('should set api key if provided', () => {
-      const p = new LemonFoxProvider('key-1');
+      const p = new LemonFoxProvider(mockAudioPlayer, 'key-1');
       // @ts-expect-error - accessing private field for test
       expect(p.apiKey).toBe('key-1');
     });
 
     it('should not set api key if not provided', () => {
-      const p = new LemonFoxProvider();
+      const p = new LemonFoxProvider(mockAudioPlayer);
       // @ts-expect-error - accessing private field for test
       expect(p.apiKey).toBeNull();
     });
