@@ -76,7 +76,7 @@
     *   **Checkpoints**: Automatic "Moral Layer" snapshots (`SyncManifest`) protect against data loss during sync (Last 10 states).
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted.
-    *   **CSV Import/Export**: Import/Export your reading list via CSV (Goodreads compatible), with intelligent filename matching (ISBN/Title fallback) to restore your library context.
+    *   **CSV Import/Export**: Import/Export your reading list via CSV, with intelligent filename matching (ISBN/Title fallback) to restore your library context.
 *   **Backups & Export**:
     *   **Light**: JSON export of metadata/settings.
     *   **Full**: ZIP archive including all book files.
