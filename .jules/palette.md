@@ -37,3 +37,7 @@
 ## 2025-05-26 - Responsive Labels and Accessible Names
 **Learning:** Using `hidden sm:inline` to visually hide a label on mobile also removes it from the accessibility tree, breaking `aria-labelledby` references and leaving controls nameless on small screens.
 **Action:** When hiding visible labels responsively, always provide a robust fallback like `aria-label` on the control itself to ensure an accessible name exists at all breakpoints.
+
+## 2025-05-27 - Status Indicators and Accessibility
+**Learning:** Visual-only status indicators (like colored dots) that rely solely on `title` attributes are invisible to screen readers unless the user explores them with a mouse emulator or specific commands. `title` is not a reliable accessible name source for non-interactive elements.
+**Action:** Always wrap status indicators in a container with `role="status"` (for live updates) or use `aria-label`/`sr-only` text to explicitly describe the state (e.g., "Synced", "Syncing") so it is programmatically determinable.
