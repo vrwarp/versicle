@@ -61,6 +61,7 @@ graph TD
         BackNav[useBackNavigationStore]
         UIStore[useUIStore]
         SyncStore[useSyncStore]
+        DeviceStore[useDeviceStore]
     end
 
     subgraph DataLayer [Data & Sync]
@@ -228,6 +229,16 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   **Memory Pressure**: Loading a large ZIP file (e.g., 500MB+) entirely into memory (ArrayBuffer) for extraction can cause tab crashes on memory-constrained mobile devices.
     *   **Main Thread Blocking**: While `JSZip` is async, large decompression tasks can still cause frame drops or UI jank during the extraction phase.
 
+#### `src/lib/csv.ts` (CSV Import/Export)
+*   **Goal**: Provide interoperability with Goodreads and other reading trackers.
+*   **Logic**:
+    *   **Universal Format**: Exports reading lists using standard Goodreads headers (Title, Author, ISBN, My Rating, Exclusive Shelf, Date Read).
+    *   **Filename Fallback Strategy**: When importing, the system attempts to resolve missing filenames using a priority cascade:
+        1.  Explicit `Filename` column (Versicle native export).
+        2.  `isbn-{ISBN}`.
+        3.  `{Title}-{Author}` (Sanitized).
+    *   **Trade-off**: Importing from generic CSVs (Goodreads) relies on "Ghost Books" creation; the user must manually import the matching EPUB file later to read it.
+
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks.
 *   **Logic**:
@@ -267,6 +278,14 @@ Manages integration with the native Android Backup Service.
     *   **Native Handoff**: The Android OS automatically backs up this file to the user's Google Drive (if enabled in Android settings).
 *   **Trade-off**: Restore is all-or-nothing and handled by the OS during app installation/restore.
 
+#### `CheckpointInspector.ts` (Forensic Layer)
+*   **Goal**: Provide deep visibility into binary checkpoints for debugging and support.
+*   **Logic**:
+    *   **Hydration**: Hydrates a binary checkpoint blob into a temporary `Y.Doc`.
+    *   **Deep Diff**: Converts both the live document and the checkpoint to JSON and performs a recursive object difference (Added, Removed, Modified).
+    *   **Dynamic Discovery**: Iterates over `doc.share` keys to dynamically discover and deserialize map/array types, handling `AbstractType` hydration issues.
+*   **Trade-off**: High CPU and memory cost (full document serialization). Strictly on-demand.
+
 ### Core Logic & Services (`src/lib/`)
 
 #### Logging (`src/lib/logger.ts`)
@@ -305,6 +324,8 @@ Handles the complex task of importing an EPUB file.
 *   **Resilience**: Automatically retries requests with the fallback model.
 *   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to improve reasoning quality for complex data interpretation.
 *   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text for TTS accessibility.
+    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures (Title, Footnote, Main Text, Table) for improved TTS flow.
+    *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
@@ -339,6 +360,13 @@ Manages manual internal state backup and restoration.
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
 *   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks.
 *   **Logic**: Uses a **Generator** pattern (`function*`) to yield Promises. Calling `cancel()` throws a `CancellationError` into the generator.
+
+#### Sync Mesh (`src/store/useDeviceStore.ts` & `src/lib/device-id.ts`)
+*   **Goal**: Provide visibility into the synchronization network and enable "Send to Device" features.
+*   **Logic**:
+    *   **Stable Identity**: `device-id.ts` generates and persists a UUID in `localStorage` to identify the current node.
+    *   **Heartbeat**: `useDeviceStore` maintains a Yjs Map of active devices, updating the `lastActive` timestamp with a 5-minute throttle.
+    *   **Metadata**: Automatically parses User Agent strings to provide human-readable device names (e.g., "Chrome on Windows").
 
 ---
 
@@ -380,7 +408,8 @@ The Data Pipeline for TTS.
 *   **Goal**: Robustly split text into sentences and handle abbreviations.
 *   **Logic**:
     *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
-    *   **Refinement**: Dynamically merges short segments using cached regex options for abbreviations and sentence starters.
+    *   **Zero-Allocation Scanning**: Uses `TextScanningTrie` (a specialized Trie implementation) to match abbreviations and sentence starters using character codes (`codePointAt`) and object lookups. This avoids the creation of intermediate substrings and `toLowerCase()` allocations inherent in Regex-based solutions.
+    *   **Segmenter Cache**: Caches `Intl.Segmenter` instances via `segmenter-cache` to avoid the heavy cost of instantiating locale data repeatedly.
     *   **Optimization**: Uses `tryFastMergeCfi` to merge CFIs optimistically via string manipulation.
 *   **Trade-offs**:
     *   **Maintenance**: The manual character scanning logic is more complex and brittle than standard regex or `String.trim()`, requiring careful regression testing.

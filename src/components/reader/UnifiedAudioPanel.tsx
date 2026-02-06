@@ -183,6 +183,7 @@ export const UnifiedAudioPanel = () => {
        {/* Footer Toggle */}
        <div className="border-t p-2 grid grid-cols-2 gap-2 bg-background">
           <Button
+             data-testid="tts-queue-tab-btn"
              variant={view === 'queue' ? 'default' : 'ghost'}
              onClick={() => setView('queue')}
              size="sm"
@@ -190,6 +191,7 @@ export const UnifiedAudioPanel = () => {
              Up Next
           </Button>
           <Button
+             data-testid="tts-settings-tab-btn"
              variant={view === 'settings' ? 'default' : 'ghost'}
              onClick={() => setView('settings')}
              size="sm"

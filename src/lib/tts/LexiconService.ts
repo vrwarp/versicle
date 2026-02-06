@@ -5,13 +5,22 @@ import { useLexiconStore } from '../../store/useLexiconStore';
 import { waitForYjsSync } from '../../store/yjs-provider';
 import type { LexiconRule } from '../../types/db';
 
+interface CompiledLexiconRule {
+    originalRule: LexiconRule;
+    regex: RegExp;
+    replacement: string;
+}
+
 /**
  * Service for managing pronunciation lexicon rules.
  * Handles CRUD operations via the Yjs-backed useLexiconStore.
  */
 export class LexiconService {
     private static instance: LexiconService;
-    private regexCache = new Map<string, RegExp>();
+    // OPTIMIZATION: Cache compiled rules (Regex objects) keyed by the rules array reference.
+    // This assumes that the caller (AudioPlayerService) reuses the rule array for sequential calls (it does).
+    // Using WeakMap avoids memory leaks as old rule arrays are garbage collected.
+    private compiledRulesCache = new WeakMap<LexiconRule[], CompiledLexiconRule[]>();
     private globalBibleLexiconEnabled: boolean = true;
 
     private constructor() { }
@@ -159,33 +168,68 @@ export class LexiconService {
         ids.forEach(id => store.deleteRule(id));
     }
 
-    applyLexicon(text: string, rules: LexiconRule[]): string {
-        let processedText = text.normalize('NFKD');
+    private getCompiledRules(rules: LexiconRule[]): CompiledLexiconRule[] {
+        let compiled = this.compiledRulesCache.get(rules);
+        if (compiled) return compiled;
+
+        compiled = [];
         for (const rule of rules) {
             if (!rule.original || !rule.replacement) continue;
-            const normalizedOriginal = rule.original.normalize('NFKD');
-            const normalizedReplacement = rule.replacement.normalize('NFKD');
 
             try {
-                const cacheKey = `${rule.id}-${normalizedOriginal}-${rule.isRegex}`;
-                let regex = this.regexCache.get(cacheKey);
+                // Pre-normalize during compilation
+                const normalizedOriginal = rule.original.normalize('NFKD');
+                const normalizedReplacement = rule.replacement.normalize('NFKD');
+                let regex: RegExp;
 
-                if (!regex) {
-                    if (rule.isRegex) {
-                        regex = new RegExp(normalizedOriginal, 'gi');
-                    } else {
-                        const escapedOriginal = normalizedOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const startIsWord = /^\w/.test(normalizedOriginal);
-                        const endIsWord = /\w$/.test(normalizedOriginal);
-                        const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
-                        regex = new RegExp(regexStr, 'gi');
-                    }
-                    this.regexCache.set(cacheKey, regex);
+                if (rule.isRegex) {
+                    regex = new RegExp(normalizedOriginal, 'gi');
+                } else {
+                    const escapedOriginal = normalizedOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const startIsWord = /^\w/.test(normalizedOriginal);
+                    const endIsWord = /\w$/.test(normalizedOriginal);
+                    const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
+                    regex = new RegExp(regexStr, 'gi');
                 }
-                processedText = processedText.replace(regex, normalizedReplacement);
+
+                compiled.push({
+                    originalRule: rule,
+                    regex,
+                    replacement: normalizedReplacement
+                });
             } catch (e) {
-                console.warn(`Invalid regex for lexicon rule: ${normalizedOriginal}`, e);
+                console.warn(`Invalid regex for lexicon rule: ${rule.original}`, e);
             }
+        }
+
+        this.compiledRulesCache.set(rules, compiled);
+        return compiled;
+    }
+
+    applyLexiconWithTrace(text: string, rules: LexiconRule[]): { final: string, trace: { rule: LexiconRule, before: string, after: string }[] } {
+        let processedText = text.normalize('NFKD');
+        const trace: { rule: LexiconRule, before: string, after: string }[] = [];
+        const compiledRules = this.getCompiledRules(rules);
+
+        for (const compiled of compiledRules) {
+            const before = processedText;
+            // Use cached regex and pre-normalized replacement
+            const after = processedText.replace(compiled.regex, compiled.replacement);
+
+            if (before !== after) {
+                trace.push({ rule: compiled.originalRule, before, after });
+                processedText = after;
+            }
+        }
+        return { final: processedText, trace };
+    }
+
+    applyLexicon(text: string, rules: LexiconRule[]): string {
+        let processedText = text.normalize('NFKD');
+        const compiledRules = this.getCompiledRules(rules);
+
+        for (const compiled of compiledRules) {
+            processedText = processedText.replace(compiled.regex, compiled.replacement);
         }
         return processedText;
     }

@@ -38,6 +38,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
     const [testInput, setTestInput] = useState('');
     const [testOutput, setTestOutput] = useState('');
+    const [testTrace, setTestTrace] = useState<{ rule: LexiconRule, before: string, after: string }[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Subscribe to store
@@ -170,9 +171,10 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             }
         }
 
-        const result = lexiconService.applyLexicon(testInput, rulesToApply);
-        setTestOutput(result);
-        return result;
+        const { final, trace } = lexiconService.applyLexiconWithTrace(testInput, rulesToApply);
+        setTestOutput(final);
+        setTestTrace(trace);
+        return final;
     };
 
     const handleReplaceCurrent = async () => { await performReplacement(false); };
@@ -554,6 +556,53 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     {testOutput && (
                         <div className="mt-2 text-sm text-gray-500">
                             Processed: <span className="italic text-gray-900 dark:text-gray-100">{testOutput}</span>
+                        </div>
+                    )}
+
+                    {testTrace.length > 0 && (
+                        <div className="mt-4 flex flex-col gap-2">
+                            <h5 className="text-xs font-semibold text-gray-500 uppercase">Transformation Steps</h5>
+                            <div className="border rounded dark:border-gray-700 bg-gray-50 dark:bg-gray-800 divide-y dark:divide-gray-700 text-xs max-h-[200px] overflow-y-auto">
+                                {testTrace.map((item, idx) => {
+                                    const isBible = item.rule.id.startsWith('bible-');
+                                    return (
+                                        <div key={idx} className="p-2 flex flex-col gap-1">
+                                            <div className="flex items-center gap-2">
+                                                {isBible ? (
+                                                    <span className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-1 rounded text-[10px] uppercase font-bold shrink-0">Bible</span>
+                                                ) : (
+                                                    <span className="bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 px-1 rounded text-[10px] uppercase font-bold shrink-0">Rule</span>
+                                                )}
+
+                                                {isBible ? (
+                                                    <span className="font-mono text-gray-600 dark:text-gray-400 truncate">
+                                                        {item.rule.original} &rarr; {item.rule.replacement}
+                                                    </span>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => {
+                                                            const found = rules.find(r => r.id === item.rule.id);
+                                                            if (found) {
+                                                                setEditingRule(found);
+                                                                setIsAdding(false);
+                                                            }
+                                                        }}
+                                                        className="font-mono font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate text-left"
+                                                        title="Click to edit rule"
+                                                    >
+                                                        {item.rule.original} &rarr; {item.rule.replacement}
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="pl-2 border-l-2 border-gray-200 dark:border-gray-600 ml-1">
+                                                <div className="text-gray-500 dark:text-gray-400 truncate">
+                                                   <span className="italic text-gray-800 dark:text-gray-200">{item.after}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     )}
                 </div>
