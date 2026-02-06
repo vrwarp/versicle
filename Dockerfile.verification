@@ -26,7 +26,8 @@ RUN playwright install
 # 3. Copy Source Code
 COPY . .
 
-# 4. Build the App
+# 4. Build the App (with HTTPS disabled for verification)
+ENV VITE_HTTPS=false
 RUN npm run build
 
 # 5. Set Entrypoint

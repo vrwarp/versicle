@@ -77,9 +77,6 @@ export const DataExportWizard: React.FC<DataExportWizardProps> = ({ open, onOpen
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const filename = `versicle-reading-list-${new Date().toISOString().split('T')[0]}.csv`;
             ExportImportService.downloadBlob(blob, filename);
-        } else {
-            console.warn("HTML export not yet implemented");
-            // Fallback to JSON or show error
         }
         handleClose();
     };

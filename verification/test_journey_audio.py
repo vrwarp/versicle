@@ -67,6 +67,22 @@ def test_journey_audio(page: Page):
     print("Switching back to Queue...")
     page.get_by_role("button", name="Up Next").click(force=True)
 
+    # --- Enhanced Queue Assertions ---
+    print("Verifying queue content...")
+    queue_items = page.locator("[data-testid^='tts-queue-item-']")
+    expect(queue_items.first).to_be_visible(timeout=5000)
+    
+    queue_count = queue_items.count()
+    print(f"Queue contains {queue_count} items")
+    assert queue_count >= 3, f"Expected at least 3 queue items, got {queue_count}"
+    
+    # Verify first item has text content (not empty)
+    first_item_text = page.get_by_test_id("tts-queue-item-0").inner_text()
+    print(f"First queue item: {first_item_text[:80]}...")
+    assert len(first_item_text.strip()) > 10, "First queue item should have meaningful text content"
+    
+    utils.capture_screenshot(page, "audio_2b_queue_verified")
+
     # Close Audio Deck
     page.keyboard.press("Escape")
     expect(page.get_by_test_id("tts-panel")).not_to_be_visible()

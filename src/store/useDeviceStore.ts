@@ -3,6 +3,7 @@ import yjs from 'zustand-middleware-yjs';
 import { UAParser } from 'ua-parser-js';
 import { yDoc } from './yjs-provider';
 import type { DeviceInfo, DeviceProfile } from '../types/device';
+import packageJson from '../../package.json';
 
 /**
  * Store for managing known devices in the sync mesh.
@@ -74,7 +75,7 @@ export const useDeviceStore = create<DeviceState>()(
                             browser: result.browser.name || 'Unknown',
                             model: result.device.model || null,
                             userAgent: result.ua,
-                            appVersion: '0.0.0', // TODO: wiring app version if available
+                            appVersion: packageJson.version,
                             created: existing ? existing.created : now,
                             lastActive: now,
                             profile

@@ -19,6 +19,7 @@ import { useTTSStore } from './store/useTTSStore';
 import { usePreferencesStore } from './store/usePreferencesStore';
 import { createLogger } from './lib/logger';
 import { RootLayout } from './layouts/RootLayout';
+import { getFirestoreSyncManager } from './lib/sync/FirestoreSyncManager';
 
 import './App.css';
 
@@ -114,6 +115,13 @@ function App() {
     return () => {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
+  }, []);
+
+  // Check for Firebase Auth Redirect Result on startup
+  useEffect(() => {
+    // Initialize Sync Manager which handles auth state and redirect results
+    const manager = getFirestoreSyncManager();
+    manager.initialize();
   }, []);
 
   // Main Initialization (DB + Migration)

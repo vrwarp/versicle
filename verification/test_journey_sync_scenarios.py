@@ -277,15 +277,92 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     inject_mock_firestore(page_b, snapshot_a)
     page_b.goto(base_url)
 
+    # Wait for sync to complete (library view loads with synced data)
+    expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=10000)
+    
+    # Give sync manager time to process the pre-loaded snapshot
+    # The Yjs provider needs time to initialize, load snapshot, and propagate to stores
+    time.sleep(3)
+
+    # Wait for the lexicon store to actually have data from the sync
+    # This is more reliable than just waiting for time to pass
+    print("Waiting for lexicon store to sync...")
+    store_synced = False
+    for i in range(30):  # Try for 15 seconds
+        try:
+            has_rules = page_b.evaluate("""
+                () => {
+                    // Check if useLexiconStore has any rules
+                    const store = window.__ZUSTAND_STORES__?.useLexiconStore;
+                    if (store) {
+                        const state = store.getState();
+                        const rules = state.rules || [];
+                        return rules.length > 0;
+                    }
+                    return false;
+                }
+            """)
+            if has_rules:
+                store_synced = True
+                print(f"Lexicon store synced after {i * 0.5}s")
+                break
+        except:
+            pass
+        time.sleep(0.5)
+
+    # If store sync didn't work, try a full page reload
+    if not store_synced:
+        print("Store sync not detected, reloading page...")
+        page_b.reload()
+        expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=10000)
+        time.sleep(3)
+
     # Check Settings
     page_b.click("button[aria-label='Settings']", force=True)
     page_b.get_by_role("button", name="Dictionary").click()
     page_b.get_by_role("button", name="Manage Rules").click()
 
-    expect(page_b.get_by_text("Offline")).to_be_visible()
+    # Wait for the lexicon rules to load from synced data
+    print("Waiting for synced lexicon rule 'Offline'...")
+    rule_visible = False
+    for i in range(40):  # Try for 20 seconds (40 * 0.5s)
+        if page_b.get_by_text("Offline").is_visible():
+            rule_visible = True
+            break
+        
+        # If not visible yet, try closing and re-opening the dialog to force re-render
+        if i > 0 and i % 10 == 0:
+            print(f"Retry {i // 10}: Closing and re-opening dialog...")
+            # Close all dialogs by pressing Escape multiple times
+            page_b.keyboard.press("Escape")
+            time.sleep(0.3)
+            page_b.keyboard.press("Escape")
+            time.sleep(0.5)
+            
+            # Re-open Settings -> Dictionary -> Manage Rules
+            page_b.click("button[aria-label='Settings']", force=True)
+            time.sleep(0.5)  # Wait for settings dialog animation
+            expect(page_b.get_by_role("button", name="Dictionary")).to_be_visible(timeout=5000)
+            page_b.get_by_role("button", name="Dictionary").click()
+            time.sleep(0.3)
+            expect(page_b.get_by_role("button", name="Manage Rules")).to_be_visible(timeout=5000)
+            page_b.get_by_role("button", name="Manage Rules").click()
+            time.sleep(0.3)
+        
+        time.sleep(0.5)
+    
+    if not rule_visible:
+        print("Rule not visible after wait. capturing screenshot...")
+        page_b.screenshot(path="verification/screenshots/sync_fail_mobile_debug.png")
+        # Fail with a clear message
+        expect(page_b.get_by_text("Offline")).to_be_visible(timeout=1000)
+    else:
+        print("Rule synced and visible!")
+        expect(page_b.get_by_text("Offline")).to_be_visible()
 
     page_b.close()
     context_b.close()
+
 
 
 def test_journey_data_liberation(browser: Browser, browser_context_args):

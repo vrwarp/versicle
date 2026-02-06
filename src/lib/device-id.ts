@@ -5,6 +5,10 @@
  * Used for per-device progress tracking in multi-device sync scenarios.
  */
 
+import { createLogger } from './logger';
+
+const logger = createLogger('DeviceId');
+
 const DEVICE_ID_KEY = 'versicle-device-id';
 
 /**
@@ -31,7 +35,7 @@ export const getDeviceId = (): string => {
     if (!deviceId) {
         deviceId = generateDeviceId();
         localStorage.setItem(DEVICE_ID_KEY, deviceId);
-        console.log('[DeviceId] Generated new device ID:', deviceId);
+        logger.info('Generated new device ID:', deviceId);
     }
 
     return deviceId;
@@ -43,6 +47,6 @@ export const getDeviceId = (): string => {
 export const resetDeviceId = (): string => {
     const newId = generateDeviceId();
     localStorage.setItem(DEVICE_ID_KEY, newId);
-    console.log('[DeviceId] Reset device ID to:', newId);
+    logger.info('Reset device ID to:', newId);
     return newId;
 };
