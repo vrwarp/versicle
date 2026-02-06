@@ -1,12 +1,13 @@
 
 interface TrieNode {
-    [key: string]: TrieNode | boolean | undefined;
+    [key: number]: TrieNode | boolean | undefined;
     _end?: boolean;
 }
 
 /**
  * A specialized Trie implementation for fast string matching without allocations.
  * Optimized for case-insensitive matching and specific text segmentation needs.
+ * Uses character codes (number) as keys to avoid string allocations during traversal.
  */
 export class TextScanningTrie {
     private root: TrieNode = {};
@@ -27,6 +28,13 @@ export class TextScanningTrie {
     private static readonly CODE_QUESTION = '?'.codePointAt(0)!;
     private static readonly CODE_SEMICOLON = ';'.codePointAt(0)!;
     private static readonly CODE_COLON = ':'.codePointAt(0)!;
+
+    // ASCII Case Folding Constants
+    private static readonly ASCII_A = 65;
+    private static readonly ASCII_Z = 90;
+    // Adding 32 to an uppercase ASCII char converts it to lowercase (e.g., 'A' (65) + 32 = 'a' (97))
+    private static readonly ASCII_TO_LOWER_OFFSET = 32;
+    private static readonly MAX_ASCII = 127;
 
     /**
      * Checks if a character code represents a whitespace character.
@@ -72,19 +80,19 @@ export class TextScanningTrie {
 
         if (reverse) {
             for (let i = len - 1; i >= 0; i--) {
-                const char = normalized[i].toLowerCase();
-                if (!node[char]) {
-                    node[char] = {};
+                const code = normalized[i].toLowerCase().charCodeAt(0);
+                if (!node[code]) {
+                    node[code] = {};
                 }
-                node = node[char] as TrieNode;
+                node = node[code] as TrieNode;
             }
         } else {
             for (let i = 0; i < len; i++) {
-                const char = normalized[i].toLowerCase();
-                if (!node[char]) {
-                    node[char] = {};
+                const code = normalized[i].toLowerCase().charCodeAt(0);
+                if (!node[code]) {
+                    node[code] = {};
                 }
-                node = node[char] as TrieNode;
+                node = node[code] as TrieNode;
             }
         }
         node._end = true;
@@ -93,6 +101,7 @@ export class TextScanningTrie {
     /**
      * Checks if the text ends with any string in the Trie.
      * Scans backwards from the end of the text, skipping trailing whitespace.
+     * Optimized to avoid string allocations.
      *
      * @param text - The text to check.
      * @returns The matching word if found, or null.
@@ -111,11 +120,23 @@ export class TextScanningTrie {
 
         // Scan backwards through the text
         while (i >= 0) {
-            const char = text[i].toLowerCase();
-            if (!node[char]) {
+            let code = text.charCodeAt(i);
+
+            // Optimization: Manual case folding for ASCII to avoid .toLowerCase() allocation
+            // If the character is between 'A' and 'Z', we add 32 to convert it to 'a'-'z'.
+            // This is significantly faster than allocating a new string with .toLowerCase().
+            if (code >= TextScanningTrie.ASCII_A && code <= TextScanningTrie.ASCII_Z) {
+                code += TextScanningTrie.ASCII_TO_LOWER_OFFSET;
+            } else if (code > TextScanningTrie.MAX_ASCII) {
+                // Fallback for non-ASCII characters (e.g., 'É', 'Æ') to ensure correct case folding
+                // We must use the standard .toLowerCase() here to handle Unicode rules correctly.
+                code = String.fromCharCode(code).toLowerCase().charCodeAt(0);
+            }
+
+            if (!node[code]) {
                 break;
             }
-            node = node[char] as TrieNode;
+            node = node[code] as TrieNode;
 
             // If we found a potential match in the Trie
             if (node._end) {
@@ -140,6 +161,7 @@ export class TextScanningTrie {
     /**
      * Checks if the text starts with any string in the Trie.
      * Scans forward from the start of the text, skipping leading whitespace.
+     * Optimized to avoid string allocations.
      *
      * @param text - The text to check.
      * @returns The matching word if found, or null.
@@ -157,11 +179,23 @@ export class TextScanningTrie {
 
         // Scan forward
         while (i < len) {
-            const char = text[i].toLowerCase();
-            if (!node[char]) {
+            let code = text.charCodeAt(i);
+
+            // Optimization: Manual case folding for ASCII to avoid .toLowerCase() allocation
+            // If the character is between 'A' and 'Z', we add 32 to convert it to 'a'-'z'.
+            // This is significantly faster than allocating a new string with .toLowerCase().
+            if (code >= TextScanningTrie.ASCII_A && code <= TextScanningTrie.ASCII_Z) {
+                code += TextScanningTrie.ASCII_TO_LOWER_OFFSET;
+            } else if (code > TextScanningTrie.MAX_ASCII) {
+                // Fallback for non-ASCII characters (e.g., 'É', 'Æ') to ensure correct case folding
+                // We must use the standard .toLowerCase() here to handle Unicode rules correctly.
+                code = String.fromCharCode(code).toLowerCase().charCodeAt(0);
+            }
+
+            if (!node[code]) {
                 return false; // No path
             }
-            node = node[char] as TrieNode;
+            node = node[code] as TrieNode;
 
             if (node._end) {
                 // Verify boundary: Next char must be Punctuation, Whitespace, or End
