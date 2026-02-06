@@ -24,6 +24,8 @@ import {
 import { MockFireProvider } from './drivers/MockFireProvider';
 import { createLogger } from '../logger';
 import { signInWithGoogle, signOutWithGoogle } from './auth-helper';
+import { useToastStore } from '../../store/useToastStore';
+import { useSyncStore } from './hooks/useSyncStore';
 
 const logger = createLogger('FirestoreSync');
 
@@ -141,6 +143,8 @@ class FirestoreSyncManager {
             const result = await getRedirectResult(auth);
             if (result && result.user) {
                 logger.info('Auth', 'Successfully returned from redirect flow', result.user.uid);
+                useToastStore.getState().showToast(`Signed in as ${result.user.email}`, 'success');
+                // Note: handleAuthStateChange will be called by onAuthStateChanged and update useSyncStore
             }
         } catch (error) {
             logger.error('Redirect login failed', error);
@@ -162,13 +166,21 @@ class FirestoreSyncManager {
     private handleAuthStateChange(user: User | null): void {
         this.currentUser = user;
 
+        // Always update the UI store directly
+        const syncStore = useSyncStore.getState();
+
         if (user) {
             logger.info(`User signed in: ${user.email}`);
             this.setAuthStatus('signed-in');
+            syncStore.setFirebaseEnabled(true);
+            syncStore.setFirebaseAuthStatus('signed-in');
+            syncStore.setFirebaseUserEmail(user.email ?? null);
             this.connectFireProvider(user.uid);
         } else {
             logger.info('User signed out');
             this.setAuthStatus('signed-out');
+            syncStore.setFirebaseAuthStatus('signed-out');
+            syncStore.setFirebaseUserEmail(null);
             this.disconnectFireProvider();
         }
     }
@@ -328,6 +340,8 @@ class FirestoreSyncManager {
     private setStatus(status: FirestoreSyncStatus): void {
         this.status = status;
         this.statusCallbacks.forEach(cb => cb(status));
+        // Always update the UI store directly
+        useSyncStore.getState().setFirestoreStatus(status);
     }
 
     private setAuthStatus(status: FirebaseAuthStatus): void {

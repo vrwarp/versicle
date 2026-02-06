@@ -36,6 +36,17 @@ export const getFirebaseConfig = (): FirebaseConfig | null => {
         return null;
     }
 
+    // Use local proxy if in dev mode OR if explicitly configured (e.g. for Docker/Nginx)
+    // explicitly check for window availability for SSR safety
+    const useProxy = import.meta.env.DEV || import.meta.env.VITE_AUTH_USE_PROXY === 'true';
+
+    if (useProxy && typeof window !== 'undefined') {
+        return {
+            ...firebaseConfig,
+            authDomain: window.location.host // e.g. "localhost:5173" or "my-app.com"
+        };
+    }
+
     return firebaseConfig;
 };
 
