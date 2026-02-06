@@ -18,6 +18,9 @@ import type { Firestore } from 'firebase/firestore';
 import { useSyncStore } from './hooks/useSyncStore';
 import { useToastStore } from '../../store/useToastStore';
 import type { FirebaseConfigSettings } from './hooks/useSyncStore';
+import { createLogger } from '../logger';
+
+const logger = createLogger('Firebase');
 
 /**
  * Firebase configuration interface (re-export for convenience)
@@ -80,7 +83,7 @@ export const resetFirebase = (): void => {
     firestore = null;
     googleProvider = null;
     currentConfigHash = null;
-    console.log('[Firebase] Reset - will reinitialize on next use');
+    logger.info('Reset - will reinitialize on next use');
 };
 
 /**
@@ -102,7 +105,7 @@ export const initializeFirebase = (): boolean => {
 
     // If config changed, reset first
     if (app && currentConfigHash !== newConfigHash) {
-        console.log('[Firebase] Config changed, reinitializing...');
+        logger.info('Config changed, reinitializing...');
         resetFirebase();
     }
 
@@ -117,9 +120,9 @@ export const initializeFirebase = (): boolean => {
                     tabManager: persistentMultipleTabManager()
                 })
             });
-            console.log('[Firebase] Offline persistence enabled');
+            logger.info('Offline persistence enabled');
         } catch (err) {
-            console.warn('[Firebase] Persistence failed, falling back to default:', err);
+            logger.warn('Persistence failed, falling back to default:', err);
             useToastStore.getState().showToast('Offline sync unavailable (persistence failed)', 'error');
             firestore = getFirestore(app);
         }
@@ -127,10 +130,10 @@ export const initializeFirebase = (): boolean => {
         googleProvider = new GoogleAuthProvider();
         currentConfigHash = newConfigHash;
 
-        console.log('[Firebase] Initialized successfully');
+        logger.info('Initialized successfully');
         return true;
     } catch (error) {
-        console.error('[Firebase] Initialization failed:', error);
+        logger.error('Initialization failed:', error);
         return false;
     }
 };
