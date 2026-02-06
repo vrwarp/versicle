@@ -277,12 +277,39 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     inject_mock_firestore(page_b, snapshot_a)
     page_b.goto(base_url)
 
+    # Wait for sync to complete (library view loads with synced data)
+    expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=10000)
+    # Give sync manager time to process the pre-loaded snapshot
+    time.sleep(2)
+
     # Check Settings
     page_b.click("button[aria-label='Settings']", force=True)
     page_b.get_by_role("button", name="Dictionary").click()
     page_b.get_by_role("button", name="Manage Rules").click()
 
-    expect(page_b.get_by_text("Offline")).to_be_visible()
+    # Wait for the lexicon rules to load from synced data
+    # We poll for visibility because the sync -> yjs -> store -> react render pipeline can be slow on mobile
+    print("Waiting for synced lexicon rule 'Offline'...")
+    rule_visible = False
+    for i in range(20): # Try for 10 seconds (20 * 0.5s)
+        if page_b.get_by_text("Offline").is_visible():
+            rule_visible = True
+            break
+        
+        # If not visible yet, force a re-render or check if we need to poke something?
+        # The list uses useLexiconStore which should auto-update.
+        # But maybe we need to scroll or ensure the tab is active?
+        # On mobile, the dialog might be rendering differently.
+        time.sleep(0.5)
+    
+    if not rule_visible:
+        print("Rule not visible after wait. capturing screenshot...")
+        page_b.screenshot(path="verification/screenshots/sync_fail_mobile_debug.png")
+        # Fail with a clear message
+        expect(page_b.get_by_text("Offline")).to_be_visible(timeout=1000)
+    else:
+        print("Rule synced and visible!")
+        expect(page_b.get_by_text("Offline")).to_be_visible()
 
     page_b.close()
     context_b.close()

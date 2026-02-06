@@ -7,6 +7,7 @@ import mkcert from 'vite-plugin-mkcert'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const useHttps = env.VITE_HTTPS !== 'false';
   return {
     build: {
       sourcemap: true,
@@ -20,7 +21,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     plugins: [
-      mkcert(),
+      ...(useHttps ? [mkcert()] : []),
       react(),
       VitePWA({
         devOptions: {

@@ -185,8 +185,8 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
           showActions={false}
         />
 
-        {/* Dropdown Menu Trigger - Visible on hover or focus */}
-        <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
+        {/* Dropdown Menu Trigger - Always visible on touch, visible on hover/focus on desktop */}
+        <div className="absolute top-2 right-2 z-20 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity focus-within:opacity-100">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
