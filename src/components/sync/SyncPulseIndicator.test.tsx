@@ -7,18 +7,40 @@ import { vi } from 'vitest';
 // Mock the store hook
 vi.mock('../../lib/sync/hooks/useSyncStore');
 
+// Define the state type based on the hook
+type SyncStoreState = ReturnType<typeof useSyncStore>;
+
+const defaultMockState: SyncStoreState = {
+  syncProvider: 'none',
+  setSyncProvider: vi.fn(),
+  firebaseConfig: {
+    apiKey: '',
+    authDomain: '',
+    projectId: '',
+    storageBucket: '',
+    messagingSenderId: '',
+    appId: ''
+  },
+  setFirebaseConfig: vi.fn(),
+  firebaseEnabled: false,
+  setFirebaseEnabled: vi.fn(),
+  firestoreStatus: 'disconnected',
+  setFirestoreStatus: vi.fn(),
+  firebaseAuthStatus: 'loading',
+  setFirebaseAuthStatus: vi.fn(),
+  firebaseUserEmail: null,
+  setFirebaseUserEmail: vi.fn(),
+  lastSyncTime: null,
+  setLastSyncTime: vi.fn(),
+};
+
 describe('SyncPulseIndicator', () => {
   it('renders with correct status role and accessible text for connected state', () => {
     vi.mocked(useSyncStore).mockReturnValue({
+      ...defaultMockState,
       firestoreStatus: 'connected',
       lastSyncTime: new Date('2023-01-01T12:00:00').getTime(),
-      isSyncing: false,
-      error: null,
-      sync: vi.fn(),
-      disconnect: vi.fn(),
-      connect: vi.fn(),
-      // Add missing properties to satisfy the type if needed, or use partial
-    } as any);
+    });
 
     render(<SyncPulseIndicator />);
 
@@ -29,14 +51,9 @@ describe('SyncPulseIndicator', () => {
 
   it('renders with correct status role and accessible text for syncing state', () => {
     vi.mocked(useSyncStore).mockReturnValue({
+      ...defaultMockState,
       firestoreStatus: 'connecting',
-      lastSyncTime: null,
-      isSyncing: true,
-      error: null,
-      sync: vi.fn(),
-      disconnect: vi.fn(),
-      connect: vi.fn(),
-    } as any);
+    });
 
     render(<SyncPulseIndicator />);
 
@@ -47,14 +64,9 @@ describe('SyncPulseIndicator', () => {
 
   it('renders with correct status role and accessible text for error state', () => {
     vi.mocked(useSyncStore).mockReturnValue({
+      ...defaultMockState,
       firestoreStatus: 'error',
-      lastSyncTime: null,
-      isSyncing: false,
-      error: new Error('Sync failed'),
-      sync: vi.fn(),
-      disconnect: vi.fn(),
-      connect: vi.fn(),
-    } as any);
+    });
 
     render(<SyncPulseIndicator />);
 
