@@ -29,6 +29,13 @@ export class TextScanningTrie {
     private static readonly CODE_SEMICOLON = ';'.codePointAt(0)!;
     private static readonly CODE_COLON = ':'.codePointAt(0)!;
 
+    // ASCII Case Folding Constants
+    private static readonly ASCII_A = 65;
+    private static readonly ASCII_Z = 90;
+    // Adding 32 to an uppercase ASCII char converts it to lowercase (e.g., 'A' (65) + 32 = 'a' (97))
+    private static readonly ASCII_TO_LOWER_OFFSET = 32;
+    private static readonly MAX_ASCII = 127;
+
     /**
      * Checks if a character code represents a whitespace character.
      * Covers common ASCII and Unicode whitespace to match Regex `\s`.
@@ -114,11 +121,15 @@ export class TextScanningTrie {
         // Scan backwards through the text
         while (i >= 0) {
             let code = text.charCodeAt(i);
+
             // Optimization: Manual case folding for ASCII to avoid .toLowerCase() allocation
-            if (code >= 65 && code <= 90) {
-                code += 32;
-            } else if (code > 127) {
-                // Fallback for non-ASCII characters to ensure correct case folding
+            // If the character is between 'A' and 'Z', we add 32 to convert it to 'a'-'z'.
+            // This is significantly faster than allocating a new string with .toLowerCase().
+            if (code >= TextScanningTrie.ASCII_A && code <= TextScanningTrie.ASCII_Z) {
+                code += TextScanningTrie.ASCII_TO_LOWER_OFFSET;
+            } else if (code > TextScanningTrie.MAX_ASCII) {
+                // Fallback for non-ASCII characters (e.g., 'É', 'Æ') to ensure correct case folding
+                // We must use the standard .toLowerCase() here to handle Unicode rules correctly.
                 code = String.fromCharCode(code).toLowerCase().charCodeAt(0);
             }
 
@@ -169,11 +180,15 @@ export class TextScanningTrie {
         // Scan forward
         while (i < len) {
             let code = text.charCodeAt(i);
+
             // Optimization: Manual case folding for ASCII to avoid .toLowerCase() allocation
-            if (code >= 65 && code <= 90) {
-                code += 32;
-            } else if (code > 127) {
-                // Fallback for non-ASCII characters to ensure correct case folding
+            // If the character is between 'A' and 'Z', we add 32 to convert it to 'a'-'z'.
+            // This is significantly faster than allocating a new string with .toLowerCase().
+            if (code >= TextScanningTrie.ASCII_A && code <= TextScanningTrie.ASCII_Z) {
+                code += TextScanningTrie.ASCII_TO_LOWER_OFFSET;
+            } else if (code > TextScanningTrie.MAX_ASCII) {
+                // Fallback for non-ASCII characters (e.g., 'É', 'Æ') to ensure correct case folding
+                // We must use the standard .toLowerCase() here to handle Unicode rules correctly.
                 code = String.fromCharCode(code).toLowerCase().charCodeAt(0);
             }
 
