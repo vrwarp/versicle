@@ -105,6 +105,7 @@ graph TD
     subgraph Workers [Web Workers]
         SearchWorker[search.worker.ts]
         SearchEngine[SearchEngine]
+        PiperWorker[piper_worker.js]
     end
 
     subgraph Storage [IndexedDB]
@@ -168,6 +169,7 @@ graph TD
     APS --> TaskSeq
 
     Piper --> PiperUtils
+    PiperUtils --> PiperWorker
 
     Reader --> SearchClient
     SearchClient --> SearchWorker
@@ -372,13 +374,13 @@ Manages manual internal state backup and restoration.
 
 ### TTS Subsystem (`src/lib/tts/`)
 
-#### `src/lib/tts/AudioPlayerService.ts`
-The Orchestrator. Manages playback state, provider selection, and UI updates.
+#### `src/lib/tts/AudioPlayerService.ts` (Main Thread Orchestrator)
+The central hub for TTS operations. It runs on the **Main Thread** and coordinates the various subsystems (Pipeline, Providers, State).
 
 *   **Logic**:
     *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods (play, pause) to prevent race conditions during rapid UI interaction.
     *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`) via `BatteryGuard`.
-    *   **Delegation**: Offloads content loading to `AudioContentPipeline` and state to `PlaybackStateManager`.
+    *   **Delegation**: Offloads heavy content loading to `AudioContentPipeline` and state logic to `PlaybackStateManager`. It **does not** run in a worker itself, but orchestrates providers that might.
 
 #### `src/lib/tts/TaskSequencer.ts`
 *   **Goal**: Prevent race conditions in async audio operations.
@@ -408,7 +410,8 @@ The Data Pipeline for TTS.
 *   **Goal**: Robustly split text into sentences and handle abbreviations.
 *   **Logic**:
     *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
-    *   **Zero-Allocation Scanning**: Uses `TextScanningTrie` (a specialized Trie implementation) to match abbreviations and sentence starters using character codes (`codePointAt`) and object lookups. This avoids the creation of intermediate substrings and `toLowerCase()` allocations inherent in Regex-based solutions.
+    *   **Zero-Allocation Scanning (`TextScanningTrie`)**: Uses a specialized Trie implementation that operates on character codes.
+        *   **Strategy**: Instead of allocating new strings with `.toLowerCase()`, it performs manual ASCII case folding (checking range 65-90 and adding 32) during traversal. This enables allocation-free matching of abbreviations in hot loops.
     *   **Segmenter Cache**: Caches `Intl.Segmenter` instances via `segmenter-cache` to avoid the heavy cost of instantiating locale data repeatedly.
     *   **Optimization**: Uses `tryFastMergeCfi` to merge CFIs optimistically via string manipulation.
 *   **Trade-offs**:
@@ -437,6 +440,12 @@ Manages the virtual playback timeline.
 #### `BackgroundAudio.ts`
 *   **Goal**: Ensure the app process remains active on Android/iOS when the screen is off.
 *   **Logic**: Plays a silent (or white noise) audio loop in the background to prevent the OS from killing the suspended app.
+
+#### `src/lib/tts/providers/PiperProvider.ts` (Local Neural TTS)
+*   **Goal**: High-quality, offline TTS using Piper voices.
+*   **Logic**:
+    *   **WASM Worker**: Offloads the heavy OnnxRuntime inference to a dedicated Web Worker (`piper_worker.js`) via `piper-utils` to prevent blocking the UI thread.
+    *   **Transactional Download**: Downloads model files (`.onnx`) and configs (`.json.onnx`) to a staging area, verifies integrity by loading them, and only then commits to the cache.
 
 #### `src/lib/tts/providers/CapacitorTTSProvider.ts`
 *   **Logic**: Uses `queueStrategy: 1` to preload the next utterance into the OS buffer while the current one plays.

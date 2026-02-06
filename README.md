@@ -22,12 +22,12 @@
 *   **Framework**: React 19.2.3 + Vite 7.3.0 + React Router 7.11.0
 *   **Language**: TypeScript
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (Custom Fork)
-*   **Sync**: `y-cinder` (Custom Fork / Firestore) + Android Backup Service
+*   **Sync**: `y-cinder` (Custom Fork / Firestore 11.10.0) + Android Backup Service
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
 *   **AI**: Google Gemini (Flash Lite / Flash) via `@google/generative-ai`
-*   **Mobile**: Capacitor 7.0.0 (Android) + `@capawesome-team/capacitor-android-battery-optimization`
+*   **Mobile**: Capacitor 7.0.0 (Android) + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
 *   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
