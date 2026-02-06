@@ -18,6 +18,7 @@ export const TTSQueueItem = memo(forwardRef<HTMLButtonElement, TTSQueueItemProps
         return (
             <button
                 data-testid={`tts-queue-item-${index}`}
+                data-current={isActive ? "true" : "false"}
                 ref={ref}
                 onClick={() => onJump(index)}
                 className={cn(

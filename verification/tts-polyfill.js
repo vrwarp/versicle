@@ -1,6 +1,6 @@
 // verification/tts-polyfill.js
 
-(function() {
+(function () {
     if (window.__mockTTSLoaded) return;
     window.__mockTTSLoaded = true;
 
@@ -39,15 +39,15 @@
         console.log('🗣️ [MockTTS] Worker Initialized');
 
         worker.onmessage = (event) => {
-             const synth = window.speechSynthesis;
-             if (synth && synth._handleMessage) {
-                 synth._handleMessage(event.data);
-             }
+            const synth = window.speechSynthesis;
+            if (synth && synth._handleMessage) {
+                synth._handleMessage(event.data);
+            }
         };
         worker.onerror = (e) => {
             console.error('🗣️ [MockTTS] Worker Error', e);
         };
-    } catch(e) {
+    } catch (e) {
         console.error('🗣️ [MockTTS] Failed to create Worker', e);
     }
 
@@ -82,8 +82,8 @@
             this.paused = false;
             this.pending = false;
             this._voices = [
-                 { name: 'Mock Voice 1', lang: 'en-US', default: true, localService: true, voiceURI: 'mock-1' },
-                 { name: 'Mock Voice 2', lang: 'en-GB', default: false, localService: true, voiceURI: 'mock-2' }
+                { name: 'Mock Voice 1', lang: 'en-US', default: true, localService: true, voiceURI: 'mock-1' },
+                { name: 'Mock Voice 2', lang: 'en-GB', default: false, localService: true, voiceURI: 'mock-2' }
             ];
             this._utteranceMap = new Map();
         }
@@ -97,18 +97,25 @@
             this.speaking = true;
             this._utteranceMap.set(utterance._id, utterance);
 
+            // Update debug element with rate for test verification
+            ensureDebugElement();
+            const debugEl = document.getElementById('tts-debug');
+            if (debugEl) {
+                debugEl.setAttribute('data-rate', String(utterance.rate));
+            }
+
             const msg = {
-                 type: 'SPEAK',
-                 payload: {
-                     text: utterance.text,
-                     rate: utterance.rate,
-                     id: utterance._id
-                 }
+                type: 'SPEAK',
+                payload: {
+                    text: utterance.text,
+                    rate: utterance.rate,
+                    id: utterance._id
+                }
             };
 
             if (worker) {
-                 console.log('🗣️ [MockTTS] sending SPEAK to Worker');
-                 worker.postMessage(msg);
+                console.log('🗣️ [MockTTS] sending SPEAK to Worker');
+                worker.postMessage(msg);
             } else {
                 console.error('🗣️ [MockTTS] No Worker available');
             }
@@ -124,11 +131,11 @@
                 worker.postMessage(msg);
             }
             this._utteranceMap.clear();
-             const debugEl = document.getElementById('tts-debug');
-             if (debugEl) {
-                 debugEl.textContent = '[[CANCELED]]';
-                 debugEl.setAttribute('data-status', 'canceled');
-             }
+            const debugEl = document.getElementById('tts-debug');
+            if (debugEl) {
+                debugEl.textContent = '[[CANCELED]]';
+                debugEl.setAttribute('data-status', 'canceled');
+            }
         }
 
         pause() {
@@ -138,27 +145,27 @@
             if (worker) {
                 worker.postMessage(msg);
             }
-             const debugEl = document.getElementById('tts-debug');
-             if (debugEl) {
-                 debugEl.textContent = '[[PAUSED]]';
-                 debugEl.setAttribute('data-status', 'paused');
-             }
+            const debugEl = document.getElementById('tts-debug');
+            if (debugEl) {
+                debugEl.textContent = '[[PAUSED]]';
+                debugEl.setAttribute('data-status', 'paused');
+            }
         }
 
         resume() {
-             console.log('🗣️ [MockTTS] resume called');
-             if (this.paused) {
-                 this.paused = false;
-                 const msg = { type: 'RESUME' };
-                 if (worker) {
-                     worker.postMessage(msg);
-                 }
-                 const debugEl = document.getElementById('tts-debug');
-                 if (debugEl) {
-                     debugEl.textContent = '[[RESUMED]]';
-                     debugEl.setAttribute('data-status', 'resumed');
-                 }
-             }
+            console.log('🗣️ [MockTTS] resume called');
+            if (this.paused) {
+                this.paused = false;
+                const msg = { type: 'RESUME' };
+                if (worker) {
+                    worker.postMessage(msg);
+                }
+                const debugEl = document.getElementById('tts-debug');
+                if (debugEl) {
+                    debugEl.textContent = '[[RESUMED]]';
+                    debugEl.setAttribute('data-status', 'resumed');
+                }
+            }
         }
 
         _handleMessage(data) {
@@ -181,34 +188,34 @@
             if (debugEl) {
                 debugEl.setAttribute('data-last-event', type);
                 if (type === 'boundary') {
-                     debugEl.textContent = text || '';
-                     debugEl.setAttribute('data-char-index', charIndex);
-                     debugEl.setAttribute('data-status', 'speaking');
+                    debugEl.textContent = text || '';
+                    debugEl.setAttribute('data-char-index', charIndex);
+                    debugEl.setAttribute('data-status', 'speaking');
                 }
                 if (type === 'start') {
-                     debugEl.setAttribute('data-status', 'start');
+                    debugEl.setAttribute('data-status', 'start');
                 }
-                 if (type === 'end') {
-                     debugEl.textContent = '[[END]]';
-                     debugEl.setAttribute('data-status', 'end');
-                     this._utteranceMap.delete(id);
+                if (type === 'end') {
+                    debugEl.textContent = '[[END]]';
+                    debugEl.setAttribute('data-status', 'end');
+                    this._utteranceMap.delete(id);
                 }
             }
 
             // Dispatch events
             let event;
             if (type === 'boundary') {
-                 event = new SpeechSynthesisEvent('boundary', { ...eventInit, charIndex, name, charLength: data.charLength });
-                 if (utterance.onboundary) utterance.onboundary(event);
+                event = new SpeechSynthesisEvent('boundary', { ...eventInit, charIndex, name, charLength: data.charLength });
+                if (utterance.onboundary) utterance.onboundary(event);
             } else if (type === 'start') {
-                 event = new SpeechSynthesisEvent('start', { ...eventInit, charIndex: 0 });
-                 if (utterance.onstart) utterance.onstart(event);
+                event = new SpeechSynthesisEvent('start', { ...eventInit, charIndex: 0 });
+                if (utterance.onstart) utterance.onstart(event);
             } else if (type === 'end') {
-                 event = new SpeechSynthesisEvent('end', { ...eventInit, charIndex: utterance.text.length });
-                 if (utterance.onend) utterance.onend(event);
+                event = new SpeechSynthesisEvent('end', { ...eventInit, charIndex: utterance.text.length });
+                if (utterance.onend) utterance.onend(event);
             }
 
-             utterance.dispatchEvent(event);
+            utterance.dispatchEvent(event);
         }
     }
 
@@ -239,9 +246,9 @@
         console.log('🗣️ [MockTTS] window.speechSynthesis overwritten');
 
         setTimeout(() => {
-             console.log('🗣️ [MockTTS] Dispatching voiceschanged');
-             mockSynth.dispatchEvent(new Event('voiceschanged'));
-             if (mockSynth.onvoiceschanged) mockSynth.onvoiceschanged(new Event('voiceschanged'));
+            console.log('🗣️ [MockTTS] Dispatching voiceschanged');
+            mockSynth.dispatchEvent(new Event('voiceschanged'));
+            if (mockSynth.onvoiceschanged) mockSynth.onvoiceschanged(new Event('voiceschanged'));
         }, 500);
 
     } catch (e) {
