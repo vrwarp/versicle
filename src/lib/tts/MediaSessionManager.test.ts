@@ -55,8 +55,13 @@ describe('MediaSessionManager', () => {
 
     // Mock MediaMetadata constructor
     vi.stubGlobal('MediaMetadata', class {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        constructor(public init: any) {}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      constructor(public init: any) { }
+    });
+
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      configurable: true
     });
 
     // Reset mocks and setup default implementations
@@ -70,39 +75,39 @@ describe('MediaSessionManager', () => {
     // Note: We don't need to mock fetch or URL.createObjectURL anymore since we load Image directly from URL string.
 
     global.Image = class {
-        onload: () => void = () => {};
-        onerror: (err: unknown) => void = () => {};
-        width = 200;
-        height = 100;
-        _src = '';
-        set src(value: string) {
-            this._src = value;
-            setTimeout(() => this.onload(), 10);
-        }
-        get src() { return this._src; }
+      onload: () => void = () => { };
+      onerror: (err: unknown) => void = () => { };
+      width = 200;
+      height = 100;
+      _src = '';
+      set src(value: string) {
+        this._src = value;
+        setTimeout(() => this.onload(), 10);
+      }
+      get src() { return this._src; }
     } as unknown as typeof Image;
 
     mockGradient = {
-        addColorStop: vi.fn(),
+      addColorStop: vi.fn(),
     };
 
     mockContext = {
-        drawImage: vi.fn(),
-        createConicGradient: vi.fn(() => mockGradient),
-        fillStyle: '',
-        fillRect: vi.fn(),
+      drawImage: vi.fn(),
+      createConicGradient: vi.fn(() => mockGradient),
+      fillStyle: '',
+      fillRect: vi.fn(),
     };
     const mockCanvas = {
-        width: 0,
-        height: 0,
-        getContext: vi.fn(() => mockContext),
-        toDataURL: vi.fn(() => 'data:image/jpeg;base64,mocked'),
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => mockContext),
+      toDataURL: vi.fn(() => 'data:image/jpeg;base64,mocked'),
     };
 
     originalCreateElement = document.createElement.bind(document);
     vi.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
-        if (tagName === 'canvas') return mockCanvas as unknown as HTMLCanvasElement;
-        return originalCreateElement(tagName, options);
+      if (tagName === 'canvas') return mockCanvas as unknown as HTMLCanvasElement;
+      return originalCreateElement(tagName, options);
     });
   });
 
@@ -112,153 +117,154 @@ describe('MediaSessionManager', () => {
   });
 
   describe('Web Environment', () => {
-      beforeEach(() => {
-          (Capacitor.isNativePlatform as Mock).mockReturnValue(false);
-      });
+    beforeEach(() => {
+      (Capacitor.isNativePlatform as Mock).mockReturnValue(false);
+    });
 
-      it('sets up action handlers on initialization', () => {
-        new MediaSessionManager(callbacks);
+    it('sets up action handlers on initialization', () => {
+      new MediaSessionManager(callbacks);
 
-        expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('play', callbacks.onPlay);
-        expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('pause', callbacks.onPause);
-        expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('previoustrack', callbacks.onPrev);
-        expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('nexttrack', callbacks.onNext);
-        expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('seekbackward', callbacks.onSeekBackward);
-        expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('seekforward', callbacks.onSeekForward);
-      });
+      expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('play', callbacks.onPlay);
+      expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('pause', callbacks.onPause);
+      expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('previoustrack', callbacks.onPrev);
+      expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('nexttrack', callbacks.onNext);
+      expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('seekbackward', callbacks.onSeekBackward);
+      expect(mediaSessionMock.setActionHandler).toHaveBeenCalledWith('seekforward', callbacks.onSeekForward);
+    });
 
-      it('updates metadata correctly with artwork processing', async () => {
-        const manager = new MediaSessionManager(callbacks);
-        const metadata = {
+    it('updates metadata correctly with artwork processing', async () => {
+      const manager = new MediaSessionManager(callbacks);
+      const metadata = {
+        title: 'Test Title',
+        artist: 'Test Artist',
+        album: 'Test Album',
+        artwork: [{ src: 'test.jpg' }],
+      };
+
+      await manager.setMetadata(metadata);
+
+      expect(mediaSessionMock.metadata).toEqual(expect.objectContaining({
+        init: expect.objectContaining({
           title: 'Test Title',
           artist: 'Test Artist',
           album: 'Test Album',
-          artwork: [{ src: 'test.jpg' }],
-        };
+          // Expect processed base64 artwork
+          artwork: [{ src: 'data:image/jpeg;base64,mocked', type: 'image/jpeg' }]
+        })
+      }));
+    });
 
-        await manager.setMetadata(metadata);
+    it('applies conic gradient when section index is provided', async () => {
+      const manager = new MediaSessionManager(callbacks);
+      const metadata = {
+        title: 'Test Title',
+        artist: 'Test Artist',
+        album: 'Test Album',
+        artwork: [{ src: 'test.jpg' }],
+        sectionIndex: 0,
+        totalSections: 10
+      };
 
-        expect(mediaSessionMock.metadata).toEqual(expect.objectContaining({
-            init: expect.objectContaining({
-                title: 'Test Title',
-                artist: 'Test Artist',
-                album: 'Test Album',
-                // Expect processed base64 artwork
-                artwork: [{ src: 'data:image/jpeg;base64,mocked', type: 'image/jpeg' }]
-            })
-        }));
-      });
+      await manager.setMetadata(metadata);
 
-      it('applies conic gradient when section index is provided', async () => {
-        const manager = new MediaSessionManager(callbacks);
-        const metadata = {
-          title: 'Test Title',
-          artist: 'Test Artist',
-          album: 'Test Album',
-          artwork: [{ src: 'test.jpg' }],
-          sectionIndex: 0,
-          totalSections: 10
-        };
+      expect(mockContext.createConicGradient).toHaveBeenCalled();
+      expect(mockGradient.addColorStop).toHaveBeenCalled();
+      expect(mockContext.fillRect).toHaveBeenCalled();
+    });
 
-        await manager.setMetadata(metadata);
+    it('updates playback state correctly', () => {
+      const manager = new MediaSessionManager(callbacks);
 
-        expect(mockContext.createConicGradient).toHaveBeenCalled();
-        expect(mockGradient.addColorStop).toHaveBeenCalled();
-        expect(mockContext.fillRect).toHaveBeenCalled();
-      });
+      manager.setPlaybackState('playing');
+      expect(mediaSessionMock.playbackState).toBe('playing');
 
-      it('updates playback state correctly', () => {
-        const manager = new MediaSessionManager(callbacks);
+      manager.setPlaybackState('paused');
+      expect(mediaSessionMock.playbackState).toBe('paused');
+    });
 
-        manager.setPlaybackState('playing');
-        expect(mediaSessionMock.playbackState).toBe('playing');
+    it('handles missing mediaSession gracefully', async () => {
+      vi.stubGlobal('navigator', {}); // No mediaSession
 
-        manager.setPlaybackState('paused');
-        expect(mediaSessionMock.playbackState).toBe('paused');
-      });
+      const manager = new MediaSessionManager(callbacks);
 
-      it('handles missing mediaSession gracefully', async () => {
-        vi.stubGlobal('navigator', {}); // No mediaSession
+      // Should not throw
+      await manager.setMetadata({ title: 'test', artist: 'test', album: 'test' });
+      manager.setPlaybackState('playing');
+      manager.setPositionState({ duration: 100, position: 10 });
+    });
 
-        const manager = new MediaSessionManager(callbacks);
+    it('sets position state correctly', () => {
+      const manager = new MediaSessionManager(callbacks);
+      const state = { duration: 60, playbackRate: 1, position: 30 };
 
-        // Should not throw
-        await manager.setMetadata({ title: 'test', artist: 'test', album: 'test' });
-        manager.setPlaybackState('playing');
-        manager.setPositionState({ duration: 100, position: 10 });
-      });
+      manager.setPositionState(state);
 
-      it('sets position state correctly', () => {
-          const manager = new MediaSessionManager(callbacks);
-          const state = { duration: 60, playbackRate: 1, position: 30 };
+      expect(mediaSessionMock.setPositionState).toHaveBeenCalledWith(state);
+    });
 
-          manager.setPositionState(state);
-
-          expect(mediaSessionMock.setPositionState).toHaveBeenCalledWith(state);
-      });
   });
 
   describe('Native Environment', () => {
-      beforeEach(() => {
-          (Capacitor.isNativePlatform as Mock).mockReturnValue(true);
+    beforeEach(() => {
+      (Capacitor.isNativePlatform as Mock).mockReturnValue(true);
+    });
+
+    it('sets up native action handlers on initialization', async () => {
+      new MediaSessionManager(callbacks);
+      // Constructor is async in effect due to async calls but we can't await it directly.
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'play' }, callbacks.onPlay);
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'pause' }, callbacks.onPause);
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'stop' }, callbacks.onStop);
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'nexttrack' }, callbacks.onNext);
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'previoustrack' }, callbacks.onPrev);
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekbackward' }, callbacks.onSeekBackward);
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekforward' }, callbacks.onSeekForward);
+    });
+
+    it('updates native metadata correctly with artwork processing', async () => {
+      const manager = new MediaSessionManager(callbacks);
+      const metadata = {
+        title: 'Native Title',
+        artist: 'Native Artist',
+        album: 'Native Album',
+        artwork: [{ src: 'native.jpg' }],
+      };
+
+      await manager.setMetadata(metadata);
+
+      expect(MediaSession.setMetadata).toHaveBeenCalledWith({
+        title: 'Native Title',
+        artist: 'Native Artist',
+        album: 'Native Album',
+        // Expect processed base64 artwork
+        artwork: [{ src: 'data:image/jpeg;base64,mocked', type: 'image/jpeg' }]
       });
+    });
 
-      it('sets up native action handlers on initialization', async () => {
-          new MediaSessionManager(callbacks);
-          // Constructor is async in effect due to async calls but we can't await it directly.
-          await new Promise(resolve => setTimeout(resolve, 0));
+    it('updates native playback state correctly', async () => {
+      const manager = new MediaSessionManager(callbacks);
 
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'play' }, callbacks.onPlay);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'pause' }, callbacks.onPause);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'stop' }, callbacks.onStop);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'nexttrack' }, callbacks.onNext);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'previoustrack' }, callbacks.onPrev);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekbackward' }, callbacks.onSeekBackward);
-          expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekforward' }, callbacks.onSeekForward);
+      await manager.setPlaybackState('playing');
+      expect(MediaSession.setPlaybackState).toHaveBeenCalledWith({
+        playbackState: 'playing',
       });
+      // This should NOT be called anymore
+      expect(MediaSession.setPositionState).not.toHaveBeenCalled();
+    });
 
-      it('updates native metadata correctly with artwork processing', async () => {
-          const manager = new MediaSessionManager(callbacks);
-          const metadata = {
-            title: 'Native Title',
-            artist: 'Native Artist',
-            album: 'Native Album',
-            artwork: [{ src: 'native.jpg' }],
-          };
+    it('updates native position state correctly', async () => {
+      const manager = new MediaSessionManager(callbacks);
+      const state = { duration: 60, playbackRate: 1, position: 30 };
 
-          await manager.setMetadata(metadata);
+      manager.setPositionState(state);
 
-          expect(MediaSession.setMetadata).toHaveBeenCalledWith({
-              title: 'Native Title',
-              artist: 'Native Artist',
-              album: 'Native Album',
-              // Expect processed base64 artwork
-              artwork: [{ src: 'data:image/jpeg;base64,mocked', type: 'image/jpeg' }]
-          });
+      expect(MediaSession.setPositionState).toHaveBeenCalledWith({
+        duration: 60,
+        playbackRate: 1,
+        position: 30
       });
-
-      it('updates native playback state correctly', async () => {
-          const manager = new MediaSessionManager(callbacks);
-
-          await manager.setPlaybackState('playing');
-          expect(MediaSession.setPlaybackState).toHaveBeenCalledWith({
-              playbackState: 'playing',
-          });
-          // This should NOT be called anymore
-          expect(MediaSession.setPositionState).not.toHaveBeenCalled();
-      });
-
-      it('updates native position state correctly', async () => {
-          const manager = new MediaSessionManager(callbacks);
-          const state = { duration: 60, playbackRate: 1, position: 30 };
-
-          manager.setPositionState(state);
-
-          expect(MediaSession.setPositionState).toHaveBeenCalledWith({
-              duration: 60,
-              playbackRate: 1,
-              position: 30
-          });
-      });
+    });
   });
 });

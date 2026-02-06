@@ -37,10 +37,10 @@ export interface MediaSessionCallbacks {
  * Represents the current state of playback.
  */
 export interface PlaybackState {
-    playbackState: 'playing' | 'paused' | 'none';
-    playbackSpeed?: number;
-    position?: number;
-    duration?: number;
+  playbackState: 'playing' | 'paused' | 'none';
+  playbackSpeed?: number;
+  position?: number;
+  duration?: number;
 }
 
 /**
@@ -66,48 +66,48 @@ export class MediaSessionManager {
    */
   private async setupActionHandlers() {
     if (this.isNative) {
-        // NATIVE MODE
-        await this.setNativeActionHandler('play', this.callbacks.onPlay);
-        await this.setNativeActionHandler('pause', this.callbacks.onPause);
-        await this.setNativeActionHandler('stop', this.callbacks.onStop);
-        await this.setNativeActionHandler('nexttrack', this.callbacks.onNext);
-        await this.setNativeActionHandler('previoustrack', this.callbacks.onPrev);
-        await this.setNativeActionHandler('seekbackward', this.callbacks.onSeekBackward);
-        await this.setNativeActionHandler('seekforward', this.callbacks.onSeekForward);
+      // NATIVE MODE
+      await this.setNativeActionHandler('play', this.callbacks.onPlay);
+      await this.setNativeActionHandler('pause', this.callbacks.onPause);
+      await this.setNativeActionHandler('stop', this.callbacks.onStop);
+      await this.setNativeActionHandler('nexttrack', this.callbacks.onNext);
+      await this.setNativeActionHandler('previoustrack', this.callbacks.onPrev);
+      await this.setNativeActionHandler('seekbackward', this.callbacks.onSeekBackward);
+      await this.setNativeActionHandler('seekforward', this.callbacks.onSeekForward);
     } else if (this.hasWebMediaSession) {
-        // WEB MODE
-        const actionHandlers: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [
-          ['play', this.callbacks.onPlay],
-          ['pause', this.callbacks.onPause],
-          ['stop', this.callbacks.onStop],
-          ['previoustrack', this.callbacks.onPrev],
-          ['nexttrack', this.callbacks.onNext],
-          ['seekbackward', this.callbacks.onSeekBackward],
-          ['seekforward', this.callbacks.onSeekForward],
-          ['seekto', this.callbacks.onSeekTo],
-        ];
+      // WEB MODE
+      const actionHandlers: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [
+        ['play', this.callbacks.onPlay],
+        ['pause', this.callbacks.onPause],
+        ['stop', this.callbacks.onStop],
+        ['previoustrack', this.callbacks.onPrev],
+        ['nexttrack', this.callbacks.onNext],
+        ['seekbackward', this.callbacks.onSeekBackward],
+        ['seekforward', this.callbacks.onSeekForward],
+        ['seekto', this.callbacks.onSeekTo],
+      ];
 
-        actionHandlers.forEach(([action, handler]) => {
-          try {
-            if (handler) {
-              navigator.mediaSession.setActionHandler(action, handler);
-            } else {
-                navigator.mediaSession.setActionHandler(action, null);
-            }
-          } catch {
-            console.warn(`MediaSession action '${action}' is not supported.`);
+      actionHandlers.forEach(([action, handler]) => {
+        try {
+          if (handler) {
+            navigator.mediaSession.setActionHandler(action, handler);
+          } else {
+            navigator.mediaSession.setActionHandler(action, null);
           }
-        });
+        } catch {
+          console.warn(`MediaSession action '${action}' is not supported.`);
+        }
+      });
     }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async setNativeActionHandler(action: string, handler?: (...args: any[]) => void) {
-      if (handler) {
-          // The types for MediaSessionAction might not perfectly align with string but it works at runtime or needs explicit casting
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await MediaSession.setActionHandler({ action: action as any }, handler);
-      }
+    if (handler) {
+      // The types for MediaSessionAction might not perfectly align with string but it works at runtime or needs explicit casting
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await MediaSession.setActionHandler({ action: action as any }, handler);
+    }
   }
 
   /**
@@ -120,32 +120,32 @@ export class MediaSessionManager {
 
     // Process artwork (fetch, crop to square, convert to base64) for both Native and Web
     if (artwork && artwork.length > 0) {
-        try {
-            // We process the first artwork item as the primary cover
-            const processedArtwork = await this.processArtwork(artwork[0], metadata.sectionIndex, metadata.totalSections);
-            if (processedArtwork) {
-                artwork = [processedArtwork];
-            }
-        } catch (e) {
-            console.warn("Failed to process artwork", e);
+      try {
+        // We process the first artwork item as the primary cover
+        const processedArtwork = await this.processArtwork(artwork[0], metadata.sectionIndex, metadata.totalSections);
+        if (processedArtwork) {
+          artwork = [processedArtwork];
         }
+      } catch (e) {
+        console.warn("Failed to process artwork", e);
+      }
     }
 
     if (this.isNative) {
-        await MediaSession.setMetadata({
-            title: metadata.title,
-            artist: metadata.artist,
-            album: metadata.album,
-            artwork: artwork
-        });
+      await MediaSession.setMetadata({
+        title: metadata.title,
+        artist: metadata.artist,
+        album: metadata.album,
+        artwork: artwork
+      });
     } else if (this.hasWebMediaSession) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        navigator.mediaSession.metadata = new (window as any).MediaMetadata({
-          title: metadata.title,
-          artist: metadata.artist,
-          album: metadata.album,
-          artwork: artwork
-        });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      navigator.mediaSession.metadata = new (window as any).MediaMetadata({
+        title: metadata.title,
+        artist: metadata.artist,
+        album: metadata.album,
+        artwork: artwork
+      });
     }
   }
 
@@ -153,14 +153,14 @@ export class MediaSessionManager {
    * Fetches the artwork, crops it to a square, and converts it to a base64 Data URL.
    */
   private async processArtwork(
-      artwork: { src: string; sizes?: string; type?: string },
-      sectionIndex?: number,
-      totalSections?: number
+    artwork: { src: string; sizes?: string; type?: string },
+    sectionIndex?: number,
+    totalSections?: number
   ): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
       let progress: number | undefined;
       if (sectionIndex !== undefined && totalSections !== undefined && totalSections > 0) {
-          progress = Math.min(Math.max(sectionIndex / totalSections, 0), 1);
+        progress = Math.min(Math.max(sectionIndex / totalSections, 0), 1);
       }
 
       // Crop to square and get base64 directly from URL
@@ -182,74 +182,82 @@ export class MediaSessionManager {
    * Optionally applies a conic gradient overlay to indicate reading progress.
    */
   private cropAndOverlayArtwork(src: string, progress?: number): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'Anonymous'; // Needed if the source is external
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous'; // Needed if the source is external
 
-        img.onload = () => {
-            try {
-                // Determine crop dimensions (min side)
-                const size = Math.min(img.width, img.height);
+      // Safety timeout: If image doesn't load within 2 seconds, just return original
+      const timeoutId = setTimeout(() => {
+        resolve(src);
+      }, 2000);
 
-                // Create canvas
-                const canvas = document.createElement('canvas');
-                canvas.width = size;
-                canvas.height = size;
+      img.onload = () => {
+        clearTimeout(timeoutId);
+        try {
+          // Determine crop dimensions (min side)
+          const size = Math.min(img.width, img.height);
 
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    reject(new Error("Could not get canvas context"));
-                    return;
-                }
+          // Create canvas
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
 
-                // Calculate source rectangle for center crop
-                const sx = (img.width - size) / 2;
-                const sy = (img.height - size) / 2;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(src); // Fallback to original
+            return;
+          }
 
-                // Draw to canvas
-                ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+          // Calculate source rectangle for center crop
+          const sx = (img.width - size) / 2;
+          const sy = (img.height - size) / 2;
 
-                // Apply conic gradient overlay if progress info is available
-                if (progress !== undefined) {
-                    // Check browser support for createConicGradient
-                    if (ctx.createConicGradient) {
-                        const cx = size / 2;
-                        const cy = size / 2;
+          // Draw to canvas
+          ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
 
-                        // Start from top (12 o'clock), so rotate -PI/2
-                        const gradient = ctx.createConicGradient(-Math.PI / 2, cx, cy);
+          // Apply conic gradient overlay if progress info is available
+          if (progress !== undefined) {
+            // Check browser support for createConicGradient
+            if (ctx.createConicGradient) {
+              const cx = size / 2;
+              const cy = size / 2;
 
-                        const overlayColor = 'rgba(255, 255, 255, 0.4)';
-                        const transparent = 'rgba(0, 0, 0, 0)';
+              // Start from top (12 o'clock), so rotate -PI/2
+              const gradient = ctx.createConicGradient(-Math.PI / 2, cx, cy);
 
-                        gradient.addColorStop(0, overlayColor);
-                        gradient.addColorStop(progress, overlayColor);
-                        // If fully complete, the whole circle is overlayColor.
-                        // If not, transition sharply to transparent.
-                        if (progress < 1) {
-                            gradient.addColorStop(progress, transparent);
-                            gradient.addColorStop(1, transparent);
-                        }
+              const overlayColor = 'rgba(255, 255, 255, 0.4)';
+              const transparent = 'rgba(0, 0, 0, 0)';
 
-                        ctx.fillStyle = gradient;
-                        ctx.fillRect(0, 0, size, size);
-                    }
-                }
+              gradient.addColorStop(0, overlayColor);
+              gradient.addColorStop(progress, overlayColor);
+              // If fully complete, the whole circle is overlayColor.
+              // If not, transition sharply to transparent.
+              if (progress < 1) {
+                gradient.addColorStop(progress, transparent);
+                gradient.addColorStop(1, transparent);
+              }
 
-                // Convert to base64
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                resolve(dataUrl);
-            } catch (e) {
-                reject(e);
+              ctx.fillStyle = gradient;
+              ctx.fillRect(0, 0, size, size);
             }
-        };
+          }
 
-        img.onerror = () => {
-             // If image load fails, we can't process it.
-             reject(new Error("Failed to load image for cropping"));
-        };
+          // Convert to base64
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          resolve(dataUrl);
+        } catch (e) {
+          // Return original on error
+          resolve(src);
+        }
+      };
 
-        img.src = src;
+      img.onerror = () => {
+        clearTimeout(timeoutId);
+        // If image load fails, we can't process it. Return original.
+        resolve(src);
+      };
+
+      img.src = src;
     });
   }
 
@@ -260,11 +268,11 @@ export class MediaSessionManager {
    */
   async setPlaybackState(playbackState: 'playing' | 'paused' | 'none') {
     if (this.isNative) {
-        await MediaSession.setPlaybackState({
-            playbackState,
-        });
+      await MediaSession.setPlaybackState({
+        playbackState,
+      });
     } else if (this.hasWebMediaSession) {
-        navigator.mediaSession.playbackState = playbackState;
+      navigator.mediaSession.playbackState = playbackState;
     }
   }
 
@@ -276,17 +284,17 @@ export class MediaSessionManager {
    */
   setPositionState(state: MediaPositionState) {
     if (this.isNative) {
-        MediaSession.setPositionState({
-            duration: state.duration,
-            playbackRate: state.playbackRate,
-            position: state.position
-        }).catch(e => console.warn("Failed to set native position state", e));
+      MediaSession.setPositionState({
+        duration: state.duration,
+        playbackRate: state.playbackRate,
+        position: state.position
+      }).catch(e => console.warn("Failed to set native position state", e));
     } else if (this.hasWebMediaSession && 'setPositionState' in navigator.mediaSession) {
-        try {
-            navigator.mediaSession.setPositionState(state);
-        } catch (e) {
-            console.warn("Failed to set MediaSession position state", e);
-        }
+      try {
+        navigator.mediaSession.setPositionState(state);
+      } catch (e) {
+        console.warn("Failed to set MediaSession position state", e);
+      }
     }
   }
 }
