@@ -59,11 +59,8 @@ describe('LibraryView Accessibility', () => {
             </MemoryRouter>
         );
 
-        // This check should currently FAIL because the loading spinner is just a div without role="status" or aria-label
-        const loadingSpinner = screen.getByRole('status');
+        // This check ensures we find the specific loading spinner with the correct accessible name
+        const loadingSpinner = screen.getByRole('status', { name: 'Loading library' });
         expect(loadingSpinner).toBeInTheDocument();
-
-        // It should also have accessible text (either aria-label or visible text)
-        expect(loadingSpinner).toHaveAttribute('aria-label', 'Loading library');
     });
 });

@@ -68,10 +68,12 @@ export const SyncPulseIndicator: React.FC<SyncPulseIndicatorProps> = ({
             className={cn("flex items-center gap-2", className)}
             title={titleText}
             data-testid="sync-pulse-indicator"
+            role="status"
         >
             <SyncIcon status={status} />
+            <span className="sr-only">{titleText}</span>
             {isError && (
-                <span className="text-xs text-destructive hidden sm:inline-block">Sync Error</span>
+                <span className="text-xs text-destructive hidden sm:inline-block" aria-hidden="true">Sync Error</span>
             )}
         </div>
     );
