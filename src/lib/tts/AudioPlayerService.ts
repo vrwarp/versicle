@@ -674,7 +674,13 @@ export class AudioPlayerService {
         if (Capacitor.getPlatform() === 'android') {
             const isEnabled = await BatteryOptimization.isBatteryOptimizationEnabled();
             if (isEnabled.enabled) {
-                // TODO: Prompt user to disable optimization
+                // Prompt user to disable battery optimization for reliable background playback
+                const { useToastStore } = await import('../../store/useToastStore');
+                useToastStore.getState().showToast(
+                    'For reliable background playback, please disable battery optimization for this app.',
+                    'info'
+                );
+                await BatteryOptimization.openBatteryOptimizationSettings();
             }
         }
     }
