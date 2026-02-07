@@ -34,22 +34,34 @@ export class Sanitizer {
         // Since our pattern in RegexPatterns isn't global, we can use split/join or a loop.
         // But to be safe and efficient, let's make a local global regex.
 
-        processed = processed.replace(Sanitizer.RE_URL_GLOBAL, (match, domain) => {
-            // Check for unbalanced trailing parentheses
-            if (match.endsWith(')')) {
-                const openCount = (match.match(/\(/g) || []).length;
-                const closeCount = (match.match(/\)/g) || []).length;
-                if (closeCount > openCount) {
-                    // Assume the last ')' is a closing punctuation mark, not part of the URL
-                    return domain + ')';
+        // OPTIMIZATION: Only run URL regex if 'http' or 'www' is present.
+        // This avoids expensive regex scans on 99% of sentences that don't contain URLs.
+        if (processed.includes('http') || processed.includes('www.')) {
+            processed = processed.replace(Sanitizer.RE_URL_GLOBAL, (match, domain) => {
+                // Check for unbalanced trailing parentheses
+                if (match.endsWith(')')) {
+                    const openCount = (match.match(/\(/g) || []).length;
+                    const closeCount = (match.match(/\)/g) || []).length;
+                    if (closeCount > openCount) {
+                        // Assume the last ')' is a closing punctuation mark, not part of the URL
+                        return domain + ')';
+                    }
                 }
-            }
-            return domain;
-        });
+                return domain;
+            });
+        }
 
         // 3. Remove Citations
-        processed = processed.replace(Sanitizer.RE_CITATION_NUMERIC_GLOBAL, '');
-        processed = processed.replace(Sanitizer.RE_CITATION_AUTHOR_YEAR_GLOBAL, '');
+
+        // OPTIMIZATION: Only check for numeric citations if bracket is present.
+        if (processed.includes('[')) {
+            processed = processed.replace(Sanitizer.RE_CITATION_NUMERIC_GLOBAL, '');
+        }
+
+        // OPTIMIZATION: Only check for author-year citations if parenthesis is present.
+        if (processed.includes('(')) {
+            processed = processed.replace(Sanitizer.RE_CITATION_AUTHOR_YEAR_GLOBAL, '');
+        }
 
         // 4. Handle Visual Separators
         // If the text is just a separator, we might return a pause or empty string.
