@@ -61,9 +61,15 @@ def test_smart_delete_journey(page: Page, demo_epub_path):
     # 5. Restore Book (Success Case)
     print("Restoring book...")
     # Trigger the restore flow by clicking the card (which is offloaded)
-    # This sets the internal state (bookToRestore) and opens the file chooser
+    # This sets the internal state (bookToRestore) and opens the Content Missing Dialog
+    book_card.click()
+
+    # Wait for the dialog to appear
+    expect(page.get_by_text("Content Missing")).to_be_visible()
+
+    # Click "Select File" to trigger the file chooser
     with page.expect_file_chooser() as fc_info:
-        book_card.click()
+        page.get_by_role("button", name="Select File").click()
 
     file_chooser = fc_info.value
     file_chooser.set_files(demo_epub_path)

@@ -14,6 +14,7 @@ def inject_mock_firestore(page: Page, snapshot=None):
     page.add_init_script("window.__VERSICLE_MOCK_FIRESTORE__ = true;")
     page.add_init_script("window.__VERSICLE_SANITIZATION_DISABLED__ = true;")
     page.add_init_script("window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 20;")
+    page.add_init_script("window.__VERSICLE_MOCK_SYNC_DELAY__ = 10;")
     page.add_init_script(path="verification/tts-polyfill.js")
     if snapshot:
         page.add_init_script(f"localStorage.setItem('versicle_mock_firestore_snapshot', JSON.stringify({json.dumps(snapshot)}));")
@@ -256,6 +257,9 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     page_a.fill("data-testid=lexicon-input-original", "Offline")
     page_a.fill("data-testid=lexicon-input-replacement", "Online")
     page_a.click("data-testid=lexicon-save-rule-btn")
+
+    # Allow Yjs/Store to propagate changes
+    time.sleep(1)
 
     # Flush sync (Simulate regaining connection)
     page_a.evaluate("window.dispatchEvent(new Event('beforeunload'))")

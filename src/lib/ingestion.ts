@@ -472,9 +472,11 @@ export async function extractBookMetadata(file: File): Promise<{
 
     // Sanitization check
     const candidateMetadata = {
+        id: 'temp-validation-id', // Dummy ID for validation
         title: metadata.title || 'Untitled',
         author: metadata.creator || 'Unknown Author',
         description: metadata.description || '',
+        addedAt: Date.now(), // Dummy date for validation
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
