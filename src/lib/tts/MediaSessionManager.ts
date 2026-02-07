@@ -245,7 +245,7 @@ export class MediaSessionManager {
           // Convert to base64
           const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
           resolve(dataUrl);
-        } catch (e) {
+        } catch {
           // Return original on error
           resolve(src);
         }

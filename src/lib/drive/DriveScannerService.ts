@@ -120,4 +120,30 @@ export class DriveScannerService {
 
         return newFiles;
     }
+
+    /**
+     * Heuristic check: Should we sync?
+     * Checks if the linked folder has been viewed more recently than the last scan.
+     */
+    static async shouldAutoSync(): Promise<boolean> {
+        const { linkedFolderId, lastScanTime } = useDriveStore.getState();
+
+        if (!linkedFolderId) return false;
+        // If never scanned, we definitely need to sync
+        if (!lastScanTime) return true;
+
+        try {
+            const metadata = await DriveService.getFolderMetadata(linkedFolderId);
+            const viewedTime = metadata.viewedByMeTime ? new Date(metadata.viewedByMeTime).getTime() : 0;
+
+            // If viewed time is more recent than last scan time, we should sync
+            // Note: If viewedByMeTime is undefined (0), we won't sync based on this heuristic,
+            // unless lastScanTime is also somehow 0 (which is handled above).
+            return viewedTime > lastScanTime;
+        } catch (error) {
+            logger.warn("Failed to check folder metadata for auto-sync heuristic:", error);
+            // Default to true on error to be safe
+            return true;
+        }
+    }
 }
