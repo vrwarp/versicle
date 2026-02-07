@@ -97,7 +97,7 @@ describe('DriveFolderPicker', () => {
         });
 
         render(<DriveFolderPicker onSelect={mockOnSelect} onCancel={mockOnCancel} />);
-        expect(screen.getByText('No folders here.')).toBeInTheDocument();
+        expect(screen.getByText('No folders here')).toBeInTheDocument();
     });
 
     it('shows error state', () => {

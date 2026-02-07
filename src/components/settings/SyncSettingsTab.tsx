@@ -40,7 +40,7 @@ export interface SyncSettingsTabProps {
     onClearConfig: () => void;
 }
 
-import { Dialog } from '../ui/Dialog';
+import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
 import { DriveFolderPicker } from '../drive/DriveFolderPicker';
 import { useDriveStore } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
@@ -306,13 +306,13 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                 <div className="p-4 border rounded-lg bg-card">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
-                            {/* Drive Icon (Simple SVG or Lucide) */}
-                            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                                <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#0066da" />
-                                    <path d="m43.85 66.85 25.3-43.8 18.15 31.45-8.35 14.35h-35.1z" fill="#4395ec" />
-                                    <path d="m87.3 52.5-18.15-31.45-18.15-31.45h-36.3l18.15 31.45z" fill="#0093f9" />
-                                </svg>
+                            {/* Drive Logo */}
+                            <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full">
+                                <img
+                                    src="/logo_drive_2020q4_color_2x_web_64dp.png"
+                                    alt="Google Drive"
+                                    className="w-6 h-6 object-contain"
+                                />
                             </div>
                             <div>
                                 <h4 className="text-sm font-medium">Google Drive</h4>
@@ -426,18 +426,20 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                 </div>
             </div>
             {/* Folder Picker Dialog */}
-            <Dialog
-                isOpen={isPickerOpen}
-                onClose={() => setIsPickerOpen(false)}
-                title="Google Drive"
-                hideCloseButton={true} // Picker has its own cancel
-                className="max-w-2xl p-0 overflow-hidden" // Override default padding/width
-            >
-                <DriveFolderPicker
-                    onSelect={handleFolderSelect}
-                    onCancel={() => setIsPickerOpen(false)}
-                />
-            </Dialog>
+            {/* Folder Picker Modal */}
+            <Modal open={isPickerOpen} onOpenChange={(open) => !open && setIsPickerOpen(false)}>
+                <ModalContent className="max-w-2xl h-[600px] p-0 overflow-hidden flex flex-col gap-0">
+                    <ModalHeader className="p-6 pb-2">
+                        <ModalTitle>Select Library Folder</ModalTitle>
+                    </ModalHeader>
+                    <div className="flex-1 min-h-0">
+                        <DriveFolderPicker
+                            onSelect={handleFolderSelect}
+                            onCancel={() => setIsPickerOpen(false)}
+                        />
+                    </div>
+                </ModalContent>
+            </Modal>
         </div>
     );
 };
