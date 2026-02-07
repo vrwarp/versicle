@@ -45,7 +45,7 @@ describe('SyncSettingsTab', () => {
     it('renders cross-device sync header', () => {
         render(<SyncSettingsTab {...defaultProps} />);
 
-        expect(screen.getByText('Cross-Device Sync')).toBeInTheDocument();
+        expect(screen.getByText('App Sync')).toBeInTheDocument();
     });
 
     it('renders device identity section', () => {
