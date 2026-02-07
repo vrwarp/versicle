@@ -40,6 +40,12 @@ export interface SyncSettingsTabProps {
     onClearConfig: () => void;
 }
 
+import { Dialog } from '../ui/Dialog';
+import { DriveFolderPicker } from '../drive/DriveFolderPicker';
+import { useDriveStore } from '../../store/useDriveStore';
+import { DriveScannerService } from '../../lib/drive/DriveScannerService';
+import { useToastStore } from '../../store/useToastStore';
+
 export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     currentDeviceId,
     currentDeviceName,
@@ -91,11 +97,42 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         }
     };
 
+    // ... inside component ...
     const {
         isServiceConnected,
         googleClientId
     } = useGoogleServicesStore();
     const [isDriveConnecting, setIsDriveConnecting] = React.useState(false);
+
+    // Drive Folder Picker State
+    const [isPickerOpen, setIsPickerOpen] = React.useState(false);
+    const { linkedFolderName, setLinkedFolder } = useDriveStore();
+    const [isScanning, setIsScanning] = React.useState(false);
+    const { showToast } = useToastStore();
+
+    const handleFolderSelect = (id: string, name: string) => {
+        setLinkedFolder(id, name);
+        setIsPickerOpen(false);
+    };
+
+    const handleScan = async () => {
+        if (!linkedFolderName) return;
+
+        setIsScanning(true);
+        try {
+            const newFiles = await DriveScannerService.checkForNewFiles();
+            if (newFiles.length > 0) {
+                showToast(`Found ${newFiles.length} new books in "${linkedFolderName}".`, 'success');
+            } else {
+                showToast('No new books found.', 'info');
+            }
+        } catch (error) {
+            console.error("Scan failed", error);
+            showToast('Failed to scan for books.', 'error');
+        } finally {
+            setIsScanning(false);
+        }
+    };
 
     const handleDriveConnect = async () => {
         setIsDriveConnecting(true);
@@ -112,6 +149,8 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const handleDriveDisconnect = async () => {
         try {
             await googleIntegrationManager.disconnectService('drive');
+            // Optionally clear linked folder on disconnect?
+            // useDriveStore.getState().clearLinkedFolder();
         } catch (error) {
             console.error("Failed to disconnect Drive", error);
         }
@@ -305,6 +344,56 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                         </p>
                     )}
 
+                    {/* Linked Folder Selection */}
+                    {isDriveConnected && (
+                        <div className="mt-4 pt-4 border-t pl-[3.5rem]">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label className="text-sm font-medium">Library Folder</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        {linkedFolderName
+                                            ? `Linked to "${linkedFolderName}"`
+                                            : "Select a folder to sync books from."}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsPickerOpen(true)}
+                                >
+                                    {linkedFolderName ? "Change Folder" : "Link Folder"}
+                                </Button>
+                            </div>
+
+                            {/* Scan Action */}
+                            {linkedFolderName && (
+                                <div className="mt-4 flex items-center justify-between border-t pt-4">
+                                    <div className="space-y-0.5">
+                                        <Label className="text-sm font-medium">Sync Library</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Check for new books in "{linkedFolderName}".
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={handleScan}
+                                        disabled={isScanning}
+                                    >
+                                        {isScanning ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                                Scanning...
+                                            </>
+                                        ) : (
+                                            "Scan for New Books"
+                                        )}
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Client ID Configuration (Web Only) */}
                     {!isDriveConnected && (
                         <div className="mt-4 pt-4 border-t">
@@ -336,6 +425,19 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                     )}
                 </div>
             </div>
+            {/* Folder Picker Dialog */}
+            <Dialog
+                isOpen={isPickerOpen}
+                onClose={() => setIsPickerOpen(false)}
+                title="Google Drive"
+                hideCloseButton={true} // Picker has its own cancel
+                className="max-w-2xl p-0 overflow-hidden" // Override default padding/width
+            >
+                <DriveFolderPicker
+                    onSelect={handleFolderSelect}
+                    onCancel={() => setIsPickerOpen(false)}
+                />
+            </Dialog>
         </div>
     );
 };

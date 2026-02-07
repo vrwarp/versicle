@@ -7,9 +7,10 @@ export class NativeGoogleAuthStrategy {
         return this.getValidToken(serviceId);
     }
 
-    async getValidToken(serviceId: string): Promise<string> {
+    async getValidToken(serviceId: string, loginHint?: string): Promise<string> {
         // Native plugin handles checking refresh token automatically.
         // Requesting scopes incrementally adds them to the user session.
+        void loginHint; // Suppress unused variable
         const result = await FirebaseAuthentication.signInWithGoogle({
             scopes: getScopesForService(serviceId),
             // The plugin might not need this explicitly if already signed in,

@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { WebGoogleAuthStrategy } from './WebGoogleAuthStrategy';
 import { NativeGoogleAuthStrategy } from './NativeGoogleAuthStrategy';
 import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
+import { useSyncStore } from '../sync/hooks/useSyncStore';
 
 class GoogleIntegrationManager {
     private strategy: WebGoogleAuthStrategy | NativeGoogleAuthStrategy;
@@ -30,7 +31,8 @@ class GoogleIntegrationManager {
         }
 
         try {
-            return await this.strategy.getValidToken(serviceId);
+            const email = useSyncStore.getState().firebaseUserEmail;
+            return await this.strategy.getValidToken(serviceId, email || undefined);
         } catch (error) {
             console.error(`Failed to get token for ${serviceId}, disconnecting...`, error);
             // Auto-disconnect on fatal auth errors (like revocation)

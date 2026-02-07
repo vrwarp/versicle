@@ -19,15 +19,34 @@ export class WebGoogleAuthStrategy {
     private tokenClient: any;
     private accessToken: string | null = null;
     private expiryTime: number = 0;
+    private initPromise: Promise<void> | null = null;
 
     async initialize(): Promise<void> {
-        await loadScript('https://accounts.google.com/gsi/client', 'google-gsi-client');
+        if (this.initPromise) return this.initPromise;
+
+        this.initPromise = (async () => {
+            if (window.google?.accounts) return;
+
+            await loadScript('https://accounts.google.com/gsi/client', 'google-gsi-client');
+
+            // Wait until window.google.accounts is actually available
+            let attempts = 0;
+            while (!window.google?.accounts && attempts < 20) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+            }
+
+            if (!window.google?.accounts) {
+                this.initPromise = null; // Reset so we can try again
+                throw new Error("Failed to load Google Identity Services script");
+            }
+        })();
+
+        return this.initPromise;
     }
 
     async connect(serviceId: string, loginHint?: string): Promise<string> {
-        if (!window.google) {
-            await this.initialize();
-        }
+        await this.initialize();
 
         const storeClientId = useGoogleServicesStore.getState().googleClientId;
         const clientId = storeClientId || import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -57,14 +76,12 @@ export class WebGoogleAuthStrategy {
         });
     }
 
-    async getValidToken(serviceId: string): Promise<string> {
+    async getValidToken(serviceId: string, loginHint?: string): Promise<string> {
         if (this.accessToken && Date.now() < this.expiryTime - 60000) {
             return this.accessToken;
         }
 
-        if (!window.google) {
-            await this.initialize();
-        }
+        await this.initialize();
 
         // Silent refresh
         return new Promise((resolve, reject) => {
@@ -91,6 +108,7 @@ export class WebGoogleAuthStrategy {
                     resolve(response.access_token);
                 },
                 prompt: '', // Attempt silent refresh
+                login_hint: loginHint, // Help GIS pick the right account silently
             });
 
             // Check if we can skip prompt
