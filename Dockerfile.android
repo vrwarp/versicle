@@ -35,6 +35,7 @@ WORKDIR /app
 # Copy package.json and scripts for npm install
 COPY package.json package-lock.json ./
 COPY scripts ./scripts
+RUN rm -f local.properties
 
 # Install npm dependencies
 RUN npm ci

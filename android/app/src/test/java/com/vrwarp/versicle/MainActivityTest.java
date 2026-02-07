@@ -21,13 +21,27 @@ import org.robolectric.shadows.ShadowWebView;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 
+
 import com.getcapacitor.BridgeActivity;
 
 import io.github.jofr.capacitor.mediasessionplugin.MediaSessionService;
 
+import android.webkit.ServiceWorkerController;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
+import static org.mockito.Mockito.mock;
+
 @RunWith(RobolectricTestRunner.class)
-@Config(manifest = Config.NONE)
+@Config(manifest = Config.NONE, shadows = {MainActivityTest.MyShadowServiceWorkerController.class})
 public class MainActivityTest {
+
+    @Implements(value = ServiceWorkerController.class, looseSignatures = true)
+    public static class MyShadowServiceWorkerController {
+        @Implementation
+        public static ServiceWorkerController getInstance() {
+            return mock(ServiceWorkerController.class);
+        }
+    }
 
     @Before
     public void setup() {
@@ -70,5 +84,17 @@ public class MainActivityTest {
 
         // Check if bridge is initialized
         assertNotNull(activity.getBridge());
+    }
+
+    @Test
+    public void pluginsShouldBeInitialized() {
+        ActivityController<MainActivity> controller = Robolectric.buildActivity(MainActivity.class).setup();
+        MainActivity activity = controller.get();
+
+        // Verify that expected plugins are present in the bridge
+        // Note: exact plugin class names depend on how they are registered by Capacitor's autoloader
+        // But we can check if the bridge has any plugins loaded.
+        assertNotNull(activity.getBridge().getPlugin("MediaSession"));
+        assertNotNull(activity.getBridge().getPlugin("TextToSpeech"));
     }
 }
