@@ -21,7 +21,8 @@ describe('DataManagementTab', () => {
         regenerationProgress: null,
         regenerationPercent: 0,
         onRegenerateMetadata: vi.fn(),
-        onClearAllData: vi.fn()
+        onClearAllData: vi.fn(),
+        isClearing: false
     };
 
     it('renders reading list section', () => {
@@ -81,6 +82,13 @@ describe('DataManagementTab', () => {
 
         expect(screen.getByText('Regenerating...')).toBeInTheDocument();
         expect(screen.getByText('Processing book 1 of 5...')).toBeInTheDocument();
+    });
+
+    it('shows clearing state', () => {
+        render(<DataManagementTab {...defaultProps} isClearing={true} />);
+
+        expect(screen.getByText('Clearing...')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /clearing/i })).toBeDisabled();
     });
 
     it('renders danger zone', () => {

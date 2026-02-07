@@ -24,6 +24,7 @@ export interface DataManagementTabProps {
     onRegenerateMetadata: () => void;
     // Danger Zone
     onClearAllData: () => void;
+    isClearing?: boolean;
 }
 
 export const DataManagementTab: React.FC<DataManagementTabProps> = ({
@@ -43,7 +44,8 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
     regenerationProgress,
     regenerationPercent,
     onRegenerateMetadata,
-    onClearAllData
+    onClearAllData,
+    isClearing = false
 }) => {
     const csvInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -93,6 +95,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                         accept=".csv"
                         onChange={handleCsvChange}
                         data-testid="reading-list-csv-input"
+                        aria-label="Upload CSV"
                     />
                 </div>
             </div>
@@ -127,6 +130,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                         accept=".zip,.json,.vbackup"
                         onChange={handleBackupChange}
                         data-testid="backup-file-input"
+                        aria-label="Restore Backup"
                     />
                     {backupStatus && (
                         <p className="text-sm text-blue-600 dark:text-blue-400 font-medium animate-pulse">
@@ -186,8 +190,15 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
             {/* Danger Zone */}
             <div className="border-t pt-4 space-y-4">
                 <h3 className="text-lg font-medium text-destructive">Danger Zone</h3>
-                <Button variant="destructive" onClick={onClearAllData}>
-                    Clear All Data
+                <Button variant="destructive" onClick={onClearAllData} disabled={isClearing}>
+                    {isClearing ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Clearing...
+                        </>
+                    ) : (
+                        "Clear All Data"
+                    )}
                 </Button>
             </div>
         </div>

@@ -41,3 +41,10 @@
 ## 2025-05-27 - Status Indicators and Accessibility
 **Learning:** Visual-only status indicators (like colored dots) that rely solely on `title` attributes are invisible to screen readers unless the user explores them with a mouse emulator or specific commands. `title` is not a reliable accessible name source for non-interactive elements.
 **Action:** Always wrap status indicators in a container with `role="status"` (for live updates) or use `aria-label`/`sr-only` text to explicitly describe the state (e.g., "Synced", "Syncing") so it is programmatically determinable.
+
+## 2025-05-28 - Destructive Action Feedback & Hidden Inputs
+**Learning:** Destructive actions like "Clear All Data" that eventually reload the page can feel broken or unresponsive if they lack immediate loading feedback during the async operation.
+**Action:** Always wrap destructive async operations in a loading state and show a spinner on the button immediately, even if the final step is a page reload.
+
+**Learning:** Hidden file inputs triggered by other buttons are often missed by accessibility tools and lack names.
+**Action:** Always add `aria-label` to hidden `<input type="file">` elements to ensure they have an accessible name in the DOM.
