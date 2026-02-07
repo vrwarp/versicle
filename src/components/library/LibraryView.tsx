@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useAllBooks } from '../../store/selectors';
-import { createLogger } from '../../lib/logger';
+// import { createLogger } from '../../lib/logger';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
@@ -34,7 +34,7 @@ import { ContentMissingDialog } from './ContentMissingDialog';
  *
  * @returns A React component rendering the library interface.
  */
-const logger = createLogger('LibraryView');
+// const logger = createLogger('LibraryView');
 
 // OPTIMIZATION: Cache for search strings to avoid redundant normalization/allocations
 // Key is the book object reference (which is stable thanks to selectors optimization).

@@ -2,9 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import {
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
-  getAuth,
-  type UserCredential
+  signInWithRedirect
 } from 'firebase/auth';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { getFirebaseAuth } from '../sync/firebase-config';

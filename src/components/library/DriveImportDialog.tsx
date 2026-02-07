@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
-import { useDriveStore, type DriveFile } from '../../store/useDriveStore';
+import { useDriveStore } from '../../store/useDriveStore';
 import { GoogleDriveService } from '../../lib/drive/GoogleDriveService';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { Loader2, Download, Search, AlertCircle, RefreshCw } from 'lucide-react';
@@ -22,13 +22,11 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ open, onOp
         files,
         accessToken,
         folderId,
-        isConnected,
         setFiles
     } = useDriveStore(useShallow(state => ({
         files: state.files,
         accessToken: state.accessToken,
         folderId: state.folderId,
-        isConnected: state.isConnected,
         setFiles: state.setFiles
     })));
 
@@ -119,7 +117,6 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ open, onOp
     };
 
     // Render logic
-    const hasFiles = files.length > 0;
     const canRefresh = !!accessToken && !!folderId;
 
     return (

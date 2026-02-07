@@ -13,7 +13,6 @@ const logger = createLogger('DriveSettingsSection');
 
 export const DriveSettingsSection: React.FC = () => {
     const {
-        isConnected,
         accessToken,
         folderId,
         files,
@@ -23,7 +22,6 @@ export const DriveSettingsSection: React.FC = () => {
         setFiles,
         disconnect
     } = useDriveStore(useShallow(state => ({
-        isConnected: state.isConnected,
         accessToken: state.accessToken,
         folderId: state.folderId,
         files: state.files,
