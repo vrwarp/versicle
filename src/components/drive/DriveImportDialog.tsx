@@ -149,7 +149,19 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
                     )}
                 </div>
 
-                <div className="p-4 border-t bg-background flex justify-end gap-2">
+                <div className="p-4 border-t bg-background flex justify-between gap-2">
+                    <Button
+                        variant="secondary"
+                        onClick={handleRefresh}
+                        disabled={isScanning}
+                    >
+                        {isScanning ? (
+                            <div className="flex items-center gap-2">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Syncing...
+                            </div>
+                        ) : "Manual Sync"}
+                    </Button>
                     <Button variant="outline" onClick={onClose}>Close</Button>
                 </div>
             </ModalContent>

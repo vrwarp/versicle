@@ -8,6 +8,7 @@ export interface DriveFile {
     size?: string;
     md5Checksum?: string;
     modifiedTime?: string;
+    viewedByMeTime?: string;
 }
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
@@ -87,7 +88,7 @@ export const DriveService = {
      */
     async getFolderMetadata(folderId: string): Promise<DriveFile> {
         const params = new URLSearchParams({
-            fields: 'id, name, mimeType, parents'
+            fields: 'id, name, mimeType, parents, viewedByMeTime'
         });
 
         const response = await this.fetchWithAuth(`${DRIVE_API_BASE}/files/${folderId}?${params.toString()}`);
@@ -117,8 +118,8 @@ export const DriveService = {
 
         const params = new URLSearchParams({
             q: query,
-            fields: 'files(id, name, mimeType, parents, size, md5Checksum, modifiedTime)',
-            orderBy: 'name_natural',
+            fields: 'files(id, name, mimeType, parents, size, md5Checksum, modifiedTime, viewedByMeTime)',
+            orderBy: 'viewedByMeTime desc',
             pageSize: '1000'
         });
 
