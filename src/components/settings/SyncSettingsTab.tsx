@@ -15,6 +15,8 @@ export interface FirebaseConfig {
     measurementId?: string;
 }
 
+import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
+import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import type { FirebaseAuthStatus } from '../../lib/sync/FirestoreSyncManager';
 
 export interface SyncSettingsTabProps {
@@ -89,10 +91,39 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         }
     };
 
+    const {
+        isServiceConnected,
+        googleClientId
+    } = useGoogleServicesStore();
+    const [isDriveConnecting, setIsDriveConnecting] = React.useState(false);
+
+    const handleDriveConnect = async () => {
+        setIsDriveConnecting(true);
+        try {
+            // Pass login_hint if we have the firebase email to encourage same-account usage
+            await googleIntegrationManager.connectService('drive', firebaseUserEmail || undefined);
+        } catch (error) {
+            console.error("Failed to connect Drive", error);
+        } finally {
+            setIsDriveConnecting(false);
+        }
+    };
+
+    const handleDriveDisconnect = async () => {
+        try {
+            await googleIntegrationManager.disconnectService('drive');
+        } catch (error) {
+            console.error("Failed to disconnect Drive", error);
+        }
+    };
+
+    const isDriveConnected = isServiceConnected('drive');
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
+            {/* Section 1: App Sync */}
             <div>
-                <h3 className="text-lg font-medium mb-4">Cross-Device Sync</h3>
+                <h3 className="text-lg font-medium mb-4">App Sync</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                     Sync your reading progress, annotations, and reading list across devices.
                 </p>
@@ -228,6 +259,82 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                         )}
                     </div>
                 )}
+            </div>
+
+            {/* Section 2: Cloud Integrations */}
+            <div className="pt-6 border-t">
+                <h3 className="text-lg font-medium mb-4">Cloud Integrations</h3>
+                <div className="p-4 border rounded-lg bg-card">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            {/* Drive Icon (Simple SVG or Lucide) */}
+                            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+                                <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#0066da" />
+                                    <path d="m43.85 66.85 25.3-43.8 18.15 31.45-8.35 14.35h-35.1z" fill="#4395ec" />
+                                    <path d="m87.3 52.5-18.15-31.45-18.15-31.45h-36.3l18.15 31.45z" fill="#0093f9" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-medium">Google Drive</h4>
+                                <p className="text-xs text-muted-foreground">
+                                    Import books directly from your Cloud Storage.
+                                </p>
+                            </div>
+                        </div>
+                        {isDriveConnected ? (
+                            <div className="flex items-center space-x-2">
+                                <span className="text-xs font-medium text-green-600 dark:text-green-400">Connected</span>
+                                <Button variant="outline" size="sm" onClick={handleDriveDisconnect}>Disconnect</Button>
+                            </div>
+                        ) : (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleDriveConnect}
+                                disabled={isDriveConnecting}
+                            >
+                                {isDriveConnecting ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : null}
+                                Connect
+                            </Button>
+                        )}
+                    </div>
+                    {firebaseUserEmail && isDriveConnected && (
+                        <p className="mt-2 text-xs text-muted-foreground pl-[3.5rem]">
+                            <span className="opacity-70">Hint: Best used with the same account as Sync ({firebaseUserEmail}).</span>
+                        </p>
+                    )}
+
+                    {/* Client ID Configuration (Web Only) */}
+                    {!isDriveConnected && (
+                        <div className="mt-4 pt-4 border-t">
+                            <Label htmlFor="google-client-id" className="text-xs font-medium text-muted-foreground">
+                                Google Client ID (Web Only)
+                            </Label>
+                            <div className="flex gap-2 mt-1.5">
+                                <Input
+                                    id="google-client-id"
+                                    value={googleClientId || ''}
+                                    onChange={(e) => useGoogleServicesStore.getState().setGoogleClientId(e.target.value)}
+                                    placeholder="Optional: Enter custom Client ID"
+                                    className="text-xs h-8"
+                                />
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 text-muted-foreground"
+                                    onClick={() => useGoogleServicesStore.getState().setGoogleClientId('')}
+                                    title="Clear Client ID"
+                                >
+                                    ✕
+                                </Button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                                Leave empty to use built-in default. Required for custom deployments.
+                            </p>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
