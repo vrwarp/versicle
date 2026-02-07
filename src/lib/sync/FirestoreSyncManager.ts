@@ -202,8 +202,14 @@ class FirestoreSyncManager {
 
         // Create a safety checkpoint before connecting (which triggers download)
         try {
-            logger.debug('Creating pre-sync checkpoint...');
-            await CheckpointService.createCheckpoint('pre-sync');
+            logger.debug('Creating pre-sync checkpoint (if needed)...');
+            // Limit to once per 24 hours (86400000 ms)
+            const id = await CheckpointService.createAutomaticCheckpoint('pre-sync', 86400000);
+            if (id) {
+                logger.info(`Created pre-sync checkpoint #${id}`);
+            } else {
+                logger.debug('Skipped pre-sync checkpoint (recent one exists)');
+            }
         } catch (error) {
             logger.warn('Failed to create pre-sync checkpoint', error);
             // Non-blocking: proceed with sync even if checkpoint fails
