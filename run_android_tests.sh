@@ -45,7 +45,7 @@ fi
 
 # Build the test image
 echo "🔨 Building Android test image..."
-docker build -t versicle-android-test -f Dockerfile.android .
+docker build --platform linux/amd64 -t versicle-android-test -f Dockerfile.android .
 
 # Create reports directory if it doesn't exist
 mkdir -p android/app/build/reports
@@ -53,7 +53,7 @@ mkdir -p android/app/build/reports
 # Run the verification container and capture exit code
 echo "🏃 Running Android tests..."
 # We mount the reports directory to persist artifacts
-docker run --rm \
+docker run --platform linux/amd64 --rm \
   -v "$(pwd)/android/app/build/reports:/app/android/app/build/reports" \
   versicle-android-test "$@"
 
