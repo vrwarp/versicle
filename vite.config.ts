@@ -67,8 +67,8 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_FIREBASE_AUTH_DOMAIN ? `https://${env.VITE_FIREBASE_AUTH_DOMAIN}` : 'https://firebaseapp.com',
           changeOrigin: true,
           // Manually strip the Domain attribute to allow cookies to be set on localhost
-          configure: (proxy, _options) => {
-            proxy.on('proxyRes', (proxyRes, _req, _res) => {
+          configure: (proxy) => {
+            proxy.on('proxyRes', (proxyRes) => {
               const cookies = proxyRes.headers['set-cookie'];
               if (cookies && Array.isArray(cookies)) {
                 proxyRes.headers['set-cookie'] = cookies.map((cookie) => {
