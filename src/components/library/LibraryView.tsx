@@ -11,6 +11,11 @@ import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
 import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search, Loader2 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
+import { ImportSourceDialog } from './ImportSourceDialog';
+import { ContentMissingDialog } from './ContentMissingDialog';
+import { DriveImportDialog } from '../drive/DriveImportDialog';
+import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
+import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
 import { Input } from '../ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
@@ -78,11 +83,17 @@ export const LibraryView: React.FC = () => {
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const restoreFileInputRef = useRef<HTMLInputElement>(null);
+  // const restoreFileInputRef = useRef<HTMLInputElement>(null); // Removed
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
+
+  // (omitted modal state)
+
+  // ...
+
+  // const handleRestoreFileSelect = ... // Removed
 
   // Modal State Coordination
   const [activeModal, setActiveModal] = useState<{
@@ -144,10 +155,52 @@ export const LibraryView: React.FC = () => {
 
   // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
 
+  // Phase 5: Drive Import
+  const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
+  const [isImportSourceOpen, setIsImportSourceOpen] = useState(false);
+  const [isContentMissingOpen, setIsContentMissingOpen] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const { isServiceConnected } = useGoogleServicesStore();
+  const isDriveConnected = isServiceConnected('drive');
+
+  const handleBrowseDrive = async () => {
+    try {
+      if (!isDriveConnected) {
+        // Try to connect/get token which triggers flow if needed? 
+        // actually GoogleIntegrationManager.connectService('drive') is better if we want to force connect.
+        // But let's check token.
+        await googleIntegrationManager.getValidToken('drive');
+      } else {
+        await googleIntegrationManager.getValidToken('drive');
+      }
+      setIsDriveImportOpen(true);
+    } catch (error) {
+      console.error("Failed to access Drive", error);
+      showToast("Please connect Google Drive in Settings first.", 'error');
+    }
+  };
+
   const handleRestore = useCallback((book: BookMetadata) => {
     setBookToRestore(book);
-    restoreFileInputRef.current?.click();
+    setIsContentMissingOpen(true);
   }, []);
+
+  const handlePerformRestore = async (file: File) => {
+    if (!bookToRestore) return;
+
+    setIsRestoring(true);
+    try {
+      await restoreBook(bookToRestore.id, file);
+      showToast(`Restored "${bookToRestore.title}"`, 'success');
+      setIsContentMissingOpen(false);
+      setBookToRestore(null);
+    } catch (err) {
+      logger.error("Restore failed", err);
+      showToast("Failed to restore book", "error");
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   const handleBookOpen = useCallback((book: BookMetadata) => {
     // Check if file is missing (Ghost or Offloaded)
@@ -213,21 +266,6 @@ export const LibraryView: React.FC = () => {
     }
   };
 
-  const handleRestoreFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0] && bookToRestore) {
-      restoreBook(bookToRestore.id, e.target.files[0]).then(() => {
-        showToast(`Restored "${bookToRestore.title}"`, 'success');
-      }).catch((err) => {
-        logger.error("Restore failed", err);
-        showToast("Failed to restore book", "error");
-      }).finally(() => {
-        setBookToRestore(null);
-      });
-    }
-    if (e.target.value) {
-      e.target.value = '';
-    }
-  };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -370,14 +408,6 @@ export const LibraryView: React.FC = () => {
         data-testid="hidden-file-input"
       />
 
-      <input
-        type="file"
-        ref={restoreFileInputRef}
-        onChange={handleRestoreFileSelect}
-        accept=".epub"
-        className="hidden"
-        data-testid="restore-file-input"
-      />
 
       {/* Drag Overlay */}
       {dragActive && (
@@ -418,6 +448,31 @@ export const LibraryView: React.FC = () => {
         fileName={currentDuplicate?.name || ''}
       />
 
+      <ImportSourceDialog
+        open={isImportSourceOpen}
+        onOpenChange={setIsImportSourceOpen}
+        onImportFromDevice={triggerFileUpload}
+        onImportFromDrive={handleBrowseDrive}
+      />
+
+      {bookToRestore && (
+        <ContentMissingDialog
+          open={isContentMissingOpen}
+          onOpenChange={(open) => {
+            setIsContentMissingOpen(open);
+            if (!open) setBookToRestore(null);
+          }}
+          book={bookToRestore}
+          onRestore={handlePerformRestore}
+          isRestoring={isRestoring}
+        />
+      )}
+
+      <DriveImportDialog
+        isOpen={isDriveImportOpen}
+        onClose={() => setIsDriveImportOpen(false)}
+      />
+
       <header className="mb-6 flex flex-col gap-4">
         {/* Top Row: Title and Actions */}
         <div className="flex justify-between items-center">
@@ -448,7 +503,7 @@ export const LibraryView: React.FC = () => {
               <Settings className="w-4 h-4" />
             </Button>
             <Button
-              onClick={triggerFileUpload}
+              onClick={() => setIsImportSourceOpen(true)}
               disabled={isImporting}
               className="gap-2 shadow-sm"
               aria-label="Import book"

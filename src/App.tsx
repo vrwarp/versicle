@@ -20,6 +20,8 @@ import { usePreferencesStore } from './store/usePreferencesStore';
 import { createLogger } from './lib/logger';
 import { RootLayout } from './layouts/RootLayout';
 import { getFirestoreSyncManager } from './lib/sync/FirestoreSyncManager';
+import { useDriveStore } from './store/useDriveStore';
+import { DriveScannerService } from './lib/drive/DriveScannerService';
 
 import './App.css';
 
@@ -145,6 +147,19 @@ function App() {
         const prefs = usePreferencesStore.getState();
         const tts = useTTSStore.getState();
         tts.initialize();
+
+        // Background Drive Scan (Phase 5)
+        const driveStore = useDriveStore.getState();
+        if (driveStore.linkedFolderId) {
+          const ONE_HOUR = 60 * 60 * 1000;
+          const now = Date.now();
+          if (!driveStore.lastScanTime || (now - driveStore.lastScanTime > ONE_HOUR)) {
+            logger.info('Background Drive Scan: Index is stale, scanning...');
+            DriveScannerService.checkForNewFiles().catch(err => {
+              logger.warn('Background Drive Scan failed:', err);
+            });
+          }
+        }
 
         const profile: DeviceProfile = {
           theme: prefs.currentTheme,

@@ -10,6 +10,7 @@ import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
 import { Button } from '../ui/Button';
+import { DriveImportDialog } from '../drive/DriveImportDialog';
 
 /**
  * A component for uploading EPUB files, ZIP archives, or directories via drag-and-drop or file selection.
@@ -151,12 +152,13 @@ export const FileUploader: React.FC = () => {
     }
   };
 
+  const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
+
   const handleBrowseDrive = async () => {
     try {
       const token = await googleIntegrationManager.getValidToken('drive');
-      console.log("Opening Drive Picker with token", token);
-      // TODO: Implement Google Picker or File Browser
-      showToast("Google Drive Picker not implemented yet", 'info');
+      console.log("Drive Token Valid, opening picker", token);
+      setIsDriveImportOpen(true);
     } catch (error) {
       console.error("Failed to access Drive", error);
       showToast("Failed to access Google Drive. Please reconnect.", 'error');
@@ -271,6 +273,11 @@ export const FileUploader: React.FC = () => {
           }
         }}
         fileName={currentDuplicate?.name || ''}
+      />
+
+      <DriveImportDialog
+        isOpen={isDriveImportOpen}
+        onClose={() => setIsDriveImportOpen(false)}
       />
 
     </div>

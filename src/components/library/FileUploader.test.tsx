@@ -32,7 +32,7 @@ describe('FileUploader', () => {
     // Mock useToastStore
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (useToastStore as any).mockReturnValue({
-        showToast: mockShowToast,
+      showToast: mockShowToast,
     });
 
     // Mock validation to pass by default
@@ -56,22 +56,22 @@ describe('FileUploader', () => {
     fireEvent.change(input!, { target: { files: [file] } });
 
     await waitFor(() => {
-        expect(validateZipSignature).toHaveBeenCalledWith(file);
-        expect(mockAddBook).toHaveBeenCalledWith(file);
+      expect(validateZipSignature).toHaveBeenCalledWith(file);
+      expect(mockAddBook).toHaveBeenCalledWith(file);
     });
   });
 
   it('should call addBook when file is selected', async () => {
-      const { container } = render(<FileUploader />);
-      const input = container.querySelector('input[type="file"]');
+    const { container } = render(<FileUploader />);
+    const input = container.querySelector('input[type="file"]');
 
-      const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
+    const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
 
-      fireEvent.change(input!, { target: { files: [file] } });
+    fireEvent.change(input!, { target: { files: [file] } });
 
-      await waitFor(() => {
-          expect(mockAddBook).toHaveBeenCalledWith(file);
-      });
+    await waitFor(() => {
+      expect(mockAddBook).toHaveBeenCalledWith(file);
+    });
   });
 
   it('should show loading state', () => {
@@ -104,14 +104,14 @@ describe('FileUploader', () => {
     // Drop
     const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
     fireEvent.drop(dropZone, {
-        dataTransfer: {
-            files: [file],
-        },
+      dataTransfer: {
+        files: [file],
+      },
     });
 
     await waitFor(() => {
-        expect(mockAddBook).toHaveBeenCalledWith(file);
-        expect(dropZone).not.toHaveClass('border-primary');
+      expect(mockAddBook).toHaveBeenCalledWith(file);
+      expect(dropZone).not.toHaveClass('border-primary');
     });
   });
 
@@ -121,84 +121,84 @@ describe('FileUploader', () => {
 
     const file = new File(['dummy'], 'test.pdf', { type: 'application/pdf' });
     fireEvent.drop(dropZone, {
-        dataTransfer: {
-            files: [file],
-        },
+      dataTransfer: {
+        files: [file],
+      },
     });
 
     await waitFor(() => {
-        expect(mockAddBook).not.toHaveBeenCalled();
-        expect(mockShowToast).toHaveBeenCalledWith('Unsupported file type: test.pdf', 'error');
+      expect(mockAddBook).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith('Unsupported file type: test.pdf', 'error');
     });
   });
 
   it('should reject epub files with invalid content', async () => {
-      // Mock validation to fail
-      (validateZipSignature as Mock).mockResolvedValue(false);
+    // Mock validation to fail
+    (validateZipSignature as Mock).mockResolvedValue(false);
 
-      const { container } = render(<FileUploader />);
-      const input = container.querySelector('input[type="file"]');
+    const { container } = render(<FileUploader />);
+    const input = container.querySelector('input[type="file"]');
 
-      const file = new File(['invalid content'], 'test.epub', { type: 'application/epub+zip' });
+    const file = new File(['invalid content'], 'test.epub', { type: 'application/epub+zip' });
 
-      fireEvent.change(input!, { target: { files: [file] } });
+    fireEvent.change(input!, { target: { files: [file] } });
 
-      await waitFor(() => {
-          expect(validateZipSignature).toHaveBeenCalledWith(file);
-          expect(mockAddBook).not.toHaveBeenCalled();
-          expect(mockShowToast).toHaveBeenCalledWith('Invalid EPUB file (header mismatch): test.epub', 'error');
-      });
+    await waitFor(() => {
+      expect(validateZipSignature).toHaveBeenCalledWith(file);
+      expect(mockAddBook).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith('Invalid EPUB file (header mismatch): test.epub', 'error');
+    });
   });
 
   it('should reject zip files with invalid content', async () => {
-      // Mock validation to fail
-      (validateZipSignature as Mock).mockResolvedValue(false);
+    // Mock validation to fail
+    (validateZipSignature as Mock).mockResolvedValue(false);
 
-      const { container } = render(<FileUploader />);
-      const input = container.querySelector('input[type="file"]');
+    const { container } = render(<FileUploader />);
+    const input = container.querySelector('input[type="file"]');
 
-      const file = new File(['invalid content'], 'test.zip', { type: 'application/zip' });
+    const file = new File(['invalid content'], 'test.zip', { type: 'application/zip' });
 
-      fireEvent.change(input!, { target: { files: [file] } });
+    fireEvent.change(input!, { target: { files: [file] } });
 
-      await waitFor(() => {
-          expect(validateZipSignature).toHaveBeenCalledWith(file);
-          expect(mockAddBook).not.toHaveBeenCalled();
-          expect(mockShowToast).toHaveBeenCalledWith('Invalid ZIP file (header mismatch): test.zip', 'error');
-      });
+    await waitFor(() => {
+      expect(validateZipSignature).toHaveBeenCalledWith(file);
+      expect(mockAddBook).not.toHaveBeenCalled();
+      expect(mockShowToast).toHaveBeenCalledWith('Invalid ZIP file (header mismatch): test.zip', 'error');
+    });
   });
 
   it('should show replacement dialog when DuplicateBookError occurs', async () => {
-      // Mock addBook to throw DuplicateBookError on first call, succeed on second
-      mockAddBook.mockRejectedValueOnce(new DuplicateBookError("test.epub"));
-      mockAddBook.mockResolvedValueOnce(undefined); // Second call succeeds
+    // Mock addBook to throw DuplicateBookError on first call, succeed on second
+    mockAddBook.mockRejectedValueOnce(new DuplicateBookError("test.epub"));
+    mockAddBook.mockResolvedValueOnce(undefined); // Second call succeeds
 
-      const { container } = render(<FileUploader />);
-      const input = container.querySelector('input[type="file"]');
-      const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
+    const { container } = render(<FileUploader />);
+    const input = container.querySelector('input[type="file"]');
+    const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
 
-      // 1. Upload file
-      fireEvent.change(input!, { target: { files: [file] } });
+    // 1. Upload file
+    fireEvent.change(input!, { target: { files: [file] } });
 
-      // 2. Expect addBook to be called and fail
-      await waitFor(() => {
-          expect(mockAddBook).toHaveBeenCalledWith(file);
-      });
+    // 2. Expect addBook to be called and fail
+    await waitFor(() => {
+      expect(mockAddBook).toHaveBeenCalledWith(file);
+    });
 
-      // 3. Expect Dialog to appear
-      expect(screen.getByText(/already exists in your library/)).toBeInTheDocument();
-      expect(screen.getByText('Replace Book?')).toBeInTheDocument();
+    // 3. Expect Dialog to appear
+    expect(screen.getByText(/already exists in your library/)).toBeInTheDocument();
+    expect(screen.getByText('Replace Book?')).toBeInTheDocument();
 
-      // 4. Click Replace
-      const replaceBtn = screen.getByTestId('confirm-replace');
-      fireEvent.click(replaceBtn);
+    // 4. Click Replace
+    const replaceBtn = screen.getByTestId('confirm-replace');
+    fireEvent.click(replaceBtn);
 
-      // 5. Expect addBook to be called again with overwrite: true
-      await waitFor(() => {
-          expect(mockAddBook).toHaveBeenCalledWith(file, { overwrite: true });
-      });
+    // 5. Expect addBook to be called again with overwrite: true
+    await waitFor(() => {
+      expect(mockAddBook).toHaveBeenCalledWith(file, { overwrite: true });
+    });
 
-      // 6. Expect toast success
-      expect(mockShowToast).toHaveBeenCalledWith("Book replaced successfully", "success");
+    // 6. Expect toast success
+    expect(mockShowToast).toHaveBeenCalledWith("Book replaced successfully", "success");
   });
 });

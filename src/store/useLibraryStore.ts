@@ -195,8 +195,83 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
         if (existingId) {
           if (options?.overwrite) {
-            set({ importStatus: 'Removing existing copy...' });
-            await get().removeBook(existingId);
+            set({ importStatus: 'Updating existing content...' });
+            logger.info(`Overwriting book ${existingId}. Preserving user progress.`);
+
+            // 1. Get existing inventory to preserve addedAt/status/etc
+            const userStore = useBookStore.getState();
+            const existingBook = userStore.books[existingId];
+
+            // 2. Overwrite content in DB using importBookWithId (keeps ID, updates static data)
+            const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+            // Note: importBookWithId returns the NEW manifest from the file
+            const manifest = await injectedDB.importBookWithId(existingId, file, {
+              abbreviations: [],
+              alwaysMerge: [],
+              sentenceStarters,
+              sanitizationEnabled
+            }, (progress, message) => {
+              set({ importProgress: progress, importStatus: message });
+            });
+
+            // 3. Update Sync Store (Merge)
+            // We update title/author/sourceFilename from new file, but KEEP addedAt, status, tags, rating, ranking.
+            // lastInteraction is updated to now.
+            if (existingBook) {
+              const updatedInventoryItem: UserInventoryItem = {
+                ...existingBook,
+                title: manifest.title,
+                author: manifest.author,
+                sourceFilename: file.name,
+                lastInteraction: Date.now()
+                // status, tags, rating, addedAt preserved from ...existingBook
+              };
+              userStore.addBook(updatedInventoryItem); // upsert
+            }
+
+            // 4. Update Static Metadata (Local)
+            set((state) => ({
+              staticMetadata: {
+                ...state.staticMetadata,
+                [existingId!]: {
+                  ...manifest,
+                  id: existingId!,
+                  version: manifest.schemaVersion,
+                  addedAt: existingBook?.addedAt || Date.now()
+                } as BookMetadata
+              },
+              offloadedBookIds: new Set([...state.offloadedBookIds].filter(id => id !== existingId)),
+              isImporting: false,
+              importProgress: 0,
+              importStatus: ''
+            }));
+
+            // 5. Update Reading List (Merge)
+            // We want to keep the percentage/location, but update title/author if changed.
+            const readingListStore = useReadingListStore.getState();
+            const existingEntry = readingListStore.entries[file.name];
+
+            if (existingEntry) {
+              readingListStore.updateEntry(file.name, {
+                title: manifest.title,
+                author: manifest.author,
+                lastUpdated: Date.now()
+              });
+            } else {
+              // If no entry existed (weird for an overwrite, but possible if deleted from reading list but not library)
+              // We add it fresh
+              readingListStore.upsertEntry({
+                filename: file.name,
+                title: manifest.title,
+                author: manifest.author,
+                percentage: 0,
+                lastUpdated: Date.now(),
+                status: 'to-read',
+                rating: 0
+              });
+            }
+
+            return; // DONE
           } else {
             set({ isImporting: false, importProgress: 0, importStatus: '' });
             throw new DuplicateBookError(file.name);
@@ -211,13 +286,17 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           const books = useBookStore.getState().books;
 
           // Find a ghost book that matches Title + Author
+          // We must EXCLUDE the existingId check result above (which matched by filename)
+          // But here we are matching by metadata.
           const ghostMatch = Object.values(books).find(b => {
-            const isGhost = !staticMeta[b.bookId]; // Not in local static manifest
+            // ... match logic ...
+            const isGhost = !staticMeta[b.bookId];
             const isMatch = b.title.trim() === meta.title.trim() && b.author.trim() === meta.author.trim();
             return isGhost && isMatch;
           });
 
           if (ghostMatch) {
+            // ... existing ghost match logic ...
             logger.info(`Found Ghost Book match: "${ghostMatch.title}" (${ghostMatch.bookId}). Linking file...`);
             set({ importStatus: `Linking to existing entry: ${ghostMatch.title}...` });
 

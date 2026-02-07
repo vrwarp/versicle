@@ -33,7 +33,7 @@ export class DriveScannerService {
      * @param fileId The ID of the file to download.
      * @param fileName The name of the file (used for the File object).
      */
-    static async importFile(fileId: string, fileName: string): Promise<void> {
+    static async importFile(fileId: string, fileName: string, options?: { overwrite?: boolean }): Promise<void> {
         try {
             logger.info(`Downloading file: ${fileName} (${fileId})`);
             const blob = await DriveService.downloadFile(fileId);
@@ -41,7 +41,7 @@ export class DriveScannerService {
             const file = new File([blob], fileName, { type: 'application/epub+zip' });
 
             logger.info(`Importing file to library: ${fileName}`);
-            await useLibraryStore.getState().addBook(file);
+            await useLibraryStore.getState().addBook(file, options);
         } catch (error) {
             logger.error(`Failed to import file ${fileName}:`, error);
             throw error;
@@ -49,18 +49,74 @@ export class DriveScannerService {
     }
 
     /**
-     * Checks for new EPUB files in the linked folder.
-     * Does NOT download them automatically.
-     * @returns A list of new DriveFile objects that are not yet in the library.
+     * Helper to map DriveFile items to lightweight DriveFileIndex
      */
-    static async checkForNewFiles(): Promise<DriveFile[]> {
-        const driveFiles = await this.scanLinkedFolder();
+    private static mapToDriveFileIndex(file: DriveFile): import('../../store/useDriveStore').DriveFileIndex {
+        return {
+            id: file.id,
+            name: file.name,
+            size: parseInt(file.size || '0', 10),
+            modifiedTime: file.modifiedTime || new Date().toISOString(),
+            mimeType: file.mimeType
+        };
+    }
+
+    /**
+     * Full scan of the linked folder.
+     * Updates the local `useDriveStore` index.
+     * This is the "heavy" operation.
+     */
+    static async scanAndIndex(): Promise<void> {
+        const { linkedFolderId, setScannedFiles, setScanning } = useDriveStore.getState();
+
+        if (!linkedFolderId) {
+            logger.warn("No linked folder ID found.");
+            return;
+        }
+
+        try {
+            setScanning(true);
+            logger.info("Starting full drive scan...");
+
+            // Fetch all EPUBs
+            const rawFiles = await DriveService.listFiles(linkedFolderId, 'application/epub+zip');
+
+            // Map to index format
+            const index = rawFiles.map(this.mapToDriveFileIndex);
+
+            logger.info(`Scan complete. Indexed ${index.length} files.`);
+            setScannedFiles(index);
+        } catch (error) {
+            logger.error("Failed to scan and index:", error);
+            throw error;
+        } finally {
+            setScanning(false);
+        }
+    }
+
+    /**
+     * Checks for new EPUB files by comparing the Cloud Index against Local Library.
+     * Returns a list of files that are in the Index but NOT in the Library.
+     * 
+     * If the index is empty, it triggers a scan first.
+     */
+    static async checkForNewFiles(): Promise<import('../../store/useDriveStore').DriveFileIndex[]> {
+        let { index } = useDriveStore.getState();
+
+        // If index is empty, force a scan
+        if (index.length === 0) {
+            await this.scanAndIndex();
+            // Refetch state
+            index = useDriveStore.getState().index;
+        }
+
         const libraryBooks = useBookStore.getState().books;
         const libraryFilenames = new Set(Object.values(libraryBooks).map(b => b.sourceFilename));
 
-        const newFiles = driveFiles.filter(f => !libraryFilenames.has(f.name));
+        // Diff: In Cloud Index AND NOT in Local Library
+        const newFiles = index.filter(f => !libraryFilenames.has(f.name));
 
-        logger.info(`Found ${driveFiles.length} files. ${newFiles.length} are new.`);
+        logger.info(`Diff logic: Found ${newFiles.length} new files available for import.`);
 
         return newFiles;
     }

@@ -5,6 +5,9 @@ export interface DriveFile {
     name: string;
     mimeType: string;
     parents?: string[];
+    size?: string;
+    md5Checksum?: string;
+    modifiedTime?: string;
 }
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
@@ -114,7 +117,7 @@ export const DriveService = {
 
         const params = new URLSearchParams({
             q: query,
-            fields: 'files(id, name, mimeType, parents, size, md5Checksum)',
+            fields: 'files(id, name, mimeType, parents, size, md5Checksum, modifiedTime)',
             orderBy: 'name_natural',
             pageSize: '1000'
         });
