@@ -1,8 +1,10 @@
 import React, { useRef } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
-import { CloudOff, Loader2, Download } from 'lucide-react';
+import { CloudOff, Loader2, Download, Cloud } from 'lucide-react';
 import type { BookMetadata } from '../../types/db';
+import { useDriveStore } from '../../store/useDriveStore';
+import { DriveScannerService } from '../../lib/drive/DriveScannerService';
 
 interface ContentMissingDialogProps {
     open: boolean;
@@ -19,7 +21,18 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
     onRestore,
     isRestoring = false,
 }) => {
+    const { findFile } = useDriveStore();
+    const [cloudMatch, setCloudMatch] = React.useState<ReturnType<typeof findFile>>(undefined);
+    const [isCloudRestoring, setIsCloudRestoring] = React.useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    React.useEffect(() => {
+        if (open && book) {
+            // BookMetadata uses 'filename' from BookSource, not 'sourceFilename'
+            const match = findFile(book.title, book.filename);
+            setCloudMatch(match);
+        }
+    }, [open, book, findFile]);
 
     const handleRestoreClick = () => {
         fileInputRef.current?.click();
@@ -29,11 +42,25 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
         const file = e.target.files?.[0];
         if (file) {
             await onRestore(file);
-            // Close handled by parent potentially, or we close here?
-            // Usually parent updates state on success.
         }
-        // Reset input
         if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handleCloudRestore = async () => {
+        if (!cloudMatch) return;
+        setIsCloudRestoring(true);
+        try {
+            // we bypass the parent onRestore and go direct to ScannerService -> Library
+            // or we could fetch blob and pass to onRestore(new File(...))
+            // Let's use ScannerService as it encapsulates the download
+            await DriveScannerService.importFile(cloudMatch.id, cloudMatch.name, { overwrite: true });
+            onOpenChange(false);
+        } catch (error) {
+            console.error(error);
+            // Toast handled by service usually, but let's be safe
+        } finally {
+            setIsCloudRestoring(false);
+        }
     };
 
     return (
@@ -47,7 +74,26 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
-                    <Button onClick={handleRestoreClick} disabled={isRestoring}>
+                    {cloudMatch && (
+                        <Button
+                            variant="secondary"
+                            onClick={handleCloudRestore}
+                            disabled={isRestoring || isCloudRestoring}
+                        >
+                            {isCloudRestoring ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Downloading...
+                                </>
+                            ) : (
+                                <>
+                                    <Cloud className="mr-2 h-4 w-4" />
+                                    Restore from Cloud
+                                </>
+                            )}
+                        </Button>
+                    )}
+                    <Button onClick={handleRestoreClick} disabled={isRestoring || isCloudRestoring}>
                         {isRestoring ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -56,7 +102,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                         ) : (
                             <>
                                 <Download className="mr-2 h-4 w-4" />
-                                Restore File
+                                Select File
                             </>
                         )}
                     </Button>
@@ -74,13 +120,25 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                     </div>
                 </div>
 
-                <div className="text-sm text-muted-foreground space-y-2">
-                    <p>To continue reading, please restore the original file:</p>
-                    <ul className="list-disc pl-5 space-y-1">
-                        <li>Import the original EPUB file again</li>
-                        <li>Transfer it from another device</li>
-                    </ul>
-                </div>
+                {cloudMatch ? (
+                    <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg flex items-center gap-3">
+                        <Cloud className="h-5 w-5 text-primary shrink-0" />
+                        <div className="flex-1">
+                            <p className="text-sm font-medium text-primary">Found in Google Drive</p>
+                            <p className="text-xs text-muted-foreground break-all whitespace-normal">
+                                "{cloudMatch.name}" ({(cloudMatch.size / 1024 / 1024).toFixed(1)} MB)
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-sm text-muted-foreground space-y-2">
+                        <p>To continue reading, please restore the original file:</p>
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li>Import the original EPUB file again</li>
+                            <li>Transfer it from another device</li>
+                        </ul>
+                    </div>
+                )}
 
                 <input
                     type="file"

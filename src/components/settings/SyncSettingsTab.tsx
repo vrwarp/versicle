@@ -15,6 +15,8 @@ export interface FirebaseConfig {
     measurementId?: string;
 }
 
+import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
+import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import type { FirebaseAuthStatus } from '../../lib/sync/FirestoreSyncManager';
 
 export interface SyncSettingsTabProps {
@@ -37,6 +39,12 @@ export interface SyncSettingsTabProps {
     onFirebaseSignOut: () => Promise<void>;
     onClearConfig: () => void;
 }
+
+import { Dialog } from '../ui/Dialog';
+import { DriveFolderPicker } from '../drive/DriveFolderPicker';
+import { useDriveStore } from '../../store/useDriveStore';
+import { DriveScannerService } from '../../lib/drive/DriveScannerService';
+import { useToastStore } from '../../store/useToastStore';
 
 export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     currentDeviceId,
@@ -89,10 +97,72 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         }
     };
 
+    // ... inside component ...
+    const {
+        isServiceConnected,
+        googleClientId
+    } = useGoogleServicesStore();
+    const [isDriveConnecting, setIsDriveConnecting] = React.useState(false);
+
+    // Drive Folder Picker State
+    const [isPickerOpen, setIsPickerOpen] = React.useState(false);
+    const { linkedFolderName, setLinkedFolder } = useDriveStore();
+    const [isScanning, setIsScanning] = React.useState(false);
+    const { showToast } = useToastStore();
+
+    const handleFolderSelect = (id: string, name: string) => {
+        setLinkedFolder(id, name);
+        setIsPickerOpen(false);
+    };
+
+    const handleScan = async () => {
+        if (!linkedFolderName) return;
+
+        setIsScanning(true);
+        try {
+            const newFiles = await DriveScannerService.checkForNewFiles();
+            if (newFiles.length > 0) {
+                showToast(`Found ${newFiles.length} new books in "${linkedFolderName}".`, 'success');
+            } else {
+                showToast('No new books found.', 'info');
+            }
+        } catch (error) {
+            console.error("Scan failed", error);
+            showToast('Failed to scan for books.', 'error');
+        } finally {
+            setIsScanning(false);
+        }
+    };
+
+    const handleDriveConnect = async () => {
+        setIsDriveConnecting(true);
+        try {
+            // Pass login_hint if we have the firebase email to encourage same-account usage
+            await googleIntegrationManager.connectService('drive', firebaseUserEmail || undefined);
+        } catch (error) {
+            console.error("Failed to connect Drive", error);
+        } finally {
+            setIsDriveConnecting(false);
+        }
+    };
+
+    const handleDriveDisconnect = async () => {
+        try {
+            await googleIntegrationManager.disconnectService('drive');
+            // Optionally clear linked folder on disconnect?
+            // useDriveStore.getState().clearLinkedFolder();
+        } catch (error) {
+            console.error("Failed to disconnect Drive", error);
+        }
+    };
+
+    const isDriveConnected = isServiceConnected('drive');
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
+            {/* Section 1: App Sync */}
             <div>
-                <h3 className="text-lg font-medium mb-4">Cross-Device Sync</h3>
+                <h3 className="text-lg font-medium mb-4">App Sync</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                     Sync your reading progress, annotations, and reading list across devices.
                 </p>
@@ -229,6 +299,145 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* Section 2: Cloud Integrations */}
+            <div className="pt-6 border-t">
+                <h3 className="text-lg font-medium mb-4">Cloud Integrations</h3>
+                <div className="p-4 border rounded-lg bg-card">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            {/* Drive Icon (Simple SVG or Lucide) */}
+                            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+                                <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#0066da" />
+                                    <path d="m43.85 66.85 25.3-43.8 18.15 31.45-8.35 14.35h-35.1z" fill="#4395ec" />
+                                    <path d="m87.3 52.5-18.15-31.45-18.15-31.45h-36.3l18.15 31.45z" fill="#0093f9" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-medium">Google Drive</h4>
+                                <p className="text-xs text-muted-foreground">
+                                    Import books directly from your Cloud Storage.
+                                </p>
+                            </div>
+                        </div>
+                        {isDriveConnected ? (
+                            <div className="flex items-center space-x-2">
+                                <span className="text-xs font-medium text-green-600 dark:text-green-400">Connected</span>
+                                <Button variant="outline" size="sm" onClick={handleDriveDisconnect}>Disconnect</Button>
+                            </div>
+                        ) : (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleDriveConnect}
+                                disabled={isDriveConnecting}
+                            >
+                                {isDriveConnecting ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : null}
+                                Connect
+                            </Button>
+                        )}
+                    </div>
+                    {firebaseUserEmail && isDriveConnected && (
+                        <p className="mt-2 text-xs text-muted-foreground pl-[3.5rem]">
+                            <span className="opacity-70">Hint: Best used with the same account as Sync ({firebaseUserEmail}).</span>
+                        </p>
+                    )}
+
+                    {/* Linked Folder Selection */}
+                    {isDriveConnected && (
+                        <div className="mt-4 pt-4 border-t pl-[3.5rem]">
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label className="text-sm font-medium">Library Folder</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        {linkedFolderName
+                                            ? `Linked to "${linkedFolderName}"`
+                                            : "Select a folder to sync books from."}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsPickerOpen(true)}
+                                >
+                                    {linkedFolderName ? "Change Folder" : "Link Folder"}
+                                </Button>
+                            </div>
+
+                            {/* Scan Action */}
+                            {linkedFolderName && (
+                                <div className="mt-4 flex items-center justify-between border-t pt-4">
+                                    <div className="space-y-0.5">
+                                        <Label className="text-sm font-medium">Sync Library</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Check for new books in "{linkedFolderName}".
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={handleScan}
+                                        disabled={isScanning}
+                                    >
+                                        {isScanning ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                                Scanning...
+                                            </>
+                                        ) : (
+                                            "Scan for New Books"
+                                        )}
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Client ID Configuration (Web Only) */}
+                    {!isDriveConnected && (
+                        <div className="mt-4 pt-4 border-t">
+                            <Label htmlFor="google-client-id" className="text-xs font-medium text-muted-foreground">
+                                Google Client ID (Web Only)
+                            </Label>
+                            <div className="flex gap-2 mt-1.5">
+                                <Input
+                                    id="google-client-id"
+                                    value={googleClientId || ''}
+                                    onChange={(e) => useGoogleServicesStore.getState().setGoogleClientId(e.target.value)}
+                                    placeholder="Optional: Enter custom Client ID"
+                                    className="text-xs h-8"
+                                />
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 text-muted-foreground"
+                                    onClick={() => useGoogleServicesStore.getState().setGoogleClientId('')}
+                                    title="Clear Client ID"
+                                >
+                                    ✕
+                                </Button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                                Leave empty to use built-in default. Required for custom deployments.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
+            {/* Folder Picker Dialog */}
+            <Dialog
+                isOpen={isPickerOpen}
+                onClose={() => setIsPickerOpen(false)}
+                title="Google Drive"
+                hideCloseButton={true} // Picker has its own cancel
+                className="max-w-2xl p-0 overflow-hidden" // Override default padding/width
+            >
+                <DriveFolderPicker
+                    onSelect={handleFolderSelect}
+                    onCancel={() => setIsPickerOpen(false)}
+                />
+            </Dialog>
         </div>
     );
 };

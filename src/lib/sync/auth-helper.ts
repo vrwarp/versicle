@@ -2,60 +2,88 @@ import { Capacitor } from '@capacitor/core';
 import {
     GoogleAuthProvider,
     signInWithCredential,
-    signInWithRedirect,
     signOut as firebaseSignOut,
     type UserCredential,
     type Auth
 } from 'firebase/auth';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
-import { getFirebaseAuth, getGoogleProvider } from './firebase-config';
+import { getFirebaseAuth } from './firebase-config';
+import { googleIntegrationManager } from '../google/GoogleIntegrationManager';
+import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 
 /**
  * Sign in with Google using a hybrid approach:
  * - On Native (Android/iOS): Uses native Google Sign-In via @capacitor-firebase/authentication.
- * - On Web: Uses standard Firebase JS SDK signInWithRedirect.
+ * - On Web: Uses Google Identity Services (GIS) popup flow to get ID token, then sign in with credential.
  */
 export const signInWithGoogle = async (): Promise<UserCredential | undefined | void> => {
     const auth = getFirebaseAuth();
-    const provider = getGoogleProvider();
-
-    if (!auth || !provider) {
+    if (!auth) {
         throw new Error("Firebase not initialized");
     }
 
     // 1. Android / iOS Native Flow
     if (Capacitor.isNativePlatform()) {
-        // This triggers the native Google login prompt
         const result = await FirebaseAuthentication.signInWithGoogle();
-
-        // The native plugin returns an ID token
         const idToken = result.credential?.idToken;
 
         if (!idToken) {
             throw new Error("No ID token returned from native sign-in");
         }
 
-        // Convert the native token into a credential the JS SDK can understand
         const credential = GoogleAuthProvider.credential(idToken);
-
-        // Sign in the JS SDK with that credential.
-        // This syncs the auth state to your existing `auth` instance.
         return await signInWithCredential(auth, credential);
     }
 
     // 2. Web / PWA Flow
     else {
-        await signInWithRedirect(auth, provider);
-        return;
+        // Use GIS-first approach: Get Access Token from Google, then sign into Firebase.
+        // This ensures consistent token management and avoids popup conflicts.
+        try {
+            // "Connect" to identity service to get a fresh access token
+            // We use the 'identity' service config (openid, email, profile)
+            const accessToken = await googleIntegrationManager.connectService('identity');
+
+            if (!accessToken) {
+                throw new Error("Failed to obtain access token from Google");
+            }
+
+            // Create Firebase credential using the Google Access Token
+            const credential = GoogleAuthProvider.credential(null, accessToken);
+
+            // Sign in to Firebase with the credential
+            // We use 'signInWithCredential' because we already have the proof of identity
+            return await signInWithCredential(auth, credential);
+
+        } catch (error) {
+            console.error("GIS Sign-In failed", error);
+            throw error;
+        }
     }
 };
 
 /**
- * Sign out from Google using a hybrid approach:
- * - On Native (Android/iOS): Signs out from both Native and Firebase JS SDK.
- * - On Web: Signs out from Firebase JS SDK.
+ * Sign out from Google:
+ * - On Native: Signs out from Native plugin + Firebase.
+ * - On Web: Signs out from Firebase.
+ * - ALWAYS: Clears Google Services Store and disconnects services.
  */
 export const signOutWithGoogle = async (auth: Auth): Promise<void> => {
+    // 1. Disconnect all services (Revoke tokens if possible)
+    // We iterate known services or just 'drive'
+    try {
+        const connectedServices = useGoogleServicesStore.getState().connectedServices;
+        for (const serviceId of connectedServices) {
+            await googleIntegrationManager.disconnectService(serviceId);
+        }
+    } catch (e) {
+        console.warn("Failed to disconnect services during signout", e);
+    }
+
+    // 2. Clear Store
+    useGoogleServicesStore.getState().reset();
+
+    // 3. Platform Sign Out
     if (Capacitor.isNativePlatform()) {
         await FirebaseAuthentication.signOut();
     }

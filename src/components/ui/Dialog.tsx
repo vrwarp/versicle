@@ -15,6 +15,7 @@ interface DialogProps {
   children?: React.ReactNode;
   footer?: React.ReactNode;
   hideCloseButton?: boolean;
+  className?: string;
 }
 
 /**
@@ -28,12 +29,13 @@ interface DialogProps {
  * @param props.children - The content of the dialog.
  * @param props.footer - Optional footer content (e.g. buttons).
  * @param props.hideCloseButton - Whether to hide the close (X) button.
+ * @param props.className - Optional className to override default styles (e.g. width).
  * @returns The rendered Dialog component.
  */
-export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, description, children, footer, hideCloseButton }) => {
+export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, description, children, footer, hideCloseButton, className }) => {
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalContent className="max-w-md" hideCloseButton={hideCloseButton}>
+      <ModalContent className={`max-w-md ${className || ''}`} hideCloseButton={hideCloseButton}>
         <ModalHeader>
           <ModalTitle>{title}</ModalTitle>
           <ModalDescription className={description ? "" : "sr-only"}>

@@ -14,6 +14,7 @@ const mockDBService = {
   getBookMetadata: vi.fn(),
   getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
   getBookIdByFilename: vi.fn(),
+  importBookWithId: vi.fn(),
 };
 
 // Mock DBService methods
@@ -162,23 +163,38 @@ describe('useLibraryStore', () => {
     vi.mocked(mockDBService.addBook).mockResolvedValue({ bookId: 'new-id', title: 'New', author: 'A', schemaVersion: 1 } as any);
 
     // Initial state with existing book
-    useBookStore.setState({
-      books: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'existing-id': { bookId: 'existing-id' } as any
-      }
-    });
+    // Initial state with existing book using public API
+    const existingBook = {
+      bookId: 'existing-id',
+      sourceFilename: 'test.epub',
+      title: 'Old',
+      author: 'Old',
+      addedAt: 500,
+      lastInteraction: 500,
+      status: 'unread',
+      tags: []
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useBookStore.getState().addBook(existingBook as any);
+
+    // Mock importBookWithId to successful manifest
+    const mockManifest = { bookId: 'existing-id', title: 'New', author: 'A', schemaVersion: 1 };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(mockDBService.importBookWithId).mockResolvedValue(mockManifest as any);
 
     await useLibraryStore.getState().addBook(mockFile, { overwrite: true });
 
-    expect(mockDBService.getBookIdByFilename).toHaveBeenCalledWith('test.epub');
-    expect(mockDBService.deleteBook).toHaveBeenCalledWith('existing-id');
-    expect(mockDBService.addBook).toHaveBeenCalled();
+    // Since book is in store, we don't call DB getBookIdByFilename
+    // expect(mockDBService.getBookIdByFilename).toHaveBeenCalledWith('test.epub');
+    // We NO LONGER delete the book on overwrite
+    expect(mockDBService.deleteBook).not.toHaveBeenCalled();
+    // We call importBookWithId instead
+    expect(mockDBService.importBookWithId).toHaveBeenCalled();
 
     // Verify state
     const bookState = useBookStore.getState();
-    expect(bookState.books['existing-id']).toBeUndefined();
-    expect(bookState.books['new-id']).toBeDefined();
+    // ID should remain the same
+    expect(bookState.books['existing-id']).toBeDefined();
   });
 
   it('should remove a book calling dbService', async () => {

@@ -66,6 +66,15 @@ export async function extractContentOffscreen(
       manager: 'default' // Display one chapter at a time
     });
 
+    // PATCH: Ensure iframe has allow-scripts to prevent blocking in strict environments
+    const iframe = container.querySelector('iframe');
+    if (iframe) {
+      const sandbox = iframe.getAttribute('sandbox') || '';
+      if (!sandbox.includes('allow-scripts')) {
+        iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
+      }
+    }
+
     // Access spine items
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const spine = book.spine as any;
