@@ -104,8 +104,8 @@ export const DriveFolderPicker: React.FC<DriveFolderPickerProps> = ({ onSelect, 
                     ) : error ? (
                         /* Error State */
                         <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                            <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-full mb-3">
-                                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                            <div className="p-3 bg-destructive/10 rounded-full mb-3">
+                                <AlertCircle className="h-6 w-6 text-destructive" />
                             </div>
                             <p className="font-medium text-foreground">Could not load folder</p>
                             <p className="text-sm mb-4">{error.message}</p>
@@ -123,7 +123,7 @@ export const DriveFolderPicker: React.FC<DriveFolderPickerProps> = ({ onSelect, 
                             <button
                                 key={folder.id}
                                 onClick={() => openFolder(folder.id, folder.name)}
-                                className="w-full flex items-center p-2 rounded-lg hover:bg-muted/60 transition-colors text-left group focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/20"
+                                className="w-full flex items-center p-2 rounded-lg hover:bg-accent transition-colors text-left group focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/20"
                             >
                                 {/* Folder Icon */}
                                 <div className="mr-3 shrink-0">

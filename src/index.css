@@ -31,6 +31,12 @@
 
   --color-surface: var(--surface);
 
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
   --animate-ping-slow: ping 10s cubic-bezier(0, 0, 0.2, 1) infinite;
 
   @keyframes ping {
@@ -75,6 +81,14 @@
   --destructive: #dc2626;
   /* Red 600 */
   --destructive-foreground: #ffffff;
+
+  --success: #16a34a;
+  /* Green 600 */
+  --success-foreground: #ffffff;
+
+  --warning: #ca8a04;
+  /* Yellow 600 */
+  --warning-foreground: #ffffff;
 
   --muted: #f1f5f9;
   /* Slate 100 */
@@ -122,6 +136,14 @@
   /* Red 500 */
   --destructive-foreground: #ffffff;
 
+  --success: #22c55e;
+  /* Green 500 */
+  --success-foreground: #ffffff;
+
+  --warning: #eab308;
+  /* Yellow 500 */
+  --warning-foreground: #020617;
+
   --muted: #1e293b;
   /* Slate 800 */
   --muted-foreground: #94a3b8;
@@ -167,6 +189,14 @@
   --destructive: #b91c1c;
   /* Red 700 */
   --destructive-foreground: #ffffff;
+
+  --success: #15803d;
+  /* Green 700 */
+  --success-foreground: #ffffff;
+
+  --warning: #b45309;
+  /* Amber 700 */
+  --warning-foreground: #ffffff;
 
   --muted: #fde68a;
   /* Amber 200 */

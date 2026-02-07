@@ -265,9 +265,9 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                             <td className="px-4 py-3 font-medium">{entry.title}</td>
                                             <td className="px-4 py-3 text-muted-foreground">{entry.author}</td>
                                             <td className="px-4 py-3">
-                                                <span className={`px-2 py-0.5 rounded text-xs border ${entry.status === 'read' ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' :
-                                                    entry.status === 'currently-reading' ? 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800' :
-                                                        'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
+                                                <span className={`px-2 py-0.5 rounded text-xs border ${entry.status === 'read' ? 'bg-success/10 text-success border-success/20' :
+                                                    entry.status === 'currently-reading' ? 'bg-primary/10 text-primary border-primary/20' :
+                                                        'bg-muted text-muted-foreground border-border'
                                                     }`}>
                                                     {entry.status === 'currently-reading' ? 'Reading' :
                                                         entry.status === 'to-read' ? 'To Read' : 'Read'}

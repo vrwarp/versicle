@@ -51,7 +51,7 @@ export const ImportSourceDialog: React.FC<ImportSourceDialogProps> = ({
                             onOpenChange(false);
                         }}
                     >
-                        <div className="p-3 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">
+                        <div className="p-3 rounded-full bg-primary/10 text-primary">
                             <Cloud className="h-8 w-8" />
                         </div>
                         <div className="flex flex-col items-center gap-1">

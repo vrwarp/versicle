@@ -237,12 +237,12 @@ export const DataExportWizard: React.FC<DataExportWizardProps> = ({ open, onOpen
 
                 {step === 'download' && (
                     <div className="flex flex-col items-center justify-center space-y-4 py-8">
-                        <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center text-green-600 dark:bg-green-900/20 dark:text-green-400">
+                        <div className="h-12 w-12 rounded-full bg-success/20 flex items-center justify-center text-success">
                             <Check className="h-6 w-6" />
                         </div>
-                        <h3 className="text-lg font-medium">Export Ready</h3>
-                        <p className="text-center text-sm text-muted-foreground max-w-xs">
-                            Your data has been packaged successfully. Click below to save the file.
+                        <h3 className="text-lg font-medium">Export Complete!</h3>
+                        <p className="text-sm text-center text-muted-foreground">
+                            Your data has been successfully exported.
                         </p>
                         <Button size="lg" className="w-full max-w-xs" onClick={handleDownload} data-testid="download-export-btn">
                             <Download className="mr-2 h-4 w-4" />

@@ -18,10 +18,10 @@ const SyncIcon: React.FC<{ status: FirestoreSyncStatus }> = ({ status }) => {
     // Determine color based on status
     const colorClass = useMemo(() => {
         switch (status) {
-            case 'connected': return 'bg-green-500';
-            case 'connecting': return 'bg-blue-500';
-            case 'error': return 'bg-red-500';
-            case 'disconnected': default: return 'bg-slate-300 dark:bg-slate-700';
+            case 'connected': return 'bg-success';
+            case 'connecting': return 'bg-primary';
+            case 'error': return 'bg-destructive';
+            case 'disconnected': default: return 'bg-muted-foreground/30';
         }
     }, [status]);
 

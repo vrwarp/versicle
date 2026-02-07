@@ -133,7 +133,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                         aria-label="Restore Backup"
                     />
                     {backupStatus && (
-                        <p className="text-sm text-blue-600 dark:text-blue-400 font-medium animate-pulse">
+                        <p className="text-sm text-primary font-medium animate-pulse">
                             {backupStatus}
                         </p>
                     )}

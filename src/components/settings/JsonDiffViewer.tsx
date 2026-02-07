@@ -18,16 +18,16 @@ const DiffNodeView: React.FC<{ node: DiffNode; level?: number }> = ({ node, leve
   const hasChildren = node.children && node.children.length > 0;
 
   if (node.type === 'unchanged') {
-      return (
-        <div style={{ marginLeft: indent }} className="text-muted-foreground font-mono text-xs whitespace-pre-wrap opacity-60">
-           {node.key}: {typeof node.value === 'object' ? '...' : String(node.value)}
-        </div>
-      );
+    return (
+      <div style={{ marginLeft: indent }} className="text-muted-foreground font-mono text-xs whitespace-pre-wrap opacity-60">
+        {node.key}: {typeof node.value === 'object' ? '...' : String(node.value)}
+      </div>
+    );
   }
 
   if (node.type === 'added') {
     return (
-      <div style={{ marginLeft: indent }} className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 font-mono text-xs whitespace-pre-wrap p-1 rounded my-0.5 break-all">
+      <div style={{ marginLeft: indent }} className="bg-success/10 text-success font-mono text-xs whitespace-pre-wrap p-1 rounded my-0.5 break-all">
         + {node.key}: {typeof node.value === 'object' ? JSON.stringify(node.value) : String(node.value)}
       </div>
     );
@@ -35,7 +35,7 @@ const DiffNodeView: React.FC<{ node: DiffNode; level?: number }> = ({ node, leve
 
   if (node.type === 'removed') {
     return (
-      <div style={{ marginLeft: indent }} className="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 font-mono text-xs whitespace-pre-wrap p-1 rounded my-0.5 break-all">
+      <div style={{ marginLeft: indent }} className="bg-destructive/10 text-destructive font-mono text-xs whitespace-pre-wrap p-1 rounded my-0.5 break-all">
         - {node.key}: {typeof node.value === 'object' ? JSON.stringify(node.value) : String(node.value)}
       </div>
     );
@@ -46,19 +46,19 @@ const DiffNodeView: React.FC<{ node: DiffNode; level?: number }> = ({ node, leve
     return (
       <div className="my-0.5">
         <div
-            className="flex items-center cursor-pointer hover:bg-muted/50 rounded p-1 select-none"
-            style={{ marginLeft: indent }}
-            onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center cursor-pointer hover:bg-muted/50 rounded p-1 select-none"
+          style={{ marginLeft: indent }}
+          onClick={() => setIsExpanded(!isExpanded)}
         >
           {isExpanded ? <ChevronDown className="w-3 h-3 mr-1" /> : <ChevronRight className="w-3 h-3 mr-1" />}
-          <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400">{node.key}</span>
+          <span className="font-mono text-xs font-bold text-primary">{node.key}</span>
         </div>
         {isExpanded && (
-            <div>
-                {node.children!.map((child, i) => (
-                    <DiffNodeView key={i} node={child} level={level + 1} />
-                ))}
-            </div>
+          <div>
+            {node.children!.map((child, i) => (
+              <DiffNodeView key={i} node={child} level={level + 1} />
+            ))}
+          </div>
         )}
       </div>
     );
@@ -67,15 +67,15 @@ const DiffNodeView: React.FC<{ node: DiffNode; level?: number }> = ({ node, leve
   // Primitive modification (leaf node)
   return (
     <div style={{ marginLeft: indent }} className="font-mono text-xs p-1 my-0.5">
-       <span className="font-bold">{node.key}:</span>
-       <div className="grid grid-cols-2 gap-2 mt-1">
-          <div className="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 p-1 rounded break-all">
-            - {JSON.stringify(node.oldValue)}
-          </div>
-          <div className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 p-1 rounded break-all">
-            + {JSON.stringify(node.newValue)}
-          </div>
-       </div>
+      <span className="font-bold">{node.key}:</span>
+      <div className="grid grid-cols-2 gap-2 mt-1">
+        <div className="bg-destructive/10 text-destructive p-1 rounded break-all">
+          - {JSON.stringify(node.oldValue)}
+        </div>
+        <div className="bg-success/10 text-success p-1 rounded break-all">
+          + {JSON.stringify(node.newValue)}
+        </div>
+      </div>
     </div>
   );
 };
@@ -85,11 +85,11 @@ export const JsonDiffViewer: React.FC<JsonDiffViewerProps> = ({ oldValue, newVal
 
   return (
     <div className={cn("overflow-auto max-h-[60vh] p-2 bg-background border rounded-md", className)}>
-        {diffTree.children ? (
-            diffTree.children.map((child, i) => <DiffNodeView key={i} node={child} />)
-        ) : (
-            <DiffNodeView node={diffTree} />
-        )}
+      {diffTree.children ? (
+        diffTree.children.map((child, i) => <DiffNodeView key={i} node={child} />)
+      ) : (
+        <DiffNodeView node={diffTree} />
+      )}
     </div>
   );
 };

@@ -184,7 +184,7 @@ export const FileUploader: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            className="gap-2 text-blue-600 border-blue-200 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-950"
+            className="gap-2 text-primary border-primary/20 hover:bg-primary/5"
             onClick={handleBrowseDrive}
           >
             <svg className="w-4 h-4" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
