@@ -66,6 +66,7 @@ export const GlobalSettingsDialog = () => {
     const [regenerationProgress, setRegenerationProgress] = useState<string | null>(null);
     const [regenerationPercent, setRegenerationPercent] = useState(0);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
+    const [isClearing, setIsClearing] = useState(false);
 
 
     const readingListEntries = useReadingListStore(state => state.entries);
@@ -224,23 +225,30 @@ export const GlobalSettingsDialog = () => {
 
     const handleClearAllData = async () => {
         if (confirm("Are you sure you want to delete ALL data? This includes books, annotations, and settings.")) {
-            dbService.cleanup();
-            // Clear IndexedDB (static and cache stores)
-            const db = await getDB();
-            await db.clear('static_manifests');
-            await db.clear('static_resources');
-            await db.clear('static_structure');
-            await db.clear('cache_table_images');
-            await db.clear('cache_render_metrics');
-            await db.clear('cache_audio_blobs');
-            await db.clear('cache_session_state');
-            await db.clear('cache_tts_preparation');
+            setIsClearing(true);
+            try {
+                dbService.cleanup();
+                // Clear IndexedDB (static and cache stores)
+                const db = await getDB();
+                await db.clear('static_manifests');
+                await db.clear('static_resources');
+                await db.clear('static_structure');
+                await db.clear('cache_table_images');
+                await db.clear('cache_render_metrics');
+                await db.clear('cache_audio_blobs');
+                await db.clear('cache_session_state');
+                await db.clear('cache_tts_preparation');
 
-            // Clear LocalStorage (includes Yjs persistence)
-            localStorage.clear();
+                // Clear LocalStorage (includes Yjs persistence)
+                localStorage.clear();
 
-            // Reload to reset Yjs stores
-            window.location.reload();
+                // Reload to reset Yjs stores
+                window.location.reload();
+            } catch (e) {
+                logger.error('Failed to clear data', e);
+                setIsClearing(false);
+                alert('Failed to clear data. Please check console.');
+            }
         }
     };
 
@@ -434,7 +442,7 @@ export const GlobalSettingsDialog = () => {
                     <span id="global-settings-desc" className="sr-only">Global application settings including appearance, TTS configuration, and data management.</span>
                     {isCsvImporting && (
                         <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 text-center">
-                            <Loader2 className={`h - 12 w - 12 text - primary mb - 4 ${!csvImportComplete ? 'animate-spin' : ''} `} />
+                            <Loader2 className={`h-12 w-12 text-primary mb-4 ${!csvImportComplete ? 'animate-spin' : ''}`} />
                             <h3 className="text-xl font-semibold mb-2">{csvImportComplete ? 'Import Complete' : 'Importing Reading List'}</h3>
                             <p className="text-muted-foreground mb-6">{csvImportMessage}</p>
 
@@ -637,6 +645,7 @@ export const GlobalSettingsDialog = () => {
                                     regenerationPercent={regenerationPercent}
                                     onRegenerateMetadata={handleRegenerateMetadata}
                                     onClearAllData={handleClearAllData}
+                                    isClearing={isClearing}
                                 />
                             )
                         }
