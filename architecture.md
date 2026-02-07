@@ -71,6 +71,8 @@ graph TD
         FireSync[FirestoreSyncManager]
         FireProvider[y-fire]
         AndroidBackup[AndroidBackupService]
+        Checkpoint[CheckpointService]
+        Inspector[CheckpointInspector]
     end
 
     subgraph Core [Core Services]
@@ -142,7 +144,10 @@ graph TD
     YjsProvider <--> YDB
     YjsProvider --> FireSync
     FireSync --> FireProvider
+    FireSync --> Checkpoint
     LibStore --> AndroidBackup
+    GlobalSettings --> Inspector
+    Inspector --> Checkpoint
 
     LibStore --> DBService
     LibStore --> Ingestion
@@ -256,14 +261,15 @@ Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for 
 #### `CheckpointService.ts` (The Moral Layer)
 *   **Goal**: Prevent data loss during complex sync merges by creating "Safety Snapshots".
 *   **Logic**:
-    *   **Before Sync**: Creates a `SyncManifest` snapshot in the `checkpoints` IDB store.
+    *   **Destructive Restore**: Clears all existing shared types (Map, Array, XmlText) in the Yjs document before applying the binary snapshot to ensure a clean state.
+    *   **Before Sync**: Automatically creates a `pre-sync` checkpoint immediately before connecting to Firestore.
     *   **Rotation**: Maintains a rolling buffer of the last 10 checkpoints.
 
 #### `FirestoreSyncManager.ts` (Real-Time Cloud)
 Provides a "Cloud Overlay" for real-time synchronization.
 
 *   **Logic**:
-    *   **Hybrid Auth**: Supports both Web (`signInWithPopup`) and Native Android (`FirebaseAuthentication` plugin) flows for Google Sign-In.
+    *   **Hybrid Auth**: Supports both Web (`signInWithPopup`/`getRedirectResult`) and Native Android (`FirebaseAuthentication` plugin) flows for Google Sign-In.
     *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
     *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
@@ -321,13 +327,14 @@ Handles the complex task of importing an EPUB file.
     *   Uses a custom URL scheme: `/__versicle__/covers/:bookId`.
     *   A **Service Worker** intercepts these requests, fetches the cover blob from IndexedDB (`static_manifests`), and responds directly.
 
-#### Generative AI (`src/lib/genai/`)
-*   **Smart Rotation**: Implements a rotation strategy (`gemini-2.5-flash-lite` <-> `gemini-2.5-flash`) to handle `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
+#### Generative AI (`src/lib/genai/GenAIService.ts`)
+*   **Smart Rotation**: Implements a singleton pattern with a rotation strategy (`gemini-2.5-flash-lite` <-> `gemini-2.5-flash`) to handle `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
 *   **Resilience**: Automatically retries requests with the fallback model.
 *   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to improve reasoning quality for complex data interpretation.
-*   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text for TTS accessibility.
+*   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text ("Teleprompter Adaptation") for TTS accessibility.
     *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures (Title, Footnote, Main Text, Table) for improved TTS flow.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
+*   **Structured Output**: Uses `responseSchema` to enforce strictly typed JSON responses from the LLM.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
@@ -366,21 +373,21 @@ Manages manual internal state backup and restoration.
 #### Sync Mesh (`src/store/useDeviceStore.ts` & `src/lib/device-id.ts`)
 *   **Goal**: Provide visibility into the synchronization network and enable "Send to Device" features.
 *   **Logic**:
-    *   **Stable Identity**: `device-id.ts` generates and persists a UUID in `localStorage` to identify the current node.
+    *   **Stable Identity**: `device-id.ts` generates and persists a stable UUID in `localStorage` to identify the current node.
     *   **Heartbeat**: `useDeviceStore` maintains a Yjs Map of active devices, updating the `lastActive` timestamp with a 5-minute throttle.
-    *   **Metadata**: Automatically parses User Agent strings to provide human-readable device names (e.g., "Chrome on Windows").
+    *   **Metadata**: Automatically parses User Agent strings (via `ua-parser-js`) to provide human-readable device names (e.g., "Chrome on Windows").
 
 ---
 
 ### TTS Subsystem (`src/lib/tts/`)
 
 #### `src/lib/tts/AudioPlayerService.ts` (Main Thread Orchestrator)
-The central hub for TTS operations. It runs on the **Main Thread** and coordinates the various subsystems (Pipeline, Providers, State).
+The central hub for TTS operations. It runs on the **Main Thread** and coordinates the various subsystems (Pipeline, Providers, State). It does **NOT** run in a worker.
 
 *   **Logic**:
     *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods (play, pause) to prevent race conditions during rapid UI interaction.
     *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`) via `BatteryGuard`.
-    *   **Delegation**: Offloads heavy content loading to `AudioContentPipeline` and state logic to `PlaybackStateManager`. It **does not** run in a worker itself, but orchestrates providers that might.
+    *   **Delegation**: Offloads heavy content loading to `AudioContentPipeline` and state logic to `PlaybackStateManager`.
 
 #### `src/lib/tts/TaskSequencer.ts`
 *   **Goal**: Prevent race conditions in async audio operations.
@@ -442,10 +449,14 @@ Manages the virtual playback timeline.
 *   **Logic**: Plays a silent (or white noise) audio loop in the background to prevent the OS from killing the suspended app.
 
 #### `src/lib/tts/providers/PiperProvider.ts` (Local Neural TTS)
-*   **Goal**: High-quality, offline TTS using Piper voices.
+*   **Goal**: High-quality, offline TTS using Piper voices (WASM).
 *   **Logic**:
-    *   **WASM Worker**: Offloads the heavy OnnxRuntime inference to a dedicated Web Worker (`piper_worker.js`) via `piper-utils` to prevent blocking the UI thread.
-    *   **Transactional Download**: Downloads model files (`.onnx`) and configs (`.json.onnx`) to a staging area, verifies integrity by loading them, and only then commits to the cache.
+    *   **Worker Offloading**: Offloads the heavy OnnxRuntime inference to a dedicated Web Worker (`piper_worker.js`) via `piper-utils` to prevent blocking the Main Thread.
+    *   **Transactional Download**: Implements a robust "Download -> Verify -> Cache" strategy.
+        1.  Downloads model and config to memory.
+        2.  Verifies integrity by running a test inference.
+        3.  Only commits to the cache if verification succeeds.
+    *   **Input Sanitization**: Splits long inputs into smaller chunks to prevent WASM memory exhaustion/crashes.
 
 #### `src/lib/tts/providers/CapacitorTTSProvider.ts`
 *   **Logic**: Uses `queueStrategy: 1` to preload the next utterance into the OS buffer while the current one plays.
@@ -496,6 +507,9 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
 *   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
 *   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.
+*   **Battery Guard**: Explicitly checks Android battery optimization settings via `BatteryGuard` and warns the user if they are likely to interfere with background playback.
+*   **Transactional Voice Download**: `PiperProvider` prevents corrupt voice models by ensuring files are downloaded and verified in memory before writing to persistent storage.
+*   **Input Sanitization**: All text inputs to the WASM TTS engine are sanitized and chunked to prevent memory access violations or worker crashes.
 
 ### UI Layer
 
