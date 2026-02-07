@@ -8,7 +8,7 @@ import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
 import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
-import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search, Loader2 } from 'lucide-react';
+import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search, Loader2, CloudDownload } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -24,6 +24,8 @@ import { DuplicateBookError } from '../../types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useNavigationGuard } from '../../hooks/useNavigationGuard';
 import { BackButtonPriority } from '../../store/useBackNavigationStore';
+import { DriveImportDialog } from './DriveImportDialog';
+import { ContentMissingDialog } from './ContentMissingDialog';
 
 /**
  * The main library view component.
@@ -78,7 +80,6 @@ export const LibraryView: React.FC = () => {
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const restoreFileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
@@ -86,14 +87,14 @@ export const LibraryView: React.FC = () => {
 
   // Modal State Coordination
   const [activeModal, setActiveModal] = useState<{
-    type: 'delete' | 'offload';
+    type: 'delete' | 'offload' | 'restore';
     book: BookMetadata;
   } | null>(null);
 
   const [duplicateQueue, setDuplicateQueue] = useState<File[]>([]);
   const currentDuplicate = duplicateQueue[0];
-  const [bookToRestore, setBookToRestore] = useState<BookMetadata | null>(null);
   const [reprocessingBookId, setReprocessingBookId] = useState<string | null>(null);
+  const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
 
   useNavigationGuard(() => {
     setActiveModal(null);
@@ -145,8 +146,7 @@ export const LibraryView: React.FC = () => {
   // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
 
   const handleRestore = useCallback((book: BookMetadata) => {
-    setBookToRestore(book);
-    restoreFileInputRef.current?.click();
+    setActiveModal({ type: 'restore', book });
   }, []);
 
   const handleBookOpen = useCallback((book: BookMetadata) => {
@@ -210,22 +210,6 @@ export const LibraryView: React.FC = () => {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       showToast(`Replace failed: ${msg}`, "error");
       throw e;
-    }
-  };
-
-  const handleRestoreFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0] && bookToRestore) {
-      restoreBook(bookToRestore.id, e.target.files[0]).then(() => {
-        showToast(`Restored "${bookToRestore.title}"`, 'success');
-      }).catch((err) => {
-        logger.error("Restore failed", err);
-        showToast("Failed to restore book", "error");
-      }).finally(() => {
-        setBookToRestore(null);
-      });
-    }
-    if (e.target.value) {
-      e.target.value = '';
     }
   };
 
@@ -370,15 +354,6 @@ export const LibraryView: React.FC = () => {
         data-testid="hidden-file-input"
       />
 
-      <input
-        type="file"
-        ref={restoreFileInputRef}
-        onChange={handleRestoreFileSelect}
-        accept=".epub"
-        className="hidden"
-        data-testid="restore-file-input"
-      />
-
       {/* Drag Overlay */}
       {dragActive && (
         <div className="absolute inset-4 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center border-4 border-primary border-dashed rounded-xl transition-all duration-200 pointer-events-none">
@@ -400,6 +375,18 @@ export const LibraryView: React.FC = () => {
         book={activeModal?.book || null}
         onClose={() => setActiveModal(null)}
       />
+      <ContentMissingDialog
+        open={activeModal?.type === 'restore'}
+        onOpenChange={(open) => !open && setActiveModal(null)}
+        book={activeModal?.book!}
+        onRestore={async (file) => {
+          if (activeModal?.book) {
+            await restoreBook(activeModal.book.id, file);
+            setActiveModal(null);
+          }
+        }}
+        isRestoring={isImporting}
+      />
       <ReprocessingInterstitial
         isOpen={!!reprocessingBookId}
         bookId={reprocessingBookId}
@@ -416,6 +403,11 @@ export const LibraryView: React.FC = () => {
         onClose={() => setDuplicateQueue(prev => prev.slice(1))}
         onConfirm={handleConfirmReplace}
         fileName={currentDuplicate?.name || ''}
+      />
+
+      <DriveImportDialog
+        open={isDriveImportOpen}
+        onOpenChange={setIsDriveImportOpen}
       />
 
       <header className="mb-6 flex flex-col gap-4">
@@ -446,6 +438,16 @@ export const LibraryView: React.FC = () => {
               data-testid="header-settings-button"
             >
               <Settings className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => setIsDriveImportOpen(true)}
+              className="shadow-sm"
+              aria-label="Import from Google Drive"
+              title="Import from Google Drive"
+            >
+              <CloudDownload className="w-4 h-4" />
             </Button>
             <Button
               onClick={triggerFileUpload}

@@ -10,7 +10,7 @@
 */
 import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
 import { yDoc } from '../../store/yjs-provider';
 import { CheckpointService } from './CheckpointService';
@@ -26,6 +26,7 @@ import { createLogger } from '../logger';
 import { signInWithGoogle, signOutWithGoogle } from './auth-helper';
 import { useToastStore } from '../../store/useToastStore';
 import { useSyncStore } from './hooks/useSyncStore';
+import { useDriveStore } from '../../store/useDriveStore';
 
 const logger = createLogger('FirestoreSync');
 
@@ -143,6 +144,14 @@ class FirestoreSyncManager {
             const result = await getRedirectResult(auth);
             if (result && result.user) {
                 logger.info('Auth', 'Successfully returned from redirect flow', result.user.uid);
+
+                // Capture Google Access Token if present (e.g. from Drive connection)
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                if (credential?.accessToken) {
+                    logger.info('Captured Google Access Token from redirect');
+                    useDriveStore.getState().setAccessToken(credential.accessToken);
+                }
+
                 useToastStore.getState().showToast(`Signed in as ${result.user.email}`, 'success');
                 // Note: handleAuthStateChange will be called by onAuthStateChanged and update useSyncStore
             }

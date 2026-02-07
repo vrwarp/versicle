@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
+import { DriveSettingsSection } from './DriveSettingsSection';
 
 export interface FirebaseConfig {
     apiKey: string;
@@ -227,6 +228,11 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                             </div>
                         )}
                     </div>
+                )}
+
+                {/* Google Drive Integration */}
+                {isFirebaseAvailable && (
+                    <DriveSettingsSection />
                 )}
             </div>
         </div>
