@@ -151,13 +151,18 @@ function App() {
         // Background Drive Scan (Phase 5)
         const driveStore = useDriveStore.getState();
         if (driveStore.linkedFolderId) {
-          const ONE_HOUR = 60 * 60 * 1000;
+          const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
           const now = Date.now();
-          if (!driveStore.lastScanTime || (now - driveStore.lastScanTime > ONE_HOUR)) {
-            logger.info('Background Drive Scan: Index is stale, scanning...');
-            DriveScannerService.checkForNewFiles().catch(err => {
-              logger.warn('Background Drive Scan failed:', err);
-            });
+          if (!driveStore.lastScanTime || (now - driveStore.lastScanTime > ONE_WEEK)) {
+            const shouldSync = await DriveScannerService.shouldAutoSync();
+            if (shouldSync) {
+              logger.info('Background Drive Scan: Heuristic triggered, refreshing index...');
+              DriveScannerService.scanAndIndex().catch(err => {
+                logger.warn('Background Drive Scan failed:', err);
+              });
+            } else {
+              logger.info('Background Drive Scan: Folder not viewed recently, skipping sync.');
+            }
           }
         }
 
