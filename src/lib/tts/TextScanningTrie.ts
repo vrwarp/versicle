@@ -36,6 +36,9 @@ export class TextScanningTrie {
     private static readonly ASCII_TO_LOWER_OFFSET = 32;
     private static readonly MAX_ASCII = 127;
 
+    // Cache for non-ASCII case folding to avoid expensive String.fromCharCode().toLowerCase() allocations
+    private static readonly caseFoldCache = new Map<number, number>();
+
     /**
      * Checks if a character code represents a whitespace character.
      * Covers common ASCII and Unicode whitespace to match Regex `\s`.
@@ -80,7 +83,7 @@ export class TextScanningTrie {
 
         if (reverse) {
             for (let i = len - 1; i >= 0; i--) {
-                const code = normalized[i].toLowerCase().charCodeAt(0);
+                const code = this.toLowerCaseCode(normalized.charCodeAt(i));
                 if (!node[code]) {
                     node[code] = {};
                 }
@@ -88,7 +91,7 @@ export class TextScanningTrie {
             }
         } else {
             for (let i = 0; i < len; i++) {
-                const code = normalized[i].toLowerCase().charCodeAt(0);
+                const code = this.toLowerCaseCode(normalized.charCodeAt(i));
                 if (!node[code]) {
                     node[code] = {};
                 }
@@ -123,14 +126,16 @@ export class TextScanningTrie {
             let code = text.charCodeAt(i);
 
             // Optimization: Manual case folding for ASCII to avoid .toLowerCase() allocation
-            // If the character is between 'A' and 'Z', we add 32 to convert it to 'a'-'z'.
-            // This is significantly faster than allocating a new string with .toLowerCase().
             if (code >= TextScanningTrie.ASCII_A && code <= TextScanningTrie.ASCII_Z) {
                 code += TextScanningTrie.ASCII_TO_LOWER_OFFSET;
             } else if (code > TextScanningTrie.MAX_ASCII) {
-                // Fallback for non-ASCII characters (e.g., 'É', 'Æ') to ensure correct case folding
-                // We must use the standard .toLowerCase() here to handle Unicode rules correctly.
-                code = String.fromCharCode(code).toLowerCase().charCodeAt(0);
+                // Check cache first to avoid expensive String.fromCharCode().toLowerCase()
+                let lower = TextScanningTrie.caseFoldCache.get(code);
+                if (lower === undefined) {
+                    lower = String.fromCharCode(code).toLowerCase().charCodeAt(0);
+                    TextScanningTrie.caseFoldCache.set(code, lower);
+                }
+                code = lower;
             }
 
             if (!node[code]) {
@@ -182,14 +187,16 @@ export class TextScanningTrie {
             let code = text.charCodeAt(i);
 
             // Optimization: Manual case folding for ASCII to avoid .toLowerCase() allocation
-            // If the character is between 'A' and 'Z', we add 32 to convert it to 'a'-'z'.
-            // This is significantly faster than allocating a new string with .toLowerCase().
             if (code >= TextScanningTrie.ASCII_A && code <= TextScanningTrie.ASCII_Z) {
                 code += TextScanningTrie.ASCII_TO_LOWER_OFFSET;
             } else if (code > TextScanningTrie.MAX_ASCII) {
-                // Fallback for non-ASCII characters (e.g., 'É', 'Æ') to ensure correct case folding
-                // We must use the standard .toLowerCase() here to handle Unicode rules correctly.
-                code = String.fromCharCode(code).toLowerCase().charCodeAt(0);
+                // Check cache first to avoid expensive String.fromCharCode().toLowerCase()
+                let lower = TextScanningTrie.caseFoldCache.get(code);
+                if (lower === undefined) {
+                    lower = String.fromCharCode(code).toLowerCase().charCodeAt(0);
+                    TextScanningTrie.caseFoldCache.set(code, lower);
+                }
+                code = lower;
             }
 
             if (!node[code]) {
@@ -211,5 +218,22 @@ export class TextScanningTrie {
             i++;
         }
         return false;
+    }
+
+    /**
+     * Helper to get lower case code, using manual ASCII folding or cache.
+     */
+    private toLowerCaseCode(code: number): number {
+        if (code >= TextScanningTrie.ASCII_A && code <= TextScanningTrie.ASCII_Z) {
+            return code + TextScanningTrie.ASCII_TO_LOWER_OFFSET;
+        } else if (code > TextScanningTrie.MAX_ASCII) {
+            let lower = TextScanningTrie.caseFoldCache.get(code);
+            if (lower === undefined) {
+                lower = String.fromCharCode(code).toLowerCase().charCodeAt(0);
+                TextScanningTrie.caseFoldCache.set(code, lower);
+            }
+            return lower;
+        }
+        return code;
     }
 }
