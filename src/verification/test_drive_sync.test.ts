@@ -4,7 +4,6 @@ import { mockDriveService } from '../lib/drive/MockDriveService';
 import { DriveScannerService } from '../lib/drive/DriveScannerService';
 import { useDriveStore } from '../store/useDriveStore';
 import { useBookStore } from '../store/useBookStore';
-import { DriveService } from '../lib/drive/DriveService';
 
 // Mock the real DriveService with our functional mock
 vi.mock('../lib/drive/DriveService', () => ({
@@ -187,7 +186,7 @@ describe('Google Drive Sync & Import E2E', () => {
         await DriveScannerService.scanAndIndex();
 
         // Sabotage the mock
-        (mockDriveService as any).fileContents.delete(fileId);
+        mockDriveService.deleteFileContent(fileId);
 
         await expect(DriveScannerService.importFile(fileId, 'Corrupt.epub'))
             .rejects.toThrow('File content not found');

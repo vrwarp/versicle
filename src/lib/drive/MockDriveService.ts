@@ -84,6 +84,11 @@ export class MockDriveService {
     getFile(id: string) {
         return this.files.get(id);
     }
+
+    // Helper to simulate corruption/missing content
+    deleteFileContent(id: string) {
+        this.fileContents.delete(id);
+    }
 }
 
 export const mockDriveService = new MockDriveService();
