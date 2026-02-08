@@ -58,7 +58,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
     const handleRefresh = async () => {
         try {
             await DriveScannerService.scanAndIndex();
-        } catch (err) {
+        } catch {
             showToast('Failed to refresh index', 'error');
         }
     };

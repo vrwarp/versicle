@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { DriveScannerService } from './DriveScannerService';
 import { useDriveStore } from '../../store/useDriveStore';
 import { useBookStore } from '../../store/useBookStore';
@@ -30,14 +30,14 @@ describe('DriveScannerService', () => {
         vi.clearAllMocks();
 
         // Setup default store mocks
-        (useDriveStore.getState as any).mockReturnValue({
+        (useDriveStore.getState as unknown as Mock).mockReturnValue({
             linkedFolderId: 'folder-123',
             index: [],
             setScannedFiles: vi.fn(),
             setScanning: vi.fn(),
         });
 
-        (useBookStore.getState as any).mockReturnValue({
+        (useBookStore.getState as unknown as Mock).mockReturnValue({
             books: {}
         });
     });
@@ -49,12 +49,12 @@ describe('DriveScannerService', () => {
                 { id: '2', name: 'Book 2.epub', size: 2000, modifiedTime: '2023-01-02', mimeType: 'application/epub+zip' }
             ];
 
-            (DriveService.listFiles as any).mockResolvedValue(mockFiles);
+            (DriveService.listFiles as unknown as Mock).mockResolvedValue(mockFiles);
 
             const setScannedFilesSpy = vi.fn();
             const setScanningSpy = vi.fn();
 
-            (useDriveStore.getState as any).mockReturnValue({
+            (useDriveStore.getState as unknown as Mock).mockReturnValue({
                 linkedFolderId: 'folder-123',
                 setScannedFiles: setScannedFilesSpy,
                 setScanning: setScanningSpy,
@@ -72,10 +72,10 @@ describe('DriveScannerService', () => {
         });
 
         it('should handle errors gracefully', async () => {
-            (DriveService.listFiles as any).mockRejectedValue(new Error('API Error'));
+            (DriveService.listFiles as unknown as Mock).mockRejectedValue(new Error('API Error'));
 
             const setScanningSpy = vi.fn();
-            (useDriveStore.getState as any).mockReturnValue({
+            (useDriveStore.getState as unknown as Mock).mockReturnValue({
                 linkedFolderId: 'folder-123',
                 setScannedFiles: vi.fn(),
                 setScanning: setScanningSpy,
@@ -86,7 +86,7 @@ describe('DriveScannerService', () => {
         });
 
         it('should do nothing if no linked folder', async () => {
-            (useDriveStore.getState as any).mockReturnValue({
+            (useDriveStore.getState as unknown as Mock).mockReturnValue({
                 linkedFolderId: null,
                 setScannedFiles: vi.fn(),
                 setScanning: vi.fn(),
@@ -110,17 +110,17 @@ describe('DriveScannerService', () => {
                 'book-1': { id: 'book-1', title: 'Start', sourceFilename: 'Book 1.epub' }
             };
 
-            (useDriveStore.getState as any).mockReturnValue({
+            (useDriveStore.getState as unknown as Mock).mockReturnValue({
                 index: mockIndex,
                 linkedFolderId: 'folder-123'
             });
 
-            (useBookStore.getState as any).mockReturnValue({
+            (useBookStore.getState as unknown as Mock).mockReturnValue({
                 books: mockLibrary
             });
 
             // We mock scanAndIndex to prevent actual call if index was empty (not empty here)
-            const scanSpy = vi.spyOn(DriveScannerService, 'scanAndIndex').mockResolvedValue();
+            vi.spyOn(DriveScannerService, 'scanAndIndex').mockResolvedValue();
 
             const newFiles = await DriveScannerService.checkForNewFiles();
 
@@ -138,7 +138,7 @@ describe('DriveScannerService', () => {
 
             // Easier: Just verify scanAndIndex is called.
 
-            (useDriveStore.getState as any).mockReturnValue({
+            (useDriveStore.getState as unknown as Mock).mockReturnValue({
                 index: [],
                 linkedFolderId: 'folder-123',
                 setScannedFiles: setScannedFilesSpy,

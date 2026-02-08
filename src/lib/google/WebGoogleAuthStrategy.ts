@@ -2,12 +2,30 @@ import { loadScript } from '../utils/script-loader';
 import { getScopesForService } from './config';
 import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 
+interface GoogleTokenResponse {
+    access_token: string;
+    expires_in: number;
+    error?: string;
+}
+
+interface GoogleTokenClientConfig {
+    client_id: string;
+    scope: string;
+    callback: (response: GoogleTokenResponse) => void;
+    login_hint?: string;
+    prompt?: string;
+}
+
+interface GoogleTokenClient {
+    requestAccessToken: () => void;
+}
+
 declare global {
     interface Window {
         google?: {
             accounts: {
                 oauth2: {
-                    initTokenClient: (config: any) => any;
+                    initTokenClient: (config: GoogleTokenClientConfig) => GoogleTokenClient;
                     revoke: (token: string, callback: () => void) => void;
                 };
             };
@@ -16,7 +34,7 @@ declare global {
 }
 
 export class WebGoogleAuthStrategy {
-    private tokenClient: any;
+    private tokenClient: GoogleTokenClient | null = null;
     private accessToken: string | null = null;
     private expiryTime: number = 0;
     private initPromise: Promise<void> | null = null;
@@ -59,7 +77,7 @@ export class WebGoogleAuthStrategy {
             this.tokenClient = window.google!.accounts.oauth2.initTokenClient({
                 client_id: clientId,
                 scope: getScopesForService(serviceId).join(' '),
-                callback: (response: any) => {
+                callback: (response: GoogleTokenResponse) => {
                     if (response.error) {
                         reject(response);
                         return;
@@ -98,7 +116,7 @@ export class WebGoogleAuthStrategy {
             this.tokenClient = window.google!.accounts.oauth2.initTokenClient({
                 client_id: clientId,
                 scope: getScopesForService(serviceId).join(' '),
-                callback: (response: any) => {
+                callback: (response: GoogleTokenResponse) => {
                     if (response.error) {
                         reject(response);
                         return;
