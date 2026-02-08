@@ -25,7 +25,7 @@ def test_preroll_journey(page: Page):
 
     # Open Settings
     print("Opening TTS Settings...")
-    page.get_by_role("button", name="Settings").click(force=True)
+    page.get_by_test_id("tts-settings-tab-btn").click(force=True)
 
     # Enable Preroll
     print("Enabling Preroll...")
@@ -49,7 +49,7 @@ def test_preroll_journey(page: Page):
     # Wait for TTS panel to be visible to ensure stability
     expect(page.get_by_test_id("tts-panel")).to_be_visible()
 
-    page.get_by_role("button", name="Settings").click(force=True)
+    page.get_by_test_id("tts-settings-tab-btn").click(force=True)
 
     preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
 
@@ -63,7 +63,7 @@ def test_preroll_journey(page: Page):
 
     # Attempt to verify queue (Optional in headless if flaky)
     # Go back to queue
-    page.get_by_role("button", name="Up Next").click(force=True)
+    page.get_by_test_id("tts-queue-tab-btn").click(force=True)
 
     # Close Audio Deck
     page.keyboard.press("Escape")
