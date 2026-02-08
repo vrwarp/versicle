@@ -3,11 +3,19 @@ import { getScopesForService } from './config';
 
 export class NativeGoogleAuthStrategy {
 
+    private accessToken: string | null = null;
+    private tokenExpiration: number | null = null;
+
     async connect(serviceId: string): Promise<string> {
         return this.getValidToken(serviceId);
     }
 
     async getValidToken(serviceId: string, loginHint?: string): Promise<string> {
+        // Check if we have a valid cached token
+        if (this.accessToken && this.tokenExpiration && Date.now() < this.tokenExpiration) {
+            return this.accessToken;
+        }
+
         // Native plugin handles checking refresh token automatically.
         // Requesting scopes incrementally adds them to the user session.
         void loginHint; // Suppress unused variable
@@ -27,10 +35,18 @@ export class NativeGoogleAuthStrategy {
             throw new Error('No access token returned from native sign-in');
         }
 
+        this.accessToken = result.credential.accessToken;
+        // Default Google Access Token lifetime is 1 hour (3600s). We use 50 minutes to be safe.
+        this.tokenExpiration = Date.now() + 50 * 60 * 1000;
+
         return result.credential.accessToken;
     }
 
     async disconnect(serviceId: string): Promise<void> {
+        // Clear cached token
+        this.accessToken = null;
+        this.tokenExpiration = null;
+
         // On native, 'disconnecting' a specific service is tricky.
         // Usually involves signing out completely or just revoking scopes which is complex.
         // For now, we might just clear local state in the app, 
