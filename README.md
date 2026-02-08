@@ -22,7 +22,7 @@
 *   **Framework**: React 19.2.3 + Vite 7.3.0 + React Router 7.11.0
 *   **Language**: TypeScript
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (Custom Fork)
-*   **Sync**: `y-cinder` (Custom Fork / Firestore 11.10.0) + Android Backup Service
+*   **Sync**: `y-cinder` (Custom Fork / Firestore 11.10.0) + Android Backup Service + Google Drive API
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API
@@ -59,7 +59,7 @@
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
 *   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
 *   **Smart Rotation**: Automatically switches between Gemini models (Flash Lite/Flash) to handle rate limits (429) and maximize free quotas.
-*   **Lexicon**: Fix mispronounced words with custom rules (Regex supported).
+*   **Lexicon**: Fix mispronounced words with custom rules (Regex supported). Includes "Trace Mode" for debugging rule application.
 *   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1").
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
@@ -71,6 +71,7 @@
     *   **Dual Sync**:
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
+        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
         *   **Device Mesh**: Real-time visibility of active devices with "Last Active" status.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
