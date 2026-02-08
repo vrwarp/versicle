@@ -73,6 +73,8 @@ graph TD
         AndroidBackup[AndroidBackupService]
         Checkpoint[CheckpointService]
         Inspector[CheckpointInspector]
+        DriveScanner[DriveScannerService]
+        GoogleAuth[GoogleIntegrationManager]
     end
 
     subgraph Core [Core Services]
@@ -148,6 +150,8 @@ graph TD
     LibStore --> AndroidBackup
     GlobalSettings --> Inspector
     Inspector --> Checkpoint
+    GlobalSettings --> DriveScanner
+    GlobalSettings --> GoogleAuth
 
     LibStore --> DBService
     LibStore --> Ingestion
@@ -360,6 +364,25 @@ Manages manual internal state backup and restoration.
 *   **Trade-offs**:
     *   **Memory Pressure**: On native devices, converting large Blobs to Base64 (for the Filesystem API) can cause Out-Of-Memory (OOM) crashes with very large backups.
 
+#### Cloud Library (`src/lib/drive/DriveScannerService.ts`)
+*   **Goal**: Integrate with Google Drive to provide a cloud-based library that syncs with the local device.
+*   **Logic**:
+    *   **Heuristic Sync**: Uses a `viewedByMeTime` vs. `lastScanTime` check to determine if a folder rescan is needed, avoiding unnecessary API calls.
+    *   **Lightweight Indexing**: Maintains a local index of Drive files (`useDriveStore`) to provide instant feedback without constant network requests.
+    *   **Ghost Book Creation**: Imported files are processed into the library, but the system can also detect "new" files in the cloud that haven't been downloaded yet.
+*   **Trade-offs**:
+    *   **API Quotas**: Heavy scanning can hit Google Drive API rate limits. The system mitigates this with the heuristic check.
+    *   **Latency**: Initial scanning of large libraries (1000+ books) can take time.
+
+#### Google Integration (`src/lib/google/GoogleIntegrationManager.ts`)
+*   **Goal**: Abstract authentication complexity across Web and Android platforms.
+*   **Logic**:
+    *   **Dual Strategy**:
+        *   **Web**: Uses Google Identity Services (GIS) for pop-up based auth.
+        *   **Android**: Uses `@capacitor-firebase/authentication` for native system-level sign-in.
+    *   **Token Management**: Handles token refresh automatically, retrying failed requests (e.g., 401s in `DriveService`) with a fresh token.
+    *   **Service Isolation**: Manages connections for 'drive' and 'sync' (Firestore) independently, allowing users to opt-in to specific features.
+
 #### `src/lib/MaintenanceService.ts`
 *   **Goal**: Perform database hygiene and remove orphaned data.
 *   **Logic**:
@@ -434,9 +457,10 @@ Manages the virtual playback timeline.
 #### `src/lib/tts/LexiconService.ts`
 *   **Goal**: Manage pronunciation rules for TTS, handling book-specific and global overrides.
 *   **Logic**:
+    *   **Traceability**: `applyLexiconWithTrace` returns a step-by-step log of text transformations, enabling users to debug which rule caused a specific pronunciation change.
+    *   **Performance (WeakMap Cache)**: Caches compiled `RegExp` objects keyed by the *reference* of the rules array in a `WeakMap`. This avoids re-compiling regexes for every sentence while ensuring memory is freed when rule sets change.
     *   **Layered Application**: Applies rules in a strict order: Book Specific (High Priority) -> Global -> Bible Rules (if enabled) -> Book Specific (Low Priority).
-    *   **Regex Caching**: Caches compiled `RegExp` objects for performance during heavy text processing.
-    *   **Bible Lexicon**: Injects a specialized set of rules for Bible citations (e.g., "Gen 1:1") if enabled for the book.
+    *   **Bible Lexicon**: Injects a specialized set of rules (`BIBLE_LEXICON_RULES`) for Bible citations (e.g., "Gen 1:1") if enabled for the book.
 
 #### `src/lib/tts/processors/Sanitizer.ts`
 *   **Goal**: Clean raw text before segmentation to improve TTS quality.
