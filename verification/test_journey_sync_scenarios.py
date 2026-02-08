@@ -415,7 +415,7 @@ def test_journey_data_liberation(browser: Browser, browser_context_args):
     page.get_by_role("button", name="Generate Export").click()
 
     # Download Step
-    expect(page.get_by_text("Export Ready")).to_be_visible()
+    expect(page.get_by_text("Export Complete!")).to_be_visible()
 
     # Handle Download
     with page.expect_download() as download_info:

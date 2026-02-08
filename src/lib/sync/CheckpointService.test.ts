@@ -116,7 +116,6 @@ describe('CheckpointService', () => {
         // Setup checkpoint
         const tempDoc = new Y.Doc();
         // Prevent collision if Math.random is mocked
-        // @ts-expect-error Writing to readonly clientID to prevent test flakiness
         tempDoc.clientID = yDoc.clientID + (++tempDocCounter);
 
         tempDoc.getMap('library').set('restored', true);
@@ -139,7 +138,6 @@ describe('CheckpointService', () => {
         // Setup checkpoint with different data
         const tempDoc = new Y.Doc();
         // Prevent collision if Math.random is mocked
-        // @ts-expect-error Writing to readonly clientID to prevent test flakiness
         tempDoc.clientID = yDoc.clientID + (++tempDocCounter);
 
         tempDoc.getMap('library').set('restored', true);
@@ -164,5 +162,53 @@ describe('CheckpointService', () => {
 
         const prefs = yDoc.getMap('preferences');
         expect(prefs.size).toBe(0);
+    });
+
+    it('should create automatic checkpoint if no previous one exists', async () => {
+        mocks.getAll.mockResolvedValue([]);
+        mocks.add.mockResolvedValue(1);
+        mocks.count.mockResolvedValue(1);
+
+        const id = await CheckpointService.createAutomaticCheckpoint('auto', 1000);
+
+        expect(id).toBe(1);
+        expect(mocks.add).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'auto' }));
+    });
+
+    it('should skip automatic checkpoint if recent one exists', async () => {
+        const now = Date.now();
+        const recentCp = { id: 1, timestamp: now - 500, trigger: 'auto' }; // 500ms ago
+        mocks.getAll.mockResolvedValue([recentCp]);
+
+        const id = await CheckpointService.createAutomaticCheckpoint('auto', 1000); // Limit 1000ms
+
+        expect(id).toBeNull();
+        expect(mocks.add).not.toHaveBeenCalled();
+    });
+
+    it('should create automatic checkpoint if previous one is old enough', async () => {
+        const now = Date.now();
+        const oldCp = { id: 1, timestamp: now - 2000, trigger: 'auto' }; // 2s ago
+        mocks.getAll.mockResolvedValue([oldCp]);
+        mocks.add.mockResolvedValue(2);
+        mocks.count.mockResolvedValue(2);
+
+        const id = await CheckpointService.createAutomaticCheckpoint('auto', 1000); // Limit 1000ms
+
+        expect(id).toBe(2);
+        expect(mocks.add).toHaveBeenCalled();
+    });
+
+    it('should ignore checkpoints with different triggers', async () => {
+        const now = Date.now();
+        const otherCp = { id: 1, timestamp: now - 100, trigger: 'manual' }; // Recent but different trigger
+        mocks.getAll.mockResolvedValue([otherCp]);
+        mocks.add.mockResolvedValue(2);
+        mocks.count.mockResolvedValue(2);
+
+        const id = await CheckpointService.createAutomaticCheckpoint('auto', 1000);
+
+        expect(id).toBe(2);
+        expect(mocks.add).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'auto' }));
     });
 });

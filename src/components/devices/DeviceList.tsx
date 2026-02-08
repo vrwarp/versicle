@@ -74,7 +74,7 @@ const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceIt
         const diff = now - lastActive;
         if (diff < 10 * 60 * 1000) return 'bg-green-500'; // < 10 mins
         if (diff < 24 * 60 * 60 * 1000) return 'bg-yellow-500'; // < 24 hours
-        return 'bg-gray-300 dark:bg-gray-600'; // Offline
+        return 'bg-muted-foreground/30'; // Offline
     };
 
     const formatLastActive = (lastActive: number) => {

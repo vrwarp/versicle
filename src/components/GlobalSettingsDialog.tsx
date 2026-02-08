@@ -559,7 +559,24 @@ export const GlobalSettingsDialog = () => {
                             <SyncSettingsTab
                                 currentDeviceId={currentDeviceId}
                                 currentDeviceName={devices[currentDeviceId]?.name || 'Unknown Device'}
-                                onDeviceRename={(name) => renameDevice(currentDeviceId, name)}
+                                onDeviceRename={(name) => {
+                                    if (devices[currentDeviceId]) {
+                                        renameDevice(currentDeviceId, name);
+                                    } else {
+                                        // Self-healing: Device not mesh-registered? Register it now with the new name.
+                                        const prefs = usePreferencesStore.getState();
+                                        const tts = useTTSStore.getState();
+                                        const profile = {
+                                            theme: prefs.currentTheme,
+                                            fontSize: prefs.fontSize,
+                                            ttsVoiceURI: tts.voice ? tts.voice.id : null,
+                                            ttsRate: tts.rate,
+                                            ttsPitch: tts.pitch
+                                        };
+                                        useDeviceStore.getState().registerCurrentDevice(currentDeviceId, profile, name);
+                                        showToast('Device registered to mesh', 'success');
+                                    }
+                                }}
                                 syncProvider={syncProvider}
                                 onSyncProviderChange={setSyncProvider}
                                 isFirebaseAvailable={isFirebaseAvailable}

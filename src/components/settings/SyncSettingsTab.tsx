@@ -40,7 +40,7 @@ export interface SyncSettingsTabProps {
     onClearConfig: () => void;
 }
 
-import { Dialog } from '../ui/Dialog';
+import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
 import { DriveFolderPicker } from '../drive/DriveFolderPicker';
 import { useDriveStore } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
@@ -168,7 +168,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                 </p>
 
                 {/* Device Identity */}
-                <div className="space-y-4 mb-6 pb-6 border-b">
+                <div className="space-y-4 mb-6 pb-6 border-b border-border">
                     <h4 className="text-sm font-medium">Device Identity</h4>
                     <div className="space-y-2">
                         <Label htmlFor="device-name-input">Device Name</Label>
@@ -206,7 +206,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
                 {/* Firebase Section */}
                 {syncProvider === 'firebase' && (
-                    <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                    <div className="space-y-4 p-4 border border-border rounded-lg bg-muted/30">
                         <h4 className="text-sm font-medium">Firebase Configuration</h4>
 
                         {!isFirebaseAvailable ? (
@@ -219,13 +219,13 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                     <Label htmlFor="firebase-config-paste">Paste Firebase Config</Label>
                                     <textarea
                                         id="firebase-config-paste"
-                                        className="w-full h-32 p-2 text-xs font-mono border rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                                        className="w-full h-32 p-2 text-xs font-mono border border-input rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                                         placeholder="// Paste your Firebase config here"
                                         onChange={(e) => parseFirebaseConfig(e.target.value)}
                                         data-testid="firebase-config-paste"
                                     />
                                 </div>
-                                <div className="border-t pt-3 mt-2">
+                                <div className="border-t border-border pt-3 mt-2">
                                     <p className="text-xs text-muted-foreground mb-3">Or edit fields individually:</p>
                                 </div>
                                 <div className="space-y-2">
@@ -254,7 +254,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                             <div className="space-y-3">
                                 <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-md">
                                     <div className="space-y-0.5">
-                                        <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                                        <p className="text-sm font-medium text-success">
                                             {firestoreStatus === 'connected' ? '✓ Connected' : 'Connecting...'}
                                         </p>
                                         <p className="text-xs text-muted-foreground">
@@ -301,18 +301,18 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
             </div>
 
             {/* Section 2: Cloud Integrations */}
-            <div className="pt-6 border-t">
+            <div className="pt-6 border-t border-border">
                 <h3 className="text-lg font-medium mb-4">Cloud Integrations</h3>
-                <div className="p-4 border rounded-lg bg-card">
+                <div className="p-4 border border-border rounded-lg bg-card">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
-                            {/* Drive Icon (Simple SVG or Lucide) */}
-                            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                                <svg className="w-6 h-6" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="#0066da" />
-                                    <path d="m43.85 66.85 25.3-43.8 18.15 31.45-8.35 14.35h-35.1z" fill="#4395ec" />
-                                    <path d="m87.3 52.5-18.15-31.45-18.15-31.45h-36.3l18.15 31.45z" fill="#0093f9" />
-                                </svg>
+                            {/* Drive Logo */}
+                            <div className="p-2 bg-muted rounded-full">
+                                <img
+                                    src="/logo_drive_2020q4_color_2x_web_64dp.png"
+                                    alt="Google Drive"
+                                    className="w-6 h-6 object-contain"
+                                />
                             </div>
                             <div>
                                 <h4 className="text-sm font-medium">Google Drive</h4>
@@ -323,7 +323,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                         </div>
                         {isDriveConnected ? (
                             <div className="flex items-center space-x-2">
-                                <span className="text-xs font-medium text-green-600 dark:text-green-400">Connected</span>
+                                <span className="text-xs font-medium text-success">Connected</span>
                                 <Button variant="outline" size="sm" onClick={handleDriveDisconnect}>Disconnect</Button>
                             </div>
                         ) : (
@@ -346,7 +346,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
                     {/* Linked Folder Selection */}
                     {isDriveConnected && (
-                        <div className="mt-4 pt-4 border-t pl-[3.5rem]">
+                        <div className="mt-4 pt-4 border-t border-border pl-[3.5rem]">
                             <div className="flex items-center justify-between">
                                 <div className="space-y-0.5">
                                     <Label className="text-sm font-medium">Library Folder</Label>
@@ -367,7 +367,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
                             {/* Scan Action */}
                             {linkedFolderName && (
-                                <div className="mt-4 flex items-center justify-between border-t pt-4">
+                                <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
                                     <div className="space-y-0.5">
                                         <Label className="text-sm font-medium">Sync Library</Label>
                                         <p className="text-xs text-muted-foreground">
@@ -396,7 +396,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
                     {/* Client ID Configuration (Web Only) */}
                     {!isDriveConnected && (
-                        <div className="mt-4 pt-4 border-t">
+                        <div className="mt-4 pt-4 border-t border-border">
                             <Label htmlFor="google-client-id" className="text-xs font-medium text-muted-foreground">
                                 Google Client ID (Web Only)
                             </Label>
@@ -426,18 +426,20 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                 </div>
             </div>
             {/* Folder Picker Dialog */}
-            <Dialog
-                isOpen={isPickerOpen}
-                onClose={() => setIsPickerOpen(false)}
-                title="Google Drive"
-                hideCloseButton={true} // Picker has its own cancel
-                className="max-w-2xl p-0 overflow-hidden" // Override default padding/width
-            >
-                <DriveFolderPicker
-                    onSelect={handleFolderSelect}
-                    onCancel={() => setIsPickerOpen(false)}
-                />
-            </Dialog>
+            {/* Folder Picker Modal */}
+            <Modal open={isPickerOpen} onOpenChange={(open) => !open && setIsPickerOpen(false)}>
+                <ModalContent className="max-w-2xl h-[600px] p-0 overflow-hidden flex flex-col gap-0 border-border bg-background">
+                    <ModalHeader className="p-6 pb-2">
+                        <ModalTitle>Select Library Folder</ModalTitle>
+                    </ModalHeader>
+                    <div className="flex-1 min-h-0">
+                        <DriveFolderPicker
+                            onSelect={handleFolderSelect}
+                            onCancel={() => setIsPickerOpen(false)}
+                        />
+                    </div>
+                </ModalContent>
+            </Modal>
         </div>
     );
 };

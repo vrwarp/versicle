@@ -265,13 +265,13 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                 <Button data-testid="lexicon-close-btn" variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
             }
         >
-            <div className="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-gray-700 pb-2 overflow-x-auto gap-4">
+            <div className="flex justify-between items-center mb-4 border-b border-border pb-2 overflow-x-auto gap-4">
                 <div className="flex space-x-4 shrink-0" role="tablist" aria-label="Lexicon Scope">
                     <button
                         role="tab"
                         aria-selected={scope === 'global'}
                         onClick={() => setScope('global')}
-                        className={`pb-1 px-2 ${scope === 'global' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                        className={`pb-1 px-2 ${scope === 'global' ? 'border-b-2 border-primary font-bold text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                         Global
                     </button>
@@ -280,7 +280,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                             role="tab"
                             aria-selected={scope === 'book'}
                             onClick={() => setScope('book')}
-                            className={`pb-1 px-2 ${scope === 'book' ? 'border-b-2 border-blue-500 font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                            className={`pb-1 px-2 ${scope === 'book' ? 'border-b-2 border-primary font-bold text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                         >
                             This Book
                         </button>
@@ -335,7 +335,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     aria-pressed={biblePreference === 'off'}
                                     data-testid="lexicon-pref-off"
                                     onClick={() => handleBiblePreferenceChange('off')}
-                                    className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'off' ? 'bg-background shadow-sm font-medium text-red-600' : 'hover:bg-background/50 text-muted-foreground'}`}
+                                    className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'off' ? 'bg-background shadow-sm font-medium text-destructive' : 'hover:bg-background/50 text-muted-foreground'}`}
                                 >
                                     Off
                                 </button>
@@ -347,23 +347,23 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                 {/* List */}
                 <div data-testid="lexicon-rules-list" className="space-y-2">
                     {rules.map((rule, index) => (
-                        <div key={rule.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
+                        <div key={rule.id} className="flex items-center justify-between p-2 bg-card rounded border border-border">
                             {editingRule?.id === rule.id ? (
                                 <div className="flex flex-1 items-center gap-2">
                                     <div className="flex flex-col gap-1 w-full">
                                         <div className="flex flex-col gap-2 w-full">
                                             <input
                                                 data-testid="lexicon-input-original"
-                                                className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                className="border p-1 rounded flex-1 min-w-0 text-sm bg-background border-input text-foreground"
                                                 value={editingRule.original}
                                                 onChange={e => setEditingRule({ ...editingRule, original: e.target.value })}
                                                 placeholder="Original"
                                             />
                                             <div className="flex items-center gap-2 w-full">
-                                                <CornerDownRight size={16} className="text-gray-400 shrink-0" />
+                                                <CornerDownRight size={16} className="text-muted-foreground shrink-0" />
                                                 <input
                                                     data-testid="lexicon-input-replacement"
-                                                    className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                                    className="border p-1 rounded flex-1 min-w-0 text-sm bg-background border-input text-foreground"
                                                     value={editingRule.replacement}
                                                     onChange={e => setEditingRule({ ...editingRule, replacement: e.target.value })}
                                                     placeholder="Replacement"
@@ -372,32 +372,32 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                         </div>
                                         <div className="flex items-center justify-between gap-2 mt-2">
                                             <div className="flex gap-4">
-                                                <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                <label className="flex items-center gap-2 text-xs text-muted-foreground">
                                                     <input
                                                         data-testid="lexicon-regex-checkbox"
                                                         type="checkbox"
                                                         checked={editingRule.isRegex || false}
                                                         onChange={e => setEditingRule({ ...editingRule, isRegex: e.target.checked })}
-                                                        className="rounded border-gray-300 dark:border-gray-600"
+                                                        className="rounded border-input"
                                                     />
                                                     Regex
                                                 </label>
                                                 {scope === 'book' && (
-                                                    <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400" title="Apply this rule before global rules">
+                                                    <label className="flex items-center gap-2 text-xs text-muted-foreground" title="Apply this rule before global rules">
                                                         <input
                                                             data-testid="lexicon-priority-checkbox"
                                                             type="checkbox"
                                                             checked={editingRule.applyBeforeGlobal || false}
                                                             onChange={e => setEditingRule({ ...editingRule, applyBeforeGlobal: e.target.checked })}
-                                                            className="rounded border-gray-300 dark:border-gray-600"
+                                                            className="rounded border-input"
                                                         />
                                                         High Priority
                                                     </label>
                                                 )}
                                             </div>
                                             <div className="flex gap-2">
-                                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
-                                                <button aria-label="Cancel editing" data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
+                                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-500/10 rounded"><Save size={18} /></button>
+                                                <button aria-label="Cancel editing" data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-destructive hover:bg-destructive/10 rounded"><X size={18} /></button>
                                             </div>
                                         </div>
                                     </div>
@@ -408,11 +408,11 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                         <div className="flex items-baseline gap-2 flex-wrap">
                                             {rule.isRegex && <span data-testid="lexicon-regex-badge" className="text-[10px] uppercase font-bold text-purple-600 border border-purple-200 bg-purple-50 px-1 rounded shrink-0">Re</span>}
                                             {rule.applyBeforeGlobal && <span data-testid="lexicon-priority-badge" className="text-[10px] uppercase font-bold text-orange-600 border border-orange-200 bg-orange-50 px-1 rounded shrink-0">Pre</span>}
-                                            <span className="font-mono text-sm break-all text-gray-900 dark:text-gray-100">{rule.original}</span>
+                                            <span className="font-mono text-sm break-all text-foreground">{rule.original}</span>
                                         </div>
                                         <div className="flex items-center gap-2 pl-1">
-                                            <CornerDownRight size={14} className="text-gray-400 shrink-0" />
-                                            <span className="font-semibold text-gray-800 dark:text-gray-300 text-sm break-words">{rule.replacement}</span>
+                                            <CornerDownRight size={14} className="text-muted-foreground shrink-0" />
+                                            <span className="font-semibold text-foreground/80 text-sm break-words">{rule.replacement}</span>
                                         </div>
                                     </div>
                                     <div className="flex gap-2 items-center">
@@ -422,7 +422,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 data-testid={`lexicon-move-up-${index}`}
                                                 onClick={() => moveRule(index, 'up')}
                                                 disabled={index === 0}
-                                                className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                                                className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
                                             >
                                                 <ArrowUp size={12} />
                                             </button>
@@ -431,13 +431,13 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 data-testid={`lexicon-move-down-${index}`}
                                                 onClick={() => moveRule(index, 'down')}
                                                 disabled={index === rules.length - 1}
-                                                className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                                                className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
                                             >
                                                 <ArrowDown size={12} />
                                             </button>
                                         </div>
-                                        <button onClick={() => setEditingRule(rule)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                                        <button aria-label="Delete rule" onClick={() => handleDelete(rule.id)} className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 p-1 rounded"><Trash2 size={16} /></button>
+                                        <button onClick={() => setEditingRule(rule)} className="text-xs text-primary hover:underline">Edit</button>
+                                        <button aria-label="Delete rule" onClick={() => handleDelete(rule.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={16} /></button>
                                     </div>
                                 </>
                             )}
@@ -445,7 +445,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     ))}
 
                     {rules.length === 0 && !isAdding && (
-                        <div className="text-center py-8 text-gray-400 text-sm">
+                        <div className="text-center py-8 text-muted-foreground text-sm">
                             No rules defined for this scope.
                         </div>
                     )}
@@ -453,21 +453,21 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
                 {/* Add New */}
                 {isAdding ? (
-                    <div className="flex flex-col gap-2 p-2 border rounded bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                    <div className="flex flex-col gap-2 p-2 border rounded bg-card border-border">
                         <div className="flex flex-col gap-2">
                             <input
                                 data-testid="lexicon-input-original"
-                                className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                className="border p-1 rounded flex-1 min-w-0 text-sm bg-background border-input text-foreground"
                                 value={editingRule?.original || ''}
                                 onChange={e => setEditingRule({ ...editingRule, original: e.target.value })}
                                 placeholder="Original"
                                 autoFocus
                             />
                             <div className="flex items-center gap-2">
-                                <CornerDownRight size={16} className="text-gray-400 shrink-0" />
+                                <CornerDownRight size={16} className="text-muted-foreground shrink-0" />
                                 <input
                                     data-testid="lexicon-input-replacement"
-                                    className="border p-1 rounded flex-1 min-w-0 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    className="border p-1 rounded flex-1 min-w-0 text-sm bg-background border-input text-foreground"
                                     value={editingRule?.replacement || ''}
                                     onChange={e => setEditingRule({ ...editingRule, replacement: e.target.value })}
                                     placeholder="Replacement"
@@ -476,32 +476,32 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
                             <div className="flex gap-4">
-                                <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                <label className="flex items-center gap-2 text-xs text-muted-foreground">
                                     <input
                                         data-testid="lexicon-regex-checkbox"
                                         type="checkbox"
                                         checked={editingRule?.isRegex || false}
                                         onChange={e => setEditingRule({ ...editingRule, isRegex: e.target.checked })}
-                                        className="rounded border-gray-300 dark:border-gray-600"
+                                        className="rounded border-input"
                                     />
                                     Regex
                                 </label>
                                 {scope === 'book' && (
-                                    <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400" title="Apply this rule before global rules">
+                                    <label className="flex items-center gap-2 text-xs text-muted-foreground" title="Apply this rule before global rules">
                                         <input
                                             data-testid="lexicon-priority-checkbox"
                                             type="checkbox"
                                             checked={editingRule?.applyBeforeGlobal || false}
                                             onChange={e => setEditingRule({ ...editingRule, applyBeforeGlobal: e.target.checked })}
-                                            className="rounded border-gray-300 dark:border-gray-600"
+                                            className="rounded border-input"
                                         />
                                         High Priority
                                     </label>
                                 )}
                             </div>
                             <div className="flex gap-2">
-                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded"><Save size={18} /></button>
-                                <button aria-label="Cancel adding" data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-red-600 hover:bg-red-100 rounded"><X size={18} /></button>
+                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-500/10 rounded"><Save size={18} /></button>
+                                <button aria-label="Cancel adding" data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-destructive hover:bg-destructive/10 rounded"><X size={18} /></button>
                             </div>
                         </div>
                     </div>
@@ -512,12 +512,12 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                 )}
 
                 {/* Test Area */}
-                <div className="mt-8 pt-4 border-t border-gray-100 dark:border-gray-700">
-                    <h4 className="text-xs font-semibold mb-2 text-gray-500 uppercase">Test Pronunciation</h4>
+                <div className="mt-8 pt-4 border-t border-border">
+                    <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase">Test Pronunciation</h4>
                     <div className="flex flex-col gap-2">
                         <input
                             data-testid="lexicon-test-input"
-                            className="w-full border p-2 rounded text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            className="w-full border p-2 rounded text-sm bg-background border-input text-foreground"
                             placeholder="Type a sentence containing your words..."
                             value={testInput}
                             onChange={e => setTestInput(e.target.value)}
@@ -554,28 +554,28 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                         </div>
                     </div>
                     {testOutput && (
-                        <div className="mt-2 text-sm text-gray-500">
-                            Processed: <span className="italic text-gray-900 dark:text-gray-100">{testOutput}</span>
+                        <div className="mt-2 text-sm text-muted-foreground">
+                            Processed: <span className="italic text-foreground">{testOutput}</span>
                         </div>
                     )}
 
                     {testTrace.length > 0 && (
                         <div className="mt-4 flex flex-col gap-2">
-                            <h5 className="text-xs font-semibold text-gray-500 uppercase">Transformation Steps</h5>
-                            <div className="border rounded dark:border-gray-700 bg-gray-50 dark:bg-gray-800 divide-y dark:divide-gray-700 text-xs max-h-[200px] overflow-y-auto">
+                            <h5 className="text-xs font-semibold text-muted-foreground uppercase">Transformation Steps</h5>
+                            <div className="border rounded border-border bg-muted/30 divide-y divide-border text-xs max-h-[200px] overflow-y-auto">
                                 {testTrace.map((item, idx) => {
                                     const isBible = item.rule.id.startsWith('bible-');
                                     return (
                                         <div key={idx} className="p-2 flex flex-col gap-1">
                                             <div className="flex items-center gap-2">
                                                 {isBible ? (
-                                                    <span className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-1 rounded text-[10px] uppercase font-bold shrink-0">Bible</span>
+                                                    <span className="bg-primary/10 text-primary px-1 rounded text-[10px] uppercase font-bold shrink-0">Bible</span>
                                                 ) : (
-                                                    <span className="bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 px-1 rounded text-[10px] uppercase font-bold shrink-0">Rule</span>
+                                                    <span className="bg-muted text-muted-foreground px-1 rounded text-[10px] uppercase font-bold shrink-0">Rule</span>
                                                 )}
 
                                                 {isBible ? (
-                                                    <span className="font-mono text-gray-600 dark:text-gray-400 truncate">
+                                                    <span className="font-mono text-muted-foreground truncate">
                                                         {item.rule.original} &rarr; {item.rule.replacement}
                                                     </span>
                                                 ) : (
@@ -587,16 +587,16 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                                 setIsAdding(false);
                                                             }
                                                         }}
-                                                        className="font-mono font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate text-left"
+                                                        className="font-mono font-semibold text-primary hover:underline truncate text-left"
                                                         title="Click to edit rule"
                                                     >
                                                         {item.rule.original} &rarr; {item.rule.replacement}
                                                     </button>
                                                 )}
                                             </div>
-                                            <div className="pl-2 border-l-2 border-gray-200 dark:border-gray-600 ml-1">
-                                                <div className="text-gray-500 dark:text-gray-400 truncate">
-                                                   <span className="italic text-gray-800 dark:text-gray-200">{item.after}</span>
+                                            <div className="pl-2 border-l-2 border-border ml-1">
+                                                <div className="text-muted-foreground truncate">
+                                                    <span className="italic text-foreground/90">{item.after}</span>
                                                 </div>
                                             </div>
                                         </div>

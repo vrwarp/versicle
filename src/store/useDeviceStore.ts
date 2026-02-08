@@ -18,7 +18,7 @@ interface DeviceState {
     /**
      * Registers or updates the current device with full metadata and profile.
      */
-    registerCurrentDevice: (deviceId: string, profile: DeviceProfile) => void;
+    registerCurrentDevice: (deviceId: string, profile: DeviceProfile, name?: string) => void;
 
     /**
      * Updates the last active timestamp for a device.
@@ -46,7 +46,7 @@ export const useDeviceStore = create<DeviceState>()(
         (set, get) => ({
             devices: {},
 
-            registerCurrentDevice: (deviceId, profile) => {
+            registerCurrentDevice: (deviceId, profile, name) => {
                 const state = get();
                 const existing = state.devices[deviceId];
                 const now = Date.now();
@@ -57,12 +57,14 @@ export const useDeviceStore = create<DeviceState>()(
                 const result = parser.getResult();
 
                 // Smart Name Generation (only if new)
-                let name = existing?.name;
-                if (!name) {
+                let deviceName = existing?.name;
+                if (name) {
+                    deviceName = name;
+                } else if (!deviceName) {
                     const browser = result.browser.name || 'Browser';
                     const os = result.os.name || 'Unknown OS';
                     const device = result.device.model ? ` ${result.device.model}` : '';
-                    name = `${browser} on ${os}${device}`;
+                    deviceName = `${browser} on ${os}${device}`;
                 }
 
                 set({
@@ -70,7 +72,7 @@ export const useDeviceStore = create<DeviceState>()(
                         ...state.devices,
                         [deviceId]: {
                             id: deviceId,
-                            name,
+                            name: deviceName,
                             platform: result.os.name || 'Unknown',
                             browser: result.browser.name || 'Unknown',
                             model: result.device.model || null,

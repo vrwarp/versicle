@@ -49,6 +49,28 @@ export class CheckpointService {
   }
 
   /**
+   * Creates a checkpoint only if the last checkpoint with the same trigger
+   * was created more than `intervalMs` ago.
+   * Returns the new checkpoint ID if created, or null if skipped.
+   */
+  static async createAutomaticCheckpoint(trigger: string, intervalMs: number): Promise<number | null> {
+    const db = await getDB();
+    const checkpoints = await db.getAll('checkpoints');
+    const lastCheckpoint = checkpoints
+      .filter(cp => cp.trigger === trigger)
+      .sort((a, b) => b.timestamp - a.timestamp)[0];
+
+    if (lastCheckpoint) {
+      const timeSinceLast = Date.now() - lastCheckpoint.timestamp;
+      if (timeSinceLast < intervalMs) {
+        return null; // Skip checkpoint
+      }
+    }
+
+    return this.createCheckpoint(trigger);
+  }
+
+  /**
    * Destructive Restore: Clears current Yjs types and applies snapshot.
    */
   static async restoreCheckpoint(id: number): Promise<void> {
@@ -73,10 +95,10 @@ export class CheckpointService {
           // Clear Array
           type.delete(0, type.length);
         } else if (type instanceof Y.XmlFragment) {
-            // Should not be used in our store, but safe handling
-            type.delete(0, type.length);
+          // Should not be used in our store, but safe handling
+          type.delete(0, type.length);
         } else if (type instanceof Y.Text) {
-            type.delete(0, type.length);
+          type.delete(0, type.length);
         }
       }
 

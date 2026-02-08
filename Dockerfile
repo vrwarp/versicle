@@ -19,6 +19,9 @@ RUN npm run build
 # Stage 2: Serve the application with Nginx
 FROM nginx:alpine
 
+# Default environment variables
+ENV FIREBASE_AUTH_DOMAIN=localhost
+
 # Copy the build output from the builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
