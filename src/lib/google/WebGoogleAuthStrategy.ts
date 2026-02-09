@@ -1,5 +1,5 @@
 import { SocialLogin } from '@capgo/capacitor-social-login';
-import { getScopesForService } from './config';
+import { getScopesForService, type GoogleLoginOptions } from './config';
 
 export class WebGoogleAuthStrategy {
     private accessToken: string | null = null;
@@ -23,7 +23,7 @@ export class WebGoogleAuthStrategy {
         void loginHint; // Suppress unused variable
 
         // Use SocialLogin plugin
-        const options: any = {
+        const options: GoogleLoginOptions = {
             scopes: getScopesForService(serviceId),
         };
 

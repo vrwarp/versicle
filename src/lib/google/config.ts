@@ -4,6 +4,13 @@ export interface GoogleServiceConfig {
     scopes: string[];
 }
 
+export interface GoogleLoginOptions {
+    scopes: string[];
+    style?: 'bottom' | 'standard';
+    autoSelectEnabled?: boolean;
+    login_hint?: string;
+}
+
 export const GOOGLE_SERVICES: Record<string, GoogleServiceConfig> = {
     drive: {
         id: 'drive',
