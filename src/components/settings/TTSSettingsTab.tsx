@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Label } from '../ui/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { Input } from '../ui/Input';
 import { Slider } from '../ui/Slider';
 import { Button } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
 import { Trash2 } from 'lucide-react';
 import type { TTSVoice } from '../../lib/tts/providers/types';
 
@@ -63,6 +64,19 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     minSentenceLength,
     onMinSentenceLengthChange
 }) => {
+    const [voiceToDelete, setVoiceToDelete] = useState<string | null>(null);
+
+    const handleConfirmDelete = () => {
+        if (voiceToDelete) {
+            onDeleteVoice(voiceToDelete);
+            setVoiceToDelete(null);
+        }
+    };
+
+    const getVoiceName = (id: string) => {
+        return voices.find(v => v.id === id)?.name || 'Unknown Voice';
+    };
+
     return (
         <div className="space-y-6">
             <div>
@@ -170,11 +184,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                                 </Button>
                                                 {isVoiceReady && (
                                                     <Button
-                                                        onClick={() => {
-                                                            if (confirm('Delete downloaded voice data?')) {
-                                                                onDeleteVoice(voice.id);
-                                                            }
-                                                        }}
+                                                        onClick={() => setVoiceToDelete(voice.id)}
                                                         variant="destructive"
                                                         size="icon"
                                                         title="Delete Voice Data"
@@ -249,6 +259,25 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                     </div>
                 </div>
             </div>
+
+            <Dialog
+                isOpen={!!voiceToDelete}
+                onClose={() => setVoiceToDelete(null)}
+                title="Delete Voice Data"
+                description={`Are you sure you want to delete the voice data for "${voiceToDelete ? getVoiceName(voiceToDelete) : ''}"? You will need to download it again to use it offline.`}
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setVoiceToDelete(null)}>Cancel</Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleConfirmDelete}
+                            data-testid="confirm-delete-voice"
+                        >
+                            Delete
+                        </Button>
+                    </>
+                }
+            />
         </div>
     );
 };
