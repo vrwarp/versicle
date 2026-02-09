@@ -35,10 +35,7 @@ const config: CapacitorConfig = {
       "detectViewportFitCoverChanges": false,
       "initialViewportFitCover": false
     },
-    FirebaseAuthentication: {
-      skipNativeAuth: false,
-      providers: ["google.com"],
-    },
+
   },
 };
 

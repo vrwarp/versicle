@@ -1,0 +1,32 @@
+diff --git a/node_modules/@capgo/capacitor-social-login/dist/esm/google-provider.js b/node_modules/@capgo/capacitor-social-login/dist/esm/google-provider.js
+index 1bd1009..70a1fd8 100644
+--- a/node_modules/@capgo/capacitor-social-login/dist/esm/google-provider.js
++++ b/node_modules/@capgo/capacitor-social-login/dist/esm/google-provider.js
+@@ -46,6 +46,7 @@ export class GoogleSocialLogin extends BaseSocialLogin {
+             nonce,
+             hostedDomain: this.hostedDomain,
+             prompt: options.prompt,
++            login_hint: options.login_hint,
+         });
+     }
+     async logout() {
+@@ -285,7 +286,8 @@ export class GoogleSocialLogin extends BaseSocialLogin {
+             return null;
+         }
+     }
+-    async traditionalOAuth({ scopes, hostedDomain, nonce, prompt, }) {
++    async traditionalOAuth(options) {
++        const { scopes, hostedDomain, nonce, prompt } = options;
+         var _a;
+         const uniqueScopes = [...new Set([...(scopes || []), 'openid'])];
+         const params = new URLSearchParams(Object.assign(Object.assign({ client_id: (_a = this.clientId) !== null && _a !== void 0 ? _a : '', redirect_uri: this.redirectUrl || window.location.origin + window.location.pathname, response_type: this.loginType === 'offline' ? 'code' : 'token id_token', scope: uniqueScopes.join(' ') }, (nonce && { nonce })), { include_granted_scopes: 'true', state: 'popup' }));
+@@ -295,6 +297,9 @@ export class GoogleSocialLogin extends BaseSocialLogin {
+         if (prompt !== undefined) {
+             params.append('prompt', prompt);
+         }
++        if (options.login_hint) {
++            params.append('login_hint', options.login_hint);
++        }
+         const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+         const width = 500;
+         const height = 600;

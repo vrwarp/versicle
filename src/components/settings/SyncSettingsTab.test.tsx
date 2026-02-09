@@ -16,6 +16,32 @@ vi.mock('../ui/Select', () => ({
     SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>
 }));
 
+// Mock Google Services Store
+const mockSetGoogleClientId = vi.fn();
+const mockSetGoogleIosClientId = vi.fn();
+
+vi.mock('../../store/useGoogleServicesStore', () => ({
+    useGoogleServicesStore: Object.assign(
+        () => ({
+            isServiceConnected: vi.fn().mockReturnValue(false),
+            googleClientId: 'mock-web-id',
+            googleIosClientId: 'mock-ios-id',
+        }),
+        {
+            getState: () => ({
+                setGoogleClientId: mockSetGoogleClientId,
+                setGoogleIosClientId: mockSetGoogleIosClientId,
+                googleClientId: 'mock-web-id',
+                googleIosClientId: 'mock-ios-id',
+                // Mock other used actions if necessary
+                connectService: vi.fn(),
+                disconnectService: vi.fn(),
+                isServiceConnected: vi.fn().mockReturnValue(false),
+            }),
+        }
+    ),
+}));
+
 describe('SyncSettingsTab', () => {
     const defaultProps: SyncSettingsTabProps = {
         currentDeviceId: 'device-123',
@@ -173,5 +199,16 @@ describe('SyncSettingsTab', () => {
 
         fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'new-key' } });
         expect(onFirebaseConfigChange).toHaveBeenCalledWith({ apiKey: 'new-key' });
+    });
+    it('updates Google Client IDs', () => {
+        render(<SyncSettingsTab {...defaultProps} syncProvider="none" />);
+
+        const webInput = screen.getByLabelText('Web Client ID');
+        fireEvent.change(webInput, { target: { value: 'new-web-id' } });
+        expect(mockSetGoogleClientId).toHaveBeenCalledWith('new-web-id');
+
+        const iosInput = screen.getByLabelText('iOS Client ID');
+        fireEvent.change(iosInput, { target: { value: 'new-ios-id' } });
+        expect(mockSetGoogleIosClientId).toHaveBeenCalledWith('new-ios-id');
     });
 });

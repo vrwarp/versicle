@@ -4,7 +4,9 @@ import { persist } from 'zustand/middleware';
 interface GoogleServicesState {
     connectedServices: string[];
     googleClientId: string | null;
+    googleIosClientId: string | null;
     setGoogleClientId: (clientId: string) => void;
+    setGoogleIosClientId: (clientId: string) => void;
     connectService: (serviceId: string) => void;
     disconnectService: (serviceId: string) => void;
     isServiceConnected: (serviceId: string) => boolean;
@@ -16,7 +18,9 @@ export const useGoogleServicesStore = create<GoogleServicesState>()(
         (set, get) => ({
             connectedServices: [],
             googleClientId: null,
+            googleIosClientId: null,
             setGoogleClientId: (clientId) => set({ googleClientId: clientId }),
+            setGoogleIosClientId: (clientId) => set({ googleIosClientId: clientId }),
             connectService: (serviceId) =>
                 set((state) => ({
                     connectedServices: state.connectedServices.includes(serviceId)

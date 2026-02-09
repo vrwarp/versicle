@@ -2,7 +2,7 @@ apply plugin: 'com.android.application'
 
 android {
     namespace "com.vrwarp.versicle"
-    compileSdk rootProject.ext.compileSdkVersion
+    compileSdk 36
     defaultConfig {
         applicationId "com.vrwarp.versicle"
         minSdkVersion rootProject.ext.minSdkVersion

@@ -100,7 +100,6 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     // ... inside component ...
     const {
         isServiceConnected,
-        googleClientId
     } = useGoogleServicesStore();
     const [isDriveConnecting, setIsDriveConnecting] = React.useState(false);
 
@@ -394,33 +393,69 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                         </div>
                     )}
 
-                    {/* Client ID Configuration (Web Only) */}
+                    {/* Client ID Configuration */}
                     {!isDriveConnected && (
-                        <div className="mt-4 pt-4 border-t border-border">
-                            <Label htmlFor="google-client-id" className="text-xs font-medium text-muted-foreground">
-                                Google Client ID (Web Only)
-                            </Label>
-                            <div className="flex gap-2 mt-1.5">
-                                <Input
-                                    id="google-client-id"
-                                    value={googleClientId || ''}
-                                    onChange={(e) => useGoogleServicesStore.getState().setGoogleClientId(e.target.value)}
-                                    placeholder="Optional: Enter custom Client ID"
-                                    className="text-xs h-8"
-                                />
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 text-muted-foreground"
-                                    onClick={() => useGoogleServicesStore.getState().setGoogleClientId('')}
-                                    title="Clear Client ID"
-                                >
-                                    ✕
-                                </Button>
+                        <div className="mt-4 pt-4 border-t border-border space-y-4">
+                            <div>
+                                <h4 className="text-sm font-medium mb-2">Google Authentication Configuration</h4>
+                                <p className="text-xs text-muted-foreground mb-4">
+                                    Override default Client IDs for custom deployments. Leave empty to use defaults.
+                                </p>
+
+                                <div className="grid gap-4">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="google-web-client-id" className="text-xs font-medium">
+                                            Web Client ID
+                                        </Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id="google-web-client-id"
+                                                value={useGoogleServicesStore.getState().googleClientId || ''}
+                                                onChange={(e) => useGoogleServicesStore.getState().setGoogleClientId(e.target.value)}
+                                                placeholder="Default Web Client ID"
+                                                className="text-xs h-8"
+                                            />
+                                            {useGoogleServicesStore.getState().googleClientId && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 px-2 text-muted-foreground"
+                                                    onClick={() => useGoogleServicesStore.getState().setGoogleClientId('')}
+                                                    title="Clear"
+                                                >
+                                                    ✕
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="google-ios-client-id" className="text-xs font-medium">
+                                            iOS Client ID
+                                        </Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id="google-ios-client-id"
+                                                value={useGoogleServicesStore.getState().googleIosClientId || ''}
+                                                onChange={(e) => useGoogleServicesStore.getState().setGoogleIosClientId(e.target.value)}
+                                                placeholder="Default iOS Client ID"
+                                                className="text-xs h-8"
+                                            />
+                                            {useGoogleServicesStore.getState().googleIosClientId && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 px-2 text-muted-foreground"
+                                                    onClick={() => useGoogleServicesStore.getState().setGoogleIosClientId('')}
+                                                    title="Clear"
+                                                >
+                                                    ✕
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <p className="text-[10px] text-muted-foreground mt-1">
-                                Leave empty to use built-in default. Required for custom deployments.
-                            </p>
                         </div>
                     )}
                 </div>
