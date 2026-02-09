@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { NativeGoogleAuthStrategy } from './NativeGoogleAuthStrategy';
+import { IosGoogleAuthStrategy } from './IosGoogleAuthStrategy';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 
 vi.mock('@capgo/capacitor-social-login', () => ({
@@ -13,12 +13,12 @@ vi.mock('./config', () => ({
     getScopesForService: vi.fn().mockReturnValue(['scope1', 'scope2']),
 }));
 
-describe('NativeGoogleAuthStrategy', () => {
-    let strategy: NativeGoogleAuthStrategy;
+describe('IosGoogleAuthStrategy', () => {
+    let strategy: IosGoogleAuthStrategy;
 
     beforeEach(() => {
         vi.clearAllMocks();
-        strategy = new NativeGoogleAuthStrategy();
+        strategy = new IosGoogleAuthStrategy();
         vi.useFakeTimers();
     });
 

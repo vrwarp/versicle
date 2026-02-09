@@ -6,12 +6,14 @@ import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 vi.mock('@capacitor/core', () => ({
     Capacitor: {
         isNativePlatform: vi.fn().mockReturnValue(false),
+        getPlatform: vi.fn().mockReturnValue('web'),
     },
 }));
 
 // Mock Strategies modules to ensure they don't do anything real
 vi.mock('./WebGoogleAuthStrategy');
-vi.mock('./NativeGoogleAuthStrategy');
+vi.mock('./AndroidGoogleAuthStrategy');
+vi.mock('./IosGoogleAuthStrategy');
 
 describe('GoogleIntegrationManager', () => {
     beforeEach(() => {
