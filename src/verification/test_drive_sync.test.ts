@@ -11,6 +11,7 @@ vi.mock('../lib/drive/DriveService', () => ({
         listFolders: (parentId?: string) => mockDriveService.listFolders(parentId),
         getFolderMetadata: (folderId: string) => mockDriveService.getFolderMetadata(folderId),
         listFiles: (parentId: string, mimeType?: string) => mockDriveService.listFiles(parentId, mimeType),
+        listFilesRecursive: (parentId: string, mimeType?: string) => mockDriveService.listFilesRecursive(parentId, mimeType),
         downloadFile: (fileId: string) => mockDriveService.downloadFile(fileId),
     }
 }));
