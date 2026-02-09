@@ -7,6 +7,7 @@ import type { SearchResult, SearchSection } from '../types/search';
 export class SearchEngine {
     // Stores content as: BookID -> (Href -> Text)
     private books = new Map<string, Map<string, string>>();
+    private parser: DOMParser | undefined;
 
     /**
      * Initializes an empty storage for a book, clearing any previous data.
@@ -48,13 +49,15 @@ export class SearchEngine {
             let text = section.text;
 
             // Offload XML parsing if text is missing but XML is provided
-            if (!text && section.xml && typeof DOMParser !== 'undefined') {
-                try {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(section.xml, 'application/xhtml+xml');
-                    text = doc.body?.textContent || doc.documentElement?.textContent || '';
-                } catch (e) {
-                    console.warn(`Failed to parse XML for ${section.href}`, e);
+            if (!text && section.xml) {
+                const parser = this.getParser();
+                if (parser) {
+                    try {
+                        const doc = parser.parseFromString(section.xml, 'application/xhtml+xml');
+                        text = doc.body?.textContent || doc.documentElement?.textContent || '';
+                    } catch (e) {
+                        console.warn(`Failed to parse XML for ${section.href}`, e);
+                    }
                 }
             }
 
@@ -128,5 +131,15 @@ export class SearchEngine {
         const end = Math.min(text.length, index + length + 40);
 
         return (start > 0 ? '...' : '') + text.substring(start, end) + (end < text.length ? '...' : '');
+    }
+
+    /**
+     * Lazily initializes and returns a DOMParser instance if supported.
+     */
+    private getParser(): DOMParser | undefined {
+        if (!this.parser && typeof DOMParser !== 'undefined') {
+            this.parser = new DOMParser();
+        }
+        return this.parser;
     }
 }
