@@ -79,7 +79,7 @@ export const VisualSettings = () => {
 
         {/* Font Family Select */}
         <Select value={fontFamily} onValueChange={setFontFamily}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger className="w-full" aria-label="Select Font Family">
             <SelectValue placeholder="Font Family" />
           </SelectTrigger>
           <SelectContent>
@@ -104,7 +104,7 @@ export const VisualSettings = () => {
       <div className="space-y-4">
         <Label className="block text-sm font-medium">Layout</Label>
         <Tabs value={readerViewMode} onValueChange={(val) => setReaderViewMode(val as 'paginated' | 'scrolled')} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-2" aria-label="Layout mode">
             <TabsTrigger value="paginated">Paginated</TabsTrigger>
             <TabsTrigger value="scrolled">Scrolled</TabsTrigger>
           </TabsList>

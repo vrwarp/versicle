@@ -19,6 +19,7 @@ export const ThemeSelector = ({ currentTheme, onThemeChange, className }: ThemeS
           currentTheme === 'light' && "ring-2 ring-primary ring-offset-2 border-transparent"
         )}
         aria-label="Select Light theme"
+        aria-pressed={currentTheme === 'light'}
       >
         White
       </Button>
@@ -32,6 +33,7 @@ export const ThemeSelector = ({ currentTheme, onThemeChange, className }: ThemeS
           currentTheme === 'sepia' && "ring-2 ring-primary ring-offset-2"
         )}
         aria-label="Select Sepia theme"
+        aria-pressed={currentTheme === 'sepia'}
       >
         Sepia
       </Button>
@@ -45,6 +47,7 @@ export const ThemeSelector = ({ currentTheme, onThemeChange, className }: ThemeS
           currentTheme === 'dark' && "ring-2 ring-primary ring-offset-2"
         )}
         aria-label="Select Dark theme"
+        aria-pressed={currentTheme === 'dark'}
       >
         Dark
       </Button>

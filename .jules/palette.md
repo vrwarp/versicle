@@ -48,3 +48,7 @@
 
 **Learning:** Hidden file inputs triggered by other buttons are often missed by accessibility tools and lack names.
 **Action:** Always add `aria-label` to hidden `<input type="file">` elements to ensure they have an accessible name in the DOM.
+
+## 2025-10-26 - Accessible Theme & Visual Settings
+**Learning:** `aria-pressed` is the correct attribute for toggle-like buttons in a group (like theme selection) when they aren't implemented as radio buttons. For `Radix UI` primitives like `Select` and `Tabs`, adding `aria-label` to the Trigger or List component ensures screen readers announce the control's purpose, especially when visual labels are absent or purely presentational.
+**Action:** Always verify custom selection components (like button groups) expose their selected state to assistive technology. Use `aria-pressed` for button groups and `aria-label` for unlabelled dropdowns/tabs.
