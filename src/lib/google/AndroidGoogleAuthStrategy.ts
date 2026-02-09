@@ -1,5 +1,5 @@
 import { SocialLogin } from '@capgo/capacitor-social-login';
-import { getScopesForService } from './config';
+import { getScopesForService, type GoogleLoginOptions } from './config';
 
 export class AndroidGoogleAuthStrategy {
     private accessToken: string | null = null;
@@ -15,7 +15,7 @@ export class AndroidGoogleAuthStrategy {
         }
 
         // Use SocialLogin plugin with options to support login_hint (patched plugin)
-        const options: any = {
+        const options: GoogleLoginOptions = {
             scopes: getScopesForService(serviceId),
             style: 'bottom', // Required for autoSelectEnabled on Android
             autoSelectEnabled: true,

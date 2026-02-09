@@ -27,8 +27,16 @@ vi.mock('../ui/Slider', () => ({
     )
 }));
 
+interface DialogMockProps {
+    isOpen: boolean;
+    title: string;
+    description: string;
+    children: React.ReactNode;
+    footer: React.ReactNode;
+}
+
 vi.mock('../ui/Dialog', () => ({
-    Dialog: ({ isOpen, title, description, children, footer }: any) => isOpen ? (
+    Dialog: ({ isOpen, title, description, children, footer }: DialogMockProps) => isOpen ? (
         <div data-testid="dialog">
             <h1>{title}</h1>
             <p>{description}</p>
