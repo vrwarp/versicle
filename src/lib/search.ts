@@ -12,6 +12,7 @@ export type { SearchResult };
 class SearchClient {
     private worker: Worker | null = null;
     private engine: Comlink.Remote<SearchEngine> | null = null;
+    private parser: DOMParser | undefined;
     private indexedBooks = new Set<string>();
     private pendingIndexes = new Map<string, Promise<void>>();
 
@@ -71,6 +72,13 @@ class SearchClient {
         }
     }
 
+    private getParser(): DOMParser | undefined {
+        if (!this.parser && typeof DOMParser !== 'undefined') {
+            this.parser = new DOMParser();
+        }
+        return this.parser;
+    }
+
     private async indexBookInternal(book: Book, bookId: string, onProgress?: (percent: number) => void) {
         const engine = this.getEngine();
         await book.ready;
@@ -102,9 +110,11 @@ class SearchClient {
                                 if (canOffload) {
                                     xml = rawXml;
                                 } else {
-                                    const parser = new DOMParser();
-                                    const doc = parser.parseFromString(rawXml, 'application/xhtml+xml');
-                                    text = doc.body.textContent || '';
+                                    const parser = this.getParser();
+                                    if (parser) {
+                                        const doc = parser.parseFromString(rawXml, 'application/xhtml+xml');
+                                        text = doc.body.textContent || '';
+                                    }
                                 }
                             }
                         } catch (err) {

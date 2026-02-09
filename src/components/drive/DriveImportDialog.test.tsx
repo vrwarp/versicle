@@ -1,8 +1,8 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { DriveImportDialog } from './DriveImportDialog';
 import { useDriveStore } from '../../store/useDriveStore';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
 
 // Mock dependencies
 vi.mock('../../store/useDriveStore');
@@ -22,18 +22,18 @@ vi.mock('../../store/useToastStore', () => ({
 // To be safe, we can mock the Modal to just render children.
 
 vi.mock('../ui/Modal', () => ({
-    Modal: ({ children, open }: any) => open ? <div>{children}</div> : null,
-    ModalContent: ({ children }: any) => <div>{children}</div>,
-    ModalHeader: ({ children }: any) => <div>{children}</div>,
-    ModalTitle: ({ children }: any) => <div>{children}</div>,
-    ModalDescription: ({ children }: any) => <div>{children}</div>,
+    Modal: ({ children, open }: { children: React.ReactNode, open: boolean }) => open ? <div>{children}</div> : null,
+    ModalContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    ModalHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    ModalTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    ModalDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 describe('DriveImportDialog', () => {
     beforeEach(() => {
         vi.resetAllMocks();
         // Setup default store state
-        (useDriveStore as any).mockReturnValue({
+        (useDriveStore as unknown as Mock).mockReturnValue({
             index: [],
             lastScanTime: Date.now(),
             isScanning: false,
@@ -58,7 +58,7 @@ describe('DriveImportDialog', () => {
     });
 
     it('shows Syncing state when isScanning is true', () => {
-        (useDriveStore as any).mockReturnValue({
+        (useDriveStore as unknown as Mock).mockReturnValue({
             index: [],
             lastScanTime: Date.now(),
             isScanning: true,

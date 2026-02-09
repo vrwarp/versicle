@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { googleIntegrationManager } from './GoogleIntegrationManager';
 import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 
@@ -14,6 +14,12 @@ vi.mock('@capacitor/core', () => ({
 vi.mock('./WebGoogleAuthStrategy');
 vi.mock('./AndroidGoogleAuthStrategy');
 
+interface MockStrategy {
+    connect: Mock;
+    getValidToken: Mock;
+    disconnect: Mock;
+}
+
 describe('GoogleIntegrationManager', () => {
     beforeEach(() => {
         useGoogleServicesStore.getState().reset();
@@ -21,7 +27,7 @@ describe('GoogleIntegrationManager', () => {
     });
 
     // Helper to get the mocked strategy instance from the singleton
-    const getMockStrategy = () => (googleIntegrationManager as any).strategy;
+    const getMockStrategy = () => (googleIntegrationManager as unknown as { strategy: MockStrategy }).strategy;
 
     it('should connect service successfully on Web', async () => {
         const strategy = getMockStrategy();

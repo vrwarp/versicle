@@ -1,7 +1,6 @@
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import { getScopesForService } from './config';
 
-
 export class WebGoogleAuthStrategy {
     private accessToken: string | null = null;
     private tokenExpiration: number | null = null;
