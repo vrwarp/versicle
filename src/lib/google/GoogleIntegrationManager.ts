@@ -1,18 +1,15 @@
 import { Capacitor } from '@capacitor/core';
 import { WebGoogleAuthStrategy } from './WebGoogleAuthStrategy';
 import { AndroidGoogleAuthStrategy } from './AndroidGoogleAuthStrategy';
-import { IosGoogleAuthStrategy } from './IosGoogleAuthStrategy';
 import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import { useSyncStore } from '../sync/hooks/useSyncStore';
 
 class GoogleIntegrationManager {
-    private strategy: WebGoogleAuthStrategy | AndroidGoogleAuthStrategy | IosGoogleAuthStrategy;
+    private strategy: WebGoogleAuthStrategy | AndroidGoogleAuthStrategy;
 
     constructor() {
         if (Capacitor.getPlatform() === 'android') {
             this.strategy = new AndroidGoogleAuthStrategy();
-        } else if (Capacitor.getPlatform() === 'ios') {
-            this.strategy = new IosGoogleAuthStrategy();
         } else {
             this.strategy = new WebGoogleAuthStrategy();
         }

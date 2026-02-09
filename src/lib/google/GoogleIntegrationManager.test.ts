@@ -13,7 +13,6 @@ vi.mock('@capacitor/core', () => ({
 // Mock Strategies modules to ensure they don't do anything real
 vi.mock('./WebGoogleAuthStrategy');
 vi.mock('./AndroidGoogleAuthStrategy');
-vi.mock('./IosGoogleAuthStrategy');
 
 describe('GoogleIntegrationManager', () => {
     beforeEach(() => {
