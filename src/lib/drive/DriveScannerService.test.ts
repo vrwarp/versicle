@@ -21,6 +21,7 @@ vi.mock('../../store/useBookStore', () => ({
 vi.mock('./DriveService', () => ({
     DriveService: {
         listFiles: vi.fn(),
+        listFilesRecursive: vi.fn(),
         downloadFile: vi.fn()
     }
 }));
@@ -49,7 +50,7 @@ describe('DriveScannerService', () => {
                 { id: '2', name: 'Book 2.epub', size: 2000, modifiedTime: '2023-01-02', mimeType: 'application/epub+zip' }
             ];
 
-            (DriveService.listFiles as unknown as Mock).mockResolvedValue(mockFiles);
+            (DriveService.listFilesRecursive as unknown as Mock).mockResolvedValue(mockFiles);
 
             const setScannedFilesSpy = vi.fn();
             const setScanningSpy = vi.fn();
@@ -62,7 +63,7 @@ describe('DriveScannerService', () => {
 
             await DriveScannerService.scanAndIndex();
 
-            expect(DriveService.listFiles).toHaveBeenCalledWith('folder-123', 'application/epub+zip');
+            expect(DriveService.listFilesRecursive).toHaveBeenCalledWith('folder-123', 'application/epub+zip');
             expect(setScanningSpy).toHaveBeenCalledWith(true);
             expect(setScannedFilesSpy).toHaveBeenCalledWith([
                 { id: '1', name: 'Book 1.epub', size: 1000, modifiedTime: '2023-01-01', mimeType: 'application/epub+zip' },
@@ -72,7 +73,7 @@ describe('DriveScannerService', () => {
         });
 
         it('should handle errors gracefully', async () => {
-            (DriveService.listFiles as unknown as Mock).mockRejectedValue(new Error('API Error'));
+            (DriveService.listFilesRecursive as unknown as Mock).mockRejectedValue(new Error('API Error'));
 
             const setScanningSpy = vi.fn();
             (useDriveStore.getState as unknown as Mock).mockReturnValue({
@@ -94,7 +95,7 @@ describe('DriveScannerService', () => {
 
             await DriveScannerService.scanAndIndex();
 
-            expect(DriveService.listFiles).not.toHaveBeenCalled();
+            expect(DriveService.listFilesRecursive).not.toHaveBeenCalled();
         });
     });
 

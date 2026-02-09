@@ -135,6 +135,28 @@ export const DriveService = {
     },
 
     /**
+     * Recursively list all files starting from a parent folder.
+     */
+    async listFilesRecursive(parentId: string, mimeType?: string, visited = new Set<string>()): Promise<DriveFile[]> {
+        if (visited.has(parentId)) {
+            console.warn(`Cycle detected in Drive folder structure: ${parentId}`);
+            return [];
+        }
+        visited.add(parentId);
+
+        const files = await this.listFiles(parentId, mimeType);
+        const folders = await this.listFolders(parentId);
+
+        const subFiles: DriveFile[] = [];
+        for (const folder of folders) {
+            const children = await this.listFilesRecursive(folder.id, mimeType, visited);
+            subFiles.push(...children);
+        }
+
+        return [...files, ...subFiles];
+    },
+
+    /**
      * Download a file by ID.
      * Returns a Blob.
      */
