@@ -11,7 +11,7 @@
 *   **Hybrid Intelligence**:
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google) for studio-quality narration.
-    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening.
+    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
 *   **Dual Sync**:
     *   **Real-time**: Synchronize progress instantly across devices using Firestore.
     *   **Native Backup**: Seamless integration with Android's built-in backup system.
@@ -71,7 +71,7 @@
     *   **Dual Sync**:
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
-        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud.
+        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses smart **Heuristic Sync** (viewed time vs scan time) to minimize API calls.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
         *   **Device Mesh**: Real-time visibility of active devices with "Last Active" status.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
