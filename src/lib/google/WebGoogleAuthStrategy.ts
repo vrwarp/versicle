@@ -24,11 +24,17 @@ export class WebGoogleAuthStrategy {
         void loginHint; // Suppress unused variable
 
         // Use SocialLogin plugin
+        const options: any = {
+            scopes: getScopesForService(serviceId),
+        };
+
+        if (loginHint) {
+            options.login_hint = loginHint;
+        }
+
         const result = await SocialLogin.login({
             provider: 'google',
-            options: {
-                scopes: getScopesForService(serviceId)
-            }
+            options,
         });
 
         if (result.result.responseType === 'offline') {

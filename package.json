@@ -12,7 +12,7 @@
     "tests": "vitest run",
     "preview": "vite preview",
     "prepare-piper": "mkdir -p public/piper && cp node_modules/piper-wasm/build/piper_phonemize.js public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.wasm public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.data public/piper/ && cp node_modules/piper-wasm/build/worker/piper_worker.js public/piper/ && node scripts/patch_piper_worker.js",
-    "postinstall": "npm run prepare-piper"
+    "postinstall": "patch-package && npm run prepare-piper"
   },
   "dependencies": {
     "@capacitor-community/safe-area": "^7.0.0",
@@ -94,7 +94,9 @@
     "fake-indexeddb": "^6.2.5",
     "globals": "^16.5.0",
     "jsdom": "^27.4.0",
+    "patch-package": "^8.0.1",
     "postcss": "^8.5.6",
+    "postinstall-postinstall": "^2.1.0",
     "tailwindcss": "^4.1.18",
     "ts-morph": "^27.0.2",
     "typescript": "^5.9.3",
