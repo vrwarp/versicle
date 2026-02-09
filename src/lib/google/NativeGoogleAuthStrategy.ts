@@ -1,4 +1,4 @@
-import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import { getScopesForService } from './config';
 
 export class NativeGoogleAuthStrategy {
@@ -16,30 +16,31 @@ export class NativeGoogleAuthStrategy {
             return this.accessToken;
         }
 
-        // Native plugin handles checking refresh token automatically.
-        // Requesting scopes incrementally adds them to the user session.
         void loginHint; // Suppress unused variable
-        const result = await FirebaseAuthentication.signInWithGoogle({
-            scopes: getScopesForService(serviceId),
-            // The plugin might not need this explicitly if already signed in,
-            // but explicit scope request ensures we have the permissions.
+
+        // Use SocialLogin plugin
+        const result = await SocialLogin.login({
+            provider: 'google',
+            options: {
+                scopes: getScopesForService(serviceId)
+            }
         });
 
-        // The token returned here is the ID Token usually, we might need an access token for Drive.
-        // The plugin's `credential` object contains `accessToken` on iOS/Android if requested.
-        // Let's check the type definition or behavior. typically `authentication` plugin returns `idToken`.
-        // However, for Drive API calls we need an OAuth2 Access Token. 
-        // The plugin documentation says: `accessToken` is available in `credential`.
+        if (result.result.responseType === 'offline') {
+            throw new Error('Offline mode not supported');
+        }
 
-        if (!result.credential?.accessToken) {
+        if (!result.result.accessToken?.token) {
             throw new Error('No access token returned from native sign-in');
         }
 
-        this.accessToken = result.credential.accessToken;
+        this.accessToken = result.result.accessToken.token;
         // Default Google Access Token lifetime is 1 hour (3600s). We use 50 minutes to be safe.
+        // The token object might have `expires` but it is a string? "2024-..."
+        // Safe assumption or we can check `result.result.idToken` if we need to decode.
         this.tokenExpiration = Date.now() + 50 * 60 * 1000;
 
-        return result.credential.accessToken;
+        return result.result.accessToken.token;
     }
 
     async disconnect(serviceId: string): Promise<void> {

@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+
 import {
     GoogleAuthProvider,
     signInWithCredential,
@@ -6,15 +6,15 @@ import {
     type UserCredential,
     type Auth
 } from 'firebase/auth';
-import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import { getFirebaseAuth } from './firebase-config';
 import { googleIntegrationManager } from '../google/GoogleIntegrationManager';
 import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 
 /**
  * Sign in with Google using a hybrid approach:
- * - On Native (Android/iOS): Uses native Google Sign-In via @capacitor-firebase/authentication.
- * - On Web: Uses Google Identity Services (GIS) popup flow to get ID token, then sign in with credential.
+ * - On Native (Android/iOS): Uses native Google Sign-In via @capgo/capacitor-social-login.
+ * - On Web: Uses @capgo/capacitor-social-login (which uses GIS).
  */
 export const signInWithGoogle = async (): Promise<UserCredential | undefined | void> => {
     const auth = getFirebaseAuth();
@@ -22,43 +22,44 @@ export const signInWithGoogle = async (): Promise<UserCredential | undefined | v
         throw new Error("Firebase not initialized");
     }
 
-    // 1. Android / iOS Native Flow
-    if (Capacitor.isNativePlatform()) {
-        const result = await FirebaseAuthentication.signInWithGoogle();
-        const idToken = result.credential?.idToken;
+    // Unite the flow if possible, or keep separate if needed for specific logic.
+    // SocialLogin works on both.
 
-        if (!idToken) {
-            throw new Error("No ID token returned from native sign-in");
-        }
+    // We want the 'identity' service scopes
+    // We can use googleIntegrationManager to 'connect' but that returns accessToken.
+    // For Firebase Auth, we prefer idToken if available, or accessToken.
 
-        const credential = GoogleAuthProvider.credential(idToken);
-        return await signInWithCredential(auth, credential);
-    }
-
-    // 2. Web / PWA Flow
-    else {
-        // Use GIS-first approach: Get Access Token from Google, then sign into Firebase.
-        // This ensures consistent token management and avoids popup conflicts.
-        try {
-            // "Connect" to identity service to get a fresh access token
-            // We use the 'identity' service config (openid, email, profile)
-            const accessToken = await googleIntegrationManager.connectService('identity');
-
-            if (!accessToken) {
-                throw new Error("Failed to obtain access token from Google");
+    // Let's use SocialLogin directly to get the full result
+    try {
+        const result = await SocialLogin.login({
+            provider: 'google',
+            options: {
+                scopes: ['email', 'profile', 'openid'] // Standard scopes for login
             }
+        });
 
-            // Create Firebase credential using the Google Access Token
-            const credential = GoogleAuthProvider.credential(null, accessToken);
-
-            // Sign in to Firebase with the credential
-            // We use 'signInWithCredential' because we already have the proof of identity
-            return await signInWithCredential(auth, credential);
-
-        } catch (error) {
-            console.error("GIS Sign-In failed", error);
-            throw error;
+        if (result.result.responseType === 'offline') {
+            throw new Error("Offline login not supported for Firebase Auth");
         }
+
+        const idToken = result.result.idToken;
+        const accessToken = result.result.accessToken?.token;
+
+        if (idToken) {
+            // Create Firebase credential using the Google ID Token
+            const credential = GoogleAuthProvider.credential(idToken);
+            return await signInWithCredential(auth, credential);
+        } else if (accessToken) {
+            // Fallback to access token if idToken is missing (web sometimes?)
+            const credential = GoogleAuthProvider.credential(null, accessToken);
+            return await signInWithCredential(auth, credential);
+        } else {
+            throw new Error("No tokens returned from Google Sign-In");
+        }
+
+    } catch (error) {
+        console.error("Google Sign-In failed", error);
+        throw error;
     }
 };
 
@@ -70,7 +71,6 @@ export const signInWithGoogle = async (): Promise<UserCredential | undefined | v
  */
 export const signOutWithGoogle = async (auth: Auth): Promise<void> => {
     // 1. Disconnect all services (Revoke tokens if possible)
-    // We iterate known services or just 'drive'
     try {
         const connectedServices = useGoogleServicesStore.getState().connectedServices;
         for (const serviceId of connectedServices) {
@@ -84,8 +84,11 @@ export const signOutWithGoogle = async (auth: Auth): Promise<void> => {
     useGoogleServicesStore.getState().reset();
 
     // 3. Platform Sign Out
-    if (Capacitor.isNativePlatform()) {
-        await FirebaseAuthentication.signOut();
+    try {
+        await SocialLogin.logout({ provider: 'google' });
+    } catch (e) {
+        // Ignore if already logged out or not supported
     }
+
     await firebaseSignOut(auth);
 };

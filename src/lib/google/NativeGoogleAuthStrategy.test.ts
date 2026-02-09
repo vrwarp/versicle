@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NativeGoogleAuthStrategy } from './NativeGoogleAuthStrategy';
-import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 
-vi.mock('@capacitor-firebase/authentication', () => ({
-    FirebaseAuthentication: {
-        signInWithGoogle: vi.fn(),
+vi.mock('@capgo/capacitor-social-login', () => ({
+    SocialLogin: {
+        login: vi.fn(),
+        logout: vi.fn(),
     },
 }));
 
@@ -25,27 +26,33 @@ describe('NativeGoogleAuthStrategy', () => {
         vi.useRealTimers();
     });
 
-    it('should call signInWithGoogle and return token on first call', async () => {
+    it('should call SocialLogin.login and return token on first call', async () => {
         const mockResult = {
-            credential: {
-                accessToken: 'new-token',
+            result: {
+                responseType: 'online',
+                accessToken: {
+                    token: 'new-token',
+                }
             },
         };
-        (FirebaseAuthentication.signInWithGoogle as any).mockResolvedValue(mockResult);
+        (SocialLogin.login as any).mockResolvedValue(mockResult);
 
         const token = await strategy.getValidToken('drive');
 
-        expect(FirebaseAuthentication.signInWithGoogle).toHaveBeenCalledTimes(1);
+        expect(SocialLogin.login).toHaveBeenCalledTimes(1);
         expect(token).toBe('new-token');
     });
 
     it('should return cached token on second call within expiration', async () => {
         const mockResult = {
-            credential: {
-                accessToken: 'cached-token',
+            result: {
+                responseType: 'online',
+                accessToken: {
+                    token: 'cached-token',
+                }
             },
         };
-        (FirebaseAuthentication.signInWithGoogle as any).mockResolvedValue(mockResult);
+        (SocialLogin.login as any).mockResolvedValue(mockResult);
 
         // First call
         await strategy.getValidToken('drive');
@@ -53,16 +60,16 @@ describe('NativeGoogleAuthStrategy', () => {
         // Second call
         const token = await strategy.getValidToken('drive');
 
-        expect(FirebaseAuthentication.signInWithGoogle).toHaveBeenCalledTimes(1);
+        expect(SocialLogin.login).toHaveBeenCalledTimes(1);
         expect(token).toBe('cached-token');
     });
 
-    it('should call signInWithGoogle again if cache expired', async () => {
-        const mockResult1 = { credential: { accessToken: 'token-1' } };
-        const mockResult2 = { credential: { accessToken: 'token-2' } };
+    it('should call SocialLogin.login again if cache expired', async () => {
+        const mockResult1 = { result: { responseType: 'online', accessToken: { token: 'token-1' } } };
+        const mockResult2 = { result: { responseType: 'online', accessToken: { token: 'token-2' } } };
 
-        const signInMock = (FirebaseAuthentication.signInWithGoogle as any);
-        signInMock.mockResolvedValueOnce(mockResult1)
+        const loginMock = (SocialLogin.login as any);
+        loginMock.mockResolvedValueOnce(mockResult1)
             .mockResolvedValueOnce(mockResult2);
 
         // First call
@@ -75,27 +82,30 @@ describe('NativeGoogleAuthStrategy', () => {
         // Second call
         const token2 = await strategy.getValidToken('drive');
         expect(token2).toBe('token-2');
-        expect(FirebaseAuthentication.signInWithGoogle).toHaveBeenCalledTimes(2);
+        expect(SocialLogin.login).toHaveBeenCalledTimes(2);
     });
 
     it('should clear cache on disconnect', async () => {
         const mockResult = {
-            credential: {
-                accessToken: 'token',
+            result: {
+                responseType: 'online',
+                accessToken: {
+                    token: 'token',
+                }
             },
         };
-        (FirebaseAuthentication.signInWithGoogle as any).mockResolvedValue(mockResult);
+        (SocialLogin.login as any).mockResolvedValue(mockResult);
 
         await strategy.getValidToken('drive');
 
         // Verify it's cached
         await strategy.getValidToken('drive');
-        expect(FirebaseAuthentication.signInWithGoogle).toHaveBeenCalledTimes(1);
+        expect(SocialLogin.login).toHaveBeenCalledTimes(1);
 
         await strategy.disconnect('drive');
 
         // Should call again after disconnect
         await strategy.getValidToken('drive');
-        expect(FirebaseAuthentication.signInWithGoogle).toHaveBeenCalledTimes(2);
+        expect(SocialLogin.login).toHaveBeenCalledTimes(2);
     });
 });
