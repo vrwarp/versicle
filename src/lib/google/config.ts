@@ -6,7 +6,7 @@ export interface GoogleServiceConfig {
 
 export interface GoogleLoginOptions {
     scopes: string[];
-    style?: string;
+    style?: 'bottom' | 'standard';
     autoSelectEnabled?: boolean;
     login_hint?: string;
 }
