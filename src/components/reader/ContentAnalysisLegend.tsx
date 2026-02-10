@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { useShallow } from 'zustand/react/shallow';
-import { X, Copy, ChevronRight, ChevronDown, RotateCcw, Loader2 } from 'lucide-react';
+import { X, Copy, ChevronRight, ChevronDown, RotateCcw, Loader2, FileText } from 'lucide-react';
 import { TYPE_COLORS } from '../../types/content-analysis';
 import type { ContentType } from '../../types/content-analysis';
 import type { Rendition } from 'epubjs';
@@ -10,6 +10,7 @@ import { dbService } from '../../db/DBService';
 import type { TableImage } from '../../types/db';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { reprocessBook } from '../../lib/ingestion';
+import { ContentAnalysisReport } from './ContentAnalysisReport';
 
 interface ContentAnalysisLegendProps {
     rendition?: Rendition | null;
@@ -26,6 +27,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     const [cfiInput, setCfiInput] = useState('');
     const [mergedContent, setMergedContent] = useState('');
     const [isExpanded, setIsExpanded] = useState(true);
+    const [isReportOpen, setIsReportOpen] = useState(false);
     const showToast = useToastStore(state => state.showToast);
     const [isReprocessing, setIsReprocessing] = useState(false);
 
@@ -254,14 +256,24 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                     {/* Reprocess Action */}
                     <div className="flex items-center justify-between bg-muted/50 p-2 rounded">
                         <span className="font-semibold text-muted-foreground">Actions</span>
-                        <button
-                            onClick={handleReprocess}
-                            disabled={isReprocessing}
-                            className="flex items-center gap-1 px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 text-[10px]"
-                        >
-                            {isReprocessing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-                            Reprocess Book
-                        </button>
+                        <div className="flex gap-1">
+                            <button
+                                onClick={() => setIsReportOpen(true)}
+                                className="flex items-center gap-1 px-2 py-1 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 text-[10px]"
+                                title="View Content Analysis Report"
+                            >
+                                <FileText className="h-3 w-3" />
+                                Report
+                            </button>
+                            <button
+                                onClick={handleReprocess}
+                                disabled={isReprocessing}
+                                className="flex items-center gap-1 px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 text-[10px]"
+                            >
+                                {isReprocessing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                                Reprocess
+                            </button>
+                        </div>
                     </div>
 
                     {/* CFI Debugger */}
@@ -350,6 +362,12 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                     </div>
                 </div>
             )}
+
+            <ContentAnalysisReport
+                isOpen={isReportOpen}
+                onClose={() => setIsReportOpen(false)}
+                rendition={rendition}
+            />
         </div>
     );
 };
