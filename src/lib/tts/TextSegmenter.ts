@@ -266,13 +266,11 @@ export class TextSegmenter {
 
                 // Check if last segment ends with an abbreviation
                 // OPTIMIZATION: Use Trie scan to avoid substring allocation and lowercasing
-                const matchedAbbr = abbrTrie.matchesEnd(last.text);
-
-                if (matchedAbbr) {
+                if (abbrTrie.hasMatchEnd(last.text)) {
                     let shouldMerge = false;
 
                     // Check if the abbreviation is in the alwaysMerge list
-                    if (mergeTrie.matchesEnd(last.text)) {
+                    if (mergeTrie.hasMatchEnd(last.text)) {
                         shouldMerge = true;
                     } else {
                         // Check the next segment (current)
