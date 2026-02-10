@@ -35,7 +35,7 @@
 ## Features
 
 ### Reading (The "Reading Room")
-*   **Adaptive Contrast**: The UI automatically adapts to your book covers, extracting dominant colors to create beautiful, accessible gradients and text themes.
+*   **Adaptive Contrast**: The UI automatically adapts to your book covers using **Weighted K-Means Clustering** to extract dominant colors, creating beautiful and accessible gradients/text themes (L* calc).
 *   **Satellite FAB**: A dedicated floating action button for quick access to playback controls and menu actions.
 *   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
 *   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
@@ -73,7 +73,7 @@
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
         *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses smart **Heuristic Sync** (viewed time vs scan time) to minimize API calls.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
-        *   **Device Mesh**: Real-time visibility of active devices with "Last Active" status.
+        *   **Sync Mesh**: Real-time visibility of active devices in the network with "Last Active" status and peer awareness.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots (`SyncManifest`) protect against data loss during sync (Last 10 states).
 *   **Reading History**: Detailed session tracking with timeline visualization.
