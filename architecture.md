@@ -65,6 +65,7 @@ graph TD
     end
 
     subgraph DataLayer [Data & Sync]
+        SyncMesh[SyncMesh / DeviceId]
         YjsProvider[YjsProvider]
         Middleware[zustand-middleware-yjs]
         YDoc[Y.Doc CRDT]
@@ -140,6 +141,7 @@ graph TD
 
     LibStore <--> Middleware
     ReaderStore <--> Middleware
+    DeviceStore <--> Middleware
 
     Middleware <--> YDoc
     YDoc <--> YjsProvider
@@ -147,10 +149,12 @@ graph TD
     YjsProvider --> FireSync
     FireSync --> FireProvider
     FireSync --> Checkpoint
+    DeviceStore --> SyncMesh
     LibStore --> AndroidBackup
     GlobalSettings --> Inspector
     Inspector --> Checkpoint
     GlobalSettings --> DriveScanner
+    DriveScanner --> GoogleAuth
     GlobalSettings --> GoogleAuth
 
     LibStore --> DBService
@@ -210,10 +214,9 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
     *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
 *   **Domain 2: User (Mutable/Syncable)** - *Managed by Yjs*
-    *   **Yjs Exclusive**: `user_inventory` (Books), `user_progress` (Reading State), and `user_reading_list` are managed **exclusively** by Yjs stores. `DBService` only reads/writes static data.
+    *   **Yjs Exclusive**: `user_inventory` (Books), `user_progress` (Reading State), `user_reading_list` (Shadow Inventory), and `user_annotations` are managed **exclusively** by Yjs stores. `DBService` only reads/writes static data.
     *   **IDB Local/Hybrid**:
         *   `user_overrides`: Custom settings like Lexicon rules.
-        *   `user_annotations`: Highlights and notes. Managed via `useAnnotationStore`.
     *   **Deprecated/Replaced**:
         *   `user_journey`: **(Removed)** Granular reading history sessions are no longer stored in IDB.
         *   `user_ai_inference`: **(Replaced)** Expensive AI-derived data is now handled by the synced `useContentAnalysisStore` (Yjs).
@@ -228,7 +231,15 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations) and `user_reading_list` entry.
     *   *Trade-off*: User must re-import the *exact same file* to read again.
 *   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files). It bypasses new ID generation to match the existing Yjs record.
+    *   **Logic**: Parses the new file but *forces* the internal IDs (Book ID, Spine Items, Batches) to match the provided ID, ensuring the new binary seamlessly reconnects with existing Yjs progress/annotations.
 *   **`ingestBook(data)`**: Performs a "Static Only" write. It persists the heavy immutable data (`static_manifests`, `static_resources`) to IDB but relies on the caller (Zustand) to update the Yjs `user_inventory`.
+
+#### `src/store/useDeviceStore.ts` (Sync Mesh)
+*   **Goal**: Provide visibility into the synchronization network and enable "Send to Device" features.
+*   **Logic**:
+    *   **Stable Identity**: `device-id.ts` generates and persists a stable UUID in `localStorage` to identify the current node.
+    *   **Heartbeat**: `useDeviceStore` maintains a Yjs Map of active devices, updating the `lastActive` timestamp with a 5-minute throttle (`HEARTBEAT_THROTTLE_MS`) to prevent excessive CRDT updates.
+    *   **Peer Discovery**: Automatically parses User Agent strings (via `ua-parser-js`) to provide human-readable device names (e.g., "Chrome on Windows").
 
 #### `src/lib/batch-ingestion.ts` (Batch Ingestion)
 *   **Goal**: Handle bulk import of books, including ZIP archives containing multiple EPUBs.
@@ -253,8 +264,8 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 #### Hardening: Validation & Sanitization (`src/db/validators.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks.
 *   **Logic**:
-    *   **Quota Management**: Explicitly handles `QuotaExceededError` (including legacy code 22) and wraps it in a typed `StorageFullError` for UI handling.
-    *   **Magic Number Check**: Verifies ZIP signature (`50 4B 03 04`) before parsing.
+    *   **Quota Management**: Explicitly handles `QuotaExceededError` (including legacy code 22) and wraps it in a typed `StorageFullError` for UI handling, prompting the user to offload books.
+    *   **Magic Number Check**: Verifies ZIP signature (`50 4B 03 04`) before parsing to prevent invalid file processing.
     *   **Sanitization**: Delegates to `DOMPurify` to strip HTML tags from metadata.
     *   **Safe Mode**: A specialized UI state (`SafeModeView`) triggered by critical database initialization failures in `App.tsx`. It provides a last-resort "Factory Reset" option (`deleteDB`) to recover the application from a corrupted state without requiring user technical knowledge.
 
@@ -324,8 +335,8 @@ Handles the complex task of importing an EPUB file.
         *   **Time-Budgeted Yield Strategy**: Explicitly checks `performance.now()` and yields to the main thread every 16ms (1 frame) to prevent freezing the UI during heavy parsing.
     3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head 4KB + Metadata + Tail 4KB) using a `cheapHash` function for O(1) duplicate detection.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
-        *   **Logic**: Uses **Weighted K-Means Clustering** on the cover image to extract dominant colors.
-        *   **Accessibility**: Calculates **Perceptual Lightness (L*)** to determine the optimal text color (Soft Dark, Hard Black, Hard White, Soft Light) for UI overlays.
+        *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
+        *   **Accessibility**: Calculates **Perceptual Lightness (L*)** (CIE 1976) from the extracted RGB values to determine the optimal text color (Soft Dark, Hard Black, Hard White, Soft Light) for UI overlays, ensuring WCAG contrast compliance.
 
 #### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
 *   **Goal**: Prevent memory leaks caused by `URL.createObjectURL`.
@@ -334,9 +345,9 @@ Handles the complex task of importing an EPUB file.
     *   A **Service Worker** intercepts these requests, fetches the cover blob from IndexedDB (`static_manifests`), and responds directly.
 
 #### Generative AI (`src/lib/genai/GenAIService.ts`)
-*   **Smart Rotation**: Implements a singleton pattern with a rotation strategy (`gemini-2.5-flash-lite` <-> `gemini-2.5-flash`) to handle `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
-*   **Resilience**: Automatically retries requests with the fallback model.
-*   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to improve reasoning quality for complex data interpretation.
+*   **Smart Rotation**: Implements a singleton pattern with a rotation strategy (shuffling `gemini-2.5-flash-lite` and `gemini-2.5-flash`) to handle `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
+*   **Resilience**: Automatically retries requests with the fallback model if the primary one hits rate limits.
+*   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to allow the model to "think" about column relationships before generating the narrative, significantly improving complex table interpretation.
 *   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text ("Teleprompter Adaptation") for TTS accessibility.
     *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures (Title, Footnote, Main Text, Table) for improved TTS flow.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
@@ -373,8 +384,8 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **`DriveScannerService.ts` (The Brain)**:
     *   **Goal**: Manage high-level sync logic and state.
     *   **Logic**:
-        *   **Heuristic Sync**: Uses a `viewedByMeTime` vs. `lastScanTime` check to determine if a folder rescan is needed.
-        *   **Diffing**: Compares the Cloud Index against the Local Library to identify "New" files (`checkForNewFiles`).
+        *   **Heuristic Sync**: To save API quota, it only performs a full scan if the remote folder's `viewedByMeTime` is more recent than the local `lastScanTime`.
+        *   **Diffing**: Compares the Cloud Index against the Local Library to identify "New" files (`checkForNewFiles`) by checking file existence in the Yjs inventory.
         *   **Lightweight Indexing**: Maintains a local index (`useDriveStore`) for instant UI feedback.
 *   **`DriveService.ts` (The Muscle)**:
     *   **Goal**: Handle low-level API interactions.
