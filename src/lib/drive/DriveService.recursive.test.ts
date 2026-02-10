@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DriveService, type DriveFile } from './DriveService';
 
 // Mock dependencies
@@ -40,11 +40,11 @@ describe('DriveService Recursive', () => {
             return [];
         });
 
-        // Call the new method (cast to any because it's not defined yet)
-        const result = await (DriveService as any).listFilesRecursive('root-id', 'application/epub+zip');
+        // Call the method
+        const result = await DriveService.listFilesRecursive('root-id', 'application/epub+zip');
 
         expect(result).toHaveLength(2);
-        expect(result.map((f: any) => f.name)).toEqual(expect.arrayContaining(['File1.epub', 'File2.epub']));
+        expect(result.map((f: DriveFile) => f.name)).toEqual(expect.arrayContaining(['File1.epub', 'File2.epub']));
 
         expect(listFilesSpy).toHaveBeenCalledWith('root-id', 'application/epub+zip');
         expect(listFoldersSpy).toHaveBeenCalledWith('root-id');
@@ -53,29 +53,29 @@ describe('DriveService Recursive', () => {
 
     it('should handle nested folders', async () => {
         // Level 1 -> Level 2 -> Level 3
-        const level1Folders = [{ id: 'L2', name: 'Level 2', mimeType: 'folder' }];
-        const level2Folders = [{ id: 'L3', name: 'Level 3', mimeType: 'folder' }];
+        const level1Folders: DriveFile[] = [{ id: 'L2', name: 'Level 2', mimeType: 'folder' }];
+        const level2Folders: DriveFile[] = [{ id: 'L3', name: 'Level 3', mimeType: 'folder' }];
 
         const listFilesSpy = vi.spyOn(DriveService, 'listFiles');
         const listFoldersSpy = vi.spyOn(DriveService, 'listFolders');
 
         listFoldersSpy.mockImplementation(async (id) => {
-            if (id === 'L1') return level1Folders as any;
-            if (id === 'L2') return level2Folders as any;
+            if (id === 'L1') return level1Folders;
+            if (id === 'L2') return level2Folders;
             return [];
         });
 
         listFilesSpy.mockImplementation(async (id) => {
-            if (id === 'L1') return [{ id: 'f1', name: 'f1' }] as any;
-            if (id === 'L2') return [{ id: 'f2', name: 'f2' }] as any;
-            if (id === 'L3') return [{ id: 'f3', name: 'f3' }] as any;
+            if (id === 'L1') return [{ id: 'f1', name: 'f1', mimeType: 'type' }];
+            if (id === 'L2') return [{ id: 'f2', name: 'f2', mimeType: 'type' }];
+            if (id === 'L3') return [{ id: 'f3', name: 'f3', mimeType: 'type' }];
             return [];
         });
 
-        const result = await (DriveService as any).listFilesRecursive('L1', 'type');
+        const result = await DriveService.listFilesRecursive('L1', 'type');
 
         expect(result).toHaveLength(3);
-        expect(result.map((f: any) => f.name)).toEqual(expect.arrayContaining(['f1', 'f2', 'f3']));
+        expect(result.map((f: DriveFile) => f.name)).toEqual(expect.arrayContaining(['f1', 'f2', 'f3']));
     });
 
     it('should detect cycles and avoid infinite recursion', async () => {
@@ -85,14 +85,14 @@ describe('DriveService Recursive', () => {
         const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         listFoldersSpy.mockImplementation(async (id) => {
-            if (id === 'L1') return [{ id: 'L2', name: 'Level 2', mimeType: 'folder' }] as any;
-            if (id === 'L2') return [{ id: 'L1', name: 'Level 1', mimeType: 'folder' }] as any;
+            if (id === 'L1') return [{ id: 'L2', name: 'Level 2', mimeType: 'folder' }];
+            if (id === 'L2') return [{ id: 'L1', name: 'Level 1', mimeType: 'folder' }];
             return [];
         });
 
         listFilesSpy.mockResolvedValue([]);
 
-        const result = await (DriveService as any).listFilesRecursive('L1', 'type');
+        const result = await DriveService.listFilesRecursive('L1', 'type');
 
         expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Cycle detected'));
         expect(result).toEqual([]); // Should return empty or partial results, but definitely terminate.
