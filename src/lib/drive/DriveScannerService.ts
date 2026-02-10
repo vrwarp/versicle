@@ -21,7 +21,7 @@ export class DriveScannerService {
 
         try {
             // List all EPUB files in the linked folder
-            return await DriveService.listFiles(linkedFolderId, 'application/epub+zip');
+            return await DriveService.listFilesRecursive(linkedFolderId, 'application/epub+zip');
         } catch (error) {
             logger.error("Failed to scan linked folder:", error);
             throw error;
@@ -79,7 +79,7 @@ export class DriveScannerService {
             logger.info("Starting full drive scan...");
 
             // Fetch all EPUBs
-            const rawFiles = await DriveService.listFiles(linkedFolderId, 'application/epub+zip');
+            const rawFiles = await DriveService.listFilesRecursive(linkedFolderId, 'application/epub+zip');
 
             // Map to index format
             const index = rawFiles.map(this.mapToDriveFileIndex);

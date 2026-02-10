@@ -164,6 +164,65 @@ export class TextScanningTrie {
     }
 
     /**
+     * Checks if the text ends with any string in the Trie.
+     * Scans backwards from the end of the text, skipping trailing whitespace.
+     * Returns true immediately upon finding a valid match (shortest suffix).
+     * Optimized to avoid string allocations.
+     *
+     * @param text - The text to check.
+     * @returns True if a match is found, false otherwise.
+     */
+    hasMatchEnd(text: string): boolean {
+        let i = text.length - 1;
+        // Skip trailing whitespace
+        while (i >= 0 && TextScanningTrie.isWhitespace(text.charCodeAt(i))) {
+            i--;
+        }
+        if (i < 0) return false;
+
+        let node = this.root;
+
+        // Scan backwards through the text
+        while (i >= 0) {
+            let code = text.charCodeAt(i);
+
+            // Optimization: Manual case folding for ASCII to avoid .toLowerCase() allocation
+            if (code >= TextScanningTrie.ASCII_A && code <= TextScanningTrie.ASCII_Z) {
+                code += TextScanningTrie.ASCII_TO_LOWER_OFFSET;
+            } else if (code > TextScanningTrie.MAX_ASCII) {
+                // Check cache first to avoid expensive String.fromCharCode().toLowerCase()
+                let lower = TextScanningTrie.caseFoldCache.get(code);
+                if (lower === undefined) {
+                    lower = String.fromCharCode(code).toLowerCase().charCodeAt(0);
+                    TextScanningTrie.caseFoldCache.set(code, lower);
+                }
+                code = lower;
+            }
+
+            if (!node[code]) {
+                return false; // No path
+            }
+            node = node[code] as TrieNode;
+
+            // If we found a potential match in the Trie
+            if (node._end) {
+                // Verify boundary: Previous char must be Punctuation, Whitespace, or Start
+                const prevIndex = i - 1;
+                const isBoundary = prevIndex < 0 ||
+                                   TextScanningTrie.isWhitespace(text.charCodeAt(prevIndex)) ||
+                                   TextScanningTrie.isPunctuation(text.charCodeAt(prevIndex));
+
+                if (isBoundary) {
+                    return true;
+                }
+            }
+            i--;
+        }
+
+        return false;
+    }
+
+    /**
      * Checks if the text starts with any string in the Trie.
      * Scans forward from the start of the text, skipping leading whitespace.
      * Optimized to avoid string allocations.

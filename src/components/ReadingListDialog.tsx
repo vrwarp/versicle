@@ -4,7 +4,7 @@ import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { useReadingListStore } from '../store/useReadingListStore';
 import type { ReadingListEntry } from '../types/db';
-import { ArrowUpDown, Trash2, Edit2, Download, CheckSquare, Square, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUpDown, Trash2, Edit2, Download, CheckSquare, Square, ArrowUp, ArrowDown, BookOpen } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
 
 interface ReadingListDialogProps {
@@ -179,8 +179,14 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
 
                     <div className="flex-1 overflow-auto p-4">
                         {entries.length === 0 ? (
-                            <div className="text-center text-muted-foreground py-8">
-                                Reading list is empty.
+                            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                                <div className="bg-muted/30 p-4 rounded-full mb-4">
+                                    <BookOpen className="w-8 h-8 text-muted-foreground/60" />
+                                </div>
+                                <h3 className="text-lg font-medium mb-1">Your reading list is empty</h3>
+                                <p className="text-muted-foreground text-sm max-w-xs">
+                                    Books are automatically added here when you import them to your library.
+                                </p>
                             </div>
                         ) : (
                             <table className="w-full text-sm text-left">

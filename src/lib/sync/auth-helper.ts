@@ -86,7 +86,7 @@ export const signOutWithGoogle = async (auth: Auth): Promise<void> => {
     // 3. Platform Sign Out
     try {
         await SocialLogin.logout({ provider: 'google' });
-    } catch (e) {
+    } catch {
         // Ignore if already logged out or not supported
     }
 

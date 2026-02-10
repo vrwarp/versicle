@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { AndroidGoogleAuthStrategy } from './AndroidGoogleAuthStrategy';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 
@@ -35,7 +35,7 @@ describe('AndroidGoogleAuthStrategy', () => {
                 }
             },
         };
-        (SocialLogin.login as any).mockResolvedValue(mockResult);
+        (SocialLogin.login as unknown as Mock).mockResolvedValue(mockResult);
 
         const token = await strategy.getValidToken('drive', 'user@example.com');
 
@@ -62,7 +62,7 @@ describe('AndroidGoogleAuthStrategy', () => {
             },
         };
 
-        vi.mocked(SocialLogin.login).mockResolvedValue(mockResult as any);
+        vi.mocked(SocialLogin.login).mockResolvedValue(mockResult as unknown);
 
         const token = await strategy.getValidToken('test-service');
 
@@ -87,7 +87,7 @@ describe('AndroidGoogleAuthStrategy', () => {
                 }
             },
         };
-        (SocialLogin.login as any).mockResolvedValue(mockResult);
+        (SocialLogin.login as unknown as Mock).mockResolvedValue(mockResult);
 
         // First call
         await strategy.getValidToken('drive');
@@ -103,7 +103,7 @@ describe('AndroidGoogleAuthStrategy', () => {
         const mockResult1 = { result: { responseType: 'online', accessToken: { token: 'token-1' } } };
         const mockResult2 = { result: { responseType: 'online', accessToken: { token: 'token-2' } } };
 
-        const loginMock = (SocialLogin.login as any);
+        const loginMock = (SocialLogin.login as unknown as Mock);
         loginMock.mockResolvedValueOnce(mockResult1)
             .mockResolvedValueOnce(mockResult2);
 
@@ -129,7 +129,7 @@ describe('AndroidGoogleAuthStrategy', () => {
                 }
             },
         };
-        (SocialLogin.login as any).mockResolvedValue(mockResult);
+        (SocialLogin.login as unknown as Mock).mockResolvedValue(mockResult);
 
         await strategy.getValidToken('drive');
 

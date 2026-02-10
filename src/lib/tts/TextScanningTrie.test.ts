@@ -43,6 +43,34 @@ describe('TextScanningTrie', () => {
         });
     });
 
+    describe('insert & hasMatchEnd (Reverse Trie, Boolean)', () => {
+        const trie = new TextScanningTrie();
+        trie.insert('Mr.', true);
+        trie.insert('e.g.', true);
+
+        it('returns true for simple abbreviations at the end', () => {
+            expect(trie.hasMatchEnd('Hello Mr.')).toBe(true);
+            expect(trie.hasMatchEnd('See e.g.')).toBe(true);
+        });
+
+        it('returns true case-insensitively', () => {
+            expect(trie.hasMatchEnd('HELLO MR.')).toBe(true);
+        });
+
+        it('skips trailing whitespace', () => {
+            expect(trie.hasMatchEnd('Hello Mr.   ')).toBe(true);
+        });
+
+        it('returns false for partial matches not on boundary', () => {
+            expect(trie.hasMatchEnd('AMr.')).toBe(false);
+            expect(trie.hasMatchEnd('Hammer.')).toBe(false);
+        });
+
+        it('returns false when no match found', () => {
+            expect(trie.hasMatchEnd('Hello world')).toBe(false);
+        });
+    });
+
     describe('insert & matchesStart (Forward Trie)', () => {
         const trie = new TextScanningTrie();
         trie.insert('He', false);

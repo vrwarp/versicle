@@ -105,6 +105,9 @@ describe('Drive Integration', () => {
             expect(result.current.currentFolderId).toBe('folder-2');
             expect(result.current.breadcrumbs).toHaveLength(2);
             expect(result.current.breadcrumbs[1].name).toBe('Folder 2');
+
+            // Wait for loading to finish to avoid act warnings
+            await waitFor(() => expect(result.current.isLoading).toBe(false));
         });
 
         it('navigates up', async () => {
@@ -127,6 +130,9 @@ describe('Drive Integration', () => {
 
             expect(result.current.currentFolderId).toBe('root');
             expect(result.current.breadcrumbs).toHaveLength(1);
+
+            // Wait for loading to finish to avoid act warnings
+            await waitFor(() => expect(result.current.isLoading).toBe(false));
         });
     });
 });
