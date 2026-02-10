@@ -641,12 +641,23 @@ class DBService {
       structure: { title: yjsAnalysis.title, footnoteMatches: [] },
       contentTypes: yjsAnalysis.semanticMap,
       tableAdaptations: yjsAnalysis.tableAdaptations,
-      lastAnalyzed: yjsAnalysis.generatedAt
+      lastAnalyzed: yjsAnalysis.generatedAt,
+      status: yjsAnalysis.status,
+      lastError: yjsAnalysis.lastError,
+      lastAttempt: yjsAnalysis.lastAttempt,
     };
   }
 
   saveContentClassifications(bookId: string, sectionId: string, results: { rootCfi: string; type: ContentType }[]): void {
     useContentAnalysisStore.getState().saveClassifications(bookId, sectionId, results);
+  }
+
+  markAnalysisLoading(bookId: string, sectionId: string): void {
+    useContentAnalysisStore.getState().markAnalysisLoading(bookId, sectionId);
+  }
+
+  markAnalysisError(bookId: string, sectionId: string, error: string): void {
+    useContentAnalysisStore.getState().markAnalysisError(bookId, sectionId, error);
   }
 
   clearContentAnalysis(): void {

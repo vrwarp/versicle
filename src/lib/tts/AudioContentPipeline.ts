@@ -518,7 +518,7 @@ export class AudioContentPipeline {
     /**
      * Retrieves cached content classifications from DB or triggers GenAI detection if missing.
      */
-    private async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[]) {
+    async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[]) {
         // Deduplicate concurrent requests for the same section
         const key = `${bookId}:${sectionId}`;
         if (this.analysisPromises.has(key)) {
@@ -530,8 +530,28 @@ export class AudioContentPipeline {
             const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
 
             // If we have stored content types, return them
-            if (contentAnalysis?.contentTypes) {
+            if (contentAnalysis?.contentTypes && contentAnalysis.contentTypes.length > 0) {
                 return contentAnalysis.contentTypes;
+            }
+
+            // RETRY LOGIC: Check status and timestamps
+            const RETRY_DELAY = 5 * 60 * 1000; // 5 minutes
+            const LOADING_TIMEOUT = 60 * 1000; // 1 minute (in case process died)
+
+            if (contentAnalysis?.status === 'loading') {
+                const elapsed = Date.now() - (contentAnalysis.lastAttempt || 0);
+                if (elapsed < LOADING_TIMEOUT) {
+                    // Still loading, skip
+                    return null;
+                }
+            }
+
+            if (contentAnalysis?.status === 'error') {
+                const elapsed = Date.now() - (contentAnalysis.lastAttempt || 0);
+                if (elapsed < RETRY_DELAY) {
+                    console.warn(`Skipping analysis for ${bookId}/${sectionId}: Recent error (${Math.round(elapsed / 1000)}s ago)`);
+                    return null;
+                }
             }
 
             // 2. If not found, detect with GenAI
@@ -543,6 +563,9 @@ export class AudioContentPipeline {
             }
 
             try {
+                // Mark as loading to prevent concurrent attempts from other sources
+                dbService.markAnalysisLoading(bookId, sectionId);
+
                 const idToCfiMap = new Map<string, string>();
 
                 const nodesToDetect = groups.map((g, index) => {
@@ -569,12 +592,14 @@ export class AudioContentPipeline {
                         type: res.type
                     })).filter(r => r.rootCfi !== '');
 
-                    // Persist detection results
+                    // Persist detection results (this sets status to 'success')
                     await dbService.saveContentClassifications(bookId, sectionId, finalResults);
                     return finalResults;
                 }
-            } catch (e) {
+            } catch (e: any) {
                 console.warn("Content detection failed", e);
+                // Mark as error with timestamp
+                dbService.markAnalysisError(bookId, sectionId, e.message || 'Unknown error');
             }
 
             return null;

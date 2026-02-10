@@ -9,7 +9,7 @@ export interface NavigationItem {
   parent?: string;
 }
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
-import type { ContentType } from './content-analysis';
+import type { ContentType, AnalysisStatus } from './content-analysis';
 
 // --- NEW V18 ARCHITECTURE TYPES ---
 
@@ -449,6 +449,12 @@ export interface ContentAnalysis {
   summary?: string;
   /** Timestamp when the analysis was performed. */
   lastAnalyzed: number;
+  /** Current analysis status. */
+  status?: AnalysisStatus;
+  /** Last error message if status is 'error'. */
+  lastError?: string;
+  /** Timestamp of the last attempt. */
+  lastAttempt?: number;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
-import type { ContentType } from '../types/content-analysis';
+import type { ContentType, AnalysisStatus } from '../types/content-analysis';
 
 /**
  * A content classification entry (CFI -> type).
@@ -31,6 +31,12 @@ export interface SectionAnalysis {
     title?: string;
     /** Generation timestamp. */
     generatedAt: number;
+    /** Current analysis status. */
+    status?: AnalysisStatus;
+    /** Last error message if status is 'error'. */
+    lastError?: string;
+    /** Timestamp of the last attempt. */
+    lastAttempt?: number;
 }
 
 /**
@@ -78,6 +84,16 @@ interface ContentAnalysisState {
     ) => void;
 
     /**
+     * Marks analysis as loading.
+     */
+    markAnalysisLoading: (bookId: string, sectionId: string) => void;
+
+    /**
+     * Marks analysis as failed with an error.
+     */
+    markAnalysisError: (bookId: string, sectionId: string, error: string) => void;
+
+    /**
      * Gets analysis data for a section, if available.
      */
     getAnalysis: (bookId: string, sectionId: string) => SectionAnalysis | undefined;
@@ -117,7 +133,10 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
                             [key]: {
                                 ...existing,
                                 semanticMap: classifications,
-                                generatedAt: Date.now()
+                                generatedAt: Date.now(),
+                                status: 'success',
+                                lastAttempt: Date.now(),
+                                lastError: undefined
                             }
                         }
                     };
@@ -143,7 +162,10 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
                             [key]: {
                                 ...existing,
                                 tableAdaptations: Array.from(existingMap.values()),
-                                generatedAt: Date.now()
+                                generatedAt: Date.now(),
+                                status: 'success',
+                                lastAttempt: Date.now(),
+                                lastError: undefined
                             }
                         }
                     };
@@ -160,6 +182,39 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
                                 ...existing,
                                 title,
                                 generatedAt: Date.now()
+                            }
+                        }
+                    };
+                }),
+
+            markAnalysisLoading: (bookId, sectionId) =>
+                set((state) => {
+                    const key = makeKey(bookId, sectionId);
+                    const existing = state.sections[key] || { generatedAt: Date.now() };
+                    return {
+                        sections: {
+                            ...state.sections,
+                            [key]: {
+                                ...existing,
+                                status: 'loading',
+                                lastAttempt: Date.now()
+                            }
+                        }
+                    };
+                }),
+
+            markAnalysisError: (bookId, sectionId, error) =>
+                set((state) => {
+                    const key = makeKey(bookId, sectionId);
+                    const existing = state.sections[key] || { generatedAt: Date.now() };
+                    return {
+                        sections: {
+                            ...state.sections,
+                            [key]: {
+                                ...existing,
+                                status: 'error',
+                                lastError: error,
+                                lastAttempt: Date.now()
                             }
                         }
                     };
