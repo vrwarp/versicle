@@ -1,4 +1,5 @@
 export type ContentType = 'title' | 'footnote' | 'main' | 'table' | 'other';
+export type AnalysisStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export interface ContentTypeResult {
   rootCfi: string;
