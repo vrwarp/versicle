@@ -7,20 +7,20 @@ import * as cfiUtils from '../cfi-utils';
 
 // Mock WebSpeechProvider class
 vi.mock('./providers/WebSpeechProvider', () => {
-  return {
-    WebSpeechProvider: class {
-      id = 'local';
-      init = vi.fn().mockResolvedValue(undefined);
-      getVoices = vi.fn().mockResolvedValue([]);
-      play = vi.fn().mockResolvedValue(undefined);
-      preload = vi.fn();
-      stop = vi.fn();
-      on = vi.fn();
-      setConfig = vi.fn();
-      pause = vi.fn();
-      resume = vi.fn();
-    }
-  };
+    return {
+        WebSpeechProvider: class {
+            id = 'local';
+            init = vi.fn().mockResolvedValue(undefined);
+            getVoices = vi.fn().mockResolvedValue([]);
+            play = vi.fn().mockResolvedValue(undefined);
+            preload = vi.fn();
+            stop = vi.fn();
+            on = vi.fn();
+            setConfig = vi.fn();
+            pause = vi.fn();
+            resume = vi.fn();
+        }
+    };
 });
 
 // Mock CapacitorTTSProvider class
@@ -54,46 +54,48 @@ vi.mock('./LexiconService', () => ({
 }));
 vi.mock('./MediaSessionManager');
 vi.mock('../../db/DBService', () => ({
-  dbService: {
-    getBookMetadata: vi.fn().mockResolvedValue({
-        title: 'Test Book',
-        author: 'Test Author',
-        coverUrl: 'http://example.com/cover.jpg'
-    }),
-    updatePlaybackState: vi.fn().mockResolvedValue(undefined),
-    getTTSState: vi.fn().mockResolvedValue(null),
-    saveTTSState: vi.fn(),
-    updateReadingHistory: vi.fn().mockResolvedValue(undefined),
-    getSections: vi.fn().mockResolvedValue([
-        { sectionId: 'sec1', characterCount: 100 },
-        { sectionId: 'sec2', characterCount: 0 }, // Empty section
-        { sectionId: 'sec3', characterCount: 100 }
-    ]),
-    getContentAnalysis: vi.fn().mockResolvedValue({ structure: { title: 'Chapter 1' } }),
-    getTTSContent: vi.fn().mockImplementation((bookId, sectionId) => {
-        if (sectionId === 'sec2') return Promise.resolve({ sentences: [] });
-        return Promise.resolve({
-            sentences: [{ text: "Sentence " + sectionId, cfi: "cfi_" + sectionId }]
-        });
-    }),
-    saveTTSPosition: vi.fn(),
-    saveContentClassifications: vi.fn(),
-    getTableImages: vi.fn().mockResolvedValue([]), // Added mock
-  }
+    dbService: {
+        getBookMetadata: vi.fn().mockResolvedValue({
+            title: 'Test Book',
+            author: 'Test Author',
+            coverUrl: 'http://example.com/cover.jpg'
+        }),
+        updatePlaybackState: vi.fn().mockResolvedValue(undefined),
+        getTTSState: vi.fn().mockResolvedValue(null),
+        saveTTSState: vi.fn(),
+        updateReadingHistory: vi.fn().mockResolvedValue(undefined),
+        getSections: vi.fn().mockResolvedValue([
+            { sectionId: 'sec1', characterCount: 100 },
+            { sectionId: 'sec2', characterCount: 0 }, // Empty section
+            { sectionId: 'sec3', characterCount: 100 }
+        ]),
+        getContentAnalysis: vi.fn().mockResolvedValue({ structure: { title: 'Chapter 1' } }),
+        getTTSContent: vi.fn().mockImplementation((bookId, sectionId) => {
+            if (sectionId === 'sec2') return Promise.resolve({ sentences: [] });
+            return Promise.resolve({
+                sentences: [{ text: "Sentence " + sectionId, cfi: "cfi_" + sectionId }]
+            });
+        }),
+        saveTTSPosition: vi.fn(),
+        saveContentClassifications: vi.fn(),
+        getTableImages: vi.fn().mockResolvedValue([]), // Added mock
+        markAnalysisLoading: vi.fn(),
+        markAnalysisError: vi.fn(),
+    }
 }));
 vi.mock('./CostEstimator');
 
 // Mock useTTSStore to avoid circular dependency
 vi.mock('../../store/useTTSStore', () => ({
-  useTTSStore: {
-    getState: vi.fn().mockReturnValue({
-        customAbbreviations: [],
-        alwaysMerge: [],
-        sentenceStarters: [],
-        minSentenceLength: 0,
-        isBibleLexiconEnabled: false
-    })
-  }
+    useTTSStore: {
+        getState: vi.fn().mockReturnValue({
+            customAbbreviations: [],
+            alwaysMerge: [],
+            sentenceStarters: [],
+            minSentenceLength: 0,
+            isBibleLexiconEnabled: false
+        })
+    }
 }));
 
 vi.mock('../../store/useGenAIStore', () => ({
@@ -127,8 +129,8 @@ describe('AudioPlayerService', () => {
     let service: AudioPlayerService;
 
     beforeEach(() => {
-        vi.spyOn(console, 'error').mockImplementation(() => {});
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'error').mockImplementation(() => { });
+        vi.spyOn(console, 'warn').mockImplementation(() => { });
 
         // Reset singleton
         // @ts-expect-error Resetting singleton for testing
@@ -435,7 +437,6 @@ describe('AudioPlayerService', () => {
             ]);
 
             // Check the mask generation
-            // @ts-expect-error casting for test compatibility
             const mask = await contentPipeline.detectContentSkipMask('book1', 'sec1', ['footnote'], sentences);
 
             // Should skip index 2 ("Footnote")
