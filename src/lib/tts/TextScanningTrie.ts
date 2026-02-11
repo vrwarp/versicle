@@ -12,23 +12,6 @@ interface TrieNode {
 export class TextScanningTrie {
     private root: TrieNode = {};
 
-    private static readonly CODE_QUOTE_DOUBLE = '"'.codePointAt(0)!;
-    private static readonly CODE_QUOTE_SINGLE = "'".codePointAt(0)!;
-    private static readonly CODE_PAREN_OPEN = '('.codePointAt(0)!;
-    private static readonly CODE_PAREN_CLOSE = ')'.codePointAt(0)!;
-    private static readonly CODE_BRACKET_OPEN = '['.codePointAt(0)!;
-    private static readonly CODE_BRACKET_CLOSE = ']'.codePointAt(0)!;
-    private static readonly CODE_ANGLE_OPEN = '<'.codePointAt(0)!;
-    private static readonly CODE_ANGLE_CLOSE = '>'.codePointAt(0)!;
-    private static readonly CODE_BRACE_OPEN = '{'.codePointAt(0)!;
-    private static readonly CODE_BRACE_CLOSE = '}'.codePointAt(0)!;
-    private static readonly CODE_PERIOD = '.'.codePointAt(0)!;
-    private static readonly CODE_COMMA = ','.codePointAt(0)!;
-    private static readonly CODE_EXCLAMATION = '!'.codePointAt(0)!;
-    private static readonly CODE_QUESTION = '?'.codePointAt(0)!;
-    private static readonly CODE_SEMICOLON = ';'.codePointAt(0)!;
-    private static readonly CODE_COLON = ':'.codePointAt(0)!;
-
     // ASCII Case Folding Constants
     private static readonly ASCII_A = 65;
     private static readonly ASCII_Z = 90;
