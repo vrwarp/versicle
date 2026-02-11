@@ -79,7 +79,7 @@ graph TD
     end
 
     subgraph Core [Core Services]
-        APS[AudioPlayerService]
+        APS[AudioPlayerService (Main Thread)]
         Pipeline[AudioContentPipeline]
         Ingestion[ingestion.ts]
         BatchIngestion[batch-ingestion.ts]
@@ -265,7 +265,6 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   **Goal**: Prevent database corruption and XSS attacks.
 *   **Logic**:
     *   **Quota Management**: Explicitly handles `QuotaExceededError` (including legacy code 22) and wraps it in a typed `StorageFullError` for UI handling, prompting the user to offload books.
-    *   **Magic Number Check**: Verifies ZIP signature (`50 4B 03 04`) before parsing to prevent invalid file processing.
     *   **Sanitization**: Delegates to `DOMPurify` to strip HTML tags from metadata.
     *   **Safe Mode**: A specialized UI state (`SafeModeView`) triggered by critical database initialization failures in `App.tsx`. It provides a last-resort "Factory Reset" option (`deleteDB`) to recover the application from a corrupted state without requiring user technical knowledge.
 
@@ -463,7 +462,8 @@ The Data Pipeline for TTS.
 *   **Logic**:
     *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
     *   **Zero-Allocation Scanning (`TextScanningTrie`)**: Uses a specialized Trie implementation that operates on character codes.
-        *   **Strategy**: Instead of allocating new strings with `.toLowerCase()`, it performs manual ASCII case folding (checking range 65-90 and adding 32) during traversal. This enables allocation-free matching of abbreviations in hot loops.
+        *   **Strategy**: Uses a static `Uint8Array` lookup table (initialized with named constants) for O(1) punctuation checks (`isPunctuation`) and implements a fast-path in `isWhitespace` to bypass complex checks for common ASCII printable characters (range 33-159).
+        *   **Performance**: Instead of allocating new strings with `.toLowerCase()`, it performs manual ASCII case folding (checking range 65-90 and adding 32) during traversal. This enables allocation-free matching of abbreviations in hot loops.
     *   **Segmenter Cache**: Caches `Intl.Segmenter` instances via `segmenter-cache` to avoid the heavy cost of instantiating locale data repeatedly.
     *   **Optimization**: Uses `tryFastMergeCfi` to merge CFIs optimistically via string manipulation.
 *   **Trade-offs**:
