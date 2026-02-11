@@ -12,6 +12,23 @@ interface TrieNode {
 export class TextScanningTrie {
     private root: TrieNode = {};
 
+    private static readonly CODE_QUOTE_DOUBLE = '"'.codePointAt(0)!;
+    private static readonly CODE_QUOTE_SINGLE = "'".codePointAt(0)!;
+    private static readonly CODE_PAREN_OPEN = '('.codePointAt(0)!;
+    private static readonly CODE_PAREN_CLOSE = ')'.codePointAt(0)!;
+    private static readonly CODE_BRACKET_OPEN = '['.codePointAt(0)!;
+    private static readonly CODE_BRACKET_CLOSE = ']'.codePointAt(0)!;
+    private static readonly CODE_ANGLE_OPEN = '<'.codePointAt(0)!;
+    private static readonly CODE_ANGLE_CLOSE = '>'.codePointAt(0)!;
+    private static readonly CODE_BRACE_OPEN = '{'.codePointAt(0)!;
+    private static readonly CODE_BRACE_CLOSE = '}'.codePointAt(0)!;
+    private static readonly CODE_PERIOD = '.'.codePointAt(0)!;
+    private static readonly CODE_COMMA = ','.codePointAt(0)!;
+    private static readonly CODE_EXCLAMATION = '!'.codePointAt(0)!;
+    private static readonly CODE_QUESTION = '?'.codePointAt(0)!;
+    private static readonly CODE_SEMICOLON = ';'.codePointAt(0)!;
+    private static readonly CODE_COLON = ':'.codePointAt(0)!;
+
     // ASCII Case Folding Constants
     private static readonly ASCII_A = 65;
     private static readonly ASCII_Z = 90;
@@ -29,22 +46,22 @@ export class TextScanningTrie {
     static {
         // Initialize punctuation flags
         const p = TextScanningTrie.PUNCTUATION_FLAGS;
-        p[34] = 1; // "
-        p[39] = 1; // '
-        p[40] = 1; // (
-        p[41] = 1; // )
-        p[91] = 1; // [
-        p[93] = 1; // ]
-        p[60] = 1; // <
-        p[62] = 1; // >
-        p[123] = 1; // {
-        p[125] = 1; // }
-        p[46] = 1; // .
-        p[44] = 1; // ,
-        p[33] = 1; // !
-        p[63] = 1; // ?
-        p[59] = 1; // ;
-        p[58] = 1; // :
+        p[TextScanningTrie.CODE_QUOTE_DOUBLE] = 1;
+        p[TextScanningTrie.CODE_QUOTE_SINGLE] = 1;
+        p[TextScanningTrie.CODE_PAREN_OPEN] = 1;
+        p[TextScanningTrie.CODE_PAREN_CLOSE] = 1;
+        p[TextScanningTrie.CODE_BRACKET_OPEN] = 1;
+        p[TextScanningTrie.CODE_BRACKET_CLOSE] = 1;
+        p[TextScanningTrie.CODE_ANGLE_OPEN] = 1;
+        p[TextScanningTrie.CODE_ANGLE_CLOSE] = 1;
+        p[TextScanningTrie.CODE_BRACE_OPEN] = 1;
+        p[TextScanningTrie.CODE_BRACE_CLOSE] = 1;
+        p[TextScanningTrie.CODE_PERIOD] = 1;
+        p[TextScanningTrie.CODE_COMMA] = 1;
+        p[TextScanningTrie.CODE_EXCLAMATION] = 1;
+        p[TextScanningTrie.CODE_QUESTION] = 1;
+        p[TextScanningTrie.CODE_SEMICOLON] = 1;
+        p[TextScanningTrie.CODE_COLON] = 1;
     }
 
     /**
