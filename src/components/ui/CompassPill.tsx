@@ -115,6 +115,16 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     return `-${m}:${s.toString().padStart(2, '0')} remaining`;
   };
 
+  // Format time remaining for screen readers
+  const formatTimeAccessible = (minutes: number) => {
+    const m = Math.floor(minutes);
+    const s = Math.floor((minutes - m) * 60);
+    const parts = [];
+    if (m > 0) parts.push(`${m} minute${m !== 1 ? 's' : ''}`);
+    if (s > 0) parts.push(`${s} second${s !== 1 ? 's' : ''}`);
+    return parts.length > 0 ? `${parts.join(' ')} remaining` : 'less than a second remaining';
+  };
+
   const handleSaveNote = () => {
     if (onAnnotationAction) {
       onAnnotationAction('note', noteText);
@@ -272,7 +282,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         }}
         role="button"
         tabIndex={0}
-        aria-label={`Continue reading ${displayTitle}`}
+        aria-label={`Continue reading ${displayTitle}, ${displaySubtitle}, ${Math.round(progress)}% complete`}
       >
         <div className="text-xs font-bold truncate w-full opacity-90">
           {displayTitle}
@@ -317,7 +327,11 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             isLoading && "cursor-wait"
           )}
           onClick={handleTogglePlay}
-          aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
+          aria-label={
+            isLoading
+              ? "Loading..."
+              : `${isPlaying ? "Pause" : "Play"} ${displayTitle}`
+          }
         >
           {isLoading ? (
             <Loader2 size={20} className="animate-spin" />
@@ -421,7 +435,11 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         role="button"
         tabIndex={0}
         data-testid="compass-active-toggle"
-        aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
+        aria-label={
+          isLoading
+            ? "Loading..."
+            : `${isPlaying ? "Pause" : "Play"} ${sectionTitle}, ${formatTimeAccessible(timeRemaining)}`
+        }
       >
         <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center flex items-center justify-center gap-1.5">
           {isLoading ? (

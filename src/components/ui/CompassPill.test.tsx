@@ -283,7 +283,7 @@ describe('CompassPill', () => {
         expect(summaryElement).toBeInTheDocument();
         expect(summaryElement).toHaveAttribute('role', 'button');
         expect(summaryElement).toHaveAttribute('tabIndex', '0');
-        expect(summaryElement).toHaveAttribute('aria-label', 'Continue reading Test Book');
+        expect(summaryElement).toHaveAttribute('aria-label', 'Continue reading Test Book, Continue Reading, 45% complete');
         expect(screen.getByText('Test Book')).toBeInTheDocument();
         expect(screen.getByText('Continue Reading')).toBeInTheDocument();
         expect(screen.getByText('45% complete')).toBeInTheDocument();
