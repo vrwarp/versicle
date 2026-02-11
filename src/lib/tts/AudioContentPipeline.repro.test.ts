@@ -2,7 +2,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { dbService } from '../../db/DBService';
-import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
 
 // Mock DB Service

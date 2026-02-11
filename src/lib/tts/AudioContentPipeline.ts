@@ -628,10 +628,11 @@ export class AudioContentPipeline {
                     await dbService.saveContentClassifications(bookId, sectionId, finalResults);
                     return finalResults;
                 }
-            } catch (e: any) {
+            } catch (e: unknown) {
                 console.warn("Content detection failed", e);
                 // Mark as error with timestamp
-                dbService.markAnalysisError(bookId, sectionId, e.message || 'Unknown error');
+                const message = e instanceof Error ? e.message : String(e);
+                dbService.markAnalysisError(bookId, sectionId, message || 'Unknown error');
             }
 
             return null;
