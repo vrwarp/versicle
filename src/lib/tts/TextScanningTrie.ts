@@ -39,13 +39,47 @@ export class TextScanningTrie {
     // Cache for non-ASCII case folding to avoid expensive String.fromCharCode().toLowerCase() allocations
     private static readonly caseFoldCache = new Map<number, number>();
 
+    // Optimized Punctuation Lookup Table (128 bytes)
+    // 0 = False, 1 = True
+    private static readonly PUNCTUATION_FLAGS = new Uint8Array(128);
+
+    static {
+        // Initialize punctuation flags
+        const p = TextScanningTrie.PUNCTUATION_FLAGS;
+        p[TextScanningTrie.CODE_QUOTE_DOUBLE] = 1;
+        p[TextScanningTrie.CODE_QUOTE_SINGLE] = 1;
+        p[TextScanningTrie.CODE_PAREN_OPEN] = 1;
+        p[TextScanningTrie.CODE_PAREN_CLOSE] = 1;
+        p[TextScanningTrie.CODE_BRACKET_OPEN] = 1;
+        p[TextScanningTrie.CODE_BRACKET_CLOSE] = 1;
+        p[TextScanningTrie.CODE_ANGLE_OPEN] = 1;
+        p[TextScanningTrie.CODE_ANGLE_CLOSE] = 1;
+        p[TextScanningTrie.CODE_BRACE_OPEN] = 1;
+        p[TextScanningTrie.CODE_BRACE_CLOSE] = 1;
+        p[TextScanningTrie.CODE_PERIOD] = 1;
+        p[TextScanningTrie.CODE_COMMA] = 1;
+        p[TextScanningTrie.CODE_EXCLAMATION] = 1;
+        p[TextScanningTrie.CODE_QUESTION] = 1;
+        p[TextScanningTrie.CODE_SEMICOLON] = 1;
+        p[TextScanningTrie.CODE_COLON] = 1;
+    }
+
     /**
      * Checks if a character code represents a whitespace character.
      * Covers common ASCII and Unicode whitespace to match Regex `\s`.
      */
     public static isWhitespace(code: number): boolean {
-        return (code === 0x0020) || // Space
-            (code >= 0x0009 && code <= 0x000D) || // Tab, LF, VT, FF, CR
+        // Optimization: Fast path for common ASCII space
+        if (code === 0x0020) return true;
+
+        // Optimization: Fast path for common non-whitespace (ASCII printable)
+        // 0x0020 (32) is handled above.
+        // 0x00A0 (160) is the next whitespace code point.
+        // So if code > 32 and code < 160, it is guaranteed NOT to be whitespace.
+        // This covers a-z, A-Z, 0-9, and common punctuation.
+        if (code > 0x0020 && code < 0x00A0) return false;
+
+        return (code >= 0x0009 && code <= 0x000D) || // Tab, LF, VT, FF, CR
             (code === 0x00A0) || // NBSP
             (code === 0x1680) || // Ogham Space Mark
             (code >= 0x2000 && code <= 0x200A) || // U+2000-U+200A (En Quad...Hair Space)
@@ -61,14 +95,11 @@ export class TextScanningTrie {
      * Includes quotes, brackets, and sentence delimiters.
      */
     public static isPunctuation(code: number): boolean {
-        return (code === TextScanningTrie.CODE_QUOTE_DOUBLE) || (code === TextScanningTrie.CODE_QUOTE_SINGLE) ||
-            (code === TextScanningTrie.CODE_PAREN_OPEN) || (code === TextScanningTrie.CODE_PAREN_CLOSE) ||
-            (code === TextScanningTrie.CODE_BRACKET_OPEN) || (code === TextScanningTrie.CODE_BRACKET_CLOSE) ||
-            (code === TextScanningTrie.CODE_ANGLE_OPEN) || (code === TextScanningTrie.CODE_ANGLE_CLOSE) ||
-            (code === TextScanningTrie.CODE_BRACE_OPEN) || (code === TextScanningTrie.CODE_BRACE_CLOSE) ||
-            (code === TextScanningTrie.CODE_PERIOD) || (code === TextScanningTrie.CODE_COMMA) ||
-            (code === TextScanningTrie.CODE_EXCLAMATION) || (code === TextScanningTrie.CODE_QUESTION) ||
-            (code === TextScanningTrie.CODE_SEMICOLON) || (code === TextScanningTrie.CODE_COLON);
+        // Optimization: Use lookup table for ASCII range
+        if (code < 128) {
+            return !!TextScanningTrie.PUNCTUATION_FLAGS[code];
+        }
+        return false;
     }
 
     /**
