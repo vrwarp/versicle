@@ -244,6 +244,40 @@ export class AudioPlayerService {
 
                     this.stateManager.setQueue(state.queue, currentIndex, sectionIndex);
                     // Subscription handles metadata and listeners
+
+                    // Trigger background content analysis (GenAI) for the restored section
+                    if (sectionIndex >= 0 && sectionIndex < this.playlist.length) {
+                        const section = this.playlist[sectionIndex];
+                        const currentSectionId = section.sectionId;
+
+                        const onMaskFound = (mask: Set<number>) => {
+                            this.enqueue(async () => {
+                                if (this.currentBookId !== bookId) return;
+                                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
+                                if (activeSection && activeSection.sectionId === currentSectionId) {
+                                    this.stateManager.applySkippedMask(mask, currentSectionId);
+                                }
+                            });
+                        };
+
+                        const onAdaptationsFound = (adaptations: { indices: number[], text: string }[]) => {
+                            this.enqueue(async () => {
+                                if (this.currentBookId !== bookId) return;
+                                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
+                                if (activeSection && activeSection.sectionId === currentSectionId) {
+                                    this.stateManager.applyTableAdaptations(adaptations);
+                                }
+                            });
+                        };
+
+                        this.contentPipeline.triggerAnalysis(
+                            bookId,
+                            section.sectionId,
+                            undefined, // will fetch from DB
+                            onMaskFound,
+                            onAdaptationsFound
+                        );
+                    }
                 }
             } catch (e) {
                 logger.error("Failed to restore TTS queue", e);

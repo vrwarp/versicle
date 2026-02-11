@@ -168,28 +168,13 @@ export class AudioContentPipeline {
                 // -----------------------------------------------------------
                 // Background Analysis (Async)
                 // -----------------------------------------------------------
-                const genAISettings = useGenAIStore.getState();
-                const skipTypes = genAISettings.contentFilterSkipTypes;
-                const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled && genAISettings.isEnabled;
-
-                if (isContentAnalysisEnabled) {
-                    if (skipTypes.length > 0 && onMaskFound) {
-                        // Trigger background detection
-                        this.detectContentSkipMask(bookId, section.sectionId, skipTypes, workingSentences)
-                            .then(mask => {
-                                if (mask && mask.size > 0) {
-                                    onMaskFound(mask);
-                                }
-                            })
-                            .catch(err => console.warn("Background mask detection failed", err));
-                    }
-                }
-
-                if (onAdaptationsFound && genAISettings.isTableAdaptationEnabled && genAISettings.isEnabled) {
-                    // Trigger table adaptations
-                    this.processTableAdaptations(bookId, section.sectionId, workingSentences, onAdaptationsFound)
-                        .catch(err => console.warn("Background table adaptation failed", err));
-                }
+                this.triggerAnalysis(
+                    bookId,
+                    section.sectionId,
+                    workingSentences,
+                    onMaskFound,
+                    onAdaptationsFound
+                );
             } else {
                 // Empty Chapter Handling
                 const randomMessage = NO_TEXT_MESSAGES[Math.floor(Math.random() * NO_TEXT_MESSAGES.length)];
@@ -208,6 +193,53 @@ export class AudioContentPipeline {
         } catch (e) {
             console.error("Failed to load section content", e);
             return null;
+        }
+    }
+
+    /**
+     * Triggers background content analysis (skip mask detection and table adaptations).
+     * 
+     * @param bookId The book ID.
+     * @param sectionId The section ID.
+     * @param sentences Optional pre-loaded sentences. If not provided, will be fetched from DB.
+     * @param onMaskFound Callback for skip mask.
+     * @param onAdaptationsFound Callback for table adaptations.
+     */
+    async triggerAnalysis(
+        bookId: string,
+        sectionId: string,
+        sentences: SentenceNode[] | undefined,
+        onMaskFound?: (mask: Set<number>) => void,
+        onAdaptationsFound?: (adaptations: { indices: number[], text: string }[]) => void
+    ): Promise<void> {
+        const genAISettings = useGenAIStore.getState();
+        const skipTypes = genAISettings.contentFilterSkipTypes;
+        const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled && genAISettings.isEnabled;
+
+        if (isContentAnalysisEnabled) {
+            if (skipTypes.length > 0 && onMaskFound) {
+                // Trigger background detection
+                this.detectContentSkipMask(bookId, sectionId, skipTypes, sentences)
+                    .then(mask => {
+                        if (mask && mask.size > 0) {
+                            onMaskFound(mask);
+                        }
+                    })
+                    .catch(err => console.warn("Background mask detection failed", err));
+            }
+        }
+
+        if (onAdaptationsFound && genAISettings.isTableAdaptationEnabled && genAISettings.isEnabled) {
+            // Fetch sentences if not provided, as processTableAdaptations needs them
+            let targetSentences = sentences;
+            if (!targetSentences) {
+                const content = await dbService.getTTSContent(bookId, sectionId);
+                targetSentences = content?.sentences || [];
+            }
+
+            // Trigger table adaptations
+            this.processTableAdaptations(bookId, sectionId, targetSentences, onAdaptationsFound)
+                .catch(err => console.warn("Background table adaptation failed", err));
         }
     }
 
@@ -665,7 +697,7 @@ export class AudioContentPipeline {
             }
 
             currentGroup.segments.push(s);
-            currentGroup.fullText += s.text + '\n';
+            currentGroup.fullText += s.text + '. ';
         }
 
         if (currentGroup) {
