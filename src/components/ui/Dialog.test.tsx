@@ -94,4 +94,22 @@ describe('Dialog', () => {
     );
     expect(screen.getByText('Action')).toBeInTheDocument();
   });
+
+  it('applies custom contentClassName to wrapper', () => {
+    render(
+      <Dialog
+        isOpen={true}
+        onClose={() => {}}
+        title="Test Title"
+        contentClassName="test-class-name"
+      >
+        <div data-testid="dialog-content">Content</div>
+      </Dialog>
+    );
+    const content = screen.getByTestId('dialog-content');
+    // The wrapper is the parent of the content
+    const wrapper = content.parentElement;
+    expect(wrapper).toHaveClass('test-class-name');
+    expect(wrapper).toHaveClass('mb-6'); // Default class
+  });
 });

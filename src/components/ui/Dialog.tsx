@@ -1,4 +1,5 @@
 import React from 'react';
+import { cn } from '../../lib/utils';
 import {
   Modal,
   ModalContent,
@@ -16,6 +17,7 @@ interface DialogProps {
   footer?: React.ReactNode;
   hideCloseButton?: boolean;
   className?: string;
+  contentClassName?: string;
 }
 
 /**
@@ -30,9 +32,10 @@ interface DialogProps {
  * @param props.footer - Optional footer content (e.g. buttons).
  * @param props.hideCloseButton - Whether to hide the close (X) button.
  * @param props.className - Optional className to override default styles (e.g. width).
+ * @param props.contentClassName - Optional className for the content wrapper.
  * @returns The rendered Dialog component.
  */
-export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, description, children, footer, hideCloseButton, className }) => {
+export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, description, children, footer, hideCloseButton, className, contentClassName }) => {
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <ModalContent className={`max-w-md ${className || ''}`} hideCloseButton={hideCloseButton}>
@@ -42,7 +45,7 @@ export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, descript
             {description || "Dialog Content"}
           </ModalDescription>
         </ModalHeader>
-        <div className="mb-6 text-foreground min-w-0">{children}</div>
+        <div className={cn("mb-6 text-foreground min-w-0", contentClassName)}>{children}</div>
         {footer && <div className="flex justify-end gap-2">{footer}</div>}
       </ModalContent>
     </Modal>

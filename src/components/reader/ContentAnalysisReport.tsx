@@ -121,6 +121,7 @@ export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ is
             onClose={onClose}
             title="Content Analysis Report"
             className="max-w-3xl h-[80vh] flex flex-col"
+            contentClassName="flex-1 overflow-hidden flex flex-col mb-0"
             description="Overview of detected content types for the entire book."
         >
             <div className="flex flex-col h-full gap-4 overflow-hidden">
