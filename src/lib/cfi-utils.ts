@@ -14,6 +14,9 @@ export interface CfiRangeData {
 export function parseCfiRange(range: string): CfiRangeData | null {
     if (!range || !range.startsWith('epubcfi(') || !range.endsWith(')')) return null;
 
+    // Optimization: Early check for comma to avoid unnecessary string operations for Point CFIs
+    if (range.indexOf(',') === -1) return null;
+
     const content = range.slice(8, -1); // remove epubcfi( and )
     const parts = content.split(',');
 
@@ -105,32 +108,41 @@ export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): strin
     // 3. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
     if (cfi.startsWith('epubcfi(')) {
         try {
-            const content = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
-            const parts = content.split('!');
-            const spine = parts[0];
-            const path = parts[1];
+            // Optimization: Avoid regex replace and array splitting
+            const content = cfi.slice(8, -1);
+            const spineSepIndex = content.indexOf('!');
 
-            if (path) {
-                // Heuristic: The text node is usually the last component (e.g. /4/2/1:0)
-                // We want the parent block element (e.g. /4/2).
-                const pathParts = path.split('/');
-                
-                // Filter empty strings from split
-                const cleanParts = pathParts.filter(p => p.length > 0);
+            if (spineSepIndex !== -1) {
+                const spine = content.substring(0, spineSepIndex);
+                const path = content.substring(spineSepIndex + 1);
 
-                // Removed Old "Structural Snapping" (> 4 depth) logic here.
+                if (path) {
+                    // Find the last slash to strip the leaf component (e.g. /4/2/1:0 -> /4/2)
+                    // Note: path usually starts with /, so we look for the last one
+                    let lastSlash = path.lastIndexOf('/');
 
-                // Standard leaf-stripping for shallow paths
-                if (cleanParts.length > 0) {
-                    cleanParts.pop();
+                    // Handle edge case where path ends with slash (unlikely but safe to handle)
+                    if (lastSlash === path.length - 1) {
+                        lastSlash = path.lastIndexOf('/', lastSlash - 1);
+                    }
+
+                    if (lastSlash > 0) {
+                        // Return everything up to the last slash
+                        return `epubcfi(${spine}!${path.substring(0, lastSlash)})`;
+                    } else if (lastSlash === 0) {
+                         // Only one slash at start (e.g. /4), stripping it leaves empty path
+                         return `epubcfi(${spine}!)`;
+                    }
+
+                    // No slash found in path (unlikely for valid CFI path), return as is or fallback to spine
+                    // If path is "1:0" (no leading slash), stripping it means empty.
+                    return `epubcfi(${spine}!)`;
                 }
 
-                return cleanParts.length === 0
-                    ? `epubcfi(${spine}!)`
-                    : `epubcfi(${spine}!/${cleanParts.join('/')})`;
-            } else {
-                // Just spine item reference
                 return `epubcfi(${spine}!)`;
+            } else {
+                 // No separator found. Treat content as spine.
+                 return `epubcfi(${content}!)`;
             }
         } catch (e) {
             console.warn("Failed to extract parent CFI", e);
