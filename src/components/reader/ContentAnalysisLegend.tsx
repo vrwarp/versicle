@@ -39,6 +39,9 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     // State for rendering
     const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
 
+    // Highlight state
+    const [highlightedCfi, setHighlightedCfi] = useState<string | null>(null);
+
     const currentBookId = useReaderUIStore(state => state.currentBookId);
 
     // Helper to clear URLs
@@ -211,7 +214,34 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     const jumpToTable = (cfi: string) => {
         rendition?.display(cfi);
         setCfiInput(cfi);
+        setHighlightedCfi(cfi);
     };
+
+    // Manage highlight lifecycle
+    useEffect(() => {
+        if (!rendition || !highlightedCfi) return;
+
+        try {
+            // @ts-expect-error annotations untyped
+            rendition.annotations.add('highlight', highlightedCfi, {}, null, 'temp-table-highlight', {
+                fill: 'yellow',
+                backgroundColor: 'rgba(255, 255, 0, 0.3)',
+                fillOpacity: '0.3',
+                mixBlendMode: 'multiply'
+            });
+        } catch (e) {
+            console.warn("Failed to add highlight", e);
+        }
+
+        return () => {
+            try {
+                // @ts-expect-error annotations untyped
+                rendition.annotations.remove(highlightedCfi, 'highlight');
+            } catch (e) {
+                console.warn("Failed to remove highlight", e);
+            }
+        };
+    }, [rendition, highlightedCfi]);
 
     const handleReprocess = async () => {
         if (!currentBookId) return;

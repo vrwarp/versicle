@@ -2,6 +2,8 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContentAnalysisLegend } from '../ContentAnalysisLegend';
 import { useGenAIStore } from '../../../store/useGenAIStore';
+import { useReaderUIStore } from '../../../store/useReaderUIStore';
+import { dbService } from '../../../db/DBService';
 import React from 'react';
 
 // Mock Lucide icons
@@ -20,6 +22,18 @@ vi.mock('../../../store/useGenAIStore', () => ({
   useGenAIStore: vi.fn(),
 }));
 
+// Mock Reader Store
+vi.mock('../../../store/useReaderUIStore', () => ({
+  useReaderUIStore: vi.fn(),
+}));
+
+// Mock DBService
+vi.mock('../../../db/DBService', () => ({
+  dbService: {
+    getTableImages: vi.fn(),
+  },
+}));
+
 describe('ContentAnalysisLegend', () => {
   const mockSetDebugModeEnabled = vi.fn();
   const mockRendition = {
@@ -28,6 +42,10 @@ describe('ContentAnalysisLegend', () => {
     display: vi.fn(),
     getRange: vi.fn(),
     getContents: vi.fn(),
+    annotations: {
+        add: vi.fn(),
+        remove: vi.fn(),
+    }
   };
 
   beforeEach(() => {
@@ -38,6 +56,13 @@ describe('ContentAnalysisLegend', () => {
         setDebugModeEnabled: mockSetDebugModeEnabled,
       })
     );
+    (useReaderUIStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector?: (state: unknown) => unknown) => {
+        const state = {
+            currentBookId: 'book1',
+            toc: []
+        };
+        return selector ? selector(state) : state;
+    });
   });
 
   it('renders nothing when debug mode is disabled', () => {
@@ -112,5 +137,50 @@ describe('ContentAnalysisLegend', () => {
 
      expect(mockRendition.display).toHaveBeenCalledWith('epubcfi(/6/4)');
      expect(screen.getByDisplayValue('New Text')).toBeInTheDocument();
+  });
+
+  it('highlights table when jumping from image', async () => {
+    // Setup mock image
+    const mockImage = {
+        id: 'book1-cfi1',
+        bookId: 'book1',
+        sectionId: 'section1',
+        cfi: 'epubcfi(/6/10)',
+        imageBlob: new Blob([''], { type: 'image/webp' })
+    };
+    (dbService.getTableImages as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([mockImage]);
+
+    // Mock URL.createObjectURL
+    const mockCreateObjectURL = vi.fn().mockReturnValue('blob:http://localhost/uuid');
+    global.URL.createObjectURL = mockCreateObjectURL;
+
+    // Render
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+
+    // Wait for images to load (wait for "Table Images" text)
+    // The text is "Table Images (1)"
+    const header = await screen.findByText(/Table Images/i);
+    expect(header).toBeInTheDocument();
+
+    // Click JUMP button
+    // It's in a button with text "JUMP"
+    const jumpButton = screen.getByText('JUMP');
+    fireEvent.click(jumpButton);
+
+    // Verify display called
+    expect(mockRendition.display).toHaveBeenCalledWith('epubcfi(/6/10)');
+
+    // Verify annotation added
+    expect(mockRendition.annotations.add).toHaveBeenCalledWith(
+        'highlight',
+        'epubcfi(/6/10)',
+        expect.anything(),
+        null,
+        'temp-table-highlight',
+        expect.objectContaining({
+            fill: 'yellow'
+        })
+    );
   });
 });
