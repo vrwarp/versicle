@@ -65,6 +65,7 @@
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
 *   **Battery Guard**: Explicitly checks and warns about aggressive Android battery optimizations that might kill background playback.
+*   **Lock Screen Controls**: Full support for OS-level media controls (Play, Pause, Seek, Artwork) via Media Session API.
 
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
@@ -79,6 +80,8 @@
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted.
     *   **CSV Import/Export**: Import/Export your reading list via CSV, with intelligent filename matching (ISBN/Title fallback) to restore your library context.
+*   **Lexicon Management**:
+    *   **CSV Import/Export**: Bulk manage pronunciation rules using CSV files.
 *   **Backups & Export**:
     *   **Light**: JSON export of metadata/settings.
     *   **Full**: ZIP archive including all book files.
