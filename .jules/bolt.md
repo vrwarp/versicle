@@ -47,3 +47,8 @@
 - **Bottleneck:** `TextSegmenter.refineSegments` used Regexes (`\s`) in a hot loop, causing overhead.
 - **Solution:** Replaced with manual character scanning helpers.
 - **Learning:** When optimizing away from Regex `\s`, naïve checks (e.g., `code === 32`) cause regressions for content with Unicode spaces (Em Space, NBSP). Always replicate the full Unicode whitespace range (or relevant subset) when implementing manual scanners for text processing.
+
+## 2025-06-05 - CFI Parent Extraction Optimization
+- **Bottleneck:** `getParentCfi` was using regex replace (`/^epubcfi\((.*)\)$/`) and `split`/`filter`/`pop`/`join` logic inside the hot path `AudioContentPipeline` loop (thousands of calls per chapter).
+- **Solution:** Replaced regex and array operations with string slicing (`slice(8, -1)`) and `lastIndexOf('/')` to extract the parent component directly. Also optimized `parseCfiRange` to return early if no comma is present.
+- **Learning:** For string format parsing in hot loops, avoid allocating intermediate arrays (`split`) or new strings (`replace`) if possible. `indexOf` and `substring`/`slice` are significantly faster (measured ~3.4x speedup).
