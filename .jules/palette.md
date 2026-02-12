@@ -52,3 +52,7 @@
 ## 2025-10-26 - Accessible Theme & Visual Settings
 **Learning:** `aria-pressed` is the correct attribute for toggle-like buttons in a group (like theme selection) when they aren't implemented as radio buttons. For `Radix UI` primitives like `Select` and `Tabs`, adding `aria-label` to the Trigger or List component ensures screen readers announce the control's purpose, especially when visual labels are absent or purely presentational.
 **Action:** Always verify custom selection components (like button groups) expose their selected state to assistive technology. Use `aria-pressed` for button groups and `aria-label` for unlabelled dropdowns/tabs.
+
+## 2025-05-30 - Enhanced Select Items with Icons
+**Learning:** Using plain text for options like "Rating" (e.g., "4 Stars") is functional but lacks visual scannability and delight. Enhancing `Select` items with icons (like stars or status indicators) significantly improves recognition speed and aesthetic appeal without compromising accessibility if implemented correctly.
+**Action:** When options have strong visual metaphors (ratings, statuses), use the `Select` component's ability to render complex children. Ensure icons are purely decorative (if text is present) or have appropriate labels, and maintain text labels for screen readers.
