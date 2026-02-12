@@ -628,7 +628,6 @@ export class AudioPlayerService {
                     if (item && item.cfi && !item.isPreroll) {
                         try {
                             useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi);
-                            dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, true).catch(e => logger.error('Failed to update reading history', e));
                         } catch (e) {
                             logger.error("Failed to update history", e);
                         }
@@ -658,7 +657,6 @@ export class AudioPlayerService {
                 if (item && item.cfi && !item.isPreroll) {
                     try {
                         useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi);
-                        dbService.updateReadingHistory(this.currentBookId, item.cfi, 'tts', item.text, false).catch(e => logger.error('Failed to update reading history', e));
                     } catch (e) {
                         logger.error("Failed to update history", e);
                     }

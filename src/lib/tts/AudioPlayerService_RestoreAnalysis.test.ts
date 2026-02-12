@@ -14,7 +14,6 @@ vi.mock('../../db/DBService', () => ({
         getSections: vi.fn(),
         getContentAnalysis: vi.fn().mockResolvedValue({}),
         getTTSContent: vi.fn().mockResolvedValue({ sentences: [] }),
-        updateReadingHistory: vi.fn(),
         getTableImages: vi.fn().mockResolvedValue([]),
         saveTableAdaptations: vi.fn(),
         saveContentClassifications: vi.fn(),
