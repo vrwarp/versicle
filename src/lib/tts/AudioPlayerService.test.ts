@@ -63,7 +63,6 @@ vi.mock('../../db/DBService', () => ({
         updatePlaybackState: vi.fn().mockResolvedValue(undefined),
         getTTSState: vi.fn().mockResolvedValue(null),
         saveTTSState: vi.fn(),
-        updateReadingHistory: vi.fn().mockResolvedValue(undefined),
         getSections: vi.fn().mockResolvedValue([
             { sectionId: 'sec1', characterCount: 100 },
             { sectionId: 'sec2', characterCount: 0 }, // Empty section
