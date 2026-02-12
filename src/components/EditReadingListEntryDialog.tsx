@@ -10,6 +10,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "./ui/Select";
+import { Star, BookOpen, Check, Clock, Ban } from 'lucide-react';
 import type { ReadingListEntry } from '../types/db';
 
 interface EditReadingListEntryDialogProps {
@@ -52,6 +53,12 @@ export const EditReadingListEntryDialog: React.FC<EditReadingListEntryDialogProp
         onOpenChange(false);
     };
 
+    const renderStars = (count: number) => {
+        return Array(count).fill(0).map((_, i) => (
+            <Star key={i} className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+        ));
+    };
+
     return (
         <Modal open={open} onOpenChange={onOpenChange}>
             <ModalContent className="sm:max-w-[425px]">
@@ -91,9 +98,24 @@ export const EditReadingListEntryDialog: React.FC<EditReadingListEntryDialogProp
                                     <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="to-read">To Read</SelectItem>
-                                    <SelectItem value="currently-reading">Reading</SelectItem>
-                                    <SelectItem value="read">Read</SelectItem>
+                                    <SelectItem value="to-read">
+                                        <div className="flex items-center gap-2">
+                                            <Clock className="w-4 h-4 text-muted-foreground" />
+                                            <span>To Read</span>
+                                        </div>
+                                    </SelectItem>
+                                    <SelectItem value="currently-reading">
+                                        <div className="flex items-center gap-2">
+                                            <BookOpen className="w-4 h-4 text-blue-500" />
+                                            <span>Reading</span>
+                                        </div>
+                                    </SelectItem>
+                                    <SelectItem value="read">
+                                        <div className="flex items-center gap-2">
+                                            <Check className="w-4 h-4 text-green-500" />
+                                            <span>Read</span>
+                                        </div>
+                                    </SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -111,12 +133,22 @@ export const EditReadingListEntryDialog: React.FC<EditReadingListEntryDialogProp
                                     <SelectValue placeholder="Select rating" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="0">No Rating</SelectItem>
-                                    <SelectItem value="1">1 Star</SelectItem>
-                                    <SelectItem value="2">2 Stars</SelectItem>
-                                    <SelectItem value="3">3 Stars</SelectItem>
-                                    <SelectItem value="4">4 Stars</SelectItem>
-                                    <SelectItem value="5">5 Stars</SelectItem>
+                                    <SelectItem value="0">
+                                        <div className="flex items-center gap-2">
+                                            <Ban className="w-4 h-4 text-muted-foreground" />
+                                            <span>No Rating</span>
+                                        </div>
+                                    </SelectItem>
+                                    {[1, 2, 3, 4, 5].map((stars) => (
+                                        <SelectItem key={stars} value={stars.toString()}>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex gap-0.5">
+                                                    {renderStars(stars)}
+                                                </div>
+                                                <span className="text-muted-foreground text-xs ml-1">({stars} Star{stars > 1 ? 's' : ''})</span>
+                                            </div>
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
