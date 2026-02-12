@@ -516,6 +516,19 @@ Manages the virtual playback timeline.
 #### `src/lib/tts/providers/CapacitorTTSProvider.ts`
 *   **Logic**: Uses `queueStrategy: 1` to preload the next utterance into the OS buffer while the current one plays.
 
+#### `src/lib/tts/PlatformIntegration.ts`
+*   **Goal**: Consolidate OS-level media interactions.
+*   **Logic**:
+    *   **Media Session**: Wraps `MediaSessionManager` to handle Lock Screen controls (Play/Pause/Seek) and update metadata/artwork.
+    *   **Background Audio**: Manages a silent/noise audio loop via `BackgroundAudio` to prevent the Android OS from suspending the app process when the screen is off.
+    *   **Lifecycle**: Automatically starts/stops the background loop based on playback state (`playing` -> start, `paused` -> stop with debounce).
+
+#### `src/lib/tts/CsvUtils.ts` (Lexicon I/O)
+*   **Goal**: Enable import/export of Lexicon rules and abbreviations.
+*   **Logic**:
+    *   **Library**: Uses `PapaParse` for robust CSV handling.
+    *   **Format**: Handles standard CSV escaping (RFC 4180) for rules containing commas or quotes.
+
 ---
 
 ### State Management (`src/store/`)
@@ -546,6 +559,9 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **`useLibraryStore` (Local Only)**:
     *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs.
     *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). If the local file is missing, the book appears as a "Ghost Book" using synced metadata.
+*   **`useGoogleServicesStore` (Local Only)**:
+    *   **Goal**: Manage connection state for Google APIs (Drive, Sync) and persist user preferences.
+    *   **Logic**: Tracks which services are actively connected and stores client IDs. Used to coordinate the authentication flow via `GoogleIntegrationManager`.
 
 #### Selector Optimization (`src/store/selectors.ts`)
 *   **Goal**: Ensure smooth UI scrolling (60fps) by preventing unnecessary re-renders in the main `LibraryView`.
@@ -565,6 +581,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **Battery Guard**: Explicitly checks Android battery optimization settings via `BatteryGuard` and warns the user if they are likely to interfere with background playback.
 *   **Transactional Voice Download**: `PiperProvider` prevents corrupt voice models by ensuring files are downloaded and verified in memory before writing to persistent storage.
 *   **Input Sanitization**: All text inputs to the WASM TTS engine are sanitized and chunked to prevent memory access violations or worker crashes.
+*   **Process Protection**: `PlatformIntegration` runs a silent audio loop during playback to prevent Android "Phantom Process Killers" from terminating the app in the background.
 
 ### UI Layer
 
