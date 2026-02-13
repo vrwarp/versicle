@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import type { Rendition } from 'epubjs';
 import { useTTSStore } from '../../store/useTTSStore';
+import { useShallow } from 'zustand/react/shallow';
 
 interface ReaderTTSControllerProps {
   rendition: Rendition | null;
@@ -26,11 +27,21 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   onPrev
 }) => {
   // We subscribe to these changing values here, so ReaderView doesn't have to.
-  const activeCfi = useTTSStore(state => state.activeCfi);
-  const currentIndex = useTTSStore(state => state.currentIndex);
-  const status = useTTSStore(state => state.status);
-  const queue = useTTSStore(state => state.queue);
-  const jumpTo = useTTSStore(state => state.jumpTo);
+  // Use shallow comparison for primitive values to avoid unnecessary re-renders
+  const { activeCfi, currentIndex, status, queue, jumpTo } = useTTSStore(useShallow(state => ({
+    activeCfi: state.activeCfi,
+    currentIndex: state.currentIndex,
+    status: state.status,
+    queue: state.queue,
+    jumpTo: state.jumpTo
+  })));
+
+  // Select actions individually or use shallow to prevent new object creation on every render
+  const { play, pause, stop } = useTTSStore(useShallow(state => ({
+    play: state.play,
+    pause: state.pause,
+    stop: state.stop
+  })));
 
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
@@ -98,10 +109,10 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   // --- Keyboard Navigation ---
   // Use a ref to access the latest state in the event listener without re-binding it constantly.
   // This prevents removing/adding the listener on every sentence change.
-  const stateRef = useRef({ status, currentIndex, queue });
+  const stateRef = useRef({ status, currentIndex, queue, play, pause, stop });
   useEffect(() => {
-    stateRef.current = { status, currentIndex, queue };
-  }, [status, currentIndex, queue]);
+    stateRef.current = { status, currentIndex, queue, play, pause, stop };
+  }, [status, currentIndex, queue, play, pause, stop]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -114,7 +125,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
         return;
       }
 
-      const { status: currentStatus, currentIndex: idx, queue: q } = stateRef.current;
+      const { status: currentStatus, currentIndex: idx, queue: q, play: doPlay, pause: doPause, stop: doStop } = stateRef.current;
 
       if (e.key === 'ArrowLeft') {
         if (currentStatus === 'playing' || currentStatus === 'paused') {
@@ -128,6 +139,21 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
           if (idx < q.length - 1) jumpTo(idx + 1);
         } else {
           onNext();
+        }
+      }
+      if (e.key === ' ' || e.code === 'Space') {
+        if (currentStatus === 'playing') {
+          e.preventDefault();
+          doPause();
+        } else if (currentStatus === 'paused') {
+          e.preventDefault();
+          doPlay();
+        }
+      }
+      if (e.key === 'Escape') {
+        if (currentStatus === 'playing' || currentStatus === 'paused') {
+          e.preventDefault();
+          doStop();
         }
       }
     };
