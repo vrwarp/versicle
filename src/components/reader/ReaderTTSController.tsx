@@ -32,6 +32,12 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   const queue = useTTSStore(state => state.queue);
   const jumpTo = useTTSStore(state => state.jumpTo);
 
+  const { play, pause, stop } = useTTSStore(state => ({
+    play: state.play,
+    pause: state.pause,
+    stop: state.stop
+  }));
+
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
     if (!rendition || !activeCfi || status === 'stopped') return;
@@ -98,10 +104,10 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   // --- Keyboard Navigation ---
   // Use a ref to access the latest state in the event listener without re-binding it constantly.
   // This prevents removing/adding the listener on every sentence change.
-  const stateRef = useRef({ status, currentIndex, queue });
+  const stateRef = useRef({ status, currentIndex, queue, play, pause, stop });
   useEffect(() => {
-    stateRef.current = { status, currentIndex, queue };
-  }, [status, currentIndex, queue]);
+    stateRef.current = { status, currentIndex, queue, play, pause, stop };
+  }, [status, currentIndex, queue, play, pause, stop]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -114,7 +120,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
         return;
       }
 
-      const { status: currentStatus, currentIndex: idx, queue: q } = stateRef.current;
+      const { status: currentStatus, currentIndex: idx, queue: q, play: doPlay, pause: doPause, stop: doStop } = stateRef.current;
 
       if (e.key === 'ArrowLeft') {
         if (currentStatus === 'playing' || currentStatus === 'paused') {
@@ -128,6 +134,21 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
           if (idx < q.length - 1) jumpTo(idx + 1);
         } else {
           onNext();
+        }
+      }
+      if (e.key === ' ' || e.code === 'Space') {
+        if (currentStatus === 'playing') {
+          e.preventDefault();
+          doPause();
+        } else if (currentStatus === 'paused') {
+          e.preventDefault();
+          doPlay();
+        }
+      }
+      if (e.key === 'Escape') {
+        if (currentStatus === 'playing' || currentStatus === 'paused') {
+          e.preventDefault();
+          doStop();
         }
       }
     };
