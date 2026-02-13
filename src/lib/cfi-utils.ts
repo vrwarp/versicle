@@ -11,6 +11,30 @@ export interface CfiRangeData {
   fullEnd: string;
 }
 
+export interface PreprocessedRoot {
+  original: string;
+  clean: string;
+}
+
+/**
+ * Pre-processes a list of block roots (e.g. table CFIs) for efficient repeated querying.
+ * Sorts by length descending and pre-calculates the clean root path.
+ */
+export function preprocessBlockRoots(roots: string[]): PreprocessedRoot[] {
+  return roots
+      .map(root => {
+          let cleanRoot = root;
+          const range = parseCfiRange(root);
+          if (range && range.parent) {
+              cleanRoot = range.parent;
+          } else if (cleanRoot.startsWith('epubcfi(')) {
+              cleanRoot = cleanRoot.slice(8, -1);
+          }
+          return { original: root, clean: cleanRoot };
+      })
+      .sort((a, b) => b.clean.length - a.clean.length);
+}
+
 export function parseCfiRange(range: string): CfiRangeData | null {
     if (!range || !range.startsWith('epubcfi(') || !range.endsWith(')')) return null;
 
@@ -65,35 +89,34 @@ export function mergeCfiSlow(left: string, right: string): string | null {
  * @param knownBlockRoots Optional list of CFI strings that are known block roots (e.g. tables). If the CFI is a descendant of one of these, it will be snapped to that root.
  * @returns The parent CFI or 'unknown' if extraction fails.
  */
-export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): string {
+export function getParentCfi(cfi: string, knownBlockRoots: string[] | PreprocessedRoot[] = []): string {
     if (!cfi) return 'unknown';
 
     // 1. Check known block roots (e.g. Tables) - Priority over Range CFI parsing
     if (knownBlockRoots.length > 0) {
-        // Sort by length descending to match innermost table first
-        const sortedRoots = [...knownBlockRoots].sort((a, b) => b.length - a.length);
+        let roots: PreprocessedRoot[];
+
+        // Check if already preprocessed (duck typing or simply by type if generic)
+        if (typeof knownBlockRoots[0] === 'string') {
+            // Slow path: Preprocess on the fly (includes sorting)
+            roots = preprocessBlockRoots(knownBlockRoots as string[]);
+        } else {
+            // Fast path: Use preprocessed roots
+            roots = knownBlockRoots as PreprocessedRoot[];
+        }
 
         // Pre-clean the target CFI once
         const cleanCfi = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
 
-        for (const root of sortedRoots) {
-            // Check prefix.
-            let cleanRoot = root;
-            const range = parseCfiRange(root);
-            if (range && range.parent) {
-                cleanRoot = range.parent;
-            } else if (cleanRoot.startsWith('epubcfi(')) {
-                 cleanRoot = cleanRoot.slice(8, -1);
-            }
-
-            if (cleanCfi.startsWith(cleanRoot)) {
+        for (const { original, clean } of roots) {
+            if (cleanCfi.startsWith(clean)) {
                 // Ensure boundary match:
-                // If cleanCfi is exactly equal to cleanRoot, it's a match.
+                // If cleanCfi is exactly equal to clean, it's a match.
                 // If cleanCfi is longer, the next char must be a separator (/ or ! or [ or ,)
                 // Added comma to support Range CFIs as target (e.g. /6/24!/4/2/4 matches /6/24!/4/2/4,/1:0,...)
-                const nextChar = cleanCfi[cleanRoot.length];
+                const nextChar = cleanCfi[clean.length];
                 if (!nextChar || ['/', '!', '[', ',', ':'].includes(nextChar)) {
-                    return root;
+                    return original;
                 }
             }
         }

@@ -5,7 +5,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
 import { EpubCFI } from 'epubjs';
-import { getParentCfi, generateCfiRange, parseCfiRange } from '../cfi-utils';
+import { getParentCfi, generateCfiRange, parseCfiRange, preprocessBlockRoots, type PreprocessedRoot } from '../cfi-utils';
 import type { SectionMetadata, NavigationItem } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
@@ -317,8 +317,11 @@ export class AudioContentPipeline {
                 const sectionTableImages = tableImages.filter(img => img.sectionId === nextSection.sectionId);
                 const tableCfis = sectionTableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
+                // Preprocess table roots for efficient querying
+                const preprocessedTableRoots = preprocessBlockRoots(tableCfis);
+
                 // 3. Group (Using raw sentences to ensure correct parent mapping)
-                const groups = this.groupSentencesByRoot(ttsContent.sentences, tableCfis);
+                const groups = this.groupSentencesByRoot(ttsContent.sentences, preprocessedTableRoots);
 
                 // 4. Detect (will use deduplicated promise if already running)
                 await this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups);
@@ -357,8 +360,11 @@ export class AudioContentPipeline {
             const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
             const tableCfis = sectionTableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
+            // Preprocess table roots for efficient querying
+            const preprocessedTableRoots = preprocessBlockRoots(tableCfis);
+
             // Group sentences by Root Node
-            const groups = this.groupSentencesByRoot(targetSentences, tableCfis);
+            const groups = this.groupSentencesByRoot(targetSentences, preprocessedTableRoots);
             const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
             if (detectedTypes && detectedTypes.length > 0) {
@@ -677,7 +683,7 @@ export class AudioContentPipeline {
      * Groups individual text segments by their common semantic root element using CFI structure.
      * This allows the GenAI to classify logical blocks (tables, asides) rather than fragmented sentences.
      */
-    private groupSentencesByRoot(sentences: { text: string; cfi: string; sourceIndices?: number[] }[], tableCfis: string[] = []): { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] {
+    private groupSentencesByRoot(sentences: { text: string; cfi: string; sourceIndices?: number[] }[], tableCfis: string[] | PreprocessedRoot[] = []): { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] {
         const groups: { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] = [];
         let currentGroup: { parentCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string } | null = null;
 
