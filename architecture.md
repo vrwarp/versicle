@@ -261,11 +261,11 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
         3.  `{Title}-{Author}` (Sanitized).
     *   **Trade-off**: Importing from generic CSVs (Goodreads) relies on "Ghost Books" creation; the user must manually import the matching EPUB file later to read it.
 
-#### Hardening: Validation & Sanitization (`src/db/validators.ts`)
+#### Hardening: Validation & Sanitization (`src/db/validators.ts` & `src/db/DBService.ts`)
 *   **Goal**: Prevent database corruption and XSS attacks.
 *   **Logic**:
-    *   **Quota Management**: Explicitly handles `QuotaExceededError` (including legacy code 22) and wraps it in a typed `StorageFullError` for UI handling, prompting the user to offload books.
-    *   **Sanitization**: Delegates to `DOMPurify` to strip HTML tags from metadata.
+    *   **Quota Management (`DBService.ts`)**: Explicitly handles `QuotaExceededError` (including legacy code 22) and wraps it in a typed `StorageFullError` for UI handling, prompting the user to offload books.
+    *   **Sanitization (`validators.ts`)**: Delegates to `DOMPurify` to strip HTML tags from metadata.
     *   **Safe Mode**: A specialized UI state (`SafeModeView`) triggered by critical database initialization failures in `App.tsx`. It provides a last-resort "Factory Reset" option (`deleteDB`) to recover the application from a corrupted state without requiring user technical knowledge.
 
 ### Sync & Cloud (`src/lib/sync/`)
@@ -304,7 +304,7 @@ Manages integration with the native Android Backup Service.
 *   **Goal**: Provide deep visibility into binary checkpoints for debugging and support.
 *   **Logic**:
     *   **Hydration**: Hydrates a binary checkpoint blob into a temporary `Y.Doc`.
-    *   **Deep Diff**: Converts both the live document and the checkpoint to JSON and performs a recursive object difference (Added, Removed, Modified).
+    *   **Deep Diff (`src/lib/json-diff.ts`)**: Converts both the live document and the checkpoint to JSON and performs a recursive object difference (Added, Removed, Modified).
     *   **Dynamic Discovery**: Iterates over `doc.share` keys to dynamically discover and deserialize map/array types, handling `AbstractType` hydration issues.
 *   **Trade-off**: High CPU and memory cost (full document serialization). Strictly on-demand.
 
@@ -350,6 +350,7 @@ Handles the complex task of importing an EPUB file.
 *   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text ("Teleprompter Adaptation") for TTS accessibility.
     *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures (Title, Footnote, Main Text, Table) for improved TTS flow.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
+    *   **Fuzzy Matching (`textMatching.ts`)**: Uses regex-based fuzzy matching to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
 *   **Structured Output**: Uses `responseSchema` to enforce strictly typed JSON responses from the LLM.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
@@ -399,7 +400,7 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **Logic**:
     *   **Dual Strategy**:
         *   **Web**: Uses Google Identity Services (GIS) for pop-up based auth.
-        *   **Android**: Uses `@capacitor-firebase/authentication` for native system-level sign-in.
+        *   **Android**: Uses `@capgo/capacitor-social-login` (patched) for native system-level sign-in, supporting `login_hint` and account selection.
     *   **Token Management**: Handles token refresh automatically, retrying failed requests (e.g., 401s in `DriveService`) with a fresh token.
     *   **Service Isolation**: Manages connections for 'drive' and 'sync' (Firestore) independently, allowing users to opt-in to specific features.
 
@@ -431,7 +432,14 @@ The central hub for TTS operations. It runs on the **Main Thread** and coordinat
 *   **Logic**:
     *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods (play, pause) to prevent race conditions during rapid UI interaction.
     *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`) via `BatteryGuard`.
-    *   **Delegation**: Offloads heavy content loading to `AudioContentPipeline` and state logic to `PlaybackStateManager`.
+    *   **Delegation**: Offloads heavy content loading to `AudioContentPipeline`, provider management to `TTSProviderManager`, and state logic to `PlaybackStateManager`.
+
+#### `src/lib/tts/TTSProviderManager.ts`
+*   **Goal**: Abstract the differences between Native and Web TTS engines.
+*   **Logic**:
+    *   **Platform Detection**: Automatically selects `CapacitorTTSProvider` on native devices and `WebSpeechProvider` on the web.
+    *   **Fallback Strategy**: Automatically falls back to the local Web Speech engine if a cloud/native provider fails.
+    *   **Event Normalization**: Unifies disparate provider events (boundaries, errors, completion) into a consistent `TTSProviderEvents` interface.
 
 #### `src/lib/tts/TaskSequencer.ts`
 *   **Goal**: Prevent race conditions in async audio operations.
