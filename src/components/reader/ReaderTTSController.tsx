@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import type { Rendition } from 'epubjs';
 import { useTTSStore } from '../../store/useTTSStore';
+import { useShallow } from 'zustand/react/shallow';
 
 interface ReaderTTSControllerProps {
   rendition: Rendition | null;
@@ -26,17 +27,21 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   onPrev
 }) => {
   // We subscribe to these changing values here, so ReaderView doesn't have to.
-  const activeCfi = useTTSStore(state => state.activeCfi);
-  const currentIndex = useTTSStore(state => state.currentIndex);
-  const status = useTTSStore(state => state.status);
-  const queue = useTTSStore(state => state.queue);
-  const jumpTo = useTTSStore(state => state.jumpTo);
+  // Use shallow comparison for primitive values to avoid unnecessary re-renders
+  const { activeCfi, currentIndex, status, queue, jumpTo } = useTTSStore(useShallow(state => ({
+    activeCfi: state.activeCfi,
+    currentIndex: state.currentIndex,
+    status: state.status,
+    queue: state.queue,
+    jumpTo: state.jumpTo
+  })));
 
-  const { play, pause, stop } = useTTSStore(state => ({
+  // Select actions individually or use shallow to prevent new object creation on every render
+  const { play, pause, stop } = useTTSStore(useShallow(state => ({
     play: state.play,
     pause: state.pause,
     stop: state.stop
-  }));
+  })));
 
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
