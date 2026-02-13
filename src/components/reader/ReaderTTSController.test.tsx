@@ -3,6 +3,7 @@ import { render, fireEvent } from '@testing-library/react';
 import { ReaderTTSController } from './ReaderTTSController';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useTTSStore } from '../../store/useTTSStore';
+import type { Rendition } from 'epubjs';
 
 // Mock useTTSStore
 vi.mock('../../store/useTTSStore', () => ({
@@ -17,6 +18,23 @@ const mockRendition = {
         remove: vi.fn()
     }
 };
+
+// Define mock state shape
+interface MockTTSState {
+    activeCfi: string;
+    currentIndex: number;
+    status: 'playing' | 'paused' | 'stopped';
+    queue: { title: string }[];
+    jumpTo: () => void;
+    play: () => void;
+    pause: () => void;
+    stop: () => void;
+}
+
+// Interface for mocked store with getState
+interface MockStoreWithGetState {
+    getState: () => Partial<MockTTSState>;
+}
 
 describe('ReaderTTSController', () => {
     const mockJumpTo = vi.fn();
@@ -35,8 +53,8 @@ describe('ReaderTTSController', () => {
     });
 
     const setup = (status: 'playing' | 'paused' | 'stopped' = 'stopped', queueLength = 5, currentIndex = 0) => {
-        vi.mocked(useTTSStore).mockImplementation((selector: any) => {
-            const state = {
+        vi.mocked(useTTSStore).mockImplementation((selector?: (state: MockTTSState) => unknown) => {
+            const state: MockTTSState = {
                 activeCfi: 'epubcfi(/6/4!/4/2)',
                 currentIndex,
                 status,
@@ -50,14 +68,14 @@ describe('ReaderTTSController', () => {
         });
 
         // Mock getState on the store itself (needed for visibility change logic in component)
-        (useTTSStore as any).getState = () => ({
+        (useTTSStore as unknown as MockStoreWithGetState).getState = () => ({
             activeCfi: 'epubcfi(/6/4!/4/2)',
             status
         });
 
         return render(
             <ReaderTTSController
-                rendition={mockRendition as any}
+                rendition={mockRendition as unknown as Rendition}
                 viewMode="paginated"
                 onNext={mockOnNext}
                 onPrev={mockOnPrev}
