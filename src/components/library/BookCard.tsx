@@ -1,12 +1,12 @@
-import React from 'react';
-import { Smartphone, Monitor, Tablet, MoreVertical, Play, Trash2, CloudOff, RotateCcw } from 'lucide-react';
+import React, { useCallback } from 'react';
+import { MoreVertical, Play, Trash2, CloudOff, RotateCcw } from 'lucide-react';
 import type { BookMetadata } from '../../types/db';
 import { BookCover } from './BookCover';
-import { useReadingStateStore, useBookProgress } from '../../store/useReadingStateStore';
-import { useDeviceStore } from '../../store/useDeviceStore';
-import { getDeviceId } from '../../lib/device-id';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '../ui/DropdownMenu';
+import { useBookProgress } from '../../store/useReadingStateStore';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/DropdownMenu';
 import { Button } from '../ui/Button';
+import { ResumeBadge } from './ResumeBadge';
+import { RemoteSessionsSubMenu } from './RemoteSessionsSubMenu';
 
 /**
  * Props for the BookCard component.
@@ -37,20 +37,6 @@ const formatDuration = (chars?: number): string => {
 }
 
 /**
- * Gets the device icon based on platform name
- */
-const DeviceIcon: React.FC<{ platform: string; className?: string }> = ({ platform, className }) => {
-  const lower = platform.toLowerCase();
-  if (lower.includes('mobile') || lower.includes('phone') || lower.includes('android') || lower.includes('ios')) {
-    return <Smartphone className={className} />;
-  }
-  if (lower.includes('tablet') || lower.includes('ipad')) {
-    return <Tablet className={className} />;
-  }
-  return <Monitor className={className} />;
-};
-
-/**
  * Displays a summary card for a book, including its cover, title, and author.
  * navigating to the reader view when clicked.
  *
@@ -66,74 +52,13 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
   onRestore,
   onResume
 }) => {
-  const currentDeviceId = getDeviceId();
-
   // Get active progress using the shared priority logic
+  // This uses a specific selector, so it's efficient and doesn't re-render on unrelated store changes
   const activeProgress = useBookProgress(book.id);
+
   // Use book.progress (from usage in selectors) as fallback if activeProgress is missing
   // This ensures Reading List progress is used if no device progress exists
   const progressPercent = activeProgress ? activeProgress.percentage : (book.progress || 0);
-
-  // Get raw progress from all devices to calculate resume badge
-  const allProgress = useReadingStateStore((state) => state.progress[book.id]);
-  const devices = useDeviceStore((state) => state.devices);
-
-  // Find if any remote device has further progress
-  const resumeInfo = React.useMemo(() => {
-    if (!allProgress) return null;
-
-    const localProgress = allProgress[currentDeviceId];
-    const localPercentage = localProgress?.percentage || 0;
-    const localLastRead = localProgress?.lastRead || 0;
-
-    // Find the remote device with the furthest progress that's more recent
-    let bestRemote: { deviceId: string; percentage: number; cfi: string; deviceName: string } | null = null;
-
-    for (const [deviceId, progress] of Object.entries(allProgress)) {
-      if (deviceId === currentDeviceId) continue;
-
-      const remoteProgress = progress as { percentage?: number; lastRead?: number; currentCfi?: string };
-      const remotePercentage = remoteProgress.percentage || 0;
-      const remoteLastRead = remoteProgress.lastRead || 0;
-
-      // Remote has further progress AND is more recent
-      if (remotePercentage > localPercentage && remoteLastRead > localLastRead) {
-        const device = devices[deviceId];
-        const deviceName = device?.name || 'Other device';
-
-        if (!bestRemote || remotePercentage > bestRemote.percentage) {
-          bestRemote = {
-            deviceId,
-            percentage: remotePercentage,
-            cfi: remoteProgress.currentCfi || '',
-            deviceName
-          };
-        }
-      }
-    }
-
-    return bestRemote;
-  }, [allProgress, currentDeviceId, devices]);
-
-  // Get list of all remote sessions for the context menu
-  const remoteSessions = React.useMemo(() => {
-    if (!allProgress) return [];
-    return Object.entries(allProgress)
-      .filter(([deviceId]) => deviceId !== currentDeviceId)
-      .map(([deviceId, progress]) => {
-        const p = progress as { percentage?: number; lastRead?: number; currentCfi?: string };
-        const device = devices[deviceId];
-        return {
-          deviceId,
-          name: device?.name || 'Unknown Device',
-          platform: device?.platform || 'desktop',
-          percentage: p.percentage || 0,
-          cfi: p.currentCfi || '',
-          lastRead: p.lastRead || 0
-        };
-      })
-      .sort((a, b) => b.lastRead - a.lastRead);
-  }, [allProgress, currentDeviceId, devices]);
 
   const handleCardClick = () => {
     if (book.isOffloaded || isGhostBook) {
@@ -150,19 +75,11 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
     }
   };
 
-  const handleResumeBadgeClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (resumeInfo && onResume) {
-      onResume(book, resumeInfo.deviceId, resumeInfo.cfi);
-    }
-  };
-
-  const handleMenuResume = (e: React.MouseEvent, deviceId: string, cfi: string) => {
-    e.stopPropagation();
+  const handleResumeClick = useCallback((deviceId: string, cfi: string) => {
     if (onResume) {
       onResume(book, deviceId, cfi);
     }
-  };
+  }, [book, onResume]);
 
   const durationString = book.totalChars ? formatDuration(book.totalChars) : null;
 
@@ -206,29 +123,12 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
                 <span>Open</span>
               </DropdownMenuItem>
 
-              {remoteSessions.length > 0 && onResume && (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <Monitor className="mr-2 h-4 w-4" />
-                    <span>Resume from...</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-48">
-                    {remoteSessions.map((session) => (
-                      <DropdownMenuItem
-                        key={session.deviceId}
-                        onClick={(e) => handleMenuResume(e, session.deviceId, session.cfi)}
-                      >
-                        <DeviceIcon platform={session.platform} className="mr-2 h-4 w-4 opacity-70" />
-                        <div className="flex flex-col gap-0.5">
-                          <span>{session.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {Math.round(session.percentage * 100)}% • {new Date(session.lastRead).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+              {/* Submenu separated to prevent re-renders of the main card on device updates */}
+              {onResume && (
+                <RemoteSessionsSubMenu
+                  bookId={book.id}
+                  onResumeClick={handleResumeClick}
+                />
               )}
 
               <DropdownMenuSeparator />
@@ -259,18 +159,12 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
       </div>
 
       {/* Resume Badge - shows when remote device has further progress */}
-      {resumeInfo && (
-        <button
-          onClick={handleResumeBadgeClick}
-          className="absolute bottom-[calc(100%-var(--cover-height)+1rem)] right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-md hover:bg-primary/90 transition-colors translate-y-[-50%]"
-          data-testid="resume-badge"
-          title={`Continue from ${resumeInfo.deviceName} at ${Math.round(resumeInfo.percentage * 100)}%`}
-          aria-label={`Continue from ${resumeInfo.deviceName} at ${Math.round(resumeInfo.percentage * 100)}%`}
-          style={{ bottom: '90px' }} // Approximate position above text
-        >
-          <DeviceIcon platform={devices[resumeInfo.deviceId]?.platform || ''} className="w-3 h-3" />
-          <span>{Math.round(resumeInfo.percentage * 100)}%</span>
-        </button>
+      {/* Separated to prevent re-renders of the main card on device updates */}
+      {onResume && (
+        <ResumeBadge
+          bookId={book.id}
+          onResumeClick={handleResumeClick}
+        />
       )}
 
       <div className="p-3 flex flex-col flex-1">
