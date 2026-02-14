@@ -56,7 +56,10 @@ export const VisualSettings = () => {
 
       {/* 2. The "Legibility" Row (Size & Font) */}
       <div className="mb-6 space-y-4">
-        <Label className="block text-sm font-medium">Legibility</Label>
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Legibility</Label>
+          <span className="text-xs text-muted-foreground font-mono" role="status" aria-live="polite">{fontSize}%</span>
+        </div>
 
         {/* Font Size Slider Row */}
         <div className="flex items-center gap-3">
@@ -116,7 +119,7 @@ export const VisualSettings = () => {
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLineHeight(Math.max(1, parseFloat((lineHeight - 0.1).toFixed(1))))} aria-label="Decrease line height">
               <Minus className="h-3 w-3" />
             </Button>
-            <span className="w-8 text-center text-sm font-medium tabular-nums">{(lineHeight || 1.5).toFixed(1)}</span>
+            <span className="w-8 text-center text-sm font-medium tabular-nums" role="status" aria-live="polite">{(lineHeight || 1.5).toFixed(1)}</span>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setLineHeight(Math.min(3, parseFloat((lineHeight + 0.1).toFixed(1))))} aria-label="Increase line height">
               <Plus className="h-3 w-3" />
             </Button>
