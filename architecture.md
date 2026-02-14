@@ -332,7 +332,8 @@ Handles the complex task of importing an EPUB file.
     1.  **Validation**: Enforces strict ZIP signature check (`PK\x03\x04`).
     2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`).
         *   **Time-Budgeted Yield Strategy**: Explicitly checks `performance.now()` and yields to the main thread every 16ms (1 frame) to prevent freezing the UI during heavy parsing.
-    3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head 4KB + Metadata + Tail 4KB) using a `cheapHash` function for O(1) duplicate detection.
+    *   **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head 4KB + Metadata String + Tail 4KB) using a `cheapHash` function for O(1) duplicate detection.
+    *   **Ghost Book Restoration**: Supports `importBookWithId` to restore "Ghost Books" (synced items missing local files). It bypasses new ID generation, forcing the file to adopt the existing Book ID to reconnect with Yjs progress/annotations seamlessly.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
         *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
         *   **Accessibility**: Calculates **Perceptual Lightness (L*)** (CIE 1976) from the extracted RGB values to determine the optimal text color (Soft Dark, Hard Black, Hard White, Soft Light) for UI overlays, ensuring WCAG contrast compliance.
@@ -363,6 +364,9 @@ Implements full-text search off the main thread.
 #### Backup (`src/lib/BackupService.ts`)
 Manages manual internal state backup and restoration.
 
+*   **V2 Architecture (Yjs Snapshots)**:
+    *   **Generation**: Captures the entire Yjs CRDT state as a binary update using `Y.encodeStateAsUpdate(yDoc)`.
+    *   **Restoration**: To prevent "Delete Wins" merge conflicts (where deleted items in the current state suppress restored items), the system **wipes the local database** (`yjsPersistence.clearData()`) before creating a fresh `Y.Doc` and applying the snapshot.
 *   **`createLightBackup()`**: JSON-only export (metadata, settings, history).
 *   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files.
 
@@ -460,10 +464,17 @@ The Data Pipeline for TTS.
 
 *   **Goal**: Decouple "Content Loading" from "Playback Readiness".
 *   **Logic (Optimistic Playback)**:
-    1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
+    1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction (`loadSection` does not await analysis).
     2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
     3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`), allowing the player to seamlessly skip content identified later without delaying the start of playback.
     4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
+
+#### `src/lib/tts/TextScanningTrie.ts`
+*   **Goal**: Extreme performance for text segmentation and abbreviation detection.
+*   **Logic**:
+    *   **Zero-Allocation**: Operates directly on character codes to avoid string allocations.
+    *   **Fast Lookups**: Uses a `Uint8Array(128)` lookup table for O(1) punctuation checks.
+    *   **Manual ASCII Folding**: Performs case-insensitive matching by manually adding 32 to ASCII uppercase codes, bypassing the expensive `String.toLowerCase()`.
 
 #### `src/lib/tts/TextSegmenter.ts`
 *   **Goal**: Robustly split text into sentences and handle abbreviations.
@@ -590,6 +601,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **Transactional Voice Download**: `PiperProvider` prevents corrupt voice models by ensuring files are downloaded and verified in memory before writing to persistent storage.
 *   **Input Sanitization**: All text inputs to the WASM TTS engine are sanitized and chunked to prevent memory access violations or worker crashes.
 *   **Process Protection**: `PlatformIntegration` runs a silent audio loop during playback to prevent Android "Phantom Process Killers" from terminating the app in the background.
+*   **GenAI Rate Limit Resilience**: `GenAIService` automatically handles `429 RESOURCE_EXHAUSTED` errors by rotating between models (`gemini-2.5-flash-lite` <-> `gemini-2.5-flash`) and retrying failed requests.
 
 ### UI Layer
 
