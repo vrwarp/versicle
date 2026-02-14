@@ -57,3 +57,8 @@
 - **Bottleneck:** `getParentCfi` (used in `AudioContentPipeline`) was sorting and parsing known block roots (tables) for *every* sentence in a chapter, leading to `O(N * M)` expensive string operations.
 - **Solution:** Implemented `preprocessBlockRoots` to parse roots once per section (`O(M)`) and updated `getParentCfi` to accept preprocessed structures.
 - **Learning:** When a utility function takes a configuration array (like `knownBlockRoots`) inside a hot loop, consider creating a "compiled" or "preprocessed" version of that configuration to hoist expensive setup work out of the loop.
+
+## 2025-06-07 - UseDeviceStore Isolation
+- **Bottleneck:** `BookCard` subscribed to `useDeviceStore` to display a conditional resume badge. Because `useDeviceStore` (Yjs-backed) returns a new object reference on every heartbeat, ALL `BookCard` instances re-rendered every 5 minutes (or on any device change), causing UI jank in large libraries.
+- **Solution:** Extracted `ResumeBadge` and `RemoteSessionsSubMenu` into separate components that isolate the `useDeviceStore` subscription.
+- **Learning:** When a heavy component (like a list item) needs global state (like `devices`) for a tiny conditional UI element, extract that element. Subscribing to frequently changing global stores in list items is a performance antipattern.
