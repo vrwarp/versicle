@@ -11,6 +11,7 @@ import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useToastStore } from '../../store/useToastStore';
 import { createLogger } from '../logger';
 
 const logger = createLogger('AudioPlayerService');
@@ -707,7 +708,6 @@ export class AudioPlayerService {
             const isEnabled = await BatteryOptimization.isBatteryOptimizationEnabled();
             if (isEnabled.enabled) {
                 // Prompt user to disable battery optimization for reliable background playback
-                const { useToastStore } = await import('../../store/useToastStore');
                 useToastStore.getState().showToast(
                     'For reliable background playback, please disable battery optimization for this app.',
                     'info'
