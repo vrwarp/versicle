@@ -149,8 +149,14 @@ export class TextSegmenter {
     private static mergeText(left: string, right: string): string {
         let i = left.length - 1;
         // Check for whitespace (Space, NBSP, Tab, LF, CR)
-        while (i >= 0 && (left.charCodeAt(i) === 32 || left.charCodeAt(i) === 160 || left.charCodeAt(i) === 9 || left.charCodeAt(i) === 10 || left.charCodeAt(i) === 13)) {
-            i--;
+        // Optimization: Use Trie's lookup table for O(1) whitespace check and avoid repeated charCodeAt calls
+        while (i >= 0) {
+            const code = left.charCodeAt(i);
+            if (TextScanningTrie.isWhitespace(code)) {
+                i--;
+            } else {
+                break;
+            }
         }
 
         let separator = '. ';

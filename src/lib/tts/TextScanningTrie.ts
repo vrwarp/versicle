@@ -43,6 +43,10 @@ export class TextScanningTrie {
     // 0 = False, 1 = True
     private static readonly PUNCTUATION_FLAGS = new Uint8Array(128);
 
+    // Optimized Whitespace Lookup Table (256 bytes)
+    // 0 = False, 1 = True
+    private static readonly WHITESPACE_FLAGS = new Uint8Array(256);
+
     static {
         // Initialize punctuation flags
         const p = TextScanningTrie.PUNCTUATION_FLAGS;
@@ -62,6 +66,16 @@ export class TextScanningTrie {
         p[TextScanningTrie.CODE_QUESTION] = 1;
         p[TextScanningTrie.CODE_SEMICOLON] = 1;
         p[TextScanningTrie.CODE_COLON] = 1;
+
+        // Initialize whitespace flags
+        const w = TextScanningTrie.WHITESPACE_FLAGS;
+        w[0x0020] = 1; // Space
+        w[0x0009] = 1; // Tab
+        w[0x000A] = 1; // LF
+        w[0x000B] = 1; // VT
+        w[0x000C] = 1; // FF
+        w[0x000D] = 1; // CR
+        w[0x00A0] = 1; // NBSP
     }
 
     /**
@@ -69,19 +83,12 @@ export class TextScanningTrie {
      * Covers common ASCII and Unicode whitespace to match Regex `\s`.
      */
     public static isWhitespace(code: number): boolean {
-        // Optimization: Fast path for common ASCII space
-        if (code === 0x0020) return true;
+        // Optimization: Fast path for common ASCII + Latin-1 space using lookup table
+        if (code < 256) {
+            return !!TextScanningTrie.WHITESPACE_FLAGS[code];
+        }
 
-        // Optimization: Fast path for common non-whitespace (ASCII printable)
-        // 0x0020 (32) is handled above.
-        // 0x00A0 (160) is the next whitespace code point.
-        // So if code > 32 and code < 160, it is guaranteed NOT to be whitespace.
-        // This covers a-z, A-Z, 0-9, and common punctuation.
-        if (code > 0x0020 && code < 0x00A0) return false;
-
-        return (code >= 0x0009 && code <= 0x000D) || // Tab, LF, VT, FF, CR
-            (code === 0x00A0) || // NBSP
-            (code === 0x1680) || // Ogham Space Mark
+        return (code === 0x1680) || // Ogham Space Mark
             (code >= 0x2000 && code <= 0x200A) || // U+2000-U+200A (En Quad...Hair Space)
             (code === 0x2028) || (code === 0x2029) || // Line/Para Separator
             (code === 0x202F) || // Narrow No-Break Space
