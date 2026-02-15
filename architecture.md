@@ -390,7 +390,7 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **`DriveService.ts` (The Muscle)**:
     *   **Goal**: Handle low-level API interactions.
     *   **Logic**:
-        *   **Resilience**: Implements automatic **Token Refresh** and **Retry Logic** for 401 Unauthorized errors.
+        *   **Resilience**: Implements basic **Token Refresh** and **Retry Logic** (retries once) for 401 Unauthorized errors to handle expired access tokens seamlessly.
         *   **Abstraction**: Wraps standard `fetch` calls with auth headers managed by `GoogleIntegrationManager`.
 *   **Trade-offs**:
     *   **API Quotas**: Heavy scanning can hit Google Drive API rate limits. The system mitigates this with the heuristic check.
@@ -491,6 +491,21 @@ Manages the virtual playback timeline.
     *   **Performance (WeakMap Cache)**: Caches compiled `RegExp` objects keyed by the *reference* of the rules array in a `WeakMap`. This avoids re-compiling regexes for every sentence while ensuring memory is freed when rule sets change.
     *   **Layered Application**: Applies rules in a strict order: Book Specific (High Priority) -> Global -> Bible Rules (if enabled) -> Book Specific (Low Priority).
     *   **Bible Lexicon**: Injects a specialized set of rules (`BIBLE_LEXICON_RULES`) for Bible citations (e.g., "Gen 1:1") if enabled for the book.
+
+#### `src/lib/tts/SyncEngine.ts`
+*   **Goal**: Efficiently synchronize audio playback time with text highlighting (Word/Sentence level).
+*   **Logic**:
+    *   **Forward Optimization**: Uses a sorted array of `AlignmentData` and optimizes lookups by starting from the last known index, assuming standard forward playback.
+    *   **Event Emission**: Emits callbacks only when the active segment index actually changes to minimize React render cycles.
+*   **Trade-off**:
+    *   **Reverse Seeking**: The optimization assumes forward playback. Reverse seeking requires a linear scan from the start (or a binary search) which is slower than the O(1) forward step.
+
+#### `src/lib/tts/AudioElementPlayer.ts`
+*   **Goal**: Abstract the HTML5 Audio element and handle Blob/URL lifecycle.
+*   **Logic**:
+    *   **Resource Management**: Automatically revokes Object URLs (`URL.revokeObjectURL`) when playback stops or the source changes to prevent memory leaks from accumulated Blob references.
+*   **Trade-off**:
+    *   **Precision**: Less precise timing (latency) compared to the Web Audio API, but significantly more memory efficient for long-form audio.
 
 #### `src/lib/tts/processors/Sanitizer.ts`
 *   **Goal**: Clean raw text before segmentation to improve TTS quality.
