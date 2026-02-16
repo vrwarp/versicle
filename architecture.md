@@ -214,9 +214,9 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
     *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
 *   **Domain 2: User (Mutable/Syncable)** - *Managed by Yjs*
-    *   **Yjs Exclusive**: `user_inventory` (Books), `user_progress` (Reading State), `user_reading_list` (Shadow Inventory), and `user_annotations` are managed **exclusively** by Yjs stores. `DBService` only reads/writes static data.
+    *   **Yjs Exclusive**: `user_inventory` (Books), `user_progress` (Reading State), `user_reading_list` (Shadow Inventory), `user_annotations`, and `user_overrides` (Lexicon Rules) are managed **exclusively** by Yjs stores. `DBService` only reads/writes static data.
     *   **IDB Local/Hybrid**:
-        *   `user_overrides`: Custom settings like Lexicon rules.
+        *   `static_manifests`: Used as a local index for offline access, but the "Truth" is in Yjs.
     *   **Deprecated/Replaced**:
         *   `user_journey`: **(Removed)** Granular reading history sessions are no longer stored in IDB.
         *   `user_ai_inference`: **(Replaced)** Expensive AI-derived data is now handled by the synced `useContentAnalysisStore` (Yjs).
@@ -350,7 +350,8 @@ Handles the complex task of importing an EPUB file.
 *   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text ("Teleprompter Adaptation") for TTS accessibility.
     *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures (Title, Footnote, Main Text, Table) for improved TTS flow.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
-    *   **Fuzzy Matching (`textMatching.ts`)**: Uses regex-based fuzzy matching to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
+    *   **Fuzzy Matching (`textMatching.ts`)**: Uses a robust fuzzy matching algorithm to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
+        *   **Strategy**: Tries Exact Match -> Case-Insensitive Match -> **Flexible Whitespace Regex** (matches varying newlines/spaces) to handle LLM formatting quirks.
 *   **Structured Output**: Uses `responseSchema` to enforce strictly typed JSON responses from the LLM.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
@@ -521,6 +522,12 @@ Manages the virtual playback timeline.
         3.  Only commits to the cache if verification succeeds.
     *   **Input Sanitization**: Splits long inputs into smaller chunks to prevent WASM memory exhaustion/crashes.
 
+#### `src/lib/tts/providers/LemonFoxProvider.ts` (Cloud Neural)
+*   **Goal**: Provide a cost-effective alternative to OpenAI/Google with similar quality.
+*   **Logic**:
+    *   **API Compatibility**: Mimics the OpenAI API structure (`/v1/audio/speech`) but points to LemonFox endpoints.
+    *   **Static Voices**: Hardcoded list of supported voices (e.g., "Heart", "Bella") mapped to the provider ID.
+
 #### `src/lib/tts/providers/CapacitorTTSProvider.ts`
 *   **Logic**: Uses `queueStrategy: 1` to preload the next utterance into the OS buffer while the current one plays.
 
@@ -556,6 +563,18 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Logic**: Updates a `lastActive` timestamp (Heartbeat) with throttling (5 mins) to track online status.
     *   **Why**: Enables "Send to Device" features and provides visibility into the sync network.
 *   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
+*   **`useGenAIStore` (Local/Persisted)**:
+    *   **Goal**: Manage AI configuration, API keys, and usage tracking.
+    *   **Logic**:
+        *   **Persistence**: Stored in `localStorage` via `persist` middleware.
+        *   **Usage Tracking**: Tracks token usage and estimated cost for the current session.
+        *   **Logging**: Maintains a rolling buffer of the last 10 debug logs (`GenAILogEntry`) for troubleshooting.
+*   **`useLexiconStore` (Synced)**:
+    *   **Goal**: Synchronize pronunciation rules across devices.
+    *   **Logic**:
+        *   **Rules**: Stored in a Yjs Map (`lexicon`).
+        *   **Ordering**: Rules have an explicit `order` field to ensure deterministic application order.
+        *   **Settings**: Stores book-specific preferences (e.g., enable Bible Lexicon) in a nested map.
 *   **`useContentAnalysisStore` (Synced)**:
     *   **Goal**: Sync expensive AI artifacts (Table Adaptations, Semantic Maps) across devices.
     *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the semantic map (footnotes/titles) and teleprompter scripts.
