@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 import type { ToastType } from '../../store/useToastStore';
@@ -22,14 +22,16 @@ export const Toast: React.FC<ToastProps> = ({
   onClose,
   duration = 3000
 }) => {
+  const [isPaused, setIsPaused] = useState(false);
+
   useEffect(() => {
-    if (isVisible && duration > 0) {
+    if (isVisible && duration > 0 && !isPaused) {
       const timer = setTimeout(() => {
         onClose();
       }, duration);
       return () => clearTimeout(timer);
     }
-  }, [isVisible, duration, onClose]);
+  }, [isVisible, duration, onClose, isPaused]);
 
   if (!isVisible) return null;
 
@@ -59,7 +61,11 @@ export const Toast: React.FC<ToastProps> = ({
         "fixed bottom-20 left-1/2 transform -translate-x-1/2 px-4 py-3 rounded-lg shadow-lg z-[100] text-sm font-medium border animate-in fade-in slide-in-from-bottom-5 flex items-center gap-3 min-w-[300px] max-w-md",
         getStyles()
       )}
-      role="alert"
+      role={type === 'error' ? 'alert' : 'status'}
+      aria-live={type === 'error' ? 'assertive' : 'polite'}
+      aria-atomic="true"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
     >
       <div className="shrink-0">
         {getIcon()}
