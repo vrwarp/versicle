@@ -418,10 +418,6 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
         const lSecondComma = left.indexOf(',', lFirstComma + 1);
         if (lSecondComma === -1) return null; // Invalid Range
 
-        // Extract Parent: epubcfi(PARENT, ...
-        // Slice from 8 to first comma
-        const parent = left.slice(8, lFirstComma);
-
         const rFirstComma = right.indexOf(',');
 
         if (rFirstComma !== -1) {
@@ -429,9 +425,8 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
             // Check if right has same parent
             // Compare substring directly
             // right starts with "epubcfi(" + parent + "," ?
-            // Construct prefix to check
-            const rPrefix = `epubcfi(${parent},`;
-            if (right.startsWith(rPrefix)) {
+            // "epubcfi(" + parent + "," corresponds exactly to left.slice(0, lFirstComma + 1)
+            if (right.startsWith(left.slice(0, lFirstComma + 1))) {
                 // Parents match!
                 // We need: epubcfi(P, S, E)
                 // S = left start component = left.slice(lFirstComma + 1, lSecondComma) (includes comma? No, +1)
@@ -455,7 +450,8 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
             // RIGHT IS POINT (Case 2)
             // Check if right is child of parent
             // right = "epubcfi(P/S)"
-            const prefix = `epubcfi(${parent}`;
+            // prefix = "epubcfi(" + parent corresponds to left.slice(0, lFirstComma)
+            const prefix = left.slice(0, lFirstComma);
             if (right.startsWith(prefix)) {
                  const remaining = right.slice(prefix.length);
                  // Must start with separator
@@ -476,9 +472,9 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
         if (rFirstComma !== -1) {
              const rSecondComma = right.indexOf(',', rFirstComma + 1);
              if (rSecondComma !== -1) {
-                 const parent = right.slice(8, rFirstComma);
                  // Check if left is child
-                 const prefix = `epubcfi(${parent}`;
+                 // prefix = "epubcfi(" + parent corresponds to right.slice(0, rFirstComma)
+                 const prefix = right.slice(0, rFirstComma);
                  if (left.startsWith(prefix)) {
                      const remaining = left.slice(prefix.length);
                      if (['/', ':', '['].includes(remaining[0])) {
@@ -486,7 +482,11 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
                           // Construct: epubcfi(P, leftStart, rightEnd)
                           // rightEnd = right.slice(rSecondComma + 1, -1)
                           const rightEnd = right.slice(rSecondComma + 1, -1);
-                          return `epubcfi(${parent},${leftStart},${rightEnd})`;
+                          // parent = right.slice(8, rFirstComma)
+                          // But we can just use prefix + "," + ...
+                          // prefix is "epubcfi(P"
+                          // We need "epubcfi(P,leftStart,rightEnd)"
+                          return `${prefix},${leftStart},${rightEnd})`;
                      }
                  }
              }
