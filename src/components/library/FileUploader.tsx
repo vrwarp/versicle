@@ -11,6 +11,9 @@ import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
 import { Button } from '../ui/Button';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
+import { createLogger } from '../../lib/logger';
+
+const logger = createLogger('FileUploader');
 
 /**
  * A component for uploading EPUB files, ZIP archives, or directories via drag-and-drop or file selection.
@@ -145,7 +148,7 @@ export const FileUploader: React.FC = () => {
     try {
       await googleIntegrationManager.connectService('drive');
     } catch (error) {
-      console.error("Failed to connect Drive", error);
+      logger.error("Failed to connect Drive", error);
       showToast("Failed to connect Google Drive", 'error');
     } finally {
       setIsDriveConnecting(false);
@@ -157,10 +160,10 @@ export const FileUploader: React.FC = () => {
   const handleBrowseDrive = async () => {
     try {
       const token = await googleIntegrationManager.getValidToken('drive');
-      console.log("Drive Token Valid, opening picker", token);
+      logger.debug("Drive Token Valid, opening picker", token);
       setIsDriveImportOpen(true);
     } catch (error) {
-      console.error("Failed to access Drive", error);
+      logger.error("Failed to access Drive", error);
       showToast("Failed to access Google Drive. Please reconnect.", 'error');
     }
   };
