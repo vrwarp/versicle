@@ -21,7 +21,6 @@ vi.mock('../../db/DBService', () => ({
     getSections: vi.fn().mockResolvedValue([]),
     getContentAnalysis: vi.fn(),
     getTTSContent: vi.fn(),
-    updateReadingHistory: vi.fn(),
   }
 }));
 

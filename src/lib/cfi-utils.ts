@@ -11,8 +11,35 @@ export interface CfiRangeData {
   fullEnd: string;
 }
 
+export interface PreprocessedRoot {
+  original: string;
+  clean: string;
+}
+
+/**
+ * Pre-processes a list of block roots (e.g. table CFIs) for efficient repeated querying.
+ * Sorts by length descending and pre-calculates the clean root path.
+ */
+export function preprocessBlockRoots(roots: string[]): PreprocessedRoot[] {
+  return roots
+      .map(root => {
+          let cleanRoot = root;
+          const range = parseCfiRange(root);
+          if (range && range.parent) {
+              cleanRoot = range.parent;
+          } else if (cleanRoot.startsWith('epubcfi(')) {
+              cleanRoot = cleanRoot.slice(8, -1);
+          }
+          return { original: root, clean: cleanRoot };
+      })
+      .sort((a, b) => b.clean.length - a.clean.length);
+}
+
 export function parseCfiRange(range: string): CfiRangeData | null {
     if (!range || !range.startsWith('epubcfi(') || !range.endsWith(')')) return null;
+
+    // Optimization: Early check for comma to avoid unnecessary string operations for Point CFIs
+    if (range.indexOf(',') === -1) return null;
 
     const content = range.slice(8, -1); // remove epubcfi( and )
     const parts = content.split(',');
@@ -62,35 +89,34 @@ export function mergeCfiSlow(left: string, right: string): string | null {
  * @param knownBlockRoots Optional list of CFI strings that are known block roots (e.g. tables). If the CFI is a descendant of one of these, it will be snapped to that root.
  * @returns The parent CFI or 'unknown' if extraction fails.
  */
-export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): string {
+export function getParentCfi(cfi: string, knownBlockRoots: string[] | PreprocessedRoot[] = []): string {
     if (!cfi) return 'unknown';
 
     // 1. Check known block roots (e.g. Tables) - Priority over Range CFI parsing
     if (knownBlockRoots.length > 0) {
-        // Sort by length descending to match innermost table first
-        const sortedRoots = [...knownBlockRoots].sort((a, b) => b.length - a.length);
+        let roots: PreprocessedRoot[];
+
+        // Check if already preprocessed (duck typing or simply by type if generic)
+        if (typeof knownBlockRoots[0] === 'string') {
+            // Slow path: Preprocess on the fly (includes sorting)
+            roots = preprocessBlockRoots(knownBlockRoots as string[]);
+        } else {
+            // Fast path: Use preprocessed roots
+            roots = knownBlockRoots as PreprocessedRoot[];
+        }
 
         // Pre-clean the target CFI once
         const cleanCfi = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
 
-        for (const root of sortedRoots) {
-            // Check prefix.
-            let cleanRoot = root;
-            const range = parseCfiRange(root);
-            if (range && range.parent) {
-                cleanRoot = range.parent;
-            } else if (cleanRoot.startsWith('epubcfi(')) {
-                 cleanRoot = cleanRoot.slice(8, -1);
-            }
-
-            if (cleanCfi.startsWith(cleanRoot)) {
+        for (const { original, clean } of roots) {
+            if (cleanCfi.startsWith(clean)) {
                 // Ensure boundary match:
-                // If cleanCfi is exactly equal to cleanRoot, it's a match.
+                // If cleanCfi is exactly equal to clean, it's a match.
                 // If cleanCfi is longer, the next char must be a separator (/ or ! or [ or ,)
                 // Added comma to support Range CFIs as target (e.g. /6/24!/4/2/4 matches /6/24!/4/2/4,/1:0,...)
-                const nextChar = cleanCfi[cleanRoot.length];
+                const nextChar = cleanCfi[clean.length];
                 if (!nextChar || ['/', '!', '[', ',', ':'].includes(nextChar)) {
-                    return root;
+                    return original;
                 }
             }
         }
@@ -105,32 +131,41 @@ export function getParentCfi(cfi: string, knownBlockRoots: string[] = []): strin
     // 3. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
     if (cfi.startsWith('epubcfi(')) {
         try {
-            const content = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
-            const parts = content.split('!');
-            const spine = parts[0];
-            const path = parts[1];
+            // Optimization: Avoid regex replace and array splitting
+            const content = cfi.slice(8, -1);
+            const spineSepIndex = content.indexOf('!');
 
-            if (path) {
-                // Heuristic: The text node is usually the last component (e.g. /4/2/1:0)
-                // We want the parent block element (e.g. /4/2).
-                const pathParts = path.split('/');
-                
-                // Filter empty strings from split
-                const cleanParts = pathParts.filter(p => p.length > 0);
+            if (spineSepIndex !== -1) {
+                const spine = content.substring(0, spineSepIndex);
+                const path = content.substring(spineSepIndex + 1);
 
-                // Removed Old "Structural Snapping" (> 4 depth) logic here.
+                if (path) {
+                    // Find the last slash to strip the leaf component (e.g. /4/2/1:0 -> /4/2)
+                    // Note: path usually starts with /, so we look for the last one
+                    let lastSlash = path.lastIndexOf('/');
 
-                // Standard leaf-stripping for shallow paths
-                if (cleanParts.length > 0) {
-                    cleanParts.pop();
+                    // Handle edge case where path ends with slash (unlikely but safe to handle)
+                    if (lastSlash === path.length - 1) {
+                        lastSlash = path.lastIndexOf('/', lastSlash - 1);
+                    }
+
+                    if (lastSlash > 0) {
+                        // Return everything up to the last slash
+                        return `epubcfi(${spine}!${path.substring(0, lastSlash)})`;
+                    } else if (lastSlash === 0) {
+                         // Only one slash at start (e.g. /4), stripping it leaves empty path
+                         return `epubcfi(${spine}!)`;
+                    }
+
+                    // No slash found in path (unlikely for valid CFI path), return as is or fallback to spine
+                    // If path is "1:0" (no leading slash), stripping it means empty.
+                    return `epubcfi(${spine}!)`;
                 }
 
-                return cleanParts.length === 0
-                    ? `epubcfi(${spine}!)`
-                    : `epubcfi(${spine}!/${cleanParts.join('/')})`;
-            } else {
-                // Just spine item reference
                 return `epubcfi(${spine}!)`;
+            } else {
+                 // No separator found. Treat content as spine.
+                 return `epubcfi(${content}!)`;
             }
         } catch (e) {
             console.warn("Failed to extract parent CFI", e);
@@ -384,8 +419,9 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
         if (lSecondComma === -1) return null; // Invalid Range
 
         // Extract Parent: epubcfi(PARENT, ...
-        // Slice from 8 to first comma
-        const parent = left.slice(8, lFirstComma);
+        // Optimization: Use substring from left directly to avoid allocation of parent string
+        // left.slice(0, lFirstComma + 1) is "epubcfi(PARENT,"
+        const lParentPrefix = left.slice(0, lFirstComma + 1);
 
         const rFirstComma = right.indexOf(',');
 
@@ -393,10 +429,7 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
             // RIGHT IS RANGE (Case 1)
             // Check if right has same parent
             // Compare substring directly
-            // right starts with "epubcfi(" + parent + "," ?
-            // Construct prefix to check
-            const rPrefix = `epubcfi(${parent},`;
-            if (right.startsWith(rPrefix)) {
+            if (right.startsWith(lParentPrefix)) {
                 // Parents match!
                 // We need: epubcfi(P, S, E)
                 // S = left start component = left.slice(lFirstComma + 1, lSecondComma) (includes comma? No, +1)
@@ -420,12 +453,15 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
             // RIGHT IS POINT (Case 2)
             // Check if right is child of parent
             // right = "epubcfi(P/S)"
-            const prefix = `epubcfi(${parent}`;
-            if (right.startsWith(prefix)) {
-                 const remaining = right.slice(prefix.length);
+            // prefix = "epubcfi(PARENT" = left.slice(0, lFirstComma)
+            const lParentPrefixNoComma = left.slice(0, lFirstComma);
+            if (right.startsWith(lParentPrefixNoComma)) {
                  // Must start with separator
-                 if (['/', ':', '['].includes(remaining[0])) {
+                 // Check char at lFirstComma
+                 const separator = right[lFirstComma];
+                 if (separator && ['/', ':', '['].includes(separator)) {
                       // Valid child
+                      const remaining = right.slice(lFirstComma);
                       const rightEnd = remaining.endsWith(')') ? remaining.slice(0, -1) : remaining;
                       // Construct: epubcfi(P, S, rightEnd)
                       // leftStartPart = epubcfi(P,S
@@ -441,17 +477,23 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
         if (rFirstComma !== -1) {
              const rSecondComma = right.indexOf(',', rFirstComma + 1);
              if (rSecondComma !== -1) {
-                 const parent = right.slice(8, rFirstComma);
                  // Check if left is child
-                 const prefix = `epubcfi(${parent}`;
-                 if (left.startsWith(prefix)) {
-                     const remaining = left.slice(prefix.length);
-                     if (['/', ':', '['].includes(remaining[0])) {
+                 // prefix = "epubcfi(PARENT" = right.slice(0, rFirstComma)
+                 const rParentPrefixNoComma = right.slice(0, rFirstComma);
+                 if (left.startsWith(rParentPrefixNoComma)) {
+                     // Check separator
+                     const separator = left[rFirstComma];
+                     if (separator && ['/', ':', '['].includes(separator)) {
+                          const remaining = left.slice(rFirstComma);
                           const leftStart = remaining.endsWith(')') ? remaining.slice(0, -1) : remaining;
                           // Construct: epubcfi(P, leftStart, rightEnd)
                           // rightEnd = right.slice(rSecondComma + 1, -1)
+                          // Extract parent from right prefix to avoid re-extraction logic, but we need just the string "epubcfi(PARENT,"
+                          // We can construct it: rParentPrefixNoComma + "," + leftStart + "," + rightEnd + ")"
+                          // Or use `parent` if we extracted it, but we didn't.
+                          // Wait, we need "epubcfi(PARENT," part.
                           const rightEnd = right.slice(rSecondComma + 1, -1);
-                          return `epubcfi(${parent},${leftStart},${rightEnd})`;
+                          return `${rParentPrefixNoComma},${leftStart},${rightEnd})`;
                      }
                  }
              }

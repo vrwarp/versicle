@@ -69,7 +69,9 @@ describe('SearchPanel', () => {
     it('shows searching indicator', () => {
         render(<SearchPanel {...defaultProps} isSearching={true} />);
 
-        expect(screen.getByText('Searching...')).toBeInTheDocument();
+        const searchingText = screen.getByText('Searching...');
+        expect(searchingText).toBeInTheDocument();
+        expect(searchingText).toHaveAttribute('role', 'status');
     });
 
     it('shows indexing progress', () => {
@@ -77,6 +79,13 @@ describe('SearchPanel', () => {
 
         expect(screen.getByText('Indexing book...')).toBeInTheDocument();
         expect(screen.getByText('45%')).toBeInTheDocument();
+
+        const progressBar = screen.getByRole('progressbar');
+        expect(progressBar).toBeInTheDocument();
+        expect(progressBar).toHaveAttribute('aria-valuenow', '45');
+        expect(progressBar).toHaveAttribute('aria-valuemin', '0');
+        expect(progressBar).toHaveAttribute('aria-valuemax', '100');
+        expect(progressBar).toHaveAttribute('aria-label', 'Indexing progress');
     });
 
     it('renders search results', () => {
@@ -106,7 +115,9 @@ describe('SearchPanel', () => {
     it('shows no results message when search returns empty', () => {
         render(<SearchPanel {...defaultProps} searchResults={[]} activeSearchQuery="test" />);
 
-        expect(screen.getByText('No results found')).toBeInTheDocument();
+        const noResults = screen.getByText('No results found');
+        expect(noResults).toBeInTheDocument();
+        expect(noResults).toHaveAttribute('role', 'status');
     });
 
     it('does not show no results message when query is empty', () => {

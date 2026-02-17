@@ -69,7 +69,14 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                             <span>Indexing book...</span>
                             <span>{indexingProgress}%</span>
                         </div>
-                        <div className="h-1.5 bg-secondary rounded-full overflow-hidden w-full">
+                        <div
+                            className="h-1.5 bg-secondary rounded-full overflow-hidden w-full"
+                            role="progressbar"
+                            aria-valuenow={indexingProgress}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-label="Indexing progress"
+                        >
                             <div
                                 className="h-full bg-primary transition-all duration-300 ease-in-out"
                                 style={{ width: `${indexingProgress}%` }}
@@ -78,9 +85,9 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                     </div>
                 )}
             </div>
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4" aria-live="polite">
                 {isSearching ? (
-                    <div className="text-center text-muted-foreground">Searching...</div>
+                    <div className="text-center text-muted-foreground" role="status" aria-live="polite">Searching...</div>
                 ) : (
                     <ul className="space-y-4">
                         {searchResults.map((result, idx) => (
@@ -98,7 +105,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                             </li>
                         ))}
                         {searchResults.length === 0 && activeSearchQuery && !isSearching && (
-                            <div className="text-center text-muted-foreground text-sm">No results found</div>
+                            <div className="text-center text-muted-foreground text-sm" role="status" aria-live="polite">No results found</div>
                         )}
                     </ul>
                 )}

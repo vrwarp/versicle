@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
 import { dbService } from '../../db/DBService';
-import { AudioContentPipeline } from './AudioContentPipeline';
 
 // --- Mocks Setup ---
 
@@ -15,7 +14,6 @@ vi.mock('../../db/DBService', () => ({
         getSections: vi.fn(),
         getContentAnalysis: vi.fn().mockResolvedValue({}),
         getTTSContent: vi.fn().mockResolvedValue({ sentences: [] }),
-        updateReadingHistory: vi.fn(),
         getTableImages: vi.fn().mockResolvedValue([]),
         saveTableAdaptations: vi.fn(),
         saveContentClassifications: vi.fn(),
@@ -112,7 +110,10 @@ vi.mock('./CostEstimator');
 
 describe('AudioPlayerService - Restore Analysis', () => {
     let service: AudioPlayerService;
-    let pipelineSpy: any;
+    let pipelineSpy: {
+        detectContentSkipMask: MockInstance;
+        processTableAdaptations: MockInstance;
+    };
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -126,7 +127,7 @@ describe('AudioPlayerService - Restore Analysis', () => {
         }
 
         // Access the real pipeline instance
-        // @ts-ignore
+        // @ts-expect-error Accessing private property for testing
         const pipeline = service.contentPipeline;
 
         // Spy on the methods we want to check

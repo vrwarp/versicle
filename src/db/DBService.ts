@@ -1,7 +1,6 @@
 import { getDB } from './db';
 import type {
   BookMetadata,
-  ReadingEventType,
   SectionMetadata,
   TableImage,
   BookLocations,
@@ -675,19 +674,6 @@ class DBService {
 
   saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): void {
     useContentAnalysisStore.getState().saveTableAdaptations(bookId, sectionId, adaptations);
-  }
-
-  // --- Reading History Operations ---
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async updateReadingHistory(bookId: string, range: string, _type: ReadingEventType, _label?: string, _isCompletion: boolean = false): Promise<void> {
-    // Stores reading history in completedRanges via Yjs store
-    try {
-      const { useReadingStateStore } = await import('../store/useReadingStateStore');
-      useReadingStateStore.getState().addCompletedRange(bookId, range);
-    } catch (error) {
-      logger.error('Failed to update reading history (completed ranges)', error);
-    }
   }
 
   // --- Cleanup ---

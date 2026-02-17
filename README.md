@@ -10,7 +10,7 @@
 *   **Privacy-Centric**: We don't know what you read. No analytics.
 *   **Hybrid Intelligence**:
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
-    *   **Cloud TTS**: Connect your own API keys (OpenAI, Google) for studio-quality narration.
+    *   **Cloud TTS**: Connect your own API keys (OpenAI, Google, LemonFox) for studio-quality narration.
     *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
 *   **Dual Sync**:
     *   **Real-time**: Synchronize progress instantly across devices using Firestore.
@@ -25,9 +25,9 @@
 *   **Sync**: `y-cinder` (Custom Fork / Firestore 11.10.0) + Android Backup Service + Google Drive API
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
-*   **Audio**: Piper (WASM) / Web Speech API
+*   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
 *   **AI**: Google Gemini (Flash Lite / Flash) via `@google/generative-ai`
-*   **Mobile**: Capacitor 7.0.0 (Android) + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session`
+*   **Mobile**: Capacitor 7.0.0 (Android) + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
 *   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
@@ -65,6 +65,7 @@
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
 *   **Battery Guard**: Explicitly checks and warns about aggressive Android battery optimizations that might kill background playback.
+*   **Lock Screen Controls**: Full support for OS-level media controls (Play, Pause, Seek, Artwork) via Media Session API.
 
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
@@ -79,6 +80,8 @@
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted.
     *   **CSV Import/Export**: Import/Export your reading list via CSV, with intelligent filename matching (ISBN/Title fallback) to restore your library context.
+*   **Lexicon Management**:
+    *   **CSV Import/Export**: Bulk manage pronunciation rules using CSV files.
 *   **Backups & Export**:
     *   **Light**: JSON export of metadata/settings.
     *   **Full**: ZIP archive including all book files.

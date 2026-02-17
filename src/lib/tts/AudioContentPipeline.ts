@@ -4,7 +4,8 @@ import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
-import { getParentCfi, generateCfiRange, parseCfiRange } from '../cfi-utils';
+import { EpubCFI } from 'epubjs';
+import { getParentCfi, generateCfiRange, parseCfiRange, preprocessBlockRoots, type PreprocessedRoot } from '../cfi-utils';
 import type { SectionMetadata, NavigationItem } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
@@ -316,8 +317,11 @@ export class AudioContentPipeline {
                 const sectionTableImages = tableImages.filter(img => img.sectionId === nextSection.sectionId);
                 const tableCfis = sectionTableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
+                // Preprocess table roots for efficient querying
+                const preprocessedTableRoots = preprocessBlockRoots(tableCfis);
+
                 // 3. Group (Using raw sentences to ensure correct parent mapping)
-                const groups = this.groupSentencesByRoot(ttsContent.sentences, tableCfis);
+                const groups = this.groupSentencesByRoot(ttsContent.sentences, preprocessedTableRoots);
 
                 // 4. Detect (will use deduplicated promise if already running)
                 await this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups);
@@ -356,8 +360,11 @@ export class AudioContentPipeline {
             const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
             const tableCfis = sectionTableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
+            // Preprocess table roots for efficient querying
+            const preprocessedTableRoots = preprocessBlockRoots(tableCfis);
+
             // Group sentences by Root Node
-            const groups = this.groupSentencesByRoot(targetSentences, tableCfis);
+            const groups = this.groupSentencesByRoot(targetSentences, preprocessedTableRoots);
             const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
             if (detectedTypes && detectedTypes.length > 0) {
@@ -496,10 +503,15 @@ export class AudioContentPipeline {
             // Strip epubcfi() wrapper for raw comparison if needed, but parseCfiRange handles format.
             // We use the full string representation of the parent/path for comparison.
             let cleanRoot = root;
+            let rangeStart: string | null = null;
+            let rangeEnd: string | null = null;
+
             if (range && range.parent) {
                 // Reconstruct parent CFI string: epubcfi(parent)
                 // But wait, parseCfiRange returns 'parent' as the path inside.
                 cleanRoot = range.parent;
+                rangeStart = range.fullStart;
+                rangeEnd = range.fullEnd;
             } else {
                 // Strip wrapper manually if not a range or simple path
                 cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1');
@@ -507,8 +519,10 @@ export class AudioContentPipeline {
             // Normalize: remove trailing ')' if present from lazy regex or range structure
             cleanRoot = cleanRoot.replace(/\)$/, '');
 
-            return { original: root, clean: cleanRoot };
+            return { original: root, clean: cleanRoot, rangeStart, rangeEnd };
         });
+
+        const cfiComparer = new EpubCFI();
 
         // Iterate through all sentences and check if they belong to any known table root
         for (let i = 0; i < sentences.length; i++) {
@@ -518,11 +532,30 @@ export class AudioContentPipeline {
             const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
 
             // Check if this sentence is a child of any known table adaptation root.
-            const match = parsedRoots.find(({ clean }) => {
+            const match = parsedRoots.find(({ clean, rangeStart, rangeEnd }) => {
                 // Check for prefix match with valid separator boundary
                 // Include ',' for range handling
-                return cleanCfi.startsWith(clean) &&
+                const isPrefixMatch = cleanCfi.startsWith(clean) &&
                     (cleanCfi.length === clean.length || ['/', '!', '[', ':', ','].includes(cleanCfi[clean.length]));
+
+                if (!isPrefixMatch) return false;
+
+                // If the table root is a range (e.g. encompasses multiple siblings), verify strictly within bounds.
+                // This prevents false positives where siblings of the table share the same parent prefix.
+                if (rangeStart && rangeEnd) {
+                    try {
+                        const afterStart = cfiComparer.compare(sentence.cfi, rangeStart) >= 0;
+                        const beforeEnd = cfiComparer.compare(sentence.cfi, rangeEnd) <= 0;
+                        return afterStart && beforeEnd;
+                    } catch (e) {
+                        console.warn('Failed to compare CFIs for table range check', e);
+                        // Fallback to prefix match if comparison fails (safer than skipping?)
+                        // Or safer to skip? Safer to skip to avoid swallowing whole chapters.
+                        return false;
+                    }
+                }
+
+                return true;
             });
 
             if (match) {
@@ -628,10 +661,11 @@ export class AudioContentPipeline {
                     await dbService.saveContentClassifications(bookId, sectionId, finalResults);
                     return finalResults;
                 }
-            } catch (e: any) {
+            } catch (e: unknown) {
                 console.warn("Content detection failed", e);
                 // Mark as error with timestamp
-                dbService.markAnalysisError(bookId, sectionId, e.message || 'Unknown error');
+                const message = e instanceof Error ? e.message : String(e);
+                dbService.markAnalysisError(bookId, sectionId, message || 'Unknown error');
             }
 
             return null;
@@ -649,7 +683,7 @@ export class AudioContentPipeline {
      * Groups individual text segments by their common semantic root element using CFI structure.
      * This allows the GenAI to classify logical blocks (tables, asides) rather than fragmented sentences.
      */
-    private groupSentencesByRoot(sentences: { text: string; cfi: string; sourceIndices?: number[] }[], tableCfis: string[] = []): { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] {
+    private groupSentencesByRoot(sentences: { text: string; cfi: string; sourceIndices?: number[] }[], tableCfis: string[] | PreprocessedRoot[] = []): { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] {
         const groups: { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] = [];
         let currentGroup: { parentCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string } | null = null;
 

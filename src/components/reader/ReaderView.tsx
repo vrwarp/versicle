@@ -211,15 +211,16 @@ export const ReaderView: React.FC = () => {
                             snapCfiToSentence(currentBook, prevEnd)
                         ]).then(([snappedStart, snappedEnd]) => {
                             const range = generateCfiRange(snappedStart, snappedEnd);
-                            const type = isScroll ? 'scroll' : 'page';
-                            const label = currentSectionTitle || undefined;
+                            // const type = isScroll ? 'scroll' : 'page';
+                            // const label = currentSectionTitle || undefined;
 
-                            dbService.updateReadingHistory(id, range, type, label)
-                                .then(() => setHistoryTick(t => t + 1))
-                                .catch((err) => {
-                                    logger.error("History update failed", err);
-                                    useToastStore.getState().showToast('Failed to save reading history', 'error');
-                                });
+                            try {
+                                useReadingStateStore.getState().addCompletedRange(id, range);
+                                setHistoryTick(t => t + 1);
+                            } catch (err) {
+                                logger.error("History update failed", err);
+                                useToastStore.getState().showToast('Failed to save reading history', 'error');
+                            }
                         });
                     }
                 }
@@ -280,7 +281,6 @@ export const ReaderView: React.FC = () => {
         showPopover,
         hidePopover,
         bookMetadata,
-        currentSectionTitle,
         progress?.currentCfi,
         setCurrentSection
     ]);
@@ -373,10 +373,14 @@ export const ReaderView: React.FC = () => {
                     // which might be destroyed during unmount, causing crashes.
                     // This ensures reading history is saved even if the reader is tearing down.
                     const range = generateCfiRange(prevStart, prevEnd);
-                    const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
-                    const type = mode === 'scrolled' ? 'scroll' : 'page';
-                    const label = title || undefined;
-                    dbService.updateReadingHistory(id, range, type, label).catch(e => logger.error("History panic save failed", e));
+                    // const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
+                    // const type = mode === 'scrolled' ? 'scroll' : 'page';
+                    // const label = title || undefined;
+                    try {
+                        useReadingStateStore.getState().addCompletedRange(id, range);
+                    } catch (e) {
+                        logger.error("History panic save failed", e);
+                    }
                 }
             }
         };

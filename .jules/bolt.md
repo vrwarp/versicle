@@ -47,3 +47,18 @@
 - **Bottleneck:** `TextSegmenter.refineSegments` used Regexes (`\s`) in a hot loop, causing overhead.
 - **Solution:** Replaced with manual character scanning helpers.
 - **Learning:** When optimizing away from Regex `\s`, naïve checks (e.g., `code === 32`) cause regressions for content with Unicode spaces (Em Space, NBSP). Always replicate the full Unicode whitespace range (or relevant subset) when implementing manual scanners for text processing.
+
+## 2025-06-05 - CFI Parent Extraction Optimization
+- **Bottleneck:** `getParentCfi` was using regex replace (`/^epubcfi\((.*)\)$/`) and `split`/`filter`/`pop`/`join` logic inside the hot path `AudioContentPipeline` loop (thousands of calls per chapter).
+- **Solution:** Replaced regex and array operations with string slicing (`slice(8, -1)`) and `lastIndexOf('/')` to extract the parent component directly. Also optimized `parseCfiRange` to return early if no comma is present.
+- **Learning:** For string format parsing in hot loops, avoid allocating intermediate arrays (`split`) or new strings (`replace`) if possible. `indexOf` and `substring`/`slice` are significantly faster (measured ~3.4x speedup).
+
+## 2025-06-06 - CFI Block Root Preprocessing
+- **Bottleneck:** `getParentCfi` (used in `AudioContentPipeline`) was sorting and parsing known block roots (tables) for *every* sentence in a chapter, leading to `O(N * M)` expensive string operations.
+- **Solution:** Implemented `preprocessBlockRoots` to parse roots once per section (`O(M)`) and updated `getParentCfi` to accept preprocessed structures.
+- **Learning:** When a utility function takes a configuration array (like `knownBlockRoots`) inside a hot loop, consider creating a "compiled" or "preprocessed" version of that configuration to hoist expensive setup work out of the loop.
+
+## 2025-06-07 - UseDeviceStore Isolation
+- **Bottleneck:** `BookCard` subscribed to `useDeviceStore` to display a conditional resume badge. Because `useDeviceStore` (Yjs-backed) returns a new object reference on every heartbeat, ALL `BookCard` instances re-rendered every 5 minutes (or on any device change), causing UI jank in large libraries.
+- **Solution:** Extracted `ResumeBadge` and `RemoteSessionsSubMenu` into separate components that isolate the `useDeviceStore` subscription.
+- **Learning:** When a heavy component (like a list item) needs global state (like `devices`) for a tiny conditional UI element, extract that element. Subscribing to frequently changing global stores in list items is a performance antipattern.

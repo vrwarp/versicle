@@ -48,7 +48,6 @@ vi.mock('../db/DBService', () => ({
     getTTSState: vi.fn(),
     saveTTSState: vi.fn(),
     updatePlaybackState: vi.fn(),
-    updateReadingHistory: vi.fn(),
     getSections: vi.fn(),
     saveTTSPosition: vi.fn(),
     saveContentClassifications: vi.fn(),
