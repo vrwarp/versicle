@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useBookProgress } from '../../store/useReadingStateStore';
+import { useBookProgress, useBookHistory } from '../../store/useReadingStateStore';
 import { parseCfiRange } from '../../lib/cfi-utils';
 import type { Rendition } from 'epubjs';
 import { BookOpen, Headphones, ScrollText } from 'lucide-react';
@@ -24,9 +24,15 @@ interface HistoryItem {
 }
 
 export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavigate }) => {
-    // Reactive progress from Yjs store
+    // Reactive progress and history from Yjs store
     const progress = useBookProgress(bookId);
+    const history = useBookHistory(bookId);
+
+    // Prefer history sessions if available, otherwise fallback to completedRanges (legacy/progress)
+    const hasHistory = history && history.sessions && history.sessions.length > 0;
+
     const completedRanges = useMemo(() => progress?.completedRanges || [], [progress]);
+    const historySessions = useMemo(() => (hasHistory && history) ? history.sessions : [], [history, hasHistory]);
 
     const items = useMemo(() => {
         const loadedItems: HistoryItem[] = [];
@@ -95,15 +101,31 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
             };
         };
 
-        // Use completedRanges from Yjs store
-        for (const range of completedRanges) {
-            loadedItems.push(processItem(range));
+        if (hasHistory) {
+            // Use new history sessions
+            // Clone and reverse to show newest first
+            const sortedSessions = [...historySessions].reverse();
+
+            for (const session of sortedSessions) {
+                loadedItems.push(processItem(
+                    session.cfiRange,
+                    session.timestamp,
+                    session.type,
+                    session.label
+                ));
+            }
+        } else {
+            // Legacy Fallback: Use completedRanges from Yjs store
+            for (const range of completedRanges) {
+                loadedItems.push(processItem(range));
+            }
+            // Sort DESC so latest (furthest) is at top for progress view
+            // (Old behavior was sorting by percentage because we didn't have timestamps)
+            loadedItems.sort((a, b) => b.percentage - a.percentage);
         }
-        // Sort DESC so latest (furthest) is at top
-        loadedItems.sort((a, b) => b.percentage - a.percentage);
 
         return loadedItems;
-    }, [completedRanges, rendition]);
+    }, [completedRanges, historySessions, hasHistory, rendition]);
 
 
     if (items.length === 0) {

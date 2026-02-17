@@ -216,6 +216,17 @@ export const ReaderView: React.FC = () => {
 
                             try {
                                 useReadingStateStore.getState().addCompletedRange(id, range);
+
+                                // Save History Session
+                                const sessionDuration = duration;
+                                useReadingStateStore.getState().addReadingSession(id, {
+                                    cfiRange: range,
+                                    timestamp: previousLocation.current!.timestamp,
+                                    duration: sessionDuration,
+                                    type: isScroll ? 'scroll' : 'page',
+                                    label: currentSectionTitle || undefined
+                                });
+
                                 setHistoryTick(t => t + 1);
                             } catch (err) {
                                 logger.error("History update failed", err);
@@ -373,11 +384,21 @@ export const ReaderView: React.FC = () => {
                     // which might be destroyed during unmount, causing crashes.
                     // This ensures reading history is saved even if the reader is tearing down.
                     const range = generateCfiRange(prevStart, prevEnd);
-                    // const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
-                    // const type = mode === 'scrolled' ? 'scroll' : 'page';
-                    // const label = title || undefined;
+                    const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
+                    const type = mode === 'scrolled' ? 'scroll' : 'page';
+                    const label = title || undefined;
                     try {
                         useReadingStateStore.getState().addCompletedRange(id, range);
+
+                        // Panic Save History Session
+                        const duration = Date.now() - previousLocation.current.timestamp;
+                        useReadingStateStore.getState().addReadingSession(id, {
+                            cfiRange: range,
+                            timestamp: previousLocation.current.timestamp,
+                            duration: duration,
+                            type: type,
+                            label: label
+                        });
                     } catch (e) {
                         logger.error("History panic save failed", e);
                     }

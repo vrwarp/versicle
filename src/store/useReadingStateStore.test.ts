@@ -7,6 +7,7 @@ vi.mock('../lib/device-id', () => ({
 
 import { useReadingStateStore } from './useReadingStateStore';
 import { getDeviceId } from '../lib/device-id';
+import { ReadingSession } from '../types/db';
 
 describe('useReadingStateStore - Per-Device Progress', () => {
     beforeEach(() => {
@@ -283,6 +284,47 @@ describe('useReadingStateStore - Per-Device Progress', () => {
 
             const result = useReadingStateStore.getState().getProgress(bookId);
             expect(result?.percentage).toBe(0);
+        });
+    });
+
+    describe('Reading History', () => {
+        it('should add reading sessions and limit to 100', () => {
+            const bookId = 'hist-book';
+            const store = useReadingStateStore.getState();
+
+            // Add 105 sessions
+            for (let i = 0; i < 105; i++) {
+                store.addReadingSession(bookId, {
+                    cfiRange: `range-${i}`,
+                    timestamp: Date.now() + i,
+                    duration: 60,
+                    type: 'page',
+                    label: `Page ${i}`
+                });
+            }
+
+            const history = useReadingStateStore.getState().history[bookId];
+            expect(history).toBeDefined();
+            expect(history.sessions.length).toBe(100);
+            expect(history.sessions[0].label).toBe('Page 5'); // First 5 should be removed
+            expect(history.sessions[99].label).toBe('Page 104');
+        });
+
+        it('should initialize history if not exists', () => {
+            const bookId = 'new-hist-book';
+            const store = useReadingStateStore.getState();
+
+            store.addReadingSession(bookId, {
+                cfiRange: 'range-1',
+                timestamp: Date.now(),
+                duration: 60,
+                type: 'page'
+            });
+
+            const history = useReadingStateStore.getState().history[bookId];
+            expect(history).toBeDefined();
+            expect(history.bookId).toBe(bookId);
+            expect(history.sessions.length).toBe(1);
         });
     });
 });

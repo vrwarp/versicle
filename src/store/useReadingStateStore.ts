@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
-import type { UserProgress } from '../types/db';
+import type { UserProgress, ReadingHistoryEntry, ReadingSession } from '../types/db';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { getDeviceId } from '../lib/device-id';
@@ -28,7 +28,15 @@ interface ReadingState {
     /** Map of reading progress keyed by bookId, then deviceId. */
     progress: PerDeviceProgress;
 
+    /** Reading history logs (sessions) keyed by bookId. */
+    history: Record<string, ReadingHistoryEntry>;
+
     // === ACTIONS (not synced to Yjs) ===
+    /**
+     * Adds a new reading session to the history.
+     */
+    addReadingSession: (bookId: string, session: ReadingSession) => void;
+
     /**
      * Updates the reading location for a book on this device.
      * @param bookId - The book ID.
@@ -103,8 +111,37 @@ export const useReadingStateStore = create<ReadingState>()(
         (set, get) => ({
             // Synced state (per-device structure)
             progress: {},
+            history: {},
 
             // Actions
+            addReadingSession: (bookId, session) => {
+                set((state) => {
+                    const existingHistory = state.history[bookId] || {
+                        bookId,
+                        readRanges: [],
+                        sessions: [],
+                        lastUpdated: Date.now()
+                    };
+
+                    // Append new session and limit to last 100
+                    const newSessions = [...(existingHistory.sessions || []), session];
+                    if (newSessions.length > 100) {
+                        newSessions.shift(); // Remove oldest
+                    }
+
+                    return {
+                        history: {
+                            ...state.history,
+                            [bookId]: {
+                                ...existingHistory,
+                                sessions: newSessions,
+                                lastUpdated: Date.now()
+                            }
+                        }
+                    };
+                });
+            },
+
             updateLocation: (bookId, cfi, percentage) => {
                 const deviceId = getDeviceId();
 
@@ -286,5 +323,17 @@ export const useCurrentDeviceProgress = (bookId: string | null) => {
     return useReadingStateStore(state => {
         if (!bookId) return null;
         return state.progress[bookId]?.[deviceId] || null;
+    });
+};
+
+/**
+ * Hook to get the reading history for a book.
+ * @param bookId - The book ID, or null.
+ * @returns The history entry, or null if not found.
+ */
+export const useBookHistory = (bookId: string | null) => {
+    return useReadingStateStore(state => {
+        if (!bookId) return null;
+        return state.history[bookId] || null;
     });
 };
