@@ -10,7 +10,7 @@
 *   **Privacy-Centric**: We don't know what you read. No analytics.
 *   **Hybrid Intelligence**:
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
-    *   **Cloud TTS**: Connect your own API keys (OpenAI, Google) for studio-quality narration.
+    *   **Cloud TTS**: Connect your own API keys (OpenAI, Google, LemonFox) for studio-quality narration.
     *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
 *   **Dual Sync**:
     *   **Real-time**: Synchronize progress instantly across devices using Firestore.
@@ -25,7 +25,7 @@
 *   **Sync**: `y-cinder` (Custom Fork / Firestore 11.10.0) + Android Backup Service + Google Drive API
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
-*   **Audio**: Piper (WASM) / Web Speech API
+*   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
 *   **AI**: Google Gemini (Flash Lite / Flash) via `@google/generative-ai`
 *   **Mobile**: Capacitor 7.0.0 (Android) + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login`
 *   **Workers**: Comlink + Web Workers
