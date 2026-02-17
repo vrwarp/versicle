@@ -5,10 +5,11 @@ import { ReadingHistoryPanel } from './ReadingHistoryPanel';
 
 // Mock the Yjs store hook
 vi.mock('../../store/useReadingStateStore', () => ({
-    useBookProgress: vi.fn()
+    useBookProgress: vi.fn(),
+    useBookHistory: vi.fn()
 }));
 
-import { useBookProgress } from '../../store/useReadingStateStore';
+import { useBookProgress, useBookHistory } from '../../store/useReadingStateStore';
 
 describe('ReadingHistory Integration', () => {
     beforeEach(() => {
