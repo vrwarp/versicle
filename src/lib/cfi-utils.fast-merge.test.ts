@@ -49,6 +49,50 @@ describe('tryFastMergeCfi', () => {
         });
     });
 
+    describe('Edge Cases', () => {
+        it('handles Ranges with IDs in steps', () => {
+            // e.g. parent has [id], steps have [id]
+            const complexParent = '/6/14[ch1]!/4[div1]/2[p1]';
+            const left = `epubcfi(${complexParent},/1:0,/3:10)`;
+            const right = `epubcfi(${complexParent},/3:10,/5:20)`;
+
+            const fastResult = tryFastMergeCfi(left, right);
+            const slowResult = mergeCfiSlow(left, right);
+            assertCfiEqual(fastResult, slowResult);
+        });
+
+        it('handles partial parent matches (should bail)', () => {
+            // parent1: /1/2
+            // parent2: /1/20
+            // verify /1/2 prefix check doesn't false positive on /1/20
+            const p1 = '/1/2';
+            const p2 = '/1/20';
+            const left = `epubcfi(${p1},/1:0,/1:10)`;
+            const right = `epubcfi(${p2},/1:0,/1:10)`;
+            expect(tryFastMergeCfi(left, right)).toBeNull();
+        });
+
+        it('handles parents with special characters (underscore, hyphen, dot)', () => {
+            const weirdParent = '/6/14[ch_1.2-beta]!/4/2';
+            const left = `epubcfi(${weirdParent},/1:0,/1:10)`;
+            const right = `epubcfi(${weirdParent},/1:10,/1:20)`;
+            const fastResult = tryFastMergeCfi(left, right);
+            const slowResult = mergeCfiSlow(left, right);
+            assertCfiEqual(fastResult, slowResult);
+        });
+
+        it('handles parents that are substrings of each other but distinct', () => {
+            const parentShort = '/6/14[ch1]!/4';
+            const parentLong = '/6/14[ch1]!/4/2';
+
+            const left = `epubcfi(${parentShort},/1:0,/1:10)`;
+            const right = `epubcfi(${parentLong},/1:0,/1:10)`;
+
+            // Should be null because parents differ
+            expect(tryFastMergeCfi(left, right)).toBeNull();
+        });
+    });
+
     describe('Bail-out Cases (Should return null)', () => {
         it('returns null for Range + Range with different parents', () => {
             const left = `epubcfi(${parent},/1:0,/1:10)`;
@@ -83,33 +127,9 @@ describe('tryFastMergeCfi', () => {
         });
     });
 
-    describe('Edge Cases', () => {
-        it('handles Ranges with IDs in steps', () => {
-            // e.g. parent has [id], steps have [id]
-            const complexParent = '/6/14[ch1]!/4[div1]/2[p1]';
-            const left = `epubcfi(${complexParent},/1:0,/3:10)`;
-            const right = `epubcfi(${complexParent},/3:10,/5:20)`;
-
-            const fastResult = tryFastMergeCfi(left, right);
-            const slowResult = mergeCfiSlow(left, right);
-            assertCfiEqual(fastResult, slowResult);
-        });
-
-        it('handles partial parent matches (should bail)', () => {
-            // parent1: /1/2
-            // parent2: /1/20
-            // verify /1/2 prefix check doesn't false positive on /1/20
-            const p1 = '/1/2';
-            const p2 = '/1/20';
-            const left = `epubcfi(${p1},/1:0,/1:10)`;
-            const right = `epubcfi(${p2},/1:0,/1:10)`;
-            expect(tryFastMergeCfi(left, right)).toBeNull();
-        });
-    });
-
     describe('Fuzz Testing', () => {
         const prng = new SeededRandom(DEFAULT_FUZZ_SEED);
-        const ITERATIONS = 1000;
+        const ITERATIONS = 5000; // Increased iterations for robustness
 
         // Generators
         const genPath = (depth: number) => {
