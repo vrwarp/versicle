@@ -48,6 +48,6 @@ def test_aria_labels(page: Page):
     page.get_by_role("button", name="Settings").click(force=True)
 
     # Playback speed slider
-    expect(page.get_by_label("Playback speed")).to_be_visible()
+    expect(page.get_by_label("Speed", exact=True)).to_be_visible()
 
     print("ARIA Labels Verification Passed!")
