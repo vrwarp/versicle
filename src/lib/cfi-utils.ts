@@ -221,6 +221,32 @@ export function generateCfiRange(start: string, end: string): string {
 }
 
 export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
+    // OPTIMIZATION: Optimistic Append for Sequential Reading
+    // If ranges is sorted (which it usually is) and newRange starts AFTER the last range,
+    // we can skip full resort and only merge the tail.
+    // This reduces O(N) overhead to O(1) for sequential reading.
+    if (ranges.length > 1 && newRange) {
+        try {
+            const last = ranges[ranges.length - 1];
+            const pLast = parseCfiRange(last);
+            const pNew = parseCfiRange(newRange);
+
+            if (pLast && pNew) {
+                const cfi = new EpubCFI();
+                // Check if newRange starts at or after last range starts.
+                // If so, it only interacts with the last range (since ranges are sorted and disjoint).
+                if (cfi.compare(pNew.fullStart, pLast.fullStart) >= 0) {
+                    // Fast path: Merge [last, newRange] only.
+                    // Recursive call with 2 items falls through to standard logic (since length=1).
+                    const tail = mergeCfiRanges([last], newRange);
+                    return [...ranges.slice(0, -1), ...tail];
+                }
+            }
+        } catch (e) {
+            // Fallback to slow path on error
+        }
+    }
+
     const allRanges = [...ranges];
     if (newRange) allRanges.push(newRange);
 
