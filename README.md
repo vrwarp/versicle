@@ -31,6 +31,7 @@
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
 *   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
+*   **Dev Tools**: `vite-plugin-mkcert` (Local HTTPS)
 
 ## Features
 
@@ -55,6 +56,7 @@
     *   **Thinking Budget**: Configurable "Thinking Budget" (default 512 tokens) allows the AI to reason about complex data layouts before speaking.
     *   **Synced Analysis**: AI-generated content (adaptations, semantic maps) is synchronized across devices via Yjs, so you only pay the generation cost once.
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
+*   **Chapter Pre-roll**: Optional announcements (Title, Author) at the start of each new chapter.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
 *   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
@@ -64,6 +66,7 @@
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
+    *   **Background Audio Mode**: Configurable options (Silence, White Noise, Off) to ensure the OS keeps the app alive during playback.
 *   **Battery Guard**: Explicitly checks and warns about aggressive Android battery optimizations that might kill background playback.
 *   **Lock Screen Controls**: Full support for OS-level media controls (Play, Pause, Seek, Artwork) via Media Session API.
 
@@ -77,6 +80,7 @@
         *   **Sync Mesh**: Real-time visibility of active devices in the network with "Last Active" status and peer awareness.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots (`SyncManifest`) protect against data loss during sync (Last 10 states).
+*   **Smart TOC Generation**: Uses GenAI to analyze book structure and generate meaningful Table of Contents for books with missing or poor metadata.
 *   **Reading History**: Detailed session tracking with timeline visualization.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted.
     *   **CSV Import/Export**: Import/Export your reading list via CSV, with intelligent filename matching (ISBN/Title fallback) to restore your library context.
