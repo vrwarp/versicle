@@ -75,6 +75,10 @@ export class CancellationError extends Error {
  * @param onCancel - Optional callback invoked if the task is cancelled.
  * @returns An object containing `result` (Promise resolving to the generator's return value) and `cancel` (function to stop execution).
  */
+import { createLogger } from './logger';
+
+const logger = createLogger('CancellableTaskRunner');
+
 export function runCancellable<TReturn = void>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   generator: Generator<Promise<any> | any, TReturn, any>,
@@ -138,7 +142,7 @@ export function runCancellable<TReturn = void>(
         if (generator.throw) {
             const result = generator.throw(new CancellationError());
             if (!result.done) {
-                console.warn(
+                logger.warn(
                     'Generator did not complete after cancellation. ' +
                     'Ensure you are not catching CancellationError and continuing execution, ' +
                     'or yielding more promises in the finally block.',
@@ -149,7 +153,7 @@ export function runCancellable<TReturn = void>(
     } catch (err) {
         // If the generator throws an error (other than completing), log it if it's not the CancellationError itself re-thrown
         if (!(err instanceof CancellationError)) {
-             console.error('Error during generator cancellation:', err);
+             logger.error('Error during generator cancellation:', err);
         }
     }
 
