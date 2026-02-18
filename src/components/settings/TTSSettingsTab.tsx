@@ -120,7 +120,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                             <div className="space-y-2">
                                 <div className="flex justify-between">
                                     <div id="white-noise-label" className="text-sm font-medium">White Noise Volume</div>
-                                    <span className="text-sm text-muted-foreground">{Math.round(whiteNoiseVolume * 100)}%</span>
+                                    <span className="text-sm text-muted-foreground" role="status" aria-live="polite">{Math.round(whiteNoiseVolume * 100)}%</span>
                                 </div>
                                 <Slider
                                     aria-labelledby="white-noise-label"
@@ -245,7 +245,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                         Sentences shorter than this will be merged with adjacent ones.
                                     </p>
                                 </div>
-                                <span className="text-sm text-muted-foreground">{minSentenceLength} chars</span>
+                                <span className="text-sm text-muted-foreground" role="status" aria-live="polite">{minSentenceLength} chars</span>
                             </div>
                             <Slider
                                 aria-labelledby="min-sentence-label"

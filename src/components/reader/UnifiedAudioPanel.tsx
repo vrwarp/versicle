@@ -121,14 +121,17 @@ export const UnifiedAudioPanel = () => {
               <section className="space-y-4">
                  <h3 className="text-sm font-medium text-muted-foreground">Voice & Pace</h3>
                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Speed ({rate}x)</label>
+                    <div className="flex items-center justify-between">
+                       <label id="speed-label" className="text-sm font-medium">Speed</label>
+                       <span className="text-sm text-muted-foreground" role="status" aria-live="polite">{rate}x</span>
+                    </div>
                     <Slider
+                       aria-labelledby="speed-label"
                        value={[rate]}
                        min={0.5}
                        max={3.0}
                        step={0.1}
                        onValueChange={(val) => setRate(val[0])}
-                       aria-label="Playback speed"
                     />
                  </div>
                  <div className="space-y-2">
