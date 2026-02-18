@@ -62,3 +62,8 @@
 - **Bottleneck:** `BookCard` subscribed to `useDeviceStore` to display a conditional resume badge. Because `useDeviceStore` (Yjs-backed) returns a new object reference on every heartbeat, ALL `BookCard` instances re-rendered every 5 minutes (or on any device change), causing UI jank in large libraries.
 - **Solution:** Extracted `ResumeBadge` and `RemoteSessionsSubMenu` into separate components that isolate the `useDeviceStore` subscription.
 - **Learning:** When a heavy component (like a list item) needs global state (like `devices`) for a tiny conditional UI element, extract that element. Subscribing to frequently changing global stores in list items is a performance antipattern.
+
+## 2025-06-08 - CFI Merge Optimistic Append
+- **Bottleneck:** `mergeCfiRanges` was parsing and resorting the entire list of completed ranges (O(N * ParseCost)) for every sentence read, causing frame drops during long reading sessions.
+- **Solution:** Implemented an "Optimistic Append" check: if the new range starts after the last existing range, only merge the tail.
+- **Learning:** For sorted list maintenance in hot paths (like reading progress), always check for the "Sequential Append" case (O(1)) before falling back to full resort (O(N)). Sequential access is the dominant pattern in reading apps.
