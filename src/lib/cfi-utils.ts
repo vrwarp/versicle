@@ -242,7 +242,7 @@ export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
                     return [...ranges.slice(0, -1), ...tail];
                 }
             }
-        } catch (e) {
+        } catch {
             // Fallback to slow path on error
         }
     }
