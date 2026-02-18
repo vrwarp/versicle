@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
+import type { ReadingSession } from '../../types/db';
 
 // Mock the Yjs store hook
 vi.mock('../../store/useReadingStateStore', () => ({
@@ -16,9 +17,16 @@ describe('ReadingHistory Integration', () => {
     });
 
     it('loads and displays reading history from Yjs store', () => {
+        const sessions: ReadingSession[] = [{
+            cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
+            timestamp: Date.now(),
+            type: 'page',
+            label: 'Chapter One'
+        }];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useBookProgress as any).mockReturnValue({
-            completedRanges: ['epubcfi(/6/14!/4/2/1:0)']
+            completedRanges: ['epubcfi(/6/14!/4/2/1:0)'],
+            readingSessions: sessions
         });
 
         render(
@@ -31,13 +39,20 @@ describe('ReadingHistory Integration', () => {
 
         // No loading state - component renders synchronously now
         expect(screen.queryByText('Loading history...')).not.toBeInTheDocument();
-        expect(screen.getByText('Reading Segment')).toBeInTheDocument();
+        expect(screen.getByText('Chapter One')).toBeInTheDocument();
     });
 
-    it('updates when completedRanges changes', () => {
+    it('updates when readingSessions changes', () => {
+        const sessions1: ReadingSession[] = [{
+            cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
+            timestamp: Date.now(),
+            type: 'page',
+            label: 'Chapter One'
+        }];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useBookProgress as any).mockReturnValue({
-            completedRanges: ['epubcfi(/6/14!/4/2/1:0)']
+            completedRanges: ['epubcfi(/6/14!/4/2/1:0)'],
+            readingSessions: sessions1
         });
 
         const { rerender } = render(
@@ -48,15 +63,25 @@ describe('ReadingHistory Integration', () => {
             />
         );
 
-        expect(screen.getAllByText('Reading Segment')).toHaveLength(1);
+        expect(screen.getAllByRole('button')).toHaveLength(1);
 
-        // Update mock to return more ranges
+        // Update mock to return more sessions (different section)
+        const sessions2: ReadingSession[] = [
+            ...sessions1,
+            {
+                cfiRange: 'epubcfi(/6/14!/4/2/1:10)',
+                timestamp: Date.now(),
+                type: 'tts',
+                label: 'Chapter Two'
+            }
+        ];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useBookProgress as any).mockReturnValue({
             completedRanges: [
                 'epubcfi(/6/14!/4/2/1:0)',
                 'epubcfi(/6/14!/4/2/1:10)'
-            ]
+            ],
+            readingSessions: sessions2
         });
 
         rerender(
@@ -67,13 +92,14 @@ describe('ReadingHistory Integration', () => {
             />
         );
 
-        expect(screen.getAllByText('Reading Segment')).toHaveLength(2);
+        expect(screen.getAllByRole('button')).toHaveLength(2);
     });
 
-    it('handles empty completedRanges gracefully', () => {
+    it('handles empty readingSessions gracefully', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useBookProgress as any).mockReturnValue({
-            completedRanges: []
+            completedRanges: [],
+            readingSessions: []
         });
 
         render(
@@ -105,7 +131,13 @@ describe('ReadingHistory Integration', () => {
     it('reacts to bookId prop changes', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (useBookProgress as any).mockReturnValue({
-            completedRanges: ['epubcfi(/6/14!/4/2/1:0)']
+            completedRanges: ['epubcfi(/6/14!/4/2/1:0)'],
+            readingSessions: [{
+                cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
+                timestamp: Date.now(),
+                type: 'page',
+                label: 'Test'
+            }]
         });
 
         const { rerender } = render(

@@ -205,17 +205,23 @@ export const ReaderView: React.FC = () => {
 
                 if (prevStart && prevEnd && prevStart !== location.start.cfi && shouldSave) {
                     const currentBook = bookRef.current;
+                    // Capture title synchronously before async op to avoid race condition with setCurrentSection
+                    const previousSectionTitle = panicSaveState.current.currentSectionTitle;
+
                     if (currentBook) {
                         Promise.all([
                             snapCfiToSentence(currentBook, prevStart),
                             snapCfiToSentence(currentBook, prevEnd)
                         ]).then(([snappedStart, snappedEnd]) => {
                             const range = generateCfiRange(snappedStart, snappedEnd);
-                            // const type = isScroll ? 'scroll' : 'page';
-                            // const label = currentSectionTitle || undefined;
+                            const type = isScroll ? 'scroll' : 'page';
+                            const label = previousSectionTitle || undefined;
+
+                            // Ignore generic "Chapter" placeholder to prevent ghost entries
+                            if (label === 'Chapter') return;
 
                             try {
-                                useReadingStateStore.getState().addCompletedRange(id, range);
+                                useReadingStateStore.getState().addCompletedRange(id, range, type, label);
                                 setHistoryTick(t => t + 1);
                             } catch (err) {
                                 logger.error("History update failed", err);
@@ -235,7 +241,8 @@ export const ReaderView: React.FC = () => {
                 useReadingStateStore.getState().updateLocation(id, location.start.cfi, percentage);
                 // Ensure current segment is in history so it appears at top of list
                 const range = generateCfiRange(location.start.cfi, location.end.cfi);
-                useReadingStateStore.getState().addCompletedRange(id, range);
+                const type = readerViewMode === 'scrolled' ? 'scroll' : 'page';
+                useReadingStateStore.getState().addCompletedRange(id, range, type, title);
             }
             setCurrentSection(title, sectionId);
         },
@@ -367,19 +374,26 @@ export const ReaderView: React.FC = () => {
             if (id && previousLocation.current) {
                 const prevStart = previousLocation.current.start;
                 const prevEnd = previousLocation.current.end;
-                if (prevStart && prevEnd) {
+                const duration = Date.now() - previousLocation.current.timestamp;
+
+                // Only save if duration > 2s (avoid strict mode double-mounts and accidental nav)
+                if (prevStart && prevEnd && duration > 2000) {
                     // Panic Save: Synchronous, raw capture.
                     // We bypass snapCfiToSentence to avoid async calls on the Book instance,
                     // which might be destroyed during unmount, causing crashes.
                     // This ensures reading history is saved even if the reader is tearing down.
                     const range = generateCfiRange(prevStart, prevEnd);
-                    // const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
-                    // const type = mode === 'scrolled' ? 'scroll' : 'page';
-                    // const label = title || undefined;
-                    try {
-                        useReadingStateStore.getState().addCompletedRange(id, range);
-                    } catch (e) {
-                        logger.error("History panic save failed", e);
+                    const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
+                    const type = mode === 'scrolled' ? 'scroll' : 'page';
+                    const label = title || undefined;
+
+                    // Ignore generic "Chapter" placeholder
+                    if (label !== 'Chapter') {
+                        try {
+                            useReadingStateStore.getState().addCompletedRange(id, range, type, label);
+                        } catch (e) {
+                            logger.error("History panic save failed", e);
+                        }
                     }
                 }
             }
