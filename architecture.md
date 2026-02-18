@@ -286,8 +286,9 @@ Provides a "Cloud Overlay" for real-time synchronization.
 
 *   **Logic**:
     *   **Hybrid Auth**: Supports both Web (`signInWithPopup`/`getRedirectResult`) and Native Android (`FirebaseAuthentication` plugin) flows for Google Sign-In.
+    *   **Cloud Overlay**: Acts as a secondary sync provider. `y-indexeddb` remains the primary source of truth, while Firestore relays updates to other devices.
     *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
-    *   **Pre-Sync Checkpoint**: Automatically creates a "pre-sync" checkpoint via `CheckpointService` immediately before connecting to the provider, ensuring a safe fallback state exists before merging remote changes.
+    *   **Pre-Sync Checkpoint**: Automatically creates a "pre-sync" checkpoint via `CheckpointService` immediately before connecting to the provider, ensuring a safe fallback state exists before merging remote changes (Destructive Restore protection).
     *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
     *   **Authenticated**: Sync only occurs when the user is signed in via Firebase Auth.
@@ -352,7 +353,7 @@ Handles the complex task of importing an EPUB file.
 *   **Features**:
     *   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text ("Teleprompter Adaptation") for TTS accessibility via `generateTableAdaptations`.
         *   **Thinking Budget**: Utilizes a configurable `thinkingBudget` (default 512 tokens) to allow the model to "think" about column relationships before generating the narrative, significantly improving complex table interpretation.
-    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures (Title, Footnote, Main Text, Table) for improved TTS flow.
+    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures (**Title**, **Footnote**, **Main**, **Table**, **Other**) for improved TTS flow (e.g., skipping footnotes).
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
 *   **Fuzzy Matching (`textMatching.ts`)**: Uses a robust fuzzy matching algorithm to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
     *   **Strategy**: Tries Exact Match -> Case-Insensitive Match -> **Flexible Whitespace Regex** (matches varying newlines/spaces) to handle LLM formatting quirks.
@@ -440,7 +441,7 @@ The central hub for TTS operations. It runs on the **Main Thread** and coordinat
     *   **State Restoration**: Implements `sessionRestored` logic to seamlessly resume playback position and state (including queue) after an app restart.
     *   **Optimistic Playback**: Integrates with `AudioContentPipeline` using asynchronous callbacks (`onMaskFound`, `onAdaptationsFound`) to update the active queue with GenAI insights (skips, table narrations) *while* playback is already in progress.
     *   **Background Audio**: Explicitly manages background playback via `engageBackgroundMode`, ensuring metadata and audio focus are correctly handled on mobile.
-    *   **Battery Optimization**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`) via `BatteryGuard`.
+    *   **Battery Guard**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`) via `@capawesome-team/capacitor-android-battery-optimization`. If enabled, it prompts the user to disable it to prevent the OS from killing the background service.
     *   **Delegation**: Offloads heavy content loading to `AudioContentPipeline`, provider management to `TTSProviderManager`, and state logic to `PlaybackStateManager`.
 
 #### `src/lib/tts/TTSProviderManager.ts`
@@ -471,7 +472,8 @@ The Data Pipeline for TTS.
 *   **Logic (Optimistic Playback)**:
     1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
     2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
-    3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`), allowing the player to seamlessly skip content identified later without delaying the start of playback.
+        *   **Grouping**: Sentences are grouped by their **Root CFI** (common ancestor) before analysis to provide the LLM with semantic context (e.g., distinguishing a footnote within a table vs. main text).
+    3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`), allowing the player to seamlessly skip content or inject table narrations identified later without delaying the start of playback.
     4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
 
 #### `src/lib/tts/TextSegmenter.ts`
@@ -571,8 +573,8 @@ State is managed using **Zustand** with specialized strategies for different dat
         *   **Persistence**: Uses `persist` middleware to save user preferences (speed, voice, provider keys) to `localStorage`.
 *   **`useReadingStateStore` (Per-Device Sync)**:
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
-    *   **Why**: To prevent overwriting reading positions when switching between devices.
-    *   **Aggregation**: The UI selector aggregates these to find the "Furthest Read" point.
+    *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., preventing a phone at 10% from overwriting a tablet at 80% during a sync race).
+    *   **Aggregation**: The UI selector uses a **Local Priority > Global Recent** strategy. It prefers the local device's progress if available; otherwise, it falls back to the most recently updated progress from any device in the mesh.
 *   **`useDeviceStore` (Sync Mesh)**:
     *   **Strategy**: Maintains a Yjs Map of active devices in the mesh.
     *   **Logic**: Updates a `lastActive` timestamp (Heartbeat) with throttling (5 mins) to track online status.

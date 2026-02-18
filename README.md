@@ -78,7 +78,7 @@
         *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses smart **Heuristic Sync** (viewed time vs scan time) to minimize API calls.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
         *   **Sync Mesh**: Real-time visibility of active devices in the network with "Last Active" status and peer awareness.
-    *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the "furthest read" point.
+    *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the most recent position across the mesh.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots (`SyncManifest`) protect against data loss during sync (Last 10 states).
 *   **Smart TOC Generation**: Uses GenAI to analyze book structure and generate meaningful Table of Contents for books with missing or poor metadata.
 *   **Reading History**: Detailed session tracking with timeline visualization.
