@@ -20,7 +20,9 @@
 ## Tech Stack
 
 *   **Framework**: React 19.2.3 + Vite 7.3.0 + React Router 7.11.0
-*   **Language**: TypeScript
+*   **Language**: TypeScript 5.9.3
+*   **Testing**: Vitest 4.0.16
+*   **Linting**: ESLint 9.39.2
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (Custom Fork)
 *   **Sync**: `y-cinder` (Custom Fork / Firestore 11.10.0) + Android Backup Service + Google Drive API
 *   **Storage**: IndexedDB (via `idb`)

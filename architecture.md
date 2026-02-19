@@ -503,6 +503,14 @@ Manages the virtual playback timeline.
     *   **Layered Application**: Applies rules in a strict order: Book Specific (High Priority) -> Global -> Bible Rules (if enabled) -> Book Specific (Low Priority).
     *   **Bible Lexicon**: Injects a specialized set of rules (`BIBLE_LEXICON_RULES`) for Bible citations (e.g., "Gen 1:1") if enabled for the book.
 
+#### `src/lib/tts/SyncEngine.ts` (Audio Synchronization)
+*   **Goal**: Efficiently map audio playback time to text segments for highlighting.
+*   **Logic**:
+    *   **Optimized Forward Scan**: Uses a stateful cursor (`currentIdx`) to optimize the common case of continuous playback. It searches forward from the last known position, making typical updates effectively O(1).
+    *   **Highlight Emission**: Triggers `onHighlight` callbacks only when the active segment actually changes, preventing unnecessary React re-renders in the UI.
+*   **Trade-offs**:
+    *   **State Management**: Requires strict lifecycle management. The stateful cursor must be manually reset (`currentIdx = -1`) on seeks or chapter changes to prevent incorrect alignment, as the engine assumes forward progression by default.
+
 #### `src/lib/tts/processors/Sanitizer.ts`
 *   **Goal**: Clean raw text before segmentation to improve TTS quality.
 *   **Logic**:
