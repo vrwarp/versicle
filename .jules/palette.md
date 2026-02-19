@@ -56,3 +56,7 @@
 ## 2025-05-30 - Enhanced Select Items with Icons
 **Learning:** Using plain text for options like "Rating" (e.g., "4 Stars") is functional but lacks visual scannability and delight. Enhancing `Select` items with icons (like stars or status indicators) significantly improves recognition speed and aesthetic appeal without compromising accessibility if implemented correctly.
 **Action:** When options have strong visual metaphors (ratings, statuses), use the `Select` component's ability to render complex children. Ensure icons are purely decorative (if text is present) or have appropriate labels, and maintain text labels for screen readers.
+
+## 2025-05-31 - Password Visibility Toggle
+**Learning:** Standard `<input type="password">` fields create friction for complex inputs like API keys, leading to user error and frustration. Users expect to be able to verify their input.
+**Action:** Replace `Input type="password"` with a specialized `PasswordInput` component that includes a toggle button. Ensure the toggle is keyboard accessible and has appropriate ARIA labels (`Show password`/`Hide password`) to communicate state changes to assistive technology.

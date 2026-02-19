@@ -1,7 +1,7 @@
 import React from 'react';
 import { Label } from '../ui/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
-import { Input } from '../ui/Input';
+import { PasswordInput } from '../ui/PasswordInput';
 import { Switch } from '../ui/Switch';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
@@ -92,9 +92,8 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                         <>
                             <div className="space-y-2">
                                 <Label htmlFor="genai-api-key">Gemini API Key</Label>
-                                <Input
+                                <PasswordInput
                                     id="genai-api-key"
-                                    type="password"
                                     value={apiKey}
                                     onChange={(e) => onApiKeyChange(e.target.value)}
                                     placeholder="Enter your Google Gemini API Key"

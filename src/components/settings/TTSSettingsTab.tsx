@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Label } from '../ui/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
-import { Input } from '../ui/Input';
+import { PasswordInput } from '../ui/PasswordInput';
 import { Slider } from '../ui/Slider';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
@@ -204,9 +204,8 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                     {providerId === 'google' && (
                         <div className="space-y-2">
                             <Label htmlFor="tts-google-key">Google API Key</Label>
-                            <Input
+                            <PasswordInput
                                 id="tts-google-key"
-                                type="password"
                                 value={apiKeys.google || ''}
                                 onChange={(e) => onApiKeyChange('google', e.target.value)}
                             />
@@ -215,9 +214,8 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                     {providerId === 'openai' && (
                         <div className="space-y-2">
                             <Label htmlFor="tts-openai-key">OpenAI API Key</Label>
-                            <Input
+                            <PasswordInput
                                 id="tts-openai-key"
-                                type="password"
                                 value={apiKeys.openai || ''}
                                 onChange={(e) => onApiKeyChange('openai', e.target.value)}
                             />
@@ -226,9 +224,8 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                     {providerId === 'lemonfox' && (
                         <div className="space-y-2">
                             <Label htmlFor="tts-lemonfox-key">LemonFox API Key</Label>
-                            <Input
+                            <PasswordInput
                                 id="tts-lemonfox-key"
-                                type="password"
                                 value={apiKeys.lemonfox || ''}
                                 onChange={(e) => onApiKeyChange('lemonfox', e.target.value)}
                             />
