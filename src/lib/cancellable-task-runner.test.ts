@@ -138,6 +138,7 @@ describe('runCancellable', () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
 
         expect(warnSpy).toHaveBeenCalledWith(
+            '[CancellableTaskRunner]',
             expect.stringContaining('Generator did not complete after cancellation'),
             expect.any(String)
         );

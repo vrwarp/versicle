@@ -184,7 +184,7 @@ export const UnifiedAudioPanel = () => {
        </div>
 
        {/* Footer Toggle */}
-       <div className="border-t p-2 grid grid-cols-2 gap-2 bg-background">
+       <div className="border-t p-2 grid grid-cols-2 gap-2 bg-background relative z-10">
           <Button
              data-testid="tts-queue-tab-btn"
              variant={view === 'queue' ? 'default' : 'ghost'}

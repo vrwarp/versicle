@@ -159,7 +159,8 @@ export const FileUploader: React.FC = () => {
 
   const handleBrowseDrive = async () => {
     try {
-      await googleIntegrationManager.getValidToken('drive');
+      const token = await googleIntegrationManager.getValidToken('drive');
+      logger.debug("Drive Token Valid, opening picker", token);
       setIsDriveImportOpen(true);
     } catch (error) {
       logger.error("Failed to access Drive", error);

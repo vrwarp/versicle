@@ -2,6 +2,7 @@ import React from 'react';
 import { Label } from '../ui/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { Input } from '../ui/Input';
+import { PasswordInput } from '../ui/PasswordInput';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
 
@@ -229,9 +230,8 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="firebase-api-key">API Key</Label>
-                                    <Input
+                                    <PasswordInput
                                         id="firebase-api-key"
-                                        type="password"
                                         value={firebaseConfig.apiKey}
                                         onChange={(e) => onFirebaseConfigChange({ apiKey: e.target.value })}
                                         placeholder="AIza..."
