@@ -8,6 +8,7 @@ import { getDeviceId } from '../lib/device-id';
 import { mergeCfiRanges } from '../lib/cfi-utils';
 
 const MAX_READING_SESSIONS = 500;
+const HISTORY_PRUNE_SIZE = 200;
 
 /**
  * Per-device progress structure.
@@ -207,7 +208,7 @@ export const useReadingStateStore = create<ReadingState>()(
 
                     // Cap at MAX_READING_SESSIONS
                     const trimmedSessions = sessions.length > MAX_READING_SESSIONS
-                        ? sessions.slice(sessions.length - MAX_READING_SESSIONS)
+                        ? sessions.slice(-(MAX_READING_SESSIONS - HISTORY_PRUNE_SIZE))
                         : sessions;
 
                     return {
@@ -271,7 +272,7 @@ export const useReadingStateStore = create<ReadingState>()(
 
                     // Cap at MAX_READING_SESSIONS
                     if (sessions.length > MAX_READING_SESSIONS) {
-                        sessions = sessions.slice(sessions.length - MAX_READING_SESSIONS);
+                        sessions = sessions.slice(-(MAX_READING_SESSIONS - HISTORY_PRUNE_SIZE));
                     }
 
                     return {

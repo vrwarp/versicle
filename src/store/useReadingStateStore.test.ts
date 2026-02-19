@@ -352,4 +352,50 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(result?.percentage).toBe(0);
         });
     });
+
+    describe('History Pruning', () => {
+        it('should prune 200 entries when max sessions (500) is exceeded', () => {
+            const bookId = 'book-history-test';
+
+            // Fill up to 500 sessions
+            const initialSessions = Array.from({ length: 500 }, (_, i) => ({
+                cfiRange: `cfi(${i})`,
+                timestamp: Date.now() + i,
+                type: 'page' as const
+            }));
+
+            // Manually inject state
+            useReadingStateStore.setState({
+                progress: {
+                    [bookId]: {
+                        'test-device-id': {
+                            bookId,
+                            percentage: 0.5,
+                            currentCfi: 'cfi(500)',
+                            lastRead: Date.now(),
+                            completedRanges: [],
+                            readingSessions: initialSessions
+                        }
+                    }
+                }
+            });
+
+            // Verify initial state
+            let state = useReadingStateStore.getState();
+            expect(state.progress[bookId]['test-device-id'].readingSessions).toHaveLength(500);
+
+            // Add one more session
+            useReadingStateStore.getState().addCompletedRange(bookId, 'cfi(501)', 'page');
+
+            // Check new length
+            state = useReadingStateStore.getState();
+            const sessions = state.progress[bookId]['test-device-id'].readingSessions;
+
+            // Expect to drop to 300 (500 max - 200 deleted)
+            expect(sessions).toHaveLength(300);
+
+            // Verify the last one is the new one
+            expect(sessions![sessions!.length - 1].cfiRange).toBe('cfi(501)');
+        });
+    });
 });
