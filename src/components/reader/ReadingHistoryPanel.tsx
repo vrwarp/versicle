@@ -51,7 +51,7 @@ function resolveSectionLabel(cfi: string, book: any): string | null {
     // This handles cases where href lookup fails or is mismatched
     if (spinePos >= 0 && book.navigation) {
         let foundLabel = null;
-        book.navigation.forEach((item: any) => {
+        book.navigation.forEach((item: { href?: string; label?: string }) => {
             // Check if nav item's href points to our spine item
             const itemHref = item.href ? item.href.split('#')[0] : null;
             const itemSection = itemHref ? book.spine.get(itemHref) : null;
