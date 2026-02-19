@@ -149,6 +149,8 @@ export interface UserProgress {
   lastRead: number;
   /** Set of completed/read CFI ranges. */
   completedRanges: string[];
+  /** Chronological reading sessions with metadata (type, timestamp, label). */
+  readingSessions?: ReadingSession[];
 }
 
 /**

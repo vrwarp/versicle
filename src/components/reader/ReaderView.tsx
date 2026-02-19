@@ -195,48 +195,77 @@ export const ReaderView: React.FC = () => {
             const currentProgress = useReadingStateStore.getState().getProgress(id || '');
             if (location.start.cfi === (currentProgress?.currentCfi || '')) return;
 
-            // Reading History
-            if (id && previousLocation.current) {
-                const prevStart = previousLocation.current.start;
-                const prevEnd = previousLocation.current.end;
-                const duration = Date.now() - previousLocation.current.timestamp;
-                const isScroll = readerViewMode === 'scrolled';
-                const shouldSave = isScroll ? duration > 2000 : true;
+            // Reading History Calculation
+            // We use a promise to handle the potential async nature of snapCfiToSentence for the PREVIOUS range,
+            // while bundling it with the synchronous update for the CURRENT range.
+            const prepareUpdates = async () => {
+                if (!id) return;
 
-                if (prevStart && prevEnd && prevStart !== location.start.cfi && shouldSave) {
-                    const currentBook = bookRef.current;
-                    if (currentBook) {
-                        Promise.all([
-                            snapCfiToSentence(currentBook, prevStart),
-                            snapCfiToSentence(currentBook, prevEnd)
-                        ]).then(([snappedStart, snappedEnd]) => {
-                            const range = generateCfiRange(snappedStart, snappedEnd);
-                            // const type = isScroll ? 'scroll' : 'page';
-                            // const label = currentSectionTitle || undefined;
+                const updates: import('../../store/useReadingStateStore').SessionUpdate[] = [];
 
+                // 1. Calculate Previous Range (Async)
+                if (previousLocation.current) {
+                    const prevStart = previousLocation.current.start;
+                    const prevEnd = previousLocation.current.end;
+                    const duration = Date.now() - previousLocation.current.timestamp;
+                    const isScroll = readerViewMode === 'scrolled';
+                    const shouldSave = isScroll ? duration > 2000 : true;
+
+                    if (prevStart && prevEnd && prevStart !== location.start.cfi && shouldSave) {
+                        const currentBook = bookRef.current;
+                        // Capture title synchronously before async op to avoid race condition with setCurrentSection
+                        const previousSectionTitle = panicSaveState.current.currentSectionTitle;
+
+                        if (currentBook) {
                             try {
-                                useReadingStateStore.getState().addCompletedRange(id, range);
-                                setHistoryTick(t => t + 1);
+                                const [snappedStart, snappedEnd] = await Promise.all([
+                                    snapCfiToSentence(currentBook, prevStart),
+                                    snapCfiToSentence(currentBook, prevEnd)
+                                ]);
+
+                                const range = generateCfiRange(snappedStart, snappedEnd);
+                                const type = isScroll ? 'scroll' : 'page';
+                                const label = previousSectionTitle || undefined;
+
+                                // Ignore generic "Chapter" placeholder
+                                if (label !== 'Chapter') {
+                                    updates.push({ range, type, label });
+                                    setHistoryTick(t => t + 1);
+                                }
                             } catch (err) {
-                                logger.error("History update failed", err);
-                                useToastStore.getState().showToast('Failed to save reading history', 'error');
+                                logger.error("History processing failed", err);
+                                // Continue even if history fails, to save current location
                             }
-                        });
+                        }
                     }
                 }
-            }
+
+                // 2. Calculate Current Range (Sync)
+                // Ensure current segment is in history so it appears at top of list
+                const currentRange = generateCfiRange(location.start.cfi, location.end.cfi);
+                const currentType = readerViewMode === 'scrolled' ? 'scroll' : 'page';
+                updates.push({ range: currentRange, type: currentType, label: title });
+
+                // 3. Single Atomic Update
+                useReadingStateStore.getState().updateReadingSession(
+                    id,
+                    location.start.cfi,
+                    percentage,
+                    updates
+                );
+            };
+
+            // Execute the updates
+            prepareUpdates().catch(err => {
+                logger.error("Failed to update reading session", err);
+            });
+
+            // Update refs immediately (independent of store storage)
             previousLocation.current = {
                 start: location.start.cfi,
                 end: location.end.cfi,
                 timestamp: Date.now()
             };
-
-            if (id) {
-                useReadingStateStore.getState().updateLocation(id, location.start.cfi, percentage);
-                // Ensure current segment is in history so it appears at top of list
-                const range = generateCfiRange(location.start.cfi, location.end.cfi);
-                useReadingStateStore.getState().addCompletedRange(id, range);
-            }
             setCurrentSection(title, sectionId);
         },
         onTocLoaded: (newToc) => setToc(newToc),
@@ -367,19 +396,26 @@ export const ReaderView: React.FC = () => {
             if (id && previousLocation.current) {
                 const prevStart = previousLocation.current.start;
                 const prevEnd = previousLocation.current.end;
-                if (prevStart && prevEnd) {
+                const duration = Date.now() - previousLocation.current.timestamp;
+
+                // Only save if duration > 2s (avoid strict mode double-mounts and accidental nav)
+                if (prevStart && prevEnd && duration > 2000) {
                     // Panic Save: Synchronous, raw capture.
                     // We bypass snapCfiToSentence to avoid async calls on the Book instance,
                     // which might be destroyed during unmount, causing crashes.
                     // This ensures reading history is saved even if the reader is tearing down.
                     const range = generateCfiRange(prevStart, prevEnd);
-                    // const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
-                    // const type = mode === 'scrolled' ? 'scroll' : 'page';
-                    // const label = title || undefined;
-                    try {
-                        useReadingStateStore.getState().addCompletedRange(id, range);
-                    } catch (e) {
-                        logger.error("History panic save failed", e);
+                    const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
+                    const type = mode === 'scrolled' ? 'scroll' : 'page';
+                    const label = title || undefined;
+
+                    // Ignore generic "Chapter" placeholder
+                    if (label !== 'Chapter') {
+                        try {
+                            useReadingStateStore.getState().addCompletedRange(id, range, type, label);
+                        } catch (e) {
+                            logger.error("History panic save failed", e);
+                        }
                     }
                 }
             }

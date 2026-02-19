@@ -37,6 +37,13 @@ export const UserProgressSchema = z.object({
     currentSectionIndex: z.number().optional(),
     lastRead: z.number(),
     completedRanges: z.array(z.string()),
+    readingSessions: z.array(z.object({
+        cfiRange: z.string(),
+        timestamp: z.number(),
+        type: z.enum(['tts', 'scroll', 'page']),
+        label: z.string().optional(),
+        duration: z.number().optional(),
+    })).optional(),
 });
 
 export const UserAnnotationSchema = z.object({

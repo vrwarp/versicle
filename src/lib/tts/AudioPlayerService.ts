@@ -628,7 +628,7 @@ export class AudioPlayerService {
                     const item = this.stateManager.getCurrentItem();
                     if (item && item.cfi && !item.isPreroll) {
                         try {
-                            useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi);
+                            useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi, 'tts');
                         } catch (e) {
                             logger.error("Failed to update history", e);
                         }
@@ -657,7 +657,7 @@ export class AudioPlayerService {
                 const item = this.stateManager.getCurrentItem();
                 if (item && item.cfi && !item.isPreroll) {
                     try {
-                        useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi);
+                        useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi, 'tts');
                     } catch (e) {
                         logger.error("Failed to update history", e);
                     }

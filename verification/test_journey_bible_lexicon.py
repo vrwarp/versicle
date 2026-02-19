@@ -38,7 +38,11 @@ def test_journey_bible_lexicon(page: Page):
 
     # 5. Open Lexicon Manager (Dictionary) from Reader Settings
     print("Opening Reader Settings > Dictionary...")
-    page.click("button[data-testid='reader-settings-button']", force=True)
+    settings_btn = page.get_by_test_id("reader-settings-button")
+    expect(settings_btn).to_be_visible()
+    # Wait for hydration/listeners to be attached since we are clicking with force
+    page.wait_for_timeout(500)
+    settings_btn.click(force=True)
     expect(page.get_by_role("dialog")).to_be_visible()
     page.get_by_role("button", name="Dictionary").click()
 

@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
-import type { UserProgress } from '../types/db';
+import type { UserProgress, ReadingEventType, ReadingSession } from '../types/db';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { getDeviceId } from '../lib/device-id';
 import { mergeCfiRanges } from '../lib/cfi-utils';
+
+const MAX_READING_SESSIONS = 500;
 
 /**
  * Per-device progress structure.
@@ -23,6 +25,15 @@ type PerDeviceProgress = Record<string, Record<string, UserProgress>>;
  * - `progress` (Record): Synced to yDoc.getMap('progress'), keyed by bookId then deviceId
  * - Actions (functions): Not synced, local-only
  */
+/**
+ * Represents a single update to the reading session history.
+ */
+export type SessionUpdate = {
+    range: string;
+    type?: ReadingEventType;
+    label?: string;
+};
+
 interface ReadingState {
     // === SYNCED STATE (persisted to Yjs) ===
     /** Map of reading progress keyed by bookId, then deviceId. */
@@ -39,8 +50,20 @@ interface ReadingState {
 
     /**
      * Adds a completed range to the progress, merging overlapping ranges.
+     * Also records a ReadingSession with type and optional label.
      */
-    addCompletedRange: (bookId: string, range: string) => void;
+    addCompletedRange: (bookId: string, range: string, type?: ReadingEventType, label?: string) => void;
+
+    /**
+     * Consolidates multiple updates into a single transaction.
+     * Updates current location (cfi, percentage) and adds multiple history entries/ranges.
+     */
+    updateReadingSession: (
+        bookId: string,
+        currentCfi: string,
+        percentage: number,
+        updates: SessionUpdate[]
+    ) => void;
 
     /**
      * Updates the last played CFI position (TTS).
@@ -150,7 +173,7 @@ export const useReadingStateStore = create<ReadingState>()(
                 }
             },
 
-            addCompletedRange: (bookId, range) => {
+            addCompletedRange: (bookId, range, type = 'page', label) => {
                 const deviceId = getDeviceId();
                 set((state) => {
                     const bookProgress = state.progress[bookId] || {};
@@ -164,6 +187,29 @@ export const useReadingStateStore = create<ReadingState>()(
 
                     const newRanges = mergeCfiRanges(existing.completedRanges || [], range);
 
+                    // Build updated sessions list
+                    const now = Date.now();
+                    const sessions = [...(existing.readingSessions || [])];
+                    const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+
+                    // Dedup: if last session has the same cfiRange, just update its timestamp
+                    if (lastSession && lastSession.cfiRange === range && lastSession.type === type) {
+                        sessions[sessions.length - 1] = { ...lastSession, timestamp: now };
+                    } else {
+                        const newSession: ReadingSession = {
+                            cfiRange: range,
+                            timestamp: now,
+                            type,
+                            ...(label ? { label } : {})
+                        };
+                        sessions.push(newSession);
+                    }
+
+                    // Cap at MAX_READING_SESSIONS
+                    const trimmedSessions = sessions.length > MAX_READING_SESSIONS
+                        ? sessions.slice(sessions.length - MAX_READING_SESSIONS)
+                        : sessions;
+
                     return {
                         progress: {
                             ...state.progress,
@@ -172,12 +218,97 @@ export const useReadingStateStore = create<ReadingState>()(
                                 [deviceId]: {
                                     ...existing,
                                     completedRanges: newRanges,
-                                    lastRead: Date.now()
+                                    readingSessions: trimmedSessions,
+                                    lastRead: now
                                 }
                             }
                         }
                     };
                 });
+            },
+
+            updateReadingSession: (bookId, currentCfi, percentage, updates) => {
+                const deviceId = getDeviceId();
+                const now = Date.now();
+
+                set((state) => {
+                    const bookProgress = state.progress[bookId] || {};
+                    const existing = bookProgress[deviceId] || {
+                        bookId,
+                        percentage: 0,
+                        currentCfi: '',
+                        lastRead: now,
+                        completedRanges: []
+                    };
+
+                    // 1. Merge all ranges
+                    let newRanges = existing.completedRanges || [];
+                    updates.forEach(u => {
+                        newRanges = mergeCfiRanges(newRanges, u.range);
+                    });
+
+                    // 2. Append history sessions
+                    let sessions = [...(existing.readingSessions || [])];
+
+                    updates.forEach(u => {
+                        const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+
+                        // Dedup logic (same as addCompletedRange)
+                        if (lastSession && lastSession.cfiRange === u.range && lastSession.type === (u.type || 'page')) {
+                            // Update timestamp of existing session
+                            sessions[sessions.length - 1] = { ...lastSession, timestamp: now };
+                        } else {
+                            if (u.type) { // Only add to history if type is provided (sanity check)
+                                sessions.push({
+                                    cfiRange: u.range,
+                                    timestamp: now,
+                                    type: u.type,
+                                    ...(u.label ? { label: u.label } : {})
+                                });
+                            }
+                        }
+                    });
+
+                    // Cap at MAX_READING_SESSIONS
+                    if (sessions.length > MAX_READING_SESSIONS) {
+                        sessions = sessions.slice(sessions.length - MAX_READING_SESSIONS);
+                    }
+
+                    return {
+                        progress: {
+                            ...state.progress,
+                            [bookId]: {
+                                ...bookProgress,
+                                [deviceId]: {
+                                    ...existing,
+                                    bookId,
+                                    currentCfi,
+                                    percentage,
+                                    completedRanges: newRanges,
+                                    readingSessions: sessions,
+                                    lastRead: now
+                                }
+                            }
+                        }
+                    };
+                });
+
+                // Sync to Reading List (same logic as updateLocation)
+                const book = useBookStore.getState().books[bookId];
+                if (book && book.sourceFilename) {
+                    const { staticMetadata } = useLibraryStore.getState();
+                    const meta = staticMetadata[bookId];
+
+                    useReadingListStore.getState().upsertEntry({
+                        filename: book.sourceFilename,
+                        title: meta?.title || book.title || 'Unknown',
+                        author: meta?.author || book.author || 'Unknown',
+                        percentage,
+                        lastUpdated: now,
+                        status: percentage > 0.98 ? 'read' : 'currently-reading',
+                        rating: book.rating
+                    });
+                }
             },
 
             updatePlaybackPosition: (bookId, lastPlayedCfi) => {

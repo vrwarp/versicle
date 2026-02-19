@@ -5,6 +5,11 @@ vi.mock('../lib/device-id', () => ({
     getDeviceId: vi.fn(() => 'test-device-id')
 }));
 
+// Mock cfi-utils to avoid real epub.js interactions
+vi.mock('../lib/cfi-utils', () => ({
+    mergeCfiRanges: vi.fn((ranges, newRange) => [...ranges, newRange])
+}));
+
 import { useReadingStateStore } from './useReadingStateStore';
 import { getDeviceId } from '../lib/device-id';
 
@@ -46,6 +51,68 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             // Both devices should have their progress preserved
             expect(state.progress[bookId]['device-A'].percentage).toBe(0.5);
             expect(state.progress[bookId]['device-B'].percentage).toBe(0.1);
+        });
+    });
+
+    describe('updateReadingSession', () => {
+        it('should atomically update location and append history', () => {
+            const bookId = 'book-1';
+            const updates = [
+                { range: 'epubcfi(/6/2)', type: 'page' as const },
+                { range: 'epubcfi(/6/4)', type: 'page' as const }
+            ];
+
+            useReadingStateStore.getState().updateReadingSession(
+                bookId,
+                'epubcfi(/6/6)',
+                0.75,
+                updates
+            );
+
+            const state = useReadingStateStore.getState();
+            const deviceProgress = state.progress[bookId]['test-device-id'];
+
+            // Check Location Update
+            expect(deviceProgress.percentage).toBe(0.75);
+            expect(deviceProgress.currentCfi).toBe('epubcfi(/6/6)');
+
+            // Check History Appended
+            expect(deviceProgress.readingSessions).toBeDefined();
+            expect(deviceProgress.readingSessions!).toHaveLength(2);
+            expect(deviceProgress.readingSessions![0].cfiRange).toBe('epubcfi(/6/2)');
+            expect(deviceProgress.readingSessions![1].cfiRange).toBe('epubcfi(/6/4)');
+        });
+
+        it('should merge completed ranges', () => {
+            const bookId = 'book-merge';
+            // Setup initial state
+            useReadingStateStore.getState().addCompletedRange(bookId, 'epubcfi(/6/2)');
+
+            const updates = [
+                { range: 'epubcfi(/6/2)', type: 'page' as const }, // Overlap
+                { range: 'epubcfi(/6/6)', type: 'page' as const }  // New
+            ];
+
+            useReadingStateStore.getState().updateReadingSession(
+                bookId,
+                'epubcfi(/6/10)',
+                0.5,
+                updates
+            );
+
+            const state = useReadingStateStore.getState();
+            const deviceProgress = state.progress[bookId]['test-device-id'];
+
+            // Completed ranges logic is mocked to just append
+            expect(deviceProgress.completedRanges).toEqual(['epubcfi(/6/2)', 'epubcfi(/6/2)', 'epubcfi(/6/6)']);
+
+            // Check readingSessions for the append log
+            // Logic dedups identical sequential entries, so the first update (same range) merges with initial.
+            // Initial: /6/2
+            // Update 1: /6/2 (Dedup -> update timestamp)
+            // Update 2: /6/6 (Append)
+            // Result: 2 sessions
+            expect(deviceProgress.readingSessions).toHaveLength(2);
         });
     });
 
