@@ -5,7 +5,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
 import { EpubCFI } from 'epubjs';
-import { getParentCfi, generateCfiRange, parseCfiRange, preprocessBlockRoots, type PreprocessedRoot } from '../cfi-utils';
+import { getParentCfi, generateCfiRange, parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
 import type { SectionMetadata, NavigationItem } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
@@ -62,26 +62,35 @@ export class AudioContentPipeline {
             if (!title) {
                 const structure = await dbService.getBookStructure(bookId);
 
-                // Recursive helper to find TOC entry by href
-                const findTocEntry = (items: NavigationItem[], href: string): NavigationItem | undefined => {
-                    for (const item of items) {
-                        if (item.href === href) return item;
+                // Pre-calculate target path once to avoid repeated split operations
+                const targetPath = section.sectionId.split('#')[0];
 
-                        // Loose match: Check if item.href matches the file path of the spine item
-                        // This covers cases where TOC points to a specific anchor but the section is the whole file
-                        const itemPath = item.href.split('#')[0];
-                        const sectionPath = href.split('#')[0];
-                        if (itemPath === sectionPath) return item;
+                // Recursive helper to find TOC entry by href
+                const findTocEntry = (items: NavigationItem[]): NavigationItem | undefined => {
+                    for (const item of items) {
+                        // Exact match (fastest)
+                        if (item.href === section.sectionId) return item;
+
+                        // Loose match: Check if item.href matches the file path of the spine item.
+                        // Instead of splitting every item.href, check if it starts with the target path
+                        // and is followed by '#' or end of string.
+                        if (item.href.startsWith(targetPath)) {
+                            const charAfter = item.href.charCodeAt(targetPath.length);
+                            // 35 is '#'
+                            if (Number.isNaN(charAfter) || charAfter === 35) {
+                                return item;
+                            }
+                        }
 
                         if (item.subitems && item.subitems.length > 0) {
-                            const found = findTocEntry(item.subitems, href);
+                            const found = findTocEntry(item.subitems);
                             if (found) return found;
                         }
                     }
                     return undefined;
                 };
 
-                const tocEntry = structure?.toc ? findTocEntry(structure.toc, section.sectionId) : undefined;
+                const tocEntry = structure?.toc ? findTocEntry(structure.toc) : undefined;
 
                 if (tocEntry) {
                     title = tocEntry.label;
@@ -315,10 +324,9 @@ export class AudioContentPipeline {
                 // OPTIMIZATION: Filter table images by the current section ID to avoid checking irrelevant tables.
                 // This reduces getParentCfi complexity from O(N_sentences * N_total_book_tables) to O(N_sentences * N_section_tables).
                 const sectionTableImages = tableImages.filter(img => img.sectionId === nextSection.sectionId);
-                const tableCfis = sectionTableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
-                // Preprocess table roots for efficient querying
-                const preprocessedTableRoots = preprocessBlockRoots(tableCfis);
+                // Preprocess table roots for efficient querying (optimized)
+                const preprocessedTableRoots = this.preprocessTableRoots(sectionTableImages);
 
                 // 3. Group (Using raw sentences to ensure correct parent mapping)
                 const groups = this.groupSentencesByRoot(ttsContent.sentences, preprocessedTableRoots);
@@ -358,10 +366,9 @@ export class AudioContentPipeline {
             // OPTIMIZATION: Filter table images by the current section ID to avoid checking irrelevant tables.
             // This reduces getParentCfi complexity from O(N_sentences * N_total_book_tables) to O(N_sentences * N_section_tables).
             const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
-            const tableCfis = sectionTableImages.map(img => parseCfiRange(img.cfi)?.parent ? `epubcfi(${parseCfiRange(img.cfi)!.parent})` : img.cfi);
 
-            // Preprocess table roots for efficient querying
-            const preprocessedTableRoots = preprocessBlockRoots(tableCfis);
+            // Preprocess table roots for efficient querying (optimized)
+            const preprocessedTableRoots = this.preprocessTableRoots(sectionTableImages);
 
             // Group sentences by Root Node
             const groups = this.groupSentencesByRoot(targetSentences, preprocessedTableRoots);
@@ -514,10 +521,17 @@ export class AudioContentPipeline {
                 rangeEnd = range.fullEnd;
             } else {
                 // Strip wrapper manually if not a range or simple path
-                cleanRoot = root.replace(/^epubcfi\((.*)\)$/, '$1');
+                if (cleanRoot.startsWith('epubcfi(')) {
+                    cleanRoot = cleanRoot.slice(8);
+                }
+                if (cleanRoot.endsWith(')')) {
+                    cleanRoot = cleanRoot.slice(0, -1);
+                }
             }
             // Normalize: remove trailing ')' if present from lazy regex or range structure
-            cleanRoot = cleanRoot.replace(/\)$/, '');
+            if (cleanRoot.endsWith(')')) {
+                cleanRoot = cleanRoot.slice(0, -1);
+            }
 
             return { original: root, clean: cleanRoot, rangeStart, rangeEnd };
         });
@@ -529,7 +543,13 @@ export class AudioContentPipeline {
             const sentence = sentences[i];
             if (!sentence.cfi) continue;
 
-            const cleanCfi = sentence.cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+            let cleanCfi = sentence.cfi;
+            if (cleanCfi.startsWith('epubcfi(')) {
+                cleanCfi = cleanCfi.slice(8);
+            }
+            if (cleanCfi.endsWith(')')) {
+                cleanCfi = cleanCfi.slice(0, -1);
+            }
 
             // Check if this sentence is a child of any known table adaptation root.
             const match = parsedRoots.find(({ clean, rangeStart, rangeEnd }) => {
@@ -578,6 +598,29 @@ export class AudioContentPipeline {
         }
 
         return result;
+    }
+
+    /**
+     * Efficiently preprocesses table images into block roots for grouping,
+     * avoiding redundant CFI parsing.
+     */
+    private preprocessTableRoots(images: { cfi: string }[]): PreprocessedRoot[] {
+        return images.map(img => {
+            const range = parseCfiRange(img.cfi);
+            if (range && range.parent) {
+                return {
+                    original: `epubcfi(${range.parent})`,
+                    clean: range.parent
+                };
+            } else {
+                let clean = img.cfi;
+                if (clean.startsWith('epubcfi(')) clean = clean.slice(8, -1);
+                return {
+                    original: img.cfi,
+                    clean
+                };
+            }
+        }).sort((a, b) => b.clean.length - a.clean.length);
     }
 
     /**

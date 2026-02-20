@@ -7,7 +7,11 @@ vi.mock('../lib/device-id', () => ({
 
 // Mock cfi-utils to avoid real epub.js interactions
 vi.mock('../lib/cfi-utils', () => ({
-    mergeCfiRanges: vi.fn((ranges, newRange) => [...ranges, newRange])
+    mergeCfiRanges: vi.fn((ranges, newRange) => {
+        const last = ranges[ranges.length - 1];
+        if (last === newRange) return [...ranges];
+        return [...ranges, newRange];
+    })
 }));
 
 import { useReadingStateStore } from './useReadingStateStore';
@@ -103,8 +107,8 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             const state = useReadingStateStore.getState();
             const deviceProgress = state.progress[bookId]['test-device-id'];
 
-            // Completed ranges logic is mocked to just append
-            expect(deviceProgress.completedRanges).toEqual(['epubcfi(/6/2)', 'epubcfi(/6/2)', 'epubcfi(/6/6)']);
+            // Completed ranges logic is mocked to merge duplicates
+            expect(deviceProgress.completedRanges).toEqual(['epubcfi(/6/2)', 'epubcfi(/6/6)']);
 
             // Check readingSessions for the append log
             // Logic dedups identical sequential entries, so the first update (same range) merges with initial.
@@ -350,6 +354,53 @@ describe('useReadingStateStore - Per-Device Progress', () => {
 
             const result = useReadingStateStore.getState().getProgress(bookId);
             expect(result?.percentage).toBe(0);
+        });
+    });
+
+    describe('History Pruning', () => {
+        it('should prune 200 entries when max sessions (500) is exceeded', () => {
+            const bookId = 'book-history-test';
+
+            // Fill up to 500 sessions
+            const initialSessions = Array.from({ length: 500 }, (_, i) => ({
+                cfiRange: `cfi(${i})`,
+                startTime: Date.now() + i,
+                endTime: Date.now() + i,
+                type: 'page' as const
+            }));
+
+            // Manually inject state
+            useReadingStateStore.setState({
+                progress: {
+                    [bookId]: {
+                        'test-device-id': {
+                            bookId,
+                            percentage: 0.5,
+                            currentCfi: 'cfi(500)',
+                            lastRead: Date.now(),
+                            completedRanges: [],
+                            readingSessions: initialSessions
+                        }
+                    }
+                }
+            });
+
+            // Verify initial state
+            let state = useReadingStateStore.getState();
+            expect(state.progress[bookId]['test-device-id'].readingSessions).toHaveLength(500);
+
+            // Add one more session
+            useReadingStateStore.getState().addCompletedRange(bookId, 'cfi(501)', 'page');
+
+            // Check new length
+            state = useReadingStateStore.getState();
+            const sessions = state.progress[bookId]['test-device-id'].readingSessions;
+
+            // Expect to drop to 300 (500 max - 200 deleted)
+            expect(sessions).toHaveLength(300);
+
+            // Verify the last one is the new one
+            expect(sessions![sessions!.length - 1].cfiRange).toBe('cfi(501)');
         });
     });
 });

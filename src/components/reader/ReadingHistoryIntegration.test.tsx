@@ -19,7 +19,8 @@ describe('ReadingHistory Integration', () => {
     it('loads and displays reading history from Yjs store', () => {
         const sessions: ReadingSession[] = [{
             cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
-            timestamp: Date.now(),
+            startTime: Date.now(),
+            endTime: Date.now(),
             type: 'page',
             label: 'Chapter One'
         }];
@@ -45,7 +46,8 @@ describe('ReadingHistory Integration', () => {
     it('updates when readingSessions changes', () => {
         const sessions1: ReadingSession[] = [{
             cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
-            timestamp: Date.now(),
+            startTime: Date.now(),
+            endTime: Date.now(),
             type: 'page',
             label: 'Chapter One'
         }];
@@ -70,7 +72,8 @@ describe('ReadingHistory Integration', () => {
             ...sessions1,
             {
                 cfiRange: 'epubcfi(/6/14!/4/2/1:10)',
-                timestamp: Date.now(),
+                startTime: Date.now(),
+                endTime: Date.now(),
                 type: 'tts',
                 label: 'Chapter Two'
             }
@@ -134,7 +137,8 @@ describe('ReadingHistory Integration', () => {
             completedRanges: ['epubcfi(/6/14!/4/2/1:0)'],
             readingSessions: [{
                 cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
-                timestamp: Date.now(),
+                startTime: Date.now(),
+                endTime: Date.now(),
                 type: 'page',
                 label: 'Test'
             }]
