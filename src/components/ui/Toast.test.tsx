@@ -134,4 +134,49 @@ describe('Toast', () => {
         expect(screen.queryByRole('status')).not.toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
+
+    it('resets pause state when re-shown after hiding', () => {
+        const onClose = vi.fn();
+
+        const { rerender } = render(
+            <Toast
+                message="First Toast"
+                isVisible={true}
+                onClose={onClose}
+                duration={3000}
+            />
+        );
+
+        // Hover to pause
+        const toast = screen.getByRole('status');
+        fireEvent.mouseEnter(toast);
+
+        // Hide toast (simulating close)
+        rerender(
+            <Toast
+                message="First Toast"
+                isVisible={false}
+                onClose={onClose}
+                duration={3000}
+            />
+        );
+
+        // Show new toast (simulating new message)
+        rerender(
+            <Toast
+                message="Second Toast"
+                isVisible={true}
+                onClose={onClose}
+                duration={3000}
+            />
+        );
+
+        // Advance time by 3500ms. If bug exists (isPaused stuck at true), onClose will NOT be called.
+        act(() => {
+            vi.advanceTimersByTime(3500);
+        });
+
+        // Expectation: onClose SHOULD be called because new toast should not be paused.
+        expect(onClose).toHaveBeenCalled();
+    });
 });
