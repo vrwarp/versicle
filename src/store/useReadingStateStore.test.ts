@@ -7,7 +7,11 @@ vi.mock('../lib/device-id', () => ({
 
 // Mock cfi-utils to avoid real epub.js interactions
 vi.mock('../lib/cfi-utils', () => ({
-    mergeCfiRanges: vi.fn((ranges, newRange) => [...ranges, newRange])
+    mergeCfiRanges: vi.fn((ranges, newRange) => {
+        const last = ranges[ranges.length - 1];
+        if (last === newRange) return [...ranges];
+        return [...ranges, newRange];
+    })
 }));
 
 import { useReadingStateStore } from './useReadingStateStore';
@@ -103,8 +107,8 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             const state = useReadingStateStore.getState();
             const deviceProgress = state.progress[bookId]['test-device-id'];
 
-            // Completed ranges logic is mocked to just append
-            expect(deviceProgress.completedRanges).toEqual(['epubcfi(/6/2)', 'epubcfi(/6/2)', 'epubcfi(/6/6)']);
+            // Completed ranges logic is mocked to merge duplicates
+            expect(deviceProgress.completedRanges).toEqual(['epubcfi(/6/2)', 'epubcfi(/6/6)']);
 
             // Check readingSessions for the append log
             // Logic dedups identical sequential entries, so the first update (same range) merges with initial.
@@ -360,7 +364,8 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             // Fill up to 500 sessions
             const initialSessions = Array.from({ length: 500 }, (_, i) => ({
                 cfiRange: `cfi(${i})`,
-                timestamp: Date.now() + i,
+                startTime: Date.now() + i,
+                endTime: Date.now() + i,
                 type: 'page' as const
             }));
 

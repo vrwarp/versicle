@@ -58,7 +58,8 @@ describe('ReadingHistoryPanel', () => {
   it('correctly displays chapter titles from session labels', () => {
     const sessions: ReadingSession[] = [{
       cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
-      timestamp: Date.now(),
+      startTime: Date.now(),
+      endTime: Date.now(),
       type: 'page',
       label: 'Chapter One'
     }];
@@ -75,7 +76,8 @@ describe('ReadingHistoryPanel', () => {
   it('resolves chapter title from book when session has no label', () => {
     const sessions: ReadingSession[] = [{
       cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
-      timestamp: Date.now(),
+      startTime: Date.now(),
+      endTime: Date.now(),
       type: 'page'
     }];
     (useBookProgress as any).mockReturnValue({
@@ -96,7 +98,8 @@ describe('ReadingHistoryPanel', () => {
   it('displays correct icon for TTS sessions', () => {
     const sessions: ReadingSession[] = [{
       cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
-      timestamp: Date.now(),
+      startTime: Date.now(),
+      endTime: Date.now(),
       type: 'tts',
       label: 'TTS Chapter'
     }];
@@ -116,10 +119,10 @@ describe('ReadingHistoryPanel', () => {
   it('merges consecutive sessions with the same label', () => {
     const now = Date.now();
     const sessions: ReadingSession[] = [
-      { cfiRange: 'cfi1', timestamp: now - 5000, type: 'page', label: 'Chapter 1' },
-      { cfiRange: 'cfi2', timestamp: now - 3000, type: 'page', label: 'Chapter 1' },
-      { cfiRange: 'cfi3', timestamp: now - 1000, type: 'scroll', label: 'Chapter 1' },
-      { cfiRange: 'cfi4', timestamp: now, type: 'page', label: 'Chapter 2' },
+      { cfiRange: 'cfi1', startTime: now - 5000, endTime: now - 5000, type: 'page', label: 'Chapter 1' },
+      { cfiRange: 'cfi2', startTime: now - 3000, endTime: now - 3000, type: 'page', label: 'Chapter 1' },
+      { cfiRange: 'cfi3', startTime: now - 1000, endTime: now - 1000, type: 'scroll', label: 'Chapter 1' },
+      { cfiRange: 'cfi4', startTime: now, endTime: now, type: 'page', label: 'Chapter 2' },
     ];
     (useBookProgress as any).mockReturnValue({
       completedRanges: [],
@@ -136,9 +139,9 @@ describe('ReadingHistoryPanel', () => {
   it('does not merge non-consecutive sessions with the same label', () => {
     const now = Date.now();
     const sessions: ReadingSession[] = [
-      { cfiRange: 'cfi1', timestamp: now - 5000, type: 'page', label: 'Chapter 1' },
-      { cfiRange: 'cfi2', timestamp: now - 3000, type: 'tts', label: 'Chapter 2' },
-      { cfiRange: 'cfi3', timestamp: now - 1000, type: 'page', label: 'Chapter 1' },
+      { cfiRange: 'cfi1', startTime: now - 5000, endTime: now - 5000, type: 'page', label: 'Chapter 1' },
+      { cfiRange: 'cfi2', startTime: now - 3000, endTime: now - 3000, type: 'tts', label: 'Chapter 2' },
+      { cfiRange: 'cfi3', startTime: now - 1000, endTime: now - 1000, type: 'page', label: 'Chapter 1' },
     ];
     (useBookProgress as any).mockReturnValue({
       completedRanges: [],
@@ -155,7 +158,8 @@ describe('ReadingHistoryPanel', () => {
   it('calls onNavigate with correct CFI when an item is clicked', () => {
     const sessions: ReadingSession[] = [{
       cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
-      timestamp: Date.now(),
+      startTime: Date.now(),
+      endTime: Date.now(),
       type: 'page',
       label: 'Chapter One'
     }];
