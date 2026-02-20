@@ -33,6 +33,15 @@ export const Toast: React.FC<ToastProps> = ({
     }
   }, [isVisible, duration, onClose, isPaused]);
 
+  // Reset paused state when toast is hidden so next toast starts fresh
+  const [prevIsVisible, setPrevIsVisible] = useState(isVisible);
+  if (isVisible !== prevIsVisible) {
+    setPrevIsVisible(isVisible);
+    if (!isVisible) {
+      setIsPaused(false);
+    }
+  }
+
   if (!isVisible) return null;
 
   const getStyles = () => {
