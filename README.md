@@ -11,7 +11,7 @@
 *   **Hybrid Intelligence**:
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google, LemonFox) for studio-quality narration.
-    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
+    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening. Includes **Smart Rotation** (shuffling `gemini-2.5-flash` variants) to maximize free quotas and prevent rate limits.
 *   **Dual Sync**:
     *   **Real-time**: Synchronize progress instantly across devices using Firestore.
     *   **Native Backup**: Seamless integration with Android's built-in backup system.
@@ -83,14 +83,14 @@
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the most recent position across the mesh.
     *   **Checkpoints**: Automatic "Moral Layer" snapshots (`SyncManifest`) protect against data loss during sync (Last 10 states).
 *   **Smart TOC Generation**: Uses GenAI to analyze book structure and generate meaningful Table of Contents for books with missing or poor metadata.
-*   **Reading History**: Detailed session tracking with timeline visualization.
+*   **Reading History**: Detailed session tracking with timeline visualization. Uses **Intelligent Session Merging** to group reading bursts and prevent clutter.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted.
     *   **CSV Import/Export**: Import/Export your reading list via CSV, with intelligent filename matching (ISBN/Title fallback) to restore your library context.
 *   **Lexicon Management**:
     *   **CSV Import/Export**: Bulk manage pronunciation rules using CSV files.
 *   **Backups & Export**:
     *   **Light**: JSON export of metadata/settings.
-    *   **Full**: ZIP archive including all book files.
+    *   **Full**: ZIP archive including all book files. Uses **V2 Snapshots** (Yjs binary) for perfect state restoration.
     *   **Unified Export**: Share files natively (AirDrop, Nearby Share) or download via browser.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.

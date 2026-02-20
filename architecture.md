@@ -214,7 +214,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
     *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
 *   **Domain 2: User (Mutable/Syncable)** - *Managed by Yjs*
-    *   **Yjs Exclusive**: `user_inventory` (Books), `user_progress` (Reading State), `user_reading_list` (Shadow Inventory), `user_annotations`, and `user_overrides` (Lexicon Rules) are managed **exclusively** by Yjs stores. `DBService` only reads/writes static data.
+    *   **Yjs Exclusive**: `user_inventory` (Books), `user_progress` (Reading State), `user_reading_list` (Shadow Inventory), `user_annotations`, and `lexicon` (Pronunciation Rules) are managed **exclusively** by Yjs stores. `DBService` only reads/writes static data.
     *   **IDB Local/Hybrid**:
         *   `static_manifests`: Used as a local index for offline access, but the "Truth" is in Yjs.
     *   **Deprecated/Replaced**:
@@ -369,6 +369,10 @@ Implements full-text search off the main thread.
 #### Backup (`src/lib/BackupService.ts`)
 Manages manual internal state backup and restoration.
 
+*   **V2 Backup Strategy (Yjs Snapshot)**:
+    *   **Generate**: Uses `Y.encodeStateAsUpdate(yDoc)` to capture the entire CRDT state, preserving vector clocks and enabling proper merging on restore.
+    *   **Restore**: Implements a "Clean Restore" strategy. It first wipes the local Yjs database (`yjsPersistence.clearData()`) before applying the binary update via `Y.applyUpdate`.
+    *   **Why**: Wiping before applying is crucial to prevent "resurrection" of deleted items. If we applied the snapshot to the existing local state, CRDT rules (Delete wins) might conflict with the snapshot state if clocks are out of sync.
 *   **`createLightBackup()`**: JSON-only export (metadata, settings, history).
 *   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files.
 
@@ -472,7 +476,8 @@ The Data Pipeline for TTS.
 *   **Logic (Optimistic Playback)**:
     1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
     2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
-        *   **Grouping**: Sentences are grouped by their **Root CFI** (common ancestor) before analysis to provide the LLM with semantic context (e.g., distinguishing a footnote within a table vs. main text).
+        *   **Semantic Grouping**: Sentences are grouped by their **Root CFI** (common ancestor) before analysis to provide the LLM with semantic context (e.g., distinguishing a footnote within a table vs. main text).
+        *   **Table Pre-filtering**: Optimizes `getParentCfi` calls by pre-filtering table images by `sectionId`, reducing complexity to O(N_sentences * N_section_tables).
     3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`), allowing the player to seamlessly skip content or inject table narrations identified later without delaying the start of playback.
     4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
 
@@ -583,6 +588,8 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
     *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., preventing a phone at 10% from overwriting a tablet at 80% during a sync race).
     *   **Aggregation**: The UI selector uses a **Local Priority > Global Recent** strategy. It prefers the local device's progress if available; otherwise, it falls back to the most recently updated progress from any device in the mesh.
+    *   **Session Merging**: Aggregates reading updates into single sessions if they occur within 20 minutes of each other, reducing history noise.
+    *   **Batched Pruning**: When the session count exceeds 500, it removes the oldest ~200 entries at once, reducing array manipulation overhead.
 *   **`useDeviceStore` (Sync Mesh)**:
     *   **Strategy**: Maintains a Yjs Map of active devices in the mesh.
     *   **Logic**: Updates a `lastActive` timestamp (Heartbeat) with throttling (5 mins) to track online status.
@@ -597,7 +604,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **`useLexiconStore` (Synced)**:
     *   **Goal**: Synchronize pronunciation rules across devices.
     *   **Logic**:
-        *   **Rules**: Stored in a Yjs Map (`lexicon`).
+        *   **Rules**: Stored in a Yjs Map (`lexicon`) replacing local-only IndexedDB storage.
         *   **Ordering**: Rules have an explicit `order` field to ensure deterministic application order.
         *   **Settings**: Stores book-specific preferences (e.g., enable Bible Lexicon) in a nested map.
 *   **`useContentAnalysisStore` (Synced)**:
