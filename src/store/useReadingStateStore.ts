@@ -198,7 +198,7 @@ export const useReadingStateStore = create<ReadingState>()(
 
                     // Try to merge with last session if it's the same type and recent enough
                     if (lastSession && lastSession.type === type) {
-                        const timeDiff = now - lastSession.timestamp;
+                        const timeDiff = now - (lastSession.endTime || lastSession.startTime);
                         if (timeDiff < MERGE_TIME_WINDOW) {
                             const mergedRanges = mergeCfiRanges([lastSession.cfiRange], range);
                             // If merged result is a single range, we can update the existing session
@@ -206,9 +206,7 @@ export const useReadingStateStore = create<ReadingState>()(
                                 sessions[sessions.length - 1] = {
                                     ...lastSession,
                                     cfiRange: mergedRanges[0],
-                                    timestamp: now,
-                                    // timeDiff is in ms, duration is in seconds
-                                    duration: (lastSession.duration || 0) + (timeDiff / 1000)
+                                    endTime: now
                                 };
                                 merged = true;
                             }
@@ -218,9 +216,9 @@ export const useReadingStateStore = create<ReadingState>()(
                     if (!merged) {
                         const newSession: ReadingSession = {
                             cfiRange: range,
-                            timestamp: now,
+                            startTime: now,
+                            endTime: now,
                             type,
-                            duration: 0,
                             ...(label ? { label } : {})
                         };
                         sessions.push(newSession);
@@ -276,15 +274,14 @@ export const useReadingStateStore = create<ReadingState>()(
                         let merged = false;
 
                         if (lastSession && lastSession.type === (u.type || 'page')) {
-                            const timeDiff = now - lastSession.timestamp;
+                            const timeDiff = now - (lastSession.endTime || lastSession.startTime);
                             if (timeDiff < MERGE_TIME_WINDOW) {
                                 const mergedRanges = mergeCfiRanges([lastSession.cfiRange], u.range);
                                 if (mergedRanges.length === 1) {
                                     sessions[sessions.length - 1] = {
                                         ...lastSession,
                                         cfiRange: mergedRanges[0],
-                                        timestamp: now,
-                                        duration: (lastSession.duration || 0) + (timeDiff / 1000)
+                                        endTime: now
                                     };
                                     merged = true;
                                 }
@@ -294,9 +291,9 @@ export const useReadingStateStore = create<ReadingState>()(
                         if (!merged && u.type) { // Only add to history if type is provided
                             sessions.push({
                                 cfiRange: u.range,
-                                timestamp: now,
+                                startTime: now,
+                                endTime: now,
                                 type: u.type,
-                                duration: 0,
                                 ...(u.label ? { label: u.label } : {})
                             });
                         }

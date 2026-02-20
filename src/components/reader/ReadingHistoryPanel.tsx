@@ -113,7 +113,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                 }
             }
 
-            const date = new Date(session.timestamp);
+            const date = new Date(session.startTime);
             const dateStr = date.toLocaleDateString();
             const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const subLabel = `${dateStr} ${timeStr} • ${(percentage * 100).toFixed(0)}%`;
@@ -123,7 +123,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                 label,
                 percentage,
                 subLabel,
-                timestamp: session.timestamp,
+                timestamp: session.startTime,
                 targetCfi,
                 type: session.type,
                 sessionCount: 1

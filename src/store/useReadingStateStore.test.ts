@@ -364,7 +364,8 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             // Fill up to 500 sessions
             const initialSessions = Array.from({ length: 500 }, (_, i) => ({
                 cfiRange: `cfi(${i})`,
-                timestamp: Date.now() + i,
+                startTime: Date.now() + i,
+                endTime: Date.now() + i,
                 type: 'page' as const
             }));
 

@@ -585,8 +585,10 @@ export type ReadingEventType = 'tts' | 'scroll' | 'page';
 export interface ReadingSession {
   /** The snapped CFI range associated with this event. */
   cfiRange: string;
-  /** Timestamp of the event. */
-  timestamp: number;
+  /** Start timestamp of the event. */
+  startTime: number;
+  /** End timestamp of the event. */
+  endTime: number;
   /** The source of the reading event. */
   type: ReadingEventType;
   /**
@@ -595,8 +597,6 @@ export interface ReadingSession {
    * - Page/Scroll: The chapter title or progress (e.g., "Chapter 1 - 15%")
    */
   label?: string;
-  /** Duration of the session in seconds. */
-  duration?: number;
 }
 
 /**
