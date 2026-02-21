@@ -324,8 +324,9 @@ Manages integration with the native Android Backup Service.
 #### Performance: Hot Paths (`src/lib/cfi-utils.ts`)
 *   **Goal**: Minimize latency during heavy text segmentation and rendering operations.
 *   **Logic**:
-    *   **Fast Merge**: `tryFastMergeCfi` uses optimistic string manipulation to merge Canonical Fragment Identifiers (CFIs) without the expensive overhead of parsing/regenerating them via `epubjs`.
-    *   **Heuristic Fallback**: If the fast path fails (complex structure), it gracefully falls back to the standard, slower implementation.
+    *   **Fast Merge ("Point + Point")**: `tryFastMergeCfi` uses optimistic string manipulation to merge sibling CFIs directly. It detects if two CFIs share a common parent prefix and simply joins the leaf components (e.g., `/1` and `/2` -> `/1,/2`) without full parsing.
+    *   **Optimistic Append**: `mergeCfiRanges` assumes sequential reading patterns. It checks if the new range follows the last existing range to perform an O(1) merge, avoiding O(N) re-sorting.
+    *   **Heuristic Fallback**: If the fast path fails (complex structure/nesting), it gracefully falls back to the standard, slower implementation.
 *   **Verification**:
     *   **Fuzz Testing**: The optimization is verified using seeded Fuzz tests (`cfi-utils.fuzz.test.ts`) that generate random CFI inputs and assert that the Fast Path output matches the Slow Path reference implementation.
 
@@ -344,20 +345,18 @@ Handles the complex task of importing an EPUB file.
 #### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
 *   **Goal**: Prevent memory leaks caused by `URL.createObjectURL`.
 *   **Logic**:
-    *   Uses a custom URL scheme: `/__versicle__/covers/:bookId`.
-    *   A **Service Worker** intercepts these requests, fetches the cover blob from IndexedDB (`static_manifests`), and responds directly.
+    *   **URL Scheme**: Uses `/__versicle__/covers/:bookId`.
+    *   **Interception**: A **Service Worker** intercepts these requests, fetches the cover blob from IndexedDB (`static_manifests`), and responds directly.
 
 #### Generative AI (`src/lib/genai/GenAIService.ts`)
-*   **Smart Rotation**: Implements a singleton pattern with a rotation strategy (shuffling `gemini-2.5-flash-lite` and `gemini-2.5-flash`) to handle `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
-*   **Resilience**: Automatically retries requests with the fallback model if the primary one hits rate limits.
-*   **Features**:
-    *   **Teleprompter**: Uses Multimodal GenAI to convert complex table images into narrative text ("Teleprompter Adaptation") for TTS accessibility via `generateTableAdaptations`.
-        *   **Thinking Budget**: Utilizes a configurable `thinkingBudget` (default 512 tokens) to allow the model to "think" about column relationships before generating the narrative, significantly improving complex table interpretation.
-    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures (**Title**, **Footnote**, **Main**, **Table**, **Other**) for improved TTS flow (e.g., skipping footnotes).
+*   **Goal**: Provide AI-driven content analysis and adaptation.
+*   **Logic**:
+    *   **Smart Rotation**: Implements a rotation strategy (shuffling `gemini-2.5-flash-lite` and `gemini-2.5-flash`) to mitigate `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
+    *   **Thinking Budget**: Utilizes a configurable `thinkingBudget` (default 512 tokens) in `generateTableAdaptations` to allow the model to reason about complex table layouts before generating narrative text.
+    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures into 5 categories: **Title**, **Footnote**, **Main**, **Table**, and **Other**.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
 *   **Fuzzy Matching (`textMatching.ts`)**: Uses a robust fuzzy matching algorithm to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
     *   **Strategy**: Tries Exact Match -> Case-Insensitive Match -> **Flexible Whitespace Regex** (matches varying newlines/spaces) to handle LLM formatting quirks.
-*   **Structured Output**: Uses `responseSchema` to enforce strictly typed JSON responses from the LLM.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
@@ -473,13 +472,14 @@ The Data Pipeline for TTS.
     1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
     2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
         *   **Grouping**: Sentences are grouped by their **Root CFI** (common ancestor) before analysis to provide the LLM with semantic context (e.g., distinguishing a footnote within a table vs. main text).
+        *   **Optimization**: Pre-filters table images by `sectionId` and batch-processes their CFIs via `preprocessTableRoots` to avoid redundant parsing and reduce lookup complexity during sentence grouping.
     3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`), allowing the player to seamlessly skip content or inject table narrations identified later without delaying the start of playback.
     4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
 
 #### `src/lib/tts/TextSegmenter.ts`
 *   **Goal**: Robustly split text into sentences and handle abbreviations.
 *   **Logic**:
-    *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
+    *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop via `charCodeAt` (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
     *   **Zero-Allocation Scanning (`TextScanningTrie`)**: Uses a specialized Trie implementation that operates on character codes.
         *   **Strategy**: Uses static `Uint8Array` lookup tables (`PUNCTUATION_FLAGS`, `WHITESPACE_FLAGS`) for O(1) character classification, bypassing conditional logic.
         *   **Performance**: Instead of allocating new strings with `.toLowerCase()`, it performs manual ASCII case folding (checking range 65-90 and adding 32) during traversal. This enables allocation-free matching of abbreviations in hot loops.
@@ -583,6 +583,8 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
     *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., preventing a phone at 10% from overwriting a tablet at 80% during a sync race).
     *   **Aggregation**: The UI selector uses a **Local Priority > Global Recent** strategy. It prefers the local device's progress if available; otherwise, it falls back to the most recently updated progress from any device in the mesh.
+    *   **Session Merging**: Implements a "Smart Merge" strategy that aggregates reading updates of the same type into a single session if they occur within 20 minutes (`MERGE_TIME_WINDOW`).
+    *   **Pruning**: Automatically prunes reading history when it exceeds `MAX_READING_SESSIONS` (500), removing the oldest `HISTORY_PRUNE_SIZE` (200) entries to maintain Yjs document performance.
 *   **`useDeviceStore` (Sync Mesh)**:
     *   **Strategy**: Maintains a Yjs Map of active devices in the mesh.
     *   **Logic**: Updates a `lastActive` timestamp (Heartbeat) with throttling (5 mins) to track online status.
