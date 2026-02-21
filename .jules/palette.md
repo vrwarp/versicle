@@ -60,3 +60,7 @@
 ## 2025-05-31 - Password Visibility Toggle
 **Learning:** Standard `<input type="password">` fields create friction for complex inputs like API keys, leading to user error and frustration. Users expect to be able to verify their input.
 **Action:** Replace `Input type="password"` with a specialized `PasswordInput` component that includes a toggle button. Ensure the toggle is keyboard accessible and has appropriate ARIA labels (`Show password`/`Hide password`) to communicate state changes to assistive technology.
+
+## 2025-06-01 - Accessible Search Feedback
+**Learning:** Client-side filtering in lists often updates the DOM silently, leaving screen reader users unaware of the results (e.g., "5 items found").
+**Action:** When implementing real-time search, always include a `sr-only` live region (`role="status"`) that announces the result count or "No results" message to provide immediate feedback.
