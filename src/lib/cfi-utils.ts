@@ -523,6 +523,31 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
                      }
                  }
              }
+            } else {
+                // Point + Point (Case 4)
+                // Both are points (e.g. epubcfi(/6/14!/4/2/1:0) and epubcfi(/6/14!/4/2/1:10))
+                // Find common parent prefix.
+                // We assume parent ends at the last slash of the LEFT point.
+                const lastSlash = left.lastIndexOf('/');
+                if (lastSlash > 8) { // Ensure slash is after "epubcfi("
+                    // Check if right matches prefix up to lastSlash (including the slash)
+                    const prefix = left.slice(0, lastSlash + 1);
+                    if (right.startsWith(prefix)) {
+                        // Common parent found!
+                        // Construct Range: epubcfi(P, S, E)
+                        // P is prefix without the trailing slash (passed as part of S/E to ensure structure)
+                        // Actually, standard range structure is epubcfi(P, /S, /E).
+                        // Our prefix is "epubcfi(P/"
+                        // So we take P as left.slice(0, lastSlash)
+                        // And append ",/" + S + ",/" + E
+
+                        const parentPrefix = left.slice(0, lastSlash);
+                        const leftSuffix = left.slice(lastSlash + 1, -1); // Remove closing paren
+                        const rightSuffix = right.slice(lastSlash + 1, -1); // Remove closing paren
+
+                        return `${parentPrefix},/${leftSuffix},/${rightSuffix})`;
+                    }
+                }
         }
     }
 
