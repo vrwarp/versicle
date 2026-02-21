@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc } from './yjs-provider';
-import type { UserProgress, ReadingEventType, ReadingSession, StoreVersion } from '../types/db';
+import { yDoc, getYjsOptions } from './yjs-provider';
+import type { UserProgress, ReadingEventType, ReadingSession } from '../types/db';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { getDeviceId } from '../lib/device-id';
@@ -38,8 +38,6 @@ export type SessionUpdate = {
 
 interface ReadingState {
     // === SYNCED STATE (persisted to Yjs) ===
-    /** Version config for managing schema changes */
-    version: StoreVersion;
     /** Map of reading progress keyed by bookId, then deviceId. */
     progress: PerDeviceProgress;
 
@@ -93,12 +91,6 @@ interface ReadingState {
      * Resets all state (used for testing/debugging).
      */
     reset: () => void;
-
-    /**
-     * Examines the store and permanently deletes all `ReadingSession` history
-     * items that violate the v2.0 schema (e.g. legacy objects missing `startTime` or `endTime`).
-     */
-    migrateAndPruneHistory: () => void;
 }
 
 const isValidProgress = (p: UserProgress | null | undefined): boolean => {
@@ -135,7 +127,6 @@ export const useReadingStateStore = create<ReadingState>()(
         'progress',
         (set, get) => ({
             // Synced state (per-device structure)
-            version: { major: 2, minor: 0 },
             progress: {},
 
             // Actions
@@ -427,53 +418,11 @@ export const useReadingStateStore = create<ReadingState>()(
                 return bookProgress?.[deviceId] || null;
             },
 
-            migrateAndPruneHistory: () => {
-                // 1. Evaluate current schema version, assuming v1.0 if not present (legacy)
-                const currentVersion = get().version || { major: 1, minor: 0 };
-                if (currentVersion.major >= 2) {
-                    return; // Already migrated to v2.0+
-                }
-
-                set((state) => {
-                    const nextProgress = { ...state.progress };
-                    let migrated = false;
-
-                    for (const bookId in nextProgress) {
-                        const devices = nextProgress[bookId];
-                        for (const deviceId in devices) {
-                            const userProgress = devices[deviceId];
-                            if (userProgress.readingSessions) {
-                                // Keep only sessions with proper times
-                                const validSessions = userProgress.readingSessions.filter(
-                                    s => typeof s.startTime === 'number' && typeof s.endTime === 'number'
-                                );
-
-                                if (validSessions.length !== userProgress.readingSessions.length) {
-                                    migrated = true;
-                                    nextProgress[bookId] = {
-                                        ...nextProgress[bookId],
-                                        [deviceId]: {
-                                            ...userProgress,
-                                            readingSessions: validSessions
-                                        }
-                                    };
-                                }
-                            }
-                        }
-                    }
-
-                    // 2. Bump version to v2.0 and save pruned tree
-                    return {
-                        version: { major: 2, minor: 0 },
-                        progress: migrated ? nextProgress : state.progress
-                    };
-                });
-            },
-
             reset: () => set({
                 progress: {},
             })
-        })
+        }),
+        getYjsOptions()
     )
 );
 

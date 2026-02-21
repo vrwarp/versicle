@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc } from './yjs-provider';
+import { yDoc, getYjsOptions } from './yjs-provider';
 import type { ReadingListEntry } from '../types/db';
 
 interface ReadingListState {
@@ -43,6 +43,8 @@ export const useReadingListStore = create<ReadingListState>()(
             upsertEntry: (entry) => set((state) => ({
                 entries: { ...state.entries, [entry.filename]: entry }
             }))
-        })
+        }),
+        getYjsOptions()
     )
 );
+

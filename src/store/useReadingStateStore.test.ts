@@ -148,13 +148,19 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             vi.useRealTimers();
         });
 
-        it('should prune legacy history sessions that lack startTime/endTime via migrateAndPruneHistory', () => {
+        it('should prune legacy history sessions via centralized runMigrations', async () => {
             const bookId = 'book-legacy-prune';
             const now = Date.now();
 
+            // Dynamically import runMigrations (it uses lazy imports internally)
+            const { runMigrations } = await import('./yjs-provider');
+            const { useBookStore } = await import('./useBookStore');
+
+            // Set __schemaVersion to 1 to simulate pre-migration state
+            useBookStore.setState({ __schemaVersion: 1 } as any);
+
             // Inject legacy session and a valid session
             useReadingStateStore.setState({
-                version: { major: 1, minor: 0 },
                 progress: {
                     [bookId]: {
                         'test-device-id': {
@@ -183,8 +189,11 @@ describe('useReadingStateStore - Per-Device Progress', () => {
                 }
             });
 
-            // Trigger migration
-            useReadingStateStore.getState().migrateAndPruneHistory();
+            // Trigger centralized migration
+            runMigrations();
+
+            // Wait for lazy imports to resolve
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             const state = useReadingStateStore.getState();
             const deviceProgress = state.progress[bookId]['test-device-id'];
@@ -197,8 +206,8 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(remainingSession.cfiRange).toBe('epubcfi(/6/4)');
             expect(remainingSession.startTime).toBe(now - 10000);
 
-            // Version should be bumped to v2.0
-            expect(state.version).toEqual({ major: 2, minor: 0 });
+            // Schema version should be bumped to 2 on useBookStore
+            expect((useBookStore.getState() as any).__schemaVersion).toBe(2);
         });
     });
 

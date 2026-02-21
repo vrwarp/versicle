@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { getDB } from './db/db';
 import { dbService } from './db/DBService';
 import { SafeModeView } from './components/SafeModeView';
+import { ObsoleteLockView } from './components/ObsoleteLockView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
@@ -22,7 +23,6 @@ import { RootLayout } from './layouts/RootLayout';
 import { getFirestoreSyncManager } from './lib/sync/FirestoreSyncManager';
 import { useDriveStore } from './store/useDriveStore';
 import { DriveScannerService } from './lib/drive/DriveScannerService';
-import { useReadingStateStore } from './store/useReadingStateStore';
 
 import './App.css';
 
@@ -144,9 +144,6 @@ function App() {
         // For meaningful profile updates, we might want to listen to changes or update on specific triggers.
         // For now, on-launch registration is sufficient as per requirements.
         await waitForYjsSync();
-
-        // Run store migrations after hydration
-        useReadingStateStore.getState().migrateAndPruneHistory();
 
         const prefs = usePreferencesStore.getState();
         const tts = useTTSStore.getState();
@@ -280,7 +277,10 @@ function App() {
   }
 
   return (
-    <RouterProvider router={router} />
+    <>
+      <ObsoleteLockView />
+      <RouterProvider router={router} />
+    </>
   );
 }
 

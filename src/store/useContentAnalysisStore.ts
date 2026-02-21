@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc } from './yjs-provider';
+import { yDoc, getYjsOptions } from './yjs-provider';
 import type { ContentType, AnalysisStatus } from '../types/content-analysis';
 
 /**
@@ -240,6 +240,7 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
                 }),
 
             clearAll: () => set({ sections: {} })
-        })
+        }),
+        getYjsOptions()
     )
 );

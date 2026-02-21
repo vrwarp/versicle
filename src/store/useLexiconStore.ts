@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc } from './yjs-provider';
+import { yDoc, getYjsOptions } from './yjs-provider';
 import type { LexiconRule } from '../types/db';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -99,6 +99,7 @@ export const useLexiconStore = create<LexiconState>()(
                     }
                 }
             }))
-        })
+        }),
+        getYjsOptions()
     )
 );

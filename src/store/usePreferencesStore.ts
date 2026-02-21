@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc } from './yjs-provider';
+import { yDoc, getYjsOptions } from './yjs-provider';
 import { getDeviceId } from '../lib/device-id';
 
 /**
@@ -67,6 +67,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             setReaderViewMode: (mode) => set({ readerViewMode: mode }),
             setLibraryLayout: (layout) => set({ libraryLayout: layout }),
             setLibraryFilterMode: (mode) => set({ libraryFilterMode: mode }),
-        })
+        }),
+        getYjsOptions()
     )
 );

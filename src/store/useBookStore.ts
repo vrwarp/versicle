@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc } from './yjs-provider';
+import { yDoc, getYjsOptions } from './yjs-provider';
 import type { UserInventoryItem } from '../types/db';
 
 /**
@@ -11,6 +11,8 @@ import type { UserInventoryItem } from '../types/db';
  */
 interface BookState {
     // === SYNCED STATE (persisted to Yjs) ===
+    /** Schema version marker. Must be an atomicKey to prevent Y.Text overhead. */
+    __schemaVersion: number;
     /** Map of user inventory items (book metadata + user data), keyed by Book ID. */
     books: Record<string, UserInventoryItem>;
 
@@ -46,6 +48,7 @@ export const useBookStore = create<BookState>()(
         yDoc,
         'library', // Share name 'library' to match existing data structure for 'books'
         (set) => ({
+            __schemaVersion: 1, // Default for empty/new documents
             books: {},
 
             setBooks: (books) => set({ books }),
@@ -90,6 +93,8 @@ export const useBookStore = create<BookState>()(
                         }
                     };
                 })
-        })
+        }),
+        getYjsOptions({ atomicKeys: ['__schemaVersion'] })
     )
 );
+
