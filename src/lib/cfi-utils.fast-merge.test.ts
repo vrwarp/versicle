@@ -47,6 +47,13 @@ describe('tryFastMergeCfi', () => {
             const expected = mergeCfiSlow(left, right);
             assertCfiEqual(tryFastMergeCfi(left, right), expected);
         });
+
+        it('merges Point + Point (common parent)', () => {
+            const left = `epubcfi(${parent}/1:0)`;
+            const right = `epubcfi(${parent}/1:10)`;
+            const expected = mergeCfiSlow(left, right);
+            assertCfiEqual(tryFastMergeCfi(left, right), expected);
+        });
     });
 
     describe('Bail-out Cases (Should return null)', () => {
@@ -65,12 +72,6 @@ describe('tryFastMergeCfi', () => {
         it('returns null for Point + Range with different parents', () => {
             const left = `epubcfi(/6/14[other]!/4/2/1:0)`;
             const right = `epubcfi(${parent},/1:5,/1:10)`;
-            expect(tryFastMergeCfi(left, right)).toBeNull();
-        });
-
-        it('returns null for Point + Point', () => {
-            const left = `epubcfi(${parent}/1:0)`;
-            const right = `epubcfi(${parent}/1:10)`;
             expect(tryFastMergeCfi(left, right)).toBeNull();
         });
 
