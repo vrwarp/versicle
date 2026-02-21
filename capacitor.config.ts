@@ -23,20 +23,14 @@ const config: CapacitorConfig = {
     allowNavigation: []
   },
   plugins: {
-    // Explicitly enable CapacitorHttp if we plan to proxy requests through the native layer
-    // to avoid CORS issues entirely (optional but recommended for robust networking).
-    CapacitorHttp: {
-      enabled: true,
-    },
     MediaSession: {
       foregroundService: "always"
     },
     SafeArea: {
       "detectViewportFitCoverChanges": false,
       "initialViewportFitCover": false
-    },
-
-  },
+    }
+  }
 };
 
 export default config;
