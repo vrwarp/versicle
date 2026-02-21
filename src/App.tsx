@@ -22,6 +22,7 @@ import { RootLayout } from './layouts/RootLayout';
 import { getFirestoreSyncManager } from './lib/sync/FirestoreSyncManager';
 import { useDriveStore } from './store/useDriveStore';
 import { DriveScannerService } from './lib/drive/DriveScannerService';
+import { useReadingStateStore } from './store/useReadingStateStore';
 
 import './App.css';
 
@@ -143,6 +144,9 @@ function App() {
         // For meaningful profile updates, we might want to listen to changes or update on specific triggers.
         // For now, on-launch registration is sufficient as per requirements.
         await waitForYjsSync();
+
+        // Run store migrations after hydration
+        useReadingStateStore.getState().migrateAndPruneHistory();
 
         const prefs = usePreferencesStore.getState();
         const tts = useTTSStore.getState();

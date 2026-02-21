@@ -80,11 +80,11 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(deviceProgress.percentage).toBe(0.75);
             expect(deviceProgress.currentCfi).toBe('epubcfi(/6/6)');
 
-            // Check History Appended
+            // Check History Appended (now merged into a single session)
             expect(deviceProgress.readingSessions).toBeDefined();
-            expect(deviceProgress.readingSessions!).toHaveLength(2);
+            expect(deviceProgress.readingSessions!).toHaveLength(1);
             expect(deviceProgress.readingSessions![0].cfiRange).toBe('epubcfi(/6/2)');
-            expect(deviceProgress.readingSessions![1].cfiRange).toBe('epubcfi(/6/4)');
+            expect(deviceProgress.readingSessions![0].cfiRanges).toEqual(['epubcfi(/6/2)', 'epubcfi(/6/4)']);
         });
 
         it('should merge completed ranges', () => {
@@ -111,12 +111,94 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(deviceProgress.completedRanges).toEqual(['epubcfi(/6/2)', 'epubcfi(/6/6)']);
 
             // Check readingSessions for the append log
-            // Logic dedups identical sequential entries, so the first update (same range) merges with initial.
-            // Initial: /6/2
-            // Update 1: /6/2 (Dedup -> update timestamp)
-            // Update 2: /6/6 (Append)
-            // Result: 2 sessions
-            expect(deviceProgress.readingSessions).toHaveLength(2);
+            // Since time elapsed is < 20 mins, all updates merge temporally into the initial session.
+            // Deduplication via mocked mergeCfiRanges leaves us with ['epubcfi(/6/2)', 'epubcfi(/6/6)']
+            expect(deviceProgress.readingSessions).toHaveLength(1);
+            expect(deviceProgress.readingSessions![0].cfiRanges).toEqual(['epubcfi(/6/2)', 'epubcfi(/6/6)']);
+        });
+    });
+
+    describe('History Tracking (Temporal Merging & Legacy Support)', () => {
+        it('should merge disparate spatial ranges into a single temporal session', () => {
+            const bookId = 'book-merge-temporal';
+            const now = Date.now();
+            vi.useFakeTimers();
+            vi.setSystemTime(now);
+
+            // Add first range
+            useReadingStateStore.getState().addCompletedRange(bookId, 'epubcfi(/6/10)', 'tts');
+
+            // Advance time within the 20-minute window (MERGE_TIME_WINDOW)
+            vi.setSystemTime(now + 5 * 60 * 1000); // 5 minutes later
+
+            // Add a discontinuous range
+            useReadingStateStore.getState().addCompletedRange(bookId, 'epubcfi(/6/50)', 'tts');
+
+            const state = useReadingStateStore.getState();
+            const deviceProgress = state.progress[bookId]['test-device-id'];
+
+            // Should be merged into 1 session because within time window and same type
+            expect(deviceProgress.readingSessions).toBeDefined();
+            expect(deviceProgress.readingSessions!).toHaveLength(1);
+
+            const session = deviceProgress.readingSessions![0];
+            expect(session.cfiRanges).toEqual(['epubcfi(/6/10)', 'epubcfi(/6/50)']);
+            expect(session.endTime).toBe(now + 5 * 60 * 1000);
+
+            vi.useRealTimers();
+        });
+
+        it('should prune legacy history sessions that lack startTime/endTime via migrateAndPruneHistory', () => {
+            const bookId = 'book-legacy-prune';
+            const now = Date.now();
+
+            // Inject legacy session and a valid session
+            useReadingStateStore.setState({
+                version: { major: 1, minor: 0 },
+                progress: {
+                    [bookId]: {
+                        'test-device-id': {
+                            bookId,
+                            percentage: 0.1,
+                            currentCfi: 'epubcfi(/6/4)',
+                            lastRead: now,
+                            completedRanges: [],
+                            readingSessions: [
+                                {
+                                    cfiRange: 'epubcfi(/6/2)',
+                                    // missing startTime and endTime -> Legacy
+                                    timestamp: now - 50000,
+                                    type: 'page' as const
+                                } as any,
+                                {
+                                    cfiRange: 'epubcfi(/6/4)',
+                                    cfiRanges: ['epubcfi(/6/4)'],
+                                    startTime: now - 10000,
+                                    endTime: now,
+                                    type: 'page' as const
+                                }
+                            ]
+                        }
+                    }
+                }
+            });
+
+            // Trigger migration
+            useReadingStateStore.getState().migrateAndPruneHistory();
+
+            const state = useReadingStateStore.getState();
+            const deviceProgress = state.progress[bookId]['test-device-id'];
+
+            // Should have pruned the legacy session, keeping only the valid one
+            expect(deviceProgress.readingSessions).toHaveLength(1);
+            const remainingSession = deviceProgress.readingSessions![0];
+
+            // Valid session remains
+            expect(remainingSession.cfiRange).toBe('epubcfi(/6/4)');
+            expect(remainingSession.startTime).toBe(now - 10000);
+
+            // Version should be bumped to v2.0
+            expect(state.version).toEqual({ major: 2, minor: 0 });
         });
     });
 
@@ -389,6 +471,10 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             let state = useReadingStateStore.getState();
             expect(state.progress[bookId]['test-device-id'].readingSessions).toHaveLength(500);
 
+            // Advance time to force a NEW session (prevent merging)
+            vi.useFakeTimers();
+            vi.setSystemTime(Date.now() + 25 * 60 * 1000); // 25 mins later
+
             // Add one more session
             useReadingStateStore.getState().addCompletedRange(bookId, 'cfi(501)', 'page');
 
@@ -401,6 +487,8 @@ describe('useReadingStateStore - Per-Device Progress', () => {
 
             // Verify the last one is the new one
             expect(sessions![sessions!.length - 1].cfiRange).toBe('cfi(501)');
+
+            vi.useRealTimers();
         });
     });
 });

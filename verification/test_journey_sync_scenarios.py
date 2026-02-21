@@ -192,6 +192,7 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
     # and to ensure we jump to the remote position (CFI)
     print("[B] Checking for Resume Badge...")
     resume_badge = card_b.locator('[data-testid="resume-badge"]')
+    
     try:
         expect(resume_badge).to_be_visible(timeout=5000)
         print("[B] Resume Badge visible. Clicking...")

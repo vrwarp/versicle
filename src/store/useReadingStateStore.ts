@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc } from './yjs-provider';
-import type { UserProgress, ReadingEventType, ReadingSession } from '../types/db';
+import type { UserProgress, ReadingEventType, ReadingSession, StoreVersion } from '../types/db';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { getDeviceId } from '../lib/device-id';
@@ -38,6 +38,8 @@ export type SessionUpdate = {
 
 interface ReadingState {
     // === SYNCED STATE (persisted to Yjs) ===
+    /** Version config for managing schema changes */
+    version: StoreVersion;
     /** Map of reading progress keyed by bookId, then deviceId. */
     progress: PerDeviceProgress;
 
@@ -91,6 +93,12 @@ interface ReadingState {
      * Resets all state (used for testing/debugging).
      */
     reset: () => void;
+
+    /**
+     * Examines the store and permanently deletes all `ReadingSession` history
+     * items that violate the v2.0 schema (e.g. legacy objects missing `startTime` or `endTime`).
+     */
+    migrateAndPruneHistory: () => void;
 }
 
 const isValidProgress = (p: UserProgress | null | undefined): boolean => {
@@ -127,6 +135,7 @@ export const useReadingStateStore = create<ReadingState>()(
         'progress',
         (set, get) => ({
             // Synced state (per-device structure)
+            version: { major: 2, minor: 0 },
             progress: {},
 
             // Actions
@@ -196,26 +205,27 @@ export const useReadingStateStore = create<ReadingState>()(
 
                     let merged = false;
 
-                    // Try to merge with last session if it's the same type and recent enough
-                    if (lastSession && lastSession.type === type) {
-                        const timeDiff = now - (lastSession.endTime || lastSession.startTime);
+                    // Try to merge with last session if it's the same type, same section, and recent enough
+                    if (lastSession && lastSession.type === type && lastSession.label === label) {
+                        const timeDiff = now - lastSession.endTime;
                         if (timeDiff < MERGE_TIME_WINDOW) {
-                            const mergedRanges = mergeCfiRanges([lastSession.cfiRange], range);
-                            // If merged result is a single range, we can update the existing session
-                            if (mergedRanges.length === 1) {
-                                sessions[sessions.length - 1] = {
-                                    ...lastSession,
-                                    cfiRange: mergedRanges[0],
-                                    endTime: now
-                                };
-                                merged = true;
-                            }
+                            const currentRanges = lastSession.cfiRanges || [lastSession.cfiRange];
+                            const mergedRanges = mergeCfiRanges(currentRanges, range);
+
+                            sessions[sessions.length - 1] = {
+                                ...lastSession,
+                                cfiRange: mergedRanges[0],
+                                cfiRanges: mergedRanges,
+                                endTime: now
+                            };
+                            merged = true;
                         }
                     }
 
                     if (!merged) {
                         const newSession: ReadingSession = {
                             cfiRange: range,
+                            cfiRanges: [range],
                             startTime: now,
                             endTime: now,
                             type,
@@ -273,24 +283,26 @@ export const useReadingStateStore = create<ReadingState>()(
                         const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
                         let merged = false;
 
-                        if (lastSession && lastSession.type === (u.type || 'page')) {
-                            const timeDiff = now - (lastSession.endTime || lastSession.startTime);
+                        if (lastSession && lastSession.type === (u.type || 'page') && lastSession.label === u.label) {
+                            const timeDiff = now - lastSession.endTime;
                             if (timeDiff < MERGE_TIME_WINDOW) {
-                                const mergedRanges = mergeCfiRanges([lastSession.cfiRange], u.range);
-                                if (mergedRanges.length === 1) {
-                                    sessions[sessions.length - 1] = {
-                                        ...lastSession,
-                                        cfiRange: mergedRanges[0],
-                                        endTime: now
-                                    };
-                                    merged = true;
-                                }
+                                const currentRanges = lastSession.cfiRanges || [lastSession.cfiRange];
+                                const mergedRanges = mergeCfiRanges(currentRanges, u.range);
+
+                                sessions[sessions.length - 1] = {
+                                    ...lastSession,
+                                    cfiRange: mergedRanges[0],
+                                    cfiRanges: mergedRanges,
+                                    endTime: now
+                                };
+                                merged = true;
                             }
                         }
 
                         if (!merged && u.type) { // Only add to history if type is provided
                             sessions.push({
                                 cfiRange: u.range,
+                                cfiRanges: [u.range],
                                 startTime: now,
                                 endTime: now,
                                 type: u.type,
@@ -415,6 +427,49 @@ export const useReadingStateStore = create<ReadingState>()(
                 return bookProgress?.[deviceId] || null;
             },
 
+            migrateAndPruneHistory: () => {
+                // 1. Evaluate current schema version, assuming v1.0 if not present (legacy)
+                const currentVersion = get().version || { major: 1, minor: 0 };
+                if (currentVersion.major >= 2) {
+                    return; // Already migrated to v2.0+
+                }
+
+                set((state) => {
+                    const nextProgress = { ...state.progress };
+                    let migrated = false;
+
+                    for (const bookId in nextProgress) {
+                        const devices = nextProgress[bookId];
+                        for (const deviceId in devices) {
+                            const userProgress = devices[deviceId];
+                            if (userProgress.readingSessions) {
+                                // Keep only sessions with proper times
+                                const validSessions = userProgress.readingSessions.filter(
+                                    s => typeof s.startTime === 'number' && typeof s.endTime === 'number'
+                                );
+
+                                if (validSessions.length !== userProgress.readingSessions.length) {
+                                    migrated = true;
+                                    nextProgress[bookId] = {
+                                        ...nextProgress[bookId],
+                                        [deviceId]: {
+                                            ...userProgress,
+                                            readingSessions: validSessions
+                                        }
+                                    };
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Bump version to v2.0 and save pruned tree
+                    return {
+                        version: { major: 2, minor: 0 },
+                        progress: migrated ? nextProgress : state.progress
+                    };
+                });
+            },
+
             reset: () => set({
                 progress: {},
             })
@@ -449,3 +504,5 @@ export const useCurrentDeviceProgress = (bookId: string | null) => {
         return state.progress[bookId]?.[deviceId] || null;
     });
 };
+// @ts-ignore
+window.useReadingStateStore = useReadingStateStore;
