@@ -1,0 +1,52 @@
+
+> versicle@0.0.0 build
+> tsc -b && vite build
+
+vite v7.3.0 building client environment for production...
+transforming...
+✓ 2247 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/registerSW.js                              0.13 kB
+dist/manifest.webmanifest                       0.36 kB
+dist/index.html                                 0.74 kB │ gzip:   0.38 kB
+dist/assets/silence-B6oov6b9.ogg                4.12 kB
+dist/assets/search.worker-iVScaY64.js           5.31 kB
+dist/assets/white-noise-U8_pGdEo.ogg          201.37 kB
+dist/assets/index-BLgd2NVI.css                 69.62 kB │ gzip:  12.11 kB
+dist/assets/rasterize-JS5G2XHH-CeZrrhc5.js      0.36 kB │ gzip:   0.28 kB │ map:     0.83 kB
+dist/assets/toBlob-CTQLovTS.js                  0.36 kB │ gzip:   0.29 kB │ map:     0.89 kB
+dist/assets/web-CrWcXY9u.js                     0.40 kB │ gzip:   0.28 kB │ map:     1.21 kB
+dist/assets/download-CrsiWidX.js                0.64 kB │ gzip:   0.43 kB │ map:     1.53 kB
+dist/assets/web-C14XT9k5.js                     0.80 kB │ gzip:   0.39 kB │ map:     1.96 kB
+dist/assets/web-Tn2R3ihb.js                     0.87 kB │ gzip:   0.30 kB │ map:     2.02 kB
+dist/assets/toImg-AD3Vc2ts.js                   1.30 kB │ gzip:   0.65 kB │ map:     2.90 kB
+dist/assets/web-Cvnl9rdu.js                     1.69 kB │ gzip:   0.72 kB │ map:     5.07 kB
+dist/assets/toCanvas-CU_lSUUY.js                2.55 kB │ gzip:   1.32 kB │ map:     6.62 kB
+dist/assets/web-DDMCexWc.js                     8.71 kB │ gzip:   2.99 kB │ map:    35.69 kB
+dist/assets/web-bgbyyP8B.js                    23.67 kB │ gzip:   6.76 kB │ map:    72.80 kB
+dist/assets/index-DVGTW2uq.js               2,187.42 kB │ gzip: 679.86 kB │ map: 9,858.54 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 27.40s
+
+PWA v1.2.0
+Building src/sw.ts service worker ("es" format)...
+vite v7.3.0 building client environment for production...
+transforming...
+✓ 67 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/sw.mjs  20.50 kB │ gzip: 7.03 kB │ map: 161.32 kB
+✓ built in 270ms
+
+PWA v1.2.0
+mode      injectManifest
+format:   es
+precache  23 entries (3000.06 KiB)
+files generated
+  dist/sw.js
+  dist/sw.js.map
