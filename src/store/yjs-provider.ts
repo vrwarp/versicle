@@ -75,7 +75,7 @@ export function handleObsoleteClient(incomingVersion: number): void {
  *
  * Called via `onLoaded` after the Y.Doc is hydrated from IndexedDB/cloud.
  */
-export function runMigrations(): void {
+function runMigrationsImpl(): void {
     // Lazy import to avoid circular dependency at module init time
     import('./useBookStore').then(({ useBookStore }) => {
         if (!useBookStore) return; // Guard for test environments
@@ -125,14 +125,8 @@ export function runMigrations(): void {
                     useReadingStateStore.setState({ progress: nextProgress });
                 }
 
-                // Bump version on the primary store via setState
-                // Defer the execution to ensure zustand-middleware-yjs has fully processed
-                // the inbound snapshot into the local state via its microtask queue,
-                // otherwise our outbound patch here would use stale state and overwrite
-                // the new incoming remote map entirely.
-                setTimeout(() => {
-                    useBookStore.setState({ __schemaVersion: 2 } as unknown as Record<string, unknown>);
-                }, 0);
+                // Bump version on the primary store
+                useBookStore.setState({ __schemaVersion: 2 } as unknown as Record<string, unknown>);
                 logger.info('Migration v1 → v2 complete (legacy history pruned).');
             }).catch(() => {
                 // Silently ignore if useReadingStateStore can't be imported (test env)
@@ -146,6 +140,15 @@ export function runMigrations(): void {
     }).catch(() => {
         // Silently ignore if useBookStore can't be imported (test env)
     });
+}
+
+/**
+ * Defers the execution of migrations to ensure zustand-middleware-yjs has fully processed
+ * the inbound snapshot into the local state via its microtask queue. Otherwise, migration logic
+ * reads and modifies stale state, which can lead to overwriting the incoming remote map.
+ */
+export function runMigrations(): void {
+    setTimeout(runMigrationsImpl, 0);
 }
 
 // ─── Shared Middleware Options ───────────────────────────────────────────────
