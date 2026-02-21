@@ -590,6 +590,9 @@ export const GlobalSettingsDialog = () => {
                                     setIsFirebaseSigningIn(true);
                                     try {
                                         await firebaseSignIn();
+                                    } catch (e: any) {
+                                        logger.error('Firebase sign in failed', e);
+                                        showToast(`Sign in failed: ${e?.message || 'Unknown error'}`, 'error');
                                     } finally {
                                         setIsFirebaseSigningIn(false);
                                     }
