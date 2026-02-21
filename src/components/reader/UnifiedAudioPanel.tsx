@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useShallow } from 'zustand/react/shallow';
-import { SheetContent, SheetHeader, SheetTitle } from '../ui/Sheet';
+import { SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../ui/Sheet';
 import { Button } from '../ui/Button';
 import { Slider } from '../ui/Slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
@@ -84,6 +84,9 @@ export const UnifiedAudioPanel = () => {
     <SheetContent side="right" className="w-full sm:w-[400px] flex flex-col p-0 gap-0" data-testid="tts-panel">
        <SheetHeader className="p-4 border-b">
          <SheetTitle>Audio Deck</SheetTitle>
+         <SheetDescription className="sr-only">
+           Controls for text-to-speech playback and settings.
+         </SheetDescription>
        </SheetHeader>
 
        {/* Stage */}

@@ -8,9 +8,10 @@ import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
 import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
-import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search, Loader2 } from 'lucide-react';
+import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search, Loader2, X } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
+import { cn } from '../../lib/utils';
 import { ImportSourceDialog } from './ImportSourceDialog';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
@@ -525,16 +526,35 @@ export const LibraryView: React.FC = () => {
           {/* Search Bar */}
           <div className="w-full md:w-72">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
                 type="search"
                 placeholder="Search library..."
                 aria-label="Search library"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
+                className={cn("pl-9", searchQuery && "pr-9")}
                 data-testid="library-search-input"
               />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear query"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            {/* Live region for screen readers */}
+            <div role="status" aria-live="polite" className="sr-only">
+              {searchQuery ? (
+                filteredAndSortedBooks.length === 0
+                  ? 'No books found'
+                  : `${filteredAndSortedBooks.length} books found`
+              ) : ''}
             </div>
           </div>
 
