@@ -45,7 +45,7 @@ def test_search_interaction():
         search_input.fill("test")
 
         # Verify Clear button appears
-        clear_button = page.get_by_label("Clear search")
+        clear_button = page.get_by_label("Clear query")
         expect(clear_button).to_be_visible()
 
         # Take a screenshot with the clear button
