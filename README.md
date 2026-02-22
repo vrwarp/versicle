@@ -44,7 +44,7 @@
 *   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
 *   **Drag & Drop**: Drag files anywhere to import.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata.
-*   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" and can be instantly restored by re-importing the file (verified via 3-point fingerprint).
+*   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" and can be instantly restored by re-importing the file (verified via 3-point fingerprint: Head 4KB + Metadata + Tail 4KB).
 *   **High-Performance Rendering**: Uses a two-stage memoization strategy to ensure the library view remains silky smooth (60fps) even with thousands of books.
 *   **Zero-Latency Parsing**: Uses a specialized zero-allocation text scanner (`TextScanningTrie`) to process text instantly without garbage collection pauses.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
@@ -77,7 +77,7 @@
     *   **Dual Sync**:
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
-        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses smart **Heuristic Sync** (viewed time vs scan time) to minimize API calls.
+        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses smart **Heuristic Sync** (viewed time vs last scan time) and **Diffing** (Cloud Index vs Local) to minimize API calls and only show new files.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
         *   **Sync Mesh**: Real-time visibility of active devices in the network with "Last Active" status and peer awareness.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the most recent position across the mesh.

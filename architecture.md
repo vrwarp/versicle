@@ -229,9 +229,9 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 
 **Key Functions:**
 *   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations) and `user_reading_list` entry.
-    *   *Trade-off*: User must re-import the *exact same file* to read again.
-*   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files). It bypasses new ID generation to match the existing Yjs record.
-    *   **Logic**: Parses the new file but *forces* the internal IDs (Book ID, Spine Items, Batches) to match the provided ID, ensuring the new binary seamlessly reconnects with existing Yjs progress/annotations. It explicitly rewrites all internal references in the extracted data structures to align with the target ID before ingestion.
+    *   *Trade-off*: User must re-import the *exact same file* to read again. The system uses a **3-Point Fingerprint** verification to ensure the file matches.
+*   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files).
+    *   **Logic**: Parses the new file but *forces* the internal IDs (Book ID, Spine Items, Batches) to match the provided ID. It explicitly rewrites all internal references in the extracted data structures to align with the target ID before ingestion, ensuring seamless reconnection with existing Yjs progress/annotations.
 *   **`ingestBook(data)`**: Performs a "Static Only" write. It persists the heavy immutable data (`static_manifests`, `static_resources`) to IDB but relies on the caller (Zustand) to update the Yjs `user_inventory`.
 *   **`getOffloadedStatus(bookIds)`**: Returns a Map indicating whether the binary resource for each book exists locally or has been offloaded.
 *   **`getAvailableResourceIds()`**: Returns a Set of all book IDs that have binary content locally (NOT offloaded).
@@ -268,7 +268,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 *   **Logic**:
     *   **Quota Management (`DBService.ts`)**: Explicitly handles `QuotaExceededError` (including legacy code 22) and wraps it in a typed `StorageFullError` for UI handling, prompting the user to offload books.
     *   **Sanitization (`validators.ts`)**: Delegates to `DOMPurify` to strip HTML tags from metadata.
-    *   **Safe Mode**: A specialized UI state (`SafeModeView`) triggered by critical database initialization failures in `App.tsx`. It provides a last-resort "Factory Reset" option (`deleteDB`) to recover the application from a corrupted state without requiring user technical knowledge.
+    *   **Safe Mode**: A specialized UI state (`SafeModeView`) in `src/components/SafeModeView.tsx` triggered by critical database initialization failures. It provides a last-resort "Factory Reset" option (`deleteDB`) to recover the application from a corrupted state without requiring user technical knowledge.
 
 ### Sync & Cloud (`src/lib/sync/`)
 
@@ -288,13 +288,22 @@ Provides a "Cloud Overlay" for real-time synchronization.
     *   **Hybrid Auth**: Supports both Web (`signInWithPopup`/`getRedirectResult`) and Native Android (`FirebaseAuthentication` plugin) flows for Google Sign-In.
     *   **Cloud Overlay**: Acts as a secondary sync provider. `y-indexeddb` remains the primary source of truth, while Firestore relays updates to other devices.
     *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
-    *   **Pre-Sync Checkpoint**: Automatically creates a "pre-sync" checkpoint via `CheckpointService` immediately before connecting to the provider, ensuring a safe fallback state exists before merging remote changes (Destructive Restore protection).
+    *   **Pre-Sync Checkpoint**: Automatically creates a "pre-sync" checkpoint via `CheckpointService` immediately before connecting to the provider. This ensures a safe fallback state exists before merging remote changes, protecting against destructive sync errors.
     *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
     *   **Authenticated**: Sync only occurs when the user is signed in via Firebase Auth.
     *   **Mock Mode**: Includes a `MockFireProvider` for integration testing without a real Firebase project.
 *   **Trade-offs**:
     *   **Complexity**: Requires maintaining a Firestore project.
+
+#### `src/lib/drive/DriveScannerService.ts` (Cloud Library)
+Integrates with Google Drive to provide a cloud-based library.
+
+*   **Goal**: Manage high-level sync logic and state for cloud imports.
+*   **Logic**:
+    *   **Heuristic Sync**: To save API quota, it checks if the remote folder's `viewedByMeTime` is more recent than the local `lastScanTime` (`shouldAutoSync`). If not, it skips the expensive scan.
+    *   **Diffing**: Compares the Cloud Index against the Local Library (`useBookStore` inventory) to identify "New" files (`checkForNewFiles`).
+    *   **Lightweight Indexing**: Maintains a local index in `useDriveStore` for instant UI feedback.
 
 #### `AndroidBackupService.ts` (Cold Path)
 Manages integration with the native Android Backup Service.
@@ -357,6 +366,30 @@ Handles the complex task of importing an EPUB file.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
 *   **Fuzzy Matching (`textMatching.ts`)**: Uses a robust fuzzy matching algorithm to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
     *   **Strategy**: Tries Exact Match -> Case-Insensitive Match -> **Flexible Whitespace Regex** (matches varying newlines/spaces) to handle LLM formatting quirks.
+
+#### `src/lib/tts/AudioContentPipeline.ts`
+The Data Pipeline for TTS.
+
+*   **Goal**: Decouple "Content Loading" from "Playback Readiness".
+*   **Logic (Optimistic Playback)**:
+    1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
+    2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
+        *   **Grouping**: Sentences are grouped by their **Root CFI** (common ancestor) before analysis to provide the LLM with semantic context (e.g., distinguishing a footnote within a table vs. main text).
+        *   **Optimization**: Pre-filters table images by `sectionId` and batch-processes their CFIs via `preprocessTableRoots` to avoid redundant parsing and reduce lookup complexity during sentence grouping.
+    3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`), allowing the player to seamlessly skip content or inject table narrations identified later without delaying the start of playback.
+    4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
+
+#### `src/lib/tts/TextSegmenter.ts`
+*   **Goal**: Robustly split text into sentences and handle abbreviations.
+*   **Logic**:
+    *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop via `charCodeAt` (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
+    *   **Zero-Allocation Scanning (`TextScanningTrie`)**: Uses a specialized Trie implementation that operates on character codes.
+        *   **Strategy**: Uses static `Uint8Array` lookup tables (`PUNCTUATION_FLAGS`, `WHITESPACE_FLAGS`) for O(1) character classification, bypassing conditional logic.
+        *   **Performance**: Instead of allocating new strings with `.toLowerCase()`, it performs manual ASCII case folding (checking range 65-90 and adding 32) during traversal. This enables allocation-free matching of abbreviations in hot loops.
+    *   **Segmenter Cache**: Caches `Intl.Segmenter` instances via `segmenter-cache` to avoid the heavy cost of instantiating locale data repeatedly.
+    *   **Optimization**: Uses `tryFastMergeCfi` to merge CFIs optimistically via string manipulation.
+*   **Trade-offs**:
+    *   **Maintenance**: The manual character scanning logic is more complex and brittle than standard regex or `String.trim()`, requiring careful regression testing.
 
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
@@ -584,7 +617,7 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., preventing a phone at 10% from overwriting a tablet at 80% during a sync race).
     *   **Aggregation**: The UI selector uses a **Local Priority > Global Recent** strategy. It prefers the local device's progress if available; otherwise, it falls back to the most recently updated progress from any device in the mesh.
     *   **Session Merging**: Implements a "Smart Merge" strategy that aggregates reading updates of the same type into a single session if they occur within 20 minutes (`MERGE_TIME_WINDOW`).
-    *   **Pruning**: Automatically prunes reading history when it exceeds `MAX_READING_SESSIONS` (500), removing the oldest `HISTORY_PRUNE_SIZE` (200) entries to maintain Yjs document performance.
+    *   **Batched Pruning**: Automatically prunes reading history when it exceeds `MAX_READING_SESSIONS` (500), removing the oldest `HISTORY_PRUNE_SIZE` (200) entries to maintain Yjs document performance and minimize array operations.
 *   **`useDeviceStore` (Sync Mesh)**:
     *   **Strategy**: Maintains a Yjs Map of active devices in the mesh.
     *   **Logic**: Updates a `lastActive` timestamp (Heartbeat) with throttling (5 mins) to track online status.
@@ -612,7 +645,7 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Trade-off**: Requires strict lifecycle management. If a component fails to unregister its handler on unmount (zombie handler), it can permanently hijack the back button and trap the user.
 *   **`useLibraryStore` (Local Only)**:
     *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs.
-    *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). If the local file is missing, the book appears as a "Ghost Book" using synced metadata.
+    *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (`useBookStore`) with Local Static Metadata (`useLibraryStore`). If the local file is missing (checked via `DBService`), the book appears as a "Ghost Book" using synced metadata, prompting the user to re-download.
 *   **`useGoogleServicesStore` (Local Only)**:
     *   **Goal**: Manage connection state for Google APIs (Drive, Sync) and persist user preferences.
     *   **Logic**: Tracks which services are actively connected and stores client IDs. Used to coordinate the authentication flow via `GoogleIntegrationManager`.
