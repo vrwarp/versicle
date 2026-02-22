@@ -19,7 +19,8 @@ import {
     getFirebaseApp,
     getFirebaseAuth,
     isFirebaseConfigured,
-    initializeFirebase
+    initializeFirebase,
+    getFirestoreDb
 } from './firebase-config';
 import { MockFireProvider } from './drivers/MockFireProvider';
 import { createLogger } from '../logger';
@@ -231,16 +232,171 @@ class FirestoreSyncManager {
             }
         }
 
-        this.setStatus('connecting');
-
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime;
 
         const isDev = import.meta.env.DEV;
         const path = isDev ? `users/${uid}/versicle/dev` : `users/${uid}/versicle/main`;
 
+        import('../../store/useBookStore').then(({ useBookStore }) => {
+            const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
+
+            if (isCleanClient) {
+                logger.info('Clean client detected. Checking for cloud data...');
+                this.performCleanSync(path, maxWaitTime, app!, isMock).catch(err => {
+                    logger.error('Clean sync failed:', err);
+                    this.setStatus('error');
+                });
+            } else {
+                this.connectFireProviderNormal(path, maxWaitTime, app!, isMock);
+            }
+        }).catch(() => {
+            this.connectFireProviderNormal(path, maxWaitTime, app!, isMock);
+        });
+    }
+
+    private async performCleanSync(path: string, maxWaitTime: number, app: FirebaseApp, isMock: boolean): Promise<void> {
+        this.setStatus('connecting');
+        const toast = useToastStore.getState().showToast;
+
+        try {
+            if (!isMock) {
+                const db = getFirestoreDb();
+                if (!db) throw new Error('Firestore not initialized');
+
+                const { doc, getDoc, collection, getDocs, query, limit } = await import('firebase/firestore');
+
+                // Check main document for snapshot/state vector
+                const docRef = doc(db, path);
+                const docSnap = await getDoc(docRef);
+                const hasMainDocData = docSnap.exists() && (
+                    docSnap.data()?.content ||
+                    docSnap.data()?.stateVector ||
+                    docSnap.data()?.snapshotBase64
+                );
+
+                // Check updates collection in case compaction hasn't run yet
+                const updatesQ = query(collection(db, path, 'updates'), limit(1));
+                const updatesSnap = await getDocs(updatesQ);
+
+                if (!hasMainDocData && updatesSnap.empty) {
+                    logger.info('No cloud data found. Client is officially the first device.');
+                    this.connectFireProviderNormal(path, maxWaitTime, app, isMock);
+                    return;
+                }
+            } else {
+                const mockDataStr = localStorage.getItem('versicle_mock_firestore_snapshot');
+                if (!mockDataStr) {
+                    logger.info('[Mock] No cloud data found. Client is officially the first device.');
+                    this.connectFireProviderNormal(path, maxWaitTime, app, isMock);
+                    return;
+                }
+                try {
+                    const mockData = JSON.parse(mockDataStr);
+                    if (!mockData[path] || !mockData[path].snapshotBase64) {
+                        logger.info('[Mock] No cloud data found for path. Client is explicitly clean.');
+                        this.connectFireProviderNormal(path, maxWaitTime, app, isMock);
+                        return;
+                    }
+                } catch (e) {
+                    logger.error('Failed to parse mock data', e);
+                }
+            }
+
+            logger.info('Cloud data found. Initiating temporary Y.Doc sync...');
+            toast('Syncing library from cloud...', 'info');
+
+            const Y = await import('yjs');
+
+            const tempDoc = new Y.Doc();
+
+            await new Promise<void>((resolve) => {
+                let resolved = false;
+
+                const timeout = setTimeout(() => {
+                    if (!resolved) {
+                        logger.warn('Clean sync timeout reached. Proceeding.');
+                        resolved = true;
+                        resolve();
+                    }
+                }, 8000);
+
+                tempDoc.on('update', () => {
+                    if (!resolved) {
+                        logger.info('Received cloud data chunk into tempDoc.');
+                        setTimeout(() => {
+                            if (!resolved) {
+                                clearTimeout(timeout);
+                                resolved = true;
+                                resolve();
+                            }
+                        }, 1000);
+                    }
+                });
+
+                const providerConfig = {
+                    firebaseApp: app,
+                    ydoc: tempDoc,
+                    path,
+                    maxWaitTime: maxWaitTime,
+                    maxUpdatesThreshold: this.config.maxUpdatesThreshold
+                };
+
+                let tempProvider: any = null;
+                try {
+                    if (isMock) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        tempProvider = new MockFireProvider(providerConfig as any);
+                    } else {
+                        tempProvider = new FireProvider(providerConfig);
+                    }
+                } catch (e) {
+                    logger.error('Failed to connect temp provider:', e);
+                    if (!resolved) {
+                        clearTimeout(timeout);
+                        resolved = true;
+                        resolve();
+                    }
+                }
+
+                // Expose to outer scope for cleanup if it doesn't resolve inside
+                if (tempProvider) {
+                    // We just let it load. It will emit 'update' on tempDoc.
+                    // Cleanup is handled after Promise resolves.
+                    (tempDoc as any)._tempProvider = tempProvider;
+                }
+            });
+
+            const tempProvider = (tempDoc as any)._tempProvider;
+            if (tempProvider) {
+                try {
+                    tempProvider.destroy();
+                } catch (e) {
+                    logger.error('Error destroying temporary provider', e);
+                }
+            }
+            logger.info('Applying downloaded cloud data to main Y.Doc...');
+            const stateVector = Y.encodeStateAsUpdate(tempDoc);
+            Y.applyUpdate(yDoc, stateVector);
+
+            logger.info('Clean sync complete. Connecting main provider...');
+            toast('Sync complete!', 'success');
+
+            // Connect the main provider now that the initial load is done
+            this.connectFireProviderNormal(path, maxWaitTime, app, isMock);
+
+        } catch (error) {
+            logger.error('Failed clean sync:', error);
+            this.setStatus('error');
+            toast('Failed to sync. Please try again.', 'error');
+        }
+    }
+
+    private connectFireProviderNormal(path: string, maxWaitTime: number, app: FirebaseApp, isMock: boolean): void {
+        this.setStatus('connecting');
+
         const providerConfig = {
-            firebaseApp: app!,
+            firebaseApp: app,
             ydoc: yDoc,
             path,
             maxWaitTime: maxWaitTime,
@@ -249,7 +405,7 @@ class FirestoreSyncManager {
 
         try {
             // Use MockFireProvider for testing when flag is set
-            if (typeof window !== 'undefined' && window.__VERSICLE_MOCK_FIRESTORE__) {
+            if (isMock) {
                 logger.debug('Using MockFireProvider (test mode)');
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 this.fireProvider = new MockFireProvider(providerConfig as any) as unknown as FireProvider;
