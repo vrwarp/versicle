@@ -29,8 +29,8 @@ def test_preroll_journey(page: Page):
 
     # Enable Preroll
     print("Enabling Preroll...")
-    # Find switch in row with text
-    preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
+    # Use accessible label selector
+    preroll_switch = page.get_by_label("Announce Chapter Titles")
 
     # Check current state (aria-checked)
     if preroll_switch.get_attribute("aria-checked") == "false":
@@ -51,7 +51,7 @@ def test_preroll_journey(page: Page):
 
     page.get_by_test_id("tts-settings-tab-btn").click(force=True)
 
-    preroll_switch = page.get_by_text("Announce Chapter Titles", exact=True).locator("xpath=..").get_by_role("switch")
+    preroll_switch = page.get_by_label("Announce Chapter Titles")
 
     # Wait for switch to be visible before checking attribute
     expect(preroll_switch).to_be_visible()
