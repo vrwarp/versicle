@@ -15,6 +15,7 @@ interface PopoverState {
   y: number;
   cfiRange: string;
   text: string;
+  id?: string;
 }
 
 /**
@@ -67,7 +68,7 @@ interface AnnotationState {
   /**
    * Shows the annotation popover.
    */
-  showPopover: (x: number, y: number, cfiRange: string, text: string) => void;
+  showPopover: (x: number, y: number, cfiRange: string, text: string, id?: string) => void;
   /**
    * Hides the annotation popover.
    */
@@ -155,7 +156,7 @@ export const createAnnotationStore = () => create<AnnotationState>()(
           .sort((a, b) => a.created - b.created);
       },
 
-      showPopover: (x, y, cfiRange, text) => {
+      showPopover: (x, y, cfiRange, text, id) => {
         set({
           popover: {
             visible: true,
@@ -163,6 +164,7 @@ export const createAnnotationStore = () => create<AnnotationState>()(
             y,
             cfiRange,
             text,
+            id,
           },
         });
       },
@@ -172,6 +174,7 @@ export const createAnnotationStore = () => create<AnnotationState>()(
           popover: {
             ...state.popover,
             visible: false,
+            id: undefined,
           },
         }));
       },

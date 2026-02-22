@@ -67,3 +67,7 @@
 - **Bottleneck:** `mergeCfiRanges` was parsing and resorting the entire list of completed ranges (O(N * ParseCost)) for every sentence read, causing frame drops during long reading sessions.
 - **Solution:** Implemented an "Optimistic Append" check: if the new range starts after the last existing range, only merge the tail.
 - **Learning:** For sorted list maintenance in hot paths (like reading progress), always check for the "Sequential Append" case (O(1)) before falling back to full resort (O(N)). Sequential access is the dominant pattern in reading apps.
+
+## 2025-02-23 - [Oversized String Accumulation in GenAI Pipeline]
+**Learning:** The `AudioContentPipeline` was accumulating the full text of every sentence in a logical group (potentially an entire chapter) into a single string (`fullText`), solely to pass a 200-character sample to the GenAI service for content type detection. This resulted in unnecessary memory allocation (megabytes per chapter) and string concatenation overhead.
+**Action:** When preparing data for partial consumption (like sampling), always bound the accumulation logic. In this case, capping `fullText` at 1000 characters avoided the bottleneck without affecting the downstream consumer.
