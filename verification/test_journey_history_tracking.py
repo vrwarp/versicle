@@ -3,7 +3,7 @@ User Journey Verification: Reading History Tracking
 
 Verifies the complete history tracking pipeline end-to-end:
  1. Page navigation → history entries with page icons and timestamps
- 2. TTS playback → history entries with TTS icons  
+ 2. TTS playback → history entries with TTS icons
  3. Session grouping → consecutive same-section entries merge
  4. Navigation from history → clicking entry navigates reader
 
@@ -116,7 +116,7 @@ def test_history_tracking_tts_playback(page: Page):
     # Verify we have history entries
     items = get_history_items(page)
     expect(items.first).to_be_visible(timeout=5000)
-    
+
     item_count = items.count()
     print(f"TTS history contains {item_count} entries")
 

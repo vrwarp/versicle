@@ -72,6 +72,12 @@ describe('UnifiedAudioPanel Accessibility', () => {
 
     // Find the label
     const speedLabel = screen.getByText('Speed');
-    expect(speedLabel).toHaveAttribute('id', 'speed-label');
+    expect(speedLabel).toHaveAttribute('for', 'speed-slider');
+
+    // Find the slider (by role, which targets the thumb where ARIA props are applied)
+    const slider = screen.getByRole('slider');
+    expect(slider).toBeInTheDocument();
+    expect(slider).toHaveAttribute('aria-valuetext', '1.5x speed');
+    expect(slider).toHaveAttribute('aria-labelledby', 'speed-label');
   });
 });

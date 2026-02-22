@@ -115,7 +115,7 @@ def test_tts_chapter_navigation_during_playback(page: Page):
     page.wait_for_timeout(1000)
     page.get_by_test_id("tts-forward-button").click()
     page.get_by_test_id("tts-forward-button").click()
-    
+
     # Pause playback before navigating to ensure clean state
     page.get_by_test_id("tts-play-pause-button").click()
     page.wait_for_timeout(500)
@@ -139,7 +139,7 @@ def test_tts_chapter_navigation_during_playback(page: Page):
     # Wait for queue to fully reload
     page.wait_for_timeout(2000)
     expect(page.get_by_test_id("tts-queue-item-0")).to_be_visible(timeout=10000)
-    
+
     chapter5_first_item = page.get_by_test_id("tts-queue-item-0").inner_text()
     print(f"Chapter V first item: {chapter5_first_item[:50]}...")
 
@@ -155,4 +155,3 @@ def test_tts_chapter_navigation_during_playback(page: Page):
 
     utils.capture_screenshot(page, "chapter_navigation_playback")
     print("Chapter Navigation During Playback Test Passed!")
-

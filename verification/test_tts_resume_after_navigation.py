@@ -90,7 +90,7 @@ def test_tts_resume_after_leaving_book(page: Page):
                 print(f"Current item at index: {i}")
                 current_text = item.inner_text()
                 print(f"Current item text: {current_text[:50]}...")
-                
+
                 # Should be at index 3 or greater (we advanced there before)
                 assert i >= 2, f"Expected to resume at index >= 2, but at index {i}"
                 utils.capture_screenshot(page, "resume_after_nav_success")

@@ -5,8 +5,8 @@ import { SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../ui/S
 import { Button } from '../ui/Button';
 import { Slider } from '../ui/Slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
-import { Badge } from '../ui/Badge';
 import { Switch } from '../ui/Switch';
+import { Label } from '../ui/Label';
 import { TTSQueue } from './TTSQueue';
 import { Play, Pause, RotateCcw, RotateCw, Mic, RefreshCw } from 'lucide-react';
 import { LexiconManager } from './LexiconManager';
@@ -106,12 +106,24 @@ export const UnifiedAudioPanel = () => {
 
           {/* Quick Toggles */}
           <div className="flex justify-center gap-4 items-center">
-             <Badge variant="outline" className="cursor-pointer" onClick={() => setView('settings')}>
+             <Button
+                variant="outline"
+                size="sm"
+                className="h-auto py-0.5 px-2.5 rounded-full text-xs font-semibold"
+                onClick={() => setView('settings')}
+                aria-label={`Current speed: ${rate}x. Click to change.`}
+             >
                 {rate}x
-             </Badge>
-             <Badge variant="outline" className="cursor-pointer truncate max-w-[150px]" onClick={() => setView('settings')}>
+             </Button>
+             <Button
+                variant="outline"
+                size="sm"
+                className="h-auto py-0.5 px-2.5 rounded-full text-xs font-semibold truncate max-w-[150px]"
+                onClick={() => setView('settings')}
+                aria-label={`Current voice: ${voice?.name || 'Default Voice'}. Click to change.`}
+             >
                 {voice?.name || 'Default Voice'}
-             </Badge>
+             </Button>
           </div>
        </div>
 
@@ -125,11 +137,13 @@ export const UnifiedAudioPanel = () => {
                  <h3 className="text-sm font-medium text-muted-foreground">Voice & Pace</h3>
                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                       <label id="speed-label" className="text-sm font-medium">Speed</label>
+                       <Label id="speed-label" htmlFor="speed-slider" className="text-sm font-medium">Speed</Label>
                        <span className="text-sm text-muted-foreground" role="status" aria-live="polite">{rate}x</span>
                     </div>
                     <Slider
+                       id="speed-slider"
                        aria-labelledby="speed-label"
+                       aria-valuetext={`${rate}x speed`}
                        value={[rate]}
                        min={0.5}
                        max={3.0}
@@ -139,7 +153,7 @@ export const UnifiedAudioPanel = () => {
                  </div>
                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium">Voice</label>
+                        <Label htmlFor="voice-select" className="text-sm font-medium">Voice</Label>
                         <Button
                              variant="ghost"
                              size="sm"
@@ -153,7 +167,7 @@ export const UnifiedAudioPanel = () => {
                         </Button>
                     </div>
                     <Select value={voice?.id || 'default'} onValueChange={handleVoiceChange}>
-                       <SelectTrigger><SelectValue placeholder="Select Voice" /></SelectTrigger>
+                       <SelectTrigger id="voice-select"><SelectValue placeholder="Select Voice" /></SelectTrigger>
                        <SelectContent>
                           <SelectItem value="default">Default</SelectItem>
                           {voices.map(v => (
@@ -167,12 +181,12 @@ export const UnifiedAudioPanel = () => {
               <section className="space-y-4">
                  <h3 className="text-sm font-medium text-muted-foreground">Flow Control</h3>
                  <div className="flex items-center justify-between">
-                    <label className="text-sm">Skip URLs & Citations</label>
-                    <Switch checked={sanitizationEnabled} onCheckedChange={setSanitizationEnabled} />
+                    <Label htmlFor="skip-urls-switch" className="text-sm font-normal">Skip URLs & Citations</Label>
+                    <Switch id="skip-urls-switch" checked={sanitizationEnabled} onCheckedChange={setSanitizationEnabled} />
                  </div>
                  <div className="flex items-center justify-between">
-                    <label className="text-sm">Announce Chapter Titles</label>
-                    <Switch checked={prerollEnabled} onCheckedChange={setPrerollEnabled} />
+                    <Label htmlFor="announce-chapter-titles-switch" className="text-sm font-normal">Announce Chapter Titles</Label>
+                    <Switch id="announce-chapter-titles-switch" checked={prerollEnabled} onCheckedChange={setPrerollEnabled} />
                  </div>
               </section>
 

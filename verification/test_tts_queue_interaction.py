@@ -27,7 +27,7 @@ def test_tts_queue_click_to_jump(page: Page):
     # Wait for queue to populate
     queue_items = page.locator("[data-testid^='tts-queue-item-']")
     expect(queue_items.first).to_be_visible(timeout=10000)
-    
+
     initial_count = queue_items.count()
     print(f"Queue has {initial_count} items")
     assert initial_count >= 3, "Need at least 3 queue items for this test"

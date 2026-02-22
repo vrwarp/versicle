@@ -31,14 +31,14 @@ def test_tts_speed_setting_applies(page: Page):
     # Find the speed slider
     # Usually labeled "Speed" or "Pace" with a slider
     speed_slider = page.locator("[data-testid='tts-speed-slider']")
-    
+
     if speed_slider.is_visible():
         print("Found speed slider, adjusting to 1.5x...")
         # Slider should have a value input we can set
         # Most shadcn sliders use aria-valuenow
         current_value = speed_slider.get_attribute("aria-valuenow")
         print(f"Current speed value: {current_value}")
-        
+
         # Try to set to max (1.5x or 2x)
         # Click on the right side of the slider
         bounding_box = speed_slider.bounding_box()
@@ -108,7 +108,7 @@ def test_tts_voice_selection_persists(page: Page):
         # Click to open dropdown
         voice_select.click()
         page.wait_for_timeout(500)
-        
+
         # Select second option
         options = page.locator("[role='option']")
         if options.count() > 1:
