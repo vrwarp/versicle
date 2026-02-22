@@ -70,8 +70,8 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
             title="Content Missing"
             description={`The content for "${book.title}" is not on your device.`}
             footer={
-                <div className="flex justify-end gap-2 w-full">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-2 w-full">
+                    <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
                         Cancel
                     </Button>
                     {cloudMatch && (
@@ -79,6 +79,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                             variant="secondary"
                             onClick={handleCloudRestore}
                             disabled={isRestoring || isCloudRestoring}
+                            className="w-full sm:w-auto"
                         >
                             {isCloudRestoring ? (
                                 <>
@@ -93,7 +94,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                             )}
                         </Button>
                     )}
-                    <Button onClick={handleRestoreClick} disabled={isRestoring || isCloudRestoring}>
+                    <Button onClick={handleRestoreClick} disabled={isRestoring || isCloudRestoring} className="w-full sm:w-auto">
                         {isRestoring ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
