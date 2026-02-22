@@ -23,6 +23,7 @@ import type {
     UserInventoryItem,
     UserProgress
 } from '../../types/db';
+import { exportFile } from '../export';
 
 const logger = createLogger('ExportImport');
 
@@ -558,15 +559,12 @@ export class ExportImportService {
     /**
      * Triggers browser download of the export blob.
      */
-    static downloadBlob(blob: Blob, filename: string): void {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+    static async downloadBlob(blob: Blob, filename: string): Promise<void> {
+        await exportFile({
+            filename,
+            data: blob,
+            mimeType: blob.type
+        });
     }
 
     /**
@@ -574,7 +572,7 @@ export class ExportImportService {
      */
     static async exportAndDownload(options: ExportOptions = DEFAULT_EXPORT_OPTIONS): Promise<ExportResult> {
         const result = await this.exportToJSON(options);
-        this.downloadBlob(result.blob, result.filename);
+        await this.downloadBlob(result.blob, result.filename);
         return result;
     }
 
