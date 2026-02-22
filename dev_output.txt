@@ -1,9 +1,0 @@
-
-> versicle@0.0.0 dev
-> vite
-
-
-  VITE v7.3.0  ready in 363 ms
-
-  ➜  Local:   https://localhost:5173/
-  ➜  Network: use --host to expose
