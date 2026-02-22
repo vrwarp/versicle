@@ -6,6 +6,7 @@ import { useReadingListStore } from '../store/useReadingListStore';
 import type { ReadingListEntry } from '../types/db';
 import { ArrowUpDown, Trash2, Edit2, Download, CheckSquare, Square, ArrowUp, ArrowDown, BookOpen } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
+import { ExportImportService } from '../lib/sync/ExportImportService';
 
 interface ReadingListDialogProps {
     open: boolean;
@@ -120,7 +121,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
      * Exports selected entries to a CSV file.
      * Escapes quotes in fields to ensure valid CSV format.
      */
-    const handleExportCSV = () => {
+    const handleExportCSV = async () => {
         const entriesToExport = entries.filter(e => selectedEntries.has(e.filename));
         if (entriesToExport.length === 0) return;
 
@@ -139,16 +140,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         ].join('\n');
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        if (link.download !== undefined) {
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', 'reading_list.csv');
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
+        await ExportImportService.downloadBlob(blob, 'reading_list.csv');
     };
 
     const handleEditSave = async (updatedEntry: ReadingListEntry) => {
