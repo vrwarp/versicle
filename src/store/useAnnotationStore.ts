@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc } from './yjs-provider';
+import { yDoc, getYjsOptions } from './yjs-provider';
 import type { UserAnnotation } from '../types/db';
 import { createLogger } from '../lib/logger';
 
@@ -178,7 +178,8 @@ export const createAnnotationStore = () => create<AnnotationState>()(
           },
         }));
       },
-    })
+    }),
+    getYjsOptions()
   )
 );
 

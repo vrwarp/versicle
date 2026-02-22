@@ -8,6 +8,7 @@ vi.mock('./yjs-provider', async () => {
     return {
         yDoc: new Y.Doc(),
         waitForYjsSync: vi.fn().mockResolvedValue(),
+        getYjsOptions: () => ({}),
     };
 });
 

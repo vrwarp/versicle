@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { getDB } from './db/db';
 import { dbService } from './db/DBService';
 import { SafeModeView } from './components/SafeModeView';
+import { ObsoleteLockView } from './components/ObsoleteLockView';
 import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
@@ -276,7 +277,10 @@ function App() {
   }
 
   return (
-    <RouterProvider router={router} />
+    <>
+      <ObsoleteLockView />
+      <RouterProvider router={router} />
+    </>
   );
 }
 

@@ -8,6 +8,10 @@ interface UIState {
     isGlobalSettingsOpen: boolean;
     /** Sets the visibility of the global settings dialog. */
     setGlobalSettingsOpen: (open: boolean) => void;
+    /** Whether the app is locked due to an obsolete schema version. */
+    obsoleteLock: boolean;
+    /** Sets the obsolete lock state (non-dismissible safe mode). */
+    setObsoleteLock: (lock: boolean) => void;
 }
 
 /**
@@ -16,4 +20,7 @@ interface UIState {
 export const useUIStore = create<UIState>((set) => ({
     isGlobalSettingsOpen: false,
     setGlobalSettingsOpen: (open) => set({ isGlobalSettingsOpen: open }),
+    obsoleteLock: false,
+    setObsoleteLock: (lock) => set({ obsoleteLock: lock }),
 }));
+

@@ -10,12 +10,30 @@ vi.mock('firebase/auth', () => ({
     signOut: vi.fn()
 }));
 
+// Store instances here for easier testing
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export let latestFireProviderInstance: any = null;
+
 // Mock y-cinder
 vi.mock('y-cinder', () => ({
     FireProvider: vi.fn(function () {
-        return {
-            destroy: vi.fn()
+        const listeners: Record<string, ((...args: any[]) => void)[]> = {};
+        const instance = {
+            destroy: vi.fn(),
+            on: vi.fn((event: string, cb: (...args: any[]) => void) => {
+                if (!listeners[event]) listeners[event] = [];
+                listeners[event].push(cb);
+            }),
+            emit: (event: string, ...args: any[]) => {
+                const callbacks = listeners[event];
+                if (callbacks) {
+                    callbacks.forEach(cb => cb(...args));
+                }
+            }
         };
+        // @ts-expect-error setting global
+        latestFireProviderInstance = instance;
+        return instance;
     })
 }));
 
@@ -189,6 +207,90 @@ describe('FirestoreSyncManager', () => {
                     maxWaitTime: 5000
                 }));
             });
+        });
+    });
+
+    describe('error events', () => {
+        let manager: ReturnType<typeof getFirestoreSyncManager>;
+        let mockFireProviderInstance: any;
+
+        beforeEach(async () => {
+            const { FireProvider } = await import('y-cinder');
+            const { onAuthStateChanged } = await import('firebase/auth');
+
+            manager = getFirestoreSyncManager();
+
+            // Mock auth state change to trigger connection
+            vi.mocked(onAuthStateChanged).mockImplementation((_auth, callback) => {
+                // @ts-expect-error Mocking user
+                callback({ uid: 'test-uid', email: 'test@example.com' });
+                return () => { };
+            });
+
+            await manager.initialize();
+
+            // Wait for internal connections to resolve
+            await vi.waitFor(() => {
+                expect(manager.getStatus()).toBe('connected');
+            });
+
+            // Retrieve instance created during initialization
+            mockFireProviderInstance = latestFireProviderInstance;
+        });
+
+        it('should handle connection-error by setting status to error', async () => {
+            expect(manager.getStatus()).toBe('connected');
+            mockFireProviderInstance.emit('connection-error', { code: 'some-error', message: 'Test message', error: new Error('Test error') });
+            expect(manager.getStatus()).toBe('error');
+        });
+
+        it('should handle sync-failure by setting status and showing toast', async () => {
+            const { useToastStore } = await import('../../store/useToastStore');
+            const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
+
+            mockFireProviderInstance.emit('sync-failure', new Error('Test failure'));
+
+            expect(manager.getStatus()).toBe('error');
+            expect(showToastMock).toHaveBeenCalledWith(
+                'Sync failed after multiple attempts. Please check your connection.',
+                'error',
+                5000
+            );
+        });
+
+        it('should handle save-rejected with document-too-large', async () => {
+            const { useToastStore } = await import('../../store/useToastStore');
+            const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
+
+            mockFireProviderInstance.emit('save-rejected', {
+                code: 'document-too-large',
+                sizeBytes: 2000000,
+                error: new Error('Too large')
+            });
+
+            expect(manager.getStatus()).toBe('error');
+            expect(showToastMock).toHaveBeenCalledWith(
+                'Sync disabled: Document too large (2000000 bytes). Please export and clear data.',
+                'error',
+                8000
+            );
+        });
+
+        it('should handle save-rejected with max-retries-exceeded', async () => {
+            const { useToastStore } = await import('../../store/useToastStore');
+            const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
+
+            mockFireProviderInstance.emit('save-rejected', {
+                code: 'max-retries-exceeded',
+                error: new Error('Timeout')
+            });
+
+            expect(manager.getStatus()).toBe('error');
+            expect(showToastMock).toHaveBeenCalledWith(
+                'Sync save failed: Max retries exceeded. Check connection.',
+                'error',
+                5000
+            );
         });
     });
 });

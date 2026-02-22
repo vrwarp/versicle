@@ -580,11 +580,22 @@ export interface LexiconRule {
 export type ReadingEventType = 'tts' | 'scroll' | 'page';
 
 /**
+ * Represents the major and minor version of the store slice,
+ * allowing backwards-incompatible migrations.
+ */
+export interface StoreVersion {
+  major: number;
+  minor: number;
+}
+
+/**
  * Represents the reading history of a book.
  */
 export interface ReadingSession {
   /** The snapped CFI range associated with this event. */
   cfiRange: string;
+  /** Array of structural CFI ranges (continuous or distinct) in this session. */
+  cfiRanges?: string[];
   /** Start timestamp of the event. */
   startTime: number;
   /** End timestamp of the event. */

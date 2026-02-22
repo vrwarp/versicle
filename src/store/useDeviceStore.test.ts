@@ -12,7 +12,8 @@ vi.mock('./yjs-provider', () => ({
             get: vi.fn(),
         })),
         transact: (cb: any) => cb(),
-    }
+    },
+    getYjsOptions: () => ({})
 }));
 
 // Mock zustand-middleware-yjs

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { UAParser } from 'ua-parser-js';
-import { yDoc } from './yjs-provider';
+import { yDoc, getYjsOptions } from './yjs-provider';
 import type { DeviceInfo, DeviceProfile } from '../types/device';
 import packageJson from '../../package.json';
 
@@ -128,6 +128,7 @@ export const useDeviceStore = create<DeviceState>()(
                     const { [deviceId]: _removed, ...rest } = state.devices;
                     return { devices: rest };
                 }),
-        })
+        }),
+        getYjsOptions()
     )
 );

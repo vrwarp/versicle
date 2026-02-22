@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc } from './yjs-provider';
+import { yDoc, getYjsOptions } from './yjs-provider';
 import type { UserProgress, ReadingEventType, ReadingSession } from '../types/db';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
@@ -196,26 +196,27 @@ export const useReadingStateStore = create<ReadingState>()(
 
                     let merged = false;
 
-                    // Try to merge with last session if it's the same type and recent enough
-                    if (lastSession && lastSession.type === type) {
-                        const timeDiff = now - (lastSession.endTime || lastSession.startTime);
+                    // Try to merge with last session if it's the same type, same section, and recent enough
+                    if (lastSession && lastSession.type === type && lastSession.label === label) {
+                        const timeDiff = now - lastSession.endTime;
                         if (timeDiff < MERGE_TIME_WINDOW) {
-                            const mergedRanges = mergeCfiRanges([lastSession.cfiRange], range);
-                            // If merged result is a single range, we can update the existing session
-                            if (mergedRanges.length === 1) {
-                                sessions[sessions.length - 1] = {
-                                    ...lastSession,
-                                    cfiRange: mergedRanges[0],
-                                    endTime: now
-                                };
-                                merged = true;
-                            }
+                            const currentRanges = lastSession.cfiRanges || [lastSession.cfiRange];
+                            const mergedRanges = mergeCfiRanges(currentRanges, range);
+
+                            sessions[sessions.length - 1] = {
+                                ...lastSession,
+                                cfiRange: mergedRanges[0],
+                                cfiRanges: mergedRanges,
+                                endTime: now
+                            };
+                            merged = true;
                         }
                     }
 
                     if (!merged) {
                         const newSession: ReadingSession = {
                             cfiRange: range,
+                            cfiRanges: [range],
                             startTime: now,
                             endTime: now,
                             type,
@@ -273,24 +274,26 @@ export const useReadingStateStore = create<ReadingState>()(
                         const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
                         let merged = false;
 
-                        if (lastSession && lastSession.type === (u.type || 'page')) {
-                            const timeDiff = now - (lastSession.endTime || lastSession.startTime);
+                        if (lastSession && lastSession.type === (u.type || 'page') && lastSession.label === u.label) {
+                            const timeDiff = now - lastSession.endTime;
                             if (timeDiff < MERGE_TIME_WINDOW) {
-                                const mergedRanges = mergeCfiRanges([lastSession.cfiRange], u.range);
-                                if (mergedRanges.length === 1) {
-                                    sessions[sessions.length - 1] = {
-                                        ...lastSession,
-                                        cfiRange: mergedRanges[0],
-                                        endTime: now
-                                    };
-                                    merged = true;
-                                }
+                                const currentRanges = lastSession.cfiRanges || [lastSession.cfiRange];
+                                const mergedRanges = mergeCfiRanges(currentRanges, u.range);
+
+                                sessions[sessions.length - 1] = {
+                                    ...lastSession,
+                                    cfiRange: mergedRanges[0],
+                                    cfiRanges: mergedRanges,
+                                    endTime: now
+                                };
+                                merged = true;
                             }
                         }
 
                         if (!merged && u.type) { // Only add to history if type is provided
                             sessions.push({
                                 cfiRange: u.range,
+                                cfiRanges: [u.range],
                                 startTime: now,
                                 endTime: now,
                                 type: u.type,
@@ -418,7 +421,8 @@ export const useReadingStateStore = create<ReadingState>()(
             reset: () => set({
                 progress: {},
             })
-        })
+        }),
+        getYjsOptions()
     )
 );
 
@@ -449,3 +453,5 @@ export const useCurrentDeviceProgress = (bookId: string | null) => {
         return state.progress[bookId]?.[deviceId] || null;
     });
 };
+// @ts-ignore
+window.useReadingStateStore = useReadingStateStore;
