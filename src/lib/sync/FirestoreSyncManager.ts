@@ -258,6 +258,29 @@ class FirestoreSyncManager {
             }
             this.currentApp = app;
 
+            // Setup new y-cinder error event listeners
+            this.fireProvider.on('connection-error', (event: any) => {
+                logger.error('Firestore connection error:', event);
+                this.setStatus('error');
+            });
+
+            this.fireProvider.on('sync-failure', (error: any) => {
+                logger.error('Firestore sync failure after max retries:', error);
+                this.setStatus('error');
+                useToastStore.getState().showToast('Sync failed after multiple attempts. Please check your connection.', 'error', 5000);
+            });
+
+            this.fireProvider.on('save-rejected', (event: any) => {
+                logger.error('Firestore save rejected:', event);
+                this.setStatus('error');
+
+                if (event.code === 'document-too-large') {
+                    useToastStore.getState().showToast(`Sync disabled: Document too large (${event.sizeBytes} bytes). Please export and clear data.`, 'error', 8000);
+                } else if (event.code === 'max-retries-exceeded') {
+                    useToastStore.getState().showToast('Sync save failed: Max retries exceeded. Check connection.', 'error', 5000);
+                }
+            });
+
             // y-fire connects automatically
             logger.info(`Connected to path: ${path}`);
             this.setStatus('connected');
