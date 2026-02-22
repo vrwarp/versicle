@@ -774,7 +774,10 @@ export class AudioContentPipeline {
             }
 
             currentGroup.segments.push(s);
-            currentGroup.fullText += s.text + '. ';
+            // Optimization: Only accumulate enough text for detection (200 chars needed, cap at 1000 for safety)
+            if (currentGroup.fullText.length < 1000) {
+                currentGroup.fullText += s.text + '. ';
+            }
         }
 
         if (currentGroup) {
