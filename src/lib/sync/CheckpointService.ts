@@ -1,7 +1,8 @@
 import { getDB } from '../../db/db';
 import * as Y from 'yjs';
-import { yDoc } from '../../store/yjs-provider';
+import { yDoc, yjsPersistence, disconnectYjs } from '../../store/yjs-provider';
 import type { SyncCheckpoint } from '../../types/db';
+import { IndexeddbPersistence } from 'y-indexeddb';
 
 const CHECKPOINT_LIMIT = 10;
 
@@ -71,40 +72,41 @@ export class CheckpointService {
   }
 
   /**
-   * Destructive Restore: Clears current Yjs types and applies snapshot.
+   * Destructive Restore: Clears current persistence and applies snapshot.
+   *
+   * WARNING: This performs a full database wipe and restore.
+   * The application MUST be reloaded after this completes.
    */
   static async restoreCheckpoint(id: number): Promise<void> {
     const db = await getDB();
     const checkpoint = await db.get('checkpoints', id);
     if (!checkpoint || !checkpoint.blob) throw new Error('Checkpoint corrupted');
 
-    // Atomic transaction to swap state
-    yDoc.transact(() => {
-      // 1. Wipe all existing shared types
-      // We iterate doc.share to find all initialized types and clear them dynamically.
-      // This handles any schema changes (e.g. Map vs Array) or dynamic keys (preferences/).
-      const allKeys = Array.from(yDoc.share.keys());
+    // 1. Clear existing persistence and disconnect
+    // We clear data first, then disconnect to ensure no pending updates overwrite it.
+    if (yjsPersistence) {
+      await yjsPersistence.clearData();
+      await disconnectYjs();
+    }
 
-      for (const key of allKeys) {
-        const type = yDoc.share.get(key);
+    // 2. Create isolated YDoc and Persistence to write the snapshot as fresh state
+    const tempDoc = new Y.Doc();
+    Y.applyUpdate(tempDoc, checkpoint.blob);
 
-        if (type instanceof Y.Map) {
-          // Clear Map
-          Array.from(type.keys()).forEach(k => type.delete(k));
-        } else if (type instanceof Y.Array) {
-          // Clear Array
-          type.delete(0, type.length);
-        } else if (type instanceof Y.XmlFragment) {
-          // Should not be used in our store, but safe handling
-          type.delete(0, type.length);
-        } else if (type instanceof Y.Text) {
-          type.delete(0, type.length);
-        }
-      }
+    // Write to the same store name 'versicle-yjs'
+    const tempPersistence = new IndexeddbPersistence('versicle-yjs', tempDoc);
 
-      // 2. Apply binary snapshot
-      Y.applyUpdate(yDoc, checkpoint.blob);
-    }, 'restore-checkpoint');
+    // 3. Wait for temp persistence to save
+    await new Promise<void>((resolve) => {
+      // IndexeddbPersistence saves updates immediately, but we wait for 'synced' to ensure connection
+      tempPersistence.once('synced', () => {
+        // Add a small buffer for write completion just in case
+        setTimeout(resolve, 500);
+      });
+    });
+
+    tempPersistence.destroy();
+    tempDoc.destroy();
   }
 
   /**

@@ -20,7 +20,19 @@ const mocks = vi.hoisted(() => {
         delete: del
     };
 
-    return { add, count, openCursor, get, getAll, del, store };
+    // Persistence mocks
+    const persistenceClearData = vi.fn();
+    const persistenceConstructor = vi.fn();
+    const persistenceOn = vi.fn();
+    const persistenceOnce = vi.fn();
+    const persistenceDestroy = vi.fn();
+    const disconnectYjs = vi.fn();
+
+    return {
+        add, count, openCursor, get, getAll, del, store,
+        persistenceClearData, persistenceConstructor, persistenceOn, persistenceOnce, persistenceDestroy,
+        disconnectYjs
+    };
 });
 
 vi.mock('../../db/db', () => ({
@@ -35,11 +47,35 @@ vi.mock('../../db/db', () => ({
     }))
 }));
 
+// Mock y-indexeddb
+vi.mock('y-indexeddb', () => ({
+    IndexeddbPersistence: class {
+        constructor(name: string, doc: any) {
+            mocks.persistenceConstructor(name, doc);
+        }
+        clearData() { return mocks.persistenceClearData(); }
+        on(event: string, cb: () => void) { mocks.persistenceOn(event, cb); }
+        once(event: string, cb: () => void) {
+            mocks.persistenceOnce(event, cb);
+            if (event === 'synced') cb(); // Auto-resolve sync
+        }
+        destroy() { mocks.persistenceDestroy(); }
+    }
+}));
+
 // Mock Yjs Provider
 vi.mock('../../store/yjs-provider', async () => {
     const YActual = await import('yjs');
     return {
-        yDoc: new YActual.Doc()
+        yDoc: new YActual.Doc(),
+        yjsPersistence: {
+            clearData: mocks.persistenceClearData,
+            destroy: mocks.persistenceDestroy,
+            on: mocks.persistenceOn,
+            once: mocks.persistenceOnce,
+            synced: true
+        },
+        disconnectYjs: mocks.disconnectYjs
     };
 });
 import { yDoc } from '../../store/yjs-provider';
@@ -54,6 +90,10 @@ describe('CheckpointService', () => {
         mocks.add.mockReset();
         mocks.count.mockReset();
         mocks.openCursor.mockReset();
+        mocks.persistenceClearData.mockReset();
+        mocks.persistenceConstructor.mockReset();
+        mocks.persistenceDestroy.mockReset();
+        mocks.disconnectYjs.mockReset();
 
         // Clear yDoc
         yDoc.transact(() => {
@@ -112,7 +152,7 @@ describe('CheckpointService', () => {
         expect(list[1].id).toBe(1);
     });
 
-    it('should restore a checkpoint by applying update', async () => {
+    it('should restore a checkpoint by applying update (via persistence)', async () => {
         // Setup checkpoint
         const tempDoc = new Y.Doc();
         // Prevent collision if Math.random is mocked
@@ -123,45 +163,37 @@ describe('CheckpointService', () => {
 
         mocks.get.mockResolvedValue({ blob });
 
-        // Setup current state
-        yDoc.getMap('library').set('current', true);
-
         await CheckpointService.restoreCheckpoint(1);
 
-        // Expect current state to be wiped and replaced
-        const lib = yDoc.getMap('library');
-        expect(lib.has('current')).toBe(false);
+        // Verify clearData and disconnect called
+        expect(mocks.persistenceClearData).toHaveBeenCalled();
+        expect(mocks.disconnectYjs).toHaveBeenCalled();
+
+        // Verify new persistence created with correct data
+        expect(mocks.persistenceConstructor).toHaveBeenCalledWith('versicle-yjs', expect.anything());
+        const restoredDoc = mocks.persistenceConstructor.mock.calls[0][1] as Y.Doc;
+
+        const lib = restoredDoc.getMap('library');
         expect(lib.get('restored')).toBe(true);
     });
 
-    it('should clear both Map and Array types during restore', async () => {
-        // Setup checkpoint with different data
-        const tempDoc = new Y.Doc();
-        // Prevent collision if Math.random is mocked
-        tempDoc.clientID = yDoc.clientID + (++tempDocCounter);
+    it('should clear both Map and Array types during restore (implicit via clearData)', async () => {
+        // This test logic is now handled by clearData() logic, but we can verify the snapshot content is correct
 
+        // Setup checkpoint with data
+        const tempDoc = new Y.Doc();
         tempDoc.getMap('library').set('restored', true);
+        // Add empty array to verify it exists if we want, or just assume snapshot integrity
         const blob = Y.encodeStateAsUpdate(tempDoc);
         mocks.get.mockResolvedValue({ blob });
 
-        // Setup current state with MIXED types
-        yDoc.getMap('library').set('current', true);
-        const lexiconArr = yDoc.getArray('lexicon'); // Force Array for test
-        lexiconArr.push(['rule1']);
-        yDoc.getMap('preferences').set('theme', 'dark');
-
         await CheckpointService.restoreCheckpoint(1);
 
-        // Verify everything is cleared/replaced
-        const lib = yDoc.getMap('library');
-        expect(lib.has('current')).toBe(false);
+        expect(mocks.persistenceClearData).toHaveBeenCalled();
+        const restoredDoc = mocks.persistenceConstructor.mock.calls[0][1] as Y.Doc;
+        const lib = restoredDoc.getMap('library');
         expect(lib.get('restored')).toBe(true);
-
-        const lex = yDoc.getArray('lexicon');
-        expect(lex.length).toBe(0); // Should be cleared (and empty in checkpoint)
-
-        const prefs = yDoc.getMap('preferences');
-        expect(prefs.size).toBe(0);
+        // The fact that we cleared data means old data is gone. The fact that we applied snapshot means new data is there.
     });
 
     it('should create automatic checkpoint if no previous one exists', async () => {
