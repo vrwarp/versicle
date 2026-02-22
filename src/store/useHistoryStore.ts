@@ -5,6 +5,9 @@ import { createLogger } from '../lib/logger';
 
 const logger = createLogger('HistoryStore');
 
+// StackItem is not exported from Yjs public API, so we extract it from UndoManager
+type StackItem = InstanceType<typeof Y.UndoManager>['undoStack'][number];
+
 export interface HistoryItem {
     timestamp: number;
     description: string;
@@ -35,7 +38,7 @@ export const undoManager = new Y.UndoManager(trackedTypes, {
 });
 
 // Helper to infer description from StackItem
-const inferDescription = (item: Y.StackItem): string => {
+const inferDescription = (item: StackItem): string => {
     let desc = 'Update';
 
     if (item.meta.has('description')) {
@@ -46,7 +49,7 @@ const inferDescription = (item: Y.StackItem): string => {
 };
 
 // Helper to format HistoryItem
-const formatStackItem = (item: Y.StackItem): HistoryItem => {
+const formatStackItem = (item: StackItem): HistoryItem => {
     return {
         timestamp: item.meta.get('timestamp') as number || Date.now(),
         description: inferDescription(item)
@@ -68,7 +71,7 @@ function updateStore() {
     });
 }
 
-export const useHistoryStore = create<HistoryState>((set, get) => ({
+export const useHistoryStore = create<HistoryState>(() => ({
     history: [],
     future: [],
 
@@ -102,7 +105,7 @@ export const initHistory = () => {
 
     logger.info('Initializing History Store (UndoManager)...');
 
-    undoManager.on('stack-item-added', (event: { stackItem: Y.StackItem, type: 'undo' | 'redo' }) => {
+    undoManager.on('stack-item-added', (event: { stackItem: StackItem, type: 'undo' | 'redo' }) => {
         // Add timestamp if missing
         if (!event.stackItem.meta.has('timestamp')) {
             event.stackItem.meta.set('timestamp', Date.now());
