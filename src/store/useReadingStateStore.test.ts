@@ -157,6 +157,7 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             const { useBookStore } = await import('./useBookStore');
 
             // Set __schemaVersion to 1 to simulate pre-migration state
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             useBookStore.setState({ __schemaVersion: 1 } as any);
 
             // Inject legacy session and a valid session
@@ -175,6 +176,7 @@ describe('useReadingStateStore - Per-Device Progress', () => {
                                     // missing startTime and endTime -> Legacy
                                     timestamp: now - 50000,
                                     type: 'page' as const
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                 } as any,
                                 {
                                     cfiRange: 'epubcfi(/6/4)',
@@ -207,6 +209,7 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(remainingSession.startTime).toBe(now - 10000);
 
             // Schema version should be bumped to 2 on useBookStore
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             expect((useBookStore.getState() as any).__schemaVersion).toBe(2);
         });
     });

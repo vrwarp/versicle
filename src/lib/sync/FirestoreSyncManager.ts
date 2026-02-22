@@ -342,6 +342,7 @@ class FirestoreSyncManager {
                     maxUpdatesThreshold: this.config.maxUpdatesThreshold
                 };
 
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 let tempProvider: any = null;
                 try {
                     if (isMock) {
@@ -363,10 +364,12 @@ class FirestoreSyncManager {
                 if (tempProvider) {
                     // We just let it load. It will emit 'update' on tempDoc.
                     // Cleanup is handled after Promise resolves.
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     (tempDoc as any)._tempProvider = tempProvider;
                 }
             });
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const tempProvider = (tempDoc as any)._tempProvider;
             if (tempProvider) {
                 try {
@@ -415,17 +418,20 @@ class FirestoreSyncManager {
             this.currentApp = app;
 
             // Setup new y-cinder error event listeners
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             this.fireProvider.on('connection-error', (event: any) => {
                 logger.error('Firestore connection error:', event);
                 this.setStatus('error');
             });
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             this.fireProvider.on('sync-failure', (error: any) => {
                 logger.error('Firestore sync failure after max retries:', error);
                 this.setStatus('error');
                 useToastStore.getState().showToast('Sync failed after multiple attempts. Please check your connection.', 'error', 5000);
             });
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             this.fireProvider.on('save-rejected', (event: any) => {
                 logger.error('Firestore save rejected:', event);
                 this.setStatus('error');

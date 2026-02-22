@@ -453,5 +453,5 @@ export const useCurrentDeviceProgress = (bookId: string | null) => {
         return state.progress[bookId]?.[deviceId] || null;
     });
 };
-// @ts-ignore
+// @ts-expect-error Exposing store for debugging
 window.useReadingStateStore = useReadingStateStore;
