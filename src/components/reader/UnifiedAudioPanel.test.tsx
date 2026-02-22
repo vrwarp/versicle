@@ -72,6 +72,11 @@ describe('UnifiedAudioPanel Accessibility', () => {
 
     // Find the label
     const speedLabel = screen.getByText('Speed');
-    expect(speedLabel).toHaveAttribute('id', 'speed-label');
+    expect(speedLabel).toHaveAttribute('for', 'speed-slider');
+
+    // Find the slider and check accessibility
+    const slider = document.getElementById('speed-slider');
+    expect(slider).toBeInTheDocument();
+    expect(slider).toHaveAttribute('aria-valuetext', '1.5x speed');
   });
 });
