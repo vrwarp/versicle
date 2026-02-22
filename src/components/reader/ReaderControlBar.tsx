@@ -23,9 +23,10 @@ export const ReaderControlBar: React.FC = () => {
     const [dismissedSyncAlerts, setDismissedSyncAlerts] = React.useState<Set<string>>(new Set());
 
     // Store Subscriptions
-    const { popover, add, hidePopover } = useAnnotationStore(useShallow(state => ({
+    const { popover, add, remove, hidePopover } = useAnnotationStore(useShallow(state => ({
         popover: state.popover,
         add: state.add,
+        remove: state.remove,
         hidePopover: state.hidePopover,
     })));
 
@@ -154,6 +155,13 @@ export const ReaderControlBar: React.FC = () => {
                     hidePopover();
                 }
                 break;
+            case 'delete':
+                if (popover.id) {
+                    remove(popover.id);
+                    showToast("Annotation deleted", "success");
+                    hidePopover();
+                }
+                break;
             case 'dismiss':
                 if (variant === 'sync-alert' && remoteProgress) {
                     setDismissedSyncAlerts(prev => new Set(prev).add(remoteProgress.deviceId));
@@ -205,7 +213,8 @@ export const ReaderControlBar: React.FC = () => {
                         onAnnotationAction={handleAnnotationAction}
                         availableActions={{
                             play: true,
-                            pronounce: true
+                            pronounce: true,
+                            delete: !!popover.id
                         }}
                         onClick={() => {
                             if (variant === 'sync-alert' && remoteProgress && jumpToLocation) {

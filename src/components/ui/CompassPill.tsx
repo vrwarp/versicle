@@ -3,7 +3,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
-import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
@@ -13,6 +13,7 @@ export type ActionType =
   | 'copy'       // Payload: null
   | 'pronounce'  // Payload: null
   | 'play'       // Payload: null
+  | 'delete'     // Payload: null
   | 'dismiss';   // Payload: null
 
 interface CompassPillProps {
@@ -25,6 +26,7 @@ interface CompassPillProps {
   availableActions?: {
     play?: boolean;
     pronounce?: boolean;
+    delete?: boolean;
   };
 }
 
@@ -246,6 +248,19 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           >
             {isCopied ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
           </Button>
+
+          {availableActions?.delete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full w-9 h-9 text-muted-foreground hover:text-destructive"
+              onClick={() => onAnnotationAction?.('delete')}
+              data-testid="popover-delete-button"
+              aria-label="Delete"
+            >
+              <Trash2 size={18} />
+            </Button>
+          )}
 
           <div className="w-px h-6 bg-border mx-1" />
 

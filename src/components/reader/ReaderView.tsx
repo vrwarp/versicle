@@ -531,7 +531,17 @@ export const ReaderView: React.FC = () => {
     }, [isWaitingForJump]);
 
     // Apply Annotations to Rendition
-    const addedAnnotations = useRef<Set<string>>(new Set());
+    // Map of ID -> CFI for highlights
+    const addedAnnotations = useRef<Map<string, string>>(new Map());
+    // Map of ID -> DOM Element for note markers
+    const noteMarkers = useRef<Map<string, HTMLElement>>(new Map());
+
+    // Clear tracked annotations if rendition changes (e.g. re-initialization)
+    useEffect(() => {
+        addedAnnotations.current.clear();
+        noteMarkers.current.forEach(marker => marker.remove());
+        noteMarkers.current.clear();
+    }, [rendition]);
 
     // Helper to get annotation styles object for epub.js
     const getAnnotationStyles = (color: string) => {
@@ -545,9 +555,32 @@ export const ReaderView: React.FC = () => {
 
     useEffect(() => {
         if (rendition && isRenditionReady) {
-            // Add new annotations
             const annotationList = Object.values(annotations);
+            const currentIds = new Set(annotationList.map(a => a.id));
+
+            // 1. Remove deleted annotations (Highlights and Markers)
+            addedAnnotations.current.forEach((cfi, id) => {
+                if (!currentIds.has(id)) {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (rendition as any).annotations.remove(cfi, 'highlight');
+                    } catch (e) {
+                        logger.warn("Failed to remove highlight", e);
+                    }
+                    addedAnnotations.current.delete(id);
+                }
+            });
+
+            noteMarkers.current.forEach((marker, id) => {
+                if (!currentIds.has(id)) {
+                    marker.remove();
+                    noteMarkers.current.delete(id);
+                }
+            });
+
+            // 2. Add new annotations
             annotationList.forEach(annotation => {
+                // Add Highlight if missing
                 if (!addedAnnotations.current.has(annotation.id)) {
                     const className = annotation.color === 'yellow' ? 'highlight-yellow' :
                         annotation.color === 'green' ? 'highlight-green' :
@@ -556,12 +589,61 @@ export const ReaderView: React.FC = () => {
 
                     try {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, () => {
-                            // logger.debug("Clicked annotation", annotation.id);
+                        (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, (e: MouseEvent) => {
+                            // Handle click on highlight to show actions (delete/edit)
+                            const iframe = viewerRef.current?.querySelector('iframe');
+                            let x = e.clientX;
+                            let y = e.clientY;
+
+                            if (iframe) {
+                                const iframeRect = iframe.getBoundingClientRect();
+                                x += iframeRect.left;
+                                y += iframeRect.top;
+                            }
+                            showPopover(x, y, annotation.cfiRange, annotation.text, annotation.id);
                         }, className, getAnnotationStyles(annotation.color));
-                        addedAnnotations.current.add(annotation.id);
+                        addedAnnotations.current.set(annotation.id, annotation.cfiRange);
                     } catch (e) {
                         logger.warn(`Failed to add annotation ${annotation.id}`, e);
+                    }
+                }
+
+                // Add Note Marker if missing and has note
+                if (annotation.note && !noteMarkers.current.has(annotation.id)) {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const range = (rendition as any).getRange(annotation.cfiRange);
+                        if (range) {
+                            const marker = document.createElement('span');
+                            marker.className = 'note-marker';
+                            marker.title = annotation.note;
+
+                            // Insert at the end safely
+                            const endRange = range.cloneRange();
+                            endRange.collapse(false);
+                            endRange.insertNode(marker);
+
+                            // Add click listener
+                            marker.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                const rect = marker.getBoundingClientRect();
+                                const iframe = viewerRef.current?.querySelector('iframe');
+                                let x = rect.left;
+                                let y = rect.top;
+
+                                if (iframe) {
+                                    const iframeRect = iframe.getBoundingClientRect();
+                                    x += iframeRect.left;
+                                    y += iframeRect.top;
+                                }
+
+                                showPopover(x, y + 20, annotation.cfiRange, annotation.text, annotation.id);
+                            });
+
+                            noteMarkers.current.set(annotation.id, marker);
+                        }
+                    } catch (e) {
+                        logger.warn("Failed to add note marker", e);
                     }
                 }
             });
@@ -570,7 +652,7 @@ export const ReaderView: React.FC = () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (window as any).__reader_added_annotations_count = addedAnnotations.current.size;
         }
-    }, [annotations, isRenditionReady, rendition]);
+    }, [annotations, isRenditionReady, rendition, showPopover]);
 
     // Handle TTS Errors
     const showToast = useToastStore(state => state.showToast);
