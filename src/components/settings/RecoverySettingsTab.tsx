@@ -4,6 +4,7 @@ import { FileSearch } from 'lucide-react';
 import { CheckpointService } from '../../lib/sync/CheckpointService';
 import { CheckpointInspector, type DiffResult } from '../../lib/sync/CheckpointInspector';
 import { CheckpointDiffView } from './CheckpointDiffView';
+import { ExportImportService, DEFAULT_EXPORT_OPTIONS } from '../../lib/sync/ExportImportService';
 import type { SyncCheckpoint } from '../../types/db';
 
 export interface RecoverySettingsTabProps {
@@ -60,12 +61,22 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
         setStatus(null);
     };
 
+    const handleBackup = async () => {
+        try {
+            await ExportImportService.exportAndDownload(DEFAULT_EXPORT_OPTIONS);
+        } catch (error) {
+            console.error('Backup failed:', error);
+            setStatus("Backup failed.");
+        }
+    };
+
     if (inspectingCheckpoint && diffData) {
         return (
             <CheckpointDiffView
                 diffData={diffData}
                 onConfirm={handleConfirmRestore}
                 onCancel={handleCancelInspect}
+                onBackup={handleBackup}
                 isRestoring={isRestoring}
             />
         );

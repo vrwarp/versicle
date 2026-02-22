@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { DiffResult } from '../../lib/sync/CheckpointInspector';
-import { ChevronDown, ChevronRight, Plus, Minus, RefreshCw, Maximize2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Minus, RefreshCw, Maximize2, Download } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';
 import { JsonDiffViewer } from './JsonDiffViewer';
@@ -9,6 +9,7 @@ interface CheckpointDiffViewProps {
   diffData: Record<string, DiffResult>;
   onConfirm: () => void;
   onCancel: () => void;
+  onBackup: () => void;
   isRestoring: boolean;
 }
 
@@ -16,6 +17,7 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
   diffData,
   onConfirm,
   onCancel,
+  onBackup,
   isRestoring
 }) => {
   const [expandedStores, setExpandedStores] = useState<Set<string>>(new Set());
@@ -146,13 +148,19 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
           })}
         </div>
 
-        <div className="p-4 border-t bg-muted/10 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onCancel} disabled={isRestoring}>
-            Cancel
+        <div className="p-4 border-t bg-muted/10 flex justify-between gap-2">
+          <Button variant="outline" onClick={onBackup} disabled={isRestoring}>
+            <Download className="w-4 h-4 mr-2" />
+            Backup Current State
           </Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={isRestoring}>
-            {isRestoring ? 'Restoring...' : 'Confirm Restore'}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onCancel} disabled={isRestoring}>
+                Cancel
+            </Button>
+            <Button variant="destructive" onClick={onConfirm} disabled={isRestoring}>
+                {isRestoring ? 'Restoring...' : 'Confirm Restore'}
+            </Button>
+          </div>
         </div>
       </div>
 
