@@ -17,13 +17,16 @@ export let latestFireProviderInstance: any = null;
 // Mock y-cinder
 vi.mock('y-cinder', () => ({
     FireProvider: vi.fn(function () {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const listeners: Record<string, ((...args: any[]) => void)[]> = {};
         const instance = {
             destroy: vi.fn(),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             on: vi.fn((event: string, cb: (...args: any[]) => void) => {
                 if (!listeners[event]) listeners[event] = [];
                 listeners[event].push(cb);
             }),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             emit: (event: string, ...args: any[]) => {
                 const callbacks = listeners[event];
                 if (callbacks) {
@@ -212,10 +215,10 @@ describe('FirestoreSyncManager', () => {
 
     describe('error events', () => {
         let manager: ReturnType<typeof getFirestoreSyncManager>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let mockFireProviderInstance: any;
 
         beforeEach(async () => {
-            const { FireProvider } = await import('y-cinder');
             const { onAuthStateChanged } = await import('firebase/auth');
 
             manager = getFirestoreSyncManager();

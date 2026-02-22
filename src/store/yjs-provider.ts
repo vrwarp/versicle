@@ -17,6 +17,7 @@ export const yDoc = new Y.Doc();
 
 // Expose globally for Playwright end-to-end tests
 if (typeof window !== 'undefined') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__YJS_DOC__ = yDoc;
 }
 
