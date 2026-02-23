@@ -17,16 +17,18 @@ def browser_context_args(request, browser_context_args):
     if request.param == "mobile":
         return {
             **browser_context_args,
-            "base_url": "http://localhost:5173",
+            "base_url": "https://localhost:5173",
             "viewport": {"width": 375, "height": 667},
             "is_mobile": True,
             "has_touch": True,
+            "ignore_https_errors": True,
         }
     else:
         return {
             **browser_context_args,
-            "base_url": "http://localhost:5173",
+            "base_url": "https://localhost:5173",
             "viewport": {"width": 1280, "height": 720},
+            "ignore_https_errors": True,
         }
 
 @pytest.fixture(scope="session")
@@ -43,7 +45,12 @@ def browser_type_launch_args(browser_type_launch_args):
     """
     return {
         **browser_type_launch_args,
-        "args": ["--disable-web-security", "--disable-features=IsolateOrigins,site-per-process"],
+        "args": [
+            "--disable-web-security",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--ignore-certificate-errors",
+            "--unsafely-treat-insecure-origin-as-secure=https://localhost:5173"
+        ],
     }
 
 @pytest.fixture(autouse=True)

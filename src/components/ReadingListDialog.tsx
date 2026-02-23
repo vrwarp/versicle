@@ -18,7 +18,7 @@ interface ReadingListDialogProps {
  * Also provides access to individual entry editing.
  */
 export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOpenChange }) => {
-    const entriesMap = useReadingListStore(state => state.entries);
+    const entriesMap = useReadingListStore(state => state.entries) || {};
     const entries = useMemo(() => Object.values(entriesMap), [entriesMap]);
 
     const [sortField, setSortField] = useState<keyof ReadingListEntry>('lastUpdated');

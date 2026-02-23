@@ -18,7 +18,7 @@ export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ bookId, onR
 
   // Get raw progress from all devices
   // This selector is fine because it's specific to the book
-  const allProgress = useReadingStateStore((state) => state.progress[bookId]);
+  const allProgress = useReadingStateStore((state) => state.progress?.[bookId]);
 
   // This selector returns the entire devices object, causing re-renders on ANY device update.
   // By isolating this in ResumeBadge, we prevent the heavy BookCard from re-rendering.

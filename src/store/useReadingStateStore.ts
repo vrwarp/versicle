@@ -6,6 +6,7 @@ import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { getDeviceId } from '../lib/device-id';
 import { mergeCfiRanges } from '../lib/cfi-utils';
+import { undoManager } from '../lib/undo-manager';
 
 const MAX_READING_SESSIONS = 500;
 const HISTORY_PRUNE_SIZE = 200;
@@ -402,6 +403,9 @@ export const useReadingStateStore = create<ReadingState>()(
 
             getProgress: (bookId) => {
                 const { progress } = get();
+                // Handle potential transient undefined state from Yjs
+                if (!progress) return null;
+
                 const deviceId = getDeviceId();
                 const bookProgress = progress[bookId];
 
@@ -453,5 +457,9 @@ export const useCurrentDeviceProgress = (bookId: string | null) => {
         return state.progress[bookId]?.[deviceId] || null;
     });
 };
+
+// Track changes from this store in history
+undoManager.addTrackedOrigin(useReadingStateStore);
+
 // @ts-expect-error Exposing store for debugging
 window.useReadingStateStore = useReadingStateStore;
