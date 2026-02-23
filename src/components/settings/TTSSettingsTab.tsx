@@ -5,6 +5,7 @@ import { PasswordInput } from '../ui/PasswordInput';
 import { Slider } from '../ui/Slider';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
+import { Progress } from '../ui/Progress';
 import { Trash2 } from 'lucide-react';
 import type { TTSVoice } from '../../lib/tts/providers/types';
 
@@ -167,9 +168,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                                     <span>{downloadStatus}</span>
                                                     <span>{Math.round(downloadProgress)}%</span>
                                                 </div>
-                                                <div className="h-2 bg-secondary rounded overflow-hidden">
-                                                    <div className="h-full bg-primary transition-all duration-300" style={{ width: `${downloadProgress}%` }} />
-                                                </div>
+                                                <Progress value={downloadProgress} className="w-full" aria-label="Voice download progress" />
                                             </div>
                                         ) : (
                                             <div className="flex gap-2">

@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { ThemeSelector } from '../ThemeSelector';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
+import { Progress } from '../ui/Progress';
 
 export type ThemeType = 'light' | 'dark' | 'sepia';
 
@@ -86,6 +87,7 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
                     className="hidden"
                     onChange={handleFileChange}
                     data-testid="zip-import-input"
+                    aria-label="Import ZIP Archive"
                 />
                 <input
                     type="file"
@@ -96,6 +98,7 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
                     className="hidden"
                     onChange={handleFileChange}
                     data-testid="folder-import-input"
+                    aria-label="Import Folder"
                 />
 
                 {isImporting && (
@@ -104,23 +107,13 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
 
                         <div className="w-full flex flex-col items-center space-y-1">
                             <p className="text-sm text-muted-foreground">{uploadStatus || 'Processing files...'}</p>
-                            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-primary/70 transition-all duration-300 ease-out"
-                                    style={{ width: `${uploadProgress}%` }}
-                                />
-                            </div>
+                            <Progress value={uploadProgress} className="w-full" aria-label="Upload progress" />
                         </div>
 
                         {(importProgress > 0 || uploadProgress >= 100) && (
                             <div className="w-full flex flex-col items-center space-y-1 mt-2">
                                 <p className="text-muted-foreground font-medium">{importStatus || 'Importing books...'}</p>
-                                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-primary transition-all duration-300 ease-out"
-                                        style={{ width: `${importProgress}%` }}
-                                    />
-                                </div>
+                                <Progress value={importProgress} className="w-full" aria-label="Import progress" />
                             </div>
                         )}
                     </div>
