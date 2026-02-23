@@ -221,7 +221,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
         *   `user_journey`: **(Removed)** Granular reading history sessions are no longer stored in IDB.
         *   `user_ai_inference`: **(Replaced)** Expensive AI-derived data is now handled by the synced `useContentAnalysisStore` (Yjs).
 *   **Domain 3: Cache (Transient/Regenerable)**
-    *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation.
+    *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation. Indexed by `bookId` and `sectionId`.
     *   `cache_audio_blobs`: Generated TTS audio segments.
     *   `cache_render_metrics`: Layout calculation results.
     *   `cache_session_state`: Playback queue persistence.
@@ -232,6 +232,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   *Trade-off*: User must re-import the *exact same file* to read again.
 *   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files). It bypasses new ID generation to match the existing Yjs record.
     *   **Logic**: Parses the new file but *forces* the internal IDs (Book ID, Spine Items, Batches) to match the provided ID, ensuring the new binary seamlessly reconnects with existing Yjs progress/annotations. It explicitly rewrites all internal references in the extracted data structures to align with the target ID before ingestion.
+*   **`deleteBook(id)`**: Cleans up all `static_` and `cache_` stores (Heavy Data) but deliberately *leaves* the `user_` data (Progress, Annotations) in the Yjs document. This allows for a "Soft Delete" where the user can restore the book later (Ghost Book) without losing their place.
 *   **`ingestBook(data)`**: Performs a "Static Only" write. It persists the heavy immutable data (`static_manifests`, `static_resources`) to IDB but relies on the caller (Zustand) to update the Yjs `user_inventory`.
 *   **`getOffloadedStatus(bookIds)`**: Returns a Map indicating whether the binary resource for each book exists locally or has been offloaded.
 *   **`getAvailableResourceIds()`**: Returns a Set of all book IDs that have binary content locally (NOT offloaded).
@@ -324,7 +325,7 @@ Manages integration with the native Android Backup Service.
 #### Performance: Hot Paths (`src/lib/cfi-utils.ts`)
 *   **Goal**: Minimize latency during heavy text segmentation and rendering operations.
 *   **Logic**:
-    *   **Fast Merge ("Point + Point")**: `tryFastMergeCfi` uses optimistic string manipulation to merge sibling CFIs directly. It detects if two CFIs share a common parent prefix and simply joins the leaf components (e.g., `/1` and `/2` -> `/1,/2`) without full parsing.
+    *   **Fast Merge ("Point + Point")**: `tryFastMergeCfi` uses optimistic string manipulation to merge sibling CFIs directly. It detects if two CFIs share a common parent prefix (up to the last slash) and simply joins the leaf components (e.g., `/1` and `/2` -> `/1,/2`) without full parsing or regeneration.
     *   **Optimistic Append**: `mergeCfiRanges` assumes sequential reading patterns. It checks if the new range follows the last existing range to perform an O(1) merge, avoiding O(N) re-sorting.
     *   **Heuristic Fallback**: If the fast path fails (complex structure/nesting), it gracefully falls back to the standard, slower implementation.
 *   **Verification**:
@@ -351,8 +352,8 @@ Handles the complex task of importing an EPUB file.
 #### Generative AI (`src/lib/genai/GenAIService.ts`)
 *   **Goal**: Provide AI-driven content analysis and adaptation.
 *   **Logic**:
-    *   **Smart Rotation**: Implements a rotation strategy (shuffling `gemini-2.5-flash-lite` and `gemini-2.5-flash`) to mitigate `429 RESOURCE_EXHAUSTED` errors and maximize free tier quotas.
-    *   **Thinking Budget**: Utilizes a configurable `thinkingBudget` (default 512 tokens) in `generateTableAdaptations` to allow the model to reason about complex table layouts before generating narrative text.
+    *   **Smart Rotation**: Implements a `executeWithRetry` strategy that shuffles between models (e.g., `gemini-2.5-flash-lite`, `gemini-2.5-flash`) to mitigate `429 RESOURCE_EXHAUSTED` errors and maximize free tier usage.
+    *   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to allow the model to "reason" about complex table layouts (headers vs. data cells) before generating the narrative JSON.
     *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures into 5 categories: **Title**, **Footnote**, **Main**, **Table**, and **Other**.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
 *   **Fuzzy Matching (`textMatching.ts`)**: Uses a robust fuzzy matching algorithm to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
@@ -390,7 +391,7 @@ Integrates with Google Drive to provide a cloud-based library.
     *   **Goal**: Manage high-level sync logic and state.
     *   **Logic**:
         *   **Heuristic Sync**: To save API quota, it checks if the remote folder's `viewedByMeTime` is more recent than the local `lastScanTime` (`shouldAutoSync`). If not, it skips the expensive scan.
-        *   **Diffing**: Compares the Cloud Index against the Local Library (`useBookStore` inventory) to identify "New" files (`checkForNewFiles`).
+        *   **Diffing**: Compares the Cloud Index (`useDriveStore`) against the Local Library (`useBookStore` inventory) to identify "New" files (`checkForNewFiles`).
         *   **Direct Store Access**: Reads directly from `useDriveStore` and `useLibraryStore` to manage state and trigger imports.
         *   **Lightweight Indexing**: Maintains a local index (`useDriveStore`) for instant UI feedback.
 *   **`DriveService.ts` (The Muscle)**:
@@ -471,14 +472,16 @@ The Data Pipeline for TTS.
 *   **Logic (Optimistic Playback)**:
     1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
     2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
-        *   **Grouping**: Sentences are grouped by their **Root CFI** (common ancestor) before analysis to provide the LLM with semantic context (e.g., distinguishing a footnote within a table vs. main text).
+            *   **Grouping**: `groupSentencesByRoot` clusters sentences by their **Root CFI** (common ancestor) before GenAI analysis. This ensures the LLM receives logical blocks (e.g., an entire table row or aside) rather than fragmented sentences, improving classification accuracy.
         *   **Optimization**: Pre-filters table images by `sectionId` and batch-processes their CFIs via `preprocessTableRoots` to avoid redundant parsing and reduce lookup complexity during sentence grouping.
-    3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`), allowing the player to seamlessly skip content or inject table narrations identified later without delaying the start of playback.
+        3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`).
+            *   **Table Injection**: `mapSentencesToAdaptations` matches raw sentences to AI-generated table narratives using CFI prefix matching, replacing the raw data cells with a natural language summary in real-time.
     4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
 
 #### `src/lib/tts/TextSegmenter.ts`
 *   **Goal**: Robustly split text into sentences and handle abbreviations.
 *   **Logic**:
+    *   **Reactive Segmentation (`refineSegments`)**: Allows re-segmenting text on the fly based on changing abbreviation rules (e.g., toggling "Bible Mode" abbreviations) without re-ingesting the book.
     *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop via `charCodeAt` (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
     *   **Zero-Allocation Scanning (`TextScanningTrie`)**: Uses a specialized Trie implementation that operates on character codes.
         *   **Strategy**: Uses static `Uint8Array` lookup tables (`PUNCTUATION_FLAGS`, `WHITESPACE_FLAGS`) for O(1) character classification, bypassing conditional logic.
@@ -583,11 +586,13 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
     *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., preventing a phone at 10% from overwriting a tablet at 80% during a sync race).
     *   **Aggregation**: The UI selector uses a **Local Priority > Global Recent** strategy. It prefers the local device's progress if available; otherwise, it falls back to the most recently updated progress from any device in the mesh.
-    *   **Session Merging**: Implements a "Smart Merge" strategy that aggregates reading updates of the same type into a single session if they occur within 20 minutes (`MERGE_TIME_WINDOW`).
+    *   **Session Merging**: Implements a "Smart Merge" strategy that aggregates reading updates of the same type (e.g., `page` vs `chapter`) into a single `ReadingSession` if they occur within 20 minutes (`MERGE_TIME_WINDOW`). This prevents history spam while preserving granular session data.
     *   **Pruning**: Automatically prunes reading history when it exceeds `MAX_READING_SESSIONS` (500), removing the oldest `HISTORY_PRUNE_SIZE` (200) entries to maintain Yjs document performance.
 *   **`useDeviceStore` (Sync Mesh)**:
     *   **Strategy**: Maintains a Yjs Map of active devices in the mesh.
-    *   **Logic**: Updates a `lastActive` timestamp (Heartbeat) with throttling (5 mins) to track online status.
+    *   **Logic**:
+        *   **User Agent Parsing**: Uses `UAParser` to automatically generate human-readable device names (e.g., "Chrome on Windows") upon registration.
+        *   **Heartbeat Throttling**: Updates the `lastActive` timestamp with a 5-minute throttle (`HEARTBEAT_THROTTLE_MS`) to prevent excessive CRDT updates while maintaining online status visibility.
     *   **Why**: Enables "Send to Device" features and provides visibility into the sync network.
 *   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
 *   **`useGenAIStore` (Local/Persisted)**:
