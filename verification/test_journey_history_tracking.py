@@ -7,7 +7,7 @@ from playwright.sync_api import Page, expect
 
 def test_journey_history_tracking(page: Page):
     # 1. Setup
-    page.goto("https://localhost:5173")
+    page.goto("http://localhost:5173")
 
     # Clear data to ensure clean state
     page.evaluate("localStorage.clear()")
