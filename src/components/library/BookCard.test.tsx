@@ -7,28 +7,13 @@ import type { BookMetadata } from '../../types/db';
 
 // Remove obsolete mock for BookActionMenu which is no longer used in BookCard
 
+// Mock Reading State Store (still needed for ResumeBadge)
 vi.mock('../../store/useReadingStateStore', () => ({
   useReadingStateStore: vi.fn((selector) => {
-    // Default mock state for the store selector if needed.
-    // BookCard uses it for `state.progress`
-    const mockState = {
-      progress: {
-        '1': { // match mockBook.id
-          'test-device-id': {
-            percentage: 0.45,
-            lastRead: Date.now()
-          }
-        }
-      }
-    };
-    return selector(mockState);
+    return selector({ progress: {} });
   }),
-  useBookProgress: vi.fn((bookId) => {
-    if (bookId === '1') { // Match mockBook.id
-      return { percentage: 0.45, lastRead: Date.now(), deviceId: 'test-device' };
-    }
-    return null;
-  }),
+  useBookProgress: vi.fn(),
+  useCurrentDeviceProgress: vi.fn(),
 }));
 
 // Mock Device Store
@@ -149,12 +134,8 @@ describe('BookCard', () => {
     expect(screen.getByText('Offloaded')).toHaveClass('sr-only');
   });
 
-  it('should render progress bar when progress > 0', async () => {
-    // Override mock for this test
-    const { useBookProgress } = await import('../../store/useReadingStateStore');
-    vi.mocked(useBookProgress).mockReturnValue({ bookId: '1', percentage: 0.45, lastRead: Date.now(), currentCfi: '', completedRanges: [] });
-
-    const bookWithProgress = { ...mockBook }; // Progress prop is now irrelevant, but we keep the object
+  it('should render progress bar when progress > 0', () => {
+    const bookWithProgress = { ...mockBook, progress: 0.45 };
     renderCard(bookWithProgress);
 
     const progressBar = screen.getByTestId('progress-bar');
@@ -166,12 +147,8 @@ describe('BookCard', () => {
     expect(progressContainer).toHaveAttribute('aria-valuenow', '45');
   });
 
-  it('should not render progress bar when progress is 0 or undefined', async () => {
-    // Override mock to return null or 0 progress
-    const { useBookProgress } = await import('../../store/useReadingStateStore');
-    vi.mocked(useBookProgress).mockReturnValue(null);
-
-    const bookWithZeroProgress = { ...mockBook };
+  it('should not render progress bar when progress is 0', () => {
+    const bookWithZeroProgress = { ...mockBook, progress: 0 };
     renderCard(bookWithZeroProgress);
     expect(screen.queryByTestId('progress-bar')).not.toBeInTheDocument();
   });
