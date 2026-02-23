@@ -28,7 +28,7 @@
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
-*   **AI**: Google Gemini (Flash Lite / Flash) via `@google/generative-ai`
+*   **AI**: Google Gemini 2.5 (Flash Lite / Flash) via `@google/generative-ai`
 *   **Mobile**: Capacitor 7.0.0 (Android) + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
@@ -60,7 +60,7 @@
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Chapter Pre-roll**: Optional announcements (Title, Author) at the start of each new chapter.
 *   **Text-to-Speech**: Turn any book into an audiobook.
-*   **Smart Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis.
+*   **Reactive Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis. Updates instantly when Lexicon settings change (e.g., toggling Bible mode).
 *   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
 *   **Smart Rotation**: Automatically switches between Gemini models (Flash Lite/Flash) to handle rate limits (429) and maximize free quotas.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported). Includes "Trace Mode" for debugging rule application.
