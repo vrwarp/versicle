@@ -2,7 +2,6 @@ import React, { useCallback } from 'react';
 import { MoreVertical, Play, Trash2, CloudOff, RotateCcw } from 'lucide-react';
 import type { BookMetadata } from '../../types/db';
 import { BookCover } from './BookCover';
-import { useBookProgress } from '../../store/useReadingStateStore';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/DropdownMenu';
 import { Button } from '../ui/Button';
 import { ResumeBadge } from './ResumeBadge';
@@ -52,13 +51,10 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
   onRestore,
   onResume
 }) => {
-  // Get active progress using the shared priority logic
-  // This uses a specific selector, so it's efficient and doesn't re-render on unrelated store changes
-  const activeProgress = useBookProgress(book.id);
-
-  // Use book.progress (from usage in selectors) as fallback if activeProgress is missing
-  // This ensures Reading List progress is used if no device progress exists
-  const progressPercent = activeProgress ? activeProgress.percentage : (book.progress || 0);
+  // OPTIMIZATION: Use book.progress passed from parent (computed by useAllBooks selector)
+  // instead of subscribing individually to useBookProgress.
+  // This prevents ~1000 selectors running on every store update.
+  const progressPercent = book.progress || 0;
 
   const handleCardClick = () => {
     if (book.isOffloaded || isGhostBook) {

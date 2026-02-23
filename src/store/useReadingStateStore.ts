@@ -93,7 +93,7 @@ interface ReadingState {
     reset: () => void;
 }
 
-const isValidProgress = (p: UserProgress | null | undefined): boolean => {
+export const isValidProgress = (p: UserProgress | null | undefined): boolean => {
     return !!(p && p.percentage > 0.005); // > 0.5%
 };
 
@@ -101,7 +101,7 @@ const isValidProgress = (p: UserProgress | null | undefined): boolean => {
  * Get the progress entry with the most recent timestamp for a book.
  * Aggregates across all devices and returns the one with the latest lastRead.
  */
-const getMostRecentProgress = (bookProgress: Record<string, UserProgress> | undefined): UserProgress | null => {
+export const getMostRecentProgress = (bookProgress: Record<string, UserProgress> | undefined): UserProgress | null => {
     if (!bookProgress) return null;
 
     let mostRecent: UserProgress | null = null;

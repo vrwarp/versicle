@@ -71,3 +71,8 @@
 ## 2025-02-23 - [Oversized String Accumulation in GenAI Pipeline]
 **Learning:** The `AudioContentPipeline` was accumulating the full text of every sentence in a logical group (potentially an entire chapter) into a single string (`fullText`), solely to pass a 200-character sample to the GenAI service for content type detection. This resulted in unnecessary memory allocation (megabytes per chapter) and string concatenation overhead.
 **Action:** When preparing data for partial consumption (like sampling), always bound the accumulation logic. In this case, capping `fullText` at 1000 characters avoided the bottleneck without affecting the downstream consumer.
+
+## 2025-02-23 - Selector Granularity & Logic Unification
+- **Bottleneck:** `BookCard` was subscribing individually to `useBookProgress` (1000 listeners) while `LibraryView` was already calculating progress via `useAllBooks`. Also, the logic between the two was inconsistent (Max vs Recent).
+- **Solution:** Updated `useAllBooks` to use the correct "Local > Recent" logic (by exporting helpers from `useReadingStateStore`) and removed the subscription from `BookCard`, passing `book.progress` directly.
+- **Learning:** When a list item component needs data that the parent list already has access to (or can easily compute), pass it as a prop instead of creating a new subscription. This reduces selector overhead from O(N) to O(1) (parent only).

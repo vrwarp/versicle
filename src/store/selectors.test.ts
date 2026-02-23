@@ -18,6 +18,18 @@ vi.mock('./useBookStore', () => ({
 
 vi.mock('./useReadingStateStore', () => ({
   useReadingStateStore: vi.fn(),
+  isValidProgress: (p: any) => !!(p && p.percentage > 0.005),
+  getMostRecentProgress: (bookProgress: any) => {
+    if (!bookProgress) return null;
+    let max: any = null;
+    for (const k in bookProgress) {
+      const p = bookProgress[k];
+      if (p && p.percentage > 0.005) {
+        if (!max || p.lastRead > max.lastRead) max = p;
+      }
+    }
+    return max;
+  },
 }));
 
 vi.mock('./useReadingListStore', () => ({

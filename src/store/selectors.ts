@@ -1,26 +1,31 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
-import { useReadingStateStore } from './useReadingStateStore';
+import { useReadingStateStore, isValidProgress, getMostRecentProgress } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
 import type { UserProgress, UserInventoryItem } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
 
 /**
- * Get the progress entry with the highest percentage for a book.
- * Aggregates across all devices and returns the max.
+ * Resolves the progress for a book using the "Local Priority > Global Recent" strategy.
+ * Matches the logic in useReadingStateStore.getProgress().
  */
-function getMaxProgress(bookProgress: Record<string, UserProgress> | undefined): UserProgress | null {
+function resolveProgress(bookProgress: Record<string, UserProgress> | undefined): UserProgress | null {
     if (!bookProgress) return null;
+    const deviceId = getDeviceId();
 
-    let max: UserProgress | null = null;
-    for (const deviceId in bookProgress) {
-        const current = bookProgress[deviceId];
-        if (!max || current.percentage > max.percentage) {
-            max = current;
-        }
+    // 1. Try Local (Must be Valid)
+    const local = bookProgress[deviceId];
+    if (local && isValidProgress(local)) {
+        return local;
     }
-    return max;
+
+    // 2. Fallback to Most Recent (Valid)
+    const recent = getMostRecentProgress(bookProgress);
+    if (recent) return recent;
+
+    // 3. Final Fallback: Return Local (even if 0%) if exists, else null
+    return local || null;
 }
 
 /**
@@ -116,7 +121,7 @@ export const useAllBooks = () => {
 
         // eslint-disable-next-line react-hooks/refs
         const result = baseBooks.map(book => {
-            const bookProgress = getMaxProgress(progressMap[book.id]);
+            const bookProgress = resolveProgress(progressMap[book.id]);
             const readingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
             const progress = bookProgress?.percentage || readingListEntry?.percentage || 0;
             const currentCfi = bookProgress?.currentCfi || undefined;
@@ -177,8 +182,8 @@ export const useBook = (id: string | null) => {
     const progressMap = useReadingStateStore(state => state.progress);
     const readingListEntries = useReadingListStore(state => state.entries);
 
-    // Get max progress across all devices for this book
-    const progress = id ? getMaxProgress(progressMap[id]) : null;
+    // Get resolved progress (Local > Recent) across all devices for this book
+    const progress = id ? resolveProgress(progressMap[id]) : null;
 
     // OPTIMIZATION: Memoize the single book result
     return useMemo(() => {
