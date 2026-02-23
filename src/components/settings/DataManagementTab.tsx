@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
+import { Progress } from '../ui/Progress';
 
 export interface DataManagementTabProps {
     // Reading List
@@ -173,12 +174,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                     {isRegenerating && (
                         <div className="w-full flex flex-col items-center space-y-1 mt-2">
                             <p className="text-xs text-muted-foreground">{regenerationProgress}</p>
-                            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-primary transition-all duration-300 ease-out"
-                                    style={{ width: `${regenerationPercent}%` }}
-                                />
-                            </div>
+                            <Progress value={regenerationPercent} className="w-full" aria-label="Regeneration progress" />
                         </div>
                     )}
                     {regenerationProgress && !isRegenerating && (
