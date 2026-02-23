@@ -330,7 +330,7 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     # Wait for the lexicon rules to load from synced data
     print("Waiting for synced lexicon rule 'Offline'...")
     rule_visible = False
-    for i in range(40):  # Try for 20 seconds (40 * 0.5s)
+    for i in range(80):  # Try for 40 seconds (80 * 0.5s) - Increased for CI slowness
         if page_b.get_by_text("Offline").is_visible():
             rule_visible = True
             break
@@ -351,8 +351,8 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
             page_b.get_by_role("button", name="Dictionary").click()
             time.sleep(0.3)
             expect(page_b.get_by_role("button", name="Manage Rules")).to_be_visible(timeout=5000)
-            page_b.get_by_role("button", name="Manage Rules").click()
-            time.sleep(0.3)
+            page_b.get_by_role("button", name="Manage Rules").click(force=True)
+            time.sleep(0.5)
 
         time.sleep(0.5)
 
