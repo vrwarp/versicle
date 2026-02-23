@@ -1,15 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore, useBookStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { MemoryRouter } from 'react-router-dom';
+import type { UserProgress, BookMetadata } from '../../types/db';
 
 // Mock zustand/middleware to disable persistence
 vi.mock('zustand/middleware', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    persist: (config: any) => (set: any, get: any, api: any) => config(set, get, api),
+    persist: (config: unknown) => (set: unknown, get: unknown, api: unknown) => (config as (set: unknown, get: unknown, api: unknown) => unknown)(set, get, api),
     createJSONStorage: () => ({
         getItem: vi.fn(),
         setItem: vi.fn(),
@@ -18,9 +18,11 @@ vi.mock('zustand/middleware', () => ({
 }));
 
 // Mock BookCard
+interface BookCardProps {
+    book: BookMetadata;
+}
 vi.mock('./BookCard', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    BookCard: ({ book }: any) => <div data-testid="book-card">{book.title}</div>
+    BookCard: ({ book }: BookCardProps) => <div data-testid="book-card">{book.title}</div>
 }));
 
 // Mock EmptyLibrary
@@ -29,9 +31,11 @@ vi.mock('./EmptyLibrary', () => ({
 }));
 
 // Mock ReprocessingInterstitial
+interface ReprocessingInterstitialProps {
+    isOpen: boolean;
+}
 vi.mock('./ReprocessingInterstitial', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ReprocessingInterstitial: ({ isOpen }: any) => isOpen ? <div data-testid="reprocessing-interstitial">Processing...</div> : null
+    ReprocessingInterstitial: ({ isOpen }: ReprocessingInterstitialProps) => isOpen ? <div data-testid="reprocessing-interstitial">Processing...</div> : null
 }));
 
 vi.mock('../../store/useToastStore', () => ({
@@ -39,9 +43,17 @@ vi.mock('../../store/useToastStore', () => ({
 }));
 
 // Mock Select components
+interface SelectProps {
+    value: string;
+    onValueChange: (value: string) => void;
+    children: ReactNode;
+}
+interface SelectItemProps {
+    value: string;
+    children: ReactNode;
+}
 vi.mock('../ui/Select', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Select: ({ value, onValueChange, children }: any) => (
+    Select: ({ value, onValueChange, children }: SelectProps) => (
         <select
             data-testid="sort-select"
             value={value}
@@ -50,13 +62,10 @@ vi.mock('../ui/Select', () => ({
             {children}
         </select>
     ),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    SelectTrigger: ({ children }: any) => <>{children}</>,
+    SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
     SelectValue: () => null,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    SelectContent: ({ children }: any) => <>{children}</>,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    SelectItem: ({ value, children }: any) => (
+    SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
+    SelectItem: ({ value, children }: SelectItemProps) => (
         <option value={value}>{children}</option>
     ),
 }));
@@ -77,10 +86,10 @@ vi.mock('../../store/useReadingStateStore', () => {
     mockStore.subscribe = vi.fn();
     return {
         useReadingStateStore: mockStore,
-        isValidProgress: (p: any) => !!(p && p.percentage > 0.005),
-        getMostRecentProgress: (bookProgress: any) => {
+        isValidProgress: (p: UserProgress | null | undefined) => !!(p && p.percentage > 0.005),
+        getMostRecentProgress: (bookProgress: Record<string, UserProgress> | undefined) => {
             if (!bookProgress) return null;
-            let max: any = null;
+            let max: UserProgress | null = null;
             for (const k in bookProgress) {
                 const p = bookProgress[k];
                 if (p && p.percentage > 0.005) {
@@ -101,7 +110,7 @@ describe('LibraryView', () => {
 
         // Mock useToastStore
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (useToastStore as any).mockImplementation((selector: any) => {
+        (useToastStore as unknown as Mock).mockImplementation((selector: any) => {
             if (selector) return selector({ showToast: mockShowToast });
             return { showToast: mockShowToast };
         });
@@ -129,12 +138,9 @@ describe('LibraryView', () => {
     it('sorts books correctly', async () => {
         useBookStore.setState({
             books: {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                '1': { id: '1', bookId: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200, lastInteraction: 100 } as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                '2': { id: '2', bookId: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100, lastInteraction: 300 } as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                '3': { id: '3', bookId: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300, lastInteraction: 200 } as any
+                '1': { id: '1', bookId: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200, lastInteraction: 100 } as BookMetadata,
+                '2': { id: '2', bookId: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100, lastInteraction: 300 } as BookMetadata,
+                '3': { id: '3', bookId: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300, lastInteraction: 200 } as BookMetadata
             }
         });
 
@@ -144,26 +150,24 @@ describe('LibraryView', () => {
 
         // Mock reading progress for sorting - using per-device structure
         // The real useAllBooks selector uses the hook to get state.progress
-        const mockProgress = {
+        const mockProgress: Record<string, Record<string, { percentage: number; lastRead: number }>> = {
             '1': { 'device-1': { percentage: 0.5, lastRead: 200 } },
             '2': { 'device-1': { percentage: 0.1, lastRead: 100 } },
             '3': { 'device-1': { percentage: 0.8, lastRead: 300 } }
         };
 
         // Mock the hook to return the progress map when selected
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (useReadingStateStore as any).mockImplementation((selector: any) => {
+        (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
             if (selector) return selector({ progress: mockProgress });
             return { progress: mockProgress };
         });
 
         // Also mock getState for direct access if any (though LibraryView uses the hook via useAllBooks)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (useReadingStateStore.getState as any).mockReturnValue({
+        (useReadingStateStore.getState as unknown as Mock).mockReturnValue({
             progress: mockProgress,
             getProgress: (bookId: string) => {
                 // This mimics the real store's behavior roughly for tests that might call it
-                const entries = Object.values(mockProgress[bookId as keyof typeof mockProgress] || {});
+                const entries = Object.values(mockProgress[bookId] || {});
                 return entries[0] || null;
             }
         });
@@ -206,8 +210,7 @@ describe('LibraryView', () => {
     it('shows no results message when search returns nothing', async () => {
         useBookStore.setState({
             books: {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                '1': { id: '1', bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', lastInteraction: 100 } as any
+                '1': { id: '1', bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', lastInteraction: 100 } as BookMetadata
             }
         });
 

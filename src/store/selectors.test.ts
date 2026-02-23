@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useAllBooks, useLastReadBookId } from './selectors';
 import { useLibraryStore } from './useLibraryStore';
@@ -6,6 +6,7 @@ import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
 import { getDeviceId } from '../lib/device-id';
+import type { UserProgress, BookMetadata } from '../types/db';
 
 // Mock stores
 vi.mock('./useLibraryStore', () => ({
@@ -18,10 +19,10 @@ vi.mock('./useBookStore', () => ({
 
 vi.mock('./useReadingStateStore', () => ({
   useReadingStateStore: vi.fn(),
-  isValidProgress: (p: any) => !!(p && p.percentage > 0.005),
-  getMostRecentProgress: (bookProgress: any) => {
+  isValidProgress: (p: UserProgress | null | undefined) => !!(p && p.percentage > 0.005),
+  getMostRecentProgress: (bookProgress: Record<string, UserProgress> | undefined) => {
     if (!bookProgress) return null;
-    let max: any = null;
+    let max: UserProgress | null = null;
     for (const k in bookProgress) {
       const p = bookProgress[k];
       if (p && p.percentage > 0.005) {
@@ -74,20 +75,17 @@ describe('selectors', () => {
       };
 
       // Mock implementation of useBookStore
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useBookStore).mockImplementation((selector: any) => {
+      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector(mockBookState);
       });
 
       // Mock implementation of useLibraryStore
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useLibraryStore).mockImplementation((selector: any) => {
+      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector(mockLibraryState);
       });
 
       // Mock reading state
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector({ progress: {} });
       });
 
@@ -123,18 +121,15 @@ describe('selectors', () => {
         offloadedBookIds: new Set()
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useBookStore).mockImplementation((selector: any) => {
+      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector(mockBookState);
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useLibraryStore).mockImplementation((selector: any) => {
+      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector(mockLibraryState);
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector({ progress: {} });
       });
 
@@ -177,20 +172,16 @@ describe('selectors', () => {
         }
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useBookStore).mockImplementation((selector: any) => {
+      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector(mockBookState);
       });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useLibraryStore).mockImplementation((selector: any) => {
+      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector(mockLibraryState);
       });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector({ progress: {} }); // No device progress
       });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingListStore).mockImplementation((selector: any) => {
+      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector(mockReadingListState);
       });
 
@@ -212,31 +203,24 @@ describe('selectors', () => {
       const mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
 
       // Initial progress: both 0
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let mockProgress: any = {
+      let mockProgress: Record<string, Record<string, Partial<UserProgress>>> = {
         'book-a': { 'device-1': { percentage: 0, lastRead: 100 } },
         'book-b': { 'device-1': { percentage: 0, lastRead: 100 } }
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useBookStore).mockImplementation((selector: any) => selector(mockBookState));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useLibraryStore).mockImplementation((selector: any) => selector(mockLibraryState));
+      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
+      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockLibraryState));
 
       // Dynamic mock for reading state
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => selector({ progress: mockProgress }));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingListStore).mockImplementation((selector: any) => selector({ entries: {} }));
-      vi.mocked(getDeviceId).mockReturnValue('device-1');
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: mockProgress }));
+      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ entries: {} }));
+      (getDeviceId as Mock).mockReturnValue('device-1');
 
       const { result, rerender } = renderHook(() => useAllBooks());
 
       const firstRender = result.current;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bookA_v1 = firstRender.find((b: any) => b.id === 'book-a');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bookB_v1 = firstRender.find((b: any) => b.id === 'book-b');
+      const bookA_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-a');
+      const bookB_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-b');
 
       expect(bookA_v1).toBeDefined();
       expect(bookB_v1).toBeDefined();
@@ -250,10 +234,8 @@ describe('selectors', () => {
       rerender();
 
       const secondRender = result.current;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bookA_v2 = secondRender.find((b: any) => b.id === 'book-a');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bookB_v2 = secondRender.find((b: any) => b.id === 'book-b');
+      const bookA_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-a');
+      const bookB_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-b');
 
       // Book A changed progress, should be new object
       expect(bookA_v2?.progress).toBe(0.5);
@@ -280,22 +262,16 @@ describe('selectors', () => {
       const mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
       const mockProgress = { 'book-a': {}, 'book-b': {} };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useBookStore).mockImplementation((selector: any) => selector(mockBookState));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useLibraryStore).mockImplementation((selector: any) => selector(mockLibraryState));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => selector({ progress: mockProgress }));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingListStore).mockImplementation((selector: any) => selector({ entries: {} }));
+      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
+      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockLibraryState));
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: mockProgress }));
+      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ entries: {} }));
 
       const { result, rerender } = renderHook(() => useAllBooks());
 
       const firstRender = result.current;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bookA_v1 = firstRender.find((b: any) => b.id === 'book-a');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bookB_v1 = firstRender.find((b: any) => b.id === 'book-b');
+      const bookA_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-a');
+      const bookB_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-b');
 
       expect(bookA_v1).toBeDefined();
       expect(bookB_v1).toBeDefined();
@@ -313,10 +289,8 @@ describe('selectors', () => {
       rerender();
 
       const secondRender = result.current;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bookA_v2 = secondRender.find((b: any) => b.id === 'book-a');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const bookB_v2 = secondRender.find((b: any) => b.id === 'book-b');
+      const bookA_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-a');
+      const bookB_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-b');
 
       // Book A changed, should be new object
       expect(bookA_v2.title).toBe('Book A Updated');
@@ -334,11 +308,10 @@ describe('selectors', () => {
     });
 
     it('should return null if no progress exists', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector({ progress: {} });
       });
-      vi.mocked(getDeviceId).mockReturnValue('device-1');
+      (getDeviceId as Mock).mockReturnValue('device-1');
 
       const { result } = renderHook(() => useLastReadBookId());
       expect(result.current).toBeNull();
@@ -355,11 +328,10 @@ describe('selectors', () => {
         }
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector({ progress: mockProgress });
       });
-      vi.mocked(getDeviceId).mockReturnValue('device-1');
+      (getDeviceId as Mock).mockReturnValue('device-1');
 
       const { result } = renderHook(() => useLastReadBookId());
       expect(result.current).toBe('book2');
@@ -375,11 +347,10 @@ describe('selectors', () => {
         }
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
         return selector({ progress: mockProgress });
       });
-      vi.mocked(getDeviceId).mockReturnValue('device-1');
+      (getDeviceId as Mock).mockReturnValue('device-1');
 
       const { result } = renderHook(() => useLastReadBookId());
       expect(result.current).toBe('book1');
