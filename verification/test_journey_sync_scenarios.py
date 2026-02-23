@@ -225,6 +225,123 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
     context_b.close()
 
 
+def test_note_marker_affordance(browser: Browser, browser_context_args):
+    """
+    Verifies that adding a note to a highlight creates a visible visual affordance (post-it marker).
+    """
+    base_url = browser_context_args.get("base_url", "http://localhost:5173")
+    context = browser.new_context(**browser_context_args)
+    page = context.new_page()
+    inject_mock_firestore(page)
+    clear_data_and_reload(page, base_url)
+
+    # Import book
+    page.set_input_files("data-testid=hidden-file-input", "verification/alice.epub")
+    book_card = page.locator("[data-testid^='book-card-']").first
+    expect(book_card).to_be_visible(timeout=10000)
+
+    # Open Reader
+    book_card.click()
+    reader_container = page.get_by_test_id("reader-iframe-container")
+    expect(reader_container).to_be_visible(timeout=10000)
+
+    # Wait for rendition
+    page.wait_for_function("window.rendition && window.rendition.location")
+
+    # Select text to trigger annotation menu
+    # We need to access the iframe content
+    # The iframe selector might not have a title attribute in all cases or it might be dynamically generated.
+    # Let's inspect the container provided by data-testid.
+    reader_iframe = reader_container.locator("iframe")
+    expect(reader_iframe).to_be_attached(timeout=10000)
+
+    # Now use frame_locator using the locator strategy
+    iframe_element = reader_iframe.content_frame
+
+    # Navigate until we find text content (skip cover/images)
+    found_text = False
+    for _ in range(5):
+        # Check if we have a paragraph with text
+        if iframe_element.locator("p").count() > 0:
+            found_text = True
+            break
+
+        print("No text found, turning page...")
+        page.evaluate("window.rendition && window.rendition.next()")
+        time.sleep(1) # Wait for page turn
+
+    expect(iframe_element.locator("p").first).to_be_visible(timeout=5000)
+
+    # Select text in the first paragraph
+    p_locator = iframe_element.locator("p").first
+
+    # We'll use evaluation to create a selection range programmatically on the found element
+    time.sleep(1) # Wait for layout stability
+
+    p_locator.evaluate("""
+        (element) => {
+            const range = document.createRange();
+            // Select first 10 characters or whole node if shorter
+            // Ensure we have a text node
+            const textNode = element.firstChild;
+            if (textNode && textNode.nodeType === 3) { // 3 = TEXT_NODE
+                range.setStart(textNode, 0);
+                range.setEnd(textNode, Math.min(10, textNode.length || 0));
+            } else {
+                range.selectNodeContents(element);
+            }
+
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            // Trigger mouseup to show menu
+            document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        }
+    """)
+
+    # Check if annotation menu appears (rendered by CompassPill in ReaderControlBar)
+    # The correct test-id is "compass-pill-annotation"
+    expect(page.get_by_test_id("compass-pill-annotation")).to_be_visible(timeout=5000)
+
+    # Click "Add Note" button
+    page.get_by_test_id("popover-add-note-button").click()
+
+    # Fill note dialog (CompassPill renders textarea in edit mode)
+    expect(page.get_by_test_id("compass-pill-annotation-edit")).to_be_visible()
+    page.locator("textarea").fill("This is a test note")
+    page.get_by_role("button", name="Save").click()
+
+    # Verify Note Marker exists and is visible in the iframe
+    # The marker class is .note-marker
+    marker = iframe_element.locator(".note-marker")
+    expect(marker).to_be_visible(timeout=5000)
+
+    # Verify styles (Yellow background)
+    # Check if style tag exists
+    style_count = iframe_element.locator("head style[id='reader-static-styles']").count()
+    print(f"Found {style_count} static style tags in iframe head")
+
+    # Debug computed styles
+    styles = marker.evaluate("""el => {
+        const style = window.getComputedStyle(el);
+        return {
+            bg: style.backgroundColor,
+            width: style.width,
+            height: style.height,
+            display: style.display
+        }
+    }""")
+    print(f"Marker Styles: {styles}")
+
+    # The injected CSS was: background-color: #fde047; which is rgb(253, 224, 71)
+    # Allow for some tolerance or exact match
+    expected_colors = ["rgb(253, 224, 71)", "#fde047"]
+    assert styles['bg'] in expected_colors or "253" in styles['bg'], f"Expected yellow background, got {styles['bg']}"
+
+    page.close()
+    context.close()
+
+
 # Test unskipped
 def test_journey_offline_resilience(browser: Browser, browser_context_args):
     """

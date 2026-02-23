@@ -13,7 +13,7 @@ const STATIC_READER_STYLES = `
   display: inline-block;
   width: 16px;
   height: 16px;
-  background-color: #fde047; /* Yellow 300 */
+  background-color: #fde047 !important; /* Yellow 300 */
   border: 1px solid #eab308; /* Yellow 500 */
   border-radius: 2px;
   margin-left: 4px;
