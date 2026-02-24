@@ -5,9 +5,15 @@ import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
+import { useLocalHistoryStore } from './useLocalHistoryStore';
+import type { UserProgress } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
 
 // Mock stores
+vi.mock('./useLocalHistoryStore', () => ({
+  useLocalHistoryStore: vi.fn(),
+}));
+
 vi.mock('./useLibraryStore', () => ({
   useLibraryStore: vi.fn(),
 }));
@@ -18,10 +24,10 @@ vi.mock('./useBookStore', () => ({
 
 vi.mock('./useReadingStateStore', () => ({
   useReadingStateStore: vi.fn(),
-  isValidProgress: (p: any) => !!(p && p.percentage > 0.005),
-  getMostRecentProgress: (bookProgress: any) => {
+  isValidProgress: (p: UserProgress | null | undefined) => !!(p && p.percentage > 0.005),
+  getMostRecentProgress: (bookProgress: Record<string, UserProgress> | undefined) => {
     if (!bookProgress) return null;
-    let max: any = null;
+    let max: UserProgress | null = null;
     for (const k in bookProgress) {
       const p = bookProgress[k];
       if (p && p.percentage > 0.005) {
@@ -331,9 +337,12 @@ describe('selectors', () => {
   describe('useLastReadBookId', () => {
     beforeEach(() => {
       vi.clearAllMocks();
+      // Default: no local history
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useLocalHistoryStore).mockImplementation((selector: any) => selector({ lastReadBookId: null }));
     });
 
-    it('should return null if no progress exists', () => {
+    it('should return null if no progress exists and no local history', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
         return selector({ progress: {} });
@@ -344,7 +353,34 @@ describe('selectors', () => {
       expect(result.current).toBeNull();
     });
 
-    it('should return book with latest timestamp on current device', () => {
+    it('should prioritize local history if available', () => {
+      // Local history has 'local-book'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useLocalHistoryStore).mockImplementation((selector: any) => selector({ lastReadBookId: 'local-book' }));
+
+      // Reading state has 'remote-book' which is newer (should be ignored)
+      const mockProgress = {
+        'remote-book': { 'device-1': { lastRead: 2000, percentage: 0.5 } },
+        'local-book': { 'device-1': { lastRead: 1000, percentage: 0.1 } }
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
+        // If local ID is present, the selector should ideally return null (conditional subscription).
+        // But our test mock implementation blindly runs the selector.
+        return selector({ progress: mockProgress });
+      });
+      vi.mocked(getDeviceId).mockReturnValue('device-1');
+
+      const { result } = renderHook(() => useLastReadBookId());
+      expect(result.current).toBe('local-book');
+    });
+
+    it('should fallback to progress scan if local history is missing', () => {
+      // Local history empty
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useLocalHistoryStore).mockImplementation((selector: any) => selector({ lastReadBookId: null }));
+
       const mockProgress = {
         'book1': {
           'device-1': { lastRead: 1000, percentage: 0.1 },
@@ -366,6 +402,9 @@ describe('selectors', () => {
     });
 
     it('should ignore books not read on current device even if read recently on others', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(useLocalHistoryStore).mockImplementation((selector: any) => selector({ lastReadBookId: null }));
+
       const mockProgress = {
         'book1': {
           'device-1': { lastRead: 1000, percentage: 0.1 }
