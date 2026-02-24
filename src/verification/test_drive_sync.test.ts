@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockDriveService } from '../lib/drive/MockDriveService';
 import { DriveScannerService } from '../lib/drive/DriveScannerService';
 import { useDriveStore } from '../store/useDriveStore';
@@ -40,6 +40,9 @@ vi.mock('../lib/epub/epub-parser', () => ({
 
 describe('Google Drive Sync & Import E2E', () => {
     beforeEach(() => {
+        vi.spyOn(console, 'info').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'error').mockImplementation(() => {});
         vi.clearAllMocks();
         mockDriveService.reset();
 
@@ -55,6 +58,10 @@ describe('Google Drive Sync & Import E2E', () => {
         useBookStore.setState({
             books: {}
         });
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     // User Journey 1: Adding a folder to monitor

@@ -136,6 +136,7 @@ describe('useLibraryStore', () => {
   });
 
   it('should handle add book error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const error = new Error('Add failed');
     vi.mocked(mockDBService.addBook).mockRejectedValue(error);
 
@@ -148,6 +149,7 @@ describe('useLibraryStore', () => {
   });
 
   it('should detect duplicate book and throw error if not overwriting', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.mocked(mockDBService.getBookIdByFilename).mockResolvedValue('existing-id');
 
     await expect(useLibraryStore.getState().addBook(mockFile)).rejects.toThrow('A book with the filename "test.epub" already exists.');

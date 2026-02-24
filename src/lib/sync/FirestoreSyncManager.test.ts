@@ -219,6 +219,8 @@ describe('FirestoreSyncManager', () => {
         let mockFireProviderInstance: any;
 
         beforeEach(async () => {
+            vi.spyOn(console, 'error').mockImplementation(() => {});
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
             const { onAuthStateChanged } = await import('firebase/auth');
 
             manager = getFirestoreSyncManager();

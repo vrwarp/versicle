@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TTSProviderManager } from './TTSProviderManager';
 
 // Mock Capacitor
@@ -61,6 +61,10 @@ describe('TTSProviderManager', () => {
         manager = new TTSProviderManager(events);
     });
 
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('should initialize with correct provider', () => {
         expect(manager).toBeDefined();
         expect(mockProviderOn).toHaveBeenCalled();
@@ -86,6 +90,8 @@ describe('TTSProviderManager', () => {
     });
 
     it('should handle cloud fallback', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         // Setup manager with a cloud provider (mocked by forcing id='cloud')
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (manager as any).provider.id = 'cloud';

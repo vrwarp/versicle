@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, Mock, afterEach } from 'vitest';
 import { DriveScannerService } from './DriveScannerService';
 import { useDriveStore } from '../../store/useDriveStore';
 import { useBookStore } from '../../store/useBookStore';
@@ -28,6 +28,9 @@ vi.mock('./DriveService', () => ({
 
 describe('DriveScannerService', () => {
     beforeEach(() => {
+        vi.spyOn(console, 'info').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'error').mockImplementation(() => {});
         vi.clearAllMocks();
 
         // Setup default store mocks
@@ -41,6 +44,10 @@ describe('DriveScannerService', () => {
         (useBookStore.getState as unknown as Mock).mockReturnValue({
             books: {}
         });
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     describe('scanAndIndex', () => {

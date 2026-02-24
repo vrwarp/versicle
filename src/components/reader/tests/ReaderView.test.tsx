@@ -92,6 +92,7 @@ describe('ReaderView', () => {
   const mockDefault = vi.fn();
 
   beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.clearAllMocks();
 
     // Mock epubjs instance

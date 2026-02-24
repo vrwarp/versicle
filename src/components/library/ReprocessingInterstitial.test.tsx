@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
@@ -24,6 +24,10 @@ describe('ReprocessingInterstitial', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     it('calls reprocessBook and hydrates metadata on mount when open', async () => {
@@ -53,6 +57,7 @@ describe('ReprocessingInterstitial', () => {
     });
 
     it('shows error message if reprocessing fails', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
         const bookId = 'test-book-123';
         (reprocessBook as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Reprocessing failed'));
 

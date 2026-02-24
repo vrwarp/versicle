@@ -167,6 +167,7 @@ describe('ingestion', () => {
 
   it('should always sanitize metadata', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
     const longTitle = 'A'.repeat(600);
 
     vi.resetModules();
@@ -193,5 +194,6 @@ describe('ingestion', () => {
     expect(data.manifest.title.length).toBe(500);
     expect(data.manifest.title).not.toBe(longTitle);
     consoleSpy.mockRestore();
+    warnSpy.mockRestore();
   });
 });

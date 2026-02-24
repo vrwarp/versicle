@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { OffloadBookDialog } from './OffloadBookDialog';
@@ -127,7 +127,12 @@ describe('OffloadBookDialog', () => {
         });
     });
 
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('handles offload error flow', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
         const error = new Error('Offload failed');
         mockOffloadBook.mockRejectedValue(error);
 

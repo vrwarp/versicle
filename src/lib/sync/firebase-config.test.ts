@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initializeFirebase, resetFirebase } from './firebase-config';
 import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
@@ -49,6 +49,10 @@ describe('firebase-config initialization', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('should initialize with offline persistence by default', () => {
     initializeFirebase();
 
@@ -60,6 +64,8 @@ describe('firebase-config initialization', () => {
   });
 
   it('should fallback to getFirestore and show toast if persistence fails', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     // Make initializeFirestore throw
     vi.mocked(initializeFirestore).mockImplementationOnce(() => {
       throw new Error('Persistence failed');
