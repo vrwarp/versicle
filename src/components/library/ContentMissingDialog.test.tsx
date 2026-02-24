@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, Mock } from 'vitest';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { useDriveStore } from '../../store/useDriveStore';
+import { BookMetadata } from '../../types/db';
 
 // Mock the store
 vi.mock('../../store/useDriveStore', () => ({
@@ -12,8 +13,14 @@ vi.mock('../../store/useDriveStore', () => ({
 // Mock the Dialog component since it uses Radix which might need setup
 // But we want to test the footer content which is passed as prop.
 // So we can mock Dialog to just render children and footer.
+interface DialogMockProps {
+  children: ReactNode;
+  footer: ReactNode;
+  isOpen: boolean;
+}
+
 vi.mock('../ui/Dialog', () => ({
-  Dialog: ({ children, footer, isOpen }: any) => isOpen ? (
+  Dialog: ({ children, footer, isOpen }: DialogMockProps) => isOpen ? (
     <div data-testid="dialog">
       {children}
       <div data-testid="footer">{footer}</div>
@@ -22,15 +29,17 @@ vi.mock('../ui/Dialog', () => ({
 }));
 
 describe('ContentMissingDialog', () => {
-  const mockBook = {
+  const mockBook: BookMetadata = {
     id: '1',
     title: 'Test Book',
+    author: 'Test Author',
+    addedAt: Date.now(),
     filename: 'test.epub',
   };
 
   it('renders footer buttons with responsive classes', () => {
     // Setup store mock
-    (useDriveStore as any).mockReturnValue({
+    (useDriveStore as unknown as Mock).mockReturnValue({
       findFile: vi.fn().mockReturnValue({
           id: 'cloud-id',
           name: 'cloud-file.epub',
@@ -42,7 +51,7 @@ describe('ContentMissingDialog', () => {
       <ContentMissingDialog
         open={true}
         onOpenChange={vi.fn()}
-        book={mockBook as any}
+        book={mockBook}
         onRestore={vi.fn()}
       />
     );
