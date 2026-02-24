@@ -4,6 +4,7 @@ import { yDoc, getYjsOptions } from './yjs-provider';
 import type { UserProgress, ReadingEventType, ReadingSession } from '../types/db';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
+import { useLocalHistoryStore } from './useLocalHistoryStore';
 import { getDeviceId } from '../lib/device-id';
 import { mergeCfiRanges } from '../lib/cfi-utils';
 
@@ -132,6 +133,7 @@ export const useReadingStateStore = create<ReadingState>()(
             // Actions
             updateLocation: (bookId, cfi, percentage) => {
                 const deviceId = getDeviceId();
+                useLocalHistoryStore.getState().setLastReadBookId(bookId);
 
                 set((state) => {
                     const bookProgress = state.progress[bookId] || {};
@@ -177,6 +179,8 @@ export const useReadingStateStore = create<ReadingState>()(
 
             addCompletedRange: (bookId, range, type = 'page', label) => {
                 const deviceId = getDeviceId();
+                useLocalHistoryStore.getState().setLastReadBookId(bookId);
+
                 set((state) => {
                     const bookProgress = state.progress[bookId] || {};
                     const existing = bookProgress[deviceId] || {
@@ -250,6 +254,7 @@ export const useReadingStateStore = create<ReadingState>()(
             updateReadingSession: (bookId, currentCfi, percentage, updates) => {
                 const deviceId = getDeviceId();
                 const now = Date.now();
+                useLocalHistoryStore.getState().setLastReadBookId(bookId);
 
                 set((state) => {
                     const bookProgress = state.progress[bookId] || {};
@@ -346,6 +351,8 @@ export const useReadingStateStore = create<ReadingState>()(
 
             updatePlaybackPosition: (bookId, lastPlayedCfi) => {
                 const deviceId = getDeviceId();
+                useLocalHistoryStore.getState().setLastReadBookId(bookId);
+
                 set((state) => {
                     const bookProgress = state.progress[bookId] || {};
                     const existing = bookProgress[deviceId] || {
@@ -373,6 +380,8 @@ export const useReadingStateStore = create<ReadingState>()(
 
             updateTTSProgress: (bookId, index, sectionIndex) => {
                 const deviceId = getDeviceId();
+                useLocalHistoryStore.getState().setLastReadBookId(bookId);
+
                 set((state) => {
                     const bookProgress = state.progress[bookId] || {};
                     const existing = bookProgress[deviceId] || {

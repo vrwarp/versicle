@@ -46,7 +46,7 @@ export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, descript
           </ModalDescription>
         </ModalHeader>
         <div className={cn("mb-6 text-foreground min-w-0", contentClassName)}>{children}</div>
-        {footer && <div className="flex justify-end gap-2">{footer}</div>}
+        {footer && <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">{footer}</div>}
       </ModalContent>
     </Modal>
   );

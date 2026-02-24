@@ -8,6 +8,39 @@ import { createLogger } from '../lib/logger';
 
 const logger = createLogger('useEpubReader');
 
+const STATIC_READER_STYLES = `
+.note-marker {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-color: #fde047 !important; /* Yellow 300 */
+  border: 1px solid #eab308; /* Yellow 500 */
+  border-radius: 2px;
+  margin-left: 4px;
+  cursor: pointer;
+  vertical-align: middle;
+  position: relative;
+  box-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+  z-index: 10;
+}
+
+.note-marker::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 1px;
+  background-color: #ca8a04; /* Yellow 600 */
+  box-shadow: 0 3px 0 #ca8a04, 0 6px 0 #ca8a04;
+}
+
+.note-marker:hover {
+  transform: scale(1.1);
+  box-shadow: 1px 1px 4px rgba(0,0,0,0.2);
+}
+`;
+
 /**
  * Recursive helper to resolve a section title from the Table of Contents (ToC).
  *
@@ -344,6 +377,15 @@ export function useEpubReader(
             style.id = styleId;
             doc.head.appendChild(style);
             applyStylesRef.current();
+          }
+
+          // Inject static styles (e.g. note markers)
+          const staticStyleId = 'reader-static-styles';
+          if (!doc.getElementById(staticStyleId)) {
+            const style = doc.createElement('style');
+            style.id = staticStyleId;
+            style.textContent = STATIC_READER_STYLES;
+            doc.head.appendChild(style);
           }
 
           // Inject empty div for scrolling space

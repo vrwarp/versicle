@@ -21,6 +21,12 @@ const initializeSocialLogin = async () => {
 
 initializeSocialLogin().catch(console.error);
 
+useGoogleServicesStore.subscribe((state, prevState) => {
+  if (state.googleClientId !== prevState.googleClientId || state.googleIosClientId !== prevState.googleIosClientId) {
+    initializeSocialLogin().catch(console.error);
+  }
+});
+
 /**
  * Application entry point.
  * Mounts the React app to the DOM.
