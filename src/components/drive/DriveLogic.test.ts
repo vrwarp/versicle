@@ -20,6 +20,7 @@ describe('Drive Integration', () => {
 
     afterEach(() => {
         vi.clearAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe('DriveService', () => {
@@ -44,6 +45,8 @@ describe('Drive Integration', () => {
         });
 
         it('retries on 401', async () => {
+            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            vi.spyOn(console, 'log').mockImplementation(() => {});
             vi.mocked(googleIntegrationManager.getValidToken)
                 .mockResolvedValueOnce('expired-token')
                 .mockResolvedValueOnce('new-token');

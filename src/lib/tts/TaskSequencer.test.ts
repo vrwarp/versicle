@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TaskSequencer } from './TaskSequencer';
 
 describe('TaskSequencer', () => {
@@ -6,6 +6,10 @@ describe('TaskSequencer', () => {
 
     beforeEach(() => {
         sequencer = new TaskSequencer();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     it('should execute tasks sequentially', async () => {
@@ -21,6 +25,7 @@ describe('TaskSequencer', () => {
     });
 
     it('should handle task failures safely', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
         const results: number[] = [];
         const task1 = () => new Promise<void>((_, reject) => setTimeout(() => reject('error'), 10));
         const task2 = () => new Promise<void>(resolve => { results.push(2); resolve(); });

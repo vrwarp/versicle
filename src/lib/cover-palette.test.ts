@@ -1,8 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { extractCoverPalette, unpackColorToRGB, rgbToL, getOptimizedTextColor } from './cover-palette';
 
 describe('extractCoverPalette', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('should extract palette using OffscreenCanvas when available', async () => {
          // Mock OffscreenCanvas
         const mockContext = {
@@ -86,6 +90,7 @@ describe('extractCoverPalette', () => {
     });
 
     it('should return empty array if createImageBitmap fails', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         (global as any).OffscreenCanvas = undefined;
         global.createImageBitmap = vi.fn().mockRejectedValue(new Error('Failed'));
 

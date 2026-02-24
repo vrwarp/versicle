@@ -83,7 +83,7 @@ describe('AudioContentPipeline Reproduction: Swallowed Errors & Retry Logic', ()
         (genAIService.detectContentTypes as any).mockRejectedValue(new Error('Network Error'));
 
         // 3. Spy on console.warn
-        const consoleSpy = vi.spyOn(console, 'warn');
+        const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const onMaskFound = vi.fn();
 
         // 4. Trigger Analysis
@@ -123,7 +123,7 @@ describe('AudioContentPipeline Reproduction: Swallowed Errors & Retry Logic', ()
         });
 
         const onMaskFound = vi.fn();
-        const consoleSpy = vi.spyOn(console, 'warn');
+        const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         // 4. Trigger Analysis
         await pipeline.loadSection('book1', mockSection, 0, false, 1.0, undefined, onMaskFound);

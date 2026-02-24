@@ -109,10 +109,12 @@ import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
 describe('App Service Worker Wait (Refactored)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('initializes successfully when SW controller is ready (mocked)', async () => {
@@ -132,6 +134,7 @@ describe('App Service Worker Wait (Refactored)', () => {
   });
 
   it('shows critical error if SW controller wait fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     // Mock failure
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (waitForServiceWorkerController as any).mockRejectedValue(new Error('Controller missing'));

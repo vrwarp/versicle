@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AndroidBackupService } from './android-backup';
 import { Filesystem } from '@capacitor/filesystem';
 
@@ -13,6 +13,10 @@ vi.mock('@capacitor/filesystem', () => ({
 }));
 
 describe('AndroidBackupService', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('should write backup payload', async () => {
         const manifest = { version: 1 } as unknown as SyncManifest;
         await AndroidBackupService.writeBackupPayload(manifest);
@@ -33,6 +37,7 @@ describe('AndroidBackupService', () => {
     });
 
     it('should handle read errors gracefully', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
         vi.mocked(Filesystem.readFile).mockRejectedValue(new Error('File not found'));
         const result = await AndroidBackupService.readBackupPayload();
         expect(result).toBeNull();
