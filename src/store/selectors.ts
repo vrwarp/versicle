@@ -3,6 +3,7 @@ import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore, isValidProgress, getMostRecentProgress } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
+import { useLocalHistoryStore } from './useLocalHistoryStore';
 import type { UserProgress, UserInventoryItem } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
 
@@ -221,11 +222,23 @@ export const useBook = (id: string | null) => {
  *
  * OPTIMIZATION: Efficiently scans the progress map to find the book with the latest timestamp.
  * This avoids iterating over the entire book library or creating large intermediate arrays.
+ *
+ * BOLT OPTIMIZATION: Uses `useLocalHistoryStore` (persisted local state) to avoid
+ * iterating the `progressMap` on every page turn. Also uses conditional subscription
+ * to avoid re-rendering when `progressMap` updates if a local ID is already found.
  */
 export const useLastReadBookId = () => {
-    const progressMap = useReadingStateStore(state => state.progress);
+    const localId = useLocalHistoryStore(state => state.lastReadBookId);
+
+    // Only subscribe to progressMap if localId is missing (first run or reset)
+    // If localId is present, we return null for progressMap to avoid re-rendering when progress changes.
+    // This is critical for performance during reading, as progressMap updates on every page turn.
+    const progressMap = useReadingStateStore(state => !localId ? state.progress : null);
 
     return useMemo(() => {
+        if (localId) return localId;
+        if (!progressMap) return null;
+
         const deviceId = getDeviceId();
         let maxLastRead = 0;
         let lastReadBookId: string | null = null;
@@ -239,7 +252,7 @@ export const useLastReadBookId = () => {
             }
         }
         return lastReadBookId;
-    }, [progressMap]);
+    }, [localId, progressMap]);
 };
 
 /**
