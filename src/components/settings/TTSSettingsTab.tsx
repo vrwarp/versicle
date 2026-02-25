@@ -237,7 +237,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                             <div className="flex justify-between">
                                 <div className="space-y-0.5">
                                     <div id="min-sentence-label" className="text-sm font-medium">Minimum Sentence Length</div>
-                                    <p className="text-xs text-muted-foreground">
+                                    <p id="min-sentence-desc" className="text-xs text-muted-foreground">
                                         Sentences shorter than this will be merged with adjacent ones.
                                     </p>
                                 </div>
@@ -245,6 +245,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                             </div>
                             <Slider
                                 aria-labelledby="min-sentence-label"
+                                aria-describedby="min-sentence-desc"
                                 value={[minSentenceLength]}
                                 min={0}
                                 max={120}
