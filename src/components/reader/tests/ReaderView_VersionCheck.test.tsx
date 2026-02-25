@@ -46,16 +46,22 @@ vi.mock('../../../store/usePreferencesStore', () => ({
     })
 }));
 const MOCK_PROGRESS = { completedRanges: [] };
-vi.mock('../../../store/useReadingStateStore', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useReadingStateStore: (selector: any) => selector({
+vi.mock('../../../store/useReadingStateStore', () => {
+    const mockState = {
         updateLocation: vi.fn(),
         reset: vi.fn(),
         progress: {},
         getProgress: () => null
-    }),
-    useBookProgress: vi.fn(() => MOCK_PROGRESS)
-}));
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mockStore = (selector: any) => selector(mockState);
+    mockStore.getState = () => mockState;
+
+    return {
+        useReadingStateStore: mockStore,
+        useBookProgress: vi.fn(() => MOCK_PROGRESS)
+    };
+});
 vi.mock('../../../store/useTTSStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useTTSStore: (selector: any) => selector({
@@ -128,6 +134,8 @@ vi.mock('../LexiconManager', () => ({ LexiconManager: () => null }));
 vi.mock('../VisualSettings', () => ({ VisualSettings: () => null }));
 vi.mock('../ReadingHistoryPanel', () => ({ ReadingHistoryPanel: () => null }));
 vi.mock('../ContentAnalysisLegend', () => ({ ContentAnalysisLegend: () => null }));
+// Mock the HistoryHighlighter since it also uses the store
+vi.mock('../HistoryHighlighter', () => ({ HistoryHighlighter: () => null }));
 
 describe('ReaderView Version Check', () => {
     const mockNavigate = vi.fn();
