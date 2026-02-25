@@ -40,7 +40,7 @@ import { CURRENT_BOOK_VERSION } from '../../lib/constants';
 import { createLogger } from '../../lib/logger';
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
-import { useHistoryHighlights } from './useHistoryHighlights';
+import { HistoryHighlighter } from './HistoryHighlighter';
 
 const logger = createLogger('ReaderView');
 
@@ -122,7 +122,11 @@ export const ReaderView: React.FC = () => {
             coverBlob: rawBookMetadata.coverBlob || undefined // Convert null to undefined for compatibility
         };
     }, [rawBookMetadata]);
-    const progress = useReadingStateStore(state => id ? state.getProgress(id) : null);
+
+    // Optimization: Read initial location once on mount/id change, avoiding subscription to progress updates
+    const initialLocation = useMemo(() => {
+        return id ? useReadingStateStore.getState().getProgress(id)?.currentCfi : undefined;
+    }, [id]);
 
     const reset = useCallback(() => {
         resetUI();
@@ -162,7 +166,7 @@ export const ReaderView: React.FC = () => {
         fontSize,
         lineHeight,
         shouldForceFont,
-        initialLocation: progress?.currentCfi,
+        initialLocation,
         metadata: bookMetadata,
         onLocationChange: (location, percentage, title, sectionId) => {
             // Initialize previousLocation if it's null (e.g. initial load), so we can track subsequent moves
@@ -310,7 +314,7 @@ export const ReaderView: React.FC = () => {
         showPopover,
         hidePopover,
         bookMetadata,
-        progress?.currentCfi,
+        initialLocation,
         setCurrentSection
     ]);
 
@@ -733,16 +737,6 @@ export const ReaderView: React.FC = () => {
         // Re-apply on section change or debug toggle
     }, [rendition, isRenditionReady, isDebugModeEnabled, id, currentSectionId, book]);
 
-    // Reading History Highlights
-    useHistoryHighlights(
-        rendition,
-        isRenditionReady,
-        id || null,
-        progress?.currentCfi,
-        isPlaying,
-        progress?.lastPlayedCfi
-    );
-
     const [useSyntheticToc, setUseSyntheticToc] = useState(false);
     const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
 
@@ -984,15 +978,30 @@ export const ReaderView: React.FC = () => {
 
     // Compute device markers for TOC
     const devices = useDeviceStore(state => state.devices);
-    const { progress: allProgress } = useReadingStateStore(useShallow(state => ({ progress: state.progress })));
+    const showToc = activeSidebar === 'toc';
     const currentDeviceId = getDeviceId();
+
+    // Optimization: Subscribe only to OTHER devices' progress to avoid re-rendering on own progress update
+    const otherDevicesProgress = useReadingStateStore(useShallow(state => {
+        if (!id) return {};
+        const bookProgress = state.progress[id];
+        if (!bookProgress) return {};
+
+        const result: Record<string, import('../../types/db').UserProgress> = {};
+        for (const [deviceId, prog] of Object.entries(bookProgress)) {
+            if (deviceId !== currentDeviceId) {
+                result[deviceId] = prog;
+            }
+        }
+        return result;
+    }));
 
     const deviceMarkers = useMemo(() => {
         const markers: Record<string, Array<{ id: string; name: string; platform: string }>> = {};
-        if (!id || !allProgress[id] || !book) return markers;
+        // Optimization: Skip computation if TOC is hidden
+        if (!showToc || !id || !book) return markers;
 
-        Object.entries(allProgress[id]).forEach(([devId, prog]) => {
-            if (devId === currentDeviceId) return; // Skip current device
+        Object.entries(otherDevicesProgress).forEach(([devId, prog]) => {
             if (!prog.currentCfi) return;
 
             try {
@@ -1016,9 +1025,7 @@ export const ReaderView: React.FC = () => {
             }
         });
         return markers;
-    }, [id, allProgress, book, devices, currentDeviceId]);
-
-    const showToc = activeSidebar === 'toc';
+    }, [showToc, id, otherDevicesProgress, book, devices]);
     const showAnnotations = activeSidebar === 'annotations';
     const showSearch = activeSidebar === 'search';
 
@@ -1292,6 +1299,13 @@ export const ReaderView: React.FC = () => {
                 onJump={(cfi) => {
                     rendition?.display(cfi);
                 }}
+            />
+
+            <HistoryHighlighter
+                rendition={rendition}
+                isRenditionReady={isRenditionReady}
+                bookId={id || null}
+                isPlaying={isPlaying}
             />
 
             {/* Smart Resume Toast */}
