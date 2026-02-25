@@ -11,7 +11,7 @@ const Slider = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof SliderPrimitive.Root>
 >(({ className, ...props }, ref) => {
   // Extract accessibility props to pass to the Thumb (which carries role="slider")
-  const { "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, "aria-valuetext": ariaValueText, ...rootProps } = props;
+  const { "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, "aria-valuetext": ariaValueText, "aria-describedby": ariaDescribedBy, ...rootProps } = props;
 
   return (
     <SliderPrimitive.Root
@@ -30,6 +30,7 @@ const Slider = React.forwardRef<
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
         aria-valuetext={ariaValueText}
+        aria-describedby={ariaDescribedBy}
       />
     </SliderPrimitive.Root>
   )
