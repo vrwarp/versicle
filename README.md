@@ -47,6 +47,7 @@
 *   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" and can be instantly restored by re-importing the file (verified via 3-point fingerprint).
 *   **High-Performance Rendering**: Uses a two-stage memoization strategy to ensure the library view remains silky smooth (60fps) even with thousands of books.
 *   **Zero-Latency Parsing**: Uses a specialized zero-allocation text scanner (`TextScanningTrie`) to process text instantly without garbage collection pauses.
+*   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
 *   **Annotations**: Highlights and notes.
 *   **Table Snapshots**: Complex tables are captured as structural images for better readability and preservation.

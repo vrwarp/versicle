@@ -288,12 +288,13 @@ Provides a "Cloud Overlay" for real-time synchronization.
 *   **Logic**:
     *   **Hybrid Auth**: Supports both Web (`signInWithPopup`/`getRedirectResult`) and Native Android (`FirebaseAuthentication` plugin) flows for Google Sign-In.
     *   **Cloud Overlay**: Acts as a secondary sync provider. `y-indexeddb` remains the primary source of truth, while Firestore relays updates to other devices.
+    *   **Hook Integration**: The synchronization logic is exposed to the UI via `useFirestoreSync` (maintains the connection) and `useSyncStore` (tracks status), decoupling the UI from the underlying provider.
     *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
     *   **Pre-Sync Checkpoint**: Automatically creates a "pre-sync" checkpoint via `CheckpointService` immediately before connecting to the provider, ensuring a safe fallback state exists before merging remote changes (Destructive Restore protection).
     *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
     *   **Authenticated**: Sync only occurs when the user is signed in via Firebase Auth.
-    *   **Mock Mode**: Includes a `MockFireProvider` for integration testing without a real Firebase project.
+    *   **Mock Mode**: Includes a `MockFireProvider` (in `drivers/`) for integration testing without a real Firebase project, allowing full E2E sync testing in CI.
 *   **Trade-offs**:
     *   **Complexity**: Requires maintaining a Firestore project.
 
@@ -422,6 +423,12 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks.
 *   **Logic**: Uses a **Generator** pattern (`function*`) to yield Promises. Calling `cancel()` throws a `CancellationError` into the generator.
 
+#### Audio Player Utility (`src/lib/tts/AudioElementPlayer.ts`)
+*   **Goal**: Provide a robust wrapper around the HTML5 Audio element.
+*   **Logic**:
+    *   **Lifecycle Management**: Abstracts the creation and revocation of Blob URLs (`URL.createObjectURL` / `revokeObjectURL`) to prevent memory leaks.
+    *   **Unified Interface**: key interface for playing both Blob assets (local TTS) and remote URLs (Cloud TTS).
+
 #### Sync Mesh (`src/store/useDeviceStore.ts` & `src/lib/device-id.ts`)
 *   **Goal**: Provide visibility into the synchronization network and enable "Send to Device" features.
 *   **Logic**:
@@ -450,6 +457,14 @@ The central hub for TTS operations. It runs on the **Main Thread** and coordinat
     *   **Platform Detection**: Automatically selects `CapacitorTTSProvider` on native devices and `WebSpeechProvider` on the web.
     *   **Fallback Strategy**: Automatically falls back to the local Web Speech engine if a cloud/native provider fails.
     *   **Event Normalization**: Unifies disparate provider events (boundaries, errors, completion) into a consistent `TTSProviderEvents` interface.
+
+#### `src/lib/tts/providers/BaseCloudProvider.ts` (Provider Architecture)
+*   **Goal**: Standardize common behavior across TTS providers to prevent code duplication.
+*   **Logic**:
+    *   **Shared Infrastructure**: Implements the core logic for **Caching** (`TTSCache`), **Cost Tracking** (`CostEstimator`), and **Audio Playback** (`AudioElementPlayer`).
+    *   **Inheritance**:
+        *   **Cloud Providers**: `OpenAIProvider`, `GoogleTTSProvider`, and `LemonFoxProvider` extend this to inherit caching and cost logic.
+        *   **Piper (Local)**: `PiperProvider` *also* extends `BaseCloudProvider`. Despite being local, it leverages the same caching/playback infrastructure, ensuring a consistent experience across all neural voices.
 
 #### `src/lib/tts/TaskSequencer.ts`
 *   **Goal**: Prevent race conditions in async audio operations.
@@ -595,6 +610,12 @@ State is managed using **Zustand** with specialized strategies for different dat
         *   **Heartbeat Throttling**: Updates the `lastActive` timestamp with a 5-minute throttle (`HEARTBEAT_THROTTLE_MS`) to prevent excessive CRDT updates while maintaining online status visibility.
     *   **Why**: Enables "Send to Device" features and provides visibility into the sync network.
 *   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
+*   **`useReaderUIStore` (Local/Ephemeral)**:
+    *   **Goal**: Manage transient UI state for the Reading Room.
+    *   **Logic**: Tracks loading state, Table of Contents (TOC), immersive mode, and holds callbacks (`playFromSelection`, `jumpToLocation`) to allow the React UI to control the underlying Reader instance.
+*   **`useLocalHistoryStore` (Local/Persisted)**:
+    *   **Goal**: Optimize startup performance by tracking the "Last Read Book" locally.
+    *   **Logic**: Stores the ID of the last open book in `localStorage`. This allows the app to immediately resume the correct book on launch without waiting to iterate through the potentially large, synced `user_progress` Yjs map.
 *   **`useGenAIStore` (Local/Persisted)**:
     *   **Goal**: Manage AI configuration, API keys, and usage tracking.
     *   **Logic**:
