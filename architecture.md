@@ -343,6 +343,9 @@ Handles the complex task of importing an EPUB file.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
         *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
         *   **Accessibility**: Calculates **Perceptual Lightness (L*)** (CIE 1976) from the extracted RGB values to determine the optimal text color (Soft Dark, Hard Black, Hard White, Soft Light) for UI overlays, ensuring WCAG contrast compliance.
+    5.  **Table Snapshots**: Captures complex tables as images for visual preservation.
+        *   **Tool**: Uses **`@zumer/snapdom`** to render table nodes into lightweight WebP blobs.
+        *   **Configuration**: 0.1 quality, 0.5 scale to minimize storage footprint while maintaining legibility.
 
 #### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
 *   **Goal**: Prevent memory leaks caused by `URL.createObjectURL`.
