@@ -128,11 +128,16 @@ describe('batch-ingestion', () => {
             const file1 = new File(['content'], 'book1.epub');
             const file2 = new File(['content'], 'book2.epub');
 
-            await processBatchImport([file1, file2]);
+            const result = await processBatchImport([file1, file2]);
 
             expect(dbService.addBook).toHaveBeenCalledTimes(2);
             expect(dbService.addBook).toHaveBeenCalledWith(file1, undefined);
             expect(dbService.addBook).toHaveBeenCalledWith(file2, undefined);
+
+            // Verify structure
+            expect(result.successful).toHaveLength(2);
+            expect(result.successful[0].sourceFilename).toBe('book1.epub');
+            expect(result.successful[1].sourceFilename).toBe('book2.epub');
         });
 
         it('should unzip and process files from zips', async () => {
@@ -158,12 +163,17 @@ describe('batch-ingestion', () => {
             mockLoadAsync.mockResolvedValue(mockZipObject);
             mockAsync.mockResolvedValue(new Blob(['inside content']));
 
-            await processBatchImport([zipFile, epubFile]);
+            const result = await processBatchImport([zipFile, epubFile]);
 
             expect(dbService.addBook).toHaveBeenCalledTimes(2);
             // One call for extracted file (we can't easily check equality of the file object created inside, but we know it's there)
             // One call for standalone.epub
             expect(dbService.addBook).toHaveBeenCalledWith(epubFile, undefined);
+
+            expect(result.successful).toHaveLength(2);
+            // ZIP content processed first
+            expect(result.successful[0].sourceFilename).toBe('inside.epub');
+            expect(result.successful[1].sourceFilename).toBe('standalone.epub');
         });
 
         it('should continue if one file fails', async () => {

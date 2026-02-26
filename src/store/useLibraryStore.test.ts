@@ -253,8 +253,8 @@ describe('useLibraryStore', () => {
     ];
 
     const mockManifests = [
-      { bookId: 'b1', title: 'Book 1', author: 'A', fileSize: 0 },
-      { bookId: 'b2', title: 'Book 2', author: 'B', fileSize: 0 }
+      { manifest: { bookId: 'b1', title: 'Book 1', author: 'A', fileSize: 0 }, sourceFilename: 'book1.epub' },
+      { manifest: { bookId: 'b2', title: 'Book 2', author: 'B', fileSize: 0 }, sourceFilename: 'book2.epub' }
     ];
 
     // Mock processBatchImport to return successful manifests

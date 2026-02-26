@@ -384,15 +384,27 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         }));
 
         // 5. Add to Reading List
-        useReadingListStore.getState().upsertEntry({
-          filename: file.name,
-          title: manifest.title,
-          author: manifest.author,
-          percentage: 0,
-          lastUpdated: Date.now(),
-          status: 'to-read',
-          rating: 0
-        });
+        const readingListStore = useReadingListStore.getState();
+        const existingEntry = readingListStore.entries[file.name];
+
+        if (existingEntry) {
+          // If entry exists, preserve progress but update metadata
+          readingListStore.updateEntry(file.name, {
+            title: manifest.title,
+            author: manifest.author,
+            lastUpdated: Date.now()
+          });
+        } else {
+          readingListStore.upsertEntry({
+            filename: file.name,
+            title: manifest.title,
+            author: manifest.author,
+            percentage: 0,
+            lastUpdated: Date.now(),
+            status: 'to-read',
+            rating: 0
+          });
+        }
       } catch (err) {
         logger.error('Failed to import book:', err);
         let errorMessage = 'Failed to import book.';
@@ -442,13 +454,13 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
         // Phase 2: Explicitly add new books to Yjs inventory
         // OPTIMIZATION: Use addBooks (batch) to avoid cascaded state updates
-        const newInventoryItems = successful.map(manifest => {
+        const newInventoryItems = successful.map(({ manifest, sourceFilename }) => {
           const inventoryItem: UserInventoryItem = {
             bookId: manifest.bookId,
             title: manifest.title,
             author: manifest.author || 'Unknown Author', // Ensure author is captured
             addedAt: Date.now(),
-            sourceFilename: files.find(f => f.name.includes(manifest.title) || f.size === manifest.fileSize)?.name, // Best effort match
+            sourceFilename: sourceFilename, // Guaranteed match from batch ingestion
             tags: [],
             status: 'unread',
             lastInteraction: Date.now()
