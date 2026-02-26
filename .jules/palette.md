@@ -64,3 +64,7 @@
 ## 2025-06-01 - Accessible Search Feedback
 **Learning:** Client-side filtering in lists often updates the DOM silently, leaving screen reader users unaware of the results (e.g., "5 items found").
 **Action:** When implementing real-time search, always include a `sr-only` live region (`role="status"`) that announces the result count or "No results" message to provide immediate feedback.
+
+## 2025-06-02 - Standardizing Selection Controls
+**Learning:** Manual implementation of selection controls (like checkboxes in data tables) using `div`s with `onClick`/`onKeyDown` handlers is fragile and visually inconsistent with the design system. It often misses nuanced states (focus rings, indeterminate) and requires verbose code.
+**Action:** Replace ad-hoc selection implementations with the standardized `Checkbox` component. This ensures full accessibility (keyboard support, proper ARIA roles) and visual consistency with zero custom CSS maintenance.

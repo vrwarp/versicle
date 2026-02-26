@@ -2,9 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
+import { Checkbox } from './ui/Checkbox';
 import { useReadingListStore } from '../store/useReadingListStore';
 import type { ReadingListEntry } from '../types/db';
-import { ArrowUpDown, Trash2, Edit2, Download, CheckSquare, Square, ArrowUp, ArrowDown, BookOpen } from 'lucide-react';
+import { ArrowUpDown, Trash2, Edit2, Download, ArrowUp, ArrowDown, BookOpen } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
 import { ExportImportService } from '../lib/sync/ExportImportService';
 
@@ -185,25 +186,12 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                 <thead className="text-xs uppercase bg-muted/50 sticky top-0 backdrop-blur-sm z-10">
                                     <tr>
                                         <th className="px-4 py-3 w-[40px]">
-                                            <div
-                                                className="cursor-pointer flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-                                                onClick={toggleSelectAll}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === ' ') {
-                                                        e.preventDefault();
-                                                        toggleSelectAll();
-                                                    }
-                                                }}
-                                                role="checkbox"
-                                                aria-checked={entries.length > 0 && selectedEntries.size === entries.length}
-                                                aria-label="Select all"
-                                                tabIndex={0}
-                                            >
-                                                {entries.length > 0 && selectedEntries.size === entries.length ? (
-                                                    <CheckSquare className="w-4 h-4" />
-                                                ) : (
-                                                    <Square className="w-4 h-4" />
-                                                )}
+                                            <div className="flex items-center justify-center">
+                                                <Checkbox
+                                                    checked={entries.length > 0 && selectedEntries.size === entries.length}
+                                                    onCheckedChange={() => toggleSelectAll()}
+                                                    aria-label="Select all"
+                                                />
                                             </div>
                                         </th>
                                         {[
@@ -239,25 +227,12 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                     {sortedEntries.map((entry) => (
                                         <tr key={entry.filename} className={`border-b hover:bg-muted/20 transition-colors ${selectedEntries.has(entry.filename) ? 'bg-muted/30' : ''}`}>
                                             <td className="px-4 py-3 text-center">
-                                                <div
-                                                    className="cursor-pointer flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
-                                                    onClick={() => toggleSelection(entry.filename)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                            e.preventDefault();
-                                                            toggleSelection(entry.filename);
-                                                        }
-                                                    }}
-                                                    role="checkbox"
-                                                    aria-checked={selectedEntries.has(entry.filename)}
-                                                    aria-label={`Select ${entry.title}`}
-                                                    tabIndex={0}
-                                                >
-                                                    {selectedEntries.has(entry.filename) ? (
-                                                        <CheckSquare className="w-4 h-4" />
-                                                    ) : (
-                                                        <Square className="w-4 h-4" />
-                                                    )}
+                                                <div className="flex items-center justify-center">
+                                                    <Checkbox
+                                                        checked={selectedEntries.has(entry.filename)}
+                                                        onCheckedChange={() => toggleSelection(entry.filename)}
+                                                        aria-label={`Select ${entry.title}`}
+                                                    />
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 font-medium">{entry.title}</td>
