@@ -89,7 +89,7 @@ export async function processBatchImport(
     ttsOptions?: ExtractionOptions,
     onProgress?: (processed: number, total: number, filename: string) => void,
     onUploadProgress?: (percent: number, status: string) => void
-): Promise<{ successful: StaticBookManifest[]; failed: string[] }> {
+): Promise<{ successful: { manifest: StaticBookManifest; sourceFilename: string }[]; failed: string[] }> {
     let allEpubs: File[] = [];
 
     // Calculate total size for upload/extraction progress
@@ -131,7 +131,7 @@ export async function processBatchImport(
         onUploadProgress(100, 'All files processed. Starting import...');
     }
 
-    const successful: StaticBookManifest[] = [];
+    const successful: { manifest: StaticBookManifest; sourceFilename: string }[] = [];
     const failed: string[] = [];
     const total = allEpubs.length;
 
@@ -145,7 +145,10 @@ export async function processBatchImport(
         try {
             const manifest = await dbService.addBook(epub, ttsOptions);
             if (manifest) {
-                successful.push(manifest);
+                successful.push({
+                    manifest,
+                    sourceFilename: epub.name
+                });
             } else {
                 failed.push(epub.name);
             }
