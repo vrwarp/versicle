@@ -5,6 +5,7 @@ import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import { useLibraryStore } from './useLibraryStore';
 import * as deviceIdModule from '../lib/device-id';
+import type { UserInventoryItem, UserProgress } from '../types/db';
 
 // Mock getDeviceId to track calls
 vi.mock('../lib/device-id', () => ({
@@ -27,8 +28,8 @@ describe('useAllBooks Performance', () => {
 
     it('should skip resolveProgress (and getDeviceId access) for unchanged books', () => {
         // 1. Setup 10 books with progress
-        const books: any = {};
-        const progress: any = {};
+        const books: Record<string, UserInventoryItem> = {};
+        const progress: Record<string, Record<string, UserProgress>> = {};
         const deviceId = 'device-id-123';
 
         for (let i = 0; i < 10; i++) {
