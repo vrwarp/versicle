@@ -50,7 +50,7 @@
 *   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker to keep the UI buttery smooth.
 *   **Annotations**: Highlights and notes.
-*   **Table Snapshots**: Complex tables are captured as structural images for better readability and preservation.
+*   **Table Snapshots**: Complex tables are captured as structural images for visual preservation.
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
