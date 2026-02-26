@@ -106,27 +106,23 @@ export const useAllBooks = () => {
     // OPTIMIZATION: Use a cache to maintain stable object references.
     // We only want to return a new object if the underlying data actually changed.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const previousResultsRef = useRef<Record<string, { result: any, base: any, progress: number, lastRead: number, currentCfi: string | undefined }>>({});
+    const previousResultsRef = useRef<Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }>>({});
 
     // OPTIMIZATION: Phase 2 - Progress Merge
     // This memo runs when 'progressMap' updates (frequently).
     // We iterate over baseBooks and merge the latest progress.
-    // CRITICAL: We compare with the previous result for each book.
-    // If the base book reference matches AND the derived progress is identical,
-    // we REUSE the previous object reference.
+    // BOLT OPTIMIZATION: Use raw reference checks (rawBookProgress) BEFORE calculating derived progress.
+    // This skips calling resolveProgress() (which involves localStorage access via getDeviceId) for unchanged books.
     const memoizedResult = useMemo(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newCache: Record<string, { result: any, base: any, progress: number, lastRead: number, currentCfi: string | undefined }> = {};
+        const newCache: Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }> = {};
 
         const cache = previousResultsRef.current;
 
         // eslint-disable-next-line react-hooks/refs
         const result = baseBooks.map(book => {
-            const bookProgress = resolveProgress(progressMap[book.id]);
-            const readingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
-            const progress = bookProgress?.percentage || readingListEntry?.percentage || 0;
-            const currentCfi = bookProgress?.currentCfi || undefined;
-            const lastRead = bookProgress?.lastRead || readingListEntry?.lastUpdated || 0;
+            const rawBookProgress = progressMap[book.id];
+            const rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
 
             // Check cache for reuse
             const prev = cache[book.id];
@@ -134,11 +130,22 @@ export const useAllBooks = () => {
             // Reuse if:
             // 1. Previous entry exists
             // 2. Base book object is referentially identical (Phase 1 didn't change it)
-            // 3. Derived progress values are identical
-            if (prev && prev.base === book && prev.progress === progress && prev.lastRead === lastRead && prev.currentCfi === currentCfi) {
+            // 3. Raw input references are identical (avoiding expensive resolveProgress)
+            if (prev &&
+                prev.base === book &&
+                prev.rawBookProgress === rawBookProgress &&
+                prev.rawReadingListEntry === rawReadingListEntry
+            ) {
                 newCache[book.id] = prev;
                 return prev.result;
             }
+
+            // Cache Miss: Calculate derived values
+            // This involves resolveProgress which calls getDeviceId -> localStorage.getItem (slow)
+            const bookProgress = resolveProgress(rawBookProgress);
+            const progress = bookProgress?.percentage || rawReadingListEntry?.percentage || 0;
+            const currentCfi = bookProgress?.currentCfi || undefined;
+            const lastRead = bookProgress?.lastRead || rawReadingListEntry?.lastUpdated || 0;
 
             // Create new object
             const newBook = {
@@ -153,9 +160,8 @@ export const useAllBooks = () => {
             newCache[book.id] = {
                 result: newBook,
                 base: book,
-                progress,
-                lastRead,
-                currentCfi
+                rawBookProgress,
+                rawReadingListEntry
             };
 
             return newBook;
