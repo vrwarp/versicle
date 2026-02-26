@@ -104,4 +104,33 @@ describe('TextSegmenter', () => {
           expect(refined[0].text).toContain("Mr.\u2003 Smith");
       });
   });
+
+  describe('Merging Reliability', () => {
+    it('should not add a leading dot when merging into a whitespace-only segment', () => {
+        // Simulating a case where the first segment is just whitespace or empty
+        // which might happen with some PDF text extractions or weird formatting
+        const segments = [
+            { text: '   ', cfi: 'cfi1', index: 0, length: 3 },
+            { text: 'Hello world.', cfi: 'cfi2', index: 3, length: 12 }
+        ];
+
+        // Using mergeByLength with a minLength > 3 to force merge
+        const merged = TextSegmenter.mergeByLength(segments, 10);
+
+        expect(merged.length).toBe(1);
+        expect(merged[0].text.trim()).toBe('Hello world.');
+        expect(merged[0].text).not.toContain('. Hello');
+    });
+
+    it('should handle empty first segment gracefully', () => {
+        const segments = [
+            { text: '', cfi: 'cfi1', index: 0, length: 0 },
+            { text: 'Start.', cfi: 'cfi2', index: 0, length: 6 }
+        ];
+
+        const merged = TextSegmenter.mergeByLength(segments, 5);
+        expect(merged.length).toBe(1);
+        expect(merged[0].text).toBe('Start.');
+    });
+  });
 });
