@@ -771,6 +771,11 @@ export class AudioContentPipeline {
                     finalizeGroup(currentGroup);
                 }
                 currentGroup = { parentCfi, segments: [], fullText: '' };
+            } else if (isAncestor) {
+                // If the new sentence is an ancestor of the current group (e.g. a Div containing a P),
+                // we expand the group's scope to the ancestor's level. This ensures subsequent
+                // descendants of this ancestor are correctly included in the group.
+                currentGroup.parentCfi = parentCfi;
             }
 
             currentGroup.segments.push(s);
