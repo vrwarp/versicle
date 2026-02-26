@@ -169,7 +169,7 @@ export class TextSegmenter {
             return left.substring(0, i + 1) + separator + right;
         } else {
             // Left was empty or all whitespace
-            return separator + right;
+            return right;
         }
     }
 
