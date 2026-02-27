@@ -730,6 +730,9 @@ export class AudioContentPipeline {
         const groups: { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] = [];
         let currentGroup: { parentCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string } | null = null;
 
+        // Cache the clean parent base for the current group to avoid repeated string ops
+        let currentParentBase: string | null = null;
+
         const finalizeGroup = (group: { segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }) => {
             const first = group.segments[0].cfi;
             const last = group.segments[group.segments.length - 1].cfi;
@@ -752,16 +755,20 @@ export class AudioContentPipeline {
             const parentCfi = getParentCfi(fullCfi, tableCfis);
 
             // Helper to check if the current group already "contains" this new parent
-            const currentParentBase = currentGroup ? currentGroup.parentCfi.replace(/\)$/, '') : '';
-            const newParentBase = parentCfi.replace(/\)$/, '');
+            if (currentGroup && currentParentBase === null) {
+                // Initialize cache if missing
+                currentParentBase = currentGroup.parentCfi.endsWith(')') ? currentGroup.parentCfi.slice(0, -1) : currentGroup.parentCfi;
+            }
+
+            const newParentBase = parentCfi.endsWith(')') ? parentCfi.slice(0, -1) : parentCfi;
 
             // Check if one path is a prefix of the other, confirming they belong to the same branch.
             // We verify that the prefix match is followed by a separator or is the end of string
             // to avoid false positives (e.g. "/1" matching "/10").
-            const isDescendant = currentGroup && newParentBase.startsWith(currentParentBase) &&
+            const isDescendant = currentGroup && currentParentBase && newParentBase.startsWith(currentParentBase) &&
                 (newParentBase.length === currentParentBase.length || ['/', '!', ':'].includes(newParentBase[currentParentBase.length]));
 
-            const isAncestor = currentGroup && currentParentBase.startsWith(newParentBase) &&
+            const isAncestor = currentGroup && currentParentBase && currentParentBase.startsWith(newParentBase) &&
                 (currentParentBase.length === newParentBase.length || ['/', '!', ':'].includes(currentParentBase[newParentBase.length]));
 
             const isInternalNode = isDescendant || isAncestor;
@@ -771,11 +778,15 @@ export class AudioContentPipeline {
                     finalizeGroup(currentGroup);
                 }
                 currentGroup = { parentCfi, segments: [], fullText: '' };
+                // Reset cache
+                currentParentBase = parentCfi.endsWith(')') ? parentCfi.slice(0, -1) : parentCfi;
             } else if (isAncestor) {
                 // If the new sentence is an ancestor of the current group (e.g. a Div containing a P),
                 // we expand the group's scope to the ancestor's level. This ensures subsequent
                 // descendants of this ancestor are correctly included in the group.
                 currentGroup.parentCfi = parentCfi;
+                // Update cache
+                currentParentBase = newParentBase;
             }
 
             currentGroup.segments.push(s);

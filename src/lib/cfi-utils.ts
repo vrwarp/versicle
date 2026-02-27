@@ -106,7 +106,10 @@ export function getParentCfi(cfi: string, knownBlockRoots: string[] | Preprocess
         }
 
         // Pre-clean the target CFI once
-        const cleanCfi = cfi.replace(/^epubcfi\((.*)\)$/, '$1');
+        let cleanCfi = cfi;
+        if (cleanCfi.startsWith('epubcfi(') && cleanCfi.endsWith(')')) {
+            cleanCfi = cleanCfi.slice(8, -1);
+        }
 
         for (const { original, clean } of roots) {
             if (cleanCfi.startsWith(clean)) {
