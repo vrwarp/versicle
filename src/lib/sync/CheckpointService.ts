@@ -4,6 +4,7 @@ import { yDoc, yjsPersistence, disconnectYjs } from '../../store/yjs-provider';
 import type { SyncCheckpoint } from '../../types/db';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import { createLogger } from '../logger';
+import { getFirestoreSyncManager } from './FirestoreSyncManager';
 
 const logger = createLogger('CheckpointService');
 const CHECKPOINT_LIMIT = 10;
@@ -80,6 +81,14 @@ export class CheckpointService {
     const db = await getDB();
     const checkpoint = await db.get('checkpoints', id);
     if (!checkpoint || !checkpoint.blob) throw new Error('Checkpoint corrupted');
+
+    // 0. Disconnect cloud sync to prevent concurrent modifications during restore
+    try {
+      getFirestoreSyncManager().destroy();
+      logger.info('Firestore disconnected for restore');
+    } catch (e) {
+      logger.warn('Failed to disconnect Firestore during restore', e);
+    }
 
     if (yjsPersistence) {
       logger.info('Performing Hard Reset restore...');
