@@ -370,23 +370,21 @@ Implements full-text search off the main thread.
     *   **Fallback**: If raw text is missing, it attempts to parse XML content using `DOMParser` (if available) to extract text.
 *   **Trade-off**: The index is **transient** (in-memory only) and rebuilt on demand.
 
-#### Backup (`src/lib/BackupService.ts`)
-Manages manual internal state backup and restoration.
+#### Backup Strategy (`src/lib/BackupService.ts` & `src/lib/sync/ExportImportService.ts`)
+Versicle employs a dual-strategy for data safety, distinguishing between "Hard Reset" backups and "Portable" exports.
 
-*   **`createLightBackup()`**: JSON-only export (metadata, settings, history).
-*   **`createFullBackup()`**: ZIP archive containing the JSON manifest plus all original `.epub` files.
-
-#### Export (`src/lib/export.ts` & `src/lib/sync/ExportImportService.ts`)
-*   **Goal**: Provide a platform-agnostic way to export data.
-*   **Logic**:
-    *   **Unified Export (`export.ts`)**: Acts as a **Platform Adapter**.
-        *   **Web**: Uses `file-saver` to trigger a browser download.
-        *   **Native**: Writes the file to the app's cache directory and uses `Capacitor Share` API to open the native share sheet.
-    *   **Export/Import Service (`ExportImportService.ts`)**: The **Logic Provider** for the "Cold Path" (Manual Backup).
-        *   **Export**: Serializes Yjs state (Inventory, Progress, Annotations) into a JSON blob with a checksum.
-        *   **Import**: Validates schema and merges data into the local Yjs document using atomic transactions.
-*   **Trade-offs**:
-    *   **Memory Pressure**: On native devices, converting large Blobs to Base64 (for the Filesystem API) can cause Out-Of-Memory (OOM) crashes with very large backups.
+*   **Full Backup (`BackupService`)**:
+    *   **Goal**: Complete system state preservation ("Hard Reset").
+    *   **Logic**:
+        *   **Snapshot**: Captures the entire Yjs document state as a binary update using `Y.encodeStateAsUpdate`.
+        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` before creating a fresh Y.Doc and applying the snapshot update. This bypasses merge conflicts and ensures the restored state is an exact replica of the backup.
+    *   **Trade-off**: Restore is destructive; any changes made since the backup are lost.
+*   **Export/Import (`ExportImportService`)**:
+    *   **Goal**: Data portability and merging between devices.
+    *   **Logic**:
+        *   **Format**: Serializes library state into a human-readable JSON format.
+        *   **Restore**: Merges the imported data into the current Yjs document using `yDoc.transact`. It handles conflicts using a "Last Write Wins" (LWW) or Union strategy depending on the data type (e.g., merging annotations vs overwriting book metadata).
+    *   **Trade-off**: Does not preserve full CRDT history or vector clocks.
 
 #### Cloud Library (`src/lib/drive/`)
 Integrates with Google Drive to provide a cloud-based library.
@@ -490,10 +488,11 @@ The Data Pipeline for TTS.
 *   **Logic (Optimistic Playback)**:
     1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
     2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
-            *   **Grouping**: `groupSentencesByRoot` clusters sentences by their **Root CFI** (common ancestor) before GenAI analysis. This ensures the LLM receives logical blocks (e.g., an entire table row or aside) rather than fragmented sentences, improving classification accuracy.
+        *   **Grouping**: `groupSentencesByRoot` clusters sentences by their **Root CFI** (common ancestor) before GenAI analysis. This ensures the LLM receives logical blocks (e.g., an entire table row or aside) rather than fragmented sentences, improving classification accuracy.
+        *   **Dynamic Scope Expansion**: If a new sentence is an ancestor of the current group (e.g., a `div` wrapping a `p`), the logic expands the group's scope to the ancestor's level. This ensures that subsequent descendants of the ancestor are correctly included in the same semantic block.
         *   **Optimization**: Pre-filters table images by `sectionId` and batch-processes their CFIs via `preprocessTableRoots` to avoid redundant parsing and reduce lookup complexity during sentence grouping.
-        3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`).
-            *   **Table Injection**: `mapSentencesToAdaptations` matches raw sentences to AI-generated table narratives using CFI prefix matching, replacing the raw data cells with a natural language summary in real-time.
+    3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`).
+        *   **Table Injection**: `mapSentencesToAdaptations` matches raw sentences to AI-generated table narratives using CFI prefix matching, replacing the raw data cells with a natural language summary in real-time.
     4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
 
 #### `src/lib/tts/TextSegmenter.ts`
@@ -600,6 +599,11 @@ State is managed using **Zustand** with specialized strategies for different dat
         *   **Preroll**: Manages `prerollEnabled` for chapter announcements.
         *   **Bible**: Toggles `isBibleLexiconEnabled` for specialized pronunciation.
         *   **Persistence**: Uses `persist` middleware to save user preferences (speed, voice, provider keys) to `localStorage`.
+*   **`usePreferencesStore` (Synced but Isolated)**:
+    *   **Goal**: Sync user preferences (theme, font size) across devices, but allow each device to maintain its own unique configuration.
+    *   **Logic**:
+        *   **Yjs Keying**: Uses `preferences/${deviceId}` as the key in the Yjs document.
+        *   **Why**: This ensures that changing the theme on your phone doesn't accidentally change the theme on your tablet, while still backing up the settings to the cloud.
 *   **`useReadingStateStore` (Per-Device Sync)**:
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
     *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., preventing a phone at 10% from overwriting a tablet at 80% during a sync race).
