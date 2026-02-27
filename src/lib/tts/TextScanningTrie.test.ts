@@ -109,6 +109,48 @@ describe('TextScanningTrie', () => {
             expect(TextScanningTrie.isPunctuation(46)).toBe(true); // '.'
             expect(TextScanningTrie.isPunctuation(34)).toBe(true); // '"'
             expect(TextScanningTrie.isPunctuation(65)).toBe(false); // 'A'
+            expect(TextScanningTrie.isPunctuation(45)).toBe(true); // '-'
+            expect(TextScanningTrie.isPunctuation(47)).toBe(true); // '/'
+            expect(TextScanningTrie.isPunctuation(0x2013)).toBe(true); // En Dash
+            expect(TextScanningTrie.isPunctuation(0x2014)).toBe(true); // Em Dash
+            expect(TextScanningTrie.isPunctuation(0x2026)).toBe(true); // Ellipsis
+        });
+    });
+
+    describe('Punctuation Boundaries (Regression)', () => {
+        it('should identify word boundaries with hyphen', () => {
+            const trie = new TextScanningTrie();
+            trie.insert('He');
+            // "He-man" should match "He" with a boundary at '-'
+            expect(trie.matchesStart('He-man')).toBe(true);
+        });
+
+        it('should identify word boundaries with em-dash', () => {
+            const trie = new TextScanningTrie();
+            trie.insert('He');
+            // "He—who" (Em Dash U+2014)
+            expect(trie.matchesStart('He\u2014who')).toBe(true);
+        });
+
+        it('should identify word boundaries with en-dash', () => {
+            const trie = new TextScanningTrie();
+            trie.insert('He');
+            // "He–who" (En Dash U+2013)
+            expect(trie.matchesStart('He\u2013who')).toBe(true);
+        });
+
+        it('should identify word boundaries with slash', () => {
+            const trie = new TextScanningTrie();
+            trie.insert('Yes');
+            // "Yes/No"
+            expect(trie.matchesStart('Yes/No')).toBe(true);
+        });
+
+        it('should identify word boundaries with ellipsis', () => {
+            const trie = new TextScanningTrie();
+            trie.insert('He');
+            // "He…" (Ellipsis U+2026)
+            expect(trie.matchesStart('He\u2026')).toBe(true);
         });
     });
 });

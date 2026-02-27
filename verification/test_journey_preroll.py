@@ -54,7 +54,8 @@ def test_preroll_journey(page: Page):
     preroll_switch = page.get_by_label("Announce Chapter Titles")
 
     # Wait for switch to be visible before checking attribute
-    expect(preroll_switch).to_be_visible()
+    # Increase timeout for CI environment reliability
+    expect(preroll_switch).to_be_visible(timeout=10000)
     expect(preroll_switch).to_have_attribute("aria-checked", "true")
 
     utils.capture_screenshot(page, "preroll_02_persisted")

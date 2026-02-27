@@ -28,6 +28,8 @@ export class TextScanningTrie {
     private static readonly CODE_QUESTION = '?'.codePointAt(0)!;
     private static readonly CODE_SEMICOLON = ';'.codePointAt(0)!;
     private static readonly CODE_COLON = ':'.codePointAt(0)!;
+    private static readonly CODE_HYPHEN = '-'.codePointAt(0)!;
+    private static readonly CODE_SLASH = '/'.codePointAt(0)!;
 
     // ASCII Case Folding Constants
     private static readonly ASCII_A = 65;
@@ -66,6 +68,8 @@ export class TextScanningTrie {
         p[TextScanningTrie.CODE_QUESTION] = 1;
         p[TextScanningTrie.CODE_SEMICOLON] = 1;
         p[TextScanningTrie.CODE_COLON] = 1;
+        p[TextScanningTrie.CODE_HYPHEN] = 1;
+        p[TextScanningTrie.CODE_SLASH] = 1;
 
         // Initialize whitespace flags
         const w = TextScanningTrie.WHITESPACE_FLAGS;
@@ -106,7 +110,9 @@ export class TextScanningTrie {
         if (code < 128) {
             return !!TextScanningTrie.PUNCTUATION_FLAGS[code];
         }
-        return false;
+        // Check for Unicode Punctuation (General Punctuation block U+2000 - U+206F)
+        // Covers En Dash (2013), Em Dash (2014), Ellipsis (2026), etc.
+        return (code >= 0x2000 && code <= 0x206F);
     }
 
     /**
