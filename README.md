@@ -55,7 +55,7 @@
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
 *   **Optimistic Playback**: Audio starts playing instantly while content filtering (skip masks) and smart adaptations are applied asynchronously in the background.
-*   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural narrative speech.
+*   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural narrative speech (Table Adaptations).
     *   **Thinking Budget**: Configurable "Thinking Budget" (default 512 tokens) allows the AI to reason about complex data layouts before speaking.
     *   **Synced Analysis**: AI-generated content (adaptations, semantic maps) is synchronized across devices via Yjs, so you only pay the generation cost once.
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
@@ -90,13 +90,13 @@
 *   **Lexicon Management**:
     *   **CSV Import/Export**: Bulk manage pronunciation rules using CSV files.
 *   **Backups & Export**:
-    *   **Light**: JSON export of metadata/settings.
-    *   **Full**: ZIP archive including all book files.
+    *   **Light**: JSON export of metadata/settings (Data Portability).
+    *   **Full**: ZIP archive including all book files (Data Portability).
     *   **Unified Export**: Share files natively (AirDrop, Nearby Share) or download via browser.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
 *   **Checkpoint Forensics**: Inspect the exact data difference between your live state and any backup checkpoint.
-*   **Safe Mode**: A fallback UI that activates on critical database failures, allowing users to export debug info or perform a factory reset to recover usability.
+*   **Safe Mode**: A fallback UI that activates on critical database initialization failures, allowing users to export debug info or perform a factory reset to recover usability.
 
 ## Setup & Development
 
