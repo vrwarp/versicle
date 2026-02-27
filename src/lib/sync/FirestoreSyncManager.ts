@@ -14,6 +14,9 @@ import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
 import { yDoc } from '../../store/yjs-provider';
 import { CheckpointService } from './CheckpointService';
+import * as Y from 'yjs';
+import { useBookStore } from '../../store/useBookStore';
+import { doc, getDoc, collection, getDocs, query, limit } from 'firebase/firestore';
 
 import {
     getFirebaseApp,
@@ -238,21 +241,17 @@ class FirestoreSyncManager {
         const isDev = import.meta.env.DEV;
         const path = isDev ? `users/${uid}/versicle/dev` : `users/${uid}/versicle/main`;
 
-        import('../../store/useBookStore').then(({ useBookStore }) => {
-            const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
+        const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
 
-            if (isCleanClient) {
-                logger.info('Clean client detected. Checking for cloud data...');
-                this.performCleanSync(path, maxWaitTime, app!, isMock).catch(err => {
-                    logger.error('Clean sync failed:', err);
-                    this.setStatus('error');
-                });
-            } else {
-                this.connectFireProviderNormal(path, maxWaitTime, app!, isMock);
-            }
-        }).catch(() => {
+        if (isCleanClient) {
+            logger.info('Clean client detected. Checking for cloud data...');
+            this.performCleanSync(path, maxWaitTime, app!, isMock).catch(err => {
+                logger.error('Clean sync failed:', err);
+                this.setStatus('error');
+            });
+        } else {
             this.connectFireProviderNormal(path, maxWaitTime, app!, isMock);
-        });
+        }
     }
 
     private async performCleanSync(path: string, maxWaitTime: number, app: FirebaseApp, isMock: boolean): Promise<void> {
@@ -263,8 +262,6 @@ class FirestoreSyncManager {
             if (!isMock) {
                 const db = getFirestoreDb();
                 if (!db) throw new Error('Firestore not initialized');
-
-                const { doc, getDoc, collection, getDocs, query, limit } = await import('firebase/firestore');
 
                 // Check main document for snapshot/state vector
                 const docRef = doc(db, path);
@@ -305,8 +302,6 @@ class FirestoreSyncManager {
 
             logger.info('Cloud data found. Initiating temporary Y.Doc sync...');
             toast('Syncing library from cloud...', 'info');
-
-            const Y = await import('yjs');
 
             const tempDoc = new Y.Doc();
 

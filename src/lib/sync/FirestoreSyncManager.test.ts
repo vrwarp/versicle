@@ -46,16 +46,31 @@ vi.mock('./firebase-config', () => ({
     initializeFirebase: vi.fn(() => true),
     getFirebaseApp: vi.fn(() => ({})),
     getFirebaseAuth: vi.fn(() => ({})),
-    getGoogleProvider: vi.fn(() => ({}))
+    getGoogleProvider: vi.fn(() => ({})),
+    getFirestoreDb: vi.fn(() => ({}))
 }));
 
 // Mock yjs-provider
-vi.mock('../../store/yjs-provider', async () => {
+vi.mock('../../store/yjs-provider', async (importOriginal) => {
     const Y = await import('yjs');
+    const actual = await importOriginal();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const actualOptions = (actual as any).getYjsOptions || ((o: any) => o);
     return {
-        yDoc: new Y.Doc()
+        yDoc: new Y.Doc(),
+        getYjsOptions: actualOptions
     };
 });
+
+// Mock firebase/firestore
+vi.mock('firebase/firestore', () => ({
+    doc: vi.fn(() => ({})),
+    getDoc: vi.fn(() => Promise.resolve({ exists: () => false })),
+    collection: vi.fn(),
+    getDocs: vi.fn(() => Promise.resolve({ empty: true })),
+    query: vi.fn(),
+    limit: vi.fn()
+}));
 
 describe('FirestoreSyncManager', () => {
     beforeEach(() => {
