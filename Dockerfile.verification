@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # 1. Setup Environment
 WORKDIR /app
@@ -7,8 +7,9 @@ ENV PATH="/app/node_modules/.bin:${PATH}"
 # 2. Install Dependencies
 # - curl, gnupg: for Node.js install
 # - build-essential: for node-gyp if needed
+# - lsb-release: required for Playwright to detect OS correctly
 RUN apt-get update && \
-    apt-get install -y curl gnupg build-essential && \
+    apt-get install -y curl gnupg build-essential lsb-release && \
     rm -rf /var/lib/apt/lists/*
 
 # 3. Install Node.js 20
