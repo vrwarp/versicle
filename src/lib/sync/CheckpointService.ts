@@ -1,8 +1,11 @@
 import { getDB } from '../../db/db';
 import * as Y from 'yjs';
-import { yDoc } from '../../store/yjs-provider';
+import { yDoc, yjsPersistence, disconnectYjs } from '../../store/yjs-provider';
 import type { SyncCheckpoint } from '../../types/db';
+import { IndexeddbPersistence } from 'y-indexeddb';
+import { createLogger } from '../logger';
 
+const logger = createLogger('CheckpointService');
 const CHECKPOINT_LIMIT = 10;
 
 /**
@@ -78,33 +81,53 @@ export class CheckpointService {
     const checkpoint = await db.get('checkpoints', id);
     if (!checkpoint || !checkpoint.blob) throw new Error('Checkpoint corrupted');
 
-    // Atomic transaction to swap state
-    yDoc.transact(() => {
-      // 1. Wipe all existing shared types
-      // We iterate doc.share to find all initialized types and clear them dynamically.
-      // This handles any schema changes (e.g. Map vs Array) or dynamic keys (preferences/).
-      const allKeys = Array.from(yDoc.share.keys());
+    if (yjsPersistence) {
+      logger.info('Performing Hard Reset restore...');
+      // 1. Wipe existing persistence
+      await yjsPersistence.clearData();
 
-      for (const key of allKeys) {
-        const type = yDoc.share.get(key);
+      // 2. Disconnect current persistence to release locks
+      await disconnectYjs();
 
-        if (type instanceof Y.Map) {
-          // Clear Map
-          Array.from(type.keys()).forEach(k => type.delete(k));
-        } else if (type instanceof Y.Array) {
-          // Clear Array
-          type.delete(0, type.length);
-        } else if (type instanceof Y.XmlFragment) {
-          // Should not be used in our store, but safe handling
-          type.delete(0, type.length);
-        } else if (type instanceof Y.Text) {
-          type.delete(0, type.length);
+      // 3. Create a temporary Doc/Persistence to write the snapshot to IDB
+      // We do this in a clean environment to ensure no in-memory state leaks
+      const tempDoc = new Y.Doc();
+      Y.applyUpdate(tempDoc, checkpoint.blob);
+
+      const tempProvider = new IndexeddbPersistence('versicle-yjs', tempDoc);
+
+      // Wait for it to write to IDB
+      await tempProvider.whenSynced;
+
+      // 4. Cleanup
+      await tempProvider.destroy();
+      tempDoc.destroy();
+
+      logger.info('Hard Reset complete. Reloading...');
+      window.location.reload();
+    } else {
+      logger.warn('Yjs Persistence not active. Falling back to In-Memory Soft Restore (Unsafe).');
+      // Atomic transaction to swap state (Fallback)
+      yDoc.transact(() => {
+        const allKeys = Array.from(yDoc.share.keys());
+
+        for (const key of allKeys) {
+          const type = yDoc.share.get(key);
+
+          if (type instanceof Y.Map) {
+            Array.from(type.keys()).forEach(k => type.delete(k));
+          } else if (type instanceof Y.Array) {
+            type.delete(0, type.length);
+          } else if (type instanceof Y.XmlFragment) {
+            type.delete(0, type.length);
+          } else if (type instanceof Y.Text) {
+            type.delete(0, type.length);
+          }
         }
-      }
 
-      // 2. Apply binary snapshot
-      Y.applyUpdate(yDoc, checkpoint.blob);
-    }, 'restore-checkpoint');
+        Y.applyUpdate(yDoc, checkpoint.blob);
+      }, 'restore-checkpoint');
+    }
   }
 
   /**

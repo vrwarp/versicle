@@ -39,7 +39,9 @@ vi.mock('../../db/db', () => ({
 vi.mock('../../store/yjs-provider', async () => {
     const YActual = await import('yjs');
     return {
-        yDoc: new YActual.Doc()
+        yDoc: new YActual.Doc(),
+        yjsPersistence: null, // Default to null (simulate fallback behavior for these tests)
+        disconnectYjs: vi.fn(),
     };
 });
 import { yDoc } from '../../store/yjs-provider';
