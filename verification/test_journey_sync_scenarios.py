@@ -404,7 +404,7 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
 
     # Give sync manager time to process the pre-loaded snapshot
     # The Yjs provider needs time to initialize, load snapshot, and propagate to stores
-    time.sleep(3)
+    time.sleep(5)
 
     # Wait for the lexicon store to actually have data from the sync
     # This is more reliable than just waiting for time to pass
@@ -457,16 +457,21 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
             print(f"Retry {i // 10}: Closing and re-opening dialog...")
             # Close all dialogs by pressing Escape multiple times
             page_b.keyboard.press("Escape")
-            time.sleep(0.3)
-            page_b.keyboard.press("Escape")
             time.sleep(0.5)
+            page_b.keyboard.press("Escape")
+            time.sleep(1)
 
             # Re-open Settings -> Dictionary -> Manage Rules
             page_b.click("button[aria-label='Settings']", force=True)
-            time.sleep(0.5)  # Wait for settings dialog animation
-            expect(page_b.get_by_role("button", name="Dictionary")).to_be_visible(timeout=5000)
-            page_b.get_by_role("button", name="Dictionary").click()
-            time.sleep(0.3)
+            time.sleep(1)  # Wait for settings dialog animation
+
+            # SCROLL sidebar to ensure Dictionary is visible on mobile
+            dictionary_btn = page_b.get_by_role("button", name="Dictionary")
+            dictionary_btn.scroll_into_view_if_needed()
+            expect(dictionary_btn).to_be_visible(timeout=5000)
+            dictionary_btn.click(force=True)
+
+            time.sleep(0.5)
             expect(page_b.get_by_role("button", name="Manage Rules")).to_be_visible(timeout=5000)
             page_b.get_by_role("button", name="Manage Rules").click(force=True)
             time.sleep(0.5)

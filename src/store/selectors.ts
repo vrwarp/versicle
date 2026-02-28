@@ -35,11 +35,17 @@ function resolveProgress(bookProgress: Record<string, UserProgress> | undefined)
  * otherwise falls back to Ghost Book metadata from Yjs inventory.
  */
 export const useAllBooks = () => {
-    const books = useBookStore(state => state.books);
-    const staticMetadata = useLibraryStore(state => state.staticMetadata);
-    const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
+    const books = useBookStore(state => state.books) || {};
+    const staticMetadata = useLibraryStore(state => state.staticMetadata) || {};
+    const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds) || new Set();
     // Subscribe to progress changes (per-device structure)
-    const progressMap = useReadingStateStore(state => state.progress);
+    // Use let to handle potential undefined state during Yjs transients
+    let progressMap = useReadingStateStore(state => state.progress);
+    if (!progressMap) {
+        // Fallback to empty object if progressMap is undefined
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (progressMap as any) = {};
+    }
     const readingListEntries = useReadingListStore(state => state.entries);
 
     // OPTIMIZATION: Phase 1 - Base Books
@@ -73,7 +79,14 @@ export const useAllBooks = () => {
             const cached = baseBookCacheRef.current.get(book);
             if (cached) return cached;
 
-            const hasCoverBlob = staticMetadata[book.bookId]?.coverBlob instanceof Blob;
+            if (!staticMetadata) {
+                console.error('staticMetadata is undefined in useAllBooks');
+            }
+            if (!book) {
+                console.error('book is undefined in useAllBooks iteration');
+            }
+
+            const hasCoverBlob = staticMetadata?.[book.bookId]?.coverBlob instanceof Blob;
 
             const newBaseBook = {
                 ...book,
@@ -182,12 +195,20 @@ export const useAllBooks = () => {
  * Returns a single book by ID with static metadata merged.
  */
 export const useBook = (id: string | null) => {
-    const book = useBookStore(state => id ? state.books[id] : null);
-    const staticMeta = useLibraryStore(state => id ? state.staticMetadata[id] : null);
-    const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds);
+    const bookStore = useBookStore(state => state.books) || {};
+    const book = id ? bookStore[id] : null;
+
+    const staticMetadata = useLibraryStore(state => state.staticMetadata) || {};
+    const staticMeta = id ? staticMetadata[id] : null;
+
+    const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds) || new Set();
     // Subscribe to progress changes (per-device structure)
-    const progressMap = useReadingStateStore(state => state.progress);
-    const readingListEntries = useReadingListStore(state => state.entries);
+    let progressMap = useReadingStateStore(state => state.progress);
+    if (!progressMap) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (progressMap as any) = {};
+    }
+    const readingListEntries = useReadingListStore(state => state.entries) || {};
 
     // Get resolved progress (Local > Recent) across all devices for this book
     const progress = id ? resolveProgress(progressMap[id]) : null;

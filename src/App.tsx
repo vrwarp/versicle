@@ -23,6 +23,7 @@ import { RootLayout } from './layouts/RootLayout';
 import { getFirestoreSyncManager } from './lib/sync/FirestoreSyncManager';
 import { useDriveStore } from './store/useDriveStore';
 import { DriveScannerService } from './lib/drive/DriveScannerService';
+import { initHistory } from './store/useHistoryStore';
 
 import './App.css';
 
@@ -199,6 +200,7 @@ function App() {
 
         await hydrateStaticMetadata();
 
+        initHistory();
         setDbStatus('ready');
       } catch (err) {
         logger.error('Failed to initialize App:', err);

@@ -3,6 +3,7 @@ import yjs from 'zustand-middleware-yjs';
 import { yDoc, getYjsOptions } from './yjs-provider';
 import type { UserAnnotation } from '../types/db';
 import { createLogger } from '../lib/logger';
+import { undoManager } from '../lib/undo-manager';
 
 const logger = createLogger('AnnotationStore');
 
@@ -188,3 +189,5 @@ export const createAnnotationStore = () => create<AnnotationState>()(
  * Wrapped with yjs() middleware for automatic CRDT synchronization.
  */
 export const useAnnotationStore = createAnnotationStore();
+
+undoManager.addTrackedOrigin(useAnnotationStore);
