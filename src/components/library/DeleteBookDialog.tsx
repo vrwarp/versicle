@@ -64,8 +64,8 @@ export const DeleteBookDialog: React.FC<DeleteBookDialogProps> = ({ isOpen, onCl
                         data-testid="confirm-delete"
                         className="gap-2"
                     >
-                        {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
-                        Delete
+                        {isDeleting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                        {isDeleting ? "Deleting..." : "Delete"}
                     </Button>
                 </>
             }

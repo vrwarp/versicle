@@ -58,8 +58,8 @@ export const ReplaceBookDialog: React.FC<ReplaceBookDialogProps> = ({
                         data-testid="confirm-replace"
                         className="gap-2"
                     >
-                        {isReplacing && <Loader2 className="h-4 w-4 animate-spin" />}
-                        Replace
+                        {isReplacing && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                        {isReplacing ? "Replacing..." : "Replace"}
                     </Button>
                 </>
             }
