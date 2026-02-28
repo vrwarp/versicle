@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
     const get = vi.fn();
     const getAll = vi.fn();
     const del = vi.fn();
+    const firestoreDestroy = vi.fn();
 
     const store = {
         add,
@@ -20,7 +21,7 @@ const mocks = vi.hoisted(() => {
         delete: del
     };
 
-    return { add, count, openCursor, get, getAll, del, store };
+    return { add, count, openCursor, get, getAll, del, store, firestoreDestroy };
 });
 
 vi.mock('../../db/db', () => ({
@@ -39,10 +40,18 @@ vi.mock('../../db/db', () => ({
 vi.mock('../../store/yjs-provider', async () => {
     const YActual = await import('yjs');
     return {
-        yDoc: new YActual.Doc()
+        yDoc: new YActual.Doc(),
+        yjsPersistence: null, // Default to null (simulate fallback behavior for these tests)
+        disconnectYjs: vi.fn(),
     };
 });
 import { yDoc } from '../../store/yjs-provider';
+
+vi.mock('./FirestoreSyncManager', () => ({
+    getFirestoreSyncManager: () => ({
+        destroy: mocks.firestoreDestroy
+    })
+}));
 
 let tempDocCounter = 0;
 
@@ -54,6 +63,7 @@ describe('CheckpointService', () => {
         mocks.add.mockReset();
         mocks.count.mockReset();
         mocks.openCursor.mockReset();
+        mocks.firestoreDestroy.mockReset();
 
         // Clear yDoc
         yDoc.transact(() => {
@@ -112,7 +122,7 @@ describe('CheckpointService', () => {
         expect(list[1].id).toBe(1);
     });
 
-    it('should restore a checkpoint by applying update', async () => {
+    it('should restore a checkpoint by applying update and disconnecting firestore', async () => {
         // Setup checkpoint
         const tempDoc = new Y.Doc();
         // Prevent collision if Math.random is mocked
@@ -127,6 +137,9 @@ describe('CheckpointService', () => {
         yDoc.getMap('library').set('current', true);
 
         await CheckpointService.restoreCheckpoint(1);
+
+        // Verify firestore is disconnected
+        expect(mocks.firestoreDestroy).toHaveBeenCalledTimes(1);
 
         // Expect current state to be wiped and replaced
         const lib = yDoc.getMap('library');
