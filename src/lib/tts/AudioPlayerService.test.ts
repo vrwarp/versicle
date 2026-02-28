@@ -102,7 +102,7 @@ vi.mock('../../store/useGenAIStore', () => ({
         getState: vi.fn().mockReturnValue({
             isContentAnalysisEnabled: true,
             isEnabled: true, // Default to true for tests
-            contentFilterSkipTypes: ['footnote'],
+            contentFilterSkipTypes: ['reference'],
             apiKey: 'test-key'
         })
     }
@@ -430,13 +430,13 @@ describe('AudioPlayerService', () => {
             // IDs correspond to indices: '0', '1', '2'
             // @ts-expect-error Mock implementation
             genAIService.detectContentTypes.mockResolvedValue([
-                { id: '0', type: 'narrative' },
-                { id: '1', type: 'narrative' },
-                { id: '2', type: 'footnote' } // Skip this one
+                { id: '0', type: 'main' },
+                { id: '1', type: 'main' },
+                { id: '2', type: 'reference' } // Skip this one
             ]);
 
             // Check the mask generation
-            const mask = await contentPipeline.detectContentSkipMask('book1', 'sec1', ['footnote'], sentences);
+            const mask = await contentPipeline.detectContentSkipMask('book1', 'sec1', ['reference'], sentences);
 
             // Should skip index 2 ("Footnote")
             expect(mask.has(2)).toBe(true);

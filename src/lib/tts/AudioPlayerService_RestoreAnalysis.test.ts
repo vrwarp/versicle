@@ -90,7 +90,7 @@ vi.mock('../../store/useGenAIStore', () => ({
             isEnabled: true,
             isContentAnalysisEnabled: true,
             isTableAdaptationEnabled: true,
-            contentFilterSkipTypes: ['table', 'footnote'],
+            contentFilterSkipTypes: ['reference'],
             apiKey: 'mock-key'
         }))
     }
