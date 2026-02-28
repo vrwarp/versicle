@@ -231,7 +231,7 @@ class GenAIService {
     if (nodes.length === 0) return [];
 
     const prompt = `You will be provided an array of text samples from an EPUB book section, ordered exactly as they appear in the book.
-Your task is to identify where the "references" section begins. References typically include footnotes, bibliographies, citations, or endnotes that appear at the end of a section or chapter.
+Your task is to identify where the end of chapter "references" section begins. References typically include footnotes, bibliographies, citations, or endnotes.
 
 ### Task:
 Find the index of the first sample that clearly marks the beginning of the references section.
@@ -244,12 +244,13 @@ ${JSON.stringify(nodes)}`;
     const schema = {
       type: SchemaType.OBJECT,
       properties: {
+        justification: { type: SchemaType.STRING },
         referenceStartIndex: { type: SchemaType.INTEGER },
       },
-      required: ['referenceStartIndex'],
+      required: ['justification', 'referenceStartIndex'],
     };
 
-    const result = await this.generateStructured<{ referenceStartIndex: number }>(prompt, schema);
+    const result = await this.generateStructured<{ justification: string; referenceStartIndex: number }>(prompt, schema);
 
     const startIndex = result.referenceStartIndex;
 
