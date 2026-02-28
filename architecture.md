@@ -367,7 +367,8 @@ Handles the complex task of importing an EPUB file.
 Implements full-text search off the main thread.
 
 *   **Logic**: Uses a **RegExp** scanning approach over in-memory text via `SearchEngine` class, exposed via `Comlink`.
-    *   **Fallback**: If raw text is missing, it attempts to parse XML content using `DOMParser` (if available) to extract text.
+    *   **Batching & Offloading**: `SearchClient` sends sections to the worker in batches. To prevent blocking the main thread, XML parsing is offloaded to the Web Worker via `supportsXmlParsing()`.
+    *   **Extraction Strategy**: First attempts to extract raw XML directly from the EPUB archive (`book.archive.getBlob`) for speed. If this fails, it falls back to the `epub.js` rendering pipeline (`book.load()`), which is slower but resolves external resources.
 *   **Trade-off**: The index is **transient** (in-memory only) and rebuilt on demand.
 
 #### Backup Strategy (`src/lib/BackupService.ts` & `src/lib/sync/ExportImportService.ts`)
