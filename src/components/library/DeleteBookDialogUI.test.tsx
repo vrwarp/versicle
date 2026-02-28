@@ -26,7 +26,7 @@ describe('DeleteBookDialog UI state', () => {
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useLibraryStore as any).mockReturnValue((id: string) => removeBookPromise);
+    (useLibraryStore as any).mockReturnValue(() => removeBookPromise);
 
     const showToastMock = vi.fn();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
