@@ -3,7 +3,7 @@ set -e
 
 # 1. Start the Preview Server in the Background
 echo "🚀 Starting Vite Preview Server..."
-npm run preview -- --port 5173 --host &
+npm run preview -- --port 5173 --host --strictPort &
 PID=$!
 
 # 2. Wait for the Server to be Ready
