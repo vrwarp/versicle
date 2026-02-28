@@ -11,6 +11,8 @@ const logger = createLogger('DeviceId');
 
 const DEVICE_ID_KEY = 'versicle-device-id';
 
+let cachedDeviceId: string | null = null;
+
 /**
  * Generate a random device ID
  */
@@ -29,6 +31,10 @@ const generateDeviceId = (): string => {
  * The ID is persisted in localStorage to remain stable across sessions.
  */
 export const getDeviceId = (): string => {
+    if (cachedDeviceId) {
+        return cachedDeviceId;
+    }
+
     // Check if we already have a device ID
     let deviceId = localStorage.getItem(DEVICE_ID_KEY);
 
@@ -38,6 +44,7 @@ export const getDeviceId = (): string => {
         logger.info('Generated new device ID:', deviceId);
     }
 
+    cachedDeviceId = deviceId;
     return deviceId;
 };
 
@@ -47,6 +54,7 @@ export const getDeviceId = (): string => {
 export const resetDeviceId = (): string => {
     const newId = generateDeviceId();
     localStorage.setItem(DEVICE_ID_KEY, newId);
+    cachedDeviceId = newId;
     logger.info('Reset device ID to:', newId);
     return newId;
 };
