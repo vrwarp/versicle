@@ -64,3 +64,7 @@
 ## 2025-06-01 - Accessible Search Feedback
 **Learning:** Client-side filtering in lists often updates the DOM silently, leaving screen reader users unaware of the results (e.g., "5 items found").
 **Action:** When implementing real-time search, always include a `sr-only` live region (`role="status"`) that announces the result count or "No results" message to provide immediate feedback.
+
+## 2025-06-02 - Standardizing Checkboxes for Selection
+**Learning:** Using ad-hoc `div`s with `role="checkbox"` for selection (like in the Reading List dialog) creates maintenance overhead and potential accessibility gaps (missing focus rings, keyboard support).
+**Action:** Always use the shared `Checkbox` component (wrapping Radix UI) for selection interfaces. It handles keyboard navigation (Space/Enter), focus management, and accessibility attributes (`aria-checked`) automatically, ensuring a consistent experience across the app.

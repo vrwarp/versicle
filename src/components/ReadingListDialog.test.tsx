@@ -19,6 +19,18 @@ vi.mock('./EditReadingListEntryDialog', () => ({
     EditReadingListEntryDialog: () => <div data-testid="edit-dialog" />
 }));
 
+// Mock Checkbox to ensure it renders accessible elements for testing
+vi.mock('./ui/Checkbox', () => ({
+    Checkbox: ({ checked, onCheckedChange, 'aria-label': ariaLabel }: { checked: boolean, onCheckedChange: (c: boolean) => void, 'aria-label': string }) => (
+        <button
+            role="checkbox"
+            aria-checked={checked}
+            aria-label={ariaLabel}
+            onClick={() => onCheckedChange(!checked)}
+        />
+    )
+}));
+
 // Mock store with data
 const mockEntries = {
     'book1.epub': {
@@ -72,6 +84,7 @@ describe('ReadingListDialog', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
+
     it('renders correctly', () => {
         render(<ReadingListDialog open={true} onOpenChange={vi.fn()} />);
         expect(screen.getByText('Reading List')).toBeInTheDocument();
@@ -84,7 +97,6 @@ describe('ReadingListDialog', () => {
         render(<ReadingListDialog open={true} onOpenChange={vi.fn()} />);
 
         // Find header for Title
-        // After refactor, this will target the button inside th
         const titleButton = screen.getByRole('button', { name: /Title/i });
         expect(titleButton).toBeInTheDocument();
 
@@ -105,6 +117,49 @@ describe('ReadingListDialog', () => {
         expect(rowsAfterSortAsc[1]).toHaveTextContent('Book A');
     });
 
+    it('selects and deselects entries', () => {
+        render(<ReadingListDialog open={true} onOpenChange={vi.fn()} />);
+
+        // Select Book A
+        const checkboxA = screen.getByRole('checkbox', { name: /Select Book A/i });
+        fireEvent.click(checkboxA);
+        expect(checkboxA).toBeChecked();
+
+        // Select Book B
+        const checkboxB = screen.getByRole('checkbox', { name: /Select Book B/i });
+        fireEvent.click(checkboxB);
+        expect(checkboxB).toBeChecked();
+
+        // Verify batch actions appear
+        expect(screen.getByText(/Delete \(2\)/)).toBeInTheDocument();
+        expect(screen.getByText('Export CSV')).toBeInTheDocument();
+
+        // Deselect Book A
+        fireEvent.click(checkboxA);
+        expect(checkboxA).not.toBeChecked();
+        expect(checkboxB).toBeChecked();
+        expect(screen.getByText(/Delete \(1\)/)).toBeInTheDocument();
+    });
+
+    it('selects all entries via header checkbox', () => {
+        render(<ReadingListDialog open={true} onOpenChange={vi.fn()} />);
+
+        // Get select all checkbox
+        const selectAll = screen.getByRole('checkbox', { name: /Select all/i });
+        fireEvent.click(selectAll);
+
+        // All checkboxes should be checked
+        expect(selectAll).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: /Select Book A/i })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: /Select Book B/i })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: /Select Book C/i })).toBeChecked();
+
+        // Deselect all
+        fireEvent.click(selectAll);
+        expect(selectAll).not.toBeChecked();
+        expect(screen.getByRole('checkbox', { name: /Select Book A/i })).not.toBeChecked();
+    });
+
     it('has accessible table headers', () => {
         render(<ReadingListDialog open={true} onOpenChange={vi.fn()} />);
 
@@ -123,8 +178,6 @@ describe('ReadingListDialog', () => {
         render(<ReadingListDialog open={true} onOpenChange={vi.fn()} />);
 
         // Find delete button for "Book A"
-        // Note: The delete button is in the same row as "Book A".
-        // We can find the row first.
         const row = screen.getByRole('row', { name: /Book A/i });
         const deleteButton = within(row).getByRole('button', { name: /delete/i });
 
@@ -135,7 +188,6 @@ describe('ReadingListDialog', () => {
         expect(screen.getByText(/Are you sure you want to delete "Book A"/i)).toBeInTheDocument();
 
         // Click confirm
-        // Use within to scope to the confirmation dialog to avoid ambiguity with the row delete button
         const confirmationDialog = screen.getByText(/Are you sure you want to delete "Book A"/i).closest('div[role="dialog"]');
         expect(confirmationDialog).toBeInTheDocument();
 
