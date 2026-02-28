@@ -3,7 +3,7 @@ from playwright.sync_api import Page, expect, sync_playwright
 def test_recovery_flow(page: Page):
     # 1. Open App
     print("Opening App...")
-    page.goto("http://localhost:5173")
+    page.goto("https://localhost:5173")
 
     # Wait for app to load
     page.wait_for_timeout(3000)

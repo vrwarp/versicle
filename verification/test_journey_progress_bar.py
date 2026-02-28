@@ -41,7 +41,7 @@ def test_verify_progress_bar(page: Page):
         back_btn.click()
     else:
         # Fallback: navigate via URL
-        page.goto("http://localhost:5173/")
+        page.goto("https://localhost:5173/")
 
     # 4. Check for progress bar
     page.wait_for_selector('[data-testid^="book-card-"]', timeout=5000)

@@ -9,7 +9,7 @@ def verify_event_history():
         page = context.new_page()
 
         print("Navigating to app...")
-        page.goto("http://localhost:5173")
+        page.goto("https://localhost:5173")
 
         # Handle empty library / Load Demo
         try:

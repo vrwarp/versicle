@@ -9,7 +9,7 @@ def test_engine_room_journey(page: Page):
 
     # 1. Test from Library
     print("Testing from Library...")
-    page.goto("http://localhost:5173") # Ensure at root
+    page.goto("https://localhost:5173") # Ensure at root
     # Wait for library to load
     expect(page.get_by_text("My Library")).to_be_visible(timeout=5000)
 

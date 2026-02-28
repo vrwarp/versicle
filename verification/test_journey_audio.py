@@ -156,7 +156,7 @@ def test_journey_audio(page: Page):
     page.get_by_test_id("reader-back-button").click()
 
     # Wait for Library
-    expect(page).to_have_url("http://localhost:5173/")
+    expect(page).to_have_url("https://localhost:5173/")
 
     # Check for Summary Pill
     expect(page.get_by_test_id("compass-pill-summary")).to_be_visible()

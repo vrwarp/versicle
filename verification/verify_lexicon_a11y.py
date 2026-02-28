@@ -2,7 +2,7 @@ from playwright.sync_api import sync_playwright, expect
 
 def test_lexicon_accessibility(page):
     # 1. Navigate to the app
-    page.goto("http://localhost:5173")
+    page.goto("https://localhost:5173")
 
     # 2. Open Settings
     page.get_by_test_id("header-settings-button").click()

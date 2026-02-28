@@ -28,7 +28,7 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     5. Device B: Restore the book file
     6. Device B: Verify book is no longer offloaded and can be opened
     """
-    base_url = browser_context_args.get("base_url", "http://localhost:5173")
+    base_url = browser_context_args.get("base_url", "https://localhost:5173")
 
     # ============================================
     # DEVICE A: Create Data & Sync
@@ -289,7 +289,7 @@ def test_firestore_sync_offload_status_hydration(browser: Browser, browser_conte
 
     This tests the hydration logic in LibraryView that detects new synced books.
     """
-    base_url = browser_context_args.get("base_url", "http://localhost:5173")
+    base_url = browser_context_args.get("base_url", "https://localhost:5173")
 
     # ============================================
     # DEVICE A: Import book & Sync
@@ -384,7 +384,7 @@ def test_firestore_offline_resilience(browser: Browser, browser_context_args):
     """
     Verifies that data created offline persists after refresh.
     """
-    base_url = browser_context_args.get("base_url", "http://localhost:5173")
+    base_url = browser_context_args.get("base_url", "https://localhost:5173")
 
     context = browser.new_context(**browser_context_args)
     page = context.new_page()

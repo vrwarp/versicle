@@ -7,10 +7,10 @@ npm run preview -- --port 5173 --host &
 PID=$!
 
 # 2. Wait for the Server to be Ready
-echo "⏳ Waiting for application to be ready at http://localhost:5173..."
+echo "⏳ Waiting for application to be ready at https://localhost:5173..."
 RETRIES=30
 for i in $(seq 1 $RETRIES); do
-    if curl -s http://localhost:5173 > /dev/null; then
+    if curl -sk https://localhost:5173 > /dev/null; then
         echo "✅ Application is ready!"
         break
     fi

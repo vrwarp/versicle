@@ -13,7 +13,7 @@ def test_firebase_config_clear(page: Page):
     6. Verify configuration form reappears.
     """
     # Navigate to app
-    page.goto("http://localhost:5173")
+    page.goto("https://localhost:5173")
 
     # Open Global Settings
     page.get_by_test_id("header-settings-button").click()
