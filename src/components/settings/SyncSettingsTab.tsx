@@ -158,6 +158,13 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
     const isDriveConnected = isServiceConnected('drive');
 
+    // Device Name State
+    const [localDeviceName, setLocalDeviceName] = React.useState(currentDeviceName);
+    React.useEffect(() => {
+        setLocalDeviceName(currentDeviceName);
+    }, [currentDeviceName]);
+    const hasDeviceNameChanged = localDeviceName !== currentDeviceName;
+
     return (
         <div className="space-y-8">
             {/* Section 1: App Sync */}
@@ -172,12 +179,33 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                     <h4 className="text-sm font-medium">Device Identity</h4>
                     <div className="space-y-2">
                         <Label htmlFor="device-name-input">Device Name</Label>
-                        <Input
-                            id="device-name-input"
-                            value={currentDeviceName}
-                            onChange={(e) => onDeviceRename(e.target.value)}
-                            placeholder="My Device"
-                        />
+                        <div className="flex items-center gap-2">
+                            <Input
+                                id="device-name-input"
+                                value={localDeviceName}
+                                onChange={(e) => setLocalDeviceName(e.target.value)}
+                                placeholder="My Device"
+                                className="max-w-[300px]"
+                            />
+                            {hasDeviceNameChanged && (
+                                <>
+                                    <Button
+                                        size="sm"
+                                        onClick={() => onDeviceRename(localDeviceName)}
+                                        disabled={!localDeviceName.trim()}
+                                    >
+                                        Save
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setLocalDeviceName(currentDeviceName)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </>
+                            )}
+                        </div>
                         <p className="text-xs text-muted-foreground">
                             ID: {currentDeviceId}
                         </p>
