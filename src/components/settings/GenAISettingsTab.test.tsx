@@ -110,8 +110,7 @@ describe('GenAISettingsTab', () => {
         );
 
         expect(screen.getByText('Skip Content Types')).toBeInTheDocument();
-        expect(screen.getByLabelText('footnote')).toBeInTheDocument();
-        expect(screen.getByLabelText('table')).toBeInTheDocument();
+        expect(screen.getByLabelText('reference')).toBeInTheDocument();
     });
 
     it('calls onContentFilterSkipTypesChange when checkbox toggled', () => {
@@ -125,8 +124,8 @@ describe('GenAISettingsTab', () => {
             />
         );
 
-        fireEvent.click(screen.getByLabelText('footnote'));
-        expect(onContentFilterSkipTypesChange).toHaveBeenCalledWith(['footnote']);
+        fireEvent.click(screen.getByLabelText('reference'));
+        expect(onContentFilterSkipTypesChange).toHaveBeenCalledWith(['reference']);
     });
 
     it('shows debug logs section when enabled', () => {
