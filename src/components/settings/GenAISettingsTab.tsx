@@ -64,7 +64,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     logs,
     onDownloadLogs
 }) => {
-    const contentTypes: ContentType[] = ['footnote', 'table', 'other', 'title', 'main'];
+    const contentTypes: ContentType[] = ['reference'];
 
     return (
         <div className="space-y-6">

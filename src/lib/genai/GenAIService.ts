@@ -230,42 +230,37 @@ class GenAIService {
   public async detectContentTypes(nodes: { id: string, sampleText: string }[]): Promise<{ id: string, type: ContentType }[]> {
     if (nodes.length === 0) return [];
 
-    const prompt = `You will be provided text samples from an EPUB book section. For each section, it is possible to classify them into one of 5 categories: title, footnote, main, table, and other.
-
-### Categories & Strict Criteria:
-1. **'title'**: Structural headers. Includes chapter titles, sub-headings (e.g., "Psalm 16", "Introductory Matters"), or bolded section markers that introduce a new topic.
-2. **'footnote'**: Reference or Citation data.
-   - **Crucial:** Any text that provides bibliographic info (Author, Book Title, Publisher, Year) or begins with a citation number (e.g., "1 Bruce K. Waltke...") MUST be classified as 'footnote'.
-   - Do NOT classify bibliographies as 'other'.
-   - Be careful not to confuse book of the bible names with citations (e.g. 1 Tim, 2 Cor, etc.)
-3. **'main'**: Narrative body text. Standard prose, paragraphs of analysis, and block quotes of Scripture or other authors that form the primary discussion.
-4. **'table'**: Relational data. Structured lists where specific data points are mapped across columns (e.g., a list mapping a Psalm number to a New Testament reference).
-5. **'other'**: Technical artifacts. Use only for CSS remnants, encoding errors, or solitary metadata that serves no editorial purpose.
-
-### Logic Constraints:
-- **Priority 1:** If it looks like a bibliography or a source citation, it is a 'footnote'.
-- **Priority 2:** If it is a short, isolated line introducing a new section, it is a 'title'.
-- **Constraint:** Do not allow the absence of "bottom-of-page" positioning to influence your choice. EPUB text is reflowable; function defines the type, not location.
+    const prompt = `You will be provided an array of text samples from an EPUB book section, ordered exactly as they appear in the book.
+Your task is to identify where the end of chapter "references" section begins. References typically include footnotes, bibliographies, citations, or endnotes.
 
 ### Task:
-Linearly scan through the array of samples and if the sampleText can precisely classified as a footnote and nothing else, return it.
+Find the index of the first sample that clearly marks the beginning of the references section.
+Once the references section begins, everything after it is also considered part of the references.
+If the text does not contain a references section, or if the references don't appear at the end, return -1.
 
 Samples:
 ${JSON.stringify(nodes)}`;
 
     const schema = {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          id: { type: SchemaType.STRING },
-          type: { type: SchemaType.STRING, enum: ['title', 'footnote', 'main', 'table', 'other'] },
-        },
-        required: ['id', 'type'],
+      type: SchemaType.OBJECT,
+      properties: {
+        justification: { type: SchemaType.STRING },
+        referenceStartIndex: { type: SchemaType.INTEGER },
       },
+      required: ['justification', 'referenceStartIndex'],
     };
 
-    return this.generateStructured<{ id: string, type: ContentType }[]>(prompt, schema);
+    const result = await this.generateStructured<{ justification: string; referenceStartIndex: number }>(prompt, schema);
+
+    const startIndex = result.referenceStartIndex;
+
+    return nodes.map((node, index) => {
+      // If startIndex is valid and we've reached it, mark as reference
+      if (startIndex !== -1 && index >= startIndex) {
+        return { id: node.id, type: 'reference' as ContentType };
+      }
+      return { id: node.id, type: 'main' as ContentType };
+    });
   }
 
   public async generateTableAdaptations(

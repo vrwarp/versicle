@@ -129,18 +129,18 @@ describe('AudioContentPipeline', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getTTSContent as any).mockResolvedValue({ sentences: [s1, s2] });
 
-            // Mock content analysis results to classify s2 as a 'table'.
+            // Mock content analysis results to classify s2 as a 'reference'.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getContentAnalysis as any).mockResolvedValue({
                 contentTypes: [
-                    { rootCfi: 'epubcfi(/2/2/4:0,,)', type: 'table' } // Matching s2 group
+                    { rootCfi: 'epubcfi(/2/2/4:0,,)', type: 'reference' } // Matching s2 group
                 ]
             });
 
             // Mock store settings to enable filtering
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (useGenAIStore.getState as any).mockReturnValue({
-                contentFilterSkipTypes: ['table'],
+                contentFilterSkipTypes: ['reference'],
                 isContentAnalysisEnabled: true,
                 isEnabled: true,
                 apiKey: 'test-key'

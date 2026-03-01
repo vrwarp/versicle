@@ -402,42 +402,8 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     # Wait for sync to complete (library view loads with synced data)
     expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=10000)
 
-    # Give sync manager time to process the pre-loaded snapshot
-    # The Yjs provider needs time to initialize, load snapshot, and propagate to stores
+    # Give sync manager a brief moment to process the pre-loaded snapshot
     time.sleep(5)
-
-    # Wait for the lexicon store to actually have data from the sync
-    # This is more reliable than just waiting for time to pass
-    print("Waiting for lexicon store to sync...")
-    store_synced = False
-    for i in range(30):  # Try for 15 seconds
-        try:
-            has_rules = page_b.evaluate("""
-                () => {
-                    // Check if useLexiconStore has any rules
-                    const store = window.__ZUSTAND_STORES__?.useLexiconStore;
-                    if (store) {
-                        const state = store.getState();
-                        const rules = state.rules || [];
-                        return rules.length > 0;
-                    }
-                    return false;
-                }
-            """)
-            if has_rules:
-                store_synced = True
-                print(f"Lexicon store synced after {i * 0.5}s")
-                break
-        except:
-            pass
-        time.sleep(0.5)
-
-    # If store sync didn't work, try a full page reload
-    if not store_synced:
-        print("Store sync not detected, reloading page...")
-        page_b.reload()
-        expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=10000)
-        time.sleep(3)
 
     # Check Settings
     page_b.click("button[aria-label='Settings']", force=True)

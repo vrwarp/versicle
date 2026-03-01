@@ -40,7 +40,7 @@ export const useGenAIStore = create<GenAIState>()(
       isModelRotationEnabled: false,
       isContentAnalysisEnabled: false,
       isTableAdaptationEnabled: false,
-      contentFilterSkipTypes: ['footnote', 'table'],
+      contentFilterSkipTypes: ['reference'],
       isDebugModeEnabled: false,
       logs: [],
       usageStats: {
