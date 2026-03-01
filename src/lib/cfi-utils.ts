@@ -111,72 +111,67 @@ export function getParentCfi(cfi: string, knownBlockRoots: string[] | Preprocess
             cleanCfi = cleanCfi.slice(8, -1);
         }
 
-        for (const { original, clean } of roots) {
-            if (cleanCfi.startsWith(clean)) {
+        for (let i = 0; i < roots.length; i++) {
+            const root = roots[i];
+            if (cleanCfi.startsWith(root.clean)) {
                 // Ensure boundary match:
                 // If cleanCfi is exactly equal to clean, it's a match.
                 // If cleanCfi is longer, the next char must be a separator (/ or ! or [ or ,)
                 // Added comma to support Range CFIs as target (e.g. /6/24!/4/2/4 matches /6/24!/4/2/4,/1:0,...)
-                const nextChar = cleanCfi[clean.length];
-                if (!nextChar || ['/', '!', '[', ',', ':'].includes(nextChar)) {
-                    return original;
+                const nextChar = cleanCfi.charCodeAt(root.clean.length);
+                if (Number.isNaN(nextChar) || nextChar === 47 || nextChar === 33 || nextChar === 91 || nextChar === 44 || nextChar === 58) { // '/', '!', '[', ',', ':'
+                    return root.original;
                 }
             }
         }
     }
 
     // 2. Try parsing as a Range CFI (epubcfi(parent, start, end))
-    const parsed = parseCfiRange(cfi);
-    if (parsed) {
-        return `epubcfi(${parsed.parent})`;
+    // Optimization: Avoid regex replace and array splitting
+    let startIdx = 0;
+    let endIdx = cfi.length;
+    if (cfi.startsWith('epubcfi(')) {
+        startIdx = 8;
+        if (cfi.endsWith(')')) {
+            endIdx -= 1;
+        }
+    } else if (cfi.endsWith(')')) {
+        endIdx -= 1;
     }
 
-    // 3. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
-    if (cfi.startsWith('epubcfi(')) {
-        try {
-            // Optimization: Avoid regex replace and array splitting
-            const content = cfi.slice(8, -1);
-            const spineSepIndex = content.indexOf('!');
-
-            if (spineSepIndex !== -1) {
-                const spine = content.substring(0, spineSepIndex);
-                const path = content.substring(spineSepIndex + 1);
-
-                if (path) {
-                    // Find the last slash to strip the leaf component (e.g. /4/2/1:0 -> /4/2)
-                    // Note: path usually starts with /, so we look for the last one
-                    let lastSlash = path.lastIndexOf('/');
-
-                    // Handle edge case where path ends with slash (unlikely but safe to handle)
-                    if (lastSlash === path.length - 1) {
-                        lastSlash = path.lastIndexOf('/', lastSlash - 1);
-                    }
-
-                    if (lastSlash > 0) {
-                        // Return everything up to the last slash
-                        return `epubcfi(${spine}!${path.substring(0, lastSlash)})`;
-                    } else if (lastSlash === 0) {
-                         // Only one slash at start (e.g. /4), stripping it leaves empty path
-                         return `epubcfi(${spine}!)`;
-                    }
-
-                    // No slash found in path (unlikely for valid CFI path), return as is or fallback to spine
-                    // If path is "1:0" (no leading slash), stripping it means empty.
-                    return `epubcfi(${spine}!)`;
-                }
-
-                return `epubcfi(${spine}!)`;
-            } else {
-                 // No separator found. Treat content as spine.
-                 return `epubcfi(${content}!)`;
-            }
-        } catch (e) {
-            console.warn("Failed to extract parent CFI", e);
+    const firstComma = cfi.indexOf(',', startIdx);
+    if (firstComma !== -1 && firstComma < endIdx) {
+        if (cfi.indexOf(',', firstComma + 1) !== -1) {
+            return 'epubcfi(' + cfi.substring(startIdx, firstComma) + ')';
         }
     }
 
-    // Return original if we can't parse it (or 'unknown' based on preference, but original might be safer for grouping)
-    return cfi;
+    // 3. Fallback: Try handling as a Standard/Point CFI (epubcfi(/.../!/...))
+    const spineSepIndex = cfi.indexOf('!', startIdx);
+    if (spineSepIndex !== -1 && spineSepIndex < endIdx) {
+        let lastSlash = -1;
+        for (let i = endIdx - 1; i > spineSepIndex; i--) {
+            if (cfi.charCodeAt(i) === 47) { // '/'
+                if (i === endIdx - 1) {
+                    continue; // Skip trailing slash
+                }
+                lastSlash = i;
+                break;
+            }
+        }
+
+        if (lastSlash > spineSepIndex) {
+            return 'epubcfi(' + cfi.substring(startIdx, lastSlash) + ')';
+        } else {
+            return 'epubcfi(' + cfi.substring(startIdx, spineSepIndex) + '!)';
+        }
+    }
+
+    // Return original if we can't parse it
+    if (startIdx === 0 && endIdx === cfi.length) {
+        return cfi;
+    }
+    return 'epubcfi(' + cfi.substring(startIdx, endIdx) + '!)';
 }
 
 export function generateCfiRange(start: string, end: string): string {

@@ -62,18 +62,18 @@ export const useAllBooks = () => {
     const prevDepsRef = useRef({ staticMetadata, offloadedBookIds });
 
     // Invalidate cache if static metadata or offloaded status changes, as these affect the base book result
-    // eslint-disable-next-line react-hooks/refs
+
     if (prevDepsRef.current.staticMetadata !== staticMetadata ||
-        // eslint-disable-next-line react-hooks/refs
+
         prevDepsRef.current.offloadedBookIds !== offloadedBookIds) {
-        // eslint-disable-next-line react-hooks/refs
+
         baseBookCacheRef.current = new WeakMap();
-        // eslint-disable-next-line react-hooks/refs
+
         prevDepsRef.current = { staticMetadata, offloadedBookIds };
     }
 
     const baseBooks = useMemo(() => {
-        // eslint-disable-next-line react-hooks/refs
+
         return Object.values(books).map(book => {
             // Check cache
             const cached = baseBookCacheRef.current.get(book);
@@ -132,7 +132,7 @@ export const useAllBooks = () => {
 
         const cache = previousResultsRef.current;
 
-        // eslint-disable-next-line react-hooks/refs
+
         const result = baseBooks.map(book => {
             const rawBookProgress = progressMap[book.id];
             const rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;

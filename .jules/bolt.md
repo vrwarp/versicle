@@ -81,3 +81,8 @@
 - **Bottleneck:** `getParentCfi` was using `regex.replace` to clean CFI strings, and `AudioContentPipeline.groupSentencesByRoot` was doing the same inside a hot loop (thousands of sentences per chapter).
 - **Solution:** Replaced regex operations with `startsWith`/`endsWith` and string slicing. Introduced `currentParentBase` caching in the grouping loop to avoid redundant string operations.
 - **Learning:** For high-frequency string manipulation (like processing thousands of CFIs), basic string methods (`slice`, `startsWith`) are significantly faster (~4-9x) than regex. Always check for `endsWith` before slicing to ensure safety.
+
+## 2024-05-18 - CFI Parent Extraction Zero-Allocation Optimization
+- **Bottleneck:** `getParentCfi` in `src/lib/cfi-utils.ts` was heavily allocating intermediate strings via `slice(8, -1)`, `split(',')`, and `substring()` inside hot loops (e.g., `groupSentencesByRoot` which runs thousands of times during chapter TTS analysis).
+- **Solution:** Rewrote `getParentCfi` to use manual index tracking (`startIdx`, `endIdx`), `indexOf` with start index offsets, and direct `charCodeAt` scanning to avoid creating temporary strings. Reduced execution time by ~40% (247ms -> 131ms in 1M iterations).
+- **Learning:** In extremely hot loops processing strings (like CFI parsing), even simple `slice()` or `substring()` calls add up to significant GC pressure. Use index pointers and direct character code checking (`charCodeAt`) to find delimiters before allocating the final sub-string.

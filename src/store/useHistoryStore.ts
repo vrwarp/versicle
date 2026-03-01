@@ -22,7 +22,7 @@ export { undoManager };
 
 // Helper to infer description from StackItem
 const inferDescription = (item: StackItem): string => {
-    let desc = 'Update';
+    const desc = 'Update';
 
     if (item.meta.has('description')) {
         return item.meta.get('description') as string;
