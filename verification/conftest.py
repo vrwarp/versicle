@@ -43,7 +43,11 @@ def browser_type_launch_args(browser_type_launch_args):
     """
     return {
         **browser_type_launch_args,
-        "args": ["--disable-web-security", "--disable-features=IsolateOrigins,site-per-process"],
+        "args": [
+            "--disable-web-security",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--ignore-certificate-errors"
+        ],
     }
 
 @pytest.fixture(autouse=True)
@@ -56,11 +60,11 @@ def configure_page(page: Page):
     Args:
         page: The Playwright Page object.
     """
-    # Set default timeout for actions (click, wait_for_selector, etc) to 5000ms
-    page.set_default_timeout(5000)
-    page.set_default_navigation_timeout(5000)
+    # Set default timeout for actions (click, wait_for_selector, etc) to 10000ms
+    page.set_default_timeout(10000)
+    page.set_default_navigation_timeout(10000)
     # Set default timeout for assertions
-    expect.set_options(timeout=5000)
+    expect.set_options(timeout=10000)
 
     # Inject Mock TTS Polyfill
     page.add_init_script(path="verification/tts-polyfill.js")

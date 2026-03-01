@@ -79,6 +79,14 @@ import { createLogger } from './logger';
 
 const logger = createLogger('CancellableTaskRunner');
 
+// Helper to safely ignore promise rejections
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function safelyIgnorePromise(value: any) {
+  if (value instanceof Promise || (value && typeof value.catch === 'function')) {
+    value.catch(() => {}); // Suppress unhandled promise rejection
+  }
+}
+
 export function runCancellable<TReturn = void>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   generator: Generator<Promise<any> | any, TReturn, any>,
@@ -99,13 +107,26 @@ export function runCancellable<TReturn = void>(
         }
 
         // Check if cancelled immediately after next (in case sync logic inside next caused cancellation)
-        if (cancelled) return;
+        if (cancelled) {
+          safelyIgnorePromise(result.value);
+          return;
+        }
 
         // Wait for the yielded promise
-        const value = await result.value;
-        if (!cancelled) {
-          iterate(value);
-        }
+        // We use Promise.resolve() to ensure the value is a promise before attaching a catch handler.
+        // This catch handler prevents unhandled rejections if the generator yielded a promise that
+        // rejected AFTER the promise was awaited but cancelled during the await.
+        // Or if the promise rejected right away, the catch block catches it.
+        const value = await Promise.resolve(result.value).catch(e => {
+            if (cancelled) {
+                return undefined;
+            }
+            throw e;
+        });
+
+        if (cancelled) return;
+
+        iterate(value);
       } catch (err) {
         if (!cancelled) {
           try {
@@ -126,12 +147,19 @@ export function runCancellable<TReturn = void>(
             // And reject the result promise.
             reject(e);
           }
+        } else {
+          // If cancelled, just ignore errors returned by the unhandled promise rejection.
         }
       }
     };
 
     void iterate();
   });
+
+  // Attach a dummy catch handler to the returned promise so that if it rejects when nobody is awaiting it,
+  // Node doesn't crash the process with an UnhandledPromiseRejection warning.
+  // We still return `resultPromise` so the caller can handle it if they choose to.
+  safelyIgnorePromise(resultPromise);
 
   const cancel = () => {
     if (cancelled) return;
@@ -142,6 +170,7 @@ export function runCancellable<TReturn = void>(
         if (generator.throw) {
             const result = generator.throw(new CancellationError());
             if (!result.done) {
+                safelyIgnorePromise(result.value);
                 logger.warn(
                     'Generator did not complete after cancellation. ' +
                     'Ensure you are not catching CancellationError and continuing execution, ' +
