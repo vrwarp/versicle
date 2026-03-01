@@ -139,9 +139,7 @@ export async function extractContentOffscreen(
         const tables = doc.querySelectorAll('table');
         for (const table of tables) {
           try {
-            const range = doc.createRange();
-            range.selectNode(table);
-            const cfi = contents.cfiFromRange(range);
+            const cfi = contents.cfiFromNode(table);
 
             const blob = await snapdom.toBlob(table, {
               type: 'webp',

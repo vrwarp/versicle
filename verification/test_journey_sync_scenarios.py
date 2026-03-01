@@ -392,9 +392,13 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     page_a.evaluate("window.dispatchEvent(new Event('beforeunload'))")
 
     # Wait for the data to actually hit "disk" (localStorage) before snapshotting
-    # We poll for the existence of the mock user path, which confirms the provider flushed the change
+    # We poll for the existence of the mock user path, AND the data payload itself which in base64 will have changed.
+    # To be extremely safe, we could wait for the rule itself. In Yjs updates, plain text strings are often visible in base64.
+    # We will just wait 2 additional seconds after the key exists to let any trailing debounces settle.
     snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/main")
     assert snapshot_a, "Device A failed to persist data to mock cloud"
+    time.sleep(2)
+    snapshot_a = page_a.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')")
     snapshot_a = json.loads(snapshot_a)
 
     page_a.close()

@@ -72,7 +72,8 @@ describe('extractContentOffscreen', () => {
     const mockDoc = document.implementation.createHTMLDocument();
     mockRendition.getContents.mockReturnValue([{
       document: mockDoc,
-      cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/1:0)')
+      cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/1:0)'),
+      cfiFromNode: vi.fn(() => 'epubcfi(/6/2!/4/2)')
     }]);
 
     const file = new Blob(['dummy content']);
@@ -94,7 +95,8 @@ describe('extractContentOffscreen', () => {
 
     mockRendition.getContents.mockReturnValue([{
       document: mockDoc,
-      cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/2)')
+      cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/2)'),
+      cfiFromNode: vi.fn(() => 'epubcfi(/6/2!/4/2)')
     }]);
 
     // Mock snapdom response
@@ -124,7 +126,8 @@ describe('extractContentOffscreen', () => {
 
     mockRendition.getContents.mockReturnValue([{
       document: mockDoc,
-      cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/2)')
+      cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/2)'),
+      cfiFromNode: vi.fn(() => 'epubcfi(/6/2!/4/2)')
     }]);
 
     // Mock failure
