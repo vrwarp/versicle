@@ -152,6 +152,38 @@ export const extractSentencesFromNode = (
                 return;
             }
 
+            // Citation Heuristics: Skip <sup> or <a> containing only typical citation markers
+            // We do this before checking for block tags or traversing children
+            if (tagName === 'SUP' || tagName === 'A') {
+                const text = el.textContent?.trim() || '';
+                // Three patterns that identify typical citation marker text:
+                //   /^\[?\d+\]?$/  — bare or bracketed number: "1", "12", "[1]", "[12]"
+                //   /^\(\d+\)$/    — parenthesized number:     "(1)", "(12)"
+                //   /^[\*†‡]+$/    — symbol markers:           "*", "†", "‡", "**"
+                const isCitationText = /^\[?\d+\]?$/.test(text) || /^\(\d+\)$/.test(text) || /^[\*\u2020\u2021]+$/.test(text);
+
+                if (isCitationText) {
+                    if (tagName === 'SUP') {
+                        return; // Always skip superscript citations
+                    } else if (tagName === 'A') {
+                        const href = el.getAttribute('href') || '';
+                        const hasEpubType = el.getAttribute('epub:type') === 'noteref';
+                        const hasRole = el.getAttribute('role') === 'doc-noteref';
+
+                        // Skip if: epub:type=noteref, role=doc-noteref, local anchor #,
+                        // or links to an external notes/endnotes file
+                        const isNoteLink = href.startsWith('#')
+                            || /notes/i.test(href)
+                            || /endnote/i.test(href)
+                            || /footnote/i.test(href);
+
+                        if (hasEpubType || hasRole || isNoteLink) {
+                            return;
+                        }
+                    }
+                }
+            }
+
             const isBlock = BLOCK_TAGS.has(tagName);
             const isBreak = tagName === 'BR';
 

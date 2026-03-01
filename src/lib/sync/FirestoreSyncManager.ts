@@ -114,12 +114,16 @@ class FirestoreSyncManager {
     async initialize(): Promise<void> {
         // Support for Mock Firestore (Testing)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__) {
+        const w = typeof window !== 'undefined' ? (window as any) : null;
+        if (w && w.__VERSICLE_MOCK_FIRESTORE__) {
             logger.info('Mock mode detected. Simulating auth and connection.');
             this.setAuthStatus('signed-in');
+
+            const mockUid = w.__VERSICLE_MOCK_USER_ID__ || 'mock-user';
+
             // Simulate a mock user
-            this.currentUser = { uid: 'mock-user', email: 'mock@example.com' } as User;
-            this.connectFireProvider('mock-user');
+            this.currentUser = { uid: mockUid, email: `${mockUid}@example.com` } as User;
+            this.connectFireProvider(mockUid);
             return;
         }
 

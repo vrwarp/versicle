@@ -9,6 +9,7 @@ export class Sanitizer {
     private static readonly RE_CITATION_NUMERIC_GLOBAL = new RegExp(RegexPatterns.CITATION_NUMERIC, 'g');
     private static readonly RE_CITATION_AUTHOR_YEAR_GLOBAL = new RegExp(RegexPatterns.CITATION_AUTHOR_YEAR, 'g');
     private static readonly RE_MULTIPLE_SPACES_GLOBAL = new RegExp(RegexPatterns.MULTIPLE_SPACES, 'g');
+    private static readonly RE_SPACE_BEFORE_PUNCTUATION = /\s+([.,!?;:])/g;
 
     /**
      * Sanitizes the input text.
@@ -72,6 +73,9 @@ export class Sanitizer {
 
         // 5. Clean up extra spaces introduced by removals
         processed = processed.replace(Sanitizer.RE_MULTIPLE_SPACES_GLOBAL, ' ').trim();
+
+        // 6. Clean up spaces before punctuation (often left when inline citations are removed)
+        processed = processed.replace(Sanitizer.RE_SPACE_BEFORE_PUNCTUATION, '$1');
 
         return processed;
     }
