@@ -621,6 +621,12 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **`useReaderUIStore` (Local/Ephemeral)**:
     *   **Goal**: Manage transient UI state for the Reading Room.
     *   **Logic**: Tracks loading state, Table of Contents (TOC), immersive mode, and holds callbacks (`playFromSelection`, `jumpToLocation`) to allow the React UI to control the underlying Reader instance.
+*   **`useToastStore` (Local/Ephemeral)**:
+    *   **Goal**: Provide global toast notifications.
+    *   **Logic**: Manages visibility, message, type (info, success, error) and duration for standard non-blocking system messages like database quota errors.
+*   **`useUIStore` (Local/Ephemeral)**:
+    *   **Goal**: Manage global modal and application lock states.
+    *   **Logic**: Controls global settings visibility and critical flags like `obsoleteLock` which forces the application into `ObsoleteLockView` when cloud schema versions misalign.
 *   **`useLocalHistoryStore` (Local/Persisted)**:
     *   **Goal**: Optimize startup performance by tracking the "Last Read Book" locally.
     *   **Logic**: Stores the ID of the last open book in `localStorage`. This allows the app to immediately resume the correct book on launch without waiting to iterate through the potentially large, synced `user_progress` Yjs map.
@@ -665,6 +671,9 @@ State is managed using **Zustand** with specialized strategies for different dat
 
 *   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
 *   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
+*   **Schema Quarantine (`ObsoleteLockView`)**: When the `FirestoreSyncManager` detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION`), `handleObsoleteClient` severs the cloud connection and locks the UI permanently.
+    *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
+    *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
 *   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.
 *   **Battery Guard**: Explicitly checks Android battery optimization settings via `BatteryGuard` and warns the user if they are likely to interfere with background playback.
 *   **Transactional Voice Download**: `PiperProvider` prevents corrupt voice models by ensuring files are downloaded and verified in memory before writing to persistent storage.
