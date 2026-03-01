@@ -14,7 +14,7 @@ export const HistorySettingsTab = () => {
             <div>
                 <h3 className="text-lg font-medium">Edit History</h3>
                 <p className="text-sm text-muted-foreground">
-                    View and reverse recent edits. "Undo to here" reverses all edits up to that point.
+                    View and reverse edits made during this session. "Undo to here" reverses all edits up to that point.
                 </p>
             </div>
 
@@ -42,7 +42,7 @@ export const HistorySettingsTab = () => {
                     <div className="space-y-2">
                         <h4 className="text-sm font-semibold text-muted-foreground">History</h4>
                         {history.length === 0 ? (
-                            <p className="text-sm text-muted-foreground italic">No recent edits recorded.</p>
+                            <p className="text-sm text-muted-foreground italic">No edits recorded in this session.</p>
                         ) : (
                             history.map((item, index) => (
                                 <div key={`history-${index}`} className="flex items-center justify-between p-3 hover:bg-muted/50 rounded transition-colors border bg-background">
