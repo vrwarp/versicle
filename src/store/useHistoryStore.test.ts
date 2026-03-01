@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { useHistoryStore, undoManager, initHistory } from './useHistoryStore';
-import * as Y from 'yjs';
 
 // Mock Yjs dependencies if needed, but Yjs works in node
 // We need to mock yDoc from yjs-provider if it's used directly
