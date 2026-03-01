@@ -230,14 +230,14 @@ export const FileUploader: React.FC = () => {
 
             {/* Upload/Processing Progress */}
             <div className="w-full flex flex-col items-center space-y-1">
-              <p className="text-sm text-muted-foreground">{uploadStatus || 'Processing files...'}</p>
+              <p className="text-sm text-muted-foreground" role="status" aria-live="polite">{uploadStatus || 'Processing files...'}</p>
               <Progress value={uploadProgress} className="w-64" aria-label="Upload progress" />
             </div>
 
             {/* Import Progress (only show if upload is done or if import started) */}
             {(importProgress > 0 || uploadProgress >= 100) && (
               <div className="w-full flex flex-col items-center space-y-1 mt-2">
-                <p className="text-muted-foreground font-medium">{importStatus || 'Importing books...'}</p>
+                <p className="text-muted-foreground font-medium" role="status" aria-live="polite">{importStatus || 'Importing books...'}</p>
                 <Progress value={importProgress} className="w-64" aria-label="Import progress" />
               </div>
             )}
