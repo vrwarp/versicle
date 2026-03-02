@@ -20,7 +20,7 @@ export function useRemoteProgress(bookId: string | null): RemoteProgressInfo | n
     const currentDeviceId = getDeviceId();
 
     // Subscribe to progress for this book
-    const allProgress = useReadingStateStore((state) => bookId ? state.progress[bookId] : undefined);
+    const allProgress = useReadingStateStore((state) => bookId ? state.progress?.[bookId] : undefined);
     const devices = useDeviceStore((state) => state.devices);
 
     return React.useMemo(() => {

@@ -56,26 +56,28 @@ export const useBookStore = create<BookState>()(
 
             updateBook: (id, updates) =>
                 set((state) => {
-                    if (!state.books[id]) return state;
+                    const currentBooks = state.books || {};
+                    if (!currentBooks[id]) return state;
                     return {
                         books: {
-                            ...state.books,
-                            [id]: { ...state.books[id], ...updates }
+                            ...currentBooks,
+                            [id]: { ...currentBooks[id], ...updates }
                         }
                     };
                 }),
 
             removeBook: (id) =>
                 set((state) => {
+                    const currentBooks = state.books || {};
                     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                    const { [id]: removed, ...remain } = state.books;
+                    const { [id]: removed, ...remain } = currentBooks;
                     return { books: remain };
                 }),
 
             addBook: (book) =>
                 set((state) => ({
                     books: {
-                        ...state.books,
+                        ...(state.books || {}),
                         [book.bookId]: book
                     }
                 })),
@@ -89,7 +91,7 @@ export const useBookStore = create<BookState>()(
 
                     return {
                         books: {
-                            ...state.books,
+                            ...(state.books || {}),
                             ...booksMap
                         }
                     };

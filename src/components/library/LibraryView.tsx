@@ -494,7 +494,7 @@ export const LibraryView: React.FC = () => {
           </div>
 
           <div className="flex gap-2">
-            {activeContext === 'library' && (
+            {(activeContext || 'library') === 'library' && (
               <>
                 <Button
                   variant="secondary"
@@ -537,7 +537,7 @@ export const LibraryView: React.FC = () => {
         </div>
 
         {/* Combined Row: Search and Sort */}
-        {activeContext === 'library' && (
+        {(activeContext || 'library') === 'library' && (
           <div className="flex flex-col gap-4 md:flex-row-reverse md:items-center md:justify-between">
             {/* Search Bar */}
             <div className="w-full md:w-72">

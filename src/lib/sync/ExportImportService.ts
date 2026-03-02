@@ -60,6 +60,8 @@ export interface ExportResult {
     blob: Blob;
     /** Suggested filename */
     filename: string;
+    /** The raw JSON string bypassing Blob */
+    jsonString: string;
     /** SHA-256 checksum of the blob */
     checksum: string;
     /** Export statistics */
@@ -290,6 +292,7 @@ export class ExportImportService {
         return {
             blob,
             filename,
+            jsonString: finalJsonString,
             checksum,
             stats: {
                 booksCount,
@@ -557,13 +560,13 @@ export class ExportImportService {
     }
 
     /**
-     * Triggers browser download of the export blob.
+     * Triggers browser download of the export blob or string.
      */
-    static async downloadBlob(blob: Blob, filename: string): Promise<void> {
+    static async downloadBlob(data: Blob | string, filename: string): Promise<void> {
         await exportFile({
             filename,
-            data: blob,
-            mimeType: blob.type
+            data,
+            mimeType: 'application/json'
         });
     }
 
@@ -572,7 +575,8 @@ export class ExportImportService {
      */
     static async exportAndDownload(options: ExportOptions = DEFAULT_EXPORT_OPTIONS): Promise<ExportResult> {
         const result = await this.exportToJSON(options);
-        await this.downloadBlob(result.blob, result.filename);
+        // Pass the jsonString directly instead of the blob to avoid base64 conversion issues on Android
+        await this.downloadBlob(result.jsonString || result.blob, result.filename);
         return result;
     }
 

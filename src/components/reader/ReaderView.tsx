@@ -985,10 +985,10 @@ export const ReaderView: React.FC = () => {
     const showToc = activeSidebar === 'toc';
     const currentDeviceId = getDeviceId();
 
-    // Optimization: Subscribe only to OTHER devices' progress to avoid re-rendering on own progress update
+    // Optimization: Subscribe only to OTHER devices' progress to avoid re-renders on own progress update
     const otherDevicesProgress = useReadingStateStore(useShallow(state => {
         if (!id) return {};
-        const bookProgress = state.progress[id];
+        const bookProgress = state.progress?.[id];
         if (!bookProgress) return {};
 
         const result: Record<string, import('../../types/db').UserProgress> = {};

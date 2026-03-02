@@ -90,7 +90,7 @@ export class ErrorBoundary extends Component<Props, State> {
               Reload Page
             </Button>
             <Button onClick={this.handleToggleRecovery} variant="outline">
-              Data Recovery
+              Open Recovery Tool
             </Button>
           </div>
         </div>

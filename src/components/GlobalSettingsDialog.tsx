@@ -70,8 +70,8 @@ export const GlobalSettingsDialog = () => {
     const [isClearing, setIsClearing] = useState(false);
 
 
-    const readingListEntries = useReadingListStore(state => state.entries) || {};
-    const readingListCount = Object.keys(readingListEntries).length;
+    const readingListEntries = useReadingListStore(state => state.entries);
+    const readingListCount = readingListEntries ? Object.keys(readingListEntries).length : 0;
     const [isReadingListOpen, setIsReadingListOpen] = useState(false);
     const [isCsvImporting, setIsCsvImporting] = useState(false);
     const [csvImportMessage, setCsvImportMessage] = useState('');
