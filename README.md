@@ -29,7 +29,7 @@
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
 *   **AI**: Google Gemini 2.5 (Flash Lite / Flash) via `@google/generative-ai`
-*   **Mobile**: Capacitor 7.0.0 (Android) + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login`
+*   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
 *   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
