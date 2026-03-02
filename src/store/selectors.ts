@@ -52,7 +52,7 @@ export const useAllBooks = () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (progressMap as any) = {};
     }
-    const readingListEntries = useReadingListStore(state => state.entries);
+    const readingListEntries = useReadingListStore(state => state.entries) || {};
 
     // OPTIMIZATION: Phase 1 - Base Books
     // Memoize the "static" transformation of books (merging inventory + library metadata).

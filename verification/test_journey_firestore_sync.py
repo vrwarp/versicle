@@ -113,8 +113,8 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     mock_data = json.loads(mock_data_str)
     print(f"[A] Mock Firestore data keys: {list(mock_data.keys())}")
 
-    # The path should be users/mock-user/versicle/main
-    sync_path = "users/mock-user/versicle/main"
+    # The path should be users/mock-user/versicle/main2
+    sync_path = "users/mock-user/versicle/main2"
     assert sync_path in mock_data, f"Expected path '{sync_path}' not found in mock data"
 
     snapshot_b64 = mock_data[sync_path].get("snapshotBase64")

@@ -160,7 +160,7 @@ export const useReadingStateStore = create<ReadingState>()(
                 // Sync to Reading List
                 // We do this outside the set() to avoid side-effects during state calculation,
                 // and because it affects a different store.
-                const book = useBookStore.getState().books[bookId];
+                const book = useBookStore.getState().books?.[bookId];
                 if (book && book.sourceFilename) {
                     const { staticMetadata } = useLibraryStore.getState();
                     const meta = staticMetadata[bookId];
@@ -331,8 +331,7 @@ export const useReadingStateStore = create<ReadingState>()(
                     };
                 });
 
-                // Sync to Reading List (same logic as updateLocation)
-                const book = useBookStore.getState().books[bookId];
+                const book = useBookStore.getState().books?.[bookId];
                 if (book && book.sourceFilename) {
                     const { staticMetadata } = useLibraryStore.getState();
                     const meta = staticMetadata[bookId];
@@ -462,7 +461,7 @@ export const useCurrentDeviceProgress = (bookId: string | null) => {
     const deviceId = getDeviceId();
     return useReadingStateStore(state => {
         if (!bookId) return null;
-        return state.progress[bookId]?.[deviceId] || null;
+        return state.progress?.[bookId]?.[deviceId] || null;
     });
 };
 

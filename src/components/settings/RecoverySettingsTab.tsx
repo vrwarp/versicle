@@ -6,6 +6,8 @@ import { CheckpointInspector, type DiffResult } from '../../lib/sync/CheckpointI
 import { CheckpointDiffView } from './CheckpointDiffView';
 import { ExportImportService, DEFAULT_EXPORT_OPTIONS } from '../../lib/sync/ExportImportService';
 import type { SyncCheckpoint } from '../../types/db';
+import { DataRecoveryView } from './DataRecoveryView';
+import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
 
 export interface RecoverySettingsTabProps {
     checkpoints: SyncCheckpoint[];
@@ -22,6 +24,7 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
     const [diffData, setDiffData] = useState<Record<string, DiffResult> | null>(null);
     const [isRestoring, setIsRestoring] = useState(false);
     const [status, setStatus] = useState<string | null>(initialStatus);
+    const [isRawRecoveryOpen, setIsRawRecoveryOpen] = useState(false);
 
     const handleInspect = async (checkpoint: SyncCheckpoint) => {
         setStatus("Analyzing checkpoint...");
@@ -119,7 +122,7 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
-                                     <Button size="sm" variant="outline" onClick={() => handleInspect(cp)}>
+                                    <Button size="sm" variant="outline" onClick={() => handleInspect(cp)}>
                                         <FileSearch className="h-4 w-4 mr-2" />
                                         Inspect
                                     </Button>
@@ -129,6 +132,31 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
                     )}
                 </div>
             </div>
+
+            <div className="pt-8 border-t">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-medium">Advanced Recovery</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                    If the application state is completely unrecoverable, you can try to extract your raw synchronized data directly from the local database.
+                </p>
+                <div className="flex space-x-2">
+                    <Button variant="outline" onClick={() => setIsRawRecoveryOpen(true)}>
+                        Open Data Recovery Tool
+                    </Button>
+                </div>
+            </div>
+
+            <Modal open={isRawRecoveryOpen} onOpenChange={setIsRawRecoveryOpen}>
+                <ModalContent className="max-w-4xl h-[90vh] sm:h-[800px] flex flex-col p-6 overflow-hidden gap-0 sm:rounded-lg">
+                    <ModalHeader>
+                        <ModalTitle>Raw Data Recovery</ModalTitle>
+                    </ModalHeader>
+                    <div className="flex-1 overflow-hidden pt-4">
+                        <DataRecoveryView />
+                    </div>
+                </ModalContent>
+            </Modal>
         </div>
     );
 };

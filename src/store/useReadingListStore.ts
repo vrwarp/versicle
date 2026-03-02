@@ -20,28 +20,30 @@ export const useReadingListStore = create<ReadingListState>()(
             entries: {},
 
             addEntry: (entry) => set((state) => ({
-                entries: { ...state.entries, [entry.filename]: entry }
+                entries: { ...(state.entries || {}), [entry.filename]: entry }
             })),
 
             removeEntry: (filename) => set((state) => {
+                const currentEntries = state.entries || {};
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { [filename]: _removed, ...remain } = state.entries;
+                const { [filename]: _removed, ...remain } = currentEntries;
                 return { entries: remain };
             }),
 
             updateEntry: (filename, updates) => set((state) => {
-                const existing = state.entries[filename];
+                const currentEntries = state.entries || {};
+                const existing = currentEntries[filename];
                 if (!existing) return state;
                 return {
                     entries: {
-                        ...state.entries,
+                        ...currentEntries,
                         [filename]: { ...existing, ...updates }
                     }
                 };
             }),
 
             upsertEntry: (entry) => set((state) => ({
-                entries: { ...state.entries, [entry.filename]: entry }
+                entries: { ...(state.entries || {}), [entry.filename]: entry }
             }))
         }),
         getYjsOptions()

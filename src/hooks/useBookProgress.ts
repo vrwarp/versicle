@@ -8,7 +8,7 @@ import type { UserProgress } from '../types/db';
 
 export function useBookProgress(bookId: string) {
     const currentBookId = useReaderUIStore(state => state.currentBookId);
-    const allProgress = useReadingStateStore(state => state.progress);
+    const allProgress = useReadingStateStore(state => state.progress || {});
 
     // If the requested book is the active one, return state from store
     const isCurrent = bookId === currentBookId;

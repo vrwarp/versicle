@@ -424,7 +424,10 @@ export class AudioContentPipeline {
             // 1. Check DB for existing adaptations
             const analysis = await dbService.getContentAnalysis(bookId, sectionId);
             const existingAdaptations = new Map<string, string>(
-                analysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
+                analysis?.tableAdaptations?.map(a => {
+                    const range = parseCfiRange(a.rootCfi);
+                    return [(range && range.parent) ? `epubcfi(${range.parent})` : a.rootCfi, a.text];
+                }) || []
             );
 
             // Notify with cached data immediately if available
@@ -436,8 +439,15 @@ export class AudioContentPipeline {
             }
 
             // 2. Identify tables that actually exist in the current section
+            // Normalizing legacy Range CFIs (e.g. from buggy cfiFromRange) to their Point CFI parents
             const tableImages = await dbService.getTableImages(bookId);
-            const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
+            const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId).map(img => {
+                const range = parseCfiRange(img.cfi);
+                return {
+                    ...img,
+                    cfi: (range && range.parent) ? `epubcfi(${range.parent})` : img.cfi
+                };
+            });
 
             if (sectionTableImages.length === 0) return;
 

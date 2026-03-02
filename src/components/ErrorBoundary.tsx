@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button } from './ui/Button';
 import { createLogger } from '../lib/logger';
+import { DataRecoveryView } from './settings/DataRecoveryView';
 
 const logger = createLogger('ErrorBoundary');
 
@@ -12,6 +13,7 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+  showRecovery: boolean;
 }
 
 /**
@@ -25,12 +27,13 @@ export class ErrorBoundary extends Component<Props, State> {
       hasError: false,
       error: null,
       errorInfo: null,
+      showRecovery: false,
     };
   }
 
   static getDerivedStateFromError(error: Error): State {
     // Update state so the next render will show the fallback UI.
-    return { hasError: true, error, errorInfo: null };
+    return { hasError: true, error, errorInfo: null, showRecovery: false };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
@@ -43,8 +46,29 @@ export class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
+  handleToggleRecovery = () => {
+    this.setState((prev) => ({ showRecovery: !prev.showRecovery }));
+  };
+
   render() {
     if (this.state.hasError) {
+      if (this.state.showRecovery) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-background text-foreground text-center">
+            <div className="w-full max-w-4xl h-[80vh] flex flex-col items-stretch text-left">
+              <div className="flex justify-between items-center mb-4">
+                <Button onClick={this.handleToggleRecovery} variant="outline">
+                  Back to Error Page
+                </Button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <DataRecoveryView />
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       // You can render any custom fallback UI
       return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-background text-foreground text-center">
@@ -61,9 +85,14 @@ export class ErrorBoundary extends Component<Props, State> {
             </pre>
           )}
 
-          <Button onClick={this.handleReload} variant="default">
-            Reload Page
-          </Button>
+          <div className="flex gap-4">
+            <Button onClick={this.handleReload} variant="default">
+              Reload Page
+            </Button>
+            <Button onClick={this.handleToggleRecovery} variant="outline">
+              Open Recovery Tool
+            </Button>
+          </div>
         </div>
       );
     }

@@ -53,16 +53,19 @@ interface SelectItemProps {
     children: ReactNode;
 }
 vi.mock('../ui/Select', () => ({
-    Select: ({ value, onValueChange, children }: SelectProps) => (
-        <select
-            data-testid="sort-select"
-            value={value}
-            onChange={(e) => onValueChange(e.target.value)}
-        >
-            {children}
-        </select>
-    ),
-    SelectTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+    Select: ({ value, onValueChange, children }: any) => {
+        const isSortSelect = ['recent', 'last_read', 'author', 'title'].includes(value);
+        return (
+            <select
+                data-testid={isSortSelect ? "sort-select" : "context-select"}
+                value={value}
+                onChange={(e) => onValueChange(e.target.value)}
+            >
+                {children}
+            </select>
+        );
+    },
+    SelectTrigger: ({ children }: any) => <>{children}</>,
     SelectValue: () => null,
     SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
     SelectItem: ({ value, children }: SelectItemProps) => (

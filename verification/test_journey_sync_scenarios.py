@@ -137,7 +137,7 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
     page_a.evaluate("window.dispatchEvent(new Event('beforeunload'))")
 
     # Wait for persistence (using the Book ID or general path to ensure flush)
-    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/main")
+    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/main2")
     assert snapshot_a, "Device A failed to sync"
     snapshot_a = json.loads(snapshot_a)
 
@@ -375,7 +375,7 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     clear_data_and_reload(page_a, base_url)
 
     # Add Lexicon Rule
-    page_a.click("button[aria-label='Settings']", force=True)
+    page_a.get_by_test_id("header-settings-button").click()
     page_a.get_by_role("button", name="Dictionary").click()
     page_a.get_by_role("button", name="Manage Rules").click()
     page_a.get_by_test_id("lexicon-add-rule-btn").click()
@@ -392,9 +392,13 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     page_a.evaluate("window.dispatchEvent(new Event('beforeunload'))")
 
     # Wait for the data to actually hit "disk" (localStorage) before snapshotting
-    # We poll for the existence of the mock user path, which confirms the provider flushed the change
-    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/main")
+    # We poll for the existence of the mock user path, AND the data payload itself which in base64 will have changed.
+    # To be extremely safe, we could wait for the rule itself. In Yjs updates, plain text strings are often visible in base64.
+    # We will just wait 2 additional seconds after the key exists to let any trailing debounces settle.
+    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/main2")
     assert snapshot_a, "Device A failed to persist data to mock cloud"
+    time.sleep(2)
+    snapshot_a = page_a.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')")
     snapshot_a = json.loads(snapshot_a)
 
     page_a.close()
@@ -414,7 +418,7 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     time.sleep(5)
 
     # Check Settings
-    page_b.click("button[aria-label='Settings']", force=True)
+    page_b.get_by_test_id("header-settings-button").click()
     page_b.get_by_role("button", name="Dictionary").click()
     page_b.get_by_role("button", name="Manage Rules").click()
 
@@ -436,7 +440,7 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
             time.sleep(1)
 
             # Re-open Settings -> Dictionary -> Manage Rules
-            page_b.click("button[aria-label='Settings']", force=True)
+            page_b.get_by_test_id("header-settings-button").click()
             time.sleep(1)  # Wait for settings dialog animation
 
             # SCROLL sidebar to ensure Dictionary is visible on mobile
@@ -481,7 +485,7 @@ def test_journey_data_liberation(browser: Browser, browser_context_args):
     clear_data_and_reload(page, base_url)
 
     # Create some data (Lexicon Rule)
-    page.click("button[aria-label='Settings']", force=True)
+    page.get_by_test_id("header-settings-button").click()
     page.get_by_role("button", name="Dictionary").click()
     page.get_by_role("button", name="Manage Rules").click()
     page.get_by_test_id("lexicon-add-rule-btn").click()
@@ -494,7 +498,7 @@ def test_journey_data_liberation(browser: Browser, browser_context_args):
     expect(page.get_by_test_id("library-view")).to_be_visible()
 
     # Open Data Management
-    page.click("button[aria-label='Settings']", force=True)
+    page.get_by_test_id("header-settings-button").click()
     time.sleep(1) # Wait for dialog animation
     page.get_by_role("button", name="Data Management").click(force=True)
 

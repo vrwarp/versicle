@@ -125,11 +125,12 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
 
             saveClassifications: (bookId, sectionId, classifications) =>
                 set((state) => {
+                    const currentSections = state.sections || {};
                     const key = makeKey(bookId, sectionId);
-                    const existing = state.sections[key] || { generatedAt: Date.now() };
+                    const existing = currentSections[key] || { generatedAt: Date.now() };
                     return {
                         sections: {
-                            ...state.sections,
+                            ...currentSections,
                             [key]: {
                                 ...existing,
                                 semanticMap: classifications,
@@ -144,8 +145,9 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
 
             saveTableAdaptations: (bookId, sectionId, adaptations) =>
                 set((state) => {
+                    const currentSections = state.sections || {};
                     const key = makeKey(bookId, sectionId);
-                    const existing = state.sections[key] || { generatedAt: Date.now() };
+                    const existing = currentSections[key] || { generatedAt: Date.now() };
 
                     // Merge with existing adaptations (de-duplicating by rootCfi)
                     const existingAdaptations = existing.tableAdaptations || [];
@@ -158,7 +160,7 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
 
                     return {
                         sections: {
-                            ...state.sections,
+                            ...currentSections,
                             [key]: {
                                 ...existing,
                                 tableAdaptations: Array.from(existingMap.values()),
@@ -173,11 +175,12 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
 
             saveSectionTitle: (bookId, sectionId, title) =>
                 set((state) => {
+                    const currentSections = state.sections || {};
                     const key = makeKey(bookId, sectionId);
-                    const existing = state.sections[key] || { generatedAt: Date.now() };
+                    const existing = currentSections[key] || { generatedAt: Date.now() };
                     return {
                         sections: {
-                            ...state.sections,
+                            ...currentSections,
                             [key]: {
                                 ...existing,
                                 title,
@@ -189,11 +192,12 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
 
             markAnalysisLoading: (bookId, sectionId) =>
                 set((state) => {
+                    const currentSections = state.sections || {};
                     const key = makeKey(bookId, sectionId);
-                    const existing = state.sections[key] || { generatedAt: Date.now() };
+                    const existing = currentSections[key] || { generatedAt: Date.now() };
                     return {
                         sections: {
-                            ...state.sections,
+                            ...currentSections,
                             [key]: {
                                 ...existing,
                                 status: 'loading',
@@ -205,11 +209,12 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
 
             markAnalysisError: (bookId, sectionId, error) =>
                 set((state) => {
+                    const currentSections = state.sections || {};
                     const key = makeKey(bookId, sectionId);
-                    const existing = state.sections[key] || { generatedAt: Date.now() };
+                    const existing = currentSections[key] || { generatedAt: Date.now() };
                     return {
                         sections: {
-                            ...state.sections,
+                            ...currentSections,
                             [key]: {
                                 ...existing,
                                 status: 'error',
@@ -222,15 +227,17 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
 
             getAnalysis: (bookId, sectionId) => {
                 const key = makeKey(bookId, sectionId);
-                return get().sections[key];
+                const currentSections = get().sections || {};
+                return currentSections[key];
             },
 
             deleteBookAnalysis: (bookId) =>
                 set((state) => {
                     const prefix = `${bookId}/`;
                     const remaining: Record<string, SectionAnalysis> = {};
+                    const currentSections = state.sections || {};
 
-                    for (const [key, value] of Object.entries(state.sections)) {
+                    for (const [key, value] of Object.entries(currentSections)) {
                         if (!key.startsWith(prefix)) {
                             remaining[key] = value;
                         }

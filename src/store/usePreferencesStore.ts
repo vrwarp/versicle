@@ -20,6 +20,7 @@ interface PreferencesState {
     readerViewMode: 'paginated' | 'scrolled';
     libraryLayout: 'grid' | 'list';
     libraryFilterMode: 'all' | 'downloaded';
+    activeContext: 'library' | 'notes';
 
     // === ACTIONS (not synced to Yjs) ===
     setTheme: (theme: 'light' | 'dark' | 'sepia') => void;
@@ -31,6 +32,7 @@ interface PreferencesState {
     setReaderViewMode: (mode: 'paginated' | 'scrolled') => void;
     setLibraryLayout: (layout: 'grid' | 'list') => void;
     setLibraryFilterMode: (mode: 'all' | 'downloaded') => void;
+    setActiveContext: (context: 'library' | 'notes') => void;
 }
 
 const defaultPreferences = {
@@ -42,7 +44,8 @@ const defaultPreferences = {
     shouldForceFont: false,
     readerViewMode: 'paginated' as const,
     libraryLayout: 'grid' as const,
-    libraryFilterMode: 'all' as const
+    libraryFilterMode: 'all' as const,
+    activeContext: 'library' as const
 };
 
 /**
@@ -67,6 +70,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             setReaderViewMode: (mode) => set({ readerViewMode: mode }),
             setLibraryLayout: (layout) => set({ libraryLayout: layout }),
             setLibraryFilterMode: (mode) => set({ libraryFilterMode: mode }),
+            setActiveContext: (context) => set({ activeContext: context }),
         }),
         getYjsOptions()
     )

@@ -152,7 +152,8 @@ describe('ExportImportService', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const callArgs = (exportFile as any).mock.calls[0][0];
             expect(callArgs.filename).toMatch(/versicle_export_\d{4}-\d{2}-\d{2}\.json/);
-            expect(callArgs.data).toBeInstanceOf(Blob);
+            expect(typeof callArgs.data).toBe('string');
+            expect(JSON.parse(callArgs.data).meta.exporter).toBe('Versicle');
             expect(callArgs.mimeType).toBe('application/json');
         });
 
