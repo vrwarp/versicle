@@ -160,10 +160,14 @@ function App() {
             if (shouldSync) {
               logger.info('Background Drive Scan: Heuristic triggered, refreshing index...');
               DriveScannerService.scanAndIndex().catch(err => {
-                logger.warn('Background Drive Scan failed:', err);
+                if (err instanceof Error && err.message.includes('is not connected')) {
+                  logger.info(`Background Drive Scan failed: ${err.message}`);
+                } else {
+                  logger.warn('Background Drive Scan failed:', err);
+                }
               });
             } else {
-              logger.info('Background Drive Scan: Folder not viewed recently, skipping sync.');
+              logger.info('Background Drive Scan: Skipping sync based on heuristic or connection status.');
             }
           }
         }
