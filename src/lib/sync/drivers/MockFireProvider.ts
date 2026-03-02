@@ -260,5 +260,6 @@ export class MockFireProvider extends ObservableV2<{
 declare global {
     interface Window {
         __VERSICLE_MOCK_FIRESTORE__?: boolean;
+        __VERSICLE_MOCK_USER_ID__?: string;
     }
 }

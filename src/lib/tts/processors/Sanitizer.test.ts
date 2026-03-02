@@ -23,12 +23,12 @@ describe('Sanitizer', () => {
 
   it('should remove citations', () => {
     // Numeric
-    expect(Sanitizer.sanitize('This is a fact [1].')).toBe('This is a fact .');
+    expect(Sanitizer.sanitize('Here is a claim [1].')).toBe('Here is a claim.');
     expect(Sanitizer.sanitize('Multi citation [1, 2, 3]')).toBe('Multi citation');
 
     // Author-Year
-    expect(Sanitizer.sanitize('According to (Smith, 2020), this is true.')).toBe('According to , this is true.');
-    expect(Sanitizer.sanitize('Another study (Jones 2021:24) showed...')).toBe('Another study showed...');
+    expect(Sanitizer.sanitize('According to (Smith, 2020), this is true.')).toBe('According to, this is true.');
+    expect(Sanitizer.sanitize('End of sentence (Jones 2021:14).')).toBe('End of sentence.');
   });
 
   it('should handle visual separators', () => {
@@ -39,35 +39,35 @@ describe('Sanitizer', () => {
   });
 
   it('should clean up extra spaces', () => {
-     expect(Sanitizer.sanitize('Text with [1] removed citation')).toBe('Text with removed citation');
-     expect(Sanitizer.sanitize('Text  with   multiple spaces')).toBe('Text with multiple spaces');
+    expect(Sanitizer.sanitize('Text with [1] removed citation')).toBe('Text with removed citation');
+    expect(Sanitizer.sanitize('Text  with   multiple spaces')).toBe('Text with multiple spaces');
   });
 
   it('should handle complex mixed cases', () => {
-      // The sanitizer is designed to work primarily on sentence/block level segments.
-      // 1. Standalone page number -> empty
-      expect(Sanitizer.sanitize('Page 42')).toBe('');
+    // The sanitizer is designed to work primarily on sentence/block level segments.
+    // 1. Standalone page number -> empty
+    expect(Sanitizer.sanitize('Page 42')).toBe('');
 
-      // 2. Text with artifacts
-      const input = 'See https://wikipedia.org for details [1].';
-      expect(Sanitizer.sanitize(input)).toBe('See wikipedia.org for details .');
+    // 2. Text with artifacts
+    const input = 'See https://wikipedia.org for details [1].';
+    expect(Sanitizer.sanitize(input)).toBe('See wikipedia.org for details.');
   });
 
   it('should preserve closing parenthesis when URL is inside parentheses', () => {
-      const input = '(See https://example.com/path)';
-      // Expect the closing parenthesis to remain
-      expect(Sanitizer.sanitize(input)).toBe('(See example.com)');
+    const input = '(See https://example.com/path)';
+    // Expect the closing parenthesis to remain
+    expect(Sanitizer.sanitize(input)).toBe('(See example.com)');
   });
 
   it('should handle URLs ending in parentheses by keeping the domain', () => {
-      // Valid URL ending in ')'
-      // Since parentheses are balanced, the closing ')' is part of the URL and should be replaced.
-      const input = 'Check https://en.wikipedia.org/wiki/Earth_(planet).';
-      expect(Sanitizer.sanitize(input)).toBe('Check en.wikipedia.org.');
+    // Valid URL ending in ')'
+    // Since parentheses are balanced, the closing ')' is part of the URL and should be replaced.
+    const input = 'Check https://en.wikipedia.org/wiki/Earth_(planet).';
+    expect(Sanitizer.sanitize(input)).toBe('Check en.wikipedia.org.');
   });
 
   it('should handle complex parenthesized URLs', () => {
-      // Unbalanced closing ')' outside the URL
-      expect(Sanitizer.sanitize('(Check https://site.com/foo(bar))')).toBe('(Check site.com)');
+    // Unbalanced closing ')' outside the URL
+    expect(Sanitizer.sanitize('(Check https://site.com/foo(bar))')).toBe('(Check site.com)');
   });
 });

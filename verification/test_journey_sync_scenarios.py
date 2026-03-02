@@ -10,8 +10,9 @@ import uuid
 from playwright.sync_api import Page, expect, Browser, BrowserContext
 
 # Helper to inject mock Firestore
-def inject_mock_firestore(page: Page, snapshot=None):
+def inject_mock_firestore(page: Page, mock_user_id: str = "mock-user", snapshot=None):
     page.add_init_script("window.__VERSICLE_MOCK_FIRESTORE__ = true;")
+    page.add_init_script(f"window.__VERSICLE_MOCK_USER_ID__ = '{mock_user_id}';")
     page.add_init_script("window.__VERSICLE_SANITIZATION_DISABLED__ = true;")
     page.add_init_script("window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 20;")
     page.add_init_script("window.__VERSICLE_MOCK_SYNC_DELAY__ = 10;")
@@ -60,13 +61,15 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
     - Device A: Import book, read to page X, add note. Sync.
     - Device B: Open app. See "Resume" badge. Click it. Verify location & note.
     """
+    test_uid = f"mock-user-{uuid.uuid4().hex[:8]}"
     base_url = browser_context_args.get("base_url", "http://localhost:5173")
 
     # --- Device A ---
     print("\n[A] Setting up...")
     context_a = browser.new_context(**browser_context_args)
     page_a = context_a.new_page()
-    inject_mock_firestore(page_a)
+    page_a.on("console", lambda msg: print("[Page A]", msg.text))
+    inject_mock_firestore(page_a, test_uid)
     clear_data_and_reload(page_a, base_url)
 
     # Import
@@ -134,7 +137,7 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
     page_a.evaluate("window.dispatchEvent(new Event('beforeunload'))")
 
     # Wait for persistence (using the Book ID or general path to ensure flush)
-    snapshot_a = poll_for_persistence(page_a, "users/mock-user/versicle/main")
+    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/main")
     assert snapshot_a, "Device A failed to sync"
     snapshot_a = json.loads(snapshot_a)
 
@@ -145,8 +148,9 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
     print("\n[B] Resuming...")
     context_b = browser.new_context(**browser_context_args)
     page_b = context_b.new_page()
+    page_b.on("console", lambda msg: print("[Page B]", msg.text))
     # Inject A's data
-    inject_mock_firestore(page_b, snapshot_a)
+    inject_mock_firestore(page_b, test_uid, snapshot_a)
     page_b.goto(base_url)
 
     # Wait for sync
@@ -229,10 +233,11 @@ def test_note_marker_affordance(browser: Browser, browser_context_args):
     """
     Verifies that adding a note to a highlight creates a visible visual affordance (post-it marker).
     """
+    test_uid = f"mock-user-{uuid.uuid4().hex[:8]}"
     base_url = browser_context_args.get("base_url", "http://localhost:5173")
     context = browser.new_context(**browser_context_args)
     page = context.new_page()
-    inject_mock_firestore(page)
+    inject_mock_firestore(page, test_uid)
     clear_data_and_reload(page, base_url)
 
     # Import book
@@ -350,11 +355,13 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     - Device A (Online): Sync sends batch.
     - Device B: Receive.
     """
+    test_uid = f"mock-user-{uuid.uuid4().hex[:8]}"
     base_url = browser_context_args.get("base_url", "http://localhost:5173")
 
     # --- Device A ---
     context_a = browser.new_context(**browser_context_args)
     page_a = context_a.new_page()
+    page_a.on("console", lambda msg: print(f"[Page A] {msg.text}"))
 
     # Start WITHOUT MockFirestore (Simulate Offline/No Sync Provider)
     # OR configure MockFirestore to fail?
@@ -364,7 +371,7 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     # MockFireProvider writes to localStorage immediately.
     # Let's verify that data created persists to localStorage even without "push".
 
-    inject_mock_firestore(page_a)
+    inject_mock_firestore(page_a, test_uid)
     clear_data_and_reload(page_a, base_url)
 
     # Add Lexicon Rule
@@ -386,7 +393,7 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
 
     # Wait for the data to actually hit "disk" (localStorage) before snapshotting
     # We poll for the existence of the mock user path, which confirms the provider flushed the change
-    snapshot_a = poll_for_persistence(page_a, "users/mock-user/versicle/main")
+    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/main")
     assert snapshot_a, "Device A failed to persist data to mock cloud"
     snapshot_a = json.loads(snapshot_a)
 
@@ -396,7 +403,8 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     # --- Device B ---
     context_b = browser.new_context(**browser_context_args)
     page_b = context_b.new_page()
-    inject_mock_firestore(page_b, snapshot_a)
+    page_b.on("console", lambda msg: print(f"[Page B] {msg.text}"))
+    inject_mock_firestore(page_b, test_uid, snapshot_a)
     page_b.goto(base_url)
 
     # Wait for sync to complete (library view loads with synced data)
@@ -465,10 +473,11 @@ def test_journey_data_liberation(browser: Browser, browser_context_args):
     - Run DataExportWizard (JSON).
     - Validate JSON content.
     """
+    test_uid = f"mock-user-{uuid.uuid4().hex[:8]}"
     base_url = browser_context_args.get("base_url", "http://localhost:5173")
     context = browser.new_context(**browser_context_args)
     page = context.new_page()
-    inject_mock_firestore(page)
+    inject_mock_firestore(page, test_uid)
     clear_data_and_reload(page, base_url)
 
     # Create some data (Lexicon Rule)
