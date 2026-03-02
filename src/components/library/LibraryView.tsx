@@ -12,6 +12,7 @@ import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search, Loade
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
+import { GlobalNotesView } from '../notes/GlobalNotesView';
 import { ImportSourceDialog } from './ImportSourceDialog';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
@@ -70,11 +71,13 @@ export const LibraryView: React.FC = () => {
   })));
 
 
-  const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode } = usePreferencesStore(useShallow(state => ({
+  const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode, activeContext, setActiveContext } = usePreferencesStore(useShallow(state => ({
     libraryLayout: state.libraryLayout,
     setLibraryLayout: state.setLibraryLayout,
     libraryFilterMode: state.libraryFilterMode,
-    setLibraryFilterMode: state.setLibraryFilterMode
+    setLibraryFilterMode: state.setLibraryFilterMode,
+    activeContext: state.activeContext,
+    setActiveContext: state.setActiveContext
   })));
 
   // Alias for backward compatibility in component
@@ -478,21 +481,48 @@ export const LibraryView: React.FC = () => {
         {/* Top Row: Title and Actions */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-foreground">My Library</h1>
+            <Select value={activeContext || 'library'} onValueChange={(val) => setActiveContext(val as 'library' | 'notes')}>
+              <SelectTrigger className="w-auto text-3xl font-bold border-0 shadow-none p-0 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none" aria-label="Select view context">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="library">My Library</SelectItem>
+                <SelectItem value="notes">Notes</SelectItem>
+              </SelectContent>
+            </Select>
             <SyncPulseIndicator />
           </div>
 
           <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="icon"
-              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-              className="shadow-sm"
-              aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
-              data-testid="view-toggle-button"
-            >
-              {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
-            </Button>
+            {activeContext === 'library' && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                  className="shadow-sm"
+                  aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
+                  data-testid="view-toggle-button"
+                >
+                  {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
+                </Button>
+                <Button
+                  onClick={() => setIsImportSourceOpen(true)}
+                  disabled={isImporting}
+                  className="gap-2 shadow-sm"
+                  aria-label="Import book"
+                  data-testid="header-add-button"
+                >
+                  {isImporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  <span className="font-medium hidden sm:inline">Import Book</span>
+                  <span className="font-medium sm:hidden">Import</span>
+                </Button>
+              </>
+            )}
             <Button
               variant="secondary"
               size="icon"
@@ -503,108 +533,95 @@ export const LibraryView: React.FC = () => {
             >
               <Settings className="w-4 h-4" />
             </Button>
-            <Button
-              onClick={() => setIsImportSourceOpen(true)}
-              disabled={isImporting}
-              className="gap-2 shadow-sm"
-              aria-label="Import book"
-              data-testid="header-add-button"
-            >
-              {isImporting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="w-4 h-4" />
-              )}
-              <span className="font-medium hidden sm:inline">Import Book</span>
-              <span className="font-medium sm:hidden">Import</span>
-            </Button>
           </div>
         </div>
 
         {/* Combined Row: Search and Sort */}
-        <div className="flex flex-col gap-4 md:flex-row-reverse md:items-center md:justify-between">
-          {/* Search Bar */}
-          <div className="w-full md:w-72">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                type="search"
-                placeholder="Search library..."
-                aria-label="Search library"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={cn("pl-9", searchQuery && "pr-9")}
-                data-testid="library-search-input"
-              />
-              {searchQuery && (
+        {activeContext === 'library' && (
+          <div className="flex flex-col gap-4 md:flex-row-reverse md:items-center md:justify-between">
+            {/* Search Bar */}
+            <div className="w-full md:w-72">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  type="search"
+                  placeholder="Search library..."
+                  aria-label="Search library"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={cn("pl-9", searchQuery && "pr-9")}
+                  data-testid="library-search-input"
+                />
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => setSearchQuery('')}
+                    aria-label="Clear query"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {/* Live region for screen readers */}
+              <div role="status" aria-live="polite" className="sr-only">
+                {searchQuery ? (
+                  filteredAndSortedBooks.length === 0
+                    ? 'No books found'
+                    : `${filteredAndSortedBooks.length} books found`
+                ) : ''}
+              </div>
+            </div>
+
+            <div className="flex flex-row items-center justify-between gap-2 w-full md:w-auto">
+              {/* Filter Toggle */}
+              <div className="flex items-center bg-muted/50 p-1 rounded-lg border shrink-0">
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={() => setSearchQuery('')}
-                  aria-label="Clear query"
+                  variant={(!libraryFilterMode || libraryFilterMode === 'all') ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setLibraryFilterMode('all')}
+                  className="h-7 px-2 sm:px-3 text-xs"
+                  data-testid="filter-all-books"
                 >
-                  <X className="h-4 w-4" />
+                  All Books
                 </Button>
-              )}
-            </div>
-            {/* Live region for screen readers */}
-            <div role="status" aria-live="polite" className="sr-only">
-              {searchQuery ? (
-                filteredAndSortedBooks.length === 0
-                  ? 'No books found'
-                  : `${filteredAndSortedBooks.length} books found`
-              ) : ''}
-            </div>
-          </div>
-
-          <div className="flex flex-row items-center justify-between gap-2 w-full md:w-auto">
-            {/* Filter Toggle */}
-            <div className="flex items-center bg-muted/50 p-1 rounded-lg border shrink-0">
-              <Button
-                variant={(!libraryFilterMode || libraryFilterMode === 'all') ? 'secondary' : 'ghost'}
-                size="sm"
-                onClick={() => setLibraryFilterMode('all')}
-                className="h-7 px-2 sm:px-3 text-xs"
-                data-testid="filter-all-books"
-              >
-                All Books
-              </Button>
-              <Button
-                variant={libraryFilterMode === 'downloaded' ? 'secondary' : 'ghost'}
-                size="sm"
-                onClick={() => setLibraryFilterMode('downloaded')}
-                className="h-7 px-2 sm:px-3 text-xs"
-                data-testid="filter-downloaded-books"
-              >
-                On Device
-              </Button>
-            </div>
-
-            {/* Sort By */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
-              <span className="whitespace-nowrap hidden sm:inline" id="sort-by-label">Sort by:</span>
-              <Select
-                value={sortOrder}
-                onValueChange={(val) => setSortOrder(val as SortOption)}
-              >
-                <SelectTrigger
-                  className="w-[130px] sm:w-[180px] text-foreground text-xs sm:text-sm h-8 sm:h-10"
-                  data-testid="sort-select"
-                  aria-label="Sort library by"
+                <Button
+                  variant={libraryFilterMode === 'downloaded' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setLibraryFilterMode('downloaded')}
+                  className="h-7 px-2 sm:px-3 text-xs"
+                  data-testid="filter-downloaded-books"
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="recent">Recently Added</SelectItem>
-                  <SelectItem value="last_read">Last Read</SelectItem>
-                  <SelectItem value="author">Author</SelectItem>
-                  <SelectItem value="title">Title</SelectItem>
-                </SelectContent>
-              </Select>
+                  On Device
+                </Button>
+              </div>
+
+              {/* Sort By */}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+                <span className="whitespace-nowrap hidden sm:inline" id="sort-by-label">Sort by:</span>
+                <Select
+                  value={sortOrder}
+                  onValueChange={(val) => setSortOrder(val as SortOption)}
+                >
+                  <SelectTrigger
+                    className="w-[130px] sm:w-[180px] text-foreground text-xs sm:text-sm h-8 sm:h-10"
+                    data-testid="sort-select"
+                    aria-label="Sort library by"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recent">Recently Added</SelectItem>
+                    <SelectItem value="last_read">Last Read</SelectItem>
+                    <SelectItem value="author">Author</SelectItem>
+                    <SelectItem value="title">Title</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </header>
 
       {error && (
@@ -623,6 +640,11 @@ export const LibraryView: React.FC = () => {
         >
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
+      ) : activeContext === 'notes' ? (
+        <GlobalNotesView onContentMissing={(bookId) => {
+          const book = books.find(b => b.id === bookId);
+          if (book) handleRestore(book);
+        }} />
       ) : (
         <section className="flex-1 w-full">
           {books.length === 0 ? (

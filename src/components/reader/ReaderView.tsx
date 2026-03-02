@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import type { NavigationItem } from 'epubjs';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
@@ -123,10 +123,14 @@ export const ReaderView: React.FC = () => {
         };
     }, [rawBookMetadata]);
 
+    const [searchParams] = useSearchParams();
+    const cfiOverride = searchParams.get('cfi');
+
     // Optimization: Read initial location once on mount/id change, avoiding subscription to progress updates
     const initialLocation = useMemo(() => {
+        if (cfiOverride) return decodeURIComponent(cfiOverride);
         return id ? useReadingStateStore.getState().getProgress(id)?.currentCfi : undefined;
-    }, [id]);
+    }, [id, cfiOverride]);
 
     const reset = useCallback(() => {
         resetUI();
