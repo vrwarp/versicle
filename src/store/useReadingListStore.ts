@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc, getYjsOptions } from './yjs-provider';
 import type { ReadingListEntry } from '../types/db';
-import { undoManager } from '../lib/undo-manager';
 
 interface ReadingListState {
     entries: Record<string, ReadingListEntry>;
@@ -49,4 +48,3 @@ export const useReadingListStore = create<ReadingListState>()(
     )
 );
 
-undoManager.addTrackedOrigin(useReadingListStore);

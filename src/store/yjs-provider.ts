@@ -14,6 +14,7 @@ export const CURRENT_SCHEMA_VERSION = 2;
 
 // Singleton Y.Doc instance - Source of Truth for User Data
 export const yDoc = new Y.Doc();
+yDoc.gc = false; // Required for Y.snapshot
 
 // Expose globally for Playwright end-to-end tests
 if (typeof window !== 'undefined') {

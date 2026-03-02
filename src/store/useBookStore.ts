@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc, getYjsOptions } from './yjs-provider';
 import type { UserInventoryItem } from '../types/db';
-import { undoManager } from '../lib/undo-manager';
 
 /**
  * State interface for the Book store (Synced).
@@ -99,4 +98,3 @@ export const useBookStore = create<BookState>()(
     )
 );
 
-undoManager.addTrackedOrigin(useBookStore);

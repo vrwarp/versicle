@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import { undoManager, type StackItem } from '../lib/undo-manager';
+import { sessionRewindManager } from '../lib/sync/SessionRewindManager';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('HistoryStore');
 
 export interface HistoryItem {
+    id: string;
     timestamp: number;
     description: string;
 }
@@ -17,35 +18,17 @@ interface HistoryState {
     undoTo: (index: number) => void;
 }
 
-// Re-export undoManager for consumers
-export { undoManager };
-
-// Helper to infer description from StackItem
-const inferDescription = (item: StackItem): string => {
-    const desc = 'Update';
-
-    if (item.meta.has('description')) {
-        return item.meta.get('description') as string;
-    }
-
-    return desc;
-};
-
-// Helper to format HistoryItem
-const formatStackItem = (item: StackItem): HistoryItem => {
-    return {
-        timestamp: item.meta.get('timestamp') as number || Date.now(),
-        description: inferDescription(item)
-    };
-};
-
 function updateStore() {
-    const history = undoManager.undoStack.map(formatStackItem).reverse();
-    const future = undoManager.redoStack.map(formatStackItem).reverse();
+    const snapshots = sessionRewindManager.getHistory();
+    const history = snapshots.map(s => ({
+        id: s.id,
+        timestamp: s.timestamp,
+        description: s.description
+    }));
 
     useHistoryStore.setState({
         history,
-        future
+        future: [] // Redo is not currently supported in SessionRewindManager
     });
 }
 
@@ -54,19 +37,34 @@ export const useHistoryStore = create<HistoryState>(() => ({
     future: [],
 
     undo: () => {
-        undoManager.undo();
+        const history = sessionRewindManager.getHistory();
+        if (history.length === 0) return;
+
+        if (history.length === 1) {
+            sessionRewindManager.restore('initial');
+        } else {
+            // Restore to the snapshot BEFORE the most recent one
+            sessionRewindManager.restore(history[1].id);
+        }
     },
 
     redo: () => {
-        undoManager.redo();
+        // Redo is not currently supported
     },
 
     undoTo: (index: number) => {
         if (index < 0) return;
 
         logger.info(`Undoing ${index + 1} steps...`);
-        for (let i = 0; i <= index; i++) {
-            undoManager.undo();
+        const history = sessionRewindManager.getHistory();
+
+        // If we want to undo 'index' items, we go to the item at index + 1 in the history array
+        // (history array is reversed, most recent first)
+        const targetIndex = index + 1;
+        if (targetIndex >= history.length) {
+            sessionRewindManager.restore('initial');
+        } else {
+            sessionRewindManager.restore(history[targetIndex].id);
         }
     }
 }));
@@ -78,21 +76,10 @@ export const initHistory = () => {
     if (isInitialized) return;
     isInitialized = true;
 
-    logger.info('Initializing History Store (UndoManager)...');
+    logger.info('Initializing History Store (SessionRewindManager)...');
 
-    undoManager.on('stack-item-added', (event: { stackItem: StackItem, type: 'undo' | 'redo' }) => {
-        if (!event.stackItem.meta.has('timestamp')) {
-            event.stackItem.meta.set('timestamp', Date.now());
-        }
-
-        if (undoManager.undoStack.length > 100) {
-            undoManager.undoStack.splice(0, undoManager.undoStack.length - 100);
-        }
-
-        updateStore();
-    });
-
-    undoManager.on('stack-item-popped', () => {
+    sessionRewindManager.startTracking();
+    sessionRewindManager.subscribe(() => {
         updateStore();
     });
 

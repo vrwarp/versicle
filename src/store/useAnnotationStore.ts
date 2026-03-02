@@ -3,7 +3,6 @@ import yjs from 'zustand-middleware-yjs';
 import { yDoc, getYjsOptions } from './yjs-provider';
 import type { UserAnnotation } from '../types/db';
 import { createLogger } from '../lib/logger';
-import { undoManager } from '../lib/undo-manager';
 
 const logger = createLogger('AnnotationStore');
 
@@ -190,4 +189,3 @@ export const createAnnotationStore = () => create<AnnotationState>()(
  */
 export const useAnnotationStore = createAnnotationStore();
 
-undoManager.addTrackedOrigin(useAnnotationStore);

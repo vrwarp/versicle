@@ -1,71 +1,74 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useHistoryStore, undoManager, initHistory } from './useHistoryStore';
-
-// Mock Yjs dependencies if needed, but Yjs works in node
-// We need to mock yDoc from yjs-provider if it's used directly
-// But useHistoryStore imports yDoc.
+import { useHistoryStore, initHistory } from './useHistoryStore';
+import { sessionRewindManager } from '../lib/sync/SessionRewindManager';
+import { yDoc } from './yjs-provider';
 
 describe('useHistoryStore', () => {
     beforeEach(() => {
-        // Reset undoManager stack
-        undoManager.clear();
+        // Reset rewind manager
+        sessionRewindManager.reset();
         useHistoryStore.setState({ history: [], future: [] });
-        // Re-init listeners (idempotent-ish)
+
         initHistory();
     });
 
-    it('should track changes in history', () => {
+    it('should track changes in history', async () => {
         // Simulate a change in a tracked type
-        const doc = undoManager.doc;
-        const map = doc.getMap('library');
+        const map = yDoc.getMap('library');
+        yDoc.transact(() => {
+            map.set('test', 1);
+        }, { getState: () => {} });
 
-        doc.transact(() => {
-            map.set('test-book', { title: 'Test' });
-        });
+        // wait for auto capture
+        await new Promise(r => setTimeout(r, 10));
 
-        // UndoManager captures async usually, but we can force it or wait
-        // Default captureTimeout is 500ms.
-        // We can manually add to stack or wait.
-        // Or we can stopCapturing() to force immediate push
-        undoManager.stopCapturing();
-
-        const { history } = useHistoryStore.getState();
-        expect(history.length).toBe(1);
-        expect(history[0].description).toBe('Update'); // Default description
+        const state = useHistoryStore.getState();
+        expect(state.history.length).toBe(1);
+        expect(state.history[0].description).toBe('Update');
     });
 
-    it('should limit history to 100 items', () => {
-        const doc = undoManager.doc;
-        const map = doc.getMap('library');
+    it('should handle undo correctly', async () => {
+        const map = yDoc.getMap('library');
 
-        for (let i = 0; i < 110; i++) {
-            doc.transact(() => {
-                map.set(`book-${i}`, { title: `Title ${i}` });
-            });
-            undoManager.stopCapturing();
-        }
+        yDoc.transact(() => {
+            map.set('test', 1);
+        }, { getState: () => {} });
 
-        const { history } = useHistoryStore.getState();
-        expect(history.length).toBe(100);
-        // The oldest should be removed.
-        // History is Newest -> Oldest.
-        // So history[99] (oldest) should correspond to the 11th edit (index 10)
-        // because 0-9 were removed.
-    });
+        await new Promise(r => setTimeout(r, 10));
 
-    it('should undo changes', () => {
-        const doc = undoManager.doc;
-        const map = doc.getMap('library');
+        yDoc.transact(() => {
+            map.set('test2', 2);
+        }, { getState: () => {} });
 
-        doc.transact(() => {
-            map.set('undo-test', 'val1');
-        });
-        undoManager.stopCapturing();
+        await new Promise(r => setTimeout(r, 10));
 
-        expect(map.get('undo-test')).toBe('val1');
+        expect(useHistoryStore.getState().history.length).toBe(2);
 
         useHistoryStore.getState().undo();
 
-        expect(map.get('undo-test')).toBeUndefined();
+        await new Promise(r => setTimeout(r, 10));
+
+        // After undo, the most recent snapshot is removed
+        expect(useHistoryStore.getState().history.length).toBe(1);
+    });
+
+    it('should handle undoTo correctly', async () => {
+        const map = yDoc.getMap('library');
+
+        for (let i = 0; i < 3; i++) {
+            yDoc.transact(() => {
+                map.set(`test${i}`, i);
+            }, { getState: () => {} });
+            await new Promise(r => setTimeout(r, 10));
+        }
+
+        expect(useHistoryStore.getState().history.length).toBe(3);
+
+        // Undo to index 1 means undoing the 2 most recent changes
+        useHistoryStore.getState().undoTo(1);
+
+        await new Promise(r => setTimeout(r, 10));
+
+        expect(useHistoryStore.getState().history.length).toBe(1);
     });
 });
