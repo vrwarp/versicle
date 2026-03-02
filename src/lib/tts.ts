@@ -159,8 +159,8 @@ export const extractSentencesFromNode = (
                 // Three patterns that identify typical citation marker text:
                 //   /^\[?\d+\]?$/  — bare or bracketed number: "1", "12", "[1]", "[12]"
                 //   /^\(\d+\)$/    — parenthesized number:     "(1)", "(12)"
-                //   /^[\*†‡]+$/    — symbol markers:           "*", "†", "‡", "**"
-                const isCitationText = /^\[?\d+\]?$/.test(text) || /^\(\d+\)$/.test(text) || /^[\*\u2020\u2021]+$/.test(text);
+                //   /^[*†‡]+$/    — symbol markers:           "*", "†", "‡", "**"
+                const isCitationText = /^\[?\d+\]?$/.test(text) || /^\(\d+\)$/.test(text) || /^[*†‡]+$/.test(text);
 
                 if (isCitationText) {
                     if (tagName === 'SUP') {

@@ -26,7 +26,7 @@ describe('Citation Skipping – Book of Citations EPUB', () => {
     let ch1Text: string;
     let ch2Text: string;
     let ch3Text: string;
-    let allText: string;
+    // let allText: string;
 
     beforeAll(async () => {
         const fixturePath = path.resolve(
@@ -55,7 +55,7 @@ describe('Citation Skipping – Book of Citations EPUB', () => {
         ch1Text = ch1Sentences.map(s => s.text).join(' ');
         ch2Text = ch2Sentences.map(s => s.text).join(' ');
         ch3Text = ch3Sentences.map(s => s.text).join(' ');
-        allText = ch1Text + ' ' + ch2Text + ' ' + ch3Text;
+        // allText = ch1Text + ' ' + ch2Text + ' ' + ch3Text;
     }, 15000);
 
     // ═══════════════════════════════════════════════════════════════════════
