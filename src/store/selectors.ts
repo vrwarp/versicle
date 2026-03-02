@@ -199,36 +199,29 @@ export const useAllBooks = () => {
  * Returns a single book by ID with static metadata merged.
  */
 export const useBook = (id: string | null) => {
-    const bookStoreRaw = useBookStore(state => state.books);
-    const bookStore = useMemo(() => bookStoreRaw || {}, [bookStoreRaw]);
-    const book = id ? bookStore[id] : null;
+    // OPTIMIZATION: Use fine-grained selectors to avoid re-rendering when other books change
+    const book = useBookStore(state => id && state.books ? state.books[id] : null);
 
-    const staticMetadataRaw = useLibraryStore(state => state.staticMetadata);
-    const staticMetadata = useMemo(() => staticMetadataRaw || {}, [staticMetadataRaw]);
-    const staticMeta = id ? staticMetadata[id] : null;
+    const staticMeta = useLibraryStore(state => id && state.staticMetadata ? state.staticMetadata[id] : null);
 
-    const offloadedBookIdsRaw = useLibraryStore(state => state.offloadedBookIds);
-    const offloadedBookIds = useMemo(() => offloadedBookIdsRaw || new Set(), [offloadedBookIdsRaw]);
+    // Set.has is safe to call even if the set is empty, but we must handle null offloadedBookIds
+    const isOffloaded = useLibraryStore(state => id && state.offloadedBookIds ? state.offloadedBookIds.has(id) : false);
 
-    // Subscribe to progress changes (per-device structure)
-    let progressMap = useReadingStateStore(state => state.progress);
-    if (!progressMap) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (progressMap as any) = {};
-    }
+    // Subscribe to progress changes ONLY for this specific book
+    const bookProgressMap = useReadingStateStore(state => id && state.progress ? state.progress[id] : undefined);
 
-    const readingListEntriesRaw = useReadingListStore(state => state.entries);
-    const readingListEntries = useMemo(() => readingListEntriesRaw || {}, [readingListEntriesRaw]);
+    // Only subscribe to the specific reading list entry if we have a source filename
+    const sourceFilename = book?.sourceFilename;
+    const readingListEntry = useReadingListStore(state => sourceFilename && state.entries ? state.entries[sourceFilename] : undefined);
 
     // Get resolved progress (Local > Recent) across all devices for this book
-    const progress = id ? resolveProgress(progressMap[id]) : null;
+    const progress = id ? resolveProgress(bookProgressMap) : null;
 
     // OPTIMIZATION: Memoize the single book result
     return useMemo(() => {
         if (!book) return null;
 
         const hasCoverBlob = staticMeta?.coverBlob instanceof Blob;
-        const readingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
         const progressPercentage = progress?.percentage || readingListEntry?.percentage || 0;
 
         return {
@@ -245,13 +238,13 @@ export const useBook = (id: string | null) => {
             totalChars: staticMeta?.totalChars,
             version: staticMeta?.version || undefined,
 
-            isOffloaded: offloadedBookIds.has(book.bookId),
+            isOffloaded,
 
             // Merge progress (max across all devices)
             progress: progressPercentage,
             currentCfi: progress?.currentCfi || undefined
         };
-    }, [book, staticMeta, offloadedBookIds, progress, readingListEntries]);
+    }, [book, staticMeta, isOffloaded, progress, readingListEntry]);
 };
 
 /**
