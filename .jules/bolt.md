@@ -86,3 +86,8 @@
 - **Bottleneck:** `ReadingListDialog.tsx` subscribed to the global `entries` map from `useReadingListStore`. Any update to *any* reading list entry (e.g. background progress updates via Yjs sync) caused the entire dialog and all its mapped `<tr>` rows to re-render in `O(N)` time. This caused UI jank for large reading lists.
 - **Solution:** Extracted the inline `<tr>` into a new `ReadingListRow` component wrapped in `React.memo`. Converted the inline arrow functions for row events (`onToggleSelection`, `onEdit`, `onDelete`) inside `ReadingListDialog` to `useCallback` functions that receive the entry ID, ensuring stable props.
 - **Learning:** When mapping large lists of data derived from a frequently updating global store, *always* extract the list item into a memoized component and ensure parent event handlers are stable. Simply shallow-comparing the store map is insufficient if the map's derived values are used for inline rendering.
+
+## 2025-06-12 - Selector Granularity Optimization (useBook)
+- **Bottleneck:** `useBook` (used by `ReaderView`, `BookCard`, etc.) was subscribing to the *entire* `books`, `staticMetadata`, `progressMap`, and `readingListEntries` maps. This caused `O(N)` re-renders of any component using `useBook` whenever *any* book in the library was updated (e.g., from background sync).
+- **Solution:** Refactored `useBook` to use fine-grained Zustand selectors (e.g., `useBookStore(state => id && state.books ? state.books[id] : null)`).
+- **Learning:** When a hook takes an ID parameter to fetch a specific item from a global store, *always* use fine-grained selectors targeting that specific ID. Subscribing to the entire collection map and indexing it later destroys React performance in large lists.
