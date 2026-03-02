@@ -45,6 +45,9 @@ vi.mock('./hooks/useSyncStore', () => ({
 
 describe('firebase-config initialization', () => {
   beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     resetFirebase();
     vi.clearAllMocks();
   });

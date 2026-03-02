@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CheckpointService } from './CheckpointService';
 import * as Y from 'yjs';
 
@@ -56,7 +56,15 @@ vi.mock('./FirestoreSyncManager', () => ({
 let tempDocCounter = 0;
 
 describe('CheckpointService', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     beforeEach(() => {
+        vi.spyOn(console, 'info').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
         vi.clearAllMocks();
         mocks.get.mockReset();
         mocks.getAll.mockReset();
