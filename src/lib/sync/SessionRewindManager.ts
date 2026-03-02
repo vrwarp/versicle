@@ -97,7 +97,7 @@ export class SessionRewindManager {
         logger.info('Starting tracking for SessionRewindManager...');
         this.initialSnapshot = Y.snapshot(yDoc);
 
-        const handleUpdate = (update: Uint8Array, origin: any, doc: Y.Doc, transaction: Y.Transaction) => {
+        const handleUpdate = (_update: Uint8Array, origin: any, _doc: Y.Doc, transaction: Y.Transaction) => {
             // Do not capture our own rewind operations or sync updates (like from firestore or indexeddb)
             if (this.isRestoring) return;
 
@@ -110,21 +110,24 @@ export class SessionRewindManager {
                 let changedTracker = false;
 
                 for (const key of trackedKeys) {
-                    if (transaction.changedParentTypes.has(yDoc.getMap(key))) {
+                    const rootMap = yDoc.getMap(key);
+
+                    // changedParentTypes is a Map<Y.AbstractType<Y.YEvent<any>>, Set<string|null>>
+                    // we need to assert the rootMap type to check it.
+                    if (transaction.changedParentTypes.has(rootMap as unknown as Y.AbstractType<Y.YEvent<any>>)) {
                         changedTracker = true;
                         break;
                     }
 
                     // check if any of the changed types are children of the tracked maps
-                    const rootMap = yDoc.getMap(key);
                     for (const changedType of transaction.changedParentTypes.keys()) {
-                        let parent = changedType;
-                        while (parent && parent !== yDoc) {
-                            if (parent === rootMap) {
+                        let parent: Y.AbstractType<any> | Y.Doc | null = changedType;
+                        while (parent && (parent as any) !== yDoc) {
+                            if ((parent as any) === rootMap) {
                                 changedTracker = true;
                                 break;
                             }
-                            parent = parent.parent as Y.AbstractType<any>;
+                            parent = (parent as Y.AbstractType<any>).parent;
                         }
                         if (changedTracker) break;
                     }
@@ -241,7 +244,7 @@ export class SessionRewindManager {
                 const index = this.snapshots.findIndex(s => s.id === snapshotId);
                 if (index !== -1) {
                     // Truncate future snapshots after this one
-                    this.snapshots = this.snapshots.slice(0, index);
+                    this.snapshots = this.snapshots.slice(0, index + 1);
                 }
             }
 
