@@ -33,9 +33,6 @@ describe('AudioContentPipeline Grouping Logic', () => {
         // Expected: All grouped together because P1 initiates group, Div expands scope to /4, then P2 fits in /4
         const case2 = groupSentences(pipeline, [p1Text, divText, p2Text]);
 
-        console.log('Case 1 Groups:', case1.length);
-        console.log('Case 2 Groups:', case2.length);
-
         expect(case1.length).toBe(1); // Div captures both children
         expect(case2.length).toBe(1); // Div (in middle) expands scope to capture P2
     });

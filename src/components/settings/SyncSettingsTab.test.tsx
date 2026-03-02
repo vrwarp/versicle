@@ -82,12 +82,47 @@ describe('SyncSettingsTab', () => {
         expect(screen.getByText('ID: device-123')).toBeInTheDocument();
     });
 
-    it('calls onDeviceRename when device name changed', () => {
+    it('shows Save and Cancel buttons when device name is changed, and calls onDeviceRename on Save', () => {
         const onDeviceRename = vi.fn();
         render(<SyncSettingsTab {...defaultProps} onDeviceRename={onDeviceRename} />);
 
-        fireEvent.change(screen.getByLabelText('Device Name'), { target: { value: 'New Name' } });
+        const input = screen.getByLabelText('Device Name');
+        fireEvent.change(input, { target: { value: 'New Name' } });
+
+        // Buttons should appear
+        const saveButton = screen.getByText('Save');
+        const cancelButton = screen.getByText('Cancel');
+        expect(saveButton).toBeInTheDocument();
+        expect(cancelButton).toBeInTheDocument();
+
+        // Callback shouldn't be called yet
+        expect(onDeviceRename).not.toHaveBeenCalled();
+
+        // Click Save
+        fireEvent.click(saveButton);
         expect(onDeviceRename).toHaveBeenCalledWith('New Name');
+    });
+
+    it('reverts device name when Cancel is clicked', () => {
+        const onDeviceRename = vi.fn();
+        render(<SyncSettingsTab {...defaultProps} onDeviceRename={onDeviceRename} />);
+
+        const input = screen.getByLabelText('Device Name');
+        fireEvent.change(input, { target: { value: 'New Name' } });
+
+        // Click Cancel
+        const cancelButton = screen.getByText('Cancel');
+        fireEvent.click(cancelButton);
+
+        // Value should be reverted
+        expect(input).toHaveValue('My Device');
+
+        // Buttons should disappear
+        expect(screen.queryByText('Save')).not.toBeInTheDocument();
+        expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
+
+        // Callback should not be called
+        expect(onDeviceRename).not.toHaveBeenCalled();
     });
 
     it('renders provider selection', () => {

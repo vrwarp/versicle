@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 /**
  * A custom React hook for persisting state to localStorage.
@@ -27,6 +27,14 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   };
 
   const [storedValue, setStoredValue] = useState<T>(readValue);
+  const [prevKey, setPrevKey] = useState<string>(key);
+
+  let currentValue = storedValue;
+  if (key !== prevKey) {
+    currentValue = readValue();
+    setPrevKey(key);
+    setStoredValue(currentValue);
+  }
 
   // Return a wrapped version of useState's setter function that ...
   // ... persists the new value to localStorage.
@@ -47,10 +55,5 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
     }
   };
 
-  useEffect(() => {
-    setStoredValue(readValue());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-
-  return [storedValue, setValue];
+  return [currentValue, setValue];
 }

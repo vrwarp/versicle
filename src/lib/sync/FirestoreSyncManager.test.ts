@@ -74,12 +74,16 @@ vi.mock('firebase/firestore', () => ({
 
 describe('FirestoreSyncManager', () => {
     beforeEach(() => {
+        vi.spyOn(console, 'info').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'error').mockImplementation(() => {});
         // Reset singleton
         FirestoreSyncManager.resetInstance();
     });
 
     afterEach(() => {
         vi.clearAllMocks();
+        vi.restoreAllMocks();
     });
 
     describe('getInstance', () => {

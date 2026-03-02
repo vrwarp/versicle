@@ -23,7 +23,6 @@ import { RootLayout } from './layouts/RootLayout';
 import { getFirestoreSyncManager } from './lib/sync/FirestoreSyncManager';
 import { useDriveStore } from './store/useDriveStore';
 import { DriveScannerService } from './lib/drive/DriveScannerService';
-import { initHistory } from './store/useHistoryStore';
 
 import './App.css';
 
@@ -160,10 +159,14 @@ function App() {
             if (shouldSync) {
               logger.info('Background Drive Scan: Heuristic triggered, refreshing index...');
               DriveScannerService.scanAndIndex().catch(err => {
-                logger.warn('Background Drive Scan failed:', err);
+                if (err instanceof Error && err.message.includes('is not connected')) {
+                  logger.info(`Background Drive Scan failed: ${err.message}`);
+                } else {
+                  logger.warn('Background Drive Scan failed:', err);
+                }
               });
             } else {
-              logger.info('Background Drive Scan: Folder not viewed recently, skipping sync.');
+              logger.info('Background Drive Scan: Skipping sync based on heuristic or connection status.');
             }
           }
         }
@@ -200,7 +203,6 @@ function App() {
 
         await hydrateStaticMetadata();
 
-        initHistory();
         setDbStatus('ready');
       } catch (err) {
         logger.error('Failed to initialize App:', err);

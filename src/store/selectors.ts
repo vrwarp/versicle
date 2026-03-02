@@ -35,9 +35,15 @@ function resolveProgress(bookProgress: Record<string, UserProgress> | undefined)
  * otherwise falls back to Ghost Book metadata from Yjs inventory.
  */
 export const useAllBooks = () => {
-    const books = useBookStore(state => state.books) || {};
-    const staticMetadata = useLibraryStore(state => state.staticMetadata) || {};
-    const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds) || new Set();
+    const booksRaw = useBookStore(state => state.books);
+    const staticMetadataRaw = useLibraryStore(state => state.staticMetadata);
+    const offloadedBookIdsRaw = useLibraryStore(state => state.offloadedBookIds);
+
+    // Memoize the defaults to prevent reference changes on every render when nullish
+    const books = useMemo(() => booksRaw || {}, [booksRaw]);
+    const staticMetadata = useMemo(() => staticMetadataRaw || {}, [staticMetadataRaw]);
+    const offloadedBookIds = useMemo(() => offloadedBookIdsRaw || new Set(), [offloadedBookIdsRaw]);
+
     // Subscribe to progress changes (per-device structure)
     // Use let to handle potential undefined state during Yjs transients
     let progressMap = useReadingStateStore(state => state.progress);
@@ -62,53 +68,52 @@ export const useAllBooks = () => {
     const prevDepsRef = useRef({ staticMetadata, offloadedBookIds });
 
     // Invalidate cache if static metadata or offloaded status changes, as these affect the base book result
-    // eslint-disable-next-line react-hooks/refs
     if (prevDepsRef.current.staticMetadata !== staticMetadata ||
-        // eslint-disable-next-line react-hooks/refs
         prevDepsRef.current.offloadedBookIds !== offloadedBookIds) {
-        // eslint-disable-next-line react-hooks/refs
         baseBookCacheRef.current = new WeakMap();
-        // eslint-disable-next-line react-hooks/refs
         prevDepsRef.current = { staticMetadata, offloadedBookIds };
     }
 
     const baseBooks = useMemo(() => {
-        // eslint-disable-next-line react-hooks/refs
-        return Object.values(books).map(book => {
+        const booksObj = books || {};
+        const staticMetadataObj = staticMetadata || {};
+        const offloadedBookIdsSet = offloadedBookIds || new Set();
+
+        return Object.values(booksObj).map(book => {
             // Check cache
             const cached = baseBookCacheRef.current.get(book);
             if (cached) return cached;
 
-            if (!staticMetadata) {
+            if (!staticMetadataObj) {
                 console.error('staticMetadata is undefined in useAllBooks');
             }
             if (!book) {
                 console.error('book is undefined in useAllBooks iteration');
             }
 
-            const hasCoverBlob = staticMetadata?.[book.bookId]?.coverBlob instanceof Blob;
+            const hasCoverBlob = staticMetadataObj?.[book.bookId]?.coverBlob instanceof Blob;
 
             const newBaseBook = {
                 ...book,
                 // Merge static metadata if available, otherwise use Ghost Book snapshots
                 id: book.bookId,  // Alias for backwards compatibility
                 // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
-                title: book.customTitle || staticMetadata[book.bookId]?.title || book.title,
-                author: book.customAuthor || staticMetadata[book.bookId]?.author || book.author,
-                coverBlob: staticMetadata[book.bookId]?.coverBlob || undefined,
-                version: staticMetadata[book.bookId]?.version || undefined,
+                title: book.customTitle || staticMetadataObj[book.bookId]?.title || book.title,
+                author: book.customAuthor || staticMetadataObj[book.bookId]?.author || book.author,
+                coverBlob: staticMetadataObj[book.bookId]?.coverBlob || undefined,
+                version: staticMetadataObj[book.bookId]?.version || undefined,
                 // OPTIMIZATION: Use Service Worker route for covers instead of creating blob URLs.
                 // This prevents memory leaks from unrevoked createObjectURL calls and avoids sync overhead.
                 coverUrl: hasCoverBlob
                     ? `/__versicle__/covers/${book.bookId}`
                     : undefined,
                 // Add other static fields for compatibility
-                fileHash: staticMetadata[book.bookId]?.fileHash,
-                fileSize: staticMetadata[book.bookId]?.fileSize,
-                totalChars: staticMetadata[book.bookId]?.totalChars,
+                fileHash: staticMetadataObj[book.bookId]?.fileHash,
+                fileSize: staticMetadataObj[book.bookId]?.fileSize,
+                totalChars: staticMetadataObj[book.bookId]?.totalChars,
 
                 // Derive offloaded status from local set
-                isOffloaded: offloadedBookIds.has(book.bookId),
+                isOffloaded: offloadedBookIdsSet.has(book.bookId),
             };
 
             baseBookCacheRef.current.set(book, newBaseBook);
@@ -132,7 +137,6 @@ export const useAllBooks = () => {
 
         const cache = previousResultsRef.current;
 
-        // eslint-disable-next-line react-hooks/refs
         const result = baseBooks.map(book => {
             const rawBookProgress = progressMap[book.id];
             const rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
@@ -195,30 +199,29 @@ export const useAllBooks = () => {
  * Returns a single book by ID with static metadata merged.
  */
 export const useBook = (id: string | null) => {
-    const bookStore = useBookStore(state => state.books) || {};
-    const book = id ? bookStore[id] : null;
+    // OPTIMIZATION: Use fine-grained selectors to avoid re-rendering when other books change
+    const book = useBookStore(state => id && state.books ? state.books[id] : null);
 
-    const staticMetadata = useLibraryStore(state => state.staticMetadata) || {};
-    const staticMeta = id ? staticMetadata[id] : null;
+    const staticMeta = useLibraryStore(state => id && state.staticMetadata ? state.staticMetadata[id] : null);
 
-    const offloadedBookIds = useLibraryStore(state => state.offloadedBookIds) || new Set();
-    // Subscribe to progress changes (per-device structure)
-    let progressMap = useReadingStateStore(state => state.progress);
-    if (!progressMap) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (progressMap as any) = {};
-    }
-    const readingListEntries = useReadingListStore(state => state.entries) || {};
+    // Set.has is safe to call even if the set is empty, but we must handle null offloadedBookIds
+    const isOffloaded = useLibraryStore(state => id && state.offloadedBookIds ? state.offloadedBookIds.has(id) : false);
+
+    // Subscribe to progress changes ONLY for this specific book
+    const bookProgressMap = useReadingStateStore(state => id && state.progress ? state.progress[id] : undefined);
+
+    // Only subscribe to the specific reading list entry if we have a source filename
+    const sourceFilename = book?.sourceFilename;
+    const readingListEntry = useReadingListStore(state => sourceFilename && state.entries ? state.entries[sourceFilename] : undefined);
 
     // Get resolved progress (Local > Recent) across all devices for this book
-    const progress = id ? resolveProgress(progressMap[id]) : null;
+    const progress = id ? resolveProgress(bookProgressMap) : null;
 
     // OPTIMIZATION: Memoize the single book result
     return useMemo(() => {
         if (!book) return null;
 
         const hasCoverBlob = staticMeta?.coverBlob instanceof Blob;
-        const readingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
         const progressPercentage = progress?.percentage || readingListEntry?.percentage || 0;
 
         return {
@@ -235,13 +238,13 @@ export const useBook = (id: string | null) => {
             totalChars: staticMeta?.totalChars,
             version: staticMeta?.version || undefined,
 
-            isOffloaded: offloadedBookIds.has(book.bookId),
+            isOffloaded,
 
             // Merge progress (max across all devices)
             progress: progressPercentage,
             currentCfi: progress?.currentCfi || undefined
         };
-    }, [book, staticMeta, offloadedBookIds, progress, readingListEntries]);
+    }, [book, staticMeta, isOffloaded, progress, readingListEntry]);
 };
 
 /**

@@ -4,4 +4,3 @@ export { GenAISettingsTab } from './GenAISettingsTab';
 export { SyncSettingsTab } from './SyncSettingsTab';
 export { RecoverySettingsTab, type RecoverySettingsTabProps } from './RecoverySettingsTab';
 export { DataManagementTab } from './DataManagementTab';
-export { HistorySettingsTab } from './HistorySettingsTab';

@@ -2,6 +2,7 @@ import { DriveService, type DriveFile } from './DriveService';
 import { useDriveStore } from '../../store/useDriveStore';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useBookStore } from '../../store/useBookStore';
+import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import { createLogger } from '../logger';
 
 const logger = createLogger('DriveScannerService');
@@ -23,7 +24,11 @@ export class DriveScannerService {
             // List all EPUB files in the linked folder
             return await DriveService.listFilesRecursive(linkedFolderId, 'application/epub+zip');
         } catch (error) {
-            logger.error("Failed to scan linked folder:", error);
+            if (error instanceof Error && error.message.includes('is not connected')) {
+                logger.warn(`Failed to scan linked folder: ${error.message}`);
+            } else {
+                logger.error("Failed to scan linked folder:", error);
+            }
             throw error;
         }
     }
@@ -43,7 +48,11 @@ export class DriveScannerService {
             logger.info(`Importing file to library: ${fileName}`);
             await useLibraryStore.getState().addBook(file, options);
         } catch (error) {
-            logger.error(`Failed to import file ${fileName}:`, error);
+            if (error instanceof Error && error.message.includes('is not connected')) {
+                logger.warn(`Failed to import file ${fileName}: ${error.message}`);
+            } else {
+                logger.error(`Failed to import file ${fileName}:`, error);
+            }
             throw error;
         }
     }
@@ -87,7 +96,11 @@ export class DriveScannerService {
             logger.info(`Scan complete. Indexed ${index.length} files.`);
             setScannedFiles(index);
         } catch (error) {
-            logger.error("Failed to scan and index:", error);
+            if (error instanceof Error && error.message.includes('is not connected')) {
+                logger.warn(`Failed to scan and index: ${error.message}`);
+            } else {
+                logger.error("Failed to scan and index:", error);
+            }
             throw error;
         } finally {
             setScanning(false);
@@ -129,6 +142,12 @@ export class DriveScannerService {
         const { linkedFolderId, lastScanTime } = useDriveStore.getState();
 
         if (!linkedFolderId) return false;
+
+        // If service is not connected, we shouldn't try to sync
+        if (!useGoogleServicesStore.getState().isServiceConnected('drive')) {
+            return false;
+        }
+
         // If never scanned, we definitely need to sync
         if (!lastScanTime) return true;
 
@@ -141,6 +160,10 @@ export class DriveScannerService {
             // unless lastScanTime is also somehow 0 (which is handled above).
             return viewedTime > lastScanTime;
         } catch (error) {
+            if (error instanceof Error && error.message.includes('is not connected')) {
+                logger.warn(`Failed to check folder metadata for auto-sync heuristic: ${error.message}`);
+                return false;
+            }
             logger.warn("Failed to check folder metadata for auto-sync heuristic:", error);
             // Default to true on error to be safe
             return true;

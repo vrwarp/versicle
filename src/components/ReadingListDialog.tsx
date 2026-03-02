@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
@@ -19,9 +19,72 @@ interface ReadingListDialogProps {
  * Supports sorting, selection, batch deletion, and CSV export.
  * Also provides access to individual entry editing.
  */
+const ReadingListRow = React.memo(({ entry, isSelected, onToggleSelection, onEdit, onDelete }: {
+    entry: ReadingListEntry,
+    isSelected: boolean,
+    onToggleSelection: (filename: string) => void,
+    onEdit: (entry: ReadingListEntry) => void,
+    onDelete: (filename: string) => void
+}) => {
+    return (
+        <tr className={`border-b hover:bg-muted/20 transition-colors ${isSelected ? 'bg-muted/30' : ''}`}>
+            <td className="px-4 py-3 text-center">
+                <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => onToggleSelection(entry.filename)}
+                    aria-label={`Select ${entry.title}`}
+                />
+            </td>
+            <td className="px-4 py-3 font-medium">{entry.title}</td>
+            <td className="px-4 py-3 text-muted-foreground">{entry.author}</td>
+            <td className="px-4 py-3">
+                <span className={`px-2 py-0.5 rounded text-xs border ${entry.status === 'read' ? 'bg-success/10 text-success border-success/20' :
+                    entry.status === 'currently-reading' ? 'bg-primary/10 text-primary border-primary/20' :
+                        'bg-muted text-muted-foreground border-border'
+                    }`}>
+                    {entry.status === 'currently-reading' ? 'Reading' :
+                        entry.status === 'to-read' ? 'To Read' : 'Read'}
+                </span>
+            </td>
+            <td className="px-4 py-3">
+                {Math.round(entry.percentage * 100)}%
+            </td>
+            <td className="px-4 py-3 text-yellow-500">
+                {entry.rating ? '★'.repeat(entry.rating) : <span className="text-muted-foreground">-</span>}
+            </td>
+            <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                {new Date(entry.lastUpdated).toLocaleDateString()}
+            </td>
+            <td className="px-4 py-3 text-right">
+                <div className="flex items-center justify-end gap-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => onEdit(entry)}
+                    >
+                        <Edit2 className="w-4 h-4" />
+                        <span className="sr-only">Edit</span>
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                        onClick={() => onDelete(entry.filename)}
+                    >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="sr-only">Delete</span>
+                    </Button>
+                </div>
+            </td>
+        </tr>
+    );
+});
+ReadingListRow.displayName = 'ReadingListRow';
+
 export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOpenChange }) => {
-    const entriesMap = useReadingListStore(state => state.entries) || {};
-    const entries = useMemo(() => Object.values(entriesMap), [entriesMap]);
+    const entriesMap = useReadingListStore(state => state.entries);
+    const entries = useMemo(() => Object.values(entriesMap || {}), [entriesMap]);
 
     const [sortField, setSortField] = useState<keyof ReadingListEntry>('lastUpdated');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -67,18 +130,24 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         }
     };
 
+    const handleEdit = useCallback((entry: ReadingListEntry) => {
+        setEditEntry(entry);
+    }, []);
+
     /**
      * Toggles selection state of a single entry.
      */
-    const toggleSelection = (filename: string) => {
-        const newSelection = new Set(selectedEntries);
-        if (newSelection.has(filename)) {
-            newSelection.delete(filename);
-        } else {
-            newSelection.add(filename);
-        }
-        setSelectedEntries(newSelection);
-    };
+    const toggleSelection = useCallback((filename: string) => {
+        setSelectedEntries(prev => {
+            const newSelection = new Set(prev);
+            if (newSelection.has(filename)) {
+                newSelection.delete(filename);
+            } else {
+                newSelection.add(filename);
+            }
+            return newSelection;
+        });
+    }, []);
 
     /**
      * Toggles selection of all entries.
@@ -92,9 +161,9 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         }
     };
 
-    const handleDelete = (filename: string) => {
+    const handleDelete = useCallback((filename: string) => {
         setDeleteConfirmation({ type: 'single', filename });
-    };
+    }, []);
 
     const handleBatchDelete = () => {
         setDeleteConfirmation({ type: 'batch' });
@@ -223,57 +292,14 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                 </thead>
                                 <tbody>
                                     {sortedEntries.map((entry) => (
-                                        <tr key={entry.filename} className={`border-b hover:bg-muted/20 transition-colors ${selectedEntries.has(entry.filename) ? 'bg-muted/30' : ''}`}>
-                                            <td className="px-4 py-3 text-center">
-                                                <Checkbox
-                                                    checked={selectedEntries.has(entry.filename)}
-                                                    onCheckedChange={() => toggleSelection(entry.filename)}
-                                                    aria-label={`Select ${entry.title}`}
-                                                />
-                                            </td>
-                                            <td className="px-4 py-3 font-medium">{entry.title}</td>
-                                            <td className="px-4 py-3 text-muted-foreground">{entry.author}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`px-2 py-0.5 rounded text-xs border ${entry.status === 'read' ? 'bg-success/10 text-success border-success/20' :
-                                                    entry.status === 'currently-reading' ? 'bg-primary/10 text-primary border-primary/20' :
-                                                        'bg-muted text-muted-foreground border-border'
-                                                    }`}>
-                                                    {entry.status === 'currently-reading' ? 'Reading' :
-                                                        entry.status === 'to-read' ? 'To Read' : 'Read'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {Math.round(entry.percentage * 100)}%
-                                            </td>
-                                            <td className="px-4 py-3 text-yellow-500">
-                                                {entry.rating ? '★'.repeat(entry.rating) : <span className="text-muted-foreground">-</span>}
-                                            </td>
-                                            <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                                                {new Date(entry.lastUpdated).toLocaleDateString()}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 w-8 p-0"
-                                                        onClick={() => setEditEntry(entry)}
-                                                    >
-                                                        <Edit2 className="w-4 h-4" />
-                                                        <span className="sr-only">Edit</span>
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                                        onClick={() => handleDelete(entry.filename)}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                        <span className="sr-only">Delete</span>
-                                                    </Button>
-                                                </div>
-                                            </td>
-                                        </tr>
+                                        <ReadingListRow
+                                            key={entry.filename}
+                                            entry={entry}
+                                            isSelected={selectedEntries.has(entry.filename)}
+                                            onToggleSelection={toggleSelection}
+                                            onEdit={handleEdit}
+                                            onDelete={handleDelete}
+                                        />
                                     ))}
                                 </tbody>
                             </table>
