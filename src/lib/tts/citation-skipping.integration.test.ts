@@ -26,7 +26,6 @@ describe('Citation Skipping – Book of Citations EPUB', () => {
     let ch1Text: string;
     let ch2Text: string;
     let ch3Text: string;
-    let allText: string;
 
     beforeAll(async () => {
         const fixturePath = path.resolve(
