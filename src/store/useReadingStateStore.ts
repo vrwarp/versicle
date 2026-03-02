@@ -7,7 +7,6 @@ import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
 import { getDeviceId } from '../lib/device-id';
 import { mergeCfiRanges } from '../lib/cfi-utils';
-import { undoManager } from '../lib/undo-manager';
 
 const MAX_READING_SESSIONS = 500;
 const HISTORY_PRUNE_SIZE = 200;
@@ -466,9 +465,6 @@ export const useCurrentDeviceProgress = (bookId: string | null) => {
         return state.progress[bookId]?.[deviceId] || null;
     });
 };
-
-// Track changes from this store in history
-undoManager.addTrackedOrigin(useReadingStateStore);
 
 // @ts-expect-error Exposing store for debugging
 window.useReadingStateStore = useReadingStateStore;

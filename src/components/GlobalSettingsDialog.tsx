@@ -41,8 +41,7 @@ import {
     GenAISettingsTab,
     SyncSettingsTab,
     RecoverySettingsTab,
-    DataManagementTab,
-    HistorySettingsTab
+    DataManagementTab
 } from './settings';
 
 const logger = createLogger('GlobalSettingsDialog');
@@ -482,9 +481,6 @@ export const GlobalSettingsDialog = () => {
                         <Button variant={activeTab === 'recovery' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('recovery')}>
                             Recovery
                         </Button>
-                        <Button variant={activeTab === 'history' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0" onClick={() => setActiveTab('history')}>
-                            History
-                        </Button>
                         {/* Add margin to last item to prevent overlap with Close button on mobile */}
                         <Button variant={activeTab === 'data' ? 'secondary' : 'ghost'} className="w-auto sm:w-full justify-start whitespace-nowrap flex-shrink-0 text-destructive hover:text-destructive mr-10 sm:mr-0" onClick={() => setActiveTab('data')}>
                             Data Management
@@ -624,12 +620,6 @@ export const GlobalSettingsDialog = () => {
                                     recoveryStatus={null}
                                     onCreateCheckpoint={handleCreateCheckpoint}
                                 />
-                            )
-                        }
-
-                        {
-                            activeTab === 'history' && (
-                                <HistorySettingsTab />
                             )
                         }
 
