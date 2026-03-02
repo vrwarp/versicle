@@ -7,3 +7,11 @@ coverage
 plan
 *.md
 verification/screenshots
+android
+ios
+.gemini
+*.out
+*.txt
+public/piper
+dev-dist
+test-results
