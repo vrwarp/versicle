@@ -160,7 +160,7 @@ export const extractSentencesFromNode = (
                 //   /^\[?\d+\]?$/  — bare or bracketed number: "1", "12", "[1]", "[12]"
                 //   /^\(\d+\)$/    — parenthesized number:     "(1)", "(12)"
                 //   /^[\*†‡]+$/    — symbol markers:           "*", "†", "‡", "**"
-                const isCitationText = /^\[?\d+\]?$/.test(text) || /^\(\d+\)$/.test(text) || /^[\*\u2020\u2021]+$/.test(text);
+                const isCitationText = /^\[?\d+\]?$/.test(text) || /^\(\d+\)$/.test(text) || /^[*†‡]+$/.test(text);
 
                 if (isCitationText) {
                     if (tagName === 'SUP') {
