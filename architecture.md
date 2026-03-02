@@ -291,6 +291,7 @@ Provides a "Cloud Overlay" for real-time synchronization.
     *   **Hook Integration**: The synchronization logic is exposed to the UI via `useFirestoreSync` (maintains the connection) and `useSyncStore` (tracks status), decoupling the UI from the underlying provider.
     *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
     *   **Pre-Sync Checkpoint**: Automatically creates a "pre-sync" checkpoint via `CheckpointService` immediately before connecting to the provider, ensuring a safe fallback state exists before merging remote changes (Destructive Restore protection).
+    *   **Clean Client Sync**: When an entirely empty client connects (a device with zero books), it delays applying changes to the main `yDoc`. It creates a temporary `Y.Doc` to fetch the entire cloud snapshot (`performCleanSync`), and only applies the `stateVector` locally once the complete dataset is downloaded. This prevents the UI from rendering incomplete data states.
     *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
     *   **Authenticated**: Sync only occurs when the user is signed in via Firebase Auth.
@@ -374,11 +375,11 @@ Implements full-text search off the main thread.
 #### Backup Strategy (`src/lib/BackupService.ts` & `src/lib/sync/ExportImportService.ts`)
 Versicle employs a dual-strategy for data safety, distinguishing between "Hard Reset" backups and "Portable" exports.
 
-*   **Full Backup (`BackupService`)**:
+*   **Full Backup (`BackupService` V2)**:
     *   **Goal**: Complete system state preservation ("Hard Reset").
     *   **Logic**:
-        *   **Snapshot**: Captures the entire Yjs document state as a binary update using `Y.encodeStateAsUpdate`.
-        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` before creating a fresh Y.Doc and applying the snapshot update. This bypasses merge conflicts and ensures the restored state is an exact replica of the backup.
+        *   **Snapshot**: Captures the entire Yjs document state as a binary update using `Y.encodeStateAsUpdate`. Also captures static metadata and cache data (like locations) from IndexedDB.
+        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` before creating a fresh isolated Y.Doc and applying the snapshot update. This bypasses merge conflicts and ensures the restored state is an exact replica of the backup.
     *   **Trade-off**: Restore is destructive; any changes made since the backup are lost.
 *   **Export/Import (`ExportImportService`)**:
     *   **Goal**: Data portability and merging between devices.
@@ -394,7 +395,8 @@ Integrates with Google Drive to provide a cloud-based library.
     *   **Goal**: Manage high-level sync logic and state.
     *   **Logic**:
         *   **Heuristic Sync**: To save API quota, it checks if the remote folder's `viewedByMeTime` is more recent than the local `lastScanTime` (`shouldAutoSync`). If not, it skips the expensive scan.
-        *   **Diffing**: Compares the Cloud Index (`useDriveStore`) against the Local Library (`useBookStore` inventory) to identify "New" files (`checkForNewFiles`).
+        *   **Folder Scanning**: Scans for EPUB files by querying the `linkedFolderId` explicitly.
+        *   **Diffing**: Compares the Cloud Index (`useDriveStore`) against the Local Library (`useBookStore` inventory) to identify "New" files (`checkForNewFiles`). If the Cloud Index is empty, it forces a fresh scan to populate it before diffing.
         *   **Direct Store Access**: Reads directly from `useDriveStore` and `useLibraryStore` to manage state and trigger imports.
         *   **Lightweight Indexing**: Maintains a local index (`useDriveStore`) for instant UI feedback.
 *   **`DriveService.ts` (The Muscle)**:
