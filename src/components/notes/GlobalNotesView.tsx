@@ -6,6 +6,7 @@ import { useGroupedAnnotations } from '../../hooks/useGroupedAnnotations';
 import { useDebounce } from '../../hooks/useDebounce';
 import { BookOpen } from 'lucide-react';
 import { useLibraryStore } from '../../store/useLibraryStore';
+import { Button } from '../ui/Button';
 
 interface GlobalNotesViewProps {
     onContentMissing: (bookId: string) => void;
@@ -72,9 +73,14 @@ export const GlobalNotesView: React.FC<GlobalNotesViewProps> = ({ onContentMissi
                                 <p className="text-muted-foreground text-center max-w-md">
                                     No annotations or notes matching "{debouncedQuery}" were found in your library.
                                 </p>
-                                <button onClick={() => setRawQuery('')} className="mt-6 font-medium bg-secondary text-secondary-foreground hover:bg-secondary/80 px-4 py-2 rounded-md transition-colors">
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => setRawQuery('')}
+                                    className="mt-6"
+                                    aria-label="Clear search query"
+                                >
                                     Clear search
-                                </button>
+                                </Button>
                             </>
                         ) : (
                             <>
