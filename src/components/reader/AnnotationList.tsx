@@ -6,6 +6,8 @@ import type { Annotation } from '../../types/db';
 interface Props {
   /** Callback to navigate to the annotation's location. */
   onNavigate: (cfi: string) => void;
+  /** The ID of the book to display annotations for. */
+  bookId?: string;
 }
 
 /**
@@ -15,7 +17,7 @@ interface Props {
  * @param props - Component props.
  * @returns A React component rendering the annotation list.
  */
-export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
+export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
   const { annotations, remove, update } = useAnnotationStore();
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
@@ -39,7 +41,9 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate }) => {
     setEditingId(null);
   };
 
-  const annotationList = Object.values(annotations);
+  const annotationList = Object.values(annotations)
+    .filter(a => !bookId || a.bookId === bookId)
+    .sort((a, b) => a.created - b.created);
 
   if (annotationList.length === 0) {
     return <div className="p-4 text-sm text-gray-500 text-center">No annotations yet. Select text to highlight.</div>;
