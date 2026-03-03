@@ -1251,10 +1251,13 @@ export const ReaderView: React.FC = () => {
                         <div className="p-4 border-b border-border">
                             <h2 className="text-lg font-bold text-foreground">Annotations</h2>
                         </div>
-                        <AnnotationList onNavigate={(cfi) => {
-                            rendition?.display(cfi);
-                            if (window.innerWidth < 768) setSidebar('none');
-                        }} />
+                        <AnnotationList
+                            bookId={id}
+                            onNavigate={(cfi) => {
+                                rendition?.display(cfi);
+                                if (window.innerWidth < 768) setSidebar('none');
+                            }}
+                        />
                     </div>
                 )}
 
