@@ -76,7 +76,7 @@
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
     *   **Dual Sync**:
-        *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
+        *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates. Implements a **Clean Client Sync** protocol to fetch full cloud snapshots before rendering UI, preventing partial data flashes.
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
         *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses smart **Heuristic Sync** (viewed time vs scan time) to minimize API calls.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.

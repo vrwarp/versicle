@@ -43,16 +43,12 @@ vi.mock('../../store/useToastStore', () => ({
 }));
 
 // Mock Select components
-interface SelectProps {
-    value: string;
-    onValueChange: (value: string) => void;
-    children: ReactNode;
-}
 interface SelectItemProps {
     value: string;
     children: ReactNode;
 }
 vi.mock('../ui/Select', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     Select: ({ value, onValueChange, children }: any) => {
         const isSortSelect = ['recent', 'last_read', 'author', 'title'].includes(value);
         return (
@@ -65,6 +61,7 @@ vi.mock('../ui/Select', () => ({
             </select>
         );
     },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     SelectTrigger: ({ children }: any) => <>{children}</>,
     SelectValue: () => null,
     SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
