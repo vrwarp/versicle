@@ -11,7 +11,7 @@ const logger = createLogger('DataRecoveryView');
 export const DataRecoveryView: React.FC = () => {
     const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const [rawData, setRawData] = useState<Record<string, any> | null>(null);
+    const [rawData, setRawData] = useState<Record<string, unknown> | null>(null);
 
     const loadData = async () => {
         setStatus('loading');
@@ -35,7 +35,7 @@ export const DataRecoveryView: React.FC = () => {
             });
 
             // Extract all root types (assuming maps and arrays)
-            const extractedData: Record<string, any> = {};
+            const extractedData: Record<string, unknown> = {};
 
             // To get all root level shared types in a Y.Doc, we can iterate over doc.share
             for (const [key, type] of tempDoc.share.entries()) {
@@ -59,9 +59,9 @@ export const DataRecoveryView: React.FC = () => {
             tempPersistence.destroy();
             tempDoc.destroy();
 
-        } catch (err: any) {
+        } catch (err: unknown) {
             logger.error('Failed to load raw Yjs data for recovery', err);
-            setErrorMsg(err.message || 'Unknown error occurred.');
+            setErrorMsg(err instanceof Error ? err.message : 'Unknown error occurred.');
             setStatus('error');
         }
     };

@@ -3,8 +3,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
 import { DataRecoveryView } from './DataRecoveryView';
-import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
 
 vi.mock('y-indexeddb', () => {
     return {
