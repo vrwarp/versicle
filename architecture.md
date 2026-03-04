@@ -659,9 +659,14 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Goal**: Manage connection state for Google APIs (Drive, Sync) and persist user preferences.
     *   **Logic**: Tracks which services are actively connected and stores client IDs. Used to coordinate the authentication flow via `GoogleIntegrationManager`.
 
+#### History Management
+*   **Architecture Evolution**: The Yjs `UndoManager` and related granular history tracking components (e.g., `useHistoryStore`, `HistorySettingsTab`) have been intentionally **removed** to reduce complexity and performance overhead.
+*   **Current Strategy**: The application now relies exclusively on the Checkpoint system (`CheckpointService`) for gross state recovery (Last 10 sync states), abandoning granular intra-session undo/redo capabilities.
+
 #### Selector Optimization (`src/store/selectors.ts`)
 *   **Goal**: Ensure smooth UI scrolling (60fps) by preventing unnecessary re-renders in the main `LibraryView`.
 *   **Logic**:
+    *   **The `useAllBooks` Hot Path**: This selector executes frequently (e.g., on every page turn due to `progressMap` updates). Any dependencies within this selector (like `readingListEntries` or fallback defaults) must maintain strict referential stability to prevent triggering expensive O(N) recalculations.
     *   **Phase 1 (Base Book Memoization)**: Merges heavy static metadata (covers, titles) into book objects. Memoized on `books` + `staticMetadata` (rare changes).
     *   **Phase 2 (Progress Merge)**: Merges frequent updates (Reading Progress) into the Base Books using **Reference Stability**.
         *   *Array Item Memoization*: Reuses the *same* book object reference from the previous render if only the progress changed but the book identity/metadata is stable, allowing `React.memo` components to skip updates.
