@@ -73,7 +73,7 @@ export class TableAdaptationProcessor {
                     imageBlob: img.imageBlob
                 }));
 
-                const results = await genAIService.generateTableAdaptations(nodes);
+                const results = await genAIService.generateTableAdaptations(nodes, 512, { bookId, sectionId });
 
                 // 5. Update DB
                 await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({

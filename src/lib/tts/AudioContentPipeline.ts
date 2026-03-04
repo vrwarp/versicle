@@ -479,7 +479,7 @@ export class AudioContentPipeline {
 
                 if (genAIService.isConfigured()) {
                     // Note: Using default model (gemini-1.5-flash) from GenAIService
-                    const results = await genAIService.detectContentTypes(nodesToDetect);
+                    const results = await genAIService.detectContentTypes(nodesToDetect, { bookId, sectionId });
 
                     // Reconstruct the original format for DB persistence
                     const finalResults = results.map(res => ({
