@@ -17,7 +17,7 @@ describe('AudioContentPipeline mapping with Point CFIs', () => {
             { text: 'D', cfi: 'epubcfi(/6/28!/4/2/16/1:0)' } // Should NOT match (sibling)
         ];
 
-        const result = pipeline.mapSentencesToAdaptations(sentences, adaptationsMap);
+        const result = pipeline["tableProcessor"].mapSentencesToAdaptations(sentences, adaptationsMap);
 
         expect(result.length).toBe(1);
         expect(result[0].text).toBe('ADAPTATION_TEXT');
@@ -34,7 +34,7 @@ describe('AudioContentPipeline mapping with Point CFIs', () => {
             { text: 'False Positive', cfi: 'epubcfi(/6/28!/4/2/142/1:1)' } // 142 instead of 14
         ];
 
-        const result = pipeline.mapSentencesToAdaptations(sentences, adaptationsMap);
+        const result = pipeline["tableProcessor"].mapSentencesToAdaptations(sentences, adaptationsMap);
 
         expect(result.length).toBe(0);
     });

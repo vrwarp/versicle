@@ -134,7 +134,7 @@ describe('AudioPlayerService - Restore Analysis', () => {
         // Note: We need to spy on the instance methods
         pipelineSpy = {
             detectContentSkipMask: vi.spyOn(pipeline, 'detectContentSkipMask').mockResolvedValue(new Set()),
-            processTableAdaptations: vi.spyOn(pipeline, 'processTableAdaptations').mockResolvedValue(undefined),
+            processTableAdaptations: vi.spyOn(pipeline['tableProcessor'], 'processTableAdaptations').mockResolvedValue(undefined),
         };
     });
 

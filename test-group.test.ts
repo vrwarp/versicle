@@ -16,7 +16,7 @@ describe('groupSentencesByRoot behavior', () => {
         ];
 
         // @ts-expect-error accessing private method
-        const preprocessedTableRoots = pipeline.preprocessTableRoots(tableImages);
+        const preprocessedTableRoots = pipeline["tableProcessor"].preprocessTableRoots(tableImages);
 
         // @ts-expect-error accessing private method
         const groups = pipeline.groupSentencesByRoot(sentences, preprocessedTableRoots);
