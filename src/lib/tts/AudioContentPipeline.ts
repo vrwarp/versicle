@@ -411,19 +411,6 @@ export class AudioContentPipeline {
 
 
     /**
-     * Maps raw sentences to their corresponding table adaptations based on CFI structure.
-     * Identifying which sentences belong to which table allows us to replace them in the queue.
-     *
-     * @param sentences The list of raw sentence nodes.
-     * @param adaptationsMap A map of Table Root CFI -> Adaptation Text.
-     * @returns An array of mappings, each containing the source indices and the replacement text.
-     */
-    /**
-     * Groups individual text segments by their common semantic root element using CFI structure.
-     * This allows the GenAI to classify logical blocks (tables, asides) rather than fragmented sentences.
-     */
-
-    /**
      * Retrieves cached content classifications from DB or triggers GenAI detection if missing.
      */
     async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[]) {
@@ -522,6 +509,10 @@ export class AudioContentPipeline {
         }
     }
 
+    /**
+     * Groups individual text segments by their common semantic root element using CFI structure.
+     * This allows the GenAI to classify logical blocks (tables, asides) rather than fragmented sentences.
+     */
     private groupSentencesByRoot(sentences: { text: string; cfi: string; sourceIndices?: number[] }[], tableCfis: string[] | PreprocessedRoot[] = []): { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] {
         const groups: { rootCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string }[] = [];
         let currentGroup: { parentCfi: string; segments: { text: string; cfi: string; sourceIndices?: number[] }[]; fullText: string } | null = null;
