@@ -523,12 +523,21 @@ export class AudioContentPipeline {
             let rangeStart: string | null = null;
             let rangeEnd: string | null = null;
 
+            let parsedRangeStart: EpubCFI | null = null;
+            let parsedRangeEnd: EpubCFI | null = null;
+
             if (range && range.parent) {
                 // Reconstruct parent CFI string: epubcfi(parent)
                 // But wait, parseCfiRange returns 'parent' as the path inside.
                 cleanRoot = range.parent;
                 rangeStart = range.fullStart;
                 rangeEnd = range.fullEnd;
+                try {
+                    parsedRangeStart = new EpubCFI(rangeStart);
+                    parsedRangeEnd = new EpubCFI(rangeEnd);
+                } catch (e) {
+                    console.warn('Failed to parse range start/end for table adaptation', e);
+                }
             } else {
                 // Strip wrapper manually if not a range or simple path
                 if (cleanRoot.startsWith('epubcfi(')) {
@@ -543,7 +552,7 @@ export class AudioContentPipeline {
                 cleanRoot = cleanRoot.slice(0, -1);
             }
 
-            return { original: root, clean: cleanRoot, rangeStart, rangeEnd };
+            return { original: root, clean: cleanRoot, parsedRangeStart, parsedRangeEnd };
         });
 
         const cfiComparer = new EpubCFI();
@@ -561,8 +570,11 @@ export class AudioContentPipeline {
                 cleanCfi = cleanCfi.slice(0, -1);
             }
 
+            // Lazy-parse the sentence CFI only if needed
+            let parsedSentenceCfi: EpubCFI | null = null;
+
             // Check if this sentence is a child of any known table adaptation root.
-            const match = parsedRoots.find(({ clean, rangeStart, rangeEnd }) => {
+            const match = parsedRoots.find(({ clean, parsedRangeStart, parsedRangeEnd }) => {
                 // Check for prefix match with valid separator boundary
                 // Include ',' for range handling
                 const isPrefixMatch = cleanCfi.startsWith(clean) &&
@@ -572,10 +584,13 @@ export class AudioContentPipeline {
 
                 // If the table root is a range (e.g. encompasses multiple siblings), verify strictly within bounds.
                 // This prevents false positives where siblings of the table share the same parent prefix.
-                if (rangeStart && rangeEnd) {
+                if (parsedRangeStart && parsedRangeEnd) {
                     try {
-                        const afterStart = cfiComparer.compare(sentence.cfi, rangeStart) >= 0;
-                        const beforeEnd = cfiComparer.compare(sentence.cfi, rangeEnd) <= 0;
+                        if (!parsedSentenceCfi) {
+                            parsedSentenceCfi = new EpubCFI(sentence.cfi);
+                        }
+                        const afterStart = cfiComparer.compare(parsedSentenceCfi, parsedRangeStart) >= 0;
+                        const beforeEnd = cfiComparer.compare(parsedSentenceCfi, parsedRangeEnd) <= 0;
                         return afterStart && beforeEnd;
                     } catch (e) {
                         console.warn('Failed to compare CFIs for table range check', e);
