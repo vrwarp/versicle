@@ -589,7 +589,9 @@ export class AudioContentPipeline {
                         if (!parsedSentenceCfi) {
                             parsedSentenceCfi = new EpubCFI(sentence.cfi);
                         }
+                        // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict types
                         const afterStart = cfiComparer.compare(parsedSentenceCfi, parsedRangeStart) >= 0;
+                        // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict types
                         const beforeEnd = cfiComparer.compare(parsedSentenceCfi, parsedRangeEnd) <= 0;
                         return afterStart && beforeEnd;
                     } catch (e) {
