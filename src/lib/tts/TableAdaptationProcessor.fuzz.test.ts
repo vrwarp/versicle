@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { SentenceNode } from '../tts';
 import { SeededRandom } from '../../test/fuzz-utils';
@@ -6,6 +6,14 @@ import { SeededRandom } from '../../test/fuzz-utils';
 const DEFAULT_FUZZ_SEED = 12345;
 
 describe('TableAdaptationProcessor Fuzz Test', () => {
+    beforeEach(() => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('mapSentencesToAdaptations should accurately match synthetic structural hierarchies', () => {
         const processor = new TableAdaptationProcessor();
         const prng = new SeededRandom(DEFAULT_FUZZ_SEED);
