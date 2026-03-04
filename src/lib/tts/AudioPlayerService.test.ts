@@ -429,7 +429,7 @@ describe('AudioPlayerService', () => {
             // Mock GenAI response
             // IDs correspond to indices: '0', '1', '2'
             // @ts-expect-error Mock implementation
-            genAIService.detectContentTypes.mockResolvedValue([
+            vi.mocked(genAIService.detectContentTypes).mockResolvedValue([
                 { id: '0', type: 'main' },
                 { id: '1', type: 'main' },
                 { id: '2', type: 'reference' } // Skip this one
