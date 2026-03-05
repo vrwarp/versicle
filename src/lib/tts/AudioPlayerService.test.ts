@@ -429,7 +429,9 @@ describe('AudioPlayerService', () => {
             ];
 
             // Mock DB to return book and structure for titles
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(dbService, 'getBookMetadata').mockResolvedValue({ title: 'Book 1', author: 'Author' } as any);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(dbService, 'getBookStructure').mockResolvedValue({ toc: [{ href: 'sec1', title: 'Section 1' }] } as any);
 
             // Mock GenAI response
