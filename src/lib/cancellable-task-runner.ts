@@ -172,9 +172,7 @@ export function runCancellable<TReturn = void>(
             if (!result.done) {
                 safelyIgnorePromise(result.value);
                 logger.warn(
-                    'Generator did not complete after cancellation. ' +
-                    'Ensure you are not catching CancellationError and continuing execution, ' +
-                    'or yielding more promises in the finally block.',
+                    'Generator did not complete after cancellation. Ensure you are not catching CancellationError and continuing execution, or yielding more promises in the finally block.',
                     new Error().stack
                 );
             }
