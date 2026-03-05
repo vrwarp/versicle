@@ -35,7 +35,7 @@ export const SatelliteFAB: React.FC = () => {
             aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
         >
             {isLoading ? (
-                <Loader2 className="w-6 h-6 animate-spin" />
+                <Loader2 className="w-6 h-6 animate-spin" aria-hidden="true" />
             ) : isPlaying ? (
                 <Pause className="w-6 h-6 fill-current" />
             ) : (

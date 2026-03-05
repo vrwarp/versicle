@@ -100,7 +100,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
                         >
                             {isScanning ? (
                                 <div className="flex items-center gap-1">
-                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
                                     Scanning...
                                 </div>
                             ) : "Refresh Index"}
@@ -135,7 +135,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
                                         className="shrink-0"
                                     >
                                         {importingId === file.id ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                                         ) : (
                                             <>
                                                 <Download className="w-4 h-4 mr-2" />
@@ -157,7 +157,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
                     >
                         {isScanning ? (
                             <div className="flex items-center gap-2">
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                                 Syncing...
                             </div>
                         ) : "Manual Sync"}
