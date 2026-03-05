@@ -60,7 +60,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                         aria-label="Search"
                         className="shrink-0"
                     >
-                        {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                        {isSearching ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" />}
                     </Button>
                 </div>
                 {isIndexing && (

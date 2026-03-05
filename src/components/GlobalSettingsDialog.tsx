@@ -442,7 +442,7 @@ export const GlobalSettingsDialog = () => {
                     <span id="global-settings-desc" className="sr-only">Global application settings including appearance, TTS configuration, and data management.</span>
                     {isCsvImporting && (
                         <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 text-center">
-                            <Loader2 className={`h-12 w-12 text-primary mb-4 ${!csvImportComplete ? 'animate-spin' : ''}`} />
+                            <Loader2 className={`h-12 w-12 text-primary mb-4 ${!csvImportComplete ? 'animate-spin' : ''}`} aria-hidden="true" />
                             <h3 className="text-xl font-semibold mb-2">{csvImportComplete ? 'Import Complete' : 'Importing Reading List'}</h3>
                             <p className="text-muted-foreground mb-6">{csvImportMessage}</p>
 

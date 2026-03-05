@@ -151,7 +151,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                     <Button onClick={onRepairDB} variant="outline" disabled={isScanning}>
                         {isScanning ? (
                             <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                                 Scanning...
                             </>
                         ) : (
@@ -164,7 +164,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                     <Button onClick={onRegenerateMetadata} variant="outline" disabled={isRegenerating}>
                         {isRegenerating ? (
                             <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                                 Regenerating...
                             </>
                         ) : (
@@ -189,7 +189,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                 <Button variant="destructive" onClick={onClearAllData} disabled={isClearing}>
                     {isClearing ? (
                         <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                             Clearing...
                         </>
                     ) : (

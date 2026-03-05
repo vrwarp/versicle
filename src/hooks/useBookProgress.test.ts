@@ -2,7 +2,7 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { useBookProgress } from './useBookProgress';
 import { dbService } from '../db/DBService';
-import { useReaderUIStore } from '../store/useReaderUIStore';
+
 
 vi.mock('../db/DBService', () => ({
   dbService: {
@@ -10,9 +10,6 @@ vi.mock('../db/DBService', () => ({
   },
 }));
 
-vi.mock('../store/useReaderUIStore', () => ({
-  useReaderUIStore: vi.fn((selector) => selector({ currentBookId: null })),
-}));
 
 // We need to mock useReadingStateStore to return empty progress
 vi.mock('../store/useReadingStateStore', () => ({
