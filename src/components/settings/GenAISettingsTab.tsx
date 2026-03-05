@@ -14,8 +14,8 @@ export interface GenAILog {
     type: string;
     method: string;
     payload: unknown;
-    bookId?: string;
-    sectionId?: string;
+    bookTitle?: string;
+    sectionTitle?: string;
     correlationId?: string;
 }
 
@@ -258,10 +258,10 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                                 <div className="font-semibold text-primary">
                                                     [{new Date(log.timestamp).toLocaleTimeString()}] {log.type.toUpperCase()} - {log.method}
                                                 </div>
-                                                {(log.bookId || log.sectionId || log.correlationId) && (
+                                                {(log.bookTitle || log.sectionTitle || log.correlationId) && (
                                                     <div className="text-muted-foreground mb-1">
-                                                        {log.bookId && <span>Book: {log.bookId} </span>}
-                                                        {log.sectionId && <span>| Section: {log.sectionId} </span>}
+                                                        {log.bookTitle && <span>Book: {log.bookTitle} </span>}
+                                                        {log.sectionTitle && <span>| Section: {log.sectionTitle} </span>}
                                                         {log.correlationId && <span>| Correlation: {log.correlationId}</span>}
                                                     </div>
                                                 )}

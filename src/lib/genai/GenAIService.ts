@@ -11,8 +11,8 @@ export interface GenAILogEntry {
   method: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload: any;
-  bookId?: string;
-  sectionId?: string;
+  bookTitle?: string;
+  sectionTitle?: string;
   correlationId?: string;
 }
 
@@ -48,7 +48,7 @@ class GenAIService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private log(type: 'request' | 'response' | 'error', method: string, payload: any, context?: { bookId?: string, sectionId?: string, correlationId?: string }) {
+  private log(type: 'request' | 'response' | 'error', method: string, payload: any, context?: { bookTitle?: string, sectionTitle?: string, correlationId?: string }) {
     if (this.logCallback) {
       this.logCallback({
         id: crypto.randomUUID(),
@@ -56,8 +56,8 @@ class GenAIService {
         type,
         method,
         payload,
-        bookId: context?.bookId,
-        sectionId: context?.sectionId,
+        bookTitle: context?.bookTitle,
+        sectionTitle: context?.sectionTitle,
         correlationId: context?.correlationId
       });
     }
@@ -75,7 +75,7 @@ class GenAIService {
   private async executeWithRetry<T>(
     operation: (genAI: GoogleGenerativeAI, modelId: string) => Promise<T>,
     methodName: string,
-    context?: { bookId?: string, sectionId?: string, correlationId?: string }
+    context?: { bookTitle?: string, sectionTitle?: string, correlationId?: string }
   ): Promise<T> {
     if (!this.genAI) {
       const error = new Error('GenAI Service not configured (missing API key).');
@@ -116,7 +116,7 @@ class GenAIService {
     throw lastError;
   }
 
-  public async generateContent(prompt: string, context?: { bookId?: string, sectionId?: string }): Promise<string> {
+  public async generateContent(prompt: string, context?: { bookTitle?: string, sectionTitle?: string }): Promise<string> {
     const correlationId = crypto.randomUUID();
     const fullContext = { ...context, correlationId };
 
@@ -146,7 +146,7 @@ class GenAIService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public async generateStructured<T>(prompt: string | any, schema: any, generationConfigOverride?: any, context?: { bookId?: string, sectionId?: string, correlationId?: string }): Promise<T> {
+  public async generateStructured<T>(prompt: string | any, schema: any, generationConfigOverride?: any, context?: { bookTitle?: string, sectionTitle?: string, correlationId?: string }): Promise<T> {
     const correlationId = context?.correlationId || crypto.randomUUID();
     const fullContext = { ...context, correlationId };
 
@@ -211,7 +211,7 @@ class GenAIService {
    * @param sections Array of objects with id and text.
    * @returns Array of objects with id and title.
    */
-  public async generateTOCForBatch(sections: { id: string, text: string }[], context?: { bookId?: string }): Promise<{ id: string, title: string }[]> {
+  public async generateTOCForBatch(sections: { id: string, text: string }[], context?: { bookTitle?: string }): Promise<{ id: string, title: string }[]> {
     if (sections.length === 0) return [];
 
     const prompt = `Generate concise section titles (max 6 words) for the following text segments.
@@ -240,7 +240,7 @@ class GenAIService {
    * @param nodes Array of objects with id and sampleText.
    * @returns Array of objects with id and type.
    */
-  public async detectContentTypes(nodes: { id: string, sampleText: string }[], context?: { bookId?: string, sectionId?: string }): Promise<{ id: string, type: ContentType }[]> {
+  public async detectContentTypes(nodes: { id: string, sampleText: string }[], context?: { bookTitle?: string, sectionTitle?: string }): Promise<{ id: string, type: ContentType }[]> {
     if (nodes.length === 0) return [];
 
     const prompt = `You will be provided an array of text samples from an EPUB book section, ordered exactly as they appear in the book.
@@ -279,7 +279,7 @@ ${JSON.stringify(nodes)}`;
   public async generateTableAdaptations(
     nodes: { rootCfi: string, imageBlob: Blob }[],
     thinkingBudget: number = 512,
-    context?: { bookId?: string, sectionId?: string }
+    context?: { bookTitle?: string, sectionTitle?: string }
   ): Promise<{ cfi: string, adaptation: string }[]> {
     const instructionPrompt = `ACT AS: An expert accessibility specialist and audiobook narrator.
 TASK: Convert each of the above table images into a "teleprompter adaptation" for Text-to-Speech playback.
