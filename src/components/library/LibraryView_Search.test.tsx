@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
@@ -53,6 +53,11 @@ describe('LibraryView Search', () => {
             isImporting: false,
             sortOrder: 'recent'
         });
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('filters books by title case-insensitively', () => {
@@ -70,7 +75,10 @@ describe('LibraryView Search', () => {
         expect(screen.getByTestId('book-card-3')).toBeInTheDocument();
 
         // Search for "great"
-        fireEvent.change(searchInput, { target: { value: 'great' } });
+        act(() => {
+            fireEvent.change(searchInput, { target: { value: 'great' } });
+            vi.advanceTimersByTime(300);
+        });
 
         expect(screen.getByTestId('book-card-1')).toBeInTheDocument(); // The Great Gatsby
         expect(screen.queryByTestId('book-card-2')).not.toBeInTheDocument();
@@ -87,7 +95,10 @@ describe('LibraryView Search', () => {
         const searchInput = screen.getByTestId('library-search-input');
 
         // Search for "orwell"
-        fireEvent.change(searchInput, { target: { value: 'orwell' } });
+        act(() => {
+            fireEvent.change(searchInput, { target: { value: 'orwell' } });
+            vi.advanceTimersByTime(300);
+        });
 
         expect(screen.queryByTestId('book-card-1')).not.toBeInTheDocument();
         expect(screen.getByTestId('book-card-2')).toBeInTheDocument(); // 1984 by George Orwell
@@ -102,7 +113,10 @@ describe('LibraryView Search', () => {
         );
 
         const searchInput = screen.getByTestId('library-search-input');
-        fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
+        act(() => {
+            fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
+            vi.advanceTimersByTime(300);
+        });
 
         expect(screen.queryByTestId('book-card-1')).not.toBeInTheDocument();
         expect(screen.queryByTestId('book-card-2')).not.toBeInTheDocument();
@@ -118,7 +132,10 @@ describe('LibraryView Search', () => {
         );
 
         const searchInput = screen.getByTestId('library-search-input');
-        fireEvent.change(searchInput, { target: { value: 'new' } });
+        act(() => {
+            fireEvent.change(searchInput, { target: { value: 'new' } });
+            vi.advanceTimersByTime(300);
+        });
 
         // Initially matches "Brave New World"
         expect(screen.getByTestId('book-card-3')).toBeInTheDocument();
@@ -132,6 +149,7 @@ describe('LibraryView Search', () => {
                     '4': { id: '4', bookId: '4', title: 'New Moon', author: 'Stephenie Meyer', addedAt: 300, lastInteraction: 300 } as any
                 }
             }));
+            vi.advanceTimersByTime(300);
         });
 
         // Should see both now

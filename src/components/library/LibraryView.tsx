@@ -31,6 +31,7 @@ import { DuplicateBookError } from '../../types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useNavigationGuard } from '../../hooks/useNavigationGuard';
 import { BackButtonPriority } from '../../store/useBackNavigationStore';
+import { useDebounce } from '../../hooks/useDebounce';
 
 /**
  * The main library view component.
@@ -90,6 +91,7 @@ export const LibraryView: React.FC = () => {
   // const restoreFileInputRef = useRef<HTMLInputElement>(null); // Removed
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -351,7 +353,8 @@ export const LibraryView: React.FC = () => {
 
   // OPTIMIZATION: Memoize filtered and sorted books
   const filteredAndSortedBooks = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    // BOLT OPTIMIZATION: Use debounced search query to prevent filtering/sorting on every keystroke
+    const query = debouncedSearchQuery.toLowerCase();
 
     // 1. Filter using the pre-computed index (fast string check)
     let filtered = searchableBooks
@@ -392,7 +395,7 @@ export const LibraryView: React.FC = () => {
           return 0;
       }
     });
-  }, [searchableBooks, searchQuery, sortOrder, libraryFilterMode, staticMetadata]);
+  }, [searchableBooks, debouncedSearchQuery, sortOrder, libraryFilterMode, staticMetadata]);
 
   return (
     <div

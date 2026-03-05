@@ -3,7 +3,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { useBookProgress } from './useBookProgress';
 import { dbService } from '../db/DBService';
 
-
 vi.mock('../db/DBService', () => ({
   dbService: {
     getBookMetadata: vi.fn(),
