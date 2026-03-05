@@ -14,6 +14,7 @@ interface GenAIState {
   contentFilterSkipTypes: ContentType[];
   isDebugModeEnabled: boolean;
   logs: GenAILogEntry[];
+  maxLogs: number;
   usageStats: {
     totalTokens: number;
     estimatedCost: number;
@@ -27,7 +28,9 @@ interface GenAIState {
   setContentFilterSkipTypes: (types: ContentType[]) => void;
   setDebugModeEnabled: (enabled: boolean) => void;
   incrementUsage: (tokens: number) => void;
+  setMaxLogs: (max: number) => void;
   addLog: (log: GenAILogEntry) => void;
+  clearLogs: () => void;
   init: () => void;
 }
 
@@ -43,6 +46,7 @@ export const useGenAIStore = create<GenAIState>()(
       contentFilterSkipTypes: ['reference'],
       isDebugModeEnabled: false,
       logs: [],
+      maxLogs: 100,
       usageStats: {
         totalTokens: 0,
         estimatedCost: 0,
@@ -71,14 +75,16 @@ export const useGenAIStore = create<GenAIState>()(
             estimatedCost: state.usageStats.estimatedCost,
           },
         })),
+      setMaxLogs: (max) => set({ maxLogs: max }),
       addLog: (log) =>
         set((state) => {
           const newLogs = [...state.logs, log];
-          if (newLogs.length > 10) {
-            newLogs.shift();
+          if (newLogs.length > state.maxLogs) {
+            newLogs.splice(0, newLogs.length - state.maxLogs);
           }
           return { logs: newLogs };
         }),
+      clearLogs: () => set({ logs: [] }),
       init: () => {
           const { apiKey, model, isModelRotationEnabled } = get();
           genAIService.configure(apiKey, model, isModelRotationEnabled);
@@ -92,8 +98,6 @@ export const useGenAIStore = create<GenAIState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         ...state,
-        // Don't persist logs for size
-        logs: [],
       }),
       onRehydrateStorage: () => (state) => {
           state?.init();

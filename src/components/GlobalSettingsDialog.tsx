@@ -219,6 +219,9 @@ export const GlobalSettingsDialog = () => {
         contentFilterSkipTypes,
         setContentFilterSkipTypes,
         logs: genAILogs,
+        maxLogs,
+        setMaxLogs,
+        clearLogs,
         isDebugModeEnabled,
         setDebugModeEnabled
     } = useGenAIStore();
@@ -551,6 +554,9 @@ export const GlobalSettingsDialog = () => {
                                 isTableAdaptationEnabled={isTableAdaptationEnabled}
                                 onTableAdaptationChange={setTableAdaptationEnabled}
                                 logs={genAILogs}
+                                maxLogs={maxLogs}
+                                onMaxLogsChange={setMaxLogs}
+                                onClearLogs={clearLogs}
                                 onDownloadLogs={handleDownloadGenAILogs}
                             />
                         )}

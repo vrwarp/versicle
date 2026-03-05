@@ -478,8 +478,26 @@ export class AudioContentPipeline {
                 }
 
                 if (genAIService.isConfigured()) {
+                    const bookMetadata = await dbService.getBookMetadata(bookId);
+                    const bookTitle = bookMetadata?.title || 'Unknown Book';
+                    const structure = await dbService.getBookStructure(bookId);
+                    const sectionMap = new Map<string, string>();
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const findSectionTitle = (items: { href: string, title?: string, subitems?: any[] }[]) => {
+                        for (const item of items) {
+                            if (item.href && item.href.split('#')[0] === sectionId) {
+                                sectionMap.set(sectionId, item.title || 'Unknown Section');
+                            }
+                            if (item.subitems) {
+                                findSectionTitle(item.subitems);
+                            }
+                        }
+                    };
+                    if (structure && structure.toc) findSectionTitle(structure.toc);
+                    const sectionTitle = sectionMap.get(sectionId) || 'Unknown Section';
+
                     // Note: Using default model (gemini-1.5-flash) from GenAIService
-                    const results = await genAIService.detectContentTypes(nodesToDetect);
+                    const results = await genAIService.detectContentTypes(nodesToDetect, { bookTitle, sectionTitle });
 
                     // Reconstruct the original format for DB persistence
                     const finalResults = results.map(res => ({

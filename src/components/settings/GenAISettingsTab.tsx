@@ -14,6 +14,9 @@ export interface GenAILog {
     type: string;
     method: string;
     payload: unknown;
+    bookTitle?: string;
+    sectionTitle?: string;
+    correlationId?: string;
 }
 
 export interface GenAISettingsTabProps {
@@ -40,7 +43,10 @@ export interface GenAISettingsTabProps {
     onTableAdaptationChange: (enabled: boolean) => void;
     // Logs
     logs: GenAILog[];
+    maxLogs: number;
+    onMaxLogsChange: (max: number) => void;
     onDownloadLogs: () => void;
+    onClearLogs: () => void;
 }
 
 export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
@@ -62,7 +68,10 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     isTableAdaptationEnabled,
     onTableAdaptationChange,
     logs,
-    onDownloadLogs
+    maxLogs,
+    onMaxLogsChange,
+    onDownloadLogs,
+    onClearLogs
 }) => {
     const contentTypes: ContentType[] = ['reference'];
 
@@ -220,10 +229,25 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                             <div className="pt-4 border-t space-y-4">
                                 <div className="flex items-center justify-between">
                                     <h4 className="text-sm font-medium">Debug Logs</h4>
-                                    <Button variant="outline" size="sm" onClick={onDownloadLogs} disabled={logs.length === 0}>
-                                        <Download className="h-4 w-4 mr-2" />
-                                        Download Logs
-                                    </Button>
+                                    <div className="flex items-center space-x-2">
+                                        <Label htmlFor="max-logs" className="text-xs whitespace-nowrap">Max Logs:</Label>
+                                        <input
+                                            id="max-logs"
+                                            type="number"
+                                            min={1}
+                                            max={1000}
+                                            className="flex h-8 w-20 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                            value={maxLogs}
+                                            onChange={(e) => onMaxLogsChange(parseInt(e.target.value) || 100)}
+                                        />
+                                        <Button variant="outline" size="sm" onClick={onClearLogs} disabled={logs.length === 0}>
+                                            Clear Logs
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={onDownloadLogs} disabled={logs.length === 0}>
+                                            <Download className="h-4 w-4 mr-2" />
+                                            Download Logs
+                                        </Button>
+                                    </div>
                                 </div>
                                 <div className="bg-muted p-2 rounded-md h-40 overflow-y-auto font-mono text-xs">
                                     {logs.length === 0 ? (
@@ -234,6 +258,13 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                                 <div className="font-semibold text-primary">
                                                     [{new Date(log.timestamp).toLocaleTimeString()}] {log.type.toUpperCase()} - {log.method}
                                                 </div>
+                                                {(log.bookTitle || log.sectionTitle || log.correlationId) && (
+                                                    <div className="text-muted-foreground mb-1">
+                                                        {log.bookTitle && <span>Book: {log.bookTitle} </span>}
+                                                        {log.sectionTitle && <span>| Section: {log.sectionTitle} </span>}
+                                                        {log.correlationId && <span>| Correlation: {log.correlationId}</span>}
+                                                    </div>
+                                                )}
                                                 <div className="whitespace-pre-wrap truncate line-clamp-2">
                                                     {JSON.stringify(log.payload)}
                                                 </div>

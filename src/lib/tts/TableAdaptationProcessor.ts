@@ -73,7 +73,25 @@ export class TableAdaptationProcessor {
                     imageBlob: img.imageBlob
                 }));
 
-                const results = await genAIService.generateTableAdaptations(nodes);
+                const bookMetadata = await dbService.getBookMetadata(bookId);
+                const bookTitle = bookMetadata?.title || 'Unknown Book';
+                const structure = await dbService.getBookStructure(bookId);
+                const sectionMap = new Map<string, string>();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const findSectionTitle = (items: { href: string, title?: string, subitems?: any[] }[]) => {
+                    for (const item of items) {
+                        if (item.href && item.href.split('#')[0] === sectionId) {
+                            sectionMap.set(sectionId, item.title || 'Unknown Section');
+                        }
+                        if (item.subitems) {
+                            findSectionTitle(item.subitems);
+                        }
+                    }
+                };
+                if (structure && structure.toc) findSectionTitle(structure.toc);
+                const sectionTitle = sectionMap.get(sectionId) || 'Unknown Section';
+
+                const results = await genAIService.generateTableAdaptations(nodes, 512, { bookTitle, sectionTitle });
 
                 // 5. Update DB
                 await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({

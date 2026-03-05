@@ -11,6 +11,9 @@ export interface GenAILogEntry {
   method: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload: any;
+  bookTitle?: string;
+  sectionTitle?: string;
+  correlationId?: string;
 }
 
 class GenAIService {
@@ -45,14 +48,17 @@ class GenAIService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private log(type: 'request' | 'response' | 'error', method: string, payload: any) {
+  private log(type: 'request' | 'response' | 'error', method: string, payload: any, context?: { bookTitle?: string, sectionTitle?: string, correlationId?: string }) {
     if (this.logCallback) {
       this.logCallback({
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         type,
         method,
-        payload
+        payload,
+        bookTitle: context?.bookTitle,
+        sectionTitle: context?.sectionTitle,
+        correlationId: context?.correlationId
       });
     }
   }
@@ -68,11 +74,12 @@ class GenAIService {
   // Helper to execute with retry logic for model rotation
   private async executeWithRetry<T>(
     operation: (genAI: GoogleGenerativeAI, modelId: string) => Promise<T>,
-    methodName: string
+    methodName: string,
+    context?: { bookTitle?: string, sectionTitle?: string, correlationId?: string }
   ): Promise<T> {
     if (!this.genAI) {
       const error = new Error('GenAI Service not configured (missing API key).');
-      this.log('error', methodName, { message: error.message });
+      this.log('error', methodName, { message: error.message }, context);
       throw error;
     }
 
@@ -97,7 +104,7 @@ class GenAIService {
         const isResourceExhausted = error.message?.includes('429') || error.status === 429 || error.toString().includes('RESOURCE_EXHAUSTED');
 
         if (this.isRotationEnabled && isResourceExhausted) {
-          this.log('error', methodName, { message: `Model ${currentModelId} exhausted (429). Retrying with next model...`, error: error.message });
+          this.log('error', methodName, { message: `Model ${currentModelId} exhausted (429). Retrying with next model...`, error: error.message }, context);
           continue;
         } else {
           // If not 429 or rotation disabled, fail immediately
@@ -109,16 +116,19 @@ class GenAIService {
     throw lastError;
   }
 
-  public async generateContent(prompt: string): Promise<string> {
+  public async generateContent(prompt: string, context?: { bookTitle?: string, sectionTitle?: string }): Promise<string> {
+    const correlationId = crypto.randomUUID();
+    const fullContext = { ...context, correlationId };
+
     return this.executeWithRetry(async (genAI, modelId) => {
-      this.log('request', 'generateContent', { prompt, model: modelId });
+      this.log('request', 'generateContent', { prompt, model: modelId }, fullContext);
       const model = genAI.getGenerativeModel({ model: modelId });
       const result = await model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
-      this.log('response', 'generateContent', { text });
+      this.log('response', 'generateContent', { text }, fullContext);
       return text;
-    }, 'generateContent');
+    }, 'generateContent', fullContext);
   }
 
   private async blobToBase64(blob: Blob): Promise<string> {
@@ -136,13 +146,16 @@ class GenAIService {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  public async generateStructured<T>(prompt: string | any, schema: any, generationConfigOverride?: any): Promise<T> {
+  public async generateStructured<T>(prompt: string | any, schema: any, generationConfigOverride?: any, context?: { bookTitle?: string, sectionTitle?: string, correlationId?: string }): Promise<T> {
+    const correlationId = context?.correlationId || crypto.randomUUID();
+    const fullContext = { ...context, correlationId };
+
     // Check for E2E Test Mocks
     if (typeof localStorage !== 'undefined') {
       const mockError = localStorage.getItem('mockGenAIError');
       if (mockError) {
         const error = new Error('Simulated GenAI Error');
-        this.log('error', 'generateStructured', { message: error.message, isMock: true });
+        this.log('error', 'generateStructured', { message: error.message, isMock: true }, fullContext);
         throw error;
       }
 
@@ -153,11 +166,11 @@ class GenAIService {
         await new Promise(resolve => setTimeout(resolve, 500));
         try {
           const parsed = JSON.parse(mockResponse) as T;
-          this.log('response', 'generateStructured', { parsed, isMock: true });
+          this.log('response', 'generateStructured', { parsed, isMock: true }, fullContext);
           return parsed;
         } catch {
           logger.error("Invalid mock response JSON");
-          this.log('error', 'generateStructured', { message: "Invalid mock response JSON", isMock: true });
+          this.log('error', 'generateStructured', { message: "Invalid mock response JSON", isMock: true }, fullContext);
         }
       }
     }
@@ -165,7 +178,7 @@ class GenAIService {
 
 
     return this.executeWithRetry(async (genAI, modelId) => {
-      this.log('request', 'generateStructured', { prompt, schema, model: modelId, generationConfigOverride });
+      this.log('request', 'generateStructured', { prompt, schema, model: modelId, generationConfigOverride }, fullContext);
 
       const model = genAI.getGenerativeModel({
         model: modelId,
@@ -182,15 +195,15 @@ class GenAIService {
 
       try {
         const parsed = JSON.parse(text) as T;
-        this.log('response', 'generateStructured', { text, parsed });
+        this.log('response', 'generateStructured', { text, parsed }, fullContext);
         return parsed;
       } catch (error) {
         logger.error('Failed to parse GenAI response as JSON:', text);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message });
+        this.log('error', 'generateStructured', { message: 'Failed to parse JSON', text, error: (error as any).message }, fullContext);
         throw error;
       }
-    }, 'generateStructured');
+    }, 'generateStructured', fullContext);
   }
 
   /**
@@ -198,7 +211,7 @@ class GenAIService {
    * @param sections Array of objects with id and text.
    * @returns Array of objects with id and title.
    */
-  public async generateTOCForBatch(sections: { id: string, text: string }[]): Promise<{ id: string, title: string }[]> {
+  public async generateTOCForBatch(sections: { id: string, text: string }[], context?: { bookTitle?: string }): Promise<{ id: string, title: string }[]> {
     if (sections.length === 0) return [];
 
     const prompt = `Generate concise section titles (max 6 words) for the following text segments.
@@ -219,7 +232,7 @@ class GenAIService {
       },
     };
 
-    return this.generateStructured<{ id: string, title: string }[]>(prompt, schema);
+    return this.generateStructured<{ id: string, title: string }[]>(prompt, schema, undefined, context);
   }
 
   /**
@@ -227,7 +240,7 @@ class GenAIService {
    * @param nodes Array of objects with id and sampleText.
    * @returns Array of objects with id and type.
    */
-  public async detectContentTypes(nodes: { id: string, sampleText: string }[]): Promise<{ id: string, type: ContentType }[]> {
+  public async detectContentTypes(nodes: { id: string, sampleText: string }[], context?: { bookTitle?: string, sectionTitle?: string }): Promise<{ id: string, type: ContentType }[]> {
     if (nodes.length === 0) return [];
 
     const prompt = `You will be provided an array of text samples from an EPUB book section, ordered exactly as they appear in the book.
@@ -250,7 +263,7 @@ ${JSON.stringify(nodes)}`;
       required: ['justification', 'referenceStartIndex'],
     };
 
-    const result = await this.generateStructured<{ justification: string; referenceStartIndex: number }>(prompt, schema);
+    const result = await this.generateStructured<{ justification: string; referenceStartIndex: number }>(prompt, schema, undefined, context);
 
     const startIndex = result.referenceStartIndex;
 
@@ -265,7 +278,8 @@ ${JSON.stringify(nodes)}`;
 
   public async generateTableAdaptations(
     nodes: { rootCfi: string, imageBlob: Blob }[],
-    thinkingBudget: number = 512
+    thinkingBudget: number = 512,
+    context?: { bookTitle?: string, sectionTitle?: string }
   ): Promise<{ cfi: string, adaptation: string }[]> {
     const instructionPrompt = `ACT AS: An expert accessibility specialist and audiobook narrator.
 TASK: Convert each of the above table images into a "teleprompter adaptation" for Text-to-Speech playback.
@@ -315,7 +329,8 @@ PROCESS:
       },
       {
         thinkingConfig: { includeThoughts: false, thinkingBudget: thinkingBudget }
-      }
+      },
+      context
     );
   }
 }
