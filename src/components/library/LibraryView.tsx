@@ -517,7 +517,7 @@ export const LibraryView: React.FC = () => {
                   data-testid="header-add-button"
                 >
                   {isImporting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                   ) : (
                     <Upload className="w-4 h-4" />
                   )}
@@ -641,7 +641,7 @@ export const LibraryView: React.FC = () => {
           role="status"
           aria-label="Loading library"
         >
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
         </div>
       ) : activeContext === 'notes' ? (
         <GlobalNotesView onContentMissing={(bookId) => {

@@ -180,7 +180,7 @@ export const FileUploader: React.FC = () => {
             onClick={handleDriveConnect}
             disabled={isDriveConnecting}
           >
-            {isDriveConnecting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+            {isDriveConnecting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" aria-hidden="true" /> : null}
             Connect Google Drive
           </Button>
         ) : (
@@ -226,7 +226,9 @@ export const FileUploader: React.FC = () => {
 
         {isImporting ? (
           <div className="flex flex-col items-center justify-center space-y-3">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" role="status" aria-label="Loading" />
+            <div role="status" aria-label="Loading">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+            </div>
 
             {/* Upload/Processing Progress */}
             <div className="w-full flex flex-col items-center space-y-1">

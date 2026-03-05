@@ -9,9 +9,6 @@ vi.mock('../db/DBService', () => ({
   },
 }));
 
-vi.mock('../store/useReaderUIStore', () => ({
-  useReaderUIStore: vi.fn((selector) => selector({ currentBookId: null })),
-}));
 
 // We need to mock useReadingStateStore to return empty progress
 vi.mock('../store/useReadingStateStore', () => ({
