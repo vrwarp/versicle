@@ -200,9 +200,18 @@ export class AudioPlayerService {
 
     private async engageBackgroundMode(item: TTSQueueItem): Promise<boolean> {
         try {
+            let artistStr = 'Versicle';
+            if (item.bookTitle && item.author) {
+                artistStr = `${item.bookTitle} by ${item.author}`;
+            } else if (item.bookTitle) {
+                artistStr = item.bookTitle;
+            } else if (item.author) {
+                artistStr = item.author;
+            }
+
             this.platformIntegration.updateMetadata({
                 title: item.title || 'Chapter Text',
-                artist: item.author || 'Versicle',
+                artist: artistStr,
                 album: item.bookTitle || '',
                 artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
                 sectionIndex: this.stateManager.currentSectionIndex,
@@ -289,9 +298,18 @@ export class AudioPlayerService {
     private updateMediaSessionMetadata() {
         const item = this.stateManager.getCurrentItem();
         if (item) {
+            let artistStr = 'Versicle';
+            if (item.bookTitle && item.author) {
+                artistStr = `${item.bookTitle} by ${item.author}`;
+            } else if (item.bookTitle) {
+                artistStr = item.bookTitle;
+            } else if (item.author) {
+                artistStr = item.author;
+            }
+
             this.platformIntegration.updateMetadata({
                 title: item.title || 'Chapter Text',
-                artist: item.author || 'Versicle',
+                artist: artistStr,
                 album: item.bookTitle || '',
                 artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
                 sectionIndex: this.stateManager.currentSectionIndex,
