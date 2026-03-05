@@ -17,9 +17,11 @@ export function useBookProgress(bookId: string) {
     const [storedProgress, setStoredProgress] = useState<UserProgress | null>(null);
 
     useEffect(() => {
+        let ignore = false;
+
         if (!isCurrent && bookId) {
             dbService.getBookMetadata(bookId).then(meta => {
-                if (meta) {
+                if (!ignore && meta) {
                     setStoredProgress({
                         bookId,
                         percentage: meta.progress || 0,
@@ -30,6 +32,10 @@ export function useBookProgress(bookId: string) {
                 }
             });
         }
+
+        return () => {
+            ignore = true;
+        };
     }, [bookId, isCurrent]);
 
     if (isCurrent) {
