@@ -44,7 +44,7 @@
 *   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
 *   **Drag & Drop**: Drag files anywhere to import.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata.
-*   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" and can be instantly restored by re-importing the file (verified via 3-point fingerprint).
+*   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" using synced metadata. Importing a file with matching metadata will automatically link it to the existing record instead of creating duplicates.
 *   **High-Performance Rendering**: Uses a two-stage memoization strategy to ensure the library view remains silky smooth (60fps) even with thousands of books.
 *   **Zero-Latency Parsing**: Uses a specialized zero-allocation text scanner (`TextScanningTrie`) to process text instantly without garbage collection pauses.
 *   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.
@@ -65,7 +65,7 @@
 *   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
 *   **Smart Rotation**: Automatically switches between Gemini models (Flash Lite/Flash) to handle rate limits (429) and maximize free quotas.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported). Includes "Trace Mode" for debugging rule application.
-*   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1").
+*   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1"), enabled by default in settings.
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
@@ -78,7 +78,7 @@
     *   **Dual Sync**:
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
-        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses smart **Heuristic Sync** (viewed time vs scan time) to minimize API calls.
+        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses smart **Heuristic Sync** (viewed time vs scan time) to minimize API calls, and a lightweight file indexing strategy to speed up "New Book" diffing.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
         *   **Sync Mesh**: Real-time visibility of active devices in the network with "Last Active" status and peer awareness.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the most recent position across the mesh.
@@ -91,7 +91,7 @@
     *   **CSV Import/Export**: Bulk manage pronunciation rules using CSV files.
 *   **Backups & Export**:
     *   **Light**: JSON export of metadata/settings (Data Portability).
-    *   **Full**: ZIP archive including all book files (Data Portability).
+    *   **Full**: ZIP archive including all book files, powered by a **V2 Binary Snapshot** that perfectly preserves the Yjs state without merge conflicts.
     *   **Unified Export**: Share files natively (AirDrop, Nearby Share) or download via browser.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
