@@ -232,7 +232,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   *Trade-off*: User must re-import the *exact same file* to read again.
 *   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files). It bypasses new ID generation to match the existing Yjs record.
     *   **Logic**: Parses the new file but *forces* the internal IDs (Book ID, Spine Items, Batches) to match the provided ID, ensuring the new binary seamlessly reconnects with existing Yjs progress/annotations. It explicitly rewrites all internal references in the extracted data structures to align with the target ID before ingestion. Does NOT write `user_inventory`.
-*   **`deleteBook(id)`**: Cleans up all `static_` and `cache_` stores (Heavy Data) and removes the synced `Content Analysis` (AI data) but deliberately *leaves* the critical `user_` data (Inventory, Progress, Annotations) in the Yjs document. This allows for a "Soft Delete" where the user can restore the book later (Ghost Book) without losing their place.
+*   **`deleteBook(id)`**: Cleans up all `static_` and `cache_` stores (Heavy Data) and removes the synced `Content Analysis` (AI data) but deliberately *leaves* the critical `user_` data (Inventory, Progress, Annotations) in the Yjs document. This allows for a "Soft Delete" where the user can restore the book later (Ghost Book) without losing their place. The UI merges the Yjs inventory with IDB static metadata via `useLibraryStore` to display these "Ghost Books" seamlessly.
 *   **`ingestBook(data)`**: Performs a "Static Only" write. It persists the heavy immutable data (`static_manifests`, `static_resources`) to IDB but relies on the caller (Zustand) to update the Yjs `user_inventory`.
 *   **`addBook(file)`**: Pure ingestion pipeline that extracts data and delegates to `ingestBook`. It only writes to `static_` and `cache_` stores, relying on `useLibraryStore` to handle the `user_inventory` Yjs update.
 *   **`getOffloadedStatus(bookIds)`**: Returns a Map indicating whether the binary resource for each book exists locally or has been offloaded.
@@ -395,9 +395,9 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **`DriveScannerService.ts` (The Brain)**:
     *   **Goal**: Manage high-level sync logic and state.
     *   **Logic**:
-        *   **Heuristic Sync**: To save API quota, it checks if the remote folder's `viewedByMeTime` is more recent than the local `lastScanTime` (`shouldAutoSync`). If not, it skips the expensive scan.
-        *   **Folder Scanning (`scanAndIndex`)**: Scans for EPUB files by querying the `linkedFolderId` explicitly. It optimizes memory by mapping the verbose API `DriveFile` responses to lightweight `DriveFileIndex` objects before persisting them in `useDriveStore`.
-        *   **Diffing (`checkForNewFiles`)**: Compares the lightweight Cloud Index (`useDriveStore`) against the Local Library (`useBookStore` inventory via filenames) to identify "New" files available for import. If the Cloud Index is empty, it forces a fresh scan to populate it before diffing.
+        *   **Heuristic Sync**: To save API quota, it checks if the remote folder's `viewedByMeTime` is more recent than the local `lastScanTime` (`shouldAutoSync`). If not, it skips the expensive scan. If the Cloud Index is empty, it bypasses the heuristic and forces a full folder scan.
+        *   **Folder Scanning (`scanAndIndex`)**: Scans for EPUB files by querying the `linkedFolderId` explicitly. It optimizes memory by mapping the heavy API `DriveFile` responses to lightweight indexing objects (`DriveFileIndex`) before persisting them in `useDriveStore`.
+        *   **Diffing (`checkForNewFiles`)**: Compares the lightweight Cloud Index (`useDriveStore`) against the Local Library (`useBookStore` inventory via filenames) to identify "New" files available for import.
         *   **Direct Store Access**: Reads directly from `useDriveStore` and `useLibraryStore` to manage state and trigger imports.
 *   **`DriveService.ts` (The Muscle)**:
     *   **Goal**: Handle low-level API interactions.
@@ -420,7 +420,7 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **Goal**: Perform database hygiene and remove orphaned data.
 *   **Logic**:
     *   **Orphan Detection**: Scans `static_resources` (files) and `cache_` stores for keys that no longer exist in the Yjs `user_inventory`.
-    *   **Post-Migration Role**: Unlike legacy versions, it *does not* touch user data (inventory, progress) as those are managed by Yjs/Firestore sync. It strictly cleans up the heavy binary/cache data left behind.
+    *   **Post-Migration Role**: After the Yjs migration, this service transition to *only* managing `static_` and `cache_` stores in IndexedDB. It strictly cleans up heavy binary data and cached assets. It *does not* touch or manage any `user_` data (inventory, progress, annotations, overrides), as those are managed entirely by their respective Yjs stores and Firestore sync.
     *   **Metadata Regeneration**: Can re-import books from their binary blobs (`regenerateAllMetadata`) to refresh Yjs metadata if the schema changes, using `DBService.importBookWithId`.
 
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
