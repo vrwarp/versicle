@@ -78,7 +78,7 @@
     *   **Dual Sync**:
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
-        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses smart **Heuristic Sync** (viewed time vs scan time) to minimize API calls, and a lightweight file indexing strategy to speed up "New Book" diffing.
+        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses a smart **Heuristic Sync** (`viewedByMeTime` vs `lastScanTime`) to skip unnecessary expensive API scans, and optimizes memory by mapping heavy API objects to a lightweight file indexing strategy to speed up "New Book" diffing. Forces a full scan if the Cloud Index is empty.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
         *   **Sync Mesh**: Real-time visibility of active devices in the network with "Last Active" status and peer awareness.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the most recent position across the mesh.
@@ -91,7 +91,7 @@
     *   **CSV Import/Export**: Bulk manage pronunciation rules using CSV files.
 *   **Backups & Export**:
     *   **Light**: JSON export of metadata/settings (Data Portability).
-    *   **Full**: ZIP archive including all book files, powered by a **V2 Binary Snapshot** that perfectly preserves the Yjs state without merge conflicts.
+    *   **Full**: ZIP archive including all book files, powered by a **V2 Binary Snapshot** (`Y.encodeStateAsUpdate(yDoc)`) that perfectly preserves the Yjs state without merge conflicts. Restores destructively by clearing `yjsPersistence.clearData()`.
     *   **Unified Export**: Share files natively (AirDrop, Nearby Share) or download via browser.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
