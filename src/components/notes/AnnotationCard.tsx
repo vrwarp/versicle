@@ -62,12 +62,16 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
             <div className="flex-1 min-w-0">
                 {isEditing ? (
                     <div className="mb-2" onClick={(e) => e.stopPropagation()}>
+                        <label htmlFor={`edit-note-${annotation.id}`} className="sr-only">Edit note</label>
                         <input
+                            id={`edit-note-${annotation.id}`}
                             type="text"
                             value={editNoteText}
                             onChange={(e) => setEditNoteText(e.target.value)}
                             className="w-full text-sm p-2 border rounded bg-background text-foreground border-input mb-2"
                             autoFocus
+                            placeholder="Add a note..."
+                            aria-label="Edit note"
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') handleSaveEdit();
                                 if (e.key === 'Escape') {
