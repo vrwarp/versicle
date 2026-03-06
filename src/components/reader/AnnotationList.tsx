@@ -58,13 +58,17 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
               <div className="flex-1 min-w-0">
                 {editingId === annotation.id ? (
                   <div className="mb-2" onClick={(e) => e.stopPropagation()}>
+                    <label htmlFor={`edit-annotation-${annotation.id}`} className="sr-only">Edit annotation note</label>
                     <input
+                      id={`edit-annotation-${annotation.id}`}
                       data-testid="annotation-note-input"
                       type="text"
                       value={editNoteText}
                       onChange={(e) => setEditNoteText(e.target.value)}
                       className="w-full text-xs p-1 border rounded bg-background text-foreground border-input mb-1"
                       autoFocus
+                      placeholder="Add a note..."
+                      aria-label="Edit annotation note"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') saveEdit(annotation.id);
                         if (e.key === 'Escape') setEditingId(null);
