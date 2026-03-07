@@ -114,9 +114,15 @@ export const GlobalSettingsDialog = () => {
     }, BackButtonPriority.OVERLAY, isGlobalSettingsOpen);
 
     useEffect(() => {
+        let ignore = false;
         if (activeTab === 'recovery') {
-            CheckpointService.listCheckpoints().then(setCheckpoints);
+            CheckpointService.listCheckpoints().then(list => {
+                if (!ignore) {
+                    setCheckpoints(list);
+                }
+            });
         }
+        return () => { ignore = true; };
     }, [activeTab]);
 
     const handleExportReadingList = async () => {
@@ -196,11 +202,17 @@ export const GlobalSettingsDialog = () => {
     const [isVoiceReady, setIsVoiceReady] = useState(false);
 
     useEffect(() => {
+        let ignore = false;
         if (providerId === 'piper' && voice) {
-            checkVoiceDownloaded(voice.id).then(setIsVoiceReady);
+            checkVoiceDownloaded(voice.id).then(isReady => {
+                if (!ignore) {
+                    setIsVoiceReady(isReady);
+                }
+            });
         } else {
             setIsVoiceReady(false);
         }
+        return () => { ignore = true; };
     }, [providerId, voice, checkVoiceDownloaded, isDownloading]);
 
     const {
