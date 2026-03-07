@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from '../ui/Input';
 import { PasswordInput } from '../ui/PasswordInput';
 import { Button } from '../ui/Button';
+import { Switch } from '../ui/Switch';
 import { Loader2 } from 'lucide-react';
 
 export interface FirebaseConfig {
@@ -36,6 +37,8 @@ export interface SyncSettingsTabProps {
     isFirebaseSigningIn: boolean;
     firebaseConfig: FirebaseConfig;
     onFirebaseConfigChange: (config: Partial<FirebaseConfig>) => void;
+    forceDevInstance: boolean;
+    onForceDevInstanceChange: (force: boolean) => void;
     onFirebaseSignIn: () => Promise<void>;
     onFirebaseSignOut: () => Promise<void>;
     onClearConfig: () => void;
@@ -60,6 +63,8 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     isFirebaseSigningIn,
     firebaseConfig,
     onFirebaseConfigChange,
+    forceDevInstance,
+    onForceDevInstanceChange,
     onFirebaseSignIn,
     onFirebaseSignOut,
     onClearConfig
@@ -229,6 +234,24 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                             {syncProvider === 'firebase' && 'Real-time sync with automatic conflict resolution.'}
                             {syncProvider === 'none' && 'Sync is disabled. Data is stored locally only.'}
                         </p>
+                    </div>
+                </div>
+
+                {/* Advanced Sync Settings */}
+                <div className="space-y-4 mb-6 pb-6 border-b border-border">
+                    <h4 className="text-sm font-medium">Developer Options</h4>
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                            <Label htmlFor="force-dev-instance-switch">Force Dev Instance</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Use the development Firestore database instead of the main production database.
+                            </p>
+                        </div>
+                        <Switch
+                            id="force-dev-instance-switch"
+                            checked={forceDevInstance}
+                            onCheckedChange={onForceDevInstanceChange}
+                        />
                     </div>
                 </div>
 

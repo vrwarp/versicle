@@ -242,7 +242,8 @@ class FirestoreSyncManager {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime;
 
-        const isDev = import.meta.env.DEV;
+        const forceDevInstance = useSyncStore.getState().forceDevInstance;
+        const isDev = import.meta.env.DEV || forceDevInstance;
         const path = isDev ? `users/${uid}/versicle/dev` : `users/${uid}/versicle/main`;
 
         const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
