@@ -121,7 +121,7 @@ describe('LexiconService', () => {
 
     it('should handle complex regex rules', () => {
       const rules: LexiconRule[] = [
-        { id: '1', original: 'chapter (\\d+)', replacement: 'Section $1', isRegex: true, created: 0 }
+        { id: '1', original: 'chapter (\\d+)', replacement: 'Section $1', isRegex: true, matchType: 'regex', created: 0 }
       ];
       const text = 'Read Chapter 5 now.';
       expect(service.applyLexicon(text, rules)).toBe('Read Section 5 now.');

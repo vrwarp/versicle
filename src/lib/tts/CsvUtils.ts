@@ -31,11 +31,21 @@ export const LexiconCSV = {
 
         // We need at least original and replacement
         if (row.length >= 2) {
+             let matchType: 'ignore_case' | 'match_case' | 'regex' = 'ignore_case';
+             const matchTypeVal = row[2]?.toLowerCase();
+
+             if (matchTypeVal === 'regex' || matchTypeVal === 'match_case' || matchTypeVal === 'ignore_case') {
+                 matchType = matchTypeVal as 'ignore_case' | 'match_case' | 'regex';
+             } else if (matchTypeVal === 'true' || row[2] === '1') {
+                 matchType = 'regex';
+             }
+
              parsedRules.push({
                  original: row[0],
                  replacement: row[1],
                  // Default to false if missing
-                 isRegex: row[2]?.toLowerCase() === 'true' || row[2] === '1',
+                 isRegex: matchType === 'regex',
+                 matchType,
                  applyBeforeGlobal: row[3]?.toLowerCase() === 'true' || row[3] === '1'
              });
         }
@@ -61,7 +71,7 @@ export const LexiconCSV = {
     const rows = rules.map(r => [
         r.original || '',
         r.replacement || '',
-        !!r.isRegex,
+        r.matchType || (r.isRegex ? 'regex' : 'ignore_case'),
         !!r.applyBeforeGlobal
     ]);
 

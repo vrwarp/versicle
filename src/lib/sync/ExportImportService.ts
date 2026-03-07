@@ -485,6 +485,7 @@ export class ExportImportService {
                                 original: rule.original,
                                 replacement: rule.replacement,
                                 isRegex: rule.isRegex,
+                                matchType: rule.matchType,
                                 bookId: rule.bookId
                             });
                             result.lexiconRulesImported++;

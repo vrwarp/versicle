@@ -87,6 +87,7 @@ export class LexiconService {
                     original: r.original,
                     replacement: r.replacement,
                     isRegex: r.isRegex,
+                    matchType: r.matchType || (r.isRegex ? 'regex' : 'ignore_case'),
                     applyBeforeGlobal: false,
                     created: 0,
                     // Bible rules act as lowest priority system defaults
@@ -115,6 +116,7 @@ export class LexiconService {
                     original: r.original,
                     replacement: r.replacement,
                     isRegex: r.isRegex,
+                    matchType: r.matchType || (r.isRegex ? 'regex' : 'ignore_case'),
                     applyBeforeGlobal: false,
                     created: 0,
                     order: Number.MAX_SAFE_INTEGER - BIBLE_LEXICON_RULES.length + i
@@ -180,8 +182,11 @@ export class LexiconService {
         for (const rule of rules) {
             if (!rule.original || !rule.replacement) continue;
 
+            // Determine effective matchType for legacy support
+            const effectiveMatchType = rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case');
+
             // Use a safe delimiter (\0) to prevent cache key collisions
-            const cacheKey = `${rule.id || 'anon'}\0${rule.isRegex}\0${rule.original}\0${rule.replacement}`;
+            const cacheKey = `${rule.id || 'anon'}\0${effectiveMatchType}\0${rule.original}\0${rule.replacement}`;
 
             let compiledRule = this.compiledRegexCache.get(cacheKey);
 
@@ -192,14 +197,15 @@ export class LexiconService {
                     const normalizedReplacement = rule.replacement.normalize('NFKD');
                     let regex: RegExp;
 
-                    if (rule.isRegex) {
+                    if (effectiveMatchType === 'regex') {
                         regex = new RegExp(normalizedOriginal, 'gi');
                     } else {
                         const escapedOriginal = normalizedOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                         const startIsWord = /^\w/.test(normalizedOriginal);
                         const endIsWord = /\w$/.test(normalizedOriginal);
                         const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
-                        regex = new RegExp(regexStr, 'gi');
+                        const flags = effectiveMatchType === 'match_case' ? 'g' : 'gi';
+                        regex = new RegExp(regexStr, flags);
                     }
 
                     compiledRule = {

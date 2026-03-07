@@ -189,6 +189,7 @@ export interface UserOverrides {
     original: string;
     replacement: string;
     isRegex?: boolean;
+  matchType?: 'ignore_case' | 'match_case' | 'regex';
     applyBeforeGlobal?: boolean;
     created: number;
   }[];
@@ -563,6 +564,8 @@ export interface LexiconRule {
   replacement: string;
   /** If true, 'original' is treated as a regular expression. */
   isRegex?: boolean;
+  /** The type of matching to perform. Replaces isRegex. */
+  matchType?: 'ignore_case' | 'match_case' | 'regex';
   /** Optional ID of a specific book. If null/undefined, the rule is global. */
   bookId?: string;
   /**

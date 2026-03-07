@@ -90,6 +90,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             original: editingRule.original,
             replacement: editingRule.replacement,
             isRegex: editingRule.isRegex,
+            matchType: editingRule.matchType || (editingRule.isRegex ? 'regex' : 'ignore_case'),
             bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
             applyBeforeGlobal: editingRule.applyBeforeGlobal
         });
@@ -128,6 +129,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     original: editingRule.original,
                     replacement: editingRule.replacement,
                     isRegex: editingRule.isRegex,
+                    matchType: editingRule.matchType || (editingRule.isRegex ? 'regex' : 'ignore_case'),
                     bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
                     applyBeforeGlobal: editingRule.applyBeforeGlobal,
                     created: 0,
@@ -154,6 +156,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     original: editingRule.original,
                     replacement: editingRule.replacement,
                     isRegex: editingRule.isRegex,
+                    matchType: editingRule.matchType || (editingRule.isRegex ? 'regex' : 'ignore_case'),
                     bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
                     applyBeforeGlobal: editingRule.applyBeforeGlobal,
                     created: 0,
@@ -372,16 +375,19 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                         </div>
                                         <div className="flex items-center justify-between gap-2 mt-2">
                                             <div className="flex gap-4">
-                                                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                    <input
-                                                        data-testid="lexicon-regex-checkbox"
-                                                        type="checkbox"
-                                                        checked={editingRule.isRegex || false}
-                                                        onChange={e => setEditingRule({ ...editingRule, isRegex: e.target.checked })}
-                                                        className="rounded border-input"
-                                                    />
-                                                    Regex
-                                                </label>
+                                                <select
+                                                    data-testid="lexicon-match-type-select"
+                                                    value={editingRule.matchType || (editingRule.isRegex ? 'regex' : 'ignore_case')}
+                                                    onChange={e => {
+                                                        const matchType = e.target.value as 'ignore_case' | 'match_case' | 'regex';
+                                                        setEditingRule({ ...editingRule, matchType, isRegex: matchType === 'regex' });
+                                                    }}
+                                                    className="rounded border-input text-xs bg-background h-6 text-muted-foreground"
+                                                >
+                                                    <option value="ignore_case">Ignore Case</option>
+                                                    <option value="match_case">Match Case</option>
+                                                    <option value="regex">Regular Expression</option>
+                                                </select>
                                                 {scope === 'book' && (
                                                     <label className="flex items-center gap-2 text-xs text-muted-foreground" title="Apply this rule before global rules">
                                                         <input
@@ -406,7 +412,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                 <>
                                     <div className="flex-1 flex flex-col gap-1 min-w-0 py-1">
                                         <div className="flex items-baseline gap-2 flex-wrap">
-                                            {rule.isRegex && <span data-testid="lexicon-regex-badge" className="text-[10px] uppercase font-bold text-purple-600 border border-purple-200 bg-purple-50 px-1 rounded shrink-0">Re</span>}
+                                            {(rule.matchType === 'regex' || (!rule.matchType && rule.isRegex)) && <span data-testid="lexicon-regex-badge" className="text-[10px] uppercase font-bold text-purple-600 border border-purple-200 bg-purple-50 px-1 rounded shrink-0">Re</span>}
+                                            {rule.matchType === 'match_case' && <span data-testid="lexicon-match-case-badge" className="text-[10px] uppercase font-bold text-blue-600 border border-blue-200 bg-blue-50 px-1 rounded shrink-0">Aa</span>}
                                             {rule.applyBeforeGlobal && <span data-testid="lexicon-priority-badge" className="text-[10px] uppercase font-bold text-orange-600 border border-orange-200 bg-orange-50 px-1 rounded shrink-0">Pre</span>}
                                             <span className="font-mono text-sm break-all text-foreground">{rule.original}</span>
                                         </div>
@@ -436,7 +443,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 <ArrowDown size={12} />
                                             </button>
                                         </div>
-                                        <button onClick={() => setEditingRule(rule)} className="text-xs text-primary hover:underline">Edit</button>
+                                        <button onClick={() => setEditingRule({ ...rule, matchType: rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case') })} className="text-xs text-primary hover:underline">Edit</button>
                                         <button aria-label="Delete rule" onClick={() => handleDelete(rule.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={16} /></button>
                                     </div>
                                 </>
@@ -476,16 +483,21 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
                             <div className="flex gap-4">
-                                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <input
-                                        data-testid="lexicon-regex-checkbox"
-                                        type="checkbox"
-                                        checked={editingRule?.isRegex || false}
-                                        onChange={e => setEditingRule({ ...editingRule, isRegex: e.target.checked })}
-                                        className="rounded border-input"
-                                    />
-                                    Regex
-                                </label>
+                                <select
+                                    data-testid="lexicon-match-type-select"
+                                    value={editingRule?.matchType || (editingRule?.isRegex ? 'regex' : 'ignore_case')}
+                                    onChange={e => {
+                                        if (editingRule) {
+                                            const matchType = e.target.value as 'ignore_case' | 'match_case' | 'regex';
+                                            setEditingRule({ ...editingRule, matchType, isRegex: matchType === 'regex' });
+                                        }
+                                    }}
+                                    className="rounded border-input text-xs bg-background h-6 text-muted-foreground"
+                                >
+                                    <option value="ignore_case">Ignore Case</option>
+                                    <option value="match_case">Match Case</option>
+                                    <option value="regex">Regular Expression</option>
+                                </select>
                                 {scope === 'book' && (
                                     <label className="flex items-center gap-2 text-xs text-muted-foreground" title="Apply this rule before global rules">
                                         <input
@@ -583,7 +595,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                         onClick={() => {
                                                             const found = rules.find(r => r.id === item.rule.id);
                                                             if (found) {
-                                                                setEditingRule(found);
+                                                                setEditingRule({ ...found, matchType: found.matchType || (found.isRegex ? 'regex' : 'ignore_case') });
                                                                 setIsAdding(false);
                                                             }
                                                         }}

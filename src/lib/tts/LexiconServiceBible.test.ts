@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => {
   return {
     get: vi.fn(),
     bibleLexiconRules: [
-      { original: 'Bible', replacement: 'Bib', isRegex: false }
+      { original: 'Bible', replacement: 'Bib', isRegex: false, matchType: 'ignore_case' }
     ]
   };
 });
