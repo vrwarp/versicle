@@ -8,7 +8,7 @@ describe('useLocalStorage closure bug', () => {
   });
 
   it('evaluates against the correct React state parameter instead of captured closure', () => {
-    const { result, rerender } = renderHook(
+    const { result } = renderHook(
       ({ key }) => useLocalStorage(key, 0),
       { initialProps: { key: 'key1' } }
     );
