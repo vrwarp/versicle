@@ -2,7 +2,7 @@ import React from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { Button } from '../ui/Button';
-import { Loader2, Library, BookOpen } from 'lucide-react';
+import { Loader2, Library, BookOpen, Upload } from 'lucide-react';
 import { FileUploader } from './FileUploader';
 import { createLogger } from '../../lib/logger';
 
@@ -23,7 +23,7 @@ interface EmptyLibraryProps {
  * @param props - Component props.
  * @returns A React component for the empty library state.
  */
-export const EmptyLibrary: React.FC<EmptyLibraryProps> = () => {
+export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
   const { addBook, isImporting } = useLibraryStore();
   const showToast = useToastStore((state) => state.showToast);
 
@@ -56,24 +56,35 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = () => {
         <FileUploader />
       </div>
 
-      <Button
-        variant="outline"
-        onClick={handleLoadDemo}
-        disabled={isImporting}
-        className="text-primary font-medium gap-2 h-12 px-6 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all touch-manipulation"
-      >
-        {isImporting ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading...
-          </>
-        ) : (
-          <>
-            <BookOpen className="h-4 w-4" />
-            Load Demo Book (Alice in Wonderland)
-          </>
-        )}
-      </Button>
+      <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md justify-center">
+        <Button
+          variant="default"
+          onClick={onImport}
+          disabled={isImporting}
+          className="font-medium gap-2 h-12 px-6 transition-all touch-manipulation w-full sm:w-auto"
+        >
+          <Upload className="h-4 w-4" />
+          Browse Files
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleLoadDemo}
+          disabled={isImporting}
+          className="text-primary font-medium gap-2 h-12 px-6 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all touch-manipulation w-full sm:w-auto"
+        >
+          {isImporting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Loading...
+            </>
+          ) : (
+            <>
+              <BookOpen className="h-4 w-4" />
+              Load Demo Book (Alice in Wonderland)
+            </>
+          )}
+        </Button>
+      </div>
     </div>
   );
 };

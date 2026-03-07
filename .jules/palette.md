@@ -68,3 +68,7 @@
 ## 2025-06-02 - Standardizing Checkboxes for Selection
 **Learning:** Using ad-hoc `div`s with `role="checkbox"` for selection (like in the Reading List dialog) creates maintenance overhead and potential accessibility gaps (missing focus rings, keyboard support).
 **Action:** Always use the shared `Checkbox` component (wrapping Radix UI) for selection interfaces. It handles keyboard navigation (Space/Enter), focus management, and accessibility attributes (`aria-checked`) automatically, ensuring a consistent experience across the app.
+
+## 2026-03-03 - Replaced native button with Button component in GlobalNotesView
+**Learning:** Found a missing `Button` component usage in `GlobalNotesView.tsx` where a native HTML `<button>` was used for the "Clear search" action. The native button also lacked an `aria-label`. Replacing it with the design system's `Button` component ensures consistent styling, while adding an `aria-label` improves keyboard navigation and screen reader support for a generic action text like "Clear search".
+**Action:** Always verify if a native `<button>` element can be replaced by the shared `<Button>` component (`src/components/ui/Button.tsx`) to adhere to the existing UI patterns, and check that an explicit `aria-label` is provided if the button's visible text is ambiguous or absent.

@@ -349,7 +349,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           }
         >
           {isLoading ? (
-            <Loader2 size={20} className="animate-spin" />
+            <Loader2 size={20} className="animate-spin" aria-hidden="true" />
           ) : isPlaying ? (
             <Pause size={20} className="fill-current" />
           ) : (
@@ -458,7 +458,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
       >
         <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center flex items-center justify-center gap-1.5">
           {isLoading ? (
-            <Loader2 size={10} className="animate-spin opacity-70" data-testid="active-loader-icon" />
+            <Loader2 size={10} className="animate-spin opacity-70" data-testid="active-loader-icon" aria-hidden="true" />
           ) : isPlaying ? (
             <Pause size={10} className="fill-current opacity-70" data-testid="active-pause-icon" />
           ) : (

@@ -48,7 +48,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
 
                 {progress === 'processing' && (
                     <div className="flex flex-col items-center gap-4 py-4">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
                         <p className="text-sm text-muted-foreground text-center">
                             We're updating this book to the latest format to improve performance and features.
                         </p>

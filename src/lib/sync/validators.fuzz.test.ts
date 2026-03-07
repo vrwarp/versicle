@@ -230,6 +230,7 @@ describe('Sync Validators Fuzzing', () => {
                         original: rng.nextString(20),
                         replacement: rng.nextString(20),
                         isRegex: rng.nextBool(),
+                        matchType: rng.nextElement(['ignore_case', 'match_case', 'regex']),
                         applyBeforeGlobal: rng.nextBool(),
                         created: Date.now(),
                     })),

@@ -121,7 +121,7 @@ describe('LexiconCSV Fuzzing', () => {
                     id: 'regex-test',
                     original: pattern,
                     replacement: 'replacement',
-                    isRegex: true,
+                    isRegex: true, matchType: 'regex',
                     created: Date.now()
                 }];
 
@@ -143,9 +143,9 @@ describe('LexiconCSV Fuzzing', () => {
     describe('Edge cases', () => {
         it('handles rules with empty strings', () => {
             const edgeCaseRules: LexiconRule[] = [
-                { id: '1', original: '', replacement: '', isRegex: false, created: Date.now() },
-                { id: '2', original: 'test', replacement: '', isRegex: false, created: Date.now() },
-                { id: '3', original: '', replacement: 'test', isRegex: false, created: Date.now() },
+                { id: '1', original: '', replacement: '', isRegex: false, matchType: 'ignore_case', created: Date.now() },
+                { id: '2', original: 'test', replacement: '', isRegex: false, matchType: 'ignore_case', created: Date.now() },
+                { id: '3', original: '', replacement: 'test', isRegex: false, matchType: 'ignore_case', created: Date.now() },
             ];
 
             for (const rule of edgeCaseRules) {
@@ -170,7 +170,7 @@ describe('LexiconCSV Fuzzing', () => {
                 id: 'long-rule',
                 original: rng.nextString(1000),
                 replacement: rng.nextString(1000),
-                isRegex: false,
+                isRegex: false, matchType: 'ignore_case',
                 created: Date.now()
             }];
 

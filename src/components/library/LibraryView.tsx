@@ -31,6 +31,7 @@ import { DuplicateBookError } from '../../types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useNavigationGuard } from '../../hooks/useNavigationGuard';
 import { BackButtonPriority } from '../../store/useBackNavigationStore';
+import { useDebounce } from '../../hooks/useDebounce';
 
 /**
  * The main library view component.
@@ -90,6 +91,7 @@ export const LibraryView: React.FC = () => {
   // const restoreFileInputRef = useRef<HTMLInputElement>(null); // Removed
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -351,7 +353,8 @@ export const LibraryView: React.FC = () => {
 
   // OPTIMIZATION: Memoize filtered and sorted books
   const filteredAndSortedBooks = useMemo(() => {
-    const query = searchQuery.toLowerCase();
+    // BOLT OPTIMIZATION: Use debounced search query to prevent filtering/sorting on every keystroke
+    const query = debouncedSearchQuery.toLowerCase();
 
     // 1. Filter using the pre-computed index (fast string check)
     let filtered = searchableBooks
@@ -392,7 +395,47 @@ export const LibraryView: React.FC = () => {
           return 0;
       }
     });
-  }, [searchableBooks, searchQuery, sortOrder, libraryFilterMode, staticMetadata]);
+  }, [searchableBooks, debouncedSearchQuery, sortOrder, libraryFilterMode, staticMetadata]);
+
+  // OPTIMIZATION: Memoize rendered VDOM items to prevent O(N) allocation on every keystroke in the search bar.
+  // When `searchQuery` updates (keystroke), LibraryView re-renders immediately, but `debouncedSearchQuery`
+  // (and thus `filteredAndSortedBooks`) stays the same until the debounce delay elapses.
+  const renderedGridItems = useMemo(() => {
+    return filteredAndSortedBooks.map((book) => {
+      const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+      return (
+        <div key={book.id} className="flex justify-center">
+          <BookCard
+            book={book}
+            isGhostBook={isGhostBook}
+            onOpen={handleBookOpen}
+            onDelete={handleDelete}
+            onOffload={handleOffload}
+            onRestore={handleRestore}
+            onResume={handleResumeReading}
+          />
+        </div>
+      );
+    });
+  }, [filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore, handleResumeReading]);
+
+  const renderedListItems = useMemo(() => {
+    return filteredAndSortedBooks.map((book) => {
+      const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+      return (
+        <BookListItem
+          key={book.id}
+          book={book}
+          isGhostBook={isGhostBook}
+          onOpen={handleBookOpen}
+          onDelete={handleDelete}
+          onOffload={handleOffload}
+          onRestore={handleRestore}
+        />
+      );
+    });
+  }, [filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore]);
+
 
   return (
     <div
@@ -514,7 +557,7 @@ export const LibraryView: React.FC = () => {
                   data-testid="header-add-button"
                 >
                   {isImporting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                   ) : (
                     <Upload className="w-4 h-4" />
                   )}
@@ -638,7 +681,7 @@ export const LibraryView: React.FC = () => {
           role="status"
           aria-label="Loading library"
         >
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
         </div>
       ) : activeContext === 'notes' ? (
         <GlobalNotesView onContentMissing={(bookId) => {
@@ -664,42 +707,11 @@ export const LibraryView: React.FC = () => {
             <>
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
-                  {filteredAndSortedBooks.map((book) => {
-
-
-                    const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
-
-                    return (
-                      <div key={book.id} className="flex justify-center">
-                        <BookCard
-                          book={book}
-                          isGhostBook={isGhostBook}
-                          onOpen={handleBookOpen}
-                          onDelete={handleDelete}
-                          onOffload={handleOffload}
-                          onRestore={handleRestore}
-                          onResume={handleResumeReading}
-                        />
-                      </div>
-                    )
-                  })}
+                  {renderedGridItems}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 w-full">
-                  {filteredAndSortedBooks.map((book) => {
-                    const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
-                    return (
-                      <BookListItem
-                        key={book.id}
-                        book={book}
-                        isGhostBook={isGhostBook}
-                        onOpen={handleBookOpen}
-                        onDelete={handleDelete}
-                        onOffload={handleOffload}
-                        onRestore={handleRestore}
-                      />
-                    )
-                  })}
+                  {renderedListItems}
                 </div>
               )}
               {/* Spacer for bottom navigation or just breathing room */}

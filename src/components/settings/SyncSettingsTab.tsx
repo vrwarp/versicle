@@ -309,7 +309,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                 >
                                     {isFirebaseSigningIn ? (
                                         <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                                             Signing in...
                                         </>
                                     ) : (
@@ -360,7 +360,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                 onClick={handleDriveConnect}
                                 disabled={isDriveConnecting}
                             >
-                                {isDriveConnecting ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : null}
+                                {isDriveConnecting ? <Loader2 className="h-3 w-3 animate-spin mr-2" aria-hidden="true" /> : null}
                                 Connect
                             </Button>
                         )}
@@ -409,7 +409,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                     >
                                         {isScanning ? (
                                             <>
-                                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                                <Loader2 className="mr-2 h-3 w-3 animate-spin" aria-hidden="true" />
                                                 Scanning...
                                             </>
                                         ) : (

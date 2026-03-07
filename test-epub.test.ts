@@ -6,6 +6,6 @@ describe('epub.js behavior', () => {
         // We just need to check if EpubCFI constructor takes a node.
         // And if contents has cfiFromNode.
         console.log("EpubCFI prototype:", Object.keys(ePub.CFI.prototype));
-        console.log("Contents prototype:", Object.keys((ePub as any).Contents?.prototype || {}));
+        console.log("Contents prototype:", Object.keys((ePub as unknown as { Contents?: { prototype: unknown } }).Contents?.prototype || {}));
     });
 });

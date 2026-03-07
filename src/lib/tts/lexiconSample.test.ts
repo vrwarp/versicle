@@ -14,7 +14,7 @@ describe('Lexicon Sample CSV', () => {
     // Simple check, not robust CSV parsing for the test unless needed
     expect(row1).toContain('"Dr."');
     expect(row1).toContain('"Doctor"');
-    expect(row1).toContain('false');
+    expect(row1).toContain('ignore_case');
   });
 
   it('should validly parse as CSV', () => {

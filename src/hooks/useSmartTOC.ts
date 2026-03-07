@@ -52,7 +52,10 @@ export function useSmartTOC(
         throw new Error('No readable content found in sections.');
       }
 
-      const generatedTitles = await genAIService.generateTOCForBatch(sectionsToProcess);
+      const bookMetadata = await dbService.getBookMetadata(bookId);
+      const bookTitle = bookMetadata?.title || 'Unknown Book';
+
+      const generatedTitles = await genAIService.generateTOCForBatch(sectionsToProcess, { bookTitle });
 
       const titleMap = new Map<string, string>();
       generatedTitles.forEach(item => titleMap.set(item.id, item.title));

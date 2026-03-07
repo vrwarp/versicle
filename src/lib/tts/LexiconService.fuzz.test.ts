@@ -58,7 +58,7 @@ describe('LexiconService.applyLexicon Fuzzing', () => {
             id: `malformed-${id}`,
             original: rng.nextElement(malformedPatterns),
             replacement: rng.nextString(rng.nextInt(0, 10)),
-            isRegex: true,
+            isRegex: true, matchType: 'regex',
             created: Date.now()
         };
     };
@@ -123,7 +123,7 @@ describe('LexiconService.applyLexicon Fuzzing', () => {
                         id: `regex-${j}`,
                         original: rng.nextElement(validPatterns),
                         replacement: rng.nextString(rng.nextInt(0, 10)),
-                        isRegex: true,
+                        isRegex: true, matchType: 'regex',
                         created: Date.now()
                     });
                 }
@@ -177,7 +177,7 @@ describe('LexiconService.applyLexicon Fuzzing', () => {
                     id: 'valid-regex',
                     original: '\\bword\\b',
                     replacement: 'WORD',
-                    isRegex: true,
+                    isRegex: true, matchType: 'regex',
                     created: Date.now()
                 });
                 rules.push(createMalformedRegexRule(rng, 2)); // Malformed
@@ -232,7 +232,7 @@ describe('LexiconService.applyLexicon Fuzzing', () => {
                     id: 'unicode-rule',
                     original: rng.nextUnicodeString(rng.nextInt(1, 10)),
                     replacement: rng.nextUnicodeString(rng.nextInt(0, 10)),
-                    isRegex: false,
+                    isRegex: false, matchType: 'ignore_case',
                     created: Date.now()
                 }];
 
@@ -252,9 +252,9 @@ describe('LexiconService.applyLexicon Fuzzing', () => {
             const text = 'Hello world';
 
             const edgeCaseRules: LexiconRule[] = [
-                { id: '1', original: '', replacement: 'test', isRegex: false, created: Date.now() },
-                { id: '2', original: 'hello', replacement: '', isRegex: false, created: Date.now() },
-                { id: '3', original: '', replacement: '', isRegex: false, created: Date.now() },
+                { id: '1', original: '', replacement: 'test', isRegex: false, matchType: 'ignore_case', created: Date.now() },
+                { id: '2', original: 'hello', replacement: '', isRegex: false, matchType: 'ignore_case', created: Date.now() },
+                { id: '3', original: '', replacement: '', isRegex: false, matchType: 'ignore_case', created: Date.now() },
             ];
 
             for (const rule of edgeCaseRules) {

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { AudioContentPipeline } from './src/lib/tts/AudioContentPipeline';
-import { preprocessBlockRoots } from './src/lib/cfi-utils';
 
 describe('groupSentencesByRoot behavior', () => {
     it('groups correctly', () => {
@@ -16,10 +15,10 @@ describe('groupSentencesByRoot behavior', () => {
             { text: 'C', cfi: 'epubcfi(/6/28!/4/2/14/2/2/80/4/2/1:7)' }
         ];
 
-        // @ts-ignore
-        const preprocessedTableRoots = pipeline.preprocessTableRoots(tableImages);
+        // @ts-expect-error accessing private method
+        const preprocessedTableRoots = pipeline["tableProcessor"].preprocessTableRoots(tableImages);
 
-        // @ts-ignore
+        // @ts-expect-error accessing private method
         const groups = pipeline.groupSentencesByRoot(sentences, preprocessedTableRoots);
         console.log("GROUPS:", JSON.stringify(groups, null, 2));
         expect(groups).toBeDefined();

@@ -60,6 +60,7 @@ vi.mock('../../db/DBService', () => ({
             author: 'Test Author',
             coverUrl: 'http://example.com/cover.jpg'
         }),
+        getBookStructure: vi.fn().mockResolvedValue({ toc: [] }),
         updatePlaybackState: vi.fn().mockResolvedValue(undefined),
         getTTSState: vi.fn().mockResolvedValue(null),
         saveTTSState: vi.fn(),
@@ -314,6 +315,7 @@ describe('AudioPlayerService', () => {
         expect(getTTSContentSpy).toHaveBeenCalledWith('book1', 'sec3');
 
         // Check if GenAI detection was triggered
+        // Now called with context { bookTitle, sectionTitle }
         expect(genAIService.detectContentTypes).toHaveBeenCalled();
     });
 
@@ -426,10 +428,16 @@ describe('AudioPlayerService', () => {
                 { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)", sourceIndices: [2] }, // Group 3 (Parent A)
             ];
 
+            // Mock DB to return book and structure for titles
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vi.spyOn(dbService, 'getBookMetadata').mockResolvedValue({ title: 'Book 1', author: 'Author' } as any);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vi.spyOn(dbService, 'getBookStructure').mockResolvedValue({ toc: [{ href: 'sec1', title: 'Section 1' }] } as any);
+
             // Mock GenAI response
             // IDs correspond to indices: '0', '1', '2'
             // @ts-expect-error Mock implementation
-            genAIService.detectContentTypes.mockResolvedValue([
+            vi.mocked(genAIService.detectContentTypes).mockResolvedValue([
                 { id: '0', type: 'main' },
                 { id: '1', type: 'main' },
                 { id: '2', type: 'reference' } // Skip this one

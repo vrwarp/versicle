@@ -33,7 +33,8 @@ describe('useLexiconStore', () => {
         useLexiconStore.getState().addRule({
             original: 'orig',
             replacement: 'rep',
-            isRegex: false
+            isRegex: false,
+            matchType: 'ignore_case'
         });
 
         const rules = useLexiconStore.getState().rules;

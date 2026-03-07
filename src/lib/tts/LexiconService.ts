@@ -17,10 +17,12 @@ interface CompiledLexiconRule {
  */
 export class LexiconService {
     private static instance: LexiconService;
-    // OPTIMIZATION: Cache compiled rules (Regex objects) keyed by the rules array reference.
-    // This assumes that the caller (AudioPlayerService) reuses the rule array for sequential calls (it does).
-    // Using WeakMap avoids memory leaks as old rule arrays are garbage collected.
+    // OPTIMIZATION: Fast path cache for stable rule arrays (O(1) lookup).
     private compiledRulesCache = new WeakMap<LexiconRule[], CompiledLexiconRule[]>();
+
+    // OPTIMIZATION: Secondary cache for individual compiled rules.
+    // Prevents expensive regex re-compilation when the rule array is regenerated but the rules haven't changed.
+    private compiledRegexCache = new Map<string, CompiledLexiconRule>();
     private globalBibleLexiconEnabled: boolean = true;
 
     private constructor() { }
@@ -85,6 +87,7 @@ export class LexiconService {
                     original: r.original,
                     replacement: r.replacement,
                     isRegex: r.isRegex,
+                    matchType: r.matchType || (r.isRegex ? 'regex' : 'ignore_case'),
                     applyBeforeGlobal: false,
                     created: 0,
                     // Bible rules act as lowest priority system defaults
@@ -113,6 +116,7 @@ export class LexiconService {
                     original: r.original,
                     replacement: r.replacement,
                     isRegex: r.isRegex,
+                    matchType: r.matchType || (r.isRegex ? 'regex' : 'ignore_case'),
                     applyBeforeGlobal: false,
                     created: 0,
                     order: Number.MAX_SAFE_INTEGER - BIBLE_LEXICON_RULES.length + i
@@ -169,39 +173,70 @@ export class LexiconService {
     }
 
     private getCompiledRules(rules: LexiconRule[]): CompiledLexiconRule[] {
+        // Fast path: O(1) lookup if array reference hasn't changed.
         let compiled = this.compiledRulesCache.get(rules);
         if (compiled) return compiled;
 
         compiled = [];
+
         for (const rule of rules) {
             if (!rule.original || !rule.replacement) continue;
 
-            try {
-                // Pre-normalize during compilation
-                const normalizedOriginal = rule.original.normalize('NFKD');
-                const normalizedReplacement = rule.replacement.normalize('NFKD');
-                let regex: RegExp;
+            // Determine effective matchType for legacy support
+            const effectiveMatchType = rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case');
 
-                if (rule.isRegex) {
-                    regex = new RegExp(normalizedOriginal, 'gi');
-                } else {
-                    const escapedOriginal = normalizedOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const startIsWord = /^\w/.test(normalizedOriginal);
-                    const endIsWord = /\w$/.test(normalizedOriginal);
-                    const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
-                    regex = new RegExp(regexStr, 'gi');
+            // Use a safe delimiter (\0) to prevent cache key collisions
+            const cacheKey = `${rule.id || 'anon'}\0${effectiveMatchType}\0${rule.original}\0${rule.replacement}`;
+
+            let compiledRule = this.compiledRegexCache.get(cacheKey);
+
+            if (!compiledRule) {
+                try {
+                    // Pre-normalize during compilation
+                    const normalizedOriginal = rule.original.normalize('NFKD');
+                    const normalizedReplacement = rule.replacement.normalize('NFKD');
+                    let regex: RegExp;
+
+                    if (effectiveMatchType === 'regex') {
+                        regex = new RegExp(normalizedOriginal, 'gi');
+                    } else {
+                        const escapedOriginal = normalizedOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const startIsWord = /^\w/.test(normalizedOriginal);
+                        const endIsWord = /\w$/.test(normalizedOriginal);
+                        const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
+                        const flags = effectiveMatchType === 'match_case' ? 'g' : 'gi';
+                        regex = new RegExp(regexStr, flags);
+                    }
+
+                    compiledRule = {
+                        originalRule: rule,
+                        regex,
+                        replacement: normalizedReplacement
+                    };
+
+                    // Memory bounds for the Map cache to prevent unlimited growth if rules change frequently
+                    if (this.compiledRegexCache.size > 2000) {
+                        // Clear 10% of entries (oldest) if cache gets too large
+                        let i = 0;
+                        for (const key of this.compiledRegexCache.keys()) {
+                            if (i++ > 200) break;
+                            this.compiledRegexCache.delete(key);
+                        }
+                    }
+
+                    this.compiledRegexCache.set(cacheKey, compiledRule);
+                } catch (e) {
+                    console.warn(`Invalid regex for lexicon rule: ${rule.original}`, e);
+                    continue; // Skip appending if invalid
                 }
+            }
 
-                compiled.push({
-                    originalRule: rule,
-                    regex,
-                    replacement: normalizedReplacement
-                });
-            } catch (e) {
-                console.warn(`Invalid regex for lexicon rule: ${rule.original}`, e);
+            if (compiledRule) {
+                compiled.push(compiledRule);
             }
         }
 
+        // Cache the result for this specific array reference.
         this.compiledRulesCache.set(rules, compiled);
         return compiled;
     }

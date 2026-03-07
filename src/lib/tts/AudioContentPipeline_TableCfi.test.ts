@@ -1,10 +1,10 @@
 
 import { describe, it, expect } from 'vitest';
-import { AudioContentPipeline } from './AudioContentPipeline';
+import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { SentenceNode } from '../tts';
 
 describe('AudioContentPipeline Table CFI Logic', () => {
-    const pipeline = new AudioContentPipeline();
+    const processor = new TableAdaptationProcessor();
 
     it('should correctly exclude siblings when using Range CFI with parent container', () => {
         // Table CFI is a range within parent /6/14!/4
@@ -20,7 +20,7 @@ describe('AudioContentPipeline Table CFI Logic', () => {
             { text: 'Outside Sibling', cfi: 'epubcfi(/6/14!/4/4/1:0)' }
         ];
 
-        const result = pipeline.mapSentencesToAdaptations(sentences, adaptationsMap);
+        const result = processor.mapSentencesToAdaptations(sentences, adaptationsMap);
 
         const indices = result.flatMap(r => r.indices);
         expect(indices).toContain(0); // Inside

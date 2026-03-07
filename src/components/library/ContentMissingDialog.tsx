@@ -83,7 +83,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                         >
                             {isCloudRestoring ? (
                                 <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                                     Downloading...
                                 </>
                             ) : (
@@ -97,7 +97,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                     <Button onClick={handleRestoreClick} disabled={isRestoring || isCloudRestoring} className="w-full sm:w-auto">
                         {isRestoring ? (
                             <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                                 Restoring...
                             </>
                         ) : (

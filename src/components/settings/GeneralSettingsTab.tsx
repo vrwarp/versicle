@@ -103,7 +103,7 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
 
                 {isImporting && (
                     <div className="flex flex-col items-center justify-center space-y-3 mt-4 p-4 bg-muted/30 rounded-lg">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
 
                         <div className="w-full flex flex-col items-center space-y-1">
                             <p className="text-sm text-muted-foreground">{uploadStatus || 'Processing files...'}</p>

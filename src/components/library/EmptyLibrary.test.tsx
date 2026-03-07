@@ -52,6 +52,16 @@ describe('EmptyLibrary', () => {
     expect(screen.getByText('Your library is empty')).toBeInTheDocument();
     expect(screen.getByTestId('file-uploader-mock')).toBeInTheDocument();
     expect(screen.getByText(/Load Demo Book/)).toBeInTheDocument();
+    expect(screen.getByText('Browse Files')).toBeInTheDocument();
+  });
+
+  it('calls onImport when Browse Files button is clicked', () => {
+    const mockOnImport = vi.fn();
+    render(<EmptyLibrary onImport={mockOnImport} />);
+
+    fireEvent.click(screen.getByText('Browse Files'));
+
+    expect(mockOnImport).toHaveBeenCalledTimes(1);
   });
 
   it('handles demo book loading success', async () => {

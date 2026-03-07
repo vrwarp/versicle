@@ -64,6 +64,7 @@ export const UserOverridesSchema = z.object({
         original: z.string(),
         replacement: z.string(),
         isRegex: z.boolean().optional(),
+        matchType: z.enum(['ignore_case', 'match_case', 'regex']).optional(),
         applyBeforeGlobal: z.boolean().optional(),
         created: z.number(),
     })),
