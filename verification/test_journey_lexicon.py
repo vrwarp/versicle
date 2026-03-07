@@ -37,17 +37,17 @@ def test_journey_lexicon(page: Page):
     print("Adding new rule...")
     page.get_by_test_id("lexicon-add-rule-btn").click()
 
-    # Verify Regex Checkbox exists
-    print("Verifying Regex capability...")
-    regex_checkbox = page.get_by_test_id("lexicon-regex-checkbox")
-    expect(regex_checkbox).to_be_visible()
+    # Verify Match Type Select exists
+    print("Verifying Match Type capability...")
+    match_type_select = page.get_by_test_id("lexicon-match-type-select")
+    expect(match_type_select).to_be_visible()
 
-    # Toggle Regex
-    regex_checkbox.check()
-    expect(regex_checkbox).to_be_checked()
-    regex_checkbox.uncheck()
-    expect(regex_checkbox).not_to_be_checked()
-    regex_checkbox.check() # Leave checked for the rule
+    # Toggle Match Type
+    match_type_select.select_option("regex")
+    expect(match_type_select).to_have_value("regex")
+    match_type_select.select_option("ignore_case")
+    expect(match_type_select).to_have_value("ignore_case")
+    match_type_select.select_option("regex") # Leave regex selected for the rule
 
     # Check for Cancel Button (Bug Reproduction)
     print("Verifying Cancel button visibility...")
