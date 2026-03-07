@@ -49,6 +49,8 @@ import { DriveFolderPicker } from '../drive/DriveFolderPicker';
 import { useDriveStore } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
 import { useToastStore } from '../../store/useToastStore';
+import { getDB } from '../../db/db';
+import { disconnectYjs } from '../../store/yjs-provider';
 
 export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     currentDeviceId,
@@ -170,6 +172,54 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     }, [currentDeviceName]);
     const hasDeviceNameChanged = localDeviceName !== currentDeviceName;
 
+    const handleForceDevInstanceToggle = async (checked: boolean) => {
+        if (!confirm("This will purge all local data (books, annotations, and settings) and reload the app to switch instances. Are you sure you want to proceed?")) {
+            return;
+        }
+
+        try {
+            await disconnectYjs();
+
+            // Clear IndexedDB (static and cache stores)
+            const db = await getDB();
+            await db.clear('static_manifests');
+            await db.clear('static_resources');
+            await db.clear('static_structure');
+            await db.clear('cache_table_images');
+            await db.clear('cache_render_metrics');
+            await db.clear('cache_audio_blobs');
+            await db.clear('cache_session_state');
+            await db.clear('cache_tts_preparation');
+
+            // Save the toggle state before clearing local storage
+            // This is slightly tricky: if we clear all local storage, the setting is lost.
+            // But we actually only want to save the new toggle.
+            // Wait, we need the new setting to be active when it reloads.
+            const currentSyncState = localStorage.getItem('sync-storage');
+
+            // Clear LocalStorage (includes Yjs persistence and preferences)
+            localStorage.clear();
+
+            // Restore sync storage but with updated toggle
+            if (currentSyncState) {
+                const parsed = JSON.parse(currentSyncState);
+                if (parsed.state) {
+                    parsed.state.forceDevInstance = checked;
+                    localStorage.setItem('sync-storage', JSON.stringify(parsed));
+                }
+            } else {
+                // Fallback if structured oddly
+                onForceDevInstanceChange(checked);
+            }
+
+            // Reload to reset Yjs stores
+            window.location.reload();
+        } catch (e) {
+            console.error('Failed to clear data', e);
+            alert('Failed to clear data. Please check console.');
+        }
+    };
+
     return (
         <div className="space-y-8">
             {/* Section 1: App Sync */}
@@ -250,7 +300,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                         <Switch
                             id="force-dev-instance-switch"
                             checked={forceDevInstance}
-                            onCheckedChange={onForceDevInstanceChange}
+                            onCheckedChange={handleForceDevInstanceToggle}
                         />
                     </div>
                 </div>

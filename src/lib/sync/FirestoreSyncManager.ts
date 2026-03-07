@@ -12,7 +12,7 @@ import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
-import { yDoc } from '../../store/yjs-provider';
+import { yDoc, CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
 import { CheckpointService } from './CheckpointService';
 import * as Y from 'yjs';
 import { useBookStore } from '../../store/useBookStore';
@@ -244,7 +244,8 @@ class FirestoreSyncManager {
 
         const forceDevInstance = useSyncStore.getState().forceDevInstance;
         const isDev = import.meta.env.DEV || forceDevInstance;
-        const path = isDev ? `users/${uid}/versicle/dev` : `users/${uid}/versicle/main`;
+        const schemaSuffix = CURRENT_SCHEMA_VERSION > 1 ? `${CURRENT_SCHEMA_VERSION}` : '';
+        const path = isDev ? `users/${uid}/versicle/dev${schemaSuffix}` : `users/${uid}/versicle/main${schemaSuffix}`;
 
         const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
 
