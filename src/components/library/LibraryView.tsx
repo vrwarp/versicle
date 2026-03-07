@@ -397,6 +397,46 @@ export const LibraryView: React.FC = () => {
     });
   }, [searchableBooks, debouncedSearchQuery, sortOrder, libraryFilterMode, staticMetadata]);
 
+  // OPTIMIZATION: Memoize rendered VDOM items to prevent O(N) allocation on every keystroke in the search bar.
+  // When `searchQuery` updates (keystroke), LibraryView re-renders immediately, but `debouncedSearchQuery`
+  // (and thus `filteredAndSortedBooks`) stays the same until the debounce delay elapses.
+  const renderedGridItems = useMemo(() => {
+    return filteredAndSortedBooks.map((book) => {
+      const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+      return (
+        <div key={book.id} className="flex justify-center">
+          <BookCard
+            book={book}
+            isGhostBook={isGhostBook}
+            onOpen={handleBookOpen}
+            onDelete={handleDelete}
+            onOffload={handleOffload}
+            onRestore={handleRestore}
+            onResume={handleResumeReading}
+          />
+        </div>
+      );
+    });
+  }, [filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore, handleResumeReading]);
+
+  const renderedListItems = useMemo(() => {
+    return filteredAndSortedBooks.map((book) => {
+      const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
+      return (
+        <BookListItem
+          key={book.id}
+          book={book}
+          isGhostBook={isGhostBook}
+          onOpen={handleBookOpen}
+          onDelete={handleDelete}
+          onOffload={handleOffload}
+          onRestore={handleRestore}
+        />
+      );
+    });
+  }, [filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore]);
+
+
   return (
     <div
       data-testid="library-view"
@@ -667,42 +707,11 @@ export const LibraryView: React.FC = () => {
             <>
               {viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
-                  {filteredAndSortedBooks.map((book) => {
-
-
-                    const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
-
-                    return (
-                      <div key={book.id} className="flex justify-center">
-                        <BookCard
-                          book={book}
-                          isGhostBook={isGhostBook}
-                          onOpen={handleBookOpen}
-                          onDelete={handleDelete}
-                          onOffload={handleOffload}
-                          onRestore={handleRestore}
-                          onResume={handleResumeReading}
-                        />
-                      </div>
-                    )
-                  })}
+                  {renderedGridItems}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 w-full">
-                  {filteredAndSortedBooks.map((book) => {
-                    const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
-                    return (
-                      <BookListItem
-                        key={book.id}
-                        book={book}
-                        isGhostBook={isGhostBook}
-                        onOpen={handleBookOpen}
-                        onDelete={handleDelete}
-                        onOffload={handleOffload}
-                        onRestore={handleRestore}
-                      />
-                    )
-                  })}
+                  {renderedListItems}
                 </div>
               )}
               {/* Spacer for bottom navigation or just breathing room */}
