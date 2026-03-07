@@ -243,7 +243,7 @@ class FirestoreSyncManager {
         const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime;
 
         const isDev = import.meta.env.DEV;
-        const path = isDev ? `users/${uid}/versicle/dev` : `users/${uid}/versicle/main2`;
+        const path = isDev ? `users/${uid}/versicle/dev` : `users/${uid}/versicle/main`;
 
         const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
 
