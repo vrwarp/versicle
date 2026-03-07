@@ -223,7 +223,8 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
                 title: manifest.title,
                 author: manifest.author,
                 sourceFilename: file.name,
-                lastInteraction: Date.now()
+                lastInteraction: Date.now(),
+                coverPalette: manifest.coverPalette
                 // status, tags, rating, addedAt preserved from ...existingBook
               };
               userStore.addBook(updatedInventoryItem); // upsert
@@ -356,7 +357,8 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           sourceFilename: file.name,
           status: 'unread',
           tags: [],
-          rating: 0
+          rating: 0,
+          coverPalette: manifest.coverPalette
         };
 
         // 3. Update Sync Store
@@ -463,7 +465,8 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             sourceFilename: sourceFilename, // Guaranteed match from batch ingestion
             tags: [],
             status: 'unread',
-            lastInteraction: Date.now()
+            lastInteraction: Date.now(),
+            coverPalette: manifest.coverPalette
           };
           return inventoryItem;
         });

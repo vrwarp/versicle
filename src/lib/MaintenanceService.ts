@@ -141,6 +141,7 @@ export class MaintenanceService {
           useBookStore.getState().updateBook(bookId, {
             title: manifest.title,
             author: manifest.author,
+            coverPalette: manifest.coverPalette,
             // We preserve addedAt, tags, status, etc.
           });
 

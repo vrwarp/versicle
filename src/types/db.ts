@@ -43,6 +43,10 @@ export interface StaticBookManifest {
    * Moved here to allow fast loading in library view without fetching heavy resources.
    */
   coverBlob?: Blob;
+  /**
+   * Ghost Book metadata: Palette snapshot generated during ingestion.
+   */
+  coverPalette?: number[];
 }
 
 /**
@@ -189,7 +193,7 @@ export interface UserOverrides {
     original: string;
     replacement: string;
     isRegex?: boolean;
-  matchType?: 'ignore_case' | 'match_case' | 'regex';
+    matchType?: 'ignore_case' | 'match_case' | 'regex';
     applyBeforeGlobal?: boolean;
     created: number;
   }[];
