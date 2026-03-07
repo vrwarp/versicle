@@ -1,4 +1,4 @@
-import { renderHook, waitFor, render } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
 import React, { act } from 'react';
@@ -61,7 +61,9 @@ vi.mock('../lib/sync/CheckpointService', () => {
 
 describe('GlobalSettingsDialog Predictability', () => {
   it('should not throw or cause unmounted state updates when promises resolve after unmount', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let voiceResolver: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let checkpointsResolver: any;
 
     // @ts-expect-error inject into global for vi.mock
@@ -81,7 +83,7 @@ describe('GlobalSettingsDialog Predictability', () => {
             if (voiceResolver) voiceResolver(true);
             if (checkpointsResolver) checkpointsResolver([]);
         });
-    } catch (e) {
+    } catch {
         errorCaught = true;
     }
 
