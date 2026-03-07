@@ -80,7 +80,7 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           ) : (
             <>
               <BookOpen className="h-4 w-4" />
-              Load Demo Book
+              Load Demo Book (Alice in Wonderland)
             </>
           )}
         </Button>
