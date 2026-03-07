@@ -5,9 +5,9 @@ import type { LexiconRule } from '../../types/db';
 describe('LexiconCSV', () => {
   it('should roundtrip rules with applyBeforeGlobal', () => {
     const rules: LexiconRule[] = [
-      { id: '1', original: 'Hello', replacement: 'Hi', isRegex: false, applyBeforeGlobal: true, created: 0 },
-      { id: '2', original: 'World', replacement: 'Earth', isRegex: true, applyBeforeGlobal: false, created: 0 },
-      { id: '3', original: 'Test', replacement: 'T', isRegex: false, created: 0 } // undefined applyBeforeGlobal
+      { id: '1', original: 'Hello', replacement: 'Hi', isRegex: false, matchType: 'ignore_case', applyBeforeGlobal: true, created: 0 },
+      { id: '2', original: 'World', replacement: 'Earth', isRegex: true, matchType: 'regex', applyBeforeGlobal: false, created: 0 },
+      { id: '3', original: 'Test', replacement: 'T', isRegex: false, matchType: 'ignore_case', created: 0 } // undefined applyBeforeGlobal
     ];
 
     const csv = LexiconCSV.generate(rules);

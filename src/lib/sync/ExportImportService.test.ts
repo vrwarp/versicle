@@ -56,6 +56,7 @@ vi.mock('../../store/useLexiconStore', () => ({
                     original: 'Capt.',
                     replacement: 'Captain',
                     isRegex: false,
+                    matchType: 'ignore_case',
                     created: 1700000000000
                 }
             },

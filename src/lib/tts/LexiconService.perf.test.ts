@@ -13,7 +13,7 @@ describe('LexiconService Performance', () => {
                 id: `rule-${i}`,
                 original: `word${i}`,
                 replacement: `replacement${i}`,
-                isRegex: false,
+                isRegex: false, matchType: 'ignore_case',
                 created: Date.now(),
                 order: i
             });
@@ -24,7 +24,7 @@ describe('LexiconService Performance', () => {
             id: 'regex-1',
             original: 'v(\\d+)',
             replacement: 'verse $1',
-            isRegex: true,
+            isRegex: true, matchType: 'regex',
             created: Date.now(),
             order: 100
         });
