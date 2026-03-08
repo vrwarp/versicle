@@ -6,9 +6,16 @@ import { dbService } from '../db/DBService';
 import { useState, useEffect } from 'react';
 import type { UserProgress } from '../types/db';
 
+import { useShallow } from 'zustand/react/shallow';
+
 export function useBookProgress(bookId: string) {
     const currentBookId = useReaderUIStore(state => state.currentBookId);
-    const allProgress = useReadingStateStore(state => state.progress || {});
+
+    // Select the derived progress directly to ensure full reactivity without anti-patterns
+    // We pass the entire calculation into the selector so it only re-renders when the final derived value changes.
+    const resolvedProgress = useReadingStateStore(
+        useShallow(state => state.getProgress(bookId))
+    );
 
     // If the requested book is the active one, return state from store
     const isCurrent = bookId === currentBookId;
@@ -44,10 +51,9 @@ export function useBookProgress(bookId: string) {
     }, [bookId, isCurrent]);
 
     if (isCurrent) {
-        const bookProgress = allProgress[bookId];
         return {
-            percentage: bookProgress?.percentage || 0,
-            currentCfi: bookProgress?.currentCfi || ''
+            percentage: resolvedProgress?.percentage || 0,
+            currentCfi: resolvedProgress?.currentCfi || ''
         };
     }
 
