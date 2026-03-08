@@ -703,7 +703,6 @@ export const LibraryView: React.FC = () => {
                 variant="link"
                 onClick={() => setSearchQuery('')}
                 className="mt-2"
-                aria-label="Clear search query"
               >
                 Clear search
               </Button>
