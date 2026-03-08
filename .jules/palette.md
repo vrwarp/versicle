@@ -72,3 +72,7 @@
 ## 2026-03-03 - Replaced native button with Button component in GlobalNotesView
 **Learning:** Found a missing `Button` component usage in `GlobalNotesView.tsx` where a native HTML `<button>` was used for the "Clear search" action. The native button also lacked an `aria-label`. Replacing it with the design system's `Button` component ensures consistent styling, while adding an `aria-label` improves keyboard navigation and screen reader support for a generic action text like "Clear search".
 **Action:** Always verify if a native `<button>` element can be replaced by the shared `<Button>` component (`src/components/ui/Button.tsx`) to adhere to the existing UI patterns, and check that an explicit `aria-label` is provided if the button's visible text is ambiguous or absent.
+
+## 2024-05-19 - [Updating UI text and labels]
+**Learning:** Playwright E2E verification tests in the `verification/` folder strictly use string matching for element location (like `page.get_by_label("Clear query")`). Updating accessibility labels (e.g. changing "Clear query" to "Clear search query") will break CI pipeline tests.
+**Action:** Always run a codebase search (`grep -rnw "verification/" -e "Old Text"`) before modifying `aria-label`, `title`, or visible text on components, and update corresponding python test scripts to match the new string values.

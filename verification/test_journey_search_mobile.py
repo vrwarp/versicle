@@ -38,7 +38,7 @@ def test_search_and_sort_mobile(page: Page):
 
     # 2b-bis. Test Input Clear Button (New Feature)
     print("  - Testing Input Clear Button")
-    input_clear_btn = page.get_by_label("Clear query")
+    input_clear_btn = page.get_by_label("Clear search query")
     expect(input_clear_btn).to_be_visible()
     input_clear_btn.click()
     expect(search_input).to_have_value("")

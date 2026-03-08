@@ -67,6 +67,7 @@ export const SyncPulseIndicator: React.FC<SyncPulseIndicatorProps> = ({
         <div
             className={cn("flex items-center gap-2", className)}
             title={titleText}
+            aria-label={titleText}
             data-testid="sync-pulse-indicator"
             role="status"
         >

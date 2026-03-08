@@ -108,6 +108,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
                 className="h-8 w-8 rounded-full shadow-md bg-background/80 backdrop-blur-sm"
                 onClick={(e) => e.stopPropagation()}
                 data-testid="book-context-menu-trigger"
+                title="Book options"
               >
                 <MoreVertical className="h-4 w-4" />
                 <span className="sr-only">Book options</span>
