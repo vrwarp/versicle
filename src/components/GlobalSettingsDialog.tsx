@@ -94,7 +94,8 @@ export const GlobalSettingsDialog = () => {
 
     const {
         setFirebaseEnabled, firestoreStatus, firebaseAuthStatus, firebaseUserEmail,
-        syncProvider, setSyncProvider, firebaseConfig, setFirebaseConfig
+        syncProvider, setSyncProvider, firebaseConfig, setFirebaseConfig,
+        forceDevInstance, setForceDevInstance
     } = useSyncStore();
     const { signIn: firebaseSignIn, signOut: firebaseSignOut, isConfigured: isFirebaseAvailable } = useFirestoreSync();
     const [isFirebaseSigningIn, setIsFirebaseSigningIn] = useState(false);
@@ -604,6 +605,8 @@ export const GlobalSettingsDialog = () => {
                                 isFirebaseSigningIn={isFirebaseSigningIn}
                                 firebaseConfig={firebaseConfig}
                                 onFirebaseConfigChange={(updates) => setFirebaseConfig({ ...firebaseConfig, ...updates })}
+                                forceDevInstance={forceDevInstance}
+                                onForceDevInstanceChange={setForceDevInstance}
                                 onFirebaseSignIn={async () => {
                                     setIsFirebaseSigningIn(true);
                                     try {

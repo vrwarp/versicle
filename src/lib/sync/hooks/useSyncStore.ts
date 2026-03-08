@@ -52,6 +52,10 @@ interface SyncStore {
     /** Timestamp of last successful sync */
     lastSyncTime: number | null;
     setLastSyncTime: (time: number) => void;
+
+    /** Force using the dev instance of Firestore */
+    forceDevInstance: boolean;
+    setForceDevInstance: (force: boolean) => void;
 }
 
 const defaultFirebaseConfig: FirebaseConfigSettings = {
@@ -92,6 +96,9 @@ export const useSyncStore = create<SyncStore>()(
             // Shared
             lastSyncTime: null,
             setLastSyncTime: (time) => set({ lastSyncTime: time }),
+
+            forceDevInstance: false,
+            setForceDevInstance: (force) => set({ forceDevInstance: force }),
         }),
         {
             name: 'sync-storage',
@@ -106,6 +113,7 @@ export const useSyncStore = create<SyncStore>()(
 
                 // Persist shared settings
                 lastSyncTime: state.lastSyncTime,
+                forceDevInstance: state.forceDevInstance,
             }),
         }
     )

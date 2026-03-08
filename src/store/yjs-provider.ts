@@ -10,7 +10,7 @@ const logger = createLogger('YjsProvider');
 // ─── Schema Version ─────────────────────────────────────────────────────────
 // Increment this when introducing breaking changes to Yjs-synced state.
 // See: Operational Runbook for Breaking Changes in the TDD.
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 // Singleton Y.Doc instance - Source of Truth for User Data
 export const yDoc = new Y.Doc();
@@ -136,8 +136,14 @@ function runMigrationsImpl(): void {
             currentVersion = 2;
         }
 
+        if (currentVersion === 2) {
+            useBookStore.setState({ __schemaVersion: 3 } as unknown as Record<string, unknown>);
+            logger.info('Migration v2 → v3 complete (major version bump).');
+            currentVersion = 3;
+        }
+
         // Future migrations added here sequentially:
-        // if (currentVersion === 2) { ... currentVersion = 3; }
+        // if (currentVersion === 3) { ... currentVersion = 4; }
     }).catch(() => {
         // Silently ignore if useBookStore can't be imported (test env)
     });

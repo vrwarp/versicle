@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from '../ui/Input';
 import { PasswordInput } from '../ui/PasswordInput';
 import { Button } from '../ui/Button';
+import { Switch } from '../ui/Switch';
 import { Loader2 } from 'lucide-react';
 
 export interface FirebaseConfig {
@@ -36,6 +37,8 @@ export interface SyncSettingsTabProps {
     isFirebaseSigningIn: boolean;
     firebaseConfig: FirebaseConfig;
     onFirebaseConfigChange: (config: Partial<FirebaseConfig>) => void;
+    forceDevInstance: boolean;
+    onForceDevInstanceChange: (force: boolean) => void;
     onFirebaseSignIn: () => Promise<void>;
     onFirebaseSignOut: () => Promise<void>;
     onClearConfig: () => void;
@@ -46,6 +49,8 @@ import { DriveFolderPicker } from '../drive/DriveFolderPicker';
 import { useDriveStore } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
 import { useToastStore } from '../../store/useToastStore';
+import { getDB } from '../../db/db';
+import { disconnectYjs } from '../../store/yjs-provider';
 
 export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     currentDeviceId,
@@ -60,6 +65,8 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     isFirebaseSigningIn,
     firebaseConfig,
     onFirebaseConfigChange,
+    forceDevInstance,
+    onForceDevInstanceChange,
     onFirebaseSignIn,
     onFirebaseSignOut,
     onClearConfig
@@ -165,6 +172,54 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     }, [currentDeviceName]);
     const hasDeviceNameChanged = localDeviceName !== currentDeviceName;
 
+    const handleForceDevInstanceToggle = async (checked: boolean) => {
+        if (!confirm("This will purge all local data (books, annotations, and settings) and reload the app to switch instances. Are you sure you want to proceed?")) {
+            return;
+        }
+
+        try {
+            await disconnectYjs();
+
+            // Clear IndexedDB (static and cache stores)
+            const db = await getDB();
+            await db.clear('static_manifests');
+            await db.clear('static_resources');
+            await db.clear('static_structure');
+            await db.clear('cache_table_images');
+            await db.clear('cache_render_metrics');
+            await db.clear('cache_audio_blobs');
+            await db.clear('cache_session_state');
+            await db.clear('cache_tts_preparation');
+
+            // Save the toggle state before clearing local storage
+            // This is slightly tricky: if we clear all local storage, the setting is lost.
+            // But we actually only want to save the new toggle.
+            // Wait, we need the new setting to be active when it reloads.
+            const currentSyncState = localStorage.getItem('sync-storage');
+
+            // Clear LocalStorage (includes Yjs persistence and preferences)
+            localStorage.clear();
+
+            // Restore sync storage but with updated toggle
+            if (currentSyncState) {
+                const parsed = JSON.parse(currentSyncState);
+                if (parsed.state) {
+                    parsed.state.forceDevInstance = checked;
+                    localStorage.setItem('sync-storage', JSON.stringify(parsed));
+                }
+            } else {
+                // Fallback if structured oddly
+                onForceDevInstanceChange(checked);
+            }
+
+            // Reload to reset Yjs stores
+            window.location.reload();
+        } catch (e) {
+            console.error('Failed to clear data', e);
+            alert('Failed to clear data. Please check console.');
+        }
+    };
+
     return (
         <div className="space-y-8">
             {/* Section 1: App Sync */}
@@ -229,6 +284,24 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                             {syncProvider === 'firebase' && 'Real-time sync with automatic conflict resolution.'}
                             {syncProvider === 'none' && 'Sync is disabled. Data is stored locally only.'}
                         </p>
+                    </div>
+                </div>
+
+                {/* Advanced Sync Settings */}
+                <div className="space-y-4 mb-6 pb-6 border-b border-border">
+                    <h4 className="text-sm font-medium">Developer Options</h4>
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                            <Label htmlFor="force-dev-instance-switch">Force Dev Instance</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Use the development Firestore database instead of the main production database.
+                            </p>
+                        </div>
+                        <Switch
+                            id="force-dev-instance-switch"
+                            checked={forceDevInstance}
+                            onCheckedChange={handleForceDevInstanceToggle}
+                        />
                     </div>
                 </div>
 

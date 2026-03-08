@@ -34,7 +34,6 @@ vi.mock('y-cinder', () => ({
                 }
             }
         };
-        // @ts-expect-error setting global
         latestFireProviderInstance = instance;
         return instance;
     })
@@ -58,7 +57,8 @@ vi.mock('../../store/yjs-provider', async (importOriginal) => {
     const actualOptions = (actual as any).getYjsOptions || ((o: any) => o);
     return {
         yDoc: new Y.Doc(),
-        getYjsOptions: actualOptions
+        getYjsOptions: actualOptions,
+        CURRENT_SCHEMA_VERSION: 3
     };
 });
 
@@ -74,9 +74,9 @@ vi.mock('firebase/firestore', () => ({
 
 describe('FirestoreSyncManager', () => {
     beforeEach(() => {
-        vi.spyOn(console, 'info').mockImplementation(() => {});
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
-        vi.spyOn(console, 'error').mockImplementation(() => {});
+        vi.spyOn(console, 'info').mockImplementation(() => { });
+        vi.spyOn(console, 'warn').mockImplementation(() => { });
+        vi.spyOn(console, 'error').mockImplementation(() => { });
         // Reset singleton
         FirestoreSyncManager.resetInstance();
     });
@@ -238,8 +238,8 @@ describe('FirestoreSyncManager', () => {
         let mockFireProviderInstance: any;
 
         beforeEach(async () => {
-            vi.spyOn(console, 'error').mockImplementation(() => {});
-            vi.spyOn(console, 'warn').mockImplementation(() => {});
+            vi.spyOn(console, 'error').mockImplementation(() => { });
+            vi.spyOn(console, 'warn').mockImplementation(() => { });
             const { onAuthStateChanged } = await import('firebase/auth');
 
             manager = getFirestoreSyncManager();
