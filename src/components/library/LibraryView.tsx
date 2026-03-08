@@ -544,7 +544,8 @@ export const LibraryView: React.FC = () => {
                   size="icon"
                   onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
                   className="shadow-sm"
-                  aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
+                  aria-label={viewMode ===  'grid'  ? "Switch to list view" : "Switch to grid view"}
+                  title={viewMode ===  'grid'  ? "Switch to list view" : "Switch to grid view"}
                   data-testid="view-toggle-button"
                 >
                   {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
@@ -554,6 +555,7 @@ export const LibraryView: React.FC = () => {
                   disabled={isImporting}
                   className="gap-2 shadow-sm"
                   aria-label="Import book"
+                  title="Import book"
                   data-testid="header-add-button"
                 >
                   {isImporting ? (
@@ -572,6 +574,7 @@ export const LibraryView: React.FC = () => {
               onClick={() => setGlobalSettingsOpen(true)}
               className="shadow-sm"
               aria-label="Settings"
+              title="Settings"
               data-testid="header-settings-button"
             >
               <Settings className="w-4 h-4" />
@@ -601,7 +604,8 @@ export const LibraryView: React.FC = () => {
                     size="icon"
                     className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
                     onClick={() => setSearchQuery('')}
-                    aria-label="Clear query"
+                    aria-label="Clear search query"
+                    title="Clear search query"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -699,6 +703,7 @@ export const LibraryView: React.FC = () => {
                 variant="link"
                 onClick={() => setSearchQuery('')}
                 className="mt-2"
+                aria-label="Clear search query"
               >
                 Clear search
               </Button>

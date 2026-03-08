@@ -182,6 +182,8 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
                                 "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
                             )}
                             data-testid={`book-actions-${book.id}`}
+                            title="Book options"
+                            aria-label="Book options"
                         >
                             <MoreVertical className="w-4 h-4" />
                         </div>
