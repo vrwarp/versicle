@@ -360,7 +360,7 @@ Handles the complex task of importing an EPUB file.
 *   **Logic**:
     *   **Smart Rotation**: Implements a `executeWithRetry` strategy that shuffles between models (e.g., `gemini-2.5-flash-lite`, `gemini-2.5-flash`) to mitigate `429 RESOURCE_EXHAUSTED` errors and maximize free tier usage.
     *   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to allow the model to "reason" about complex table layouts (headers vs. data cells) before generating the narrative JSON.
-    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures into 5 categories: **Title**, **Footnote**, **Main**, **Table**, and **Other**.
+    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures. It optimizes inference by prompting the AI to identify the boundary (starting index) of the references section rather than classifying individual nodes, mapping subsequent text uniformly as 'reference'.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
 *   **Fuzzy Matching (`textMatching.ts`)**: Uses a robust fuzzy matching algorithm to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
     *   **Strategy**: Tries Exact Match -> Case-Insensitive Match -> **Flexible Whitespace Regex** (matches varying newlines/spaces) to handle LLM formatting quirks.
@@ -638,7 +638,7 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Logic**:
         *   **Persistence**: Stored in `localStorage` via `persist` middleware.
         *   **Usage Tracking**: Tracks token usage and estimated cost for the current session.
-        *   **Logging**: Maintains a rolling buffer of the last 10 debug logs (`GenAILogEntry`) for troubleshooting.
+        *   **Logging**: Maintains a rolling buffer of the last 100 debug logs (`GenAILogEntry`) for troubleshooting. Each log is linked by a generated `correlationId` and contextualized with `bookId` and `sectionId` to trace full request/response lifecycles.
 *   **`useLexiconStore` (Synced)**:
     *   **Goal**: Synchronize pronunciation rules across devices.
     *   **Logic**:
@@ -668,7 +668,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 #### Selector Optimization (`src/store/selectors.ts`)
 *   **Goal**: Ensure smooth UI scrolling (60fps) by preventing unnecessary re-renders in the main `LibraryView`.
 *   **Logic**:
-    *   **The `useAllBooks` Hot Path**: This selector executes frequently (e.g., on every page turn due to `progressMap` updates). Any dependencies within this selector (like `readingListEntries` or fallback defaults) must maintain strict referential stability to prevent triggering expensive O(N) recalculations.
+    *   **The `useAllBooks` Hot Path**: This selector executes frequently (e.g., on every page turn due to `progressMap` updates). Any dependencies within this selector (like `readingListEntries` or fallback defaults, e.g., `{}`) must maintain strict referential stability (using `useMemo` for fallbacks) to prevent triggering expensive O(N) recalculations.
     *   **Phase 1 (Base Book Memoization)**: Merges heavy static metadata (covers, titles) into book objects. Memoized on `books` + `staticMetadata` (rare changes).
     *   **Phase 2 (Progress Merge)**: Merges frequent updates (Reading Progress) into the Base Books using **Reference Stability**.
         *   *Array Item Memoization*: Reuses the *same* book object reference from the previous render if only the progress changed but the book identity/metadata is stable, allowing `React.memo` components to skip updates.
