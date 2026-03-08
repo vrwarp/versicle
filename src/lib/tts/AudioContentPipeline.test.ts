@@ -8,7 +8,7 @@ vi.mock('../../db/DBService', () => ({
         getTTSContent: vi.fn(),
         getContentAnalysis: vi.fn(),
         getBookMetadata: vi.fn(),
-        saveContentClassifications: vi.fn(),
+        saveReferenceStartCfi: vi.fn(),
         getBookStructure: vi.fn(),
         getTableImages: vi.fn().mockResolvedValue([]), // Added mock
     }
@@ -132,9 +132,7 @@ describe('AudioContentPipeline', () => {
             // Mock content analysis results to classify s2 as a 'reference'.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getContentAnalysis as any).mockResolvedValue({
-                contentTypes: [
-                    { rootCfi: 'epubcfi(/2/2/4:0,,)', type: 'reference' } // Matching s2 group
-                ]
+                referenceStartCfi: 'epubcfi(/2/2/4:0,,)' // Matching s2 group
             });
 
             // Mock store settings to enable filtering
