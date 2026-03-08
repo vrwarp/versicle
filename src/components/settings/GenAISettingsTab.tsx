@@ -227,19 +227,21 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                             </div>
 
                             <div className="pt-4 border-t space-y-4">
-                                <div className="flex items-center justify-between">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                     <h4 className="text-sm font-medium">Debug Logs</h4>
-                                    <div className="flex items-center space-x-2">
-                                        <Label htmlFor="max-logs" className="text-xs whitespace-nowrap">Max Logs:</Label>
-                                        <input
-                                            id="max-logs"
-                                            type="number"
-                                            min={1}
-                                            max={1000}
-                                            className="flex h-8 w-20 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                            value={maxLogs}
-                                            onChange={(e) => onMaxLogsChange(parseInt(e.target.value) || 100)}
-                                        />
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex items-center space-x-2">
+                                            <Label htmlFor="max-logs" className="text-xs whitespace-nowrap">Max Logs:</Label>
+                                            <input
+                                                id="max-logs"
+                                                type="number"
+                                                min={1}
+                                                max={1000}
+                                                className="flex h-8 w-20 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                                value={maxLogs}
+                                                onChange={(e) => onMaxLogsChange(parseInt(e.target.value) || 100)}
+                                            />
+                                        </div>
                                         <Button variant="outline" size="sm" onClick={onClearLogs} disabled={logs.length === 0}>
                                             Clear Logs
                                         </Button>
