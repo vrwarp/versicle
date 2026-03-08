@@ -7,6 +7,7 @@ import { getParentCfi, parseCfiRange, generateCfiRange, mergeCfiRanges, generate
 let triggerEpubCfiError = false;
 
 // Mock epubjs EpubCFI with more realistic comparison logic for tests
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockCompare = vi.fn((aRaw: any, bRaw: any) => {
     const a = typeof aRaw === 'string' ? aRaw : aRaw?.str;
     const b = typeof bRaw === 'string' ? bRaw : bRaw?.str;
