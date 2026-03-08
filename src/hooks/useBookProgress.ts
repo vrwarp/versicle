@@ -21,14 +21,19 @@ export function useBookProgress(bookId: string) {
 
         if (!isCurrent && bookId) {
             dbService.getBookMetadata(bookId).then(meta => {
-                if (!ignore && meta) {
-                    setStoredProgress({
-                        bookId,
-                        percentage: meta.progress || 0,
-                        currentCfi: meta.currentCfi || '',
-                        lastRead: meta.lastRead || 0,
-                        completedRanges: [] // We don't have this in BookMetadata, but it's fine for now
-                    });
+                if (!ignore) {
+                    if (meta) {
+                        setStoredProgress({
+                            bookId,
+                            percentage: meta.progress || 0,
+                            currentCfi: meta.currentCfi || '',
+                            lastRead: meta.lastRead || 0,
+                            completedRanges: [] // We don't have this in BookMetadata, but it's fine for now
+                        });
+                    } else {
+                        // Null out progress if metadata not found
+                        setStoredProgress(null);
+                    }
                 }
             });
         }
