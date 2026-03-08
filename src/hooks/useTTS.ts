@@ -24,6 +24,8 @@ export const useTTS = () => {
 
   // Main Effect: Sync Audio Service with Visual Location (when idle)
   useEffect(() => {
+    let ignore = false;
+
     if (!currentBookId || !currentSectionId) return;
 
     const syncQueue = async () => {
@@ -38,11 +40,17 @@ export const useTTS = () => {
       // from the currently visible chapter.
       // We load it without auto-playing.
       const currentSectionTitle = useReaderUIStore.getState().currentSectionTitle;
-      player.loadSectionBySectionId(currentSectionId, false, currentSectionTitle || undefined);
+
+      if (!ignore) {
+        player.loadSectionBySectionId(currentSectionId, false, currentSectionTitle || undefined);
+      }
     };
 
     syncQueue();
 
+    return () => {
+      ignore = true;
+    };
   }, [player, currentBookId, currentSectionId]);
 
   return {};
