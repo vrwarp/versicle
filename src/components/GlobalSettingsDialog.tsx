@@ -32,7 +32,6 @@ import { getDeviceId } from '../lib/device-id';
 
 import { DeviceManager } from './devices/DeviceManager';
 import { createLogger } from '../lib/logger';
-import { DataExportWizard } from './sync/DataExportWizard';
 import { BackButtonPriority } from '../store/useBackNavigationStore';
 import { useNavigationGuard } from '../hooks/useNavigationGuard';
 import {
@@ -75,7 +74,6 @@ export const GlobalSettingsDialog = () => {
     const [isCsvImporting, setIsCsvImporting] = useState(false);
     const [csvImportMessage, setCsvImportMessage] = useState('');
     const [csvImportComplete, setCsvImportComplete] = useState(false);
-    const [isExportWizardOpen, setIsExportWizardOpen] = useState(false);
 
     const {
         addBooks,
@@ -105,9 +103,7 @@ export const GlobalSettingsDialog = () => {
     const currentDeviceId = getDeviceId();
 
     useNavigationGuard(() => {
-        if (isExportWizardOpen) {
-            setIsExportWizardOpen(false);
-        } else if (isReadingListOpen) {
+        if (isReadingListOpen) {
             setIsReadingListOpen(false);
         } else {
             setGlobalSettingsOpen(false);
@@ -676,7 +672,6 @@ export const GlobalSettingsDialog = () => {
                                     onImportReadingList={handleImportReadingListFile}
                                     backupStatus={backupStatus}
                                     onExportFull={handleExportFull}
-                                    onExportWizard={() => setIsExportWizardOpen(true)}
                                     onExportLight={handleExportLight}
                                     onRestoreBackup={handleRestoreBackupFile}
                                     isScanning={isScanning}
@@ -695,7 +690,6 @@ export const GlobalSettingsDialog = () => {
                 </ModalContent >
             </Modal >
             <ReadingListDialog open={isReadingListOpen} onOpenChange={setIsReadingListOpen} />
-            <DataExportWizard open={isExportWizardOpen} onOpenChange={setIsExportWizardOpen} />
         </>
     );
 };

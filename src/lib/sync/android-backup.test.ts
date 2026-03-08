@@ -2,6 +2,15 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AndroidBackupService } from './android-backup';
 import { Filesystem } from '@capacitor/filesystem';
 
+import { backupService } from '../BackupService';
+
+// Mock BackupService
+vi.mock('../BackupService', () => ({
+    backupService: {
+        generateManifest: vi.fn(),
+    }
+}));
+
 // Mock Capacitor Filesystem
 vi.mock('@capacitor/filesystem', () => ({
     Filesystem: {
@@ -17,12 +26,16 @@ describe('AndroidBackupService', () => {
         vi.restoreAllMocks();
     });
 
-    it('should write backup payload', async () => {
-        const manifest = { version: 1 } as unknown as SyncManifest;
-        await AndroidBackupService.writeBackupPayload(manifest);
+    it('should write backup payload from generateManifest', async () => {
+        const mockManifest = { version: 2, yjsSnapshot: 'test' };
+        vi.mocked(backupService.generateManifest).mockResolvedValue(mockManifest as any);
+
+        await AndroidBackupService.writeBackupPayload();
+
+        expect(backupService.generateManifest).toHaveBeenCalled();
         expect(Filesystem.writeFile).toHaveBeenCalledWith({
             path: 'backup_payload.json',
-            data: JSON.stringify(manifest),
+            data: JSON.stringify(mockManifest),
             directory: 'DATA',
             encoding: 'utf8'
         });
@@ -37,7 +50,7 @@ describe('AndroidBackupService', () => {
     });
 
     it('should handle read errors gracefully', async () => {
-        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(console, 'warn').mockImplementation(() => { });
         vi.mocked(Filesystem.readFile).mockRejectedValue(new Error('File not found'));
         const result = await AndroidBackupService.readBackupPayload();
         expect(result).toBeNull();

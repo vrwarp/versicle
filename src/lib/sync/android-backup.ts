@@ -1,5 +1,6 @@
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import type { SyncManifest } from '../../types/db';
+import type { BackupManifestV2 } from '../BackupService';
+import { backupService } from '../BackupService';
 import { createLogger } from '../logger';
 
 const logger = createLogger('AndroidBackupService');
@@ -12,12 +13,12 @@ const BACKUP_FILENAME = 'backup_payload.json';
  */
 export class AndroidBackupService {
     /**
-     * Writes the SyncManifest to the app's data directory.
-     *
-     * @param manifest The manifest to back up.
+     * Writes the backup payload to the app's data directory.
+     * Uses the V2 Backup Manifest.
      */
-    static async writeBackupPayload(manifest: SyncManifest): Promise<void> {
+    static async writeBackupPayload(): Promise<void> {
         try {
+            const manifest: BackupManifestV2 = await backupService.generateManifest();
             await Filesystem.writeFile({
                 path: BACKUP_FILENAME,
                 data: JSON.stringify(manifest),
@@ -33,7 +34,7 @@ export class AndroidBackupService {
     /**
      * Reads the backup payload (useful for debugging or restore verification).
      */
-    static async readBackupPayload(): Promise<SyncManifest | null> {
+    static async readBackupPayload(): Promise<BackupManifestV2 | null> {
         try {
             const result = await Filesystem.readFile({
                 path: BACKUP_FILENAME,
@@ -42,7 +43,7 @@ export class AndroidBackupService {
             });
 
             if (typeof result.data === 'string') {
-                return JSON.parse(result.data);
+                return JSON.parse(result.data) as BackupManifestV2;
             }
             return null;
         } catch (e) {

@@ -65,12 +65,12 @@ def test_journey_backup_restore(page: Page):
     expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
 
     # Check if already on Data Management (persistent state)
-    if not page.get_by_role("button", name="Quick JSON Export (Legacy)").is_visible():
+    if not page.get_by_role("button", name="Quick JSON Export").is_visible():
         page.get_by_role("button", name="Data Management").click(force=True)
 
     # Setup download listener
     with page.expect_download() as download_info:
-        page.click("button:has-text('Quick JSON Export (Legacy)')")
+        page.click("button:has-text('Quick JSON Export')")
 
     download = download_info.value
     # Fix: Save with correct extension so re-upload works
@@ -115,7 +115,7 @@ def test_journey_backup_restore(page: Page):
     page.click("button[aria-label='Settings']", force=True)
     expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
 
-    if not page.get_by_role("button", name="Quick JSON Export (Legacy)").is_visible():
+    if not page.get_by_role("button", name="Quick JSON Export").is_visible():
         page.get_by_role("button", name="Data Management").click(force=True)
 
     # Handle the file chooser for restore
@@ -167,11 +167,11 @@ def test_journey_full_backup_restore(page: Page):
     page.click("button[aria-label='Settings']", force=True) # Header settings
     expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
 
-    if not page.get_by_role("button", name="Export Full Backup (ZIP)").is_visible():
+    if not page.get_by_role("button", name="Full ZIP Export").is_visible():
         page.get_by_role("button", name="Data Management").click(force=True)
 
     with page.expect_download() as download_info:
-        page.click("button:has-text('Export Full Backup (ZIP)')")
+        page.click("button:has-text('Full ZIP Export')")
 
     download = download_info.value
     suggested_filename = download.suggested_filename
@@ -200,7 +200,7 @@ def test_journey_full_backup_restore(page: Page):
     page.click("button[aria-label='Settings']", force=True)
     expect(page.get_by_role("dialog")).to_be_visible(timeout=10000)
 
-    if not page.get_by_role("button", name="Export Full Backup (ZIP)").is_visible():
+    if not page.get_by_role("button", name="Full ZIP Export").is_visible():
         page.get_by_role("button", name="Data Management").click(force=True)
 
     page.once("dialog", lambda dialog: dialog.accept())

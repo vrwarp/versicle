@@ -23,15 +23,16 @@ export interface BackupManifestV2 {
   /** ISO timestamp of when the backup was created. */
   timestamp: string;
 
-  // === Yjs Snapshot (Base64 encoded) ===
+  // === Deterministic Restore Payload (Active Execution) ===
   /** The entire Y.Doc state as a base64-encoded binary snapshot */
   yjsSnapshot: string;
-
-  // === Static/Cache Data (from IDB, not in Yjs) ===
   /** Static manifests for Ghost Book metadata support */
   staticManifests: StaticBookManifest[];
   /** Location data from cache_render_metrics */
   locations: BookLocations[];
+
+  // === Human-Readable Payload (Passive Artifact) ===
+  semanticData?: Partial<any>; // Using any to avoid importing SyncManifest since it's just a passive export
 }
 
 /**
@@ -135,16 +136,20 @@ export class BackupService {
   /**
    * Generate a v2 backup manifest using Yjs snapshot.
    */
-  private async generateManifest(): Promise<BackupManifestV2> {
+  async generateManifest(): Promise<BackupManifestV2> {
     // Ensure Yjs is synced before capturing snapshot
     await waitForYjsSync();
 
-    // Capture the entire Y.Doc state as a binary update
+    // 1. Capture the entire Y.Doc state as a binary update
+    // 2. Concurrently read static data from IDB and capture semantic tree
+    const [db, semanticData] = await Promise.all([
+      getDB(),
+      import('./sync/semantic-tree').then(m => m.generateSemanticTree())
+    ]);
+
     const stateUpdate = Y.encodeStateAsUpdate(yDoc);
     const yjsSnapshot = this.uint8ArrayToBase64(stateUpdate);
 
-    // Read static/cache data from IDB
-    const db = await getDB();
     const staticManifests = await db.getAll('static_manifests');
     const metrics = await db.getAll('cache_render_metrics');
 
@@ -161,20 +166,15 @@ export class BackupService {
       timestamp: new Date().toISOString(),
       yjsSnapshot,
       staticManifests,
-      locations
+      locations,
+      semanticData
     };
   }
 
   private async restoreLightBackup(file: File, onProgress?: (percent: number, message: string) => void): Promise<void> {
     const text = await file.text();
-    const rawManifest = JSON.parse(text);
+    const manifest = JSON.parse(text) as BackupManifestV2;
 
-    // Check version - reject v1 backups
-    if (rawManifest.version === 1 || typeof rawManifest.books !== 'undefined') {
-      throw new Error('Backup format v1 is no longer supported. Please re-export from the original device with the latest app version.');
-    }
-
-    const manifest = rawManifest as BackupManifestV2;
     await this.processManifest(manifest, undefined, onProgress);
   }
 
@@ -187,14 +187,8 @@ export class BackupService {
     }
 
     const manifestText = await manifestFile.async('string');
-    const rawManifest = JSON.parse(manifestText);
+    const manifest = JSON.parse(manifestText) as BackupManifestV2;
 
-    // Check version - reject v1 backups
-    if (rawManifest.version === 1 || typeof rawManifest.books !== 'undefined') {
-      throw new Error('Backup format v1 is no longer supported. Please re-export from the original device with the latest app version.');
-    }
-
-    const manifest = rawManifest as BackupManifestV2;
     await this.processManifest(manifest, zip, onProgress);
   }
 
@@ -202,11 +196,15 @@ export class BackupService {
    * Process a v2 manifest by applying Yjs snapshot.
    * Uses Y.applyUpdate() for proper CRDT merging.
    */
-  private async processManifest(
+  async processManifest(
     manifest: BackupManifestV2,
     zip?: JSZip,
     onProgress?: (percent: number, message: string) => void
   ): Promise<void> {
+    if (!manifest.yjsSnapshot) {
+      throw new Error("Fatal: yjsSnapshot is missing. Legacy V1 restoration is not supported.");
+    }
+
     if (manifest.version > this.BACKUP_VERSION) {
       logger.warn(`Backup version ${manifest.version} is newer than supported ${this.BACKUP_VERSION}. Proceeding with caution.`);
     }

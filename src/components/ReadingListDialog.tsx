@@ -7,7 +7,7 @@ import { useReadingListStore } from '../store/useReadingListStore';
 import type { ReadingListEntry } from '../types/db';
 import { ArrowUpDown, Trash2, Edit2, Download, ArrowUp, ArrowDown, BookOpen } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
-import { ExportImportService } from '../lib/sync/ExportImportService';
+import { exportFile } from '../lib/export';
 
 interface ReadingListDialogProps {
     open: boolean;
@@ -210,7 +210,11 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         ].join('\n');
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        await ExportImportService.downloadBlob(blob, 'reading_list.csv');
+        await exportFile({
+            filename: 'reading_list.csv',
+            data: blob,
+            mimeType: 'text/csv'
+        });
     };
 
     const handleEditSave = async (updatedEntry: ReadingListEntry) => {

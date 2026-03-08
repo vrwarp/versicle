@@ -248,7 +248,7 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       expect(mocks.capturedDocs.length).toBeGreaterThan(0);
       const restoredDoc = mocks.capturedDocs[mocks.capturedDocs.length - 1] as Y.Doc;
 
-      const restoredBooks = restoredDoc.getMap('library').get('books');
+      const restoredBooks = restoredDoc.getMap('library').get('books') as Y.Map<any>;
       expect(restoredBooks).toBeDefined();
       const b1 = restoredBooks.get('b1');
       expect(b1).toBeDefined();
@@ -267,7 +267,7 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
 
       const file = new File([JSON.stringify(v1Manifest)], 'backup.json', { type: 'application/json' });
 
-      await expect(service.restoreBackup(file)).rejects.toThrow('v1 is no longer supported');
+      await expect(service.restoreBackup(file)).rejects.toThrow('Fatal: yjsSnapshot is missing');
     });
 
   });

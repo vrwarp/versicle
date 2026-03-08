@@ -4,7 +4,7 @@ import { FileSearch } from 'lucide-react';
 import { CheckpointService } from '../../lib/sync/CheckpointService';
 import { CheckpointInspector, type DiffResult } from '../../lib/sync/CheckpointInspector';
 import { CheckpointDiffView } from './CheckpointDiffView';
-import { ExportImportService, DEFAULT_EXPORT_OPTIONS } from '../../lib/sync/ExportImportService';
+import { backupService } from '../../lib/BackupService';
 import type { SyncCheckpoint } from '../../types/db';
 import { DataRecoveryView } from './DataRecoveryView';
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
@@ -66,7 +66,7 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
 
     const handleBackup = async () => {
         try {
-            await ExportImportService.exportAndDownload(DEFAULT_EXPORT_OPTIONS);
+            await backupService.createLightBackup();
         } catch (error) {
             console.error('Backup failed:', error);
             setStatus("Backup failed.");
