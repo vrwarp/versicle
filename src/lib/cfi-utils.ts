@@ -9,6 +9,8 @@ export interface CfiRangeData {
   rawEnd: string;
   fullStart: string;
   fullEnd: string;
+  parsedStart?: EpubCFI;
+  parsedEnd?: EpubCFI;
 }
 
 export interface PreprocessedRoot {
@@ -236,9 +238,14 @@ export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
 
             if (pLast && pNew) {
                 const cfi = new EpubCFI();
+                // Pre-parse to avoid instantiation overhead in compare()
+                const newStartParsed = new EpubCFI(pNew.fullStart);
+                const lastStartParsed = new EpubCFI(pLast.fullStart);
+
                 // Check if newRange starts at or after last range starts.
                 // If so, it only interacts with the last range (since ranges are sorted and disjoint).
-                if (cfi.compare(pNew.fullStart, pLast.fullStart) >= 0) {
+                // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict string types
+                if (cfi.compare(newStartParsed, lastStartParsed) >= 0) {
                     // Fast path: Merge [last, newRange] only.
                     // Recursive call with 2 items falls through to standard logic (since length=1).
                     const tail = mergeCfiRanges([last], newRange);
@@ -256,7 +263,10 @@ export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
     if (allRanges.length === 0) return [];
 
     const cfi = new EpubCFI();
-    const compareFn = (a: string, b: string) => {
+
+    // compareFn takes pre-parsed EpubCFI objects to avoid recompilation inside loops
+    const compareFn = (a: EpubCFI, b: EpubCFI) => {
+         // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict string types
          return cfi.compare(a, b);
     };
 
@@ -282,34 +292,45 @@ export function mergeCfiRanges(ranges: string[], newRange?: string): string[] {
         }
 
         if (p) {
+            try {
+                p.parsedStart = new EpubCFI(p.fullStart);
+                p.parsedEnd = new EpubCFI(p.fullEnd);
+            } catch {
+                // If invalid CFI, we can't parse it. It'll fail sorting.
+            }
             parsedRanges.push(p);
         }
     }
 
     if (parsedRanges.length === 0) return [];
 
+    // Filter out invalid CFIs before sorting to ensure parsedStart/End exist
+    const validRanges = parsedRanges.filter(r => r.parsedStart && r.parsedEnd);
+    if (validRanges.length === 0) return allRanges; // Fallback
+
     // Sort by fullStart
     try {
-        parsedRanges.sort((a, b) => compareFn(a.fullStart, b.fullStart));
+        validRanges.sort((a, b) => compareFn(a.parsedStart!, b.parsedStart!));
     } catch (e) {
         console.error("Error comparing CFIs", e);
         return allRanges;
     }
 
     const merged: CfiRangeData[] = [];
-    let current = parsedRanges[0];
+    let current = validRanges[0];
 
-    for (let i = 1; i < parsedRanges.length; i++) {
-        const next = parsedRanges[i];
+    for (let i = 1; i < validRanges.length; i++) {
+        const next = validRanges[i];
 
         // Check overlap: next.start <= current.end
         try {
-            if (compareFn(next.fullStart, current.fullEnd) <= 0) {
+            if (compareFn(next.parsedStart!, current.parsedEnd!) <= 0) {
                 // Merge
                 // newEnd = Max(current.end, next.end)
-                if (compareFn(next.fullEnd, current.fullEnd) > 0) {
+                if (compareFn(next.parsedEnd!, current.parsedEnd!) > 0) {
                     current.fullEnd = next.fullEnd;
                     current.rawEnd = next.rawEnd;
+                    current.parsedEnd = next.parsedEnd;
                 }
             } else {
                 merged.push(current);
