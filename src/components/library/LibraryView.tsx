@@ -544,8 +544,8 @@ export const LibraryView: React.FC = () => {
                   size="icon"
                   onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
                   className="shadow-sm"
-                  aria-label={viewMode ===  'grid'  ? "Switch to list view" : "Switch to grid view"}
-                  title={viewMode ===  'grid'  ? "Switch to list view" : "Switch to grid view"}
+                  aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
+                  title={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
                   data-testid="view-toggle-button"
                 >
                   {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
