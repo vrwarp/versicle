@@ -15,7 +15,6 @@ import type {
   CachedSegment
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
-import type { ContentType } from '../types/content-analysis';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
 import { useContentAnalysisStore } from '../store/useContentAnalysisStore';
@@ -638,7 +637,7 @@ class DBService {
       bookId,
       sectionId,
       structure: { title: yjsAnalysis.title, footnoteMatches: [] },
-      contentTypes: yjsAnalysis.semanticMap,
+      referenceStartCfi: yjsAnalysis.referenceStartCfi,
       tableAdaptations: yjsAnalysis.tableAdaptations,
       lastAnalyzed: yjsAnalysis.generatedAt,
       status: yjsAnalysis.status,
@@ -647,8 +646,8 @@ class DBService {
     };
   }
 
-  saveContentClassifications(bookId: string, sectionId: string, results: { rootCfi: string; type: ContentType }[]): void {
-    useContentAnalysisStore.getState().saveClassifications(bookId, sectionId, results);
+  saveReferenceStartCfi(bookId: string, sectionId: string, referenceStartCfi: string | undefined): void {
+    useContentAnalysisStore.getState().saveReferenceStartCfi(bookId, sectionId, referenceStartCfi);
   }
 
   markAnalysisLoading(bookId: string, sectionId: string): void {

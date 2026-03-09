@@ -374,28 +374,18 @@ export class AudioContentPipeline {
 
             // Group sentences by Root Node
             const groups = this.groupSentencesByRoot(targetSentences, preprocessedTableRoots);
-            const detectedTypes = await this.getOrDetectContentTypes(bookId, sectionId, groups);
+            const referenceStartCfi = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
-            if (detectedTypes && detectedTypes.length > 0) {
-                const typeMap = new Map<string, ContentType>();
-                detectedTypes.forEach((r: { rootCfi: string; type: ContentType }) => typeMap.set(r.rootCfi, r.type));
-
-                const skipRoots = new Set<string>();
-                groups.forEach(g => {
-                    const type = typeMap.get(g.rootCfi);
-                    if (type && skipTypes.includes(type)) {
-                        skipRoots.add(g.rootCfi);
+            if (referenceStartCfi && skipTypes.includes('reference')) {
+                let isReferenceSection = false;
+                for (const g of groups) {
+                    if (g.rootCfi === referenceStartCfi) {
+                        isReferenceSection = true;
                     }
-                });
-
-                if (skipRoots.size > 0) {
-                    for (const g of groups) {
-                        if (skipRoots.has(g.rootCfi)) {
-                            // Mark all segments in this group as skipped
-                            for (const segment of g.segments) {
-                                if (segment.sourceIndices) {
-                                    segment.sourceIndices.forEach(idx => indicesToSkip.add(idx));
-                                }
+                    if (isReferenceSection) {
+                        for (const segment of g.segments) {
+                            if (segment.sourceIndices) {
+                                segment.sourceIndices.forEach(idx => indicesToSkip.add(idx));
                             }
                         }
                     }
@@ -411,9 +401,9 @@ export class AudioContentPipeline {
 
 
     /**
-     * Retrieves cached content classifications from DB or triggers GenAI detection if missing.
+     * Retrieves cached reference start CFI from DB or triggers GenAI detection if missing.
      */
-    async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[]) {
+    async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[]): Promise<string | undefined | null> {
         // Deduplicate concurrent requests for the same section
         const key = `${bookId}:${sectionId}`;
         if (this.analysisPromises.has(key)) {
@@ -424,12 +414,16 @@ export class AudioContentPipeline {
             // 1. Check existing classification in DB
             const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
 
-            // If we have stored content types, return them
-            if (contentAnalysis?.contentTypes && contentAnalysis.contentTypes.length > 0) {
-                return contentAnalysis.contentTypes;
+            // If we have stored reference start CFI, return it
+            if (contentAnalysis?.referenceStartCfi !== undefined) {
+                return contentAnalysis.referenceStartCfi;
             }
 
             // RETRY LOGIC: Check status and timestamps
+            if (contentAnalysis?.status === 'success') {
+                return contentAnalysis.referenceStartCfi || undefined;
+            }
+
             const RETRY_DELAY = 5 * 60 * 1000; // 5 minutes
             const LOADING_TIMEOUT = 60 * 1000; // 1 minute (in case process died)
 
@@ -499,15 +493,13 @@ export class AudioContentPipeline {
                     // Note: Using default model (gemini-1.5-flash) from GenAIService
                     const results = await genAIService.detectContentTypes(nodesToDetect, { bookTitle, sectionTitle });
 
-                    // Reconstruct the original format for DB persistence
-                    const finalResults = results.map(res => ({
-                        rootCfi: idToCfiMap.get(res.id) || '',
-                        type: res.type
-                    })).filter(r => r.rootCfi !== '');
+                    // Find the first result marked as reference
+                    const referenceResult = results.find(res => res.type === 'reference');
+                    const referenceStartCfi = referenceResult ? idToCfiMap.get(referenceResult.id) : undefined;
 
                     // Persist detection results (this sets status to 'success')
-                    await dbService.saveContentClassifications(bookId, sectionId, finalResults);
-                    return finalResults;
+                    await dbService.saveReferenceStartCfi(bookId, sectionId, referenceStartCfi);
+                    return referenceStartCfi;
                 }
             } catch (e: unknown) {
                 console.warn("Content detection failed", e);

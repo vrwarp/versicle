@@ -82,20 +82,17 @@ export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ is
 
     const filteredSections = useMemo(() => {
         return sortedSections.map(section => {
-            const filteredMap = section.semanticMap?.filter(item =>
-                filterType === 'all' || item.type === filterType
-            ) || [];
+            const hasReference = !!section.referenceStartCfi;
 
             return {
                 ...section,
-                filteredMap,
-                hasMatches: filteredMap.length > 0
+                hasMatches: filterType === 'all' || (filterType === 'reference' && hasReference)
             };
-        }).filter(s => s.hasMatches);
+        }).filter(s => s.hasMatches && s.referenceStartCfi);
     }, [sortedSections, filterType]);
 
     const totalCount = useMemo(() => {
-        return filteredSections.reduce((acc, s) => acc + s.filteredMap.length, 0);
+        return filteredSections.length;
     }, [filteredSections]);
 
     const toggleSection = (sectionId: string) => {
@@ -172,30 +169,27 @@ export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ is
                                         <span className="truncate">{section.displayTitle}</span>
                                     </div>
                                     <span className="text-xs bg-muted px-2 py-1 rounded-full text-muted-foreground shrink-0">
-                                        {section.filteredMap.length} items
+                                        1 item
                                     </span>
                                 </button>
 
-                                {expandedSections.has(section.sectionId) && (
+                                {expandedSections.has(section.sectionId) && section.referenceStartCfi && (
                                     <div className="border-t divide-y bg-background/50">
-                                        {section.filteredMap.map((item, idx) => (
-                                            <button
-                                                key={`${section.sectionId}-${idx}`}
-                                                onClick={() => handleJump(item.rootCfi)}
-                                                className="w-full flex items-center justify-between p-2 pl-8 hover:bg-accent transition-colors text-xs group"
-                                            >
-                                                <div className="flex items-center gap-2">
-                                                    <div
-                                                        className="w-2 h-2 rounded-full shrink-0"
-                                                        style={{ backgroundColor: TYPE_COLORS[item.type] }}
-                                                    />
-                                                    <span className="capitalize font-mono text-muted-foreground">{item.type}</span>
-                                                </div>
-                                                <span className="font-mono text-[10px] text-muted-foreground/50 truncate max-w-[200px] group-hover:text-foreground">
-                                                    {item.rootCfi}
-                                                </span>
-                                            </button>
-                                        ))}
+                                        <button
+                                            onClick={() => handleJump(section.referenceStartCfi!)}
+                                            className="w-full flex items-center justify-between p-2 pl-8 hover:bg-accent transition-colors text-xs group"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <div
+                                                    className="w-2 h-2 rounded-full shrink-0"
+                                                    style={{ backgroundColor: TYPE_COLORS['reference'] }}
+                                                />
+                                                <span className="capitalize font-mono text-muted-foreground">reference start</span>
+                                            </div>
+                                            <span className="font-mono text-[10px] text-muted-foreground/50 truncate max-w-[200px] group-hover:text-foreground">
+                                                {section.referenceStartCfi}
+                                            </span>
+                                        </button>
                                     </div>
                                 )}
                             </div>
