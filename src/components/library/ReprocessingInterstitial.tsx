@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { reprocessBook } from '../../lib/ingestion';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { Loader2 } from 'lucide-react';
+import { Button } from '../ui/Button';
 
 interface ReprocessingInterstitialProps {
     isOpen: boolean;
@@ -61,12 +62,12 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
                             Failed to upgrade book: {error}
                         </p>
                         <div className="flex justify-end gap-2">
-                            <button
+                            <Button
+                                variant="secondary"
                                 onClick={onClose}
-                                className="px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80"
                             >
                                 Cancel
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 )}
