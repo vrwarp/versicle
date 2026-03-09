@@ -36,6 +36,24 @@ vi.mock('../store/usePreferencesStore', () => ({
 vi.mock('../store/useToastStore', () => ({
   useToastStore: () => ({ showToast: vi.fn() })
 }));
+
+
+vi.mock('./ui/Modal', () => {
+    return {
+        Modal: ({ children }: any) => <div>{children}</div>,
+        ModalContent: ({ children }: any) => <div>{children}</div>,
+        ModalHeader: ({ children }: any) => <div>{children}</div>,
+        ModalTitle: ({ children }: any) => <div>{children}</div>,
+        ModalDescription: ({ children }: any) => <div>{children}</div>,
+    }
+})
+
+vi.mock('../components/ReadingListDialog', () => ({
+  ReadingListDialog: () => <div data-testid="reading-list-dialog" />
+}));
+vi.mock('../components/sync/DataExportWizard', () => ({
+  DataExportWizard: () => <div data-testid="data-export-wizard" />
+}));
 vi.mock('../store/useGenAIStore', () => ({
   useGenAIStore: () => ({ logs: [] })
 }));
