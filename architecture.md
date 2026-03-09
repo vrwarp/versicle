@@ -360,7 +360,7 @@ Handles the complex task of importing an EPUB file.
 *   **Logic**:
     *   **Smart Rotation**: Implements a `executeWithRetry` strategy that shuffles between models (e.g., `gemini-2.5-flash-lite`, `gemini-2.5-flash`) to mitigate `429 RESOURCE_EXHAUSTED` errors and maximize free tier usage.
     *   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to allow the model to "reason" about complex table layouts (headers vs. data cells) before generating the narrative JSON.
-    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures. It optimizes inference by prompting the AI to identify the boundary (starting index) of the references section rather than classifying individual nodes, mapping subsequent text uniformly as 'reference'.
+    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures. It identifies the boundary of the references section and stores it as a single `referenceStartCfi` string in `SectionAnalysis`, replacing the deprecated granular `semanticMap`/`contentTypes` arrays to save space. All content after this CFI is uniformly mapped as 'reference'.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
 *   **Fuzzy Matching (`textMatching.ts`)**: Uses a robust fuzzy matching algorithm to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
     *   **Strategy**: Tries Exact Match -> Case-Insensitive Match -> **Flexible Whitespace Regex** (matches varying newlines/spaces) to handle LLM formatting quirks.
@@ -646,8 +646,8 @@ State is managed using **Zustand** with specialized strategies for different dat
         *   **Ordering**: Rules have an explicit `order` field to ensure deterministic application order.
         *   **Settings**: Stores book-specific preferences (e.g., enable Bible Lexicon) in a nested map.
 *   **`useContentAnalysisStore` (Synced)**:
-    *   **Goal**: Sync expensive AI artifacts (Table Adaptations, Semantic Maps) across devices.
-    *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the semantic map (footnotes/titles) and teleprompter scripts.
+    *   **Goal**: Sync expensive AI artifacts (Table Adaptations) across devices.
+    *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the teleprompter scripts. It also stores `referenceStartCfi` to define the boundary where references begin, replacing deprecated granular arrays (like semantic maps) to save space.
     *   **Trade-off**: Large analysis objects (e.g., from books with many tables) increase the Yjs document size, potentially causing higher latency during initial sync/hydration.
 *   **`useBackNavigationStore` (Local Only)**:
     *   **Goal**: Solve the "Back Button Hell" on Android where multiple components (Router, Modals, Menus) compete for the hardware back action.

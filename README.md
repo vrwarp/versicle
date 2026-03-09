@@ -11,7 +11,7 @@
 *   **Hybrid Intelligence**:
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google, LemonFox) for studio-quality narration.
-    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
+    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content (by identifying reference boundaries), and adapt tables for listening. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
 *   **Dual Sync**:
     *   **Real-time**: Synchronize progress instantly across devices using Firestore.
     *   **Native Backup**: Seamless integration with Android's built-in backup system.
@@ -62,7 +62,7 @@
 *   **Chapter Pre-roll**: Optional announcements (Title, Author) at the start of each new chapter.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Reactive Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis. Updates instantly when Lexicon settings change (e.g., toggling Bible mode).
-*   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
+*   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini. Optimizes API usage by finding the boundary where references begin rather than analyzing individual elements.
 *   **Smart Rotation**: Automatically switches between Gemini models (Flash Lite/Flash) to handle rate limits (429) and maximize free quotas.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported). Includes "Trace Mode" for debugging rule application.
 *   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1"), enabled by default in settings.
