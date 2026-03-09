@@ -3,6 +3,7 @@ import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
 import { DeviceIcon } from '../devices/DeviceIcon';
+import { Button } from '../ui/Button';
 
 interface ResumeBadgeProps {
   bookId: string;
@@ -62,12 +63,14 @@ export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ bookId, onR
   if (!resumeInfo) return null;
 
   return (
-    <button
+    <Button
+      variant="default"
+      size="sm"
       onClick={(e) => {
         e.stopPropagation();
         onResumeClick(resumeInfo.deviceId, resumeInfo.cfi);
       }}
-      className="absolute bottom-[calc(100%-var(--cover-height)+1rem)] right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-md hover:bg-primary/90 transition-colors translate-y-[-50%]"
+      className="absolute bottom-[calc(100%-var(--cover-height)+1rem)] right-2 z-10 flex items-center gap-1 px-2 py-1 h-auto rounded-full text-xs font-medium shadow-md transition-colors translate-y-[-50%]"
       data-testid="resume-badge"
       title={`Continue from ${resumeInfo.deviceName} at ${Math.round(resumeInfo.percentage * 100)}%`}
       aria-label={`Continue from ${resumeInfo.deviceName} at ${Math.round(resumeInfo.percentage * 100)}%`}
@@ -75,6 +78,6 @@ export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ bookId, onR
     >
       <DeviceIcon platform={devices[resumeInfo.deviceId]?.platform || ''} className="w-3 h-3" />
       <span>{Math.round(resumeInfo.percentage * 100)}%</span>
-    </button>
+    </Button>
   );
 });
