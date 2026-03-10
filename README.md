@@ -32,13 +32,13 @@
 *   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
-*   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
+*   **Tools**: `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
 *   **Dev Tools**: `vite-plugin-mkcert` (Local HTTPS)
 
 ## Features
 
 ### Reading (The "Reading Room")
-*   **Adaptive Contrast**: The UI automatically adapts to your book covers using **Weighted K-Means Clustering** to extract dominant colors, creating beautiful and accessible gradients/text themes (L* calc).
+*   **Adaptive Contrast**: The UI automatically adapts to your book covers using **Weighted K-Means Clustering** to extract dominant colors, creating beautiful gradients and text themes.
 *   **Satellite FAB**: A dedicated floating action button for quick access to playback controls and menu actions.
 *   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
 *   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
@@ -50,14 +50,10 @@
 *   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker. Features smart offloading of XML parsing and direct EPUB archive extraction (with rendering fallback) to keep the UI buttery smooth during indexing.
 *   **Annotations**: Highlights and notes.
-*   **Table Snapshots**: Complex tables are captured as structural images for visual preservation.
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
 *   **Optimistic Playback**: Audio starts playing instantly while content filtering (skip masks) and smart adaptations are applied asynchronously in the background.
-*   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural narrative speech (Table Adaptations).
-    *   **Thinking Budget**: Configurable "Thinking Budget" (default 512 tokens) allows the AI to reason about complex data layouts before speaking.
-    *   **Synced Analysis**: AI-generated content (adaptations, semantic maps) is synchronized across devices via Yjs, so you only pay the generation cost once.
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Chapter Pre-roll**: Optional announcements (Title, Author) at the start of each new chapter.
 *   **Text-to-Speech**: Turn any book into an audiobook.

@@ -344,10 +344,6 @@ Handles the complex task of importing an EPUB file.
     3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head 4KB + Metadata + Tail 4KB) using a `cheapHash` function for O(1) duplicate detection.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
         *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
-        *   **Accessibility**: Calculates **Perceptual Lightness (L*)** (CIE 1976) from the extracted RGB values to determine the optimal text color (Soft Dark, Hard Black, Hard White, Soft Light) for UI overlays, ensuring WCAG contrast compliance.
-    5.  **Table Snapshots**: Captures complex tables as images for visual preservation.
-        *   **Tool**: Uses **`@zumer/snapdom`** to render table nodes into lightweight WebP blobs.
-        *   **Configuration**: 0.1 quality, 0.5 scale to minimize storage footprint while maintaining legibility.
 
 #### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
 *   **Goal**: Prevent memory leaks caused by `URL.createObjectURL`.
@@ -420,7 +416,7 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **Goal**: Perform database hygiene and remove orphaned data.
 *   **Logic**:
     *   **Orphan Detection**: Scans `static_resources` (files) and `cache_` stores for keys that no longer exist in the Yjs `user_inventory`.
-    *   **Post-Migration Role**: After the Yjs migration, this service transition to *only* managing `static_` and `cache_` stores in IndexedDB. It strictly cleans up heavy binary data and cached assets. It *does not* touch or manage any `user_` data (inventory, progress, annotations, overrides), as those are managed entirely by their respective Yjs stores and Firestore sync.
+    *   **Post-Migration Role**: After the Yjs migration, this service transitions to *only* managing `static_` and `cache_` stores in IndexedDB. It strictly cleans up heavy binary data and cached assets. It *does not* touch or manage any `user_` data (inventory, progress, annotations, overrides), as those are managed entirely by their respective Yjs stores and Firestore sync.
     *   **Metadata Regeneration**: Can re-import books from their binary blobs (`regenerateAllMetadata`) to refresh Yjs metadata if the schema changes, using `DBService.importBookWithId`.
 
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
@@ -680,7 +676,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 
 *   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
 *   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
-*   **Schema Quarantine (`ObsoleteLockView`)**: When the `FirestoreSyncManager` detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION`), `handleObsoleteClient` severs the cloud connection and locks the UI permanently.
+*   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION`), it renders `ObsoleteLockView` to lock the UI permanently.
     *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
     *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
 *   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.
