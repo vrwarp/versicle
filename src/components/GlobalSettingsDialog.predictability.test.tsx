@@ -40,11 +40,11 @@ vi.mock('../store/useToastStore', () => ({
 
 vi.mock('./ui/Modal', () => {
     return {
-        Modal: ({ children }: any) => <div>{children}</div>,
-        ModalContent: ({ children }: any) => <div>{children}</div>,
-        ModalHeader: ({ children }: any) => <div>{children}</div>,
-        ModalTitle: ({ children }: any) => <div>{children}</div>,
-        ModalDescription: ({ children }: any) => <div>{children}</div>,
+        Modal: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
+        ModalContent: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
+        ModalHeader: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
+        ModalTitle: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
+        ModalDescription: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
     }
 })
 
