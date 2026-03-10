@@ -43,7 +43,7 @@ export const useDeviceStore = create<DeviceState>()(
     yjs(
         yDoc,
         'devices', // Shared map name in Yjs
-        (set, get) => ({
+        (set) => ({
             devices: {},
 
             registerCurrentDevice: (deviceId, profile, name) => {
