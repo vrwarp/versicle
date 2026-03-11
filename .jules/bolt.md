@@ -95,7 +95,10 @@
 ## 2025-06-13 - [Selector Granularity Optimization (Object Fallback)]
 **Learning:** The `useAllBooks` selector had an inline object fallback (`useReadingListStore(state => state.entries) || {}`) that created a new empty object reference on every render when the state was nullish. This caused downstream `useMemo` blocks (like the O(N) progress merge loop) to re-evaluate unnecessarily.
 **Action:** When creating global selectors, avoid returning inline object literals (e.g. `|| {}`) if they are used in downstream dependency arrays. Either memoize them with `useMemo` or use a module-level constant (e.g., `const EMPTY_OBJ = {}`) to preserve reference stability and prevent cascaded re-renders.
-\n## 2026-03-04 - EpubCFI Instantiation Overhead in Loops\n**Learning:** The `epubjs` library's `EpubCFI.compare()` method accepts strings, but calling it with strings inside a loop forces internal recompilation (`new EpubCFI(string)`) on every iteration. In `AudioContentPipeline.mapSentencesToAdaptations`, this caused severe `O(N * M)` string parsing overhead.\n**Action:** When comparing CFIs inside a hot path or nested loop, always pre-parse the strings into `EpubCFI` objects and pass the object references to `compare()`.
+
+## 2026-03-04 - EpubCFI Instantiation Overhead in Loops
+**Learning:** The `epubjs` library's `EpubCFI.compare()` method accepts strings, but calling it with strings inside a loop forces internal recompilation (`new EpubCFI(string)`) on every iteration. In `AudioContentPipeline.mapSentencesToAdaptations`, this caused severe `O(N * M)` string parsing overhead.
+**Action:** When comparing CFIs inside a hot path or nested loop, always pre-parse the strings into `EpubCFI` objects and pass the object references to `compare()`.
 
 ## 2025-02-13 - [React List Re-rendering Optimization]
 **Learning:** Even when using `React.memo` on list item components and debouncing search input states, putting the search state (`useState`) and the list mapping logic inside the same parent component causes the entire list mapping (`O(N)` VDOM creations) to re-evaluate on *every single keystroke* before the debounce even triggers.
@@ -104,6 +107,10 @@
 - **Bottleneck:** The `epubjs` library's `EpubCFI.compare()` method accepts strings, but calling it with strings inside a loop (like sorting or merging) forces internal recompilation (`new EpubCFI(string)`) on every iteration. In `cfi-utils.ts`, this caused severe string parsing overhead during `mergeCfiRanges`.
 - **Solution:** Modified `mergeCfiRanges` to instantiate `EpubCFI` objects upfront during the initial parsing loop, storing them in the `CfiRangeData` interface, and passing the pre-parsed objects directly to `compare()`.
 - **Learning:** When comparing CFIs inside a hot path or nested loop, always pre-parse the strings into `EpubCFI` objects and pass the object references to `compare()`. Use `@ts-expect-error` if TypeScript definitions strictly expect strings, as the underlying `epubjs` implementation handles `EpubCFI` instances natively.
+
+## 2026-03-09 - Selector Ref Caching Pattern Fix
+**Learning:** When trying to maintain referential stability for derived objects across renders, manually managing a WeakMap cache with `useRef` and conditionally invalidating it directly in the render body triggers `react-hooks/refs` errors and violates React's strict mode rules against side-effects during render.
+**Action:** Instead of manually invalidating a `useRef` based on previous dependency tracking, instantiate the WeakMap directly inside a `useMemo` hook (e.g., `useMemo(() => new WeakMap(), [deps])`). This naturally flushes the cache when dependencies change and strictly adheres to React Hook rules without any lint suppressions.
 
 ## 2026-03-04 - Batched IndexedDB Transactions on Startup
 - **Bottleneck:** The `useLibraryStore` `hydrateStaticMetadata` method used `Promise.all` over `bookIds.map(id => injectedDB.getBookMetadata(id))`, opening a separate IndexedDB transaction per book on application startup. For libraries with hundreds of books, this concurrent transaction explosion caused significant startup latency and potential blocking of the main thread.
